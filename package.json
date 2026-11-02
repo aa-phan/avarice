@@ -14,5 +14,9 @@
     "test:unit": "node --test \"test/unit/**/*.test.ts\"",
     "check:boundaries": "node scripts/check-boundaries.ts",
     "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
   }
 }

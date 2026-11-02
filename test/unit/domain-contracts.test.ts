@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { Result } from '../../src/domain/result.ts';
+import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
 import { ok, err } from '../../src/domain/result.ts';
 import { ulid, newId } from '../../src/domain/ids.ts';
 import { canonicalJson, sha256Hex, digestOf } from '../../src/domain/digest.ts';
@@ -80,7 +81,7 @@ const NON_TERMINAL_PRE_ACTIVATION = [
   'planning',
   'planning_ready',
 ];
-const ALL_STATES = [
+const ALL_STATES: readonly OnboardingState[] = [
   'unregistered',
   'discovered',
   'contract_proposed',
@@ -133,7 +134,7 @@ describe('onboarding lifecycle', () => {
   });
 
   it('rejects a state name that is not in the lifecycle', () => {
-    const r = assertTransition('nonsense', 'active');
+    const r = assertTransition('nonsense' as OnboardingState, 'active');
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error.kind, 'invalid');
   });
@@ -510,7 +511,7 @@ function recordInput(overrides: Record<string, unknown> = {}) {
       { path: '.planning/codebase/STRUCTURE.md', digest: 'sha256:91fe', lastMappedCommit: 'git:4f2c9e1' },
     ],
     snapshot: 'sha256:5d0a',
-    mapping: { mode: 'fast', scope: ['.'], mappedAt: '2026-11-02T00:00:00Z' },
+    mapping: { mode: 'fast' as const, scope: ['.'], mappedAt: '2026-11-02T00:00:00Z' },
     notMapped: ['uncommitted changes in src/a.ts'],
     ...overrides,
   };
