@@ -10,7 +10,8 @@ import type { AppDeps } from '../deps.ts';
 import type { StageContext } from './stage.ts';
 
 export const MAP_DIR = '.planning/codebase';
-// Plan 01-10 applies the configurable size cap (256 KiB default) as a validation check.
+// The read limit. The validation size cap (256 KiB, plan 01-10) is lower; a file between the two is read so the check
+// can name its size, a file above this is only reported as oversize.
 export const MAX_MAP_DOCUMENT_BYTES = 1024 * 1024;
 
 export interface StoredContract {
@@ -43,6 +44,9 @@ export interface MapDocument {
   path: string;
   text: string;
   lastMappedCommit: string | null;
+  // UTF-8 size of the file; above the read limit it is the limit plus one and `oversize` is set (text is then empty).
+  bytes: number;
+  oversize?: boolean;
 }
 
 // `last_mapped_commit` from a leading YAML frontmatter block, or null when there is none.
@@ -96,6 +100,25 @@ export function effectiveMappingMode(deps: AppDeps, onboardingId: string, contra
   return ok(plan.value === null ? contract.mapping.mode : plan.value.mode);
 }
 
+// What the latest accepted validation recorded as step `validate`: the coverage label and scope the record states.
+export interface AcceptedValidation {
+  scope: string[];
+  completeness: string;
+}
+
+export function loadAcceptedValidation(deps: AppDeps, onboardingId: string): Result<AcceptedValidation | null> {
+  const steps = deps.ledger.getStepResults(onboardingId);
+  if (!steps.ok) return steps;
+  const found = [...steps.value].reverse().find((s) => s.step === 'validate' && s.status === 'accepted');
+  if (found === undefined) return ok(null);
+  const body = typeof found.result === 'object' && found.result !== null ? (found.result as Record<string, unknown>) : {};
+  const scope = body['scope'];
+  return ok({
+    scope: Array.isArray(scope) ? scope.filter((p): p is string => typeof p === 'string') : [],
+    completeness: typeof body['completeness'] === 'string' ? body['completeness'] : '',
+  });
+}
+
 // GSD must be present and admitted before staging is touched or a host invoked (ONB-12, S-36).
 export function stopIncompatible(ctx: StageContext, row: OnboardingRow, found: string, admitted: string): Result<void> {
   ctx.note(`gsd-core is incompatible: ${found}; admitted: ${admitted}`);
@@ -129,13 +152,13 @@ export function readMapDocuments(staging: StagingWorkspace, stagingPath: string,
     const read = staging.read(stagingPath, path, MAX_MAP_DOCUMENT_BYTES);
     if (!read.ok) {
       if (read.error.kind === 'invalid' && read.error.field === 'size') {
-        documents.push({ path, text: '', lastMappedCommit: null });
+        documents.push({ path, text: '', lastMappedCommit: null, bytes: MAX_MAP_DOCUMENT_BYTES + 1, oversize: true });
         continue;
       }
       return read;
     }
     if (read.value === null) continue;
-    documents.push({ path, text: read.value, lastMappedCommit: frontmatterStamp(read.value) });
+    documents.push({ path, text: read.value, lastMappedCommit: frontmatterStamp(read.value), bytes: Buffer.byteLength(read.value, 'utf8') });
   }
   return ok(documents);
 }

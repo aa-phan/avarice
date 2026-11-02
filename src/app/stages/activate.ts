@@ -8,7 +8,7 @@ import { buildProjectRecord } from '../../domain/project-record.ts';
 import type { CodebaseArtifact } from '../../domain/project-record.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { effectiveMappingMode, loadAcceptedValidation, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
 const STORE = 'local';
 const RETENTION = 'evidence';
@@ -29,6 +29,9 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   if (!mode.ok) return mode;
   const documents = readMapDocuments(deps.staging, staging.value, mode.value);
   if (!documents.ok) return documents;
+  // The coverage scope is what validation judged (ONB-7): the four files for a fast map, `.` for a full one.
+  const validated = loadAcceptedValidation(deps, row.onboardingId);
+  if (!validated.ok) return validated;
 
   const nowMs = deps.clock.nowMs();
   const codebase: CodebaseArtifact[] = [];
@@ -93,7 +96,7 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
     stagingPath: staging.value,
     codebase,
     snapshot: manifestStored.value.digest,
-    mapping: { mode: mode.value, scope: ['.'], mappedAt: mapped },
+    mapping: { mode: mode.value, scope: validated.value?.scope ?? ['.'], mappedAt: mapped },
     notMapped,
     ...(gsdVersion !== undefined ? { gsdVersion } : {}),
   });
