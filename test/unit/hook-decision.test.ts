@@ -244,7 +244,7 @@ describe('Bash command identity', () => {
     assert.equal(decide(shell(`cat ${DATA}/state.db`)).decision, 'deny');
     const secret = decide(shell('cat config/.env'));
     assert.deepEqual([secret.decision, secret.rule], ['deny', 'deny-secret-read']);
-    assert.equal(decide(shell('cat ../../../home/u/repo/.env', `${STAGING}/sub`)).decision, 'deny');
+    assert.equal(decide(shell('cat ../../../../home/u/repo/.env', `${STAGING}/sub`)).decision, 'deny');
   });
 
   it('returns an explicit allow only for the hook-allow strategy', () => {

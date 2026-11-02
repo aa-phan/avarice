@@ -99,8 +99,8 @@ export interface HookInput {
   [key: string]: unknown;
 }
 
-function hookArgs(event: string, policyPath: string | undefined): string[] {
-  return ['--disable-warning=ExperimentalWarning', HOOK_ENTRY, '--event', event, ...(policyPath === undefined ? [] : ['--policy', policyPath])];
+function hookArgs(event: string, policyPath: string | null): string[] {
+  return ['--disable-warning=ExperimentalWarning', HOOK_ENTRY, '--event', event, ...(policyPath === null ? [] : ['--policy', policyPath])];
 }
 
 function cleanEnv(): NodeJS.ProcessEnv {
@@ -109,7 +109,7 @@ function cleanEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-export function runHook(fx: HookFixture, event: 'pre' | 'post' | 'config-change' | string, input: HookInput | string, policyPath: string | undefined = fx.policyPath): HookResult {
+export function runHook(fx: HookFixture, event: 'pre' | 'post' | 'config-change' | string, input: HookInput | string, policyPath: string | null = fx.policyPath): HookResult {
   const payload = typeof input === 'string' ? input : JSON.stringify({ cwd: fx.staging, hook_event_name: event, ...input });
   const result = spawnSync(process.execPath, hookArgs(event, policyPath), { input: payload, encoding: 'utf8', env: cleanEnv(), timeout: 30_000 });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };

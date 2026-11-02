@@ -3,10 +3,15 @@
 // never contain (CON-2, CON-3, CON-13, T-01-31, T-01-33, T-01-35, S-31).
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { writeHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
+import { parseHookPolicy } from '../../src/domain/hook-decision.ts';
+import type { HookPolicy } from '../../src/domain/hook-decision.ts';
+import { computeInvocationScope } from '../../src/domain/invocation-scope.ts';
+import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { HOOK_ENTRY, PREAMBLE, budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook, runHookAsync } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
@@ -20,6 +25,12 @@ function fixture(options: Parameters<typeof makeHookFixture>[0] = {}): HookFixtu
 after(() => {
   for (const fx of fixtures) rmSync(fx.dir, { recursive: true, force: true });
 });
+
+function contractFor() {
+  const compiled = compileOnboardingContract({ onboardingId: 'onb_1', runId: 'run_1', projectId: 'prj_1', pin: 'a'.repeat(40), preflight: {}, request: {}, nowIso: '2026-11-02T00:00:00.000Z' });
+  if (!compiled.ok) throw new Error('contract');
+  return compiled.value;
+}
 
 interface Deny {
   hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string };
@@ -194,7 +205,7 @@ describe('fail closed (CON-3)', () => {
     const wrong = join(fx.dir, 'wrong.json');
     writeFileSync(wrong, JSON.stringify({ schema: 1 }));
     assert.equal(runHook(fx, 'pre', input, wrong).code, 2);
-    assert.equal(runHook(fx, 'pre', input, undefined).code, 2);
+    assert.equal(runHook(fx, 'pre', input, null).code, 2);
     assert.equal(runHook(fx, 'bogus', input).code, 2);
   });
 
@@ -285,5 +296,38 @@ describe('events: attribution, no payloads, hash chain (S-31, T-01-35)', () => {
     reopened.value.close();
     assert.deepEqual(eventRows(fx).map((r) => r.type), ['before', 'hook.decision', 'hook.decision', 'tool.completed', 'after']);
     assert.ok(chainIsIntact(fx.ledgerPath));
+  });
+});
+
+describe('writeHookPolicy', () => {
+  it('writes hook-policy.json with mode 0600, canonical paths, the preamble fingerprint and the agent set', () => {
+    const fx = fixture();
+    const link = join(fx.dir, 'staging-link');
+    symlinkSync(fx.staging, link);
+    const scope = computeInvocationScope({
+      purpose: 'map',
+      contract: contractFor(),
+      stagingPath: link,
+      repoPath: fx.repo,
+      dataRoot: join(fx.dir, 'data'),
+      home: join(fx.dir, 'home'),
+      workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [join(fx.repo, '.git')] },
+      readRoots: [],
+    });
+    const invDir = join(fx.dir, 'inv');
+    const written = writeHookPolicy(invDir, scope, { onboardingId: 'onb_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: ['gsd-codebase-mapper'] }, fx.ledgerPath, { sha256: 'a'.repeat(64), length: 99 });
+    assert.ok(written.ok);
+    assert.equal(written.value.file, join(invDir, 'hook-policy.json'));
+    assert.equal(statSync(written.value.file).mode & 0o777, 0o600);
+    const onDisk = JSON.parse(readFileSync(written.value.file, 'utf8')) as HookPolicy;
+    assert.ok(parseHookPolicy(onDisk).ok);
+    assert.equal(onDisk.stagingPath, fx.staging);
+    assert.deepEqual(onDisk.writeRoots, [join(fx.staging, '.planning', 'codebase')]);
+    assert.equal(onDisk.ledgerPath, fx.ledgerPath);
+    assert.deepEqual(onDisk.subagentTypes, ['gsd-codebase-mapper']);
+    assert.equal(onDisk.commands.preambleSha256, 'a'.repeat(64));
+    assert.equal(onDisk.commands.preambleLength, 99);
+    assert.equal(onDisk.commands.strategy, 'blanket-bash-hook-identity');
+    assert.deepEqual(readdirSync(invDir), ['hook-policy.json']);
   });
 });

@@ -5,7 +5,7 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { IdPrefix } from '../../domain/ids.ts';
-import { canonicalJson, digestOf, sha256Hex } from '../../domain/digest.ts';
+import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
 import type {
@@ -35,6 +35,7 @@ import type {
   TransitionInput,
 } from '../../ports/ledger.ts';
 import { abort, LedgerAbort, toPortError, tx } from './db.ts';
+import { appendEventRow, EventDataError } from './events.ts';
 import type { Db } from './db.ts';
 
 type Row = Record<string, unknown>;
@@ -59,32 +60,11 @@ function parseJson(v: unknown): unknown {
   return JSON.parse(String(v));
 }
 
-const GENESIS_HASH = '0'.repeat(64);
-const MAX_EVENT_STRING = 1024;
-const MAX_EVENT_JSON = 8192;
 const MAX_BODY_BYTES = 1024 * 1024;
 const NO_NEXT_ACTION = 'none';
 
 function iso(ms: number): string {
   return new Date(ms).toISOString();
-}
-
-// Events carry IDs, counts, digests and exit codes, never payloads (T-01-62, ledger prohibition on
-// document text): refuse any string longer than a path or digest plausibly is, and any large document.
-function boundedEventJson(data: unknown): string {
-  const visit = (value: unknown, path: string): void => {
-    if (typeof value === 'string') {
-      if (value.length > MAX_EVENT_STRING) abort({ kind: 'invalid', field: `data${path}`, reason: `event data strings are limited to ${MAX_EVENT_STRING} characters` });
-    } else if (Array.isArray(value)) {
-      value.forEach((item, i) => visit(item, `${path}[${i}]`));
-    } else if (typeof value === 'object' && value !== null) {
-      for (const [k, v] of Object.entries(value)) visit(v, `${path}.${k}`);
-    }
-  };
-  visit(data, '');
-  const json = canonicalJson(data);
-  if (json.length > MAX_EVENT_JSON) abort({ kind: 'invalid', field: 'data', reason: `event data is limited to ${MAX_EVENT_JSON} characters` });
-  return json;
 }
 
 // Stored documents (records, contracts) hold structure, paths and digests, never document text.
@@ -118,7 +98,7 @@ function requiredString(value: unknown, ...path: string[]): string {
 
 interface EventRow {
   type: string;
-  level?: string;
+  level?: 'debug' | 'info' | 'warn' | 'error';
   runId?: string;
   attemptId?: string;
   invocationId?: string;
@@ -551,18 +531,14 @@ export class SqliteLedger implements Ledger {
     return tx(this.db, () => this.insertEvent(input));
   }
 
-  // The caller's transaction must be open. Appends one row to the hash chain:
-  // row_hash = sha256(prev_hash \n ts \n type \n (run_id or "") \n data_json), genesis prev_hash = 64 zeros.
+  // The caller's transaction must be open. Appends one row to the hash chain (events.ts).
   private insertEvent(ev: EventRow): EventReceipt {
-    const dataJson = boundedEventJson(ev.data);
-    const last = this.db.prepare('SELECT row_hash FROM events ORDER BY seq DESC LIMIT 1').get() as { row_hash: string } | undefined;
-    const prevHash = last ? last.row_hash : GENESIS_HASH;
-    const ts = iso(ev.nowMs);
-    const rowHash = sha256Hex([prevHash, ts, ev.type, ev.runId ?? '', dataJson].join('\n'));
-    const result = this.db
-      .prepare('INSERT INTO events (ts, level, type, run_id, attempt_id, invocation_id, data_json, prev_hash, row_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(ts, ev.level ?? 'info', ev.type, ev.runId ?? null, ev.attemptId ?? null, ev.invocationId ?? null, dataJson, prevHash, rowHash);
-    return { seq: Number(result.lastInsertRowid), rowHash };
+    try {
+      return appendEventRow(this.db, ev);
+    } catch (e) {
+      if (e instanceof EventDataError) abort({ kind: 'invalid', field: e.field, reason: e.reason });
+      throw e;
+    }
   }
 
   recordArtifact(input: ArtifactInput): Result<void> {
