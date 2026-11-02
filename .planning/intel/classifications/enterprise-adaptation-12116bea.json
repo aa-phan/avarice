@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/enterprise-adaptation.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Enterprise adaptation",
+  "summary": "Proposed design for running AVARICE inside enterprise identity, tracker, SCM, CI, and release systems, with compatibility constraints, policy model, and onboarding questionnaire.",
+  "scope": ["AVARICE", "enterprise profile", "compatibility constraints", "policy model", "profile isolation", "credentials", "manual modes", "enterprise adapters", "onboarding questionnaire"],
+  "cross_refs": ["requirements.md", "decisions/ADR-001-language-and-runtime.md", "decisions/ADR-009-credential-broker.md", "decisions/ADR-010-serverless-baseline-local-services.md", "containment.md", "repository-onboarding.md", "operations-and-testing.md"],
+  "locked": false,
+  "precedence": 4,
+  "notes": "Type set by MANIFEST_TYPE (SPEC), treated as authoritative. Document status is 'proposal'; nothing described is built or tested, so no content is locked. Body is mixed (compatibility tables, policy rules, questionnaire), and the manifest declaration was not second-guessed."
+}

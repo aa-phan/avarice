@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-003-local-persistence.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-003: One local SQLite database per profile, artifact bytes in a separate store",
+  "summary": "Proposed decision to store each profile's runs and evidence in one local WAL-mode SQLite database, with artifact bytes in a separate content-addressed store.",
+  "scope": ["SQLite", "node:sqlite", "WAL mode", "ArtifactStore port", "content-addressed artifact store", "VACUUM INTO backups", "schema migrations", "network-mount detection", "doctor command", "dataRoot profile configuration"],
+  "cross_refs": ["ADR-010-serverless-baseline-local-services.md", "../deployment-and-portability.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Type set by MANIFEST_TYPE (ADR). Status line reads 'Proposed', not 'Accepted', so locked is false. The status also notes it is amended by ADR-010. Cross-ref to deployment-and-portability.md is the link target without its #anchor. Output filename uses the slug only: the SHA-256 suffix could not be computed because this agent has no shell tool, so the caller must add the 8-hex hash suffix or rename this file."
+}

@@ -1,0 +1,22 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-010-serverless-baseline-local-services.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-010: Keep the serverless baseline; allow an optional local-services deployment",
+  "summary": "Keeps AVARICE's serverless baseline and makes an optional localhost local-services deployment supported, gated by enterprise profile rules.",
+  "scope": ["serverless baseline", "NFR-1", "local-services deployment", "localhost", "Docker Compose", "Podman", "personal-extended profile", "enterprise profile", "system of record", "service adapters"],
+  "cross_refs": [
+    "ADR-003-local-persistence.md",
+    "ADR-004-modular-monolith-and-ports.md",
+    "ADR-009-credential-broker.md",
+    "../reference-system-comparison.md",
+    "../enterprise-adaptation.md",
+    "../deployment-and-portability.md",
+    "../implementation-plan.md",
+    "../reference-system-deep-dive.md"
+  ],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status reads 'Proposed' (not 'Accepted'), so locked is false despite ADR type. Amends ADR-003 and ADR-004 for the baseline only. Type and precedence supplied by manifest. Output filename uses no source hash because the classifier has no hashing tool; the synthesizer should match on source_path."
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-004-modular-monolith-and-ports.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-004: Modular monolith with ports only at realistic migration boundaries",
+  "summary": "Chose a single-package modular monolith with ports only where a second implementation or per-environment swap is expected; rejected separate services on day one.",
+  "scope": ["AVARICE", "modular monolith", "ports", "module import rules", "MCP wrapper", "CommandExecutor port", "NFR-1", "NFR-3", "NFR-4"],
+  "cross_refs": ["docs/decisions/ADR-010-serverless-baseline-local-services.md", "docs/architecture.md", "docs/contracts-and-state.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status is Proposed (amended by ADR-010), so locked is false despite ADR type from manifest. Output filename omits the 8-hex source_hash suffix because the classifier had no hashing tool available; orchestrator should rename per the naming rule if required."
+}

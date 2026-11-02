@@ -1,0 +1,28 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/reference-system-deep-dive.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "How AVARICE differs from 3dmk",
+  "summary": "Compares AVARICE's proposed design with the documented 3dmk system across lifecycle stages, components, portability, scalability and homelab convergence.",
+  "scope": ["AVARICE", "3dmk", "human review and approval", "OS sandbox", "run contract", "evidence gates", "portability", "Seele", "Scrolls", "Registry", "Atlas", "Magi", "reconciliation", "Core MCP", "NervHQ", "Consul", "Vault", "Nexus", "PostgreSQL", "Redis", "Fetch", "Design", "GSD", "SQLite", "homelab"],
+  "cross_refs": [
+    "reference-system-comparison.md",
+    "contracts-and-state.md",
+    "decisions/ADR-002-gsd-integration-mode.md",
+    "decisions/ADR-003-local-persistence.md",
+    "decisions/ADR-006-unattended-delegation.md",
+    "decisions/ADR-009-credential-broker.md",
+    "decisions/ADR-011-static-dashboard.md",
+    "decisions/ADR-012-architecture-model.md",
+    "extensions.md",
+    "deployment-and-portability.md",
+    "enterprise-adaptation.md",
+    "repository-onboarding.md",
+    "operations-and-testing.md",
+    "implementation-plan.md"
+  ],
+  "locked": false,
+  "precedence": 5,
+  "notes": ""
+}

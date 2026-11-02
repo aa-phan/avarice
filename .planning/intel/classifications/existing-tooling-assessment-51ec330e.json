@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/existing-tooling-assessment.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Existing tooling assessment",
+  "summary": "Inventory of GSD 1.17.0, Claude Code and local tooling, with a reuse and gap matrix deciding what AVARICE reuses, extends, wraps or builds.",
+  "scope": ["GSD 1.17.0", "AVARICE", "Claude Code", "hooks", "plugins, skills and MCP", "local toolchain", "autonomy and enforcement surfaces", "reuse and gap matrix"],
+  "cross_refs": [
+    "decisions/ADR-002-gsd-integration-mode.md",
+    "decisions/ADR-006-unattended-delegation.md",
+    "decisions/ADR-007-mutation-gate.md",
+    "decisions/ADR-011-static-dashboard.md",
+    "decisions/ADR-012-architecture-model.md",
+    "extensions.md",
+    "containment.md",
+    "repository-onboarding.md",
+    "operations-and-testing.md",
+    "docs/reference/capability-manifest.md"
+  ],
+  "locked": false,
+  "precedence": 5,
+  "notes": ""
+}

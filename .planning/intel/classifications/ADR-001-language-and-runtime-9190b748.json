@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-001-language-and-runtime.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-001: TypeScript on Node.js with built-in SQLite",
+  "summary": "Chose TypeScript on Node.js with node:sqlite for persistence, restricted to erasable syntax, with a minimum runtime of Node 22.13.",
+  "scope": ["TypeScript", "Node.js", "node:sqlite", "SQLite", "AVARICE CLI", "doctor command", "erasable syntax", "bundled JavaScript build", "node --test"],
+  "cross_refs": ["../requirements.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status reads Proposed, not Accepted, so locked is false despite the decision section being written as final. Type and precedence were supplied by MANIFEST_TYPE=ADR and MANIFEST_PRECEDENCE=2. Output filename uses a placeholder because no SHA-256 tool was available to this classifier; the required 8-hex source_hash of /Users/aphan/avarice/docs/decisions/ADR-001-language-and-runtime.md was not computed and must be substituted or the file renamed by the caller."
+}

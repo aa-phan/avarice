@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/deployment-and-portability.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Deployment and portability",
+  "summary": "Proposed design for moving AVARICE from a local Mac baseline to NAS artifacts, a remote worker and shared coordination, via port adapters and migration rules.",
+  "scope": ["AVARICE CLI", "state.db SQLite profile store", "ArtifactStore port", "CommandExecutor port", "Ledger port", "remote worker", "coordination API", "NAS artifact storage", "local services deployment (MinIO, Vault/OpenBao, PostgreSQL)", "migration matrix", "backup consistency", "workspace identity and path translation", "concurrent workers and leases"],
+  "cross_refs": ["decisions/ADR-003-local-persistence.md", "decisions/ADR-010-serverless-baseline-local-services.md", "decisions/ADR-009-credential-broker.md", "enterprise-adaptation.md"],
+  "locked": false,
+  "precedence": 4,
+  "notes": ""
+}

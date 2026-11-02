@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-005-policy-approvals-and-profiles.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-005: Deny-by-default privileged actions, parameter-bound approvals, hard profile separation",
+  "summary": "Decides deny-by-default for privileged actions, parameter-bound approvals, precedence of policy layers, and hard separation between personal and enterprise profiles.",
+  "scope": ["AVARICE", "privileged actions", "action approvals", "policy sources", "organization policy file", "profiles", "data root", "run contract", "PreToolUse hook", "avarice hook pre-tool-use"],
+  "cross_refs": ["https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/hooks", "https://code.claude.com/docs/en/settings"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status is Proposed, so locked is false. Only Accepted ADRs are locked. Type ADR comes from MANIFEST_TYPE and matches the content (Context/Decision/Consequences/Alternatives, numbered filename). Output filename uses slug plus the literal placeholder UNHASHED because no shell or hashing tool was available to compute the SHA-256 path hash; rename to {slug}-{first 8 hex of sha256(source_path)}.json before synthesis."
+}

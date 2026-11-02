@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/operations-and-testing.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Operations and testing",
+  "summary": "Proposed operational contract for AVARICE: diagnostics, per-operation timeouts, retry and cancellation rules, observability, backup, test strategy and acceptance scenarios. Unbuilt proposal.",
+  "scope": ["AVARICE", "avarice doctor", "operation budgets", "ledger transactions", "git subprocess", "gsd_run", "PR creation", "tracker comments", "artifact store", "host invocation", "graphify index build", "run hooks", "notifications", "event log", "redaction", "credential audit", "dashboard", "backup and restore", "schema migration", "test strategy", "acceptance scenarios", "SQLite", "GSD 1.17.0", "gh CLI"],
+  "cross_refs": ["contracts-and-state.md", "deployment-and-portability.md", "autonomy-and-decisions.md"],
+  "locked": false,
+  "precedence": 4,
+  "notes": ""
+}

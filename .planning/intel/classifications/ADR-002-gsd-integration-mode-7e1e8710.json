@@ -1,0 +1,18 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-002-gsd-integration-mode.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-002: AVARICE supplies services to GSD and never orchestrates the loop",
+  "summary": "Decides AVARICE owns the run envelope (intake, context, ledger, evidence, authorization) while GSD owns plan-to-ship; AVARICE integrates as services, not orchestrator.",
+  "scope": ["AVARICE", "GSD", "run envelope", "lifecycle transitions", "integration Stage 1", "integration Stage 2", "state.json contract", "planning inspect", "gsd_run CLI", "GSD capabilities", "GSD ship gates", "HANDOFF.json"],
+  "cross_refs": [
+    "ADR-006-unattended-delegation.md",
+    "../existing-tooling-assessment.md#gsd-lifecycle-ownership",
+    "../architecture.md#integration-stages",
+    "../extensions.md#5-gsd-capability-avarice-bridge-stage-2"
+  ],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status is Proposed (not Accepted), so locked is false. Partially superseded by ADR-006 for unattended runs. Manifest-declared type ADR and precedence 2 applied as authoritative. Content signals (Status, Context/Decision/Consequences, Alternatives, Revisit when) confirm ADR. The SHA-256 source_hash could not be computed (no shell tool available), so the filename omits the 8-char hash suffix; orchestrator should rename per the naming convention if collision avoidance is needed."
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-011-static-dashboard.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-011: Ship a static, read-only dashboard in the MVP",
+  "summary": "Decides to ship a self-contained, read-only HTML dashboard via `avarice dashboard` in the MVP, with no server or listening port; served dashboards deferred.",
+  "scope": ["static dashboard", "avarice dashboard command", "profile ledger", "MVP", "observe module", "redaction (SEC-3)", "single-profile scope (SEC-1)"],
+  "cross_refs": ["../requirements.md#non-goals", "../reference-system-deep-dive.md#nervhq-oversight", "ADR-010-serverless-baseline-local-services.md", "../operations-and-testing.md#observability", "../architecture.md#modules"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Type set by MANIFEST_TYPE (manifest_override true). Status reads 'Proposed', not 'Accepted', so locked is false. The ADR narrows the dashboard non-goal in requirements.md, which the synthesizer should weigh when it is accepted. The source_hash filename suffix could not be computed (no shell tool available to this classifier); the file is written as ADR-011-static-dashboard-UNHASHED.json and should be renamed to ADR-011-static-dashboard-<first 8 hex of sha256 of the POSIX source path>.json."
+}

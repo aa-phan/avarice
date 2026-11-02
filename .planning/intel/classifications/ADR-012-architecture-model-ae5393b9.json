@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-012-architecture-model.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-012: Hold code to a repository-owned, machine-checkable architecture model",
+  "summary": "Proposes a repository-committed architecture model (.avarice/architecture.json) with components, typed edges and shared resources, checked against the code graph at G4 and G2.",
+  "scope": ["architecture model", ".avarice/architecture.json", "components", "edges", "shared resources", "architecture-model check", "G4 phase gate", "G2", "AUT-17", "ONB-2", "FR-25", "FR-21", "FR-23", "3dmk Magi"],
+  "cross_refs": ["../requirements.md", "../reference-system-comparison.md", "../repository-onboarding.md", "../contracts-and-state.md", "../reference-system-deep-dive.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status is 'Proposed' (not Accepted), so locked is false despite ADR classification. Manifest declared type ADR and precedence 2; content matches ADR structure (Context/Decision/Consequences/Alternatives). Output filename omits the source_path hash because no hashing tool was available to the classifier."
+}

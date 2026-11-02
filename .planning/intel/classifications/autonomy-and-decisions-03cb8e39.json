@@ -1,0 +1,19 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/autonomy-and-decisions.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": true,
+  "title": "Autonomy and decisions",
+  "summary": "Proposed design for unattended AVARICE runs: when to escalate to a human, decision records, authority classes, notification channels, and autonomy metrics.",
+  "scope": ["AVARICE", "GSD", "unattended runs", "decision records", "authority classes", "notification adapters", "run states", "autonomy metrics", "cross-repository runs"],
+  "cross_refs": [
+    "requirements.md",
+    "contracts-and-state.md",
+    "decisions/ADR-006-unattended-delegation.md",
+    "decisions/ADR-007-mutation-gate.md",
+    "deployment-and-portability.md"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": "MANIFEST_TYPE SPEC applied as authoritative (manifest_override true). Content signals are weaker than typical SPEC: no endpoint tables, request/response schemas, or protocol definitions; it is a behavioral design with a decision matrix, authority-class table, and metrics. Status line says 'proposal; nothing built yet', so present tense describes proposed design only. Cross_refs are file paths with anchor fragments stripped. Source hash not computed (no shell tool available to this classifier); filename carries a placeholder token 'UNCOMPUTED' and must be renamed to autonomy-and-decisions-<first 8 hex of SHA-256 of /Users/aphan/avarice/docs/autonomy-and-decisions.md>.json by the orchestrator."
+}

@@ -1,0 +1,38 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/containment.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Containment",
+  "summary": "Proposed containment design: four independent layers (OS sandbox, host permissions and hooks, scoped credentials and network allowlists, adapter budgets) limiting agent run impact, with fail-closed behavior.",
+  "scope": [
+    "containment",
+    "OS sandbox",
+    "Seatbelt",
+    "bubblewrap",
+    "Claude Code permissions",
+    "PreToolUse hook",
+    "generated host settings",
+    "network allowlist",
+    "budgets",
+    "run contract",
+    "restricted mode",
+    "MCP servers",
+    "subagents",
+    "CommandExecutor"
+  ],
+  "cross_refs": [
+    "requirements.md#containment",
+    "contracts-and-state.md#run-contract",
+    "existing-tooling-assessment.md#agent-host-and-configuration",
+    "deployment-and-portability.md#local-baseline",
+    "decisions/ADR-007-mutation-gate.md",
+    "extensions.md#version-compatibility",
+    "autonomy-and-decisions.md#decision-matrix",
+    "contracts-and-state.md#phase-gates",
+    "contracts-and-state.md#budget-accounting"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": "Lists unresolved host limitations 1-8."
+}

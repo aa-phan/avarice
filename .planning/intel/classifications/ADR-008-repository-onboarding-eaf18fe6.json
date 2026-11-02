@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-008-repository-onboarding.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-008: GSD maps and plans; AVARICE onboards in a contained staging worktree and records provenance",
+  "summary": "Proposed decision: GSD handles semantic mapping and planning; AVARICE onboards repositories in a contained staging worktree and records provenance.",
+  "scope": ["GSD", "AVARICE", "repository onboarding", "staging worktree", "codebase map", "project record", "planning initialization", "GSD intel", "graphify index", "GsdOnboarding port"],
+  "cross_refs": ["../repository-onboarding.md", "~/.claude/gsd-core/workflows/onboard.md", "~/.claude/gsd-core/workflows/map-codebase.md", "~/.claude/gsd-core/workflows/scan.md", "~/.claude/gsd-core/workflows/ingest-docs.md", "~/.claude/gsd-core/bin/lib/onboard-projection.cjs", "~/.claude/gsd-core/bin/lib/gate-codebase-drift.cjs", "~/.claude/gsd-core/bin/lib/drift.cjs"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Manifest declared type ADR and precedence 2; applied as authoritative. Status reads 'Proposed' (not 'Accepted'), so locked is false. Source hash for the output filename could not be computed (no hashing tool available to this classifier); file was written with suffix 'nohash' and the orchestrator should rename it using the first 8 hex chars of SHA-256 of the full source path."
+}

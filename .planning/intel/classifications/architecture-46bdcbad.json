@@ -1,0 +1,43 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/architecture.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Architecture",
+  "summary": "Normative architecture for AVARICE: module boundaries, dependency direction, process view, data flows, trust boundaries, and source-of-truth ownership. Proposal, not built.",
+  "scope": [
+    "AVARICE CLI",
+    "workflow",
+    "context",
+    "ledger",
+    "inventory",
+    "exec",
+    "policy",
+    "decisions",
+    "onboarding",
+    "verify",
+    "artifacts",
+    "observe",
+    "supervisor",
+    "profile store",
+    "GSD",
+    "agent host",
+    "avarice-bridge capability",
+    "trust boundaries",
+    "source-of-truth ownership"
+  ],
+  "cross_refs": [
+    "decisions/ADR-006-unattended-delegation.md",
+    "decisions/ADR-002-gsd-integration-mode.md",
+    "requirements.md",
+    "contracts-and-state.md",
+    "extensions.md",
+    "autonomy-and-decisions.md",
+    "containment.md",
+    "enterprise-adaptation.md",
+    "implementation-plan.md"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

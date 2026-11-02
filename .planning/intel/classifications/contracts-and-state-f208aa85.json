@@ -1,0 +1,30 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/contracts-and-state.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Contracts and state",
+  "summary": "Proposed contracts for AVARICE's ports, error and capability model, run state machine, persisted SQLite schema, and configuration format.",
+  "scope": ["AVARICE", "ports", "Result and PortError", "CapabilityDescriptor", "ExternalRef", "correlation identifiers", "run contract", "policy presets", "budget accounting", "Workspace", "CommandExecutor", "ContextSource", "TaskSource", "ChangeRequests", "ArtifactStore", "Ledger", "CredentialProvider", "EventSink", "AgentHost", "Notifier", "GsdOnboarding", "run state machine", "work item states", "recovery rules", "decision records", "evidence schema", "phase gates G0-G4", "mutation evidence", "persisted entities", "concurrency control", "reference freshness", "retention, export and import", "configuration layers"],
+  "cross_refs": [
+    "requirements.md",
+    "architecture.md#modules",
+    "operations-and-testing.md#operation-budgets",
+    "deployment-and-portability.md#concurrent-workers-later",
+    "repository-onboarding.md#onboarding-contract",
+    "repository-onboarding.md",
+    "containment.md#checks-and-probes-run-sandboxed",
+    "containment.md#fail-closed-behavior",
+    "containment.md#how-a-run-is-launched",
+    "containment.md#enforcement-coverage-matrix",
+    "autonomy-and-decisions.md#responses",
+    "extensions.md#12-standards-context-adapter-later",
+    "enterprise-adaptation.md#policy-model",
+    "decisions/ADR-003-local-persistence.md",
+    "decisions/ADR-007-mutation-gate.md",
+    "decisions/ADR-009-credential-broker.md"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

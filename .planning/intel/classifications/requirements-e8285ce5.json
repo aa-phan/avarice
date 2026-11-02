@@ -1,0 +1,28 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/requirements.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Requirements",
+  "summary": "Owns all normative AVARICE requirements (FR, RC, CON, AUT, ONB, NFR, SEC, OPS, acceptance criteria, assumptions) for the proposed agent orchestration framework.",
+  "scope": ["AVARICE", "run contract", "workflow", "authorization", "integration", "containment", "autonomy and decisions", "repository onboarding", "portability", "reliability", "security and isolation", "operability", "GSD integration", "profiles"],
+  "cross_refs": [
+    "../README.md",
+    "decisions/ADR-002-gsd-integration-mode.md",
+    "decisions/ADR-012-architecture-model.md",
+    "decisions/ADR-011-static-dashboard.md",
+    "decisions/ADR-007-mutation-gate.md",
+    "decisions/ADR-009-credential-broker.md",
+    "decisions/ADR-001-language-and-runtime.md",
+    "contracts-and-state.md",
+    "containment.md",
+    "autonomy-and-decisions.md",
+    "repository-onboarding.md",
+    "deployment-and-portability.md",
+    "operations-and-testing.md",
+    "implementation-plan.md"
+  ],
+  "locked": false,
+  "precedence": 1,
+  "notes": "Type and precedence taken from MANIFEST_TYPE=PRD and MANIFEST_PRECEDENCE=1. Content also contains SPEC-like containment and architecture material and a status line marking the document as a proposal; the manifest declaration was treated as authoritative. No ADR status applies, so locked is false. Output filename uses slug only because the source hash could not be computed in this environment."
+}

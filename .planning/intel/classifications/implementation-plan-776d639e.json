@@ -1,0 +1,27 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/implementation-plan.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Implementation plan",
+  "summary": "Proposed eight-slice (0-7) implementation plan for AVARICE, with scope tiers, verification, dependencies, maintenance cost, and GSD roadmap mapping.",
+  "scope": ["AVARICE", "GSD 1.17.0", "contained onboarding", "run contract", "containment and sandbox", "decisions and amendments", "profiles and retrieval", "delivery and draft PR", "GSD capability bridge", "personal infrastructure adapters", "cross-repository runs"],
+  "cross_refs": [
+    "requirements.md",
+    "contracts-and-state.md#ports",
+    "enterprise-adaptation.md#onboarding-questionnaire",
+    "repository-onboarding.md",
+    "extensions.md#version-compatibility",
+    "containment.md#unresolved-host-limitations",
+    "autonomy-and-decisions.md#cross-repository-runs-later",
+    "existing-tooling-assessment.md#gsd",
+    "extensions.md#12-standards-context-adapter-later",
+    "decisions/ADR-006-unattended-delegation.md",
+    "decisions/ADR-009-credential-broker.md",
+    "decisions/ADR-010-serverless-baseline-local-services.md",
+    "gsd-ingest-manifest.yaml"
+  ],
+  "locked": false,
+  "precedence": 5,
+  "notes": "Type DOC set by MANIFEST_TYPE (authoritative); heuristic and content classification skipped. Content carries plan-like features (requirement IDs, verification lists, success criteria, and a GSD roadmap-phase block) that a PRD or SPEC reader might weigh, but the status line reads 'Proposal; nothing built yet' and the manifest declares DOC. Precedence 5 from MANIFEST_PRECEDENCE. Not an ADR; locked is false."
+}

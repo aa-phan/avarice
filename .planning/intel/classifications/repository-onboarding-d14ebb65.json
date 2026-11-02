@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/repository-onboarding.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Repository onboarding",
+  "summary": "Proposed design for AVARICE onboarding of existing repositories via staged GSD mapping, validation, and project record activation.",
+  "scope": ["AVARICE", "repository onboarding", "GSD map-codebase", "GSD scan", "project record", "onboarding contract", "staging worktree", "ingest-docs", "intel index", "graphify knowledge graph", "architecture draft", "enforcement and containment", "promotion", "active command validation"],
+  "cross_refs": ["requirements.md", "decisions/ADR-008-repository-onboarding.md", "decisions/ADR-006-unattended-delegation.md", "decisions/ADR-012-architecture-model.md", "contracts-and-state.md", "containment.md", "enterprise-adaptation.md", "autonomy-and-decisions.md"],
+  "locked": false,
+  "precedence": 3,
+  "notes": "Type and precedence taken from manifest (SPEC, precedence 3). Document self-declares 'Status: proposal'; nothing described is built yet, and the GSD 1.17.0 facts are evidence-cited. Filename hash not computed: classifier had no hashing tool. Rename to repository-onboarding-<first 8 hex of sha256('/Users/aphan/avarice/docs/repository-onboarding.md')>.json before the synthesizer reads it."
+}

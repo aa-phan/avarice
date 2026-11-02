@@ -1,0 +1,28 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-006-unattended-delegation.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-006: Unattended runs delegate bounded GSD units through contained headless invocations and route every GSD pause",
+  "summary": "Unattended runs drive GSD units through contained headless invocations, routing every GSD pause to a validated human decision or declared default.",
+  "scope": [
+    "unattended runs",
+    "GSD units",
+    "supervisor process",
+    "headless invocations",
+    "containment",
+    "GSD checkpoints",
+    "GSD configuration",
+    "integrity gates",
+    "ready_for_review endpoint"
+  ],
+  "cross_refs": [
+    "ADR-002-gsd-integration-mode.md",
+    "../containment.md",
+    "../autonomy-and-decisions.md#decision-matrix",
+    "../extensions.md#5-gsd-capability-avarice-bridge-stage-2"
+  ],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status Proposed; supersedes part of ADR-002."
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/aphan/avarice/docs/decisions/ADR-007-mutation-gate.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-007: Measure test strength with a mutation gate; reuse the adversarial-mutation-test skill, probe in Node",
+  "summary": "Proposed decision to measure test strength on changed lines with a deterministic mutation gate, reusing the adversarial-mutation-test skill and a Node probe.",
+  "scope": ["mutation gate", "gate G4", "test strength", "adversarial-mutation-test skill", "mutation-probe", "Node mutation probe", "harden work item type", "containment sandbox", "mutants.toml"],
+  "cross_refs": ["../containment.md", "../existing-tooling-assessment.md", "ADR-001-language-and-runtime.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Status reads Proposed, so locked is false despite the ADR type. Type and precedence came from the manifest. Cross-ref anchors (#enforcement-coverage-matrix, #checks-and-probes-run-sandboxed, #plugins-skills-and-mcp) stripped from paths. The SHA-256 source_hash suffix could not be computed (no shell or hashing tool available to this classifier), so this file is named without the hash suffix; the orchestrator must rename it to {slug}-{first 8 hex of SHA-256 of the POSIX source path}.json."
+}
