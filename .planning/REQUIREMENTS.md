@@ -115,11 +115,11 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Portability and reliability (NFR-1 to NFR-9)
 
-- [ ] **NFR-1** [MVP]: Baseline operation on one Mac needs no NAS, cloud account, container runtime, Kubernetes, Redis or always-on database server.
+- [x] **NFR-1** [MVP]: Baseline operation on one Mac needs no NAS, cloud account, container runtime, Kubernetes, Redis or always-on database server.
 - [x] **NFR-2** [MVP]: Local orchestration (status, resume planning, verification, checkpoints, evidence) works without network access.
 - [x] **NFR-3** [MVP]: Domain workflow code contains no provider identifiers, URLs, absolute paths, SQL dialect or agent-vendor APIs; a lint check enforces the import boundary.
 - [ ] **NFR-4** [Contract proved with a fake remote adapter, Later real]: Moving artifact storage or execution to another host needs only configuration, explicit data migration and possibly a new adapter; domain workflow code does not change.
-- [ ] **NFR-5** [MVP]: SQLite databases live on local storage and are never placed on a network filesystem.
+- [x] **NFR-5** [MVP]: SQLite databases live on local storage and are never placed on a network filesystem.
 - [ ] **NFR-6** [MVP]: After a process crash, sleep or kill at any point, the next command detects interrupted work and presents a consistent state ("paused, needs reconciliation" is allowed); it never silently shows "done".
 - [ ] **NFR-7** [Contract]: Every external side effect carries an idempotency or correlation key; an ambiguous timeout triggers reconciliation (lookup by key) before any retry.
 - [ ] **NFR-8** [MVP]: Every critical operation has a defined timeout, cancellation behavior and retry eligibility.
@@ -292,11 +292,11 @@ Each v1 requirement maps to exactly one phase.
 | ONB-13 | Phase 1 | Pending |
 | ONB-14 | Phase 1 | Pending |
 | ONB-15 | Phase 4 | Pending |
-| NFR-1 | Phase 2 | Pending |
+| NFR-1 | Phase 2 | Complete |
 | NFR-2 | Phase 1 | Complete |
 | NFR-3 | Phase 2 | Complete |
 | NFR-4 | Phase 4 | Pending |
-| NFR-5 | Phase 2 | Pending |
+| NFR-5 | Phase 2 | Complete |
 | NFR-6 | Phase 2 | Pending |
 | NFR-7 | Phase 5 | Pending |
 | NFR-8 | Phase 5 | Pending |

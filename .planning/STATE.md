@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-11-02T19:58:48.320Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-11-02T20:10:47.780Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 7b03925039e4b6e6bfb2f812f7eb892972aebb91
+state_head: 41f4d25c46da5cea81c317ce8ec8ac4158abbb4f
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 7 of 20
+Plan: 8 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 15min | 2 tasks | 11 files |
 | Phase 01 P05 | 12 min | 2 tasks | 16 files |
 | Phase 01 P06 | 19 min | 3 tasks | 14 files |
+| Phase 01 P07 | 9 min | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-06: a lease is expired only when its expiry instant is strictly before now; renewal checks holder and fence, not expiry; resume on a stop state takes no lease
 - [Phase 01]: 01-06: reconcile of an interrupted mapping goes mapping->paused->mapping (relaunch) or ->validating with invocation.reconciled when every required map file is present; a round has an invocation iff launch:map rows exceed validate rows
 - [Phase 01]: 01-06: migrate backs up with VACUUM INTO to backups/ beside the store before the first pending migration (default derived from db.location, composition untouched), one transaction per migration, checksum mismatch refuses with 'store schema v{n} checksum mismatch: refusing to start'
+- [Phase 01]: 01-07: resolveProfile returns Result, realpaths only for the checks and returns the configured paths; roots that equal or contain the home or Claude config directory are also refused
+- [Phase 01]: 01-07: openDb runs the SQLite WAL-reset gate first (PortError unsupported gains detail) and creates the store file 0600; a command module may export usage() to refuse before the profile is resolved
+- [Phase 01]: 01-07: local-mount check fails closed when the mount table cannot be read; the local flag is a heuristic (A6), unverified against a real network volume
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T19:58:48.304Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-11-02T20:10:47.763Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
