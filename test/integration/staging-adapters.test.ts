@@ -59,9 +59,12 @@ function prepared(repo: ScratchRepo, workRoot: string, pin = repo.head): Staging
 }
 
 describe('staging strategy', () => {
-  it('names the worktree strategy and builds the matching adapter', () => {
-    assert.equal(STAGING_STRATEGY, 'worktree');
-    assert.ok(createStagingWorkspace(STAGING_STRATEGY) instanceof WorktreeStagingWorkspace);
+  // Plan 01-08 Task 1: the owner chose the local clone over the linked worktree. This file keeps exercising the
+  // worktree adapter directly (it stays behind the same port); no-repo-exec.test.ts covers the clone.
+  it('names the clone strategy and still builds the worktree adapter on request', () => {
+    assert.equal(STAGING_STRATEGY, 'clone');
+    assert.ok(!(createStagingWorkspace(STAGING_STRATEGY) instanceof WorktreeStagingWorkspace));
+    assert.ok(createStagingWorkspace('worktree') instanceof WorktreeStagingWorkspace);
   });
 });
 
