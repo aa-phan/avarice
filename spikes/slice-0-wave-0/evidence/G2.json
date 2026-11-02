@@ -1,0 +1,256 @@
+{
+  "case": "G2",
+  "spike": "S0-G",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge"
+    ],
+    "denyWrite": [],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "G2",
+    "spike": "S0-G",
+    "costUsd": 0.009831620000000001,
+    "capUsd": 0.4,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 26,
+    "at": "2026-11-02T18:05:25.065Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.009831620000000001,
+    "duration_ms": 5986,
+    "num_turns": 2,
+    "text": "The `/graphify .` run is stopped at the semantic-extraction step, so there is no graph or report yet. **What's blocking:** The four doc files (`docs/guide.md`, `docs/design.md`, `docs/adr/ADR-001.md`, `.planning/codebase/STACK.md`) need to ",
+    "permission_denials": [
+      {
+        "tool": "Read",
+        "input": "{\"file_path\":\"/Users/aphan/.local/share/avarice-spikes/wave-0/plugin/skills/graphify/references/extraction-spec.md\"}"
+      }
+    ],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.009831620000000001
+      }
+    },
+    "subagent_stats": {
+      "spawned": 1,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 1
+      },
+      "started_in_background": 1,
+      "max_depth": 1,
+      "spawned_by_subagents": 0,
+      "completed": 1,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "general-purpose": 1
+      }
+    },
+    "usage": {
+      "input": 4,
+      "cache_creation": 1910,
+      "cache_read": 82151,
+      "output": 1055
+    }
+  },
+  "toolCalls": {
+    "Bash": 3,
+    "Agent": 1,
+    "Read": 6
+  },
+  "bash": [
+    {
+      "first_line": "ls -la graphify-out 2>/dev/null | head -5; PYTHON=\"\"; GRAPHIFY_BIN=$(which graphify 2>/dev/null); if [ -z \"$PYTHON\" ] && command -v uv >/dev/null 2>&1; then _UV_PY=$(uv tool run --from graphifyy pytho",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "$(cat graphify-out/.graphify_python) -c \"",
+      "lines": 11,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "find docs .planning -type f; ls /Users/aphan/.local/share/avarice-spikes/wave-0/plugin/skills/graphify/references/; echo \"GEMINI set: ${GEMINI_API_KEY:+yes}${GOOGLE_API_KEY:+yes}\"",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [
+    {
+      "subagent_type": "general-purpose",
+      "background": false
+    }
+  ],
+  "toolErrors": [
+    {
+      "tool": "Read",
+      "excerpt": "Permission to use Read has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tool"
+    },
+    {
+      "tool": "Read",
+      "excerpt": "Permission to use Read has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tool"
+    }
+  ],
+  "hook": {
+    "calls": 10,
+    "byDecision": {
+      "none": 10
+    },
+    "byTool": {
+      "Bash": 3,
+      "Agent": 1,
+      "Read": 6
+    },
+    "subagentCalls": 5,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "tree": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+      "count": 7,
+      "files": [
+        ".planning/codebase/STACK.md",
+        "docs/adr/ADR-001.md",
+        "docs/design.md",
+        "docs/guide.md",
+        "graphify-out/.graphify_detect.json",
+        "graphify-out/.graphify_python",
+        "graphify-out/.graphify_root"
+      ]
+    },
+    "hooklog": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G2.hook.log",
+      "bashCommands": 3,
+      "needles": {
+        "max-workers": 0,
+        "uv tool": 1,
+        "pip install": 1,
+        "graphify extract": 0,
+        "graphify-out": 2,
+        ".graphify_python": 2
+      }
+    },
+    "toolOutput": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G2.jsonl",
+      "toolResultCount": 10,
+      "needles": {
+        "allow list": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "Operation not permitted": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "Could not resolve": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "No module named": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "Failed to": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        }
+      }
+    },
+    "graph": {
+      "graphJson": "absent"
+    }
+  },
+  "eventCount": 61
+}

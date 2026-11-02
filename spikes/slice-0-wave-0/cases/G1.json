@@ -1,0 +1,32 @@
+{
+  "case": "G1",
+  "spike": "S0-G",
+  "cwd": "{KP}/.avarice-knowledge",
+  "hook": "log",
+  "allow": [
+    "Read(/{KP}/**)",
+    "Read(/{GSD}/**)",
+    "Edit(/{KP}/.avarice-knowledge/**)",
+    "Glob",
+    "Grep",
+    "Agent",
+    "Bash"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch"
+  ],
+  "allowWrite": [
+    "{KP}/.avarice-knowledge"
+  ],
+  "denyWrite": [],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh"
+  ]
+}

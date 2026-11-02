@@ -1,0 +1,25 @@
+{
+  "case": "E2b",
+  "spike": "S0-E",
+  "cwd": "{SRC}",
+  "hook": "log",
+  "memoryEnv": false,
+  "allow": [
+    "Read(/{SRC}/**)"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch"
+  ],
+  "allowWrite": [],
+  "denyWrite": [],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh"
+  ]
+}

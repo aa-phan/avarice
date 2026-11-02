@@ -1,0 +1,35 @@
+{
+  "case": "E3",
+  "spike": "S0-E",
+  "cwd": "{SRC}",
+  "hook": "log",
+  "allow": [
+    "Read(/{SRC}/**)",
+    "Read(/{GSD}/**)",
+    "Glob",
+    "Grep",
+    "Bash(gsd_run:*)"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch"
+  ],
+  "allowWrite": [],
+  "denyWrite": [
+    "{SRC}/src",
+    "{SRC}/docs",
+    "{SRC}/README.md",
+    "{SRC}/CLAUDE.md",
+    "{SRC}/.env",
+    "{SRC}/.git"
+  ],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh"
+  ]
+}

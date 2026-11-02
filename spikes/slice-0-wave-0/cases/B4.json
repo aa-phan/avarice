@@ -1,0 +1,39 @@
+{
+  "case": "B4",
+  "spike": "S0-B",
+  "cwd": "{WT}",
+  "hook": "log",
+  "allow": [
+    "Read(/{WT}/**)",
+    "Edit(/{WT}/.planning/codebase/**)",
+    "Bash"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch",
+    "Read(/{SRC}/**)"
+  ],
+  "allowWrite": [
+    "{WT}/.planning/codebase"
+  ],
+  "denyWrite": [
+    "{SRC}/.git",
+    "{SRC}/.git/worktrees/wt"
+  ],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh",
+    "{SRC}"
+  ],
+  "allowRead": [
+    "{SRC}/.git"
+  ],
+  "mkdirs": [
+    "{WT}/.planning/codebase"
+  ]
+}

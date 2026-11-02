@@ -1,0 +1,142 @@
+{
+  "case": "E1b",
+  "spike": "S0-E",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [],
+    "denyWrite": [],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "E1b",
+    "spike": "S0-E",
+    "costUsd": 0.0014888500000000003,
+    "capUsd": 0.15,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 2,
+    "at": "2026-11-02T17:53:13.968Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [],
+    "skillCount": 19,
+    "slashGsd": [],
+    "agents": [],
+    "plugins": [
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.0014888500000000003,
+    "duration_ms": 1046,
+    "num_turns": 1,
+    "text": "canary: NONE graphify: no",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.0014888500000000003
+      }
+    },
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "usage": {
+      "input": 2,
+      "cache_creation": 6537,
+      "cache_read": 13675,
+      "output": 89
+    }
+  },
+  "toolCalls": {},
+  "bash": [],
+  "agentCalls": [],
+  "toolErrors": [],
+  "hook": {
+    "calls": 0,
+    "byDecision": {},
+    "byTool": {},
+    "subagentCalls": 0,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "canary": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/E1b.jsonl",
+      "toolResultCount": 0,
+      "needles": {
+        "CANARY-7": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        }
+      }
+    }
+  },
+  "eventCount": 7
+}

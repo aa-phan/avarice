@@ -1,0 +1,296 @@
+{
+  "case": "A1",
+  "spike": "S0-A",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash(gsd_run:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(wc:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git log:*)",
+      "Bash(git rev-parse:*)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase"
+    ],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/README.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/CLAUDE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.env",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "A1",
+    "spike": "S0-A",
+    "costUsd": 0.01606839,
+    "capUsd": 0.3,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 53,
+    "at": "2026-11-02T17:57:59.842Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.01606839,
+    "duration_ms": 4726,
+    "num_turns": 2,
+    "text": "The `--fast` scan finished. It used the default `tech+arch` focus, since no focus value was passed. Four documents are in `.planning/codebase/`: - `STACK.md` (67 lines) - `INTEGRATIONS.md` (63 lines) - `ARCHITECTURE.md` (121 lines) - `STRUC",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.01606839
+      }
+    },
+    "subagent_stats": {
+      "spawned": 1,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 1
+      },
+      "started_in_background": 1,
+      "max_depth": 1,
+      "spawned_by_subagents": 0,
+      "completed": 1,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "gsd-codebase-mapper": 1
+      }
+    },
+    "usage": {
+      "input": 4,
+      "cache_creation": 1581,
+      "cache_read": 62601,
+      "output": 774
+    }
+  },
+  "toolCalls": {
+    "Bash": 9,
+    "Read": 8,
+    "Agent": 1,
+    "Write": 4
+  },
+  "bash": [
+    {
+      "first_line": "ls -la .claude/gsd-core/workflows/ 2>/dev/null; ls -la \"$HOME/.claude/gsd-core/workflows/\" 2>/dev/null | head -50; ls -la .planning/codebase 2>/dev/null",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "test -f .planning/STATE.md && head -40 .planning/STATE.md; echo \"---\"; git -C . status --short | head",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls -la \"$HOME/.claude/gsd-core/workflows/scan.md\" \"$HOME/.claude/gsd-core/workflows/map-codebase.md\" 2>&1",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "GSD_TOOLS=\"$HOME/.claude/gsd-core/bin/gsd-tools.cjs\"; ls -la \"$GSD_TOOLS\" 2>&1; node \"$GSD_TOOLS\" query init.map-codebase 2>&1 | head -c 2000",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "pwd && git ls-files | head -300 && echo \"---COUNT---\" && git ls-files | wc -l && echo \"---SKILLS---\" && ls -la .claude/skills .agents/skills 2>/dev/null; echo \"---MANIFESTS---\"; ls -la package.json re",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "ls -la && echo \"---CODEBASE OUT---\" && ls -la .planning/codebase",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "find .claude -maxdepth 3 2>/dev/null; echo \"---GITIGNORE---\"; ls -la .gitignore 2>/dev/null || echo \"no .gitignore\"; echo \"---BRANCH/REMOTE---\"; git branch --show-current; git remote -v; echo \"---ENV ",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "cd /Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase && wc -l STACK.md INTEGRATIONS.md ARCHITECTURE.md STRUCTURE.md",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "wc -l .planning/codebase/*.md && git status --short",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [
+    {
+      "subagent_type": "gsd-codebase-mapper",
+      "model": "haiku",
+      "background": false
+    }
+  ],
+  "toolErrors": [],
+  "hook": {
+    "calls": 22,
+    "byDecision": {
+      "none": 22
+    },
+    "byTool": {
+      "Bash": 9,
+      "Read": 8,
+      "Agent": 1,
+      "Write": 4
+    },
+    "subagentCalls": 15,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "fastMapFiles": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase",
+      "present": [
+        "STACK.md",
+        "INTEGRATIONS.md",
+        "ARCHITECTURE.md",
+        "STRUCTURE.md"
+      ],
+      "missing": [],
+      "files": {
+        "STACK.md": {
+          "exists": true,
+          "bytes": 1985,
+          "lines": 68
+        },
+        "INTEGRATIONS.md": {
+          "exists": true,
+          "bytes": 1471,
+          "lines": 64
+        },
+        "ARCHITECTURE.md": {
+          "exists": true,
+          "bytes": 5549,
+          "lines": 122
+        },
+        "STRUCTURE.md": {
+          "exists": true,
+          "bytes": 4247,
+          "lines": 118
+        }
+      }
+    },
+    "gitStatus": {
+      "repo": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+      "lines": [
+        "?? .env",
+        "?? .planning/codebase/ARCHITECTURE.md",
+        "?? .planning/codebase/INTEGRATIONS.md",
+        "?? .planning/codebase/STACK.md",
+        "?? .planning/codebase/STRUCTURE.md"
+      ]
+    },
+    "planningTree": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning",
+      "count": 4,
+      "files": [
+        "codebase/ARCHITECTURE.md",
+        "codebase/INTEGRATIONS.md",
+        "codebase/STACK.md",
+        "codebase/STRUCTURE.md"
+      ]
+    }
+  },
+  "eventCount": 96
+}

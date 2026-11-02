@@ -1,0 +1,282 @@
+{
+  "case": "A2",
+  "spike": "S0-A",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase"
+    ],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/README.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/CLAUDE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.env",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "A2",
+    "spike": "S0-A",
+    "costUsd": 0.015234680000000004,
+    "capUsd": 0.3,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 57,
+    "at": "2026-11-02T17:58:57.977Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.015234680000000004,
+    "duration_ms": 9346,
+    "num_turns": 3,
+    "text": "The codebase map is written, but I couldn't commit it. The sandbox blocks writes to `.git/index.lock`, and it is not possible to override that from here. **Map files written to `.planning/codebase/`** (tech+arch focus, one `gsd-codebase-map",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.015234680000000004
+      }
+    },
+    "subagent_stats": {
+      "spawned": 1,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 1
+      },
+      "started_in_background": 1,
+      "max_depth": 1,
+      "spawned_by_subagents": 0,
+      "completed": 1,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "gsd-codebase-mapper": 1
+      }
+    },
+    "usage": {
+      "input": 6,
+      "cache_creation": 2090,
+      "cache_read": 101780,
+      "output": 1535
+    }
+  },
+  "toolCalls": {
+    "Bash": 7,
+    "Read": 8,
+    "Agent": 1,
+    "Write": 4
+  },
+  "bash": [
+    {
+      "first_line": "ls -la \"$HOME/.claude/gsd-core/workflows/\" 2>&1; ls -la .claude/gsd-core/workflows/ 2>&1; ls -la .planning 2>&1",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls -la \"$HOME/.claude/gsd-core/bin/\" 2>&1 | head; ls -la .planning/codebase; git rev-parse --show-toplevel; node \"$HOME/.claude/gsd-core/bin/gsd-tools.cjs\" query init.map-codebase 2>&1 | head -c 2000",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "pwd && ls -la && echo \"---\" && find . -not -path '*/node_modules*' -not -path '*/.git/*' -not -path '*/.env*' | head -200 && echo \"---\" && git log --oneline | head -5",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "ls -la .claude .claude/.cc-writes .planning .planning/codebase 2>&1; echo \"---\"; ls -la src docs docs/adr; echo \"---\"; ls package.json tsconfig.json pyproject.toml requirements.txt setup.py Makefile D",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "cd /Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase && wc -l STACK.md INTEGRATIONS.md ARCHITECTURE.md STRUCTURE.md",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "wc -l .planning/codebase/*.md && git status --short && cat CLAUDE.md 2>/dev/null | head -40",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "git add .planning/codebase && git commit -q -m \"docs: map codebase (tech+arch scan)",
+      "lines": 3,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [
+    {
+      "subagent_type": "gsd-codebase-mapper",
+      "model": "haiku",
+      "background": false
+    }
+  ],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Exit code 128 fatal: Unable to create '/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git/index.lock': Operation not permitted"
+    }
+  ],
+  "hook": {
+    "calls": 20,
+    "byDecision": {
+      "none": 20
+    },
+    "byTool": {
+      "Bash": 7,
+      "Read": 8,
+      "Agent": 1,
+      "Write": 4
+    },
+    "subagentCalls": 14,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "fastMapFiles": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase",
+      "present": [
+        "STACK.md",
+        "INTEGRATIONS.md",
+        "ARCHITECTURE.md",
+        "STRUCTURE.md"
+      ],
+      "missing": [],
+      "files": {
+        "STACK.md": {
+          "exists": true,
+          "bytes": 2085,
+          "lines": 70
+        },
+        "INTEGRATIONS.md": {
+          "exists": true,
+          "bytes": 1474,
+          "lines": 64
+        },
+        "ARCHITECTURE.md": {
+          "exists": true,
+          "bytes": 5378,
+          "lines": 120
+        },
+        "STRUCTURE.md": {
+          "exists": true,
+          "bytes": 4153,
+          "lines": 123
+        }
+      }
+    },
+    "gitStatus": {
+      "repo": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+      "lines": [
+        "?? .env",
+        "?? .planning/codebase/ARCHITECTURE.md",
+        "?? .planning/codebase/INTEGRATIONS.md",
+        "?? .planning/codebase/STACK.md",
+        "?? .planning/codebase/STRUCTURE.md"
+      ]
+    },
+    "planningTree": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning",
+      "count": 4,
+      "files": [
+        "codebase/ARCHITECTURE.md",
+        "codebase/INTEGRATIONS.md",
+        "codebase/STACK.md",
+        "codebase/STRUCTURE.md"
+      ]
+    }
+  },
+  "eventCount": 93
+}

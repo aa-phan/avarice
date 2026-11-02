@@ -1,0 +1,261 @@
+{
+  "case": "G1",
+  "spike": "S0-G",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge"
+    ],
+    "denyWrite": [],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "G1",
+    "spike": "S0-G",
+    "costUsd": 0.00987673,
+    "capUsd": 0.4,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 28,
+    "at": "2026-11-02T18:04:57.525Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.00987673,
+    "duration_ms": 27087,
+    "num_turns": 8,
+    "text": "I couldn't build the graph. The graphify package can't be installed from this sandbox, so nothing was written to `graphify-out/`. **What blocked it** - `uv tool install graphifyy` fails because uv can't write to `~/.local/share/uv/tools` (s",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.00987673
+      }
+    },
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "usage": {
+      "input": 16,
+      "cache_creation": 27392,
+      "cache_read": 283823,
+      "output": 3117
+    }
+  },
+  "toolCalls": {
+    "Bash": 7
+  },
+  "bash": [
+    {
+      "first_line": "ls -la && ls -la graphify-out 2>/dev/null; which graphify uv python3 2>/dev/null",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "PYTHON=\"\"; _UV_PY=$(uv tool run --from graphifyy python -c \"import sys; print(sys.executable)\" 2>/dev/null); echo \"uv py: $_UV_PY\"; if [ -z \"$_UV_PY\" ]; then uv tool install --upgrade graphifyy -q 2>&",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "_UV_PY=$(uv tool run --from graphifyy python -c \"import sys; print(sys.executable)\" 2>&1 | tail -5); echo \"out: $_UV_PY\"",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "export UV_CACHE_DIR=\"$TMPDIR/uv-cache\"; uv tool install --upgrade graphifyy -q 2>&1 | tail -5; uv tool run --from graphifyy python -c \"import sys; print(sys.executable)\" 2>&1 | tail -3",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "cd \"$TMPDIR\" && /usr/bin/python3 -m venv \"$TMPDIR/graphify-venv\" && \"$TMPDIR/graphify-venv/bin/pip\" install -q graphifyy 2>&1 | tail -5; \"$TMPDIR/graphify-venv/bin/python\" -c \"import graphify; print('",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "/usr/bin/python3 -c \"import graphify,sys;print(graphify.__file__)\" 2>&1 | tail -1; ls /Users/aphan/.local/share/avarice-spikes/wave-0/plugin 2>&1 | head; find /Users/aphan/.local/share/avarice-spikes/",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "find . -type f -not -path \"./.git/*\" | sed 's/.*\\.//' | sort | uniq -c | sort -rn | head; find . -type f | wc -l",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Exit code 1 total 0 drwxr-xr-x@ 5 aphan staff 160 Nov 2 12:04 . drwxr-xr-x@ 3 aphan staff 96 Nov 2 12:04 .. drwxr-xr-x@ 3 aphan staff 96 Nov 2 12:04 .claude drw"
+    },
+    {
+      "tool": "Bash",
+      "excerpt": "<tool_use_error>allowed_domains cannot widen network access in this session: the configured sandbox allowlist is the whole allowlist here (a managed-domains-onl"
+    }
+  ],
+  "hook": {
+    "calls": 6,
+    "byDecision": {
+      "none": 6
+    },
+    "byTool": {
+      "Bash": 6
+    },
+    "subagentCalls": 0,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "tree": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+      "count": 4,
+      "files": [
+        ".planning/codebase/STACK.md",
+        "docs/adr/ADR-001.md",
+        "docs/design.md",
+        "docs/guide.md"
+      ]
+    },
+    "hooklog": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G1.hook.log",
+      "bashCommands": 6,
+      "needles": {
+        "max-workers": 0,
+        "uv tool": 2,
+        "pip install": 0,
+        "graphify extract": 0,
+        "graphify-out": 1,
+        ".graphify_python": 0
+      }
+    },
+    "toolOutput": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G1.jsonl",
+      "toolResultCount": 7,
+      "needles": {
+        "allow list": {
+          "inToolResults": 10,
+          "inTranscript": 20
+        },
+        "Operation not permitted": {
+          "inToolResults": 3,
+          "inTranscript": 6
+        },
+        "Could not resolve": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "No module named": {
+          "inToolResults": 2,
+          "inTranscript": 4
+        },
+        "Failed to": {
+          "inToolResults": 1,
+          "inTranscript": 2
+        }
+      }
+    },
+    "graph": {
+      "graphJson": "absent"
+    }
+  },
+  "eventCount": 44
+}

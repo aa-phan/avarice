@@ -1,0 +1,33 @@
+{
+  "case": "B3",
+  "spike": "S0-B",
+  "cwd": "{CLONE}",
+  "hook": "log",
+  "allow": [
+    "Read(/{CLONE}/**)",
+    "Edit(/{CLONE}/.planning/codebase/**)",
+    "Bash"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch"
+  ],
+  "allowWrite": [
+    "{CLONE}/.planning/codebase"
+  ],
+  "denyWrite": [
+    "{CLONE}/.git"
+  ],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh"
+  ],
+  "mkdirs": [
+    "{CLONE}/.planning/codebase"
+  ]
+}

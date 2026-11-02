@@ -1,0 +1,218 @@
+{
+  "case": "E3",
+  "spike": "S0-E",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Glob",
+      "Grep",
+      "Bash(gsd_run:*)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/README.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/CLAUDE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.env",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "E3",
+    "spike": "S0-E",
+    "costUsd": 0.00483381,
+    "capUsd": 0.25,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 12,
+    "at": "2026-11-02T17:53:33.573Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.00483381,
+    "duration_ms": 11050,
+    "num_turns": 6,
+    "text": "`--query status` didn't run because the intel system is disabled in this repo. - `gsd-tools.cjs query intel.status` reports: \"Intel system disabled. Set intel.enabled=true in config.json to activate.\" - This repo has no `.planning/` directo",
+    "permission_denials": [
+      {
+        "tool": "Bash",
+        "input": "{\"command\":\"cd ~/.claude/gsd-core/workflows/ && ls | grep -i -E \\\"intel|map|scan\\\"; echo ---; cat ~/.claude/gsd-core/workflows/intel.md 2>/dev/null; echo ---; c"
+      }
+    ],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.00483381
+      }
+    },
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "usage": {
+      "input": 12,
+      "cache_creation": 12975,
+      "cache_read": 131261,
+      "output": 1850
+    }
+  },
+  "toolCalls": {
+    "Bash": 5
+  },
+  "bash": [
+    {
+      "first_line": "ls -la .claude/gsd-core/workflows/ 2>/dev/null; ls ~/.claude/gsd-core/workflows/ 2>/dev/null | head -50; cat .planning/config.json 2>/dev/null | head -50; ls .planning 2>/dev/null",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "cd ~/.claude/gsd-core/workflows/ && ls | grep -i -E \"intel|map|scan\"; echo ---; cat ~/.claude/gsd-core/workflows/intel.md 2>/dev/null; echo ---; cd - >/dev/null; ls -d .planning 2>/dev/null; ls .plann",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls /Users/aphan/.claude/gsd-core/workflows/ | grep -i -E \"intel|map|scan\"",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "grep -n -i -E \"query|intel|status\" /Users/aphan/.claude/gsd-core/workflows/map-codebase.md | head -40; echo ---; ls -la /Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning 2>&1 | head; ",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "G=\"\"; for p in ./gsd-core/bin/gsd-tools.cjs ./.claude/gsd-core/bin/gsd-tools.cjs /Users/aphan/.claude/gsd-core/bin/gsd-tools.cjs; do [ -f \"$p\" ] && G=\"$p\" && break; done; echo \"tools: ${G:-none}\"; [ -",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Exit code 1 _runtime-launcher.snippet.sh add-backlog.md add-phase.md add-tests.md add-todo.md ai-integration-phase.md analyze-dependencies.md audit-fix.md audit"
+    },
+    {
+      "tool": "Bash",
+      "excerpt": "ls reads '.planning' after a cd whose target cannot be resolved, and a deny rule (~/.ssh/**) names that file under a directory it may run in"
+    }
+  ],
+  "hook": {
+    "calls": 5,
+    "byDecision": {
+      "none": 5
+    },
+    "byTool": {
+      "Bash": 5
+    },
+    "subagentCalls": 0,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "hooklog": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/E3.hook.log",
+      "bashCommands": 5,
+      "needles": {
+        "gsd_run": 0,
+        "map-codebase": 1,
+        "intel": 4
+      }
+    }
+  },
+  "eventCount": 28
+}

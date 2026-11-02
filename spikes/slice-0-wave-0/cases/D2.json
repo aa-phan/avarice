@@ -1,0 +1,43 @@
+{
+  "case": "D2",
+  "spike": "S0-D",
+  "cwd": "{SRC}",
+  "hook": "log",
+  "allow": [
+    "Read(/{SRC}/**)",
+    "Read(/{GSD}/**)",
+    "Edit(/{SRC}/.planning/intel/**)",
+    "Glob",
+    "Grep",
+    "Agent",
+    "Bash"
+  ],
+  "deny": [
+    "Read(~/.ssh/**)",
+    "Read(~/.config/gh/**)",
+    "Bash(git push:*)",
+    "Bash(gh:*)",
+    "Bash(claude:*)",
+    "WebSearch"
+  ],
+  "allowWrite": [
+    "{SRC}/.planning/intel"
+  ],
+  "denyWrite": [
+    "{SRC}/src",
+    "{SRC}/docs",
+    "{SRC}/README.md",
+    "{SRC}/CLAUDE.md",
+    "{SRC}/.env",
+    "{SRC}/.git",
+    "{SRC}/.planning/config.json"
+  ],
+  "denyRead": [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh"
+  ],
+  "mkdirs": [
+    "{SRC}/.planning/intel"
+  ]
+}

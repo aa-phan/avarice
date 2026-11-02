@@ -1,0 +1,325 @@
+{
+  "case": "G3",
+  "spike": "S0-G",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/plugin/**)",
+      "Read(//Users/aphan/.claude/skills/graphify/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge"
+    ],
+    "denyWrite": [],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "G3",
+    "spike": "S0-G",
+    "costUsd": 0.023527569999999998,
+    "capUsd": 0.4,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 77,
+    "at": "2026-11-02T18:07:02.079Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.023527569999999998,
+    "duration_ms": 76688,
+    "num_turns": 13,
+    "text": "The graph for `.` is built, and the interactive HTML is written. The corpus is small, so the graph is small too. **Outputs** in `/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge/graphify-out/`: - `graph.html`: interacti",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.023527569999999998
+      }
+    },
+    "subagent_stats": {
+      "spawned": 1,
+      "requested": {
+        "background": 0,
+        "foreground": 1,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 1,
+      "spawned_by_subagents": 0,
+      "completed": 1,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "general-purpose": 1
+      }
+    },
+    "usage": {
+      "input": 26,
+      "cache_creation": 23665,
+      "cache_read": 537206,
+      "output": 9523
+    }
+  },
+  "toolCalls": {
+    "Bash": 11,
+    "Agent": 1,
+    "Read": 4,
+    "Write": 1
+  },
+  "bash": [
+    {
+      "first_line": "ls -la graphify-out 2>/dev/null; which graphify; command -v uv; python3 -c \"import graphify\" 2>&1 | tail -1",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "PYTHON=\"\"; _UV_PY=$(uv tool run --from graphifyy python -c \"import sys; print(sys.executable)\" 2>/dev/null); PYTHON=\"$_UV_PY\"; echo \"PY=$PYTHON\"; \"$PYTHON\" -c \"import graphify; print('ok')\" 2>&1 | tai",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "head -1 /Users/aphan/.local/bin/graphify; uv tool run --from graphifyy python -c \"import sys; print(sys.executable)\" 2>&1 | tail -3",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "PYTHON=/Users/aphan/.local/share/uv/tools/graphifyy/bin/python; \"$PYTHON\" -c \"import graphify; print('ok')\" && mkdir -p graphify-out && \"$PYTHON\" -c \"import sys; open('graphify-out/.graphify_python','",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "find graphify-out -maxdepth 2 | head -50; echo ---; find . -path ./graphify-out -prune -o -type f -print | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn | head -30",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "$(cat graphify-out/.graphify_python) -c \"",
+      "lines": 10,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "SPEC=/Users/aphan/.local/share/avarice-spikes/wave-0/plugin/skills/graphify/references/extraction-spec.md && wc -c $SPEC && $(cat graphify-out/.graphify_python) -c \"",
+      "lines": 14,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "cat /Users/aphan/.local/share/avarice-spikes/wave-0/plugin/skills/graphify/references/extraction-spec.md",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "P=$(cat graphify-out/.graphify_python) && SPEC=/Users/aphan/.local/share/avarice-spikes/wave-0/plugin/skills/graphify/references/extraction-spec.md && $P -c \"",
+      "lines": 55,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "P=$(cat graphify-out/.graphify_python) && $P -c \"",
+      "lines": 34,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "graphify export html 2>&1 | tail -5; ls -la graphify-out | grep -i html",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [
+    {
+      "subagent_type": "general-purpose",
+      "background": false
+    }
+  ],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Exit code 126 PY= (eval):1: permission denied: (eval):1: permission denied:"
+    }
+  ],
+  "hook": {
+    "calls": 17,
+    "byDecision": {
+      "none": 17
+    },
+    "byTool": {
+      "Bash": 11,
+      "Agent": 1,
+      "Read": 4,
+      "Write": 1
+    },
+    "subagentCalls": 5,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "tree": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/kp/.avarice-knowledge",
+      "count": 12,
+      "files": [
+        ".planning/codebase/STACK.md",
+        "docs/adr/ADR-001.md",
+        "docs/design.md",
+        "docs/guide.md",
+        "graphify-out/.graphify_labels.json",
+        "graphify-out/.graphify_python",
+        "graphify-out/.graphify_root",
+        "graphify-out/GRAPH_REPORT.md",
+        "graphify-out/cost.json",
+        "graphify-out/graph.html",
+        "graphify-out/graph.json",
+        "graphify-out/manifest.json"
+      ]
+    },
+    "hooklog": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G3.hook.log",
+      "bashCommands": 11,
+      "needles": {
+        "max-workers": 0,
+        "uv tool": 2,
+        "pip install": 0,
+        "graphify extract": 0,
+        "graphify-out": 9,
+        ".graphify_python": 6
+      }
+    },
+    "toolOutput": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/G3.jsonl",
+      "toolResultCount": 17,
+      "needles": {
+        "allow list": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "Operation not permitted": {
+          "inToolResults": 1,
+          "inTranscript": 2
+        },
+        "Could not resolve": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "No module named": {
+          "inToolResults": 1,
+          "inTranscript": 2
+        },
+        "Failed to": {
+          "inToolResults": 1,
+          "inTranscript": 2
+        }
+      }
+    },
+    "graph": {
+      "nodes": 11,
+      "edges": 21,
+      "builtAtCommit": null,
+      "nodesByFileType": {
+        "code": 4,
+        "concept": 3,
+        "document": 4
+      },
+      "nodesByOrigin": {
+        "none": 11
+      },
+      "edgesByConfidence": {
+        "EXTRACTED": 20,
+        "INFERRED": 1
+      },
+      "documentEdgesExtracted": 16,
+      "sourceFiles": [
+        "docs/design.md",
+        ".planning/codebase/STACK.md",
+        "docs/adr/ADR-001.md",
+        "docs/guide.md"
+      ]
+    }
+  },
+  "eventCount": 77
+}

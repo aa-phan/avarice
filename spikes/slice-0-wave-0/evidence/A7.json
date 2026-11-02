@@ -1,0 +1,226 @@
+{
+  "case": "A7",
+  "spike": "S0-A",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase/**)",
+      "Glob",
+      "Grep",
+      "Agent"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "deny-all",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase"
+    ],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/README.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/CLAUDE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.env",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "A7",
+    "spike": "S0-A",
+    "costUsd": 0.00290022,
+    "capUsd": 0.2,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 7,
+    "at": "2026-11-02T18:02:41.304Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.00290022,
+    "duration_ms": 5788,
+    "num_turns": 4,
+    "text": "I couldn't run the `--fast` mapping because every tool call is being blocked by a hook. Bash and Read both fail with `PreToolUse:... hook error: spike deny-all`. I haven't changed anything. Nothing was written to `.planning/codebase/` and n",
+    "permission_denials": [
+      {
+        "tool": "Bash",
+        "input": "{\"command\":\"ls -la \\\"$HOME/.claude/gsd-core/workflows/scan.md\\\" .claude/gsd-core/workflows/scan.md 2>&1; ls -la .planning/codebase 2>&1 | head -20\",\"description"
+      },
+      {
+        "tool": "Read",
+        "input": "{\"file_path\":\"/Users/aphan/.claude/gsd-core/workflows/scan.md\"}"
+      },
+      {
+        "tool": "Read",
+        "input": "{\"file_path\":\"/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase\"}"
+      }
+    ],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.00290022
+      }
+    },
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "usage": {
+      "input": 6,
+      "cache_creation": 9216,
+      "cache_read": 58242,
+      "output": 948
+    }
+  },
+  "toolCalls": {
+    "Bash": 1,
+    "Read": 2
+  },
+  "bash": [
+    {
+      "first_line": "ls -la \"$HOME/.claude/gsd-core/workflows/scan.md\" .claude/gsd-core/workflows/scan.md 2>&1; ls -la .planning/codebase 2>&1 | head -20",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "PreToolUse:Bash hook error: spike deny-all"
+    },
+    {
+      "tool": "Read",
+      "excerpt": "PreToolUse:Read hook error: spike deny-all"
+    },
+    {
+      "tool": "Read",
+      "excerpt": "PreToolUse:Read hook error: spike deny-all"
+    }
+  ],
+  "hook": {
+    "calls": 3,
+    "byDecision": {
+      "deny": 3
+    },
+    "byTool": {
+      "Bash": 1,
+      "Read": 2
+    },
+    "subagentCalls": 0,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "fastMapFiles": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase",
+      "present": [],
+      "missing": [
+        "STACK.md",
+        "INTEGRATIONS.md",
+        "ARCHITECTURE.md",
+        "STRUCTURE.md"
+      ],
+      "files": {
+        "STACK.md": {
+          "exists": false
+        },
+        "INTEGRATIONS.md": {
+          "exists": false
+        },
+        "ARCHITECTURE.md": {
+          "exists": false
+        },
+        "STRUCTURE.md": {
+          "exists": false
+        }
+      }
+    }
+  },
+  "eventCount": 20
+}

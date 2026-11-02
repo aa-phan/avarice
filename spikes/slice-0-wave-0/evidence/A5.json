@@ -1,0 +1,242 @@
+{
+  "case": "A5",
+  "spike": "S0-A",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase/**)",
+      "Glob",
+      "Grep",
+      "Agent"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "log",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.planning/codebase"
+    ],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/README.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/CLAUDE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.env",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/src-repo/.git"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "A5",
+    "spike": "S0-A",
+    "costUsd": 0.00436718,
+    "capUsd": 0.2,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 12,
+    "at": "2026-11-02T18:02:28.344Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/src-repo",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.00436718,
+    "duration_ms": 10639,
+    "num_turns": 4,
+    "text": "All three Bash calls were denied before they ran, so I have no results to report for any of them. The session is in \"don't ask\" permission mode, and every Bash call returned: `Permission to use Bash has been denied because Claude Code is ru",
+    "permission_denials": [
+      {
+        "tool": "Bash",
+        "input": "{\"command\":\"_GSD_SHIM_NAME=\\\"gsd-tools.cjs\\\"; _GSD_RUNTIME_ROOT=\\\"${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\\\"; GSD_TOOLS=\\\"${_GSD_RUNT"
+      },
+      {
+        "tool": "Bash",
+        "input": "{\"command\":\"node -e \\\"console.log(1+1)\\\"\",\"description\":\"Run node one-liner (command 2 of 3)\"}"
+      },
+      {
+        "tool": "Bash",
+        "input": "{\"command\":\"mkdir -p /tmp/spike-a5-probe && echo hi > /tmp/spike-a5-probe/x\",\"description\":\"Create probe directory and write test file (command 3 of 3)\"}"
+      }
+    ],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.00436718
+      }
+    },
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "usage": {
+      "input": 6,
+      "cache_creation": 11916,
+      "cache_read": 60838,
+      "output": 2750
+    }
+  },
+  "toolCalls": {
+    "Bash": 3
+  },
+  "bash": [
+    {
+      "first_line": "_GSD_SHIM_NAME=\"gsd-tools.cjs\"; _GSD_RUNTIME_ROOT=\"${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; GSD_TOOLS=\"${_GSD_RUNTIME_ROOT}/gsd-core/bin/${_GSD_SHIM_NAME}\"; _gsd_at() { fo",
+      "lines": 2,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "node -e \"console.log(1+1)\"",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "mkdir -p /tmp/spike-a5-probe && echo hi > /tmp/spike-a5-probe/x",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    }
+  ],
+  "agentCalls": [],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Permission to use Bash has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tool"
+    },
+    {
+      "tool": "Bash",
+      "excerpt": "Permission to use Bash has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tool"
+    },
+    {
+      "tool": "Bash",
+      "excerpt": "Permission to use Bash has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tool"
+    }
+  ],
+  "hook": {
+    "calls": 3,
+    "byDecision": {
+      "none": 3
+    },
+    "byTool": {
+      "Bash": 3
+    },
+    "subagentCalls": 0,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "toolOutput": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/A5.jsonl",
+      "toolResultCount": 3,
+      "needles": {
+        "\"packageName\":\"@opengsd/gsd-core\"": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        },
+        "Permission to use Bash": {
+          "inToolResults": 3,
+          "inTranscript": 11
+        },
+        "Operation not permitted": {
+          "inToolResults": 0,
+          "inTranscript": 0
+        }
+      }
+    },
+    "hooklog": {
+      "file": "/Users/aphan/.local/share/avarice-spikes/wave-0/out/A5.hook.log",
+      "bashCommands": 3,
+      "needles": {
+        "_GSD_SHIM_NAME": 1,
+        "node -e": 1,
+        "spike-a5-probe": 1
+      }
+    },
+    "outsideWrite": {
+      "tmpProbeFileCreated": false
+    }
+  },
+  "eventCount": 22
+}

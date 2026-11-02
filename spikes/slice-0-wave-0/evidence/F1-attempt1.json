@@ -1,0 +1,306 @@
+{
+  "case": "F1",
+  "spike": "S0-F",
+  "pathMode": "gsd-first",
+  "env": {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "settings": {
+    "allow": [
+      "Read(//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/**)",
+      "Read(//Users/aphan/.claude/gsd-core/**)",
+      "Edit(//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/codebase/**)",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash(gsd_run:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(wc:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git log:*)",
+      "Bash(git rev-parse:*)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)",
+      "Bash(claude:*)",
+      "WebSearch"
+    ],
+    "hook": "allow-preamble",
+    "allowWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/codebase"
+    ],
+    "denyWrite": [
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.claude",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.github",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.gitignore",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.oxlintignore",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.oxlintrc.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.prettierignore",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/404.html",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/DESIGN.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/docs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/index.html",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/package-lock.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/package.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/playwright.config.ts",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/prettier.config.mjs",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/public",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/scripts",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/src",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tests",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tsconfig.app.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tsconfig.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tsconfig.node.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tsconfig.scripts.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/tsconfig.test.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/vite.config.ts",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/vitest.config.ts",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.git",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/PROJECT.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/REQUIREMENTS.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/ROADMAP.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/STATE.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/WINDOWS.md",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/config.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/phases",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/quick",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/research",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/state.json",
+      "//Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/todos"
+    ],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gh"
+    ],
+    "allowRead": []
+  },
+  "run": {
+    "case": "F1",
+    "spike": "S0-F",
+    "costUsd": 0.012920245,
+    "capUsd": 0.4,
+    "assumed": false,
+    "exit": 0,
+    "wallSeconds": 624,
+    "at": "2026-11-02T18:22:04.297Z"
+  },
+  "init": {
+    "model": "claude-haiku-5-5",
+    "permissionMode": "dontAsk",
+    "cwd": "/Users/aphan/.local/share/avarice-spikes/wave-0/target-clone",
+    "tools": 26,
+    "skills": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "skillCount": 21,
+    "slashGsd": [
+      "avarice-run-skills:graphify",
+      "avarice-run-skills:gsd-map-codebase"
+    ],
+    "agents": [
+      "gsd-codebase-mapper",
+      "gsd-intel-updater"
+    ],
+    "plugins": [
+      {
+        "name": "avarice-run-skills",
+        "path": "/Users/aphan/.local/share/avarice-spikes/wave-0/plugin",
+        "source": "avarice-run-skills@inline",
+        "version": "0.0.0"
+      },
+      {
+        "name": "cc-plugin-sec-default",
+        "path": "builtin",
+        "source": "cc-plugin-sec-default@builtin"
+      },
+      {
+        "name": "cc-plugin-agents-md",
+        "path": "builtin",
+        "source": "cc-plugin-agents-md@builtin"
+      },
+      {
+        "name": "cc-plugin-telemetry",
+        "path": "builtin",
+        "source": "cc-plugin-telemetry@builtin"
+      },
+      {
+        "name": "cc-plugin-plugin-authoring",
+        "path": "builtin",
+        "source": "cc-plugin-plugin-authoring@builtin"
+      }
+    ]
+  },
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "total_cost_usd": 0.012920245,
+    "duration_ms": 10821,
+    "num_turns": 6,
+    "text": "The fast scan is running in the background. I'll wait for the mapper's completion notification before verifying the output.",
+    "permission_denials": [],
+    "modelUsage": {
+      "claude-haiku-5-5": {
+        "costUSD": 0.012920245
+      }
+    },
+    "subagent_stats": {
+      "spawned": 1,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 1
+      },
+      "started_in_background": 1,
+      "max_depth": 1,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 1
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "gsd-codebase-mapper": 1
+      }
+    },
+    "usage": {
+      "input": 10,
+      "cache_creation": 15085,
+      "cache_read": 113831,
+      "output": 1236
+    }
+  },
+  "toolCalls": {
+    "Bash": 9,
+    "Read": 4,
+    "Agent": 1
+  },
+  "bash": [
+    {
+      "first_line": "ls -la .claude/gsd-core/workflows/scan.md \"$HOME/.claude/gsd-core/workflows/scan.md\" 2>&1; ls .planning 2>&1; ls .planning/codebase 2>&1",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls -la .planning/codebase",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls ~/.claude/gsd-core/bin/ 2>&1 | head; cd \"$(git rev-parse --show-toplevel)\" && node ~/.claude/gsd-core/bin/gsd-tools.cjs query init.map-codebase 2>&1 | head -c 3000",
+      "lines": 1,
+      "background": false,
+      "subagent": false
+    },
+    {
+      "first_line": "ls -la && echo \"---\" && git ls-files | head -300 && echo \"---\" && git ls-files | wc -l && ls -la .planning 2>/dev/null; ls .claude/skills .agents/skills 2>/dev/null",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "for f in package.json tsconfig.json next.config.* vite.config.* astro.config.* svelte.config.* nuxt.config.* Cargo.toml go.mod pyproject.toml requirements.txt .nvmrc .node-version .python-version Dock",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "git ls-files | sed -n '300,400p'; echo ---; cat .github/workflows/deploy.yml | head -80; echo ---; cat tsconfig.app.json",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "echo \"== main.tsx\"; cat src/main.tsx; echo \"== App.tsx\"; cat src/app/App.tsx; echo \"== Providers.tsx\"; cat src/app/Providers.tsx; echo \"== Page.tsx\"; cat src/app/Page.tsx; echo \"== content/index.ts\"; ",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "echo \"== hooks/useTheme\"; head -60 src/hooks/useTheme.ts; echo \"== lib/theme.ts\"; head -40 src/lib/theme.ts; echo \"== sections/Projects/Projects.tsx (head)\"; head -50 src/sections/Projects/Projects.ts",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    },
+    {
+      "first_line": "cat src/anim/index.ts 2>/dev/null; echo \"== anim/tokens.ts\"; head -30 src/anim/tokens.ts; echo \"== MotionFeatures\"; head -30 src/anim/MotionFeatures.tsx; echo \"== scroll/LenisRoot\"; head -30 src/anim/",
+      "lines": 1,
+      "background": false,
+      "subagent": true
+    }
+  ],
+  "agentCalls": [
+    {
+      "subagent_type": "gsd-codebase-mapper",
+      "model": "haiku",
+      "background": false
+    }
+  ],
+  "toolErrors": [
+    {
+      "tool": "Bash",
+      "excerpt": "Exit code 1 total 472 drwxr-xr-x@ 29 aphan staff 928 Nov 2 12:11 . drwxr-xr-x@ 19 aphan staff 608 Nov 2 12:11 .. drwxr-xr-x@ 4 aphan staff 128 Nov 2 12:11 .clau"
+    }
+  ],
+  "hook": {
+    "calls": 14,
+    "byDecision": {
+      "none": 14
+    },
+    "byTool": {
+      "Bash": 9,
+      "Read": 4,
+      "Agent": 1
+    },
+    "subagentCalls": 9,
+    "allowedFirstLines": []
+  },
+  "groundTruth": {
+    "fastMapFiles": {
+      "dir": "/Users/aphan/.local/share/avarice-spikes/wave-0/target-clone/.planning/codebase",
+      "present": [],
+      "missing": [
+        "STACK.md",
+        "INTEGRATIONS.md",
+        "ARCHITECTURE.md",
+        "STRUCTURE.md"
+      ],
+      "files": {
+        "STACK.md": {
+          "exists": false
+        },
+        "INTEGRATIONS.md": {
+          "exists": false
+        },
+        "ARCHITECTURE.md": {
+          "exists": false
+        },
+        "STRUCTURE.md": {
+          "exists": false
+        }
+      }
+    },
+    "gitStatus": {
+      "repo": "/Users/aphan/.local/share/avarice-spikes/wave-0/target-clone",
+      "lines": []
+    }
+  },
+  "eventCount": 59
+}
