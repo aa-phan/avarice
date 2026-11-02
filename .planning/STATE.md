@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-11-02T17:39:44.768Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-11-02T19:05:55.300Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: b7dd72be2caed27e8c4365d4141f2e1a7b9c9b94
+state_head: 64c68162c1bfcaaa116215df1ce75be79e5994bc
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 2 of 20
+Plan: 3 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 25 min | 3 tasks | 14 files |
+| Phase 01 P02 | 84 min | 2 tasks | 68 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,12 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: Onboarding contract: per-purpose write maps, files.readExclude and files.secretGlobs separate from files.read, flat budget override keys, request and preflight validated as untrusted input
 - [Phase 01]: completenessFor never claims complete without evidence; buildProjectRecord defaults grant no write paths, endpoints or credentials
 - [Phase 01]: Vendor tool names kept out of the domain contract; execution.toolClasses only (SKELETON vendor-code placement)
+- [Phase 01]: S0-A: Bash command identity is a PreToolUse hook concern (skills pre-approve Bash, hook allow and deny hold under dontAsk), not a permissions.allow concern
+- [Phase 01]: S0-B: stage onboarding in a local clone; a linked worktree is safe only with generated denyWrite on the source .git and worktree gitdir (without it a contained run moved a source ref)
+- [Phase 01]: S0-C/E: env allowlist gains USER and LOGNAME, PATH starts with gsd-core/bin, CLAUDE_CODE_DISABLE_AUTO_MEMORY=1; --setting-sources empty already excludes CLAUDE.md
+- [Phase 01]: S0-D: intel runs as claude -p --agent gsd-intel-updater with the agent in --agents (no Agent tool)
+- [Phase 01]: S0-F: default budgets wall clock map 8, intel 5, knowledge 6 min, toolCalls 300, costUsd perInvocation 1.00 perRun 3.00; AVARICE enforces its own wall clock (host holds -p 10 min on a stalled subagent)
+- [Phase 01]: S0-G: knowledge pass needs graphify dir on PATH for that invocation; document edges return EXTRACTED and are re-tagged by AVARICE
 
 ### Pending Todos
 
@@ -111,6 +118,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T17:39:44.751Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-11-02T19:05:55.273Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
