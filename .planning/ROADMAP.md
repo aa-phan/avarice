@@ -2,46 +2,46 @@
 
 ## Overview
 
-AVARICE is built in eight vertical slices; Phase N mirrors slice N of `docs/implementation-plan.md`. The first milestone (v1.0, Phases 0-2) builds the contained kernel: Phase 0 onboards one real repository under containment with GSD as the mapper, Phase 1 runs one work item unattended inside an OS sandbox with fail-closed hooks, and Phase 2 adds decisions, independent work around them and contract amendments. Containment is built in from the first slice and not deferred to a hardening phase. Phases 3 and 4 (v1.1) complete the PRD's MVP with profiles, retrieval, restricted mode, the portability proof, delivery to a draft PR, test-strength gates, the dashboard and data safety. Phases 5 to 7 (v2.0) are post-MVP and start only when a measured need exists. Implementation itself runs through GSD 1.17.0 on Claude Code.
+AVARICE is built in eight vertical slices; Phase N mirrors slice N−1 of `docs/implementation-plan.md` (Phases 1-8 = slices 0-7), because GSD 1.17.0 does not parse a phase 0. The first milestone (v1.0, Phases 1-3) builds the contained kernel: Phase 1 onboards one real repository under containment with GSD as the mapper, Phase 2 runs one work item unattended inside an OS sandbox with fail-closed hooks, and Phase 3 adds decisions, independent work around them and contract amendments. Containment is built in from the first slice and not deferred to a hardening phase. Phases 4 and 5 (v1.1) complete the PRD's MVP with profiles, retrieval, restricted mode, the portability proof, delivery to a draft PR, test-strength gates, the dashboard and data safety. Phases 6 to 8 (v2.0) are post-MVP and start only when a measured need exists. Implementation itself runs through GSD 1.17.0 on Claude Code.
 
 ## Milestones
 
-- 🚧 **v1.0 Contained Kernel** - Phases 0-2 (slices 0-2; first milestone)
-- 📋 **v1.1 MVP Completion** - Phases 3-4 (slices 3-4; completes the PRD's MVP)
-- 📋 **v2.0 Post-MVP Extensions** - Phases 5-7 (slices 5-7; trigger-driven)
+- 🚧 **v1.0 Contained Kernel** - Phases 1-3 (slices 0-2; first milestone)
+- 📋 **v1.1 MVP Completion** - Phases 4-5 (slices 3-4; completes the PRD's MVP)
+- 📋 **v2.0 Post-MVP Extensions** - Phases 6-8 (slices 5-7; trigger-driven)
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (0-7): Planned milestone work, numbered to match the implementation plan's slices
+- Integer phases (1-8): Planned milestone work; phase N is slice N−1 of the implementation plan
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
 **v1.0 Contained Kernel**
 
-- [ ] **Phase 0: Contained onboarding of one repository** - `avarice onboard` takes one existing repository to an active project record with GSD as the mapper, source read-only
-- [ ] **Phase 1: Contained unattended run of one work item** - `avarice start` takes one work item to `ready_for_review` or `blocked_on_decision` inside enforced containment
-- [ ] **Phase 2: Decisions, independent work and amendments** - Runs continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish
+- [ ] **Phase 1: Contained onboarding of one repository** - `avarice onboard` takes one existing repository to an active project record with GSD as the mapper, source read-only
+- [ ] **Phase 2: Contained unattended run of one work item** - `avarice start` takes one work item to `ready_for_review` or `blocked_on_decision` inside enforced containment
+- [ ] **Phase 3: Decisions, independent work and amendments** - Runs continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish
 
 **v1.1 MVP Completion**
 
-- [ ] **Phase 3: Profiles, retrieval budgets, restricted mode and the portability proof** - Separate profiles, progressive retrieval with enforced caps, explicit degradation, proof that domain code is adapter-independent
-- [ ] **Phase 4: Delivery, test strength, review feedback and data safety** - From `ready_for_review` to a pushed branch and draft PR, back to a new attempt on feedback, with no duplicate PRs
+- [ ] **Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof** - Separate profiles, progressive retrieval with enforced caps, explicit degradation, proof that domain code is adapter-independent
+- [ ] **Phase 5: Delivery, test strength, review feedback and data safety** - From `ready_for_review` to a pushed branch and draft PR, back to a new attempt on feedback, with no duplicate PRs
 
 **v2.0 Post-MVP Extensions**
 
-- [ ] **Phase 5: GSD capability bridge, phased work, plugin and push notifiers** - Gates inside GSD's loop, `/gsd-autonomous --only N` units, one-step install, notifications away from the desk
-- [ ] **Phase 6: Personal infrastructure** - NAS artifacts, remote worker, coordination service, Vault adapter; each part starts only on a measured trigger
-- [ ] **Phase 7: Cross-repository runs and project groups** - One unattended run spans several repositories of a project group and ends with one linked change request per repository
+- [ ] **Phase 6: GSD capability bridge, phased work, plugin and push notifiers** - Gates inside GSD's loop, `/gsd-autonomous --only N` units, one-step install, notifications away from the desk
+- [ ] **Phase 7: Personal infrastructure** - NAS artifacts, remote worker, coordination service, Vault adapter; each part starts only on a measured trigger
+- [ ] **Phase 8: Cross-repository runs and project groups** - One unattended run spans several repositories of a project group and ends with one linked change request per repository
 
 ## Phase Details
 
-### Phase 0: Contained onboarding of one repository
+### Phase 1: Contained onboarding of one repository
 **Goal**: `avarice onboard --policy onboarding` takes one existing local Git repository (`~/aa-phan-portfolio-v2`) to an active project record, with GSD as the semantic mapper, GSD intel and graph indexes recorded, source read-only and writes confined to the staging worktree
 **Depends on**: Nothing (first phase). Pre-execution spikes closed 2026-11-01 (see STATE.md and `spikes/2026-11-01-pre-slice-0/README.md`)
 **Requirements**: ONB-1, ONB-2, ONB-3, ONB-4, ONB-5, ONB-7, ONB-8, ONB-9, ONB-12, ONB-13, ONB-14, FR-20, SEC-5, NFR-2
-**Partial coverage** (owned by the later phase): CON-2, CON-3, CON-5, CON-6, CON-13, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9 (Phase 1, delivered here for the onboarding contract); ONB-6 (Phase 3; this phase delivers detection and refusal only)
+**Partial coverage** (owned by the later phase): CON-2, CON-3, CON-5, CON-6, CON-13, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9 (Phase 2, delivered here for the onboarding contract); ONB-6 (Phase 4; this phase delivers detection and refusal only)
 **Success Criteria** (what must be TRUE):
   1. `~/aa-phan-portfolio-v2` reaches an active project record (promotion `none`) whose graph lists code nodes and document nodes, and whose graph and intel each record a build commit equal to the onboarded revision; the user's checkout is unchanged
   2. During mapping, a scripted source edit through Edit, Bash and Python is blocked, and so is a scripted edit of the policy file
@@ -49,13 +49,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 **Plans**: TBD
-**Notes**: Suits `/gsd-mvp-phase`. Kernel built here: package skeleton with import-boundary lint, ledger on `node:sqlite`, contract compiler with the `onboarding` preset, staging worktree, generated host settings and hook set, contained Claude Code host adapter, `GsdOnboarding` adapter for GSD 1.17.x, index stage and knowledge pass, `gsd-intel` and `gsd-graph` adapters. The target already has committed GSD planning but no codebase map, so this phase exercises detection and non-overwrite of existing planning state, not adoption of a stamped map (Phase 3). Excluded: remote workers, dashboard, `ingest-docs`, path-scoped and incremental refresh, promotion `copy` and `commit`, active command validation.
+**Notes**: Suits `/gsd-mvp-phase`. Kernel built here: package skeleton with import-boundary lint, ledger on `node:sqlite`, contract compiler with the `onboarding` preset, staging worktree, generated host settings and hook set, contained Claude Code host adapter, `GsdOnboarding` adapter for GSD 1.17.x, index stage and knowledge pass, `gsd-intel` and `gsd-graph` adapters. The target already has committed GSD planning but no codebase map, so this phase exercises detection and non-overwrite of existing planning state, not adoption of a stamped map (Phase 4). Excluded: remote workers, dashboard, `ingest-docs`, path-scoped and incremental refresh, promotion `copy` and `commit`, active command validation.
 
-### Phase 1: Contained unattended run of one work item
+### Phase 2: Contained unattended run of one work item
 **Goal**: `avarice start --brief b.md --policy routine` takes one work item to `ready_for_review` without prompts, or to `blocked_on_decision` with a decision record, inside enforced containment, surviving a kill at any point
-**Depends on**: Phase 0 (an active project record for the target repository; a spike confirming the sandbox runtime can wrap AVARICE's own check commands)
+**Depends on**: Phase 1 (an active project record for the target repository; a spike confirming the sandbox runtime can wrap AVARICE's own check commands)
 **Requirements**: RC-1, RC-2, RC-3, RC-4, RC-5, CON-1, CON-2, CON-3, CON-5, CON-6, CON-7, CON-8, CON-9, CON-13, CON-14, CON-16, AUT-7, AUT-8, AUT-9, FR-1, FR-2, FR-4, FR-5, FR-6, FR-7, FR-11, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9, OPS-2, ONB-10
-**Partial coverage** (owned by the later phase): AUT-2 (decision record only) and AUT-12 (states and cancellation for one item) in Phase 2; SEC-2 (scrubbed environment, no credentials in the run) in Phase 3; FR-3 (context packs from the four MVP adapters) in Phase 3. FR-4 here is Stage 1 only; the Stage 2 capability extends it in Phase 5
+**Partial coverage** (owned by the later phase): AUT-2 (decision record only) and AUT-12 (states and cancellation for one item) in Phase 3; SEC-2 (scrubbed environment, no credentials in the run) in Phase 4; FR-3 (context packs from the four MVP adapters) in Phase 3. FR-4 here is Stage 1 only; the Stage 2 capability extends it in Phase 6
 **Success Criteria** (what must be TRUE):
   1. Three R1 benchmark tasks (routine, no decisions expected) on a real repository, each started with `avarice start --brief <file> --policy routine`, reach `ready_for_review` with no human input after start
   2. Every `ready_for_review` run carries evidence naming the exact verified revision (commit and clean-tree flag), required checks passed, and each acceptance criterion mapped to deterministic evidence; `avarice status` shows run state, last checkpoint and evidence offline with no model
@@ -63,13 +63,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing the supervisor and running `avarice resume` continues from the last checkpoint, and after a forced kill during verification `resume` identifies the interrupted attempt in 100% of fault-injection cases (AC-3)
   5. A crashed or timed-out invocation with no external side effect is discarded and retried once from the item's last checkpoint, without resetting or deleting changes the run did not make
 **Plans**: TBD
-**Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 0 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
+**Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
-### Phase 2: Decisions, independent work and amendments
+### Phase 3: Decisions, independent work and amendments
 **Goal**: Runs with several work items continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish
-**Depends on**: Phase 1
+**Depends on**: Phase 2
 **Requirements**: AUT-1, AUT-2, AUT-3, AUT-4, AUT-5, AUT-6, AUT-10, AUT-12, AUT-16, RC-6, RC-7, RC-8, CON-15
-**Partial coverage**: AUT-6 here is local notification only; push adapters extend it in Phase 5
+**Partial coverage**: AUT-6 here is local notification only; push adapters extend it in Phase 6
 **Success Criteria** (what must be TRUE):
   1. A blocking question on one item leaves an independent item completed with evidence, while dependent work is not implemented; a consequential question becomes a decision record and routine reversible choices proceed without prompts
   2. Silence (a passed deadline) and a failing notifier leave the decision open and visible in the local inbox
@@ -79,11 +79,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
 
-### Phase 3: Profiles, retrieval budgets, restricted mode and the portability proof
+### Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof
 **Goal**: Separate profiles, progressive retrieval with enforced caps, explicit degradation, and proof that domain code is adapter-independent
-**Depends on**: Phase 1 and Phase 2
+**Depends on**: Phase 2 and Phase 3
 **Requirements**: ONB-6, ONB-11, ONB-15, FR-3, FR-8, FR-12, FR-13, FR-14, FR-15, FR-16, FR-17, FR-18, FR-19, FR-22, SEC-1, SEC-2, SEC-3, SEC-4, SEC-6, SEC-7, CON-4, CON-10, CON-11, CON-12, OPS-1, OPS-5, OPS-6, NFR-4
-**Partial coverage**: ONB-6 (detection and refusal in Phase 0) and SEC-2 (scrubbed environment in Phase 1) are completed here. Extensions owned here: NFR-4 and CON-11 gain real remote adapters in Phase 6; OPS-6 gains Stage 2 gating in Phase 5; SEC-4 enterprise policy sources are not planned
+**Partial coverage**: ONB-6 (detection and refusal in Phase 1) and SEC-2 (scrubbed environment in Phase 2) are completed here. Extensions owned here: NFR-4 and CON-11 gain real remote adapters in Phase 7; OPS-6 gains Stage 2 gating in Phase 6; SEC-4 enterprise policy sources are not planned
 **Success Criteria** (what must be TRUE):
   1. Profiles have separate configuration, credentials, caches, logs, indexes and stores with no automatic fallback: the isolation suite finds 0 cross-profile reads (AC-6) and the redaction suite leaves 0 secret patterns in events, evidence or artifacts (AC-5)
   2. Context retrieval is handle-first and capped: a pack built with the index adapters matches a full-repo baseline's task success at no more than 50% of its tokens (AC-8), and `status` stays under 300 ms at p95 with 1,000 runs (AC-2)
@@ -93,9 +93,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
 
-### Phase 4: Delivery, test strength, review feedback and data safety
+### Phase 5: Delivery, test strength, review feedback and data safety
 **Goal**: From `ready_for_review` to a pushed branch and draft PR when the contract authorizes it, and back to a new attempt on review feedback, with no duplicate PRs
-**Depends on**: Phase 3
+**Depends on**: Phase 4
 **Requirements**: AUT-11, AUT-13, AUT-14, AUT-17, SEC-8, FR-9, FR-10, FR-25, FR-26, NFR-7, NFR-8, OPS-3, OPS-4
 **Success Criteria** (what must be TRUE):
   1. When the contract authorizes it, AVARICE pushes the branch and opens a draft PR outside the contained invocation, an injected ambiguous timeout produces 0 duplicate PRs (AC-4), review and CI feedback become new evidence on a new attempt without overwriting earlier evidence, and every credential resolution is recorded as a value-free `credential.resolve` event
@@ -107,11 +107,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **UI hint**: yes
 **Notes**: Completes the PRD's MVP. Excluded: merge, release, deploy. AC-10 and AC-11 need the C1, C2 and X task classes and are measured with the full benchmark in Phase 5.
 
-### Phase 5: GSD capability bridge, phased work, plugin and push notifiers
+### Phase 6: GSD capability bridge, phased work, plugin and push notifiers
 **Goal**: Gates inside GSD's loop; `/gsd-autonomous --only N` units; one-step install; notifications away from the desk
-**Depends on**: Phase 4, and a confirmed reading of the capability schema in the installed GSD version
+**Depends on**: Phase 5, and a confirmed reading of the capability schema in the installed GSD version
 **Requirements**: None newly owned (all three requirements this slice touches are owned by earlier phases)
-**Extends**: FR-4 (Stage 2 capability; owned by Phase 1), AUT-6 (push adapters; owned by Phase 2), OPS-6 (Stage 2 `engines.gsd` gating; owned by Phase 3)
+**Extends**: FR-4 (Stage 2 capability; owned by Phase 2), AUT-6 (push adapters; owned by Phase 3), OPS-6 (Stage 2 `engines.gsd` gating; owned by Phase 4)
 **Success Criteria** (what must be TRUE):
   1. The `avarice-bridge` capability installs at project scope with explicit consent, its blocking gates (G1 at `plan:post`, G2 at `verify:post`, approval check at `ship:pre`) halt GSD on failure, `ship:pre` blocks when AVARICE is unavailable (exit 69), and the capability disables itself outside the pinned `engines.gsd` range
   2. A phased unit (`/gsd-autonomous --only N`) runs unattended only after the integration test of the plan-phase double-execute path passes
@@ -121,11 +121,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 **Notes**: Trigger-driven. Revisit trigger: if GSD changes the capability schema or adds a headless mode before this phase starts, re-run the GSD investigation and update ADR-006 first.
 
-### Phase 6: Personal infrastructure
+### Phase 7: Personal infrastructure
 **Goal**: Move artifacts and execution off the laptop when a measured need exists, keeping the ledger local and domain code unchanged; parts 6a to 6d are independent except that 6c needs 6b
-**Depends on**: Phase 4
+**Depends on**: Phase 5
 **Requirements**: FR-24
-**Extends**: NFR-4 (real remote adapters; owned by Phase 3), SEC-2 and SEC-8 (Vault adapter behind the same credential port; owned by Phases 3 and 4)
+**Extends**: NFR-4 (real remote adapters; owned by Phase 4), SEC-2 and SEC-8 (Vault adapter behind the same credential port; owned by Phases 4 and 5)
 **Success Criteria** (what must be TRUE):
   1. (6a, trigger: disk pressure) `avarice artifacts migrate --to nas` copies blobs, verifies digests, switches the artifact store and deletes local copies only after verification (S-10 against MinIO or the NAS)
   2. (6b, trigger: runs that must continue while the Mac sleeps, or checks that cannot run on macOS) A remote worker runs checks and, after its own containment suite (CS-1 to CS-16) passes on the worker OS, contained agent invocations; S-11 passes over the home network including Wi-Fi loss; a host cannot be deactivated while an active project or run depends on it (FR-24)
@@ -134,9 +134,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD (one plan per part, each started only when its trigger is measured)
 **Notes**: Each part may also run on `localhost` through the optional local-services deployment (ADR-010). Excluded: concurrent workers in 6b, multi-user access control, enterprise profiles, dynamic secrets, SMB and NFS mounts.
 
-### Phase 7: Cross-repository runs and project groups
+### Phase 8: Cross-repository runs and project groups
 **Goal**: One unattended run spans several repositories of a project group and ends with one linked change request per repository
-**Depends on**: Phase 4, and an active project record for each member repository
+**Depends on**: Phase 5, and an active project record for each member repository
 **Requirements**: AUT-15, FR-21
 **Success Criteria** (what must be TRUE):
   1. A single unattended run spans two repositories of one project group, each with its own worktree, contract scope, gates and change request, and ends with one linked change request per repository
@@ -149,7 +149,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 6b) and 7 as their triggers fire (each depends on Phase 4)
+Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 6b) and 7 as their triggers fire (each depends on Phase 5)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|

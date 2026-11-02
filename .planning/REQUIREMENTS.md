@@ -9,7 +9,7 @@ Source: `docs/requirements.md` (PRD, precedence 1). IDs are the PRD's own (the i
 
 ## v1 Requirements
 
-Committed scope; each maps to a roadmap phase (see Traceability). Phases 0-2 are the first milestone (v1.0).
+Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are the first milestone (v1.0).
 
 ### Workflow (FR-1 to FR-11)
 
@@ -157,15 +157,15 @@ Delivered across phases by the requirements above. The phase column is roadmappe
 
 | ID | Use case | Delivered by |
 |----|----------|--------------|
-| UC-1 | Start from a manual brief or task reference; get a bounded plan grounded in retrieved context | Phase 1 (Phase 3) |
-| UC-2 | Implement through the agent host and GSD, then run the repository's own checks | Phase 1 |
-| UC-3 | Stop at any point and resume with an accurate picture of what was verified | Phase 1 |
-| UC-4 | Prepare a reviewable change and fold review or CI feedback into a new attempt | Phase 4 |
-| UC-5 | Ask "what state is this work in, and what proves it?" without the model online | Phase 1 |
-| UC-6 | Later, move artifact bytes or command execution to a NAS or homelab without rewriting workflows | Phase 3 proof (Phase 6 real) |
-| UC-7 | Use the same workflow at an employer under its identity, tracker, SCM, CI and policy | Phase 3 (enterprise adapters not planned) |
-| UC-8 | Set the goal and boundaries, leave the desk, return to a verified change or blocking decisions | Phase 2 |
-| UC-9 | Bring an existing repository under AVARICE with GSD learning and planning for it | Phase 0 |
+| UC-1 | Start from a manual brief or task reference; get a bounded plan grounded in retrieved context | Phase 2 (Phase 4) |
+| UC-2 | Implement through the agent host and GSD, then run the repository's own checks | Phase 2 |
+| UC-3 | Stop at any point and resume with an accurate picture of what was verified | Phase 2 |
+| UC-4 | Prepare a reviewable change and fold review or CI feedback into a new attempt | Phase 5 |
+| UC-5 | Ask "what state is this work in, and what proves it?" without the model online | Phase 2 |
+| UC-6 | Later, move artifact bytes or command execution to a NAS or homelab without rewriting workflows | Phase 4 proof (Phase 7 real) |
+| UC-7 | Use the same workflow at an employer under its identity, tracker, SCM, CI and policy | Phase 4 (enterprise adapters not planned) |
+| UC-8 | Set the goal and boundaries, leave the desk, return to a verified change or blocking decisions | Phase 3 |
+| UC-9 | Bring an existing repository under AVARICE with GSD learning and planning for it | Phase 1 |
 
 ## Acceptance Criteria (PRD AC-1 to AC-15)
 
@@ -173,21 +173,21 @@ The success metric. Targets are the PRD's; "Measured in" follows the implementat
 
 | AC | Target | Measured in |
 |----|--------|-------------|
-| AC-1 | Install to first successful `status` on a fresh Mac with Node present: under 10 minutes, no admin rights | Phase 0 |
-| AC-2 | `status` with 1,000 runs, warm cache: p95 under 300 ms | Phase 3 |
-| AC-3 | Forced kill during verification: next `resume` identifies the interrupted attempt in 100% of recovery-suite fault-injection cases | Phase 1 |
-| AC-4 | Duplicate privileged action after an injected ambiguous timeout: 0 in the reconciliation suite | Phase 4 |
-| AC-5 | Secret patterns in events, evidence or artifacts after the redaction suite: 0 | Phase 3 |
-| AC-6 | Cross-profile reads in the isolation suite: 0 | Phase 3 |
-| AC-7 | Domain-code changes needed for the portability proof against the fake remote adapter: 0 lines | Phase 3 |
-| AC-8 | Retrieval quality: task success with the context pack and index adapters at least equal to a full-repo baseline at no more than 50% of its tokens | Phase 3 |
-| AC-9 | Routine low-risk benchmark tasks reaching `ready_for_review` with no phase-transition prompt: at least 70%, defect rate no worse than attended runs | Phase 4 (subset: 16 R1, 8 R2) |
-| AC-10 | Unnecessary escalations: under 15% of escalations | Phase 5 (full 40-task benchmark) |
-| AC-11 | Containment failures in the containment suite and benchmark runs: 0 | Containment suites from Phase 0; full benchmark Phase 5 |
-| AC-12 | Budget overruns beyond declared tolerance: 0 for hard budgets; reported per run for estimated budgets | Phase 4 (subset) |
-| AC-13 | Mechanical mutants on changed lines killed or accepted as equivalent: at least 90%; 0 `NO-RUN` scored as survivors | Phase 4 (subset) |
-| AC-14 | Brownfield benchmark repositories reaching an active profile with no source change and no unapproved write outside staging: 5 of 5, 0 containment failures | Phase 3 |
-| AC-15 | `avarice dashboard` render with 1,000 runs: under 2 seconds | Phase 4 |
+| AC-1 | Install to first successful `status` on a fresh Mac with Node present: under 10 minutes, no admin rights | Phase 1 |
+| AC-2 | `status` with 1,000 runs, warm cache: p95 under 300 ms | Phase 4 |
+| AC-3 | Forced kill during verification: next `resume` identifies the interrupted attempt in 100% of recovery-suite fault-injection cases | Phase 2 |
+| AC-4 | Duplicate privileged action after an injected ambiguous timeout: 0 in the reconciliation suite | Phase 5 |
+| AC-5 | Secret patterns in events, evidence or artifacts after the redaction suite: 0 | Phase 4 |
+| AC-6 | Cross-profile reads in the isolation suite: 0 | Phase 4 |
+| AC-7 | Domain-code changes needed for the portability proof against the fake remote adapter: 0 lines | Phase 4 |
+| AC-8 | Retrieval quality: task success with the context pack and index adapters at least equal to a full-repo baseline at no more than 50% of its tokens | Phase 4 |
+| AC-9 | Routine low-risk benchmark tasks reaching `ready_for_review` with no phase-transition prompt: at least 70%, defect rate no worse than attended runs | Phase 5 (subset: 16 R1, 8 R2) |
+| AC-10 | Unnecessary escalations: under 15% of escalations | Phase 6 (full 40-task benchmark) |
+| AC-11 | Containment failures in the containment suite and benchmark runs: 0 | Containment suites from Phase 1; full benchmark Phase 6 |
+| AC-12 | Budget overruns beyond declared tolerance: 0 for hard budgets; reported per run for estimated budgets | Phase 5 (subset) |
+| AC-13 | Mechanical mutants on changed lines killed or accepted as equivalent: at least 90%; 0 `NO-RUN` scored as survivors | Phase 5 (subset) |
+| AC-14 | Brownfield benchmark repositories reaching an active profile with no source change and no unapproved write outside staging: 5 of 5, 0 containment failures | Phase 4 |
+| AC-15 | `avarice dashboard` render with 1,000 runs: under 2 seconds | Phase 5 |
 
 ## Out of Scope
 
@@ -211,117 +211,117 @@ Each v1 requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FR-1 | Phase 1 | Pending |
-| FR-2 | Phase 1 | Pending |
-| FR-3 | Phase 3 | Pending |
-| FR-4 | Phase 1 | Pending |
-| FR-5 | Phase 1 | Pending |
-| FR-6 | Phase 1 | Pending |
-| FR-7 | Phase 1 | Pending |
-| FR-8 | Phase 3 | Pending |
-| FR-9 | Phase 4 | Pending |
-| FR-10 | Phase 4 | Pending |
-| FR-11 | Phase 1 | Pending |
-| FR-12 | Phase 3 | Pending |
-| FR-13 | Phase 3 | Pending |
-| FR-14 | Phase 3 | Pending |
-| FR-15 | Phase 3 | Pending |
-| FR-16 | Phase 3 | Pending |
-| FR-17 | Phase 3 | Pending |
-| FR-18 | Phase 3 | Pending |
-| FR-19 | Phase 3 | Pending |
-| FR-20 | Phase 0 | Pending |
-| FR-21 | Phase 7 | Pending |
-| FR-22 | Phase 3 | Pending |
-| FR-24 | Phase 6 | Pending |
-| FR-25 | Phase 4 | Pending |
-| FR-26 | Phase 4 | Pending |
-| RC-1 | Phase 1 | Pending |
-| RC-2 | Phase 1 | Pending |
-| RC-3 | Phase 1 | Pending |
-| RC-4 | Phase 1 | Pending |
-| RC-5 | Phase 1 | Pending |
-| RC-6 | Phase 2 | Pending |
-| RC-7 | Phase 2 | Pending |
-| RC-8 | Phase 2 | Pending |
-| CON-1 | Phase 1 | Pending |
-| CON-2 | Phase 1 | Pending |
-| CON-3 | Phase 1 | Pending |
-| CON-4 | Phase 3 | Pending |
-| CON-5 | Phase 1 | Pending |
-| CON-6 | Phase 1 | Pending |
-| CON-7 | Phase 1 | Pending |
-| CON-8 | Phase 1 | Pending |
-| CON-9 | Phase 1 | Pending |
-| CON-10 | Phase 3 | Pending |
-| CON-11 | Phase 3 | Pending |
-| CON-12 | Phase 3 | Pending |
-| CON-13 | Phase 1 | Pending |
-| CON-14 | Phase 1 | Pending |
-| CON-15 | Phase 2 | Pending |
-| CON-16 | Phase 1 | Pending |
-| AUT-1 | Phase 2 | Pending |
-| AUT-2 | Phase 2 | Pending |
-| AUT-3 | Phase 2 | Pending |
-| AUT-4 | Phase 2 | Pending |
-| AUT-5 | Phase 2 | Pending |
-| AUT-6 | Phase 2 | Pending |
-| AUT-7 | Phase 1 | Pending |
-| AUT-8 | Phase 1 | Pending |
-| AUT-9 | Phase 1 | Pending |
-| AUT-10 | Phase 2 | Pending |
-| AUT-11 | Phase 4 | Pending |
-| AUT-12 | Phase 2 | Pending |
-| AUT-13 | Phase 4 | Pending |
-| AUT-14 | Phase 4 | Pending |
-| AUT-15 | Phase 7 | Pending |
-| AUT-16 | Phase 2 | Pending |
-| AUT-17 | Phase 4 | Pending |
-| ONB-1 | Phase 0 | Pending |
-| ONB-2 | Phase 0 | Pending |
-| ONB-3 | Phase 0 | Pending |
-| ONB-4 | Phase 0 | Pending |
-| ONB-5 | Phase 0 | Pending |
-| ONB-6 | Phase 3 | Pending |
-| ONB-7 | Phase 0 | Pending |
-| ONB-8 | Phase 0 | Pending |
-| ONB-9 | Phase 0 | Pending |
-| ONB-10 | Phase 1 | Pending |
-| ONB-11 | Phase 3 | Pending |
-| ONB-12 | Phase 0 | Pending |
-| ONB-13 | Phase 0 | Pending |
-| ONB-14 | Phase 0 | Pending |
-| ONB-15 | Phase 3 | Pending |
-| NFR-1 | Phase 1 | Pending |
-| NFR-2 | Phase 0 | Pending |
-| NFR-3 | Phase 1 | Pending |
-| NFR-4 | Phase 3 | Pending |
-| NFR-5 | Phase 1 | Pending |
-| NFR-6 | Phase 1 | Pending |
-| NFR-7 | Phase 4 | Pending |
-| NFR-8 | Phase 4 | Pending |
-| NFR-9 | Phase 1 | Pending |
-| SEC-1 | Phase 3 | Pending |
-| SEC-2 | Phase 3 | Pending |
-| SEC-3 | Phase 3 | Pending |
-| SEC-4 | Phase 3 | Pending |
-| SEC-5 | Phase 0 | Pending |
-| SEC-6 | Phase 3 | Pending |
-| SEC-7 | Phase 3 | Pending |
-| SEC-8 | Phase 4 | Pending |
-| OPS-1 | Phase 3 | Pending |
-| OPS-2 | Phase 1 | Pending |
-| OPS-3 | Phase 4 | Pending |
-| OPS-4 | Phase 4 | Pending |
-| OPS-5 | Phase 3 | Pending |
-| OPS-6 | Phase 3 | Pending |
+| FR-1 | Phase 2 | Pending |
+| FR-2 | Phase 2 | Pending |
+| FR-3 | Phase 4 | Pending |
+| FR-4 | Phase 2 | Pending |
+| FR-5 | Phase 2 | Pending |
+| FR-6 | Phase 2 | Pending |
+| FR-7 | Phase 2 | Pending |
+| FR-8 | Phase 4 | Pending |
+| FR-9 | Phase 5 | Pending |
+| FR-10 | Phase 5 | Pending |
+| FR-11 | Phase 2 | Pending |
+| FR-12 | Phase 4 | Pending |
+| FR-13 | Phase 4 | Pending |
+| FR-14 | Phase 4 | Pending |
+| FR-15 | Phase 4 | Pending |
+| FR-16 | Phase 4 | Pending |
+| FR-17 | Phase 4 | Pending |
+| FR-18 | Phase 4 | Pending |
+| FR-19 | Phase 4 | Pending |
+| FR-20 | Phase 1 | Pending |
+| FR-21 | Phase 8 | Pending |
+| FR-22 | Phase 4 | Pending |
+| FR-24 | Phase 7 | Pending |
+| FR-25 | Phase 5 | Pending |
+| FR-26 | Phase 5 | Pending |
+| RC-1 | Phase 2 | Pending |
+| RC-2 | Phase 2 | Pending |
+| RC-3 | Phase 2 | Pending |
+| RC-4 | Phase 2 | Pending |
+| RC-5 | Phase 2 | Pending |
+| RC-6 | Phase 3 | Pending |
+| RC-7 | Phase 3 | Pending |
+| RC-8 | Phase 3 | Pending |
+| CON-1 | Phase 2 | Pending |
+| CON-2 | Phase 2 | Pending |
+| CON-3 | Phase 2 | Pending |
+| CON-4 | Phase 4 | Pending |
+| CON-5 | Phase 2 | Pending |
+| CON-6 | Phase 2 | Pending |
+| CON-7 | Phase 2 | Pending |
+| CON-8 | Phase 2 | Pending |
+| CON-9 | Phase 2 | Pending |
+| CON-10 | Phase 4 | Pending |
+| CON-11 | Phase 4 | Pending |
+| CON-12 | Phase 4 | Pending |
+| CON-13 | Phase 2 | Pending |
+| CON-14 | Phase 2 | Pending |
+| CON-15 | Phase 3 | Pending |
+| CON-16 | Phase 2 | Pending |
+| AUT-1 | Phase 3 | Pending |
+| AUT-2 | Phase 3 | Pending |
+| AUT-3 | Phase 3 | Pending |
+| AUT-4 | Phase 3 | Pending |
+| AUT-5 | Phase 3 | Pending |
+| AUT-6 | Phase 3 | Pending |
+| AUT-7 | Phase 2 | Pending |
+| AUT-8 | Phase 2 | Pending |
+| AUT-9 | Phase 2 | Pending |
+| AUT-10 | Phase 3 | Pending |
+| AUT-11 | Phase 5 | Pending |
+| AUT-12 | Phase 3 | Pending |
+| AUT-13 | Phase 5 | Pending |
+| AUT-14 | Phase 5 | Pending |
+| AUT-15 | Phase 8 | Pending |
+| AUT-16 | Phase 3 | Pending |
+| AUT-17 | Phase 5 | Pending |
+| ONB-1 | Phase 1 | Pending |
+| ONB-2 | Phase 1 | Pending |
+| ONB-3 | Phase 1 | Pending |
+| ONB-4 | Phase 1 | Pending |
+| ONB-5 | Phase 1 | Pending |
+| ONB-6 | Phase 4 | Pending |
+| ONB-7 | Phase 1 | Pending |
+| ONB-8 | Phase 1 | Pending |
+| ONB-9 | Phase 1 | Pending |
+| ONB-10 | Phase 2 | Pending |
+| ONB-11 | Phase 4 | Pending |
+| ONB-12 | Phase 1 | Pending |
+| ONB-13 | Phase 1 | Pending |
+| ONB-14 | Phase 1 | Pending |
+| ONB-15 | Phase 4 | Pending |
+| NFR-1 | Phase 2 | Pending |
+| NFR-2 | Phase 1 | Pending |
+| NFR-3 | Phase 2 | Pending |
+| NFR-4 | Phase 4 | Pending |
+| NFR-5 | Phase 2 | Pending |
+| NFR-6 | Phase 2 | Pending |
+| NFR-7 | Phase 5 | Pending |
+| NFR-8 | Phase 5 | Pending |
+| NFR-9 | Phase 2 | Pending |
+| SEC-1 | Phase 4 | Pending |
+| SEC-2 | Phase 4 | Pending |
+| SEC-3 | Phase 4 | Pending |
+| SEC-4 | Phase 4 | Pending |
+| SEC-5 | Phase 1 | Pending |
+| SEC-6 | Phase 4 | Pending |
+| SEC-7 | Phase 4 | Pending |
+| SEC-8 | Phase 5 | Pending |
+| OPS-1 | Phase 4 | Pending |
+| OPS-2 | Phase 2 | Pending |
+| OPS-3 | Phase 5 | Pending |
+| OPS-4 | Phase 5 | Pending |
+| OPS-5 | Phase 4 | Pending |
+| OPS-6 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 104 total (105 normative minus FR-23 deferred)
 - Mapped to phases: 104
 - Unmapped: 0
-- Owned per phase: Phase 0: 14, Phase 1: 33, Phase 2: 13, Phase 3: 28, Phase 4: 13, Phase 5: 0, Phase 6: 1, Phase 7: 2
-- Milestone v1.0 (Phases 0-2): 60. Milestone v1.1 (Phases 3-4): 41. Milestone v2.0 (Phases 5-7): 3.
+- Owned per phase: Phase 1: 14, Phase 2: 33, Phase 3: 13, Phase 4: 28, Phase 5: 13, Phase 6: 0, Phase 7: 1, Phase 8: 2
+- Milestone v1.0 (Phases 1-3): 60. Milestone v1.1 (Phases 4-5): 41. Milestone v2.0 (Phases 6-8): 3.
 
 ## Partial and extension coverage
 
@@ -329,20 +329,20 @@ An earlier phase delivers part of a requirement that a later phase completes (th
 
 | Requirement | Owner | Partial or extension coverage |
 |-------------|-------|-------------------------------|
-| CON-2, CON-3, CON-5, CON-6, CON-13 | Phase 1 | Phase 0 delivers them for the onboarding contract; Phase 1 completes them for run contracts. CON-13 here covers tool calls, invocations, wall clock and cost cap; Phase 2 CON-15 adds subagent budget sharing |
-| NFR-1, NFR-3, NFR-5, NFR-6, NFR-9 | Phase 1 | Phase 0 establishes them for onboarding (package skeleton and lint, ledger schema 1, resume); Phase 1 completes them for runs |
-| AUT-2, AUT-12 | Phase 2 | Phase 1 delivers the decision record only and run states and cancellation for one item |
-| ONB-6 | Phase 3 | Phase 0 delivers detection and refusal; Phase 3 delivers adoption, migration and refresh flows |
-| SEC-2 | Phase 3 | Phase 1 delivers the scrubbed environment and no credentials in the run; Phase 3 completes provider and reference rules |
-| FR-3 | Phase 3 | Phase 1 builds context packs from the four MVP adapters; Phase 3 completes bounded, cited packs and retrieval caps |
-| FR-4 | Phase 1 | Stage 1 only; Phase 5 extends with the Stage 2 GSD capability |
-| AUT-6 | Phase 2 | Local notification only; Phase 5 extends with push adapters (ntfy, Pushover, Telegram) |
-| OPS-6 | Phase 3 | `doctor` version detection; Phase 5 extends it to Stage 2 `engines.gsd` gating |
-| NFR-4 | Phase 3 | Proved with fake remote adapters; Phase 6 extends with real adapters |
-| CON-11 | Phase 3 | Local adapters; remote adapters arrive with Phase 6 |
-| ONB-10 | Phase 1 | Declared check commands only; active validation of setup and run commands is Later and unscheduled |
-| OPS-3 | Phase 4 | Backup, export, uninstall (and the plan's restore and import on one host); restore across hosts is Later and unscheduled |
-| SEC-4 | Phase 3 | Policy model; enterprise policy sources are Onboarding-labeled and not planned |
+| CON-2, CON-3, CON-5, CON-6, CON-13 | Phase 2 | Phase 1 delivers them for the onboarding contract; Phase 2 completes them for run contracts. CON-13 here covers tool calls, invocations, wall clock and cost cap; Phase 3 CON-15 adds subagent budget sharing |
+| NFR-1, NFR-3, NFR-5, NFR-6, NFR-9 | Phase 2 | Phase 1 establishes them for onboarding (package skeleton and lint, ledger schema 1, resume); Phase 2 completes them for runs |
+| AUT-2, AUT-12 | Phase 3 | Phase 2 delivers the decision record only and run states and cancellation for one item |
+| ONB-6 | Phase 4 | Phase 1 delivers detection and refusal; Phase 4 delivers adoption, migration and refresh flows |
+| SEC-2 | Phase 4 | Phase 2 delivers the scrubbed environment and no credentials in the run; Phase 4 completes provider and reference rules |
+| FR-3 | Phase 4 | Phase 2 builds context packs from the four MVP adapters; Phase 4 completes bounded, cited packs and retrieval caps |
+| FR-4 | Phase 2 | Stage 1 only; Phase 6 extends with the Stage 2 GSD capability |
+| AUT-6 | Phase 3 | Local notification only; Phase 6 extends with push adapters (ntfy, Pushover, Telegram) |
+| OPS-6 | Phase 4 | `doctor` version detection; Phase 6 extends it to Stage 2 `engines.gsd` gating |
+| NFR-4 | Phase 4 | Proved with fake remote adapters; Phase 7 extends with real adapters |
+| CON-11 | Phase 4 | Local adapters; remote adapters arrive with Phase 7 |
+| ONB-10 | Phase 2 | Declared check commands only; active validation of setup and run commands is Later and unscheduled |
+| OPS-3 | Phase 5 | Backup, export, uninstall (and the plan's restore and import on one host); restore across hosts is Later and unscheduled |
+| SEC-4 | Phase 4 | Policy model; enterprise policy sources are Onboarding-labeled and not planned |
 
 ---
 *Requirements defined: 2026-11-01*

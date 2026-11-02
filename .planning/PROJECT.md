@@ -18,20 +18,20 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 
 ### Active
 
-Milestone v1.0 Contained Kernel (Phases 0-2, first milestone, slices 0-2):
+Milestone v1.0 Contained Kernel (Phases 1-3, first milestone, slices 0-2):
 
-- [ ] Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (Phase 0: ONB, FR-20, SEC-5, NFR-2)
-- [ ] A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (Phase 1: RC-1..5, CON, AUT-7..9, FR-1/2/4/5/6/7/11, NFR, OPS-2, ONB-10)
-- [ ] Decision records, independent work around an open decision, validated answers, contract amendments, local notification (Phase 2: AUT-1..6/10/12/16, RC-6..8, CON-15)
+- [ ] Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (Phase 1: ONB, FR-20, SEC-5, NFR-2)
+- [ ] A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (Phase 2: RC-1..5, CON, AUT-7..9, FR-1/2/4/5/6/7/11, NFR, OPS-2, ONB-10)
+- [ ] Decision records, independent work around an open decision, validated answers, contract amendments, local notification (Phase 3: AUT-1..6/10/12/16, RC-6..8, CON-15)
 
-Milestone v1.1 MVP Completion (Phases 3-4, planned; completes the PRD's MVP):
+Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
 
-- [ ] Profiles, handle-first retrieval with caps, restricted mode, privileged-action approvals, `doctor`, existing-GSD adoption and refresh, portability proof (Phase 3)
-- [ ] Delivery to a draft PR, review feedback attempts, mutation gate, architecture-model check, static dashboard, backup and uninstall (Phase 4)
+- [ ] Profiles, handle-first retrieval with caps, restricted mode, privileged-action approvals, `doctor`, existing-GSD adoption and refresh, portability proof (Phase 4)
+- [ ] Delivery to a draft PR, review feedback attempts, mutation gate, architecture-model check, static dashboard, backup and uninstall (Phase 5)
 
-Milestone v2.0 Post-MVP Extensions (Phases 5-7, planned, trigger-driven):
+Milestone v2.0 Post-MVP Extensions (Phases 6-8, planned, trigger-driven):
 
-- [ ] GSD capability bridge, phased work, plugin, push notifiers (Phase 5); personal infrastructure and host records (Phase 6, FR-24); cross-repository runs and project groups (Phase 7, AUT-15, FR-21)
+- [ ] GSD capability bridge, phased work, plugin, push notifiers (Phase 6); personal infrastructure and host records (Phase 7, FR-24); cross-repository runs and project groups (Phase 8, AUT-15, FR-21)
 
 ### Out of Scope
 
@@ -52,8 +52,8 @@ Milestone v2.0 Post-MVP Extensions (Phases 5-7, planned, trigger-driven):
 
 - **Source set:** 26 documents ingested 2026-11-01 (1 PRD, 12 ADR, 9 SPEC, 4 DOC), all status proposal. Precedence PRD > ADR > SPEC > DOC. Conflict report: 0 blockers, 1 warning (the document cross-reference graph is one cycle of navigational links; accepted by the user), 9 info. Detail: `.planning/INGEST-CONFLICTS.md`; intel: `.planning/intel/`.
 - **Host baseline (decided 2026-11-01):** Claude Code is the primary host and GSD 1.17.0 the baseline; GSD updates are taken deliberately. Installed: Claude Code 2.1.316 (admitted versions: 2.1.312 and 2.1.316). Attended use targets whichever directory `CLAUDE_CONFIG_DIR` names, default `~/.claude`; nothing is hard-coded. The developer's active directory is `~/.claude-edu`. Unattended runs load neither directory's settings.
-- **Slice 0 exit-criterion target:** `~/aa-phan-portfolio-v2`, an existing repository with committed GSD planning (its own milestone v2, Phase 4 of 6 executing) and no codebase map, intel or graph. It exercises detection and non-overwrite of existing planning state (ONB-6, detection and refusal). Adoption of an existing stamped map is a Phase 3 deliverable and this target cannot exercise it unless a map exists first.
-- **Success metric:** acceptance criteria AC-1..AC-15 (PRD). The first milestone verifies AC-1 and AC-3 directly and reports containment failures (AC-11) from its containment suites; the rest are measured in Phases 3-5 (mapping in REQUIREMENTS.md).
+- **Slice 0 exit-criterion target:** `~/aa-phan-portfolio-v2`, an existing repository with committed GSD planning (its own milestone v2, Phase 5 of 6 executing) and no codebase map, intel or graph. It exercises detection and non-overwrite of existing planning state (ONB-6, detection and refusal). Adoption of an existing stamped map is a Phase 4 deliverable and this target cannot exercise it unless a map exists first.
+- **Success metric:** acceptance criteria AC-1..AC-15 (PRD). The first milestone verifies AC-1 and AC-3 directly and reports containment failures (AC-11) from its containment suites; the rest are measured in Phases 4-6 (mapping in REQUIREMENTS.md).
 - **Pre-build spikes closed 2026-11-01** (`spikes/2026-11-01-pre-slice-0/README.md`): launch line gains `--plugin-dir` and `--agents`; out-of-scope worktree entries get `denyWrite`; the knowledge pass uses an AVARICE graph merge instead of `merge-graphs`; minimum Node raised to 22.22.3.
 - **Open owner decisions (README items 3-9):** GitHub and manual briefs as the only personal SCM and task source (A-3, A-4); `routine` preset default limits and whether it may push and open a draft PR; notification destination and check-in times; unattended only while the Mac is awake (A-8); NAS model and OS before slice 6 (A-5); default promotion mode (`none`, `copy`, `commit`); enterprise questionnaire (A-6).
 - **Maintenance cost (estimate):** re-run the GSD integration suite on GSD upgrades and the containment suite on every Claude Code upgrade; re-run all suites on Node majors. The containment suite is likely the largest recurring cost.
@@ -69,7 +69,7 @@ Milestone v2.0 Post-MVP Extensions (Phases 5-7, planned, trigger-driven):
 - **Architecture:** `domain` and `ports` import no adapters or `node:` modules other than `node:crypto`, enforced by lint (NFR-3); AVARICE never writes `.planning/` directly, never retries inside a GSD unit, never calls a model API.
 - **Operating envelope:** unattended runs only while the Mac is awake and on power (A-8); the endpoint is `ready_for_review`; no merge, release or deploy.
 - **Performance targets (unmeasured proposals):** status p95 < 300 ms at 1,000 runs, doctor < 2 s, hook decision p95 < 150 ms, dashboard < 2 s at 1,000 runs, install to first `status` < 10 minutes (T-1..T-9).
-- **Dependencies:** `graphify` 0.9.53 optional (ADR-008); `gh` 2.x; `@anthropic-ai/sandbox-runtime` unverified for wrapping AVARICE's own checks (Phase 1 spike); the adversarial-mutation-test plugin's DecentraLicense is unreviewed, so no plugin code is copied (ADR-007).
+- **Dependencies:** `graphify` 0.9.53 optional (ADR-008); `gh` 2.x; `@anthropic-ai/sandbox-runtime` unverified for wrapping AVARICE's own checks (Phase 2 spike); the adversarial-mutation-test plugin's DecentraLicense is unreviewed, so no plugin code is copied (ADR-007).
 
 ## Key Decisions
 
@@ -92,7 +92,7 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Claude Code primary host, GSD 1.17.0 baseline (A-1, A-2) | Owner confirmation | Decided 2026-11-01 |
 | Config directory is whatever `CLAUDE_CONFIG_DIR` names, default `~/.claude`; nothing hard-coded | Developer's active directory is `~/.claude-edu` | Decided 2026-11-01 |
 | Slice 0 exit target is `~/aa-phan-portfolio-v2` | Real brownfield repository with existing GSD planning | Decided 2026-11-01 |
-| Phase N mirrors slice N of the implementation plan (Phases 0-7) | Owner's slice structure and exit criteria are the phase input | Decided 2026-11-01 |
+| Phase N mirrors slice N−1 of the implementation plan (Phases 1-8 = slices 0-7; GSD 1.17.0 does not support a phase 0) | Owner's slice structure and exit criteria are the phase input | Decided 2026-11-01 |
 | A requirement ID shared across phases maps to the phase that completes its MVP scope; earlier phases record partial coverage | Keeps one owner per requirement; post-MVP phases extend, never take over | Roadmapper, 2026-11-01 (confirm) |
 | Ingest warning: the document cross-reference cycle is treated as hyperlinks, not circular definitions | Documents were read independently; no synthesis loop | Accepted by user |
 
