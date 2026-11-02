@@ -1,4 +1,6 @@
-// UnavailableAgentHost: placeholder until the implementation commit.
+// UnavailableAgentHost: the production host until the contained Claude Code adapter (plan 01-15) is
+// admitted. It reports enforcement `none` and refuses every invocation, so onboarding blocks with
+// `enforcement_failure` instead of running an agent without containment (ONB-12, CON-3, T-01-64).
 import { err } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../ports/agent-host.ts';
@@ -9,12 +11,18 @@ export class UnavailableAgentHost implements AgentHost {
     port: 'agent-host',
     adapter: 'unavailable',
     version: '0.0.0',
-    capabilities: {},
-    attributes: {},
+    capabilities: { 'contained-invocation': false },
+    attributes: { enforcement: 'none' },
     offline: true,
   };
 
   invoke(_req: InvocationRequest, _signal: AbortSignal): Promise<Result<InvocationOutcome>> {
-    return Promise.resolve(err({ kind: 'internal', cause: 'UnavailableAgentHost is not implemented yet' }));
+    return Promise.resolve(
+      err({
+        kind: 'unsupported',
+        capability: 'contained-invocation',
+        reducedMode: 'none until the Claude Code host adapter is admitted',
+      }),
+    );
   }
 }
