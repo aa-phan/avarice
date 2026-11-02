@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 1
+current_phase: 01
 current_phase_name: Contained onboarding of one repository
-status: planning
-stopped_at: ROADMAP.md, STATE.md, PROJECT.md and REQUIREMENTS.md written; awaiting orchestrator review and commit
-last_updated: "2026-11-02T07:13:17.168Z"
-last_activity: 2026-11-01
-last_activity_desc: Roadmap created from ingested intel (26 documents, 104 requirements mapped, 1 deferred)
-state_head: 7ab961d084b4477b236c42692dd3658e31761b6b
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-11-02T17:39:44.768Z"
+last_activity: 2026-11-02
+last_activity_desc: Phase 01 execution started
+state_head: b7dd72be2caed27e8c4365d4141f2e1a7b9c9b94
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-01)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 1 — Contained onboarding of one repository (milestone v1.0 Contained Kernel = Phases 1-3)
+**Current focus:** Phase 01 — Contained onboarding of one repository
 
 ## Current Position
 
-Phase: 1 (Contained onboarding of one repository) — READY TO EXECUTE
-Plan: 0 of TBD in current phase
-Status: Ready to plan; execution gated on the pre-build spikes below
-Last activity: 2026-11-01 — Roadmap created from ingested intel (26 documents, 104 requirements mapped, 1 deferred)
+Phase: 01 (Contained onboarding of one repository) — EXECUTING
+Plan: 2 of 20
+Status: Ready to execute
+Last activity: 2026-11-02 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -53,6 +53,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 25 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -63,6 +68,10 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Init]: Phase N mirrors slice N−1 (Phases 1-8 = slices 0-7; renumbered 2026-11-01 because GSD 1.17.0 `roadmap.analyze` and `get-phase` ignore a phase 0); a shared requirement ID maps to the phase that completes its MVP scope (roadmapper decision, confirm)
 - [Init]: Host baseline Claude Code + GSD 1.17.0; config dir is whatever `CLAUDE_CONFIG_DIR` names, default `~/.claude`, nothing hard-coded (decided 2026-11-01)
 - [Init]: Slice 0 exit target is `~/aa-phan-portfolio-v2` (decided 2026-11-01)
+- [Phase 01]: ID prefixes include the underscore (newId('onb_', ...)); ulid and newId take time and 10 random bytes as arguments
+- [Phase 01]: Onboarding contract: per-purpose write maps, files.readExclude and files.secretGlobs separate from files.read, flat budget override keys, request and preflight validated as untrusted input
+- [Phase 01]: completenessFor never claims complete without evidence; buildProjectRecord defaults grant no write paths, endpoints or credentials
+- [Phase 01]: Vendor tool names kept out of the domain contract; execution.toolClasses only (SKELETON vendor-code placement)
 
 ### Pending Todos
 
@@ -102,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-01
-Stopped at: ROADMAP.md, STATE.md, PROJECT.md and REQUIREMENTS.md written; awaiting orchestrator review and commit
+Last session: 2026-11-02T17:39:44.751Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
