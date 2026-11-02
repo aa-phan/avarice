@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-11-02T22:56:26.718Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-11-02T23:12:47.532Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: bfba83319dcc30f1eac51ffff3847798ed6df046
+state_head: 2768a53a2c321a78252b66df04bd26b571ab8381
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 11 of 20
+Plan: 12 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P08 | 17 min | 3 tasks | 18 files |
 | Phase 01 P09 | 91min | 2 tasks | 23 files |
 | Phase 01 P10 | 41 min | 2 tasks | 19 files |
+| Phase 01 P11 | 15min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: Preflight reads existing state from git objects at the pin only (cat-file, ls-tree, log -S); map user-edited means a commit after the stamp-writing commit or uncommitted changes under .planning/; every existing-map class regenerates in isolation, adoption deferred
 - [Phase 01]: 01-09: the mapping:plan step (not the contract) is the mapping mode in force; non-brownfield repositories skip mapping (mode skip, completeness none); an explicit GSD_HOME is judged alone and never replaced by another install
 - [Phase 01]: 01-10: tracked files may change in staging only in .planning/config.json and inside an invoked agent write set (Refresh regenerates a committed map); coverage scope and completeness come from the validate step; commands from .avarice/config.json are recorded inactive; artifact kinds are map-document and map-snapshot with retention onboarding
+- [Phase 01]: 01-11: Bash strategy blanket-bash-hook-identity (ONBOARDING_BASH_STRATEGY in invocation-scope.ts): blanket Bash allow, AVARICE PreToolUse hook is the command-identity control, sandbox confines effects
+- [Phase 01]: 01-11: Launch is gated by assertLaunchArgsSafe (refuses bypass, non-dontAsk modes, missing settings/budget) and checkLaunchReady (settings keys, blocking hook and script, sandbox probe, claude 2.1.312/2.1.316); every refusal is enforcement_failure
 
 ### Pending Todos
 
@@ -149,6 +152,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T22:56:26.700Z
-Stopped at: Completed 01-10-PLAN.md
+Last session: 2026-11-02T23:12:47.513Z
+Stopped at: Completed 01-11-PLAN.md
 Resume file: None
