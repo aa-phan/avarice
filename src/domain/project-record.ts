@@ -4,6 +4,7 @@
 import { digestOf } from './digest.ts';
 import { completenessFor } from './mapping.ts';
 import type { Completeness, MappingMode } from './mapping.ts';
+import { PROFILE_POLICY } from './policy-narrowing.ts';
 import type { ProposedCommand } from './policy-narrowing.ts';
 
 export interface CodebaseArtifact {
@@ -101,6 +102,7 @@ export interface ProjectRecord {
 // plans can only narrow authority (ONB-9); widening needs a new record version through policy.
 export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
   const paths = input.paths ?? {};
+  const defaults = PROFILE_POLICY.paths;
   const execution = input.execution ?? {};
   return {
     schema: 1,
@@ -115,11 +117,17 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     profile: input.profile,
     policyPreset: 'routine',
     promotion: 'none',
-    gsd: { version: input.gsdVersion ?? 'unknown', runtime: 'claude', adapter: 'gsd-onboarding@1.17', config: {}, capabilities: [] },
-    contract: null,
-    existingState: {},
-    instructionFiles: [],
-    findings: [],
+    gsd: {
+      version: input.gsdVersion ?? 'unknown',
+      runtime: 'claude',
+      adapter: 'gsd-onboarding@1.17',
+      config: { ...(input.gsd?.config ?? {}) },
+      capabilities: [...(input.gsd?.capabilities ?? [])],
+    },
+    contract: input.contract === undefined ? null : { runId: input.contract.runId, version: input.contract.version, digest: input.contract.digest },
+    existingState: { ...(input.existingState ?? {}) },
+    instructionFiles: [...(input.instructionFiles ?? [])],
+    findings: (input.findings ?? []).map((f) => ({ ...f })),
     artifacts: {
       location: 'staging',
       stagingPath: input.stagingPath,
@@ -139,12 +147,13 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     },
     indexes: {},
     notMapped: [...input.notMapped],
+    // The profile policy's grants, then the proposals that survived narrowing. Protection only accumulates.
     paths: {
-      read: [...(paths.read ?? ['**'])],
-      write: [...(paths.write ?? [])],
-      protected: [...(paths.protected ?? [])],
-      generated: [...(paths.generated ?? [])],
-      artifacts: [...(paths.artifacts ?? [])],
+      read: [...(paths.read ?? defaults.read)],
+      write: [...(paths.write ?? defaults.write)],
+      protected: [...new Set([...defaults.protected, ...(paths.protected ?? [])])],
+      generated: [...(paths.generated ?? defaults.generated)],
+      artifacts: [...(paths.artifacts ?? defaults.artifacts)],
     },
     execution: {
       toolClasses: [...(execution.toolClasses ?? ['read'])],
@@ -152,7 +161,7 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
       endpoints: [...(execution.endpoints ?? [])],
       credentials: [...(execution.credentials ?? [])],
     },
-    commands: [],
+    commands: (input.commands ?? []).map((c) => ({ name: c.name, argv: [...c.argv], provenance: c.provenance, status: c.status })),
   };
 }
 

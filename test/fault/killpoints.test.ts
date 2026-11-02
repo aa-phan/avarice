@@ -75,7 +75,7 @@ function outcomeOf(roots: CliRoots): Outcome {
   const store = new LocalArtifactStore(roots.AVARICE_DATA_ROOT);
   const manifestBytes = store.get(body.artifacts.snapshot);
   assert.ok(manifestBytes.ok, 'the snapshot manifest is in the artifact store');
-  const codebaseDigests = rows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE kind = 'codebase-map' ORDER BY digest").map((r) => r.digest);
+  const codebaseDigests = rows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE kind = 'map-document' ORDER BY digest").map((r) => r.digest);
   return {
     record: normalizeRecord(body),
     rawRecord: body,

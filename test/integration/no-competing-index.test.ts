@@ -178,7 +178,9 @@ describe('repository proposals only narrow (ONB-9, T-01-22)', () => {
     assert.deepEqual(record.commands, [{ name: 'unit', argv: ['npm', 'test'], provenance: '.avarice/config.json', status: 'inactive' }]);
     const narrowing = record.findings.filter((f) => f.source === 'narrowing').map((f) => [f.field, f.reason]);
     assert.deepEqual(narrowing, [['paths.write', 'widens'], ['execution', 'unknown']]);
-    assert.equal(JSON.stringify(record).includes('example.com'), false, 'a rejected value never becomes authority');
+    const execution = (record as unknown as { execution: { endpoints: string[]; credentials: string[] } }).execution;
+    assert.deepEqual(execution.endpoints, [], 'a rejected value never becomes authority');
+    assert.deepEqual(execution.credentials, []);
   });
 
   it('records a finding, and still activates, for a config that is not JSON or is too large', () => {

@@ -147,9 +147,11 @@ export function normalizeText(text: string): string {
 
 // Replaces ULIDs, ISO timestamps and absolute temp-dir prefixes with placeholders. The snapshot manifest
 // digest is replaced too, because the manifest embeds the onboarding ID; tests compare the manifests
-// themselves after normalization.
+// themselves after normalization. The contract digest is replaced for the same reason: the contract embeds
+// the onboarding and run IDs, so two runs of one repository never share it (plan 01-10 records it).
 export function normalizeRecord(body: unknown): unknown {
-  const parsed = JSON.parse(normalizeText(JSON.stringify(body))) as { artifacts?: { snapshot?: unknown } };
+  const parsed = JSON.parse(normalizeText(JSON.stringify(body))) as { artifacts?: { snapshot?: unknown }; contract?: { digest?: unknown } | null };
   if (parsed.artifacts !== undefined && typeof parsed.artifacts.snapshot === 'string') parsed.artifacts.snapshot = '<manifest-digest>';
+  if (parsed.contract != null && typeof parsed.contract.digest === 'string') parsed.contract.digest = '<contract-digest>';
   return parsed;
 }

@@ -62,8 +62,10 @@ export class LocalArtifactStore implements ArtifactStore {
     const hex = sha256Hex(bytes);
     const result = { digest: `sha256:${hex}`, size: bytes.length };
     const { dir, file } = this.pathFor(hex);
+    // Already stored: a no-op, but only when the stored bytes really are these bytes. A blob that was truncated or
+    // corrupted at the same size is replaced by the rename below (an atomic replace), never trusted by its size.
     try {
-      if (statSync(file).size === bytes.length) return ok(result);
+      if (statSync(file).size === bytes.length && sha256Hex(readFileSync(file)) === hex) return ok(result);
     } catch {
       // Not stored yet.
     }
