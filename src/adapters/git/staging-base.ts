@@ -292,6 +292,17 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
       branch: branch.value.stdout.trim(),
       modified: parsed.modified,
       untracked: parsed.untracked,
+      defaultBranch: null,
+      planningFiles: [],
+      codebaseMapFiles: [],
+      submodules: [],
+      nestedRepos: [],
+      workspaceManifests: [],
+      instructionFiles: [],
+      adrDirs: [],
+      runtimes: [],
+      trackedFiles: 0,
+      trackedBytes: 0,
     };
     if (remote.ok && remote.value.stdout.trim().length > 0) facts.remote = stripCredentials(remote.value.stdout.trim());
     return ok(facts);

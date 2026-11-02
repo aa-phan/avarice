@@ -1,7 +1,12 @@
 // StagingWorkspace port (SKELETON.md "Ports"). Application code reaches the staging copy of a repository
 // only through this port; the adapter is the only code that touches git or the filesystem.
-// `inspectRepo` is read-only: it reports names, never file contents (ONB-3).
+// `inspectRepo` is read-only: it reports names of uncommitted and untracked files, never their contents, and
+// reads committed content only (through git objects at the pinned commit), never a file of the checkout
+// (ONB-3, T-01-16).
+import type { RepoFacts } from '../domain/preflight.ts';
 import type { Result } from '../domain/result.ts';
+
+export type { MapFileFacts, RepoFacts } from '../domain/preflight.ts';
 
 export interface PrepareInput {
   // The user's repository; prepare never writes to its working tree.
@@ -32,20 +37,6 @@ export interface StagingChanges {
   modified: string[];
   added: string[];
   deleted: string[];
-}
-
-export interface RepoFacts {
-  gitRoot: string;
-  rootCommit: string;
-  // Remote URL of `origin` with any credentials removed.
-  remote?: string;
-  pin: string;
-  // Empty string when HEAD is detached.
-  branch: string;
-  // Names of tracked files with uncommitted changes.
-  modified: string[];
-  // Names of untracked files (not ignored).
-  untracked: string[];
 }
 
 export interface StagingWorkspace {
