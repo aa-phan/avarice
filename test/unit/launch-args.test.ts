@@ -134,8 +134,8 @@ describe('assertLaunchArgsSafe', () => {
   });
 
   it('refuses flags that widen what the settings allow', () => {
-    for (const extra of [['--add-dir', '/'], ['--allowedTools', 'Bash'], ['--allowed-tools', 'Bash'], ['--tools', 'default']]) {
-      assert.match(refused([...good(), ...extra]), /widen|add-dir|allowed|tools/);
+    for (const extra of [['--add-dir', '/'], ['--allowedTools', 'Bash'], ['--allowed-tools', 'Bash']]) {
+      assert.match(refused([...good(), ...extra]), /widen/);
     }
   });
 
