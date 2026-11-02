@@ -24,6 +24,9 @@ const MAX_BUFFER = 64 * 1024 * 1024;
 export interface RunGitOptions {
   cwd: string;
   timeoutMs?: number;
+  // Neutralize the clean, smudge and process commands of every `filter.<name>.*` driver the repository (or an
+  // included file) defines, for this call only (RED stub: not implemented yet).
+  neutralizeFilters?: boolean;
 }
 
 export interface GitOutput {
