@@ -105,7 +105,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [ ] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
 - [ ] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
-- [ ] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
+- [x] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [ ] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
 - [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
 - [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
@@ -285,7 +285,7 @@ Each v1 requirement maps to exactly one phase.
 | ONB-6 | Phase 4 | Pending |
 | ONB-7 | Phase 1 | Pending |
 | ONB-8 | Phase 1 | Pending |
-| ONB-9 | Phase 1 | Pending |
+| ONB-9 | Phase 1 | Complete |
 | ONB-10 | Phase 2 | Pending |
 | ONB-11 | Phase 4 | Pending |
 | ONB-12 | Phase 1 | Complete |
