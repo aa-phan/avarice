@@ -7,6 +7,7 @@ import { compileOnboardingContract, contractDigest } from '../../domain/onboardi
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
+import { stopIncompatible } from './shared.ts';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -27,9 +28,7 @@ export const contractStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   if (deps.gsd === undefined || (inspected !== undefined && !inspected.ok && inspected.error.kind === 'unsupported')) {
     const problem = deps.gsdProblem ?? NO_GSD;
     const found = inspected !== undefined && !inspected.ok && inspected.error.kind === 'unsupported' ? (inspected.error.detail ?? problem.found) : problem.found;
-    ctx.note(`gsd-core is incompatible: ${found}; admitted: ${problem.admitted}`);
-    const moved = ctx.transition(row, 'incompatible', 'none', { data: { found: found.slice(0, MAX_DETAIL), admitted: problem.admitted } });
-    return moved.ok ? ok(undefined) : moved;
+    return stopIncompatible(ctx, row, found, problem.admitted);
   }
   if (inspected === undefined || !inspected.ok) return inspected ?? err({ kind: 'internal', cause: 'gsd inspect returned nothing' });
   const recordedInspect = deps.ledger.recordStepResult(row.onboardingId, {

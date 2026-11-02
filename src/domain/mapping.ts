@@ -1,6 +1,6 @@
 // Mapping modes, the GSD map file sets and completeness labels
 // (docs/repository-onboarding.md "Mapping-mode decision table", "Validation").
-import { err } from './result.ts';
+import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import type { ExistingMapClass } from './preflight.ts';
 
@@ -83,7 +83,34 @@ export interface MappingModeDecision {
   reason: string;
 }
 
-// Stub until the GREEN commit of plan 01-09 Task 2.
-export function chooseMappingMode(_input: MappingModeInput): Result<MappingModeDecision> {
-  return err({ kind: 'internal', cause: 'not implemented' });
+// The decision table of docs/repository-onboarding.md "Mapping-mode decision table", as far as Phase 1
+// implements it. In order:
+//   - not brownfield (GSD's own `is_brownfield`): skip mapping, completeness `none`;
+//   - requested `paths`: unsupported, reduced mode `fast` (path scope is Phase 4);
+//   - requested `adopt`: unsupported, reduced mode `full` (adopting a stamped map is Phase 4);
+//   - requested `skip`: skip; requested `fast`: fast (`partial`); otherwise full (`complete`).
+// An existing map of any classification does not change the mode: it is regenerated in isolation in the
+// staging workspace, and the classification is carried so the caller can pass the contract's existing-map answer.
+export function chooseMappingMode(input: MappingModeInput): Result<MappingModeDecision> {
+  const existingMap: ExistingMapClass = input.existingMap ?? 'none';
+  const requested = input.requested;
+  if (requested !== undefined && !(MAPPING_MODES as readonly string[]).includes(requested)) {
+    return err({ kind: 'invalid', field: 'mode', reason: `unknown mapping mode ${JSON.stringify(requested)}` });
+  }
+  const decide = (mode: MappingMode, reason: string): Result<MappingModeDecision> =>
+    ok({ mode, completeness: completenessFor(mode), existingMap, reason });
+
+  if (!input.isBrownfield) return decide('skip', 'not brownfield: planning from the brief only');
+  switch (requested) {
+    case 'paths':
+      return err({ kind: 'unsupported', capability: 'map-paths', reducedMode: 'fast', detail: 'path-scoped mapping arrives in Phase 4' });
+    case 'adopt':
+      return err({ kind: 'unsupported', capability: 'adopt-map', reducedMode: 'full', detail: 'adopting an existing stamped map arrives in Phase 4; the map is regenerated in staging' });
+    case 'skip':
+      return decide('skip', 'mapping skipped on request');
+    case 'fast':
+      return decide('fast', 'fast map requested');
+    default:
+      return decide('full', existingMap === 'none' ? 'brownfield repository, full map' : `existing map (${existingMap}) regenerated in staging, full map`);
+  }
 }

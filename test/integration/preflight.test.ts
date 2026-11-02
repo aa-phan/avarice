@@ -321,7 +321,8 @@ describe('ONB-6 refusals through the CLI', () => {
   });
 
   it('refuses a new onboarding while another onboarding of the project is mid-flight', () => {
-    const repo = makeScratchRepo();
+    // Brownfield (a package file), so the mapper is invoked: a README-only repository is skipped (plan 01-09).
+    const repo = makeScratchRepo({ files: { 'README.md': '# r\n', 'package.json': '{"name":"scratch"}\n' } });
     cleanups.push(repo.dispose);
     const roots = fixtureProfile();
     runWithFault(roots, repo, 'mid-invocation');

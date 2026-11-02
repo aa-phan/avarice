@@ -12,14 +12,14 @@ import type { AppDeps } from './deps.ts';
 import { runOnboarding } from './onboarding-service.ts';
 import type { OnboardingOutcome } from './onboarding-service.ts';
 import type { StageContext } from './stages/stage.ts';
-import { loadContract, readMapDocuments, stagingPathOf } from './stages/shared.ts';
+import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf, stampFastMap } from './stages/shared.ts';
 
 const LAUNCH = 'launch:map';
 const VALIDATE = 'validate';
 
 // Decides the fate of the map invocation that was running when the previous holder died, and moves the
 // onboarding out of `paused` (`mapping` again, or on to `validating` when the invocation had finished).
-function reconcileInvocation(ctx: StageContext): Result<void> {
+async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
   const { deps, onboardingId } = ctx;
   let current = deps.ledger.getOnboarding(onboardingId);
   if (!current.ok) return current;
@@ -43,12 +43,14 @@ function reconcileInvocation(ctx: StageContext): Result<void> {
   const validations = steps.value.filter((s) => s.step === VALIDATE);
   // Each mapping round is one launch followed by one validation, so an extra launch is this round's invocation.
   const invoked = launches.length > validations.length;
+  const mode = effectiveMappingMode(deps, onboardingId, contract.value.body);
+  if (!mode.ok) return mode;
   let finished = false;
   if (invoked) {
-    const documents = readMapDocuments(deps.staging, staging.value, contract.value.body);
+    const documents = readMapDocuments(deps.staging, staging.value, mode.value);
     if (!documents.ok) return documents;
     const present = new Set(documents.value.map((d) => d.path));
-    finished = requiredFilesFor(contract.value.body.mapping.mode).every((path) => present.has(path));
+    finished = requiredFilesFor(mode.value).every((path) => present.has(path));
   }
 
   const latest = launches.at(-1);
@@ -76,6 +78,11 @@ function reconcileInvocation(ctx: StageContext): Result<void> {
     nowMs: deps.clock.nowMs(),
   });
   if (!event.ok) return event;
+  // The interrupted invocation was a fast map: it still owes its AVARICE-run stamp.
+  if (mode.value === 'fast') {
+    const stamped = await stampFastMap(deps, onboardingId, staging.value);
+    if (!stamped.ok) return stamped;
+  }
   const validating = ctx.transition(resumed.value, 'validating', VALIDATE, { data: { reconciled: true } });
   return validating.ok ? ok(undefined) : validating;
 }

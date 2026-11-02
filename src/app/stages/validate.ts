@@ -7,7 +7,7 @@ import type { Result } from '../../domain/result.ts';
 import { validateMapArtifacts } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
 export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Result<void> => {
   const { deps } = ctx;
@@ -18,12 +18,14 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
 
   const head = deps.staging.head(staging.value);
   if (!head.ok) return head;
-  const documents = readMapDocuments(deps.staging, staging.value, contract.value.body);
+  const mode = effectiveMappingMode(deps, row.onboardingId, contract.value.body);
+  if (!mode.ok) return mode;
+  const documents = readMapDocuments(deps.staging, staging.value, mode.value);
   if (!documents.ok) return documents;
 
   const validation = validateMapArtifacts(
     { stagingHead: head.value, files: documents.value.map((d) => ({ path: d.path, lastMappedCommit: d.lastMappedCommit })) },
-    { mode: contract.value.body.mapping.mode },
+    { mode: mode.value },
   );
 
   const attempts = deps.ledger.listAttempts(row.onboardingId);
