@@ -159,7 +159,7 @@ completed: 2026-11-02
 
 ## Task Commits
 
-1. **Task 1** (TDD): RED `43a7d2f` test(01-12) (52 tests, 9 pass on arrival, 43 fail; `RED_EVIDENCE_OK`, record `01-12-red-evidence-task1.json`); GREEN `8ef2a5d` feat(01-12) (52 of 52 plus 2 writeHookPolicy-era tests; full suite 632).
+1. **Task 1** (TDD): RED `43a7d2f` test(01-12) (52 tests, 9 pass on arrival, 43 fail; `RED_EVIDENCE_OK`, record `01-12-red-evidence-task1.json`); GREEN `8ef2a5d` feat(01-12) (53 of 53 including the writeHookPolicy test; full suite 632).
 2. **Task 2** (TDD): RED `858a727` test(01-12) (11 tests, all fail on assertions; `RED_EVIDENCE_OK`, record `01-12-red-evidence-task2.json`); GREEN `9fddd17` feat(01-12) (11 of 11; full suite 643).
 
 ## TDD Gate Compliance
