@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-11-02T19:05:55.300Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-11-02T19:18:32.116Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 64c68162c1bfcaaa116215df1ce75be79e5994bc
+state_head: 414084b064cb775a5c1847321b0a3869aeeb563e
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 3 of 20
+Plan: 4 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | 25 min | 3 tasks | 14 files |
 | Phase 01 P02 | 84 min | 2 tasks | 68 files |
+| Phase 01 P03 | 11 min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,12 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: S0-D: intel runs as claude -p --agent gsd-intel-updater with the agent in --agents (no Agent tool)
 - [Phase 01]: S0-F: default budgets wall clock map 8, intel 5, knowledge 6 min, toolCalls 300, costUsd perInvocation 1.00 perRun 3.00; AVARICE enforces its own wall clock (host holds -p 10 min on a stalled subagent)
 - [Phase 01]: S0-G: knowledge pass needs graphify dir on PATH for that invocation; document edges return EXTRACTED and are re-tagged by AVARICE
+- [Phase 01]: Ledger methods take nowMs from the caller and SqliteLedger takes an id function; the adapter reads no clock
+- [Phase 01]: Blocked reason rides in the onboarding.transition event data (OnboardingRow.reason reads the latest); blocked requires a reason
+- [Phase 01]: Checkpoint seq is continuous across the onboarding ID and its contract run ID
+- [Phase 01]: acquireLease grants only a free lease in 01-03; expiry takeover is 01-06
+- [Phase 01]: Command modules export run, readOnly and booleanFlags; status opens the store read-only after migrating
+- [Phase 01]: Events limited to 1024-char strings and 8192 chars; stored bodies limited to 1 MiB (enforces no document text in the ledger)
 
 ### Pending Todos
 
@@ -118,6 +125,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T19:05:55.273Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-11-02T19:18:32.080Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None

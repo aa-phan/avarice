@@ -97,8 +97,8 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Codebase onboarding (ONB-1 to ONB-15)
 
-- [ ] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
-- [ ] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
+- [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
+- [x] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
 - [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
@@ -116,14 +116,14 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 ### Portability and reliability (NFR-1 to NFR-9)
 
 - [ ] **NFR-1** [MVP]: Baseline operation on one Mac needs no NAS, cloud account, container runtime, Kubernetes, Redis or always-on database server.
-- [ ] **NFR-2** [MVP]: Local orchestration (status, resume planning, verification, checkpoints, evidence) works without network access.
+- [x] **NFR-2** [MVP]: Local orchestration (status, resume planning, verification, checkpoints, evidence) works without network access.
 - [x] **NFR-3** [MVP]: Domain workflow code contains no provider identifiers, URLs, absolute paths, SQL dialect or agent-vendor APIs; a lint check enforces the import boundary.
 - [ ] **NFR-4** [Contract proved with a fake remote adapter, Later real]: Moving artifact storage or execution to another host needs only configuration, explicit data migration and possibly a new adapter; domain workflow code does not change.
 - [ ] **NFR-5** [MVP]: SQLite databases live on local storage and are never placed on a network filesystem.
 - [ ] **NFR-6** [MVP]: After a process crash, sleep or kill at any point, the next command detects interrupted work and presents a consistent state ("paused, needs reconciliation" is allowed); it never silently shows "done".
 - [ ] **NFR-7** [Contract]: Every external side effect carries an idempotency or correlation key; an ambiguous timeout triggers reconciliation (lookup by key) before any retry.
 - [ ] **NFR-8** [MVP]: Every critical operation has a defined timeout, cancellation behavior and retry eligibility.
-- [ ] **NFR-9** [MVP]: Schema changes are versioned, forward-only and tested against fixtures; an interrupted migration leaves the old or the new schema, never a mix.
+- [x] **NFR-9** [MVP]: Schema changes are versioned, forward-only and tested against fixtures; an interrupted migration leaves the old or the new schema, never a mix.
 
 ### Security and isolation (SEC-1 to SEC-8)
 
@@ -277,8 +277,8 @@ Each v1 requirement maps to exactly one phase.
 | AUT-15 | Phase 8 | Pending |
 | AUT-16 | Phase 3 | Pending |
 | AUT-17 | Phase 5 | Pending |
-| ONB-1 | Phase 1 | Pending |
-| ONB-2 | Phase 1 | Pending |
+| ONB-1 | Phase 1 | Complete |
+| ONB-2 | Phase 1 | Complete |
 | ONB-3 | Phase 1 | Pending |
 | ONB-4 | Phase 1 | Pending |
 | ONB-5 | Phase 1 | Pending |
@@ -293,14 +293,14 @@ Each v1 requirement maps to exactly one phase.
 | ONB-14 | Phase 1 | Pending |
 | ONB-15 | Phase 4 | Pending |
 | NFR-1 | Phase 2 | Pending |
-| NFR-2 | Phase 1 | Pending |
+| NFR-2 | Phase 1 | Complete |
 | NFR-3 | Phase 2 | Complete |
 | NFR-4 | Phase 4 | Pending |
 | NFR-5 | Phase 2 | Pending |
 | NFR-6 | Phase 2 | Pending |
 | NFR-7 | Phase 5 | Pending |
 | NFR-8 | Phase 5 | Pending |
-| NFR-9 | Phase 2 | Pending |
+| NFR-9 | Phase 2 | Complete |
 | SEC-1 | Phase 4 | Pending |
 | SEC-2 | Phase 4 | Pending |
 | SEC-3 | Phase 4 | Pending |
