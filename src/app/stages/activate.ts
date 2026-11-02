@@ -68,6 +68,12 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   const previous = deps.ledger.getActiveRecord(row.projectId);
   if (!previous.ok) return previous;
 
+  // The version the contract stage recorded as step gsd:inspect.
+  const steps = deps.ledger.getStepResults(row.onboardingId);
+  if (!steps.ok) return steps;
+  const inspected = steps.value.find((s) => s.step === 'gsd:inspect')?.result;
+  const gsdVersion = typeof inspected === 'object' && inspected !== null && typeof (inspected as Record<string, unknown>)['version'] === 'string' ? ((inspected as Record<string, unknown>)['version'] as string) : undefined;
+
   const preflight = (typeof row.preflight === 'object' && row.preflight !== null ? row.preflight : {}) as Record<string, unknown>;
   const notMapped = Array.isArray(preflight['notMapped']) ? (preflight['notMapped'] as unknown[]).filter((n): n is string => typeof n === 'string') : [];
   const mapped = new Date(nowMs).toISOString();
@@ -87,6 +93,7 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
     snapshot: manifestStored.value.digest,
     mapping: { mode: contract.value.body.mapping.mode, scope: ['.'], mappedAt: mapped },
     notMapped,
+    ...(gsdVersion !== undefined ? { gsdVersion } : {}),
   });
 
   const activated = ctx.activate(row, record as unknown as Readonly<Record<string, unknown>>);

@@ -23,6 +23,8 @@ export interface ProjectRecordInput {
   snapshot: string;
   mapping: { mode: MappingMode; scope: readonly string[]; mappedAt: string; freshness?: 'fresh' | 'stale' };
   notMapped: readonly string[];
+  // Version reported by the located gsd-core (`runtime-identity`); `unknown` when none was recorded.
+  gsdVersion?: string;
   paths?: Partial<RecordPaths>;
   execution?: Partial<RecordExecution>;
 }
@@ -90,8 +92,7 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     profile: input.profile,
     policyPreset: 'routine',
     promotion: 'none',
-    // The GSD version is read by the adapter in plan 01-09.
-    gsd: { version: 'unknown' },
+    gsd: { version: input.gsdVersion ?? 'unknown' },
     artifacts: {
       location: 'staging',
       stagingPath: input.stagingPath,

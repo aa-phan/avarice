@@ -243,5 +243,10 @@ describe('onboarding with the discovered gsd-core', () => {
     assert.equal(snapshot.gsdCoreDir, join(REAL_HOME, '.claude', 'gsd-core'));
     assert.ok(snapshot.capabilities.includes('init-onboard'));
     assert.equal(snapshot.agentsDir, join(snapshot.gsdCoreDir, '..', 'agents'));
+
+    // The project record carries the version the adapter read, not `unknown`.
+    const [record] = rows<{ gsd_version: string; body_json: string }>(roots, 'SELECT gsd_version, body_json FROM project_records');
+    assert.equal(record?.gsd_version, snapshot.version);
+    assert.equal((JSON.parse(record?.body_json ?? '{}') as { gsd: { version: string } }).gsd.version, snapshot.version);
   });
 });

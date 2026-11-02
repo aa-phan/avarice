@@ -2,6 +2,7 @@
 import type { IdPrefix } from '../domain/ids.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
+import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
 
@@ -20,6 +21,11 @@ export interface ProfilePaths {
   workRoot: string;
 }
 
+export interface GsdProblem {
+  found: string;
+  admitted: string;
+}
+
 export interface AppDeps {
   ledger: Ledger;
   // The agent host. Production composition supplies the fail-closed UnavailableAgentHost until the
@@ -27,6 +33,10 @@ export interface AppDeps {
   host: AgentHost;
   staging: StagingWorkspace;
   artifacts: ArtifactStore;
+  // The GSD adapter, present only when discovery found an admitted gsd-core (@opengsd/gsd-core 1.17.x).
+  gsd?: GsdOnboarding;
+  // Why `gsd` is absent: what discovery found and what is admitted. Onboarding stops `incompatible` with it.
+  gsdProblem?: GsdProblem;
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;

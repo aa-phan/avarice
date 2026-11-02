@@ -181,7 +181,8 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
     };
     const stepsStarted = (): string[] => {
       const s = ledger?.getStepResults(onboardingId);
-      return s?.ok ? s.value.map((x) => x.step) : [];
+      // Invocation steps only: the gsd:* steps (plan 01-09) are AVARICE's own GSD calls, not host invocations.
+      return s?.ok ? s.value.map((x) => x.step).filter((step) => step.startsWith('launch:')) : [];
     };
 
     class SpyHost extends FakeAgentHost {
@@ -297,7 +298,7 @@ describe('the production path fails closed', () => {
     const reasons = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'onboarding.transition' ORDER BY seq DESC LIMIT 1");
     assert.equal((JSON.parse(reasons[0]?.data_json ?? '{}') as { reason?: string }).reason, 'enforcement_failure');
     assert.deepEqual(
-      rows<{ step: string }>(roots, 'SELECT step FROM onboarding_steps'),
+      rows<{ step: string }>(roots, "SELECT step FROM onboarding_steps WHERE step LIKE 'launch:%'"),
       [],
       'no launch:map step: the host was never called',
     );

@@ -4,6 +4,7 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { compileOnboardingContract, contractDigest } from '../../domain/onboarding-contract.ts';
+import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
 
@@ -12,12 +13,33 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 const MAX_DETAIL = 500;
+const NO_GSD = { found: 'no gsd-core', admitted: `${GSD_ADMITTED_PACKAGE} ${GSD_ADMITTED_RANGE}` };
 
 export const contractStage: Stage = (ctx: StageContext, row: OnboardingRow): Result<void> => {
   const { deps } = ctx;
   const preflight = asRecord(row.preflight);
   const pin = preflight['pin'];
   if (typeof pin !== 'string') return err({ kind: 'internal', cause: `onboarding ${row.onboardingId} has no pinned revision in its preflight` });
+
+  // GSD must be an admitted version before anything is staged or invoked (ONB-12, S-36). Out of range, or not
+  // found: `incompatible`, with what was found and what is admitted. Nothing else has been created yet.
+  const inspected = deps.gsd === undefined ? undefined : deps.gsd.inspect();
+  if (deps.gsd === undefined || (inspected !== undefined && !inspected.ok && inspected.error.kind === 'unsupported')) {
+    const problem = deps.gsdProblem ?? NO_GSD;
+    const found = inspected !== undefined && !inspected.ok && inspected.error.kind === 'unsupported' ? (inspected.error.detail ?? problem.found) : problem.found;
+    ctx.note(`gsd-core is incompatible: ${found}; admitted: ${problem.admitted}`);
+    const moved = ctx.transition(row, 'incompatible', 'none', { data: { found: found.slice(0, MAX_DETAIL), admitted: problem.admitted } });
+    return moved.ok ? ok(undefined) : moved;
+  }
+  if (inspected === undefined || !inspected.ok) return inspected ?? err({ kind: 'internal', cause: 'gsd inspect returned nothing' });
+  const recordedInspect = deps.ledger.recordStepResult(row.onboardingId, {
+    step: 'gsd:inspect',
+    status: 'completed',
+    result: inspected.value,
+    nowMs: deps.clock.nowMs(),
+    completedAtMs: deps.clock.nowMs(),
+  });
+  if (!recordedInspect.ok) return recordedInspect;
 
   // A crash between storing the contract and committing the transition leaves a stored contract:
   // finish the transition instead of storing a second one.

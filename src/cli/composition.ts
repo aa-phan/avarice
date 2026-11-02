@@ -16,9 +16,13 @@ import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
 import { UnavailableAgentHost } from '../adapters/host/unavailable-host.ts';
+import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
+import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import { digestOf } from '../domain/digest.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
-import type { AppDeps, Clock, IdSource } from '../app/deps.ts';
+import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
+import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
+import type { AppDeps, Clock, GsdProblem, IdSource } from '../app/deps.ts';
 
 export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001];
 export const EXIT_INTERNAL = 70;
@@ -108,12 +112,40 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       return failure('cannot record the host adapter', describeError(recorded.error));
     }
   }
+  // Locate GSD (ONB-12). A read-only command (status) never runs GSD, so it does not look for it. Without an
+  // admitted gsd-core no adapter exists and onboarding stops `incompatible` at the contract stage.
+  let gsd: GsdOnboarding | undefined;
+  let gsdProblem: GsdProblem | undefined;
+  if (options.readOnly !== true) {
+    const located = locateGsdCore(env);
+    if (located.ok) {
+      const adapter = new GsdOnboardingAdapter(located.value);
+      const stored = ledger.upsertAdapterConfig({
+        name: 'gsd',
+        port: adapter.descriptor.port,
+        adapter: adapter.descriptor.adapter,
+        configDigest: digestOf(adapter.descriptor),
+        descriptor: adapter.descriptor,
+      });
+      if (!stored.ok) {
+        store.close();
+        return failure('cannot record the gsd adapter', describeError(stored.error));
+      }
+      gsd = adapter;
+    } else {
+      const e = located.error;
+      gsdProblem = {
+        found: e.kind === 'unsupported' ? (e.detail ?? 'an unsupported gsd-core') : e.kind === 'not_found' ? `no gsd-core found (${e.ref})` : describeError(e),
+        admitted: `${GSD_ADMITTED_PACKAGE} ${GSD_ADMITTED_RANGE}`,
+      };
+    }
+  }
   const staging = createStagingWorkspace(STAGING_STRATEGY);
   const artifacts = new LocalArtifactStore(profile.dataRoot);
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, clock, ids, profile },
+      deps: { ledger, host, staging, artifacts, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile },
       close: () => {
         try {
           store.close();
