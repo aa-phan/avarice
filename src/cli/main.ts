@@ -65,13 +65,19 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return EXIT_INTERNAL;
   }
 
+  const args = parseArgs(argv.slice(1), { boolean: mod.booleanFlags ?? [] });
+  const usageError = mod.usage?.(args);
+  if (usageError !== undefined) {
+    io.err(`avarice ${name}: ${usageError}\n${USAGE}`);
+    return EXIT_USAGE;
+  }
+
   const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true });
   if (!composed.ok) {
     io.err(composed.message + '\n');
     return composed.code;
   }
   try {
-    const args = parseArgs(argv.slice(1), { boolean: mod.booleanFlags ?? [] });
     return await mod.run(args, composed.value.deps, io);
   } catch (e) {
     io.err(`avarice: ${name} failed: ${e instanceof Error ? e.message : String(e)}\n`);

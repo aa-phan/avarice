@@ -3,7 +3,7 @@
 // touches the real profile locations.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -113,6 +113,22 @@ describe('avarice init', () => {
     const other = runCli(['init', '--profile', 'team'], { roots: freshRoots() });
     assert.equal(other.code, 64);
     assert.match(other.stderr, /only personal-local in Phase 1/);
+  });
+
+  it('refuses another profile name before anything is created', () => {
+    const roots = freshRoots();
+    const r = runCli(['init', '--profile', 'team'], { roots });
+    assert.equal(r.code, 64);
+    for (const dir of [roots.AVARICE_CONFIG_HOME, roots.AVARICE_DATA_ROOT, roots.AVARICE_WORK_ROOT]) assert.equal(existsSync(dir), false, dir);
+  });
+
+  it('warns about an existing root that other users can open, and still succeeds', () => {
+    const roots = freshRoots();
+    mkdirSync(roots.AVARICE_DATA_ROOT);
+    chmodSync(roots.AVARICE_DATA_ROOT, 0o755);
+    const r = runCli(['init'], { roots });
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stderr, /warning: .*0755.*chmod 700/);
   });
 
   it('places the default roots under the home directory in a temp HOME', () => {

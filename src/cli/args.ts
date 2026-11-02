@@ -55,4 +55,6 @@ export interface CommandModule<Deps> {
   run(args: ParsedArgs, deps: Deps, io: Io): Promise<number> | number;
   readOnly?: boolean;
   booleanFlags?: readonly string[];
+  // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
+  usage?(args: ParsedArgs): string | undefined;
 }

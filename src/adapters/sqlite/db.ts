@@ -1,8 +1,10 @@
 // node:sqlite connection and transaction helpers (SKELETON.md "Persistence"; research Pattern 1).
 // Every write is a BEGIN IMMEDIATE transaction, so a writer conflict surfaces at the start and a
 // SIGKILLed writer's open transaction rolls back on the next open.
+import { closeSync, existsSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { ok, err } from '../../domain/result.ts';
+import { checkSqliteVersion } from '../../domain/runtime-support.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 
 export type Db = DatabaseSync;
@@ -32,6 +34,8 @@ export function describeError(error: PortError): string {
       return `unavailable: ${error.cause}`;
     case 'internal':
       return `internal error: ${error.cause}`;
+    case 'unsupported':
+      return error.detail ?? `unsupported: ${error.capability}`;
     default:
       return error.kind;
   }
@@ -68,12 +72,54 @@ export interface OpenOptions {
   sqliteVersionProbe?: () => string;
 }
 
-// Opens the database (creating it unless read-only). Read-write opens switch to WAL and require the
-// switch to take effect, because WAL on a filesystem that cannot share memory is unsafe (NFR-5).
+let probedVersion: string | undefined;
+
+function bundledSqliteVersion(): string {
+  if (probedVersion === undefined) {
+    const probe = new DatabaseSync(':memory:');
+    try {
+      probedVersion = String((probe.prepare('select sqlite_version() as v').get() as { v: string }).v);
+    } finally {
+      probe.close();
+    }
+  }
+  return probedVersion;
+}
+
+// Runtime gate (ADR-001): the SQLite bundled with this Node must contain the WAL-reset fix.
+export function checkRuntime(probe: () => string = bundledSqliteVersion): Result<void> {
+  let version: string;
+  try {
+    version = probe();
+  } catch (e) {
+    return err({ kind: 'internal', cause: `cannot read the bundled SQLite version: ${e instanceof Error ? e.message : String(e)}` });
+  }
+  const verdict = checkSqliteVersion(version);
+  if (verdict.ok) return verdict;
+  return err({
+    kind: 'unsupported',
+    capability: 'sqlite-wal-reset-fix',
+    reducedMode: 'none',
+    detail: `Node ${process.version} bundles SQLite ${version} without the WAL-reset fix; install Node 22.22.3 or newer`,
+  });
+}
+
+// Opens the database (creating it unless read-only). The runtime gate runs first. A new store file is
+// created with mode 0600 (SQLite gives its -wal and -shm files the same mode). Read-write opens switch to WAL
+// and require the switch to take effect, because WAL on a filesystem that cannot share memory is unsafe (NFR-5).
 export function openDb(path: string, options: OpenOptions = {}): Result<Db> {
+  const supported = checkRuntime(options.sqliteVersionProbe);
+  if (!supported.ok) return supported;
   let db: DatabaseSync | undefined;
   try {
     const readOnly = options.readOnly === true;
+    if (!readOnly && path !== ':memory:' && path !== '' && !existsSync(path)) {
+      try {
+        closeSync(openSync(path, 'wx', 0o600));
+      } catch (e) {
+        if ((e as { code?: unknown }).code !== 'EEXIST') throw e;
+      }
+    }
     db = new DatabaseSync(path, { timeout: 5000, enableForeignKeyConstraints: true, readOnly });
     if (!readOnly) {
       const mode = db.prepare('PRAGMA journal_mode = WAL').get() as { journal_mode?: string } | undefined;
