@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-11-02T23:32:50.626Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-11-02T23:53:13.499Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 0dc4667e033258d6a318967ceec835c964a6e789
+state_head: fbe9ab7fd63316629f27d99b7609f52cc0c23836
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 13 of 20
+Plan: 14 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P10 | 41 min | 2 tasks | 19 files |
 | Phase 01 P11 | 15min | 3 tasks | 17 files |
 | Phase 01 P12 | 19 min | 2 tasks | 20 files |
+| Phase 01 P13 | 25 min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: An Agent call charges only subagentsTotal; a subagent's own tool calls charge toolCalls through the same hook
 - [Phase 01]: Budget rows are created with the contract and only grow in used: createBudgets is INSERT OR IGNORE, a killed invocation's reservation is settled as spent, nothing is refunded or raised
 - [Phase 01]: Hook events carry tool, rule, IDs and a staging-relative target only (long targets truncated plus digest); the ledger's 1024/8192 event limits stay unchanged
+- [Phase 01]: 01-13: the Seatbelt profile protects the command's cwd after the temp-area allowance and re-allows only declared write paths; no sandbox means no run (unavailable), never unsandboxed
+- [Phase 01]: 01-13: sandbox-exec cannot nest, so offline tests inject a test-only InheritedSandboxExecutor through test-cli (AVARICE_TEST_OUTER_SANDBOX); production composition always uses SandboxedExecutor
+- [Phase 01]: 01-13: graphify runs code-only with --max-workers 1, cwd staging, only outDir (outside staging) writable; install copies three files into .planning/graphs and refuses symlinked targets
 
 ### Pending Todos
 
@@ -157,6 +161,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T23:32:46.213Z
-Stopped at: Completed 01-12-PLAN.md
+Last session: 2026-11-02T23:53:13.478Z
+Stopped at: Completed 01-13-PLAN.md
 Resume file: None
