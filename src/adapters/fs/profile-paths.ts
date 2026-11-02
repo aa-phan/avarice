@@ -4,6 +4,8 @@
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { ok } from '../../domain/result.ts';
+import type { Result } from '../../domain/result.ts';
 
 export interface ResolvedProfile {
   profile: string;
@@ -14,7 +16,11 @@ export interface ResolvedProfile {
 
 export const DEFAULT_PROFILE = 'personal-local';
 
-export function resolveProfile(env: NodeJS.ProcessEnv): ResolvedProfile {
+export interface ProfileProbes {
+  isLocalMount?: (path: string) => Result<boolean>;
+}
+
+export function resolveProfile(env: NodeJS.ProcessEnv, _probes: ProfileProbes = {}): Result<ResolvedProfile> {
   const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
   const pick = (name: string, fallback: string): string => {
     const value = env[name];
@@ -30,5 +36,5 @@ export function resolveProfile(env: NodeJS.ProcessEnv): ResolvedProfile {
   for (const dir of [resolved.configHome, resolved.dataRoot, resolved.workRoot]) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  return resolved;
+  return ok(resolved);
 }

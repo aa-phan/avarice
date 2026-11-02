@@ -64,6 +64,8 @@ export function toPortError(e: unknown): PortError {
 
 export interface OpenOptions {
   readOnly?: boolean;
+  // Replaces the sqlite_version() probe. Tests only; production never passes it.
+  sqliteVersionProbe?: () => string;
 }
 
 // Opens the database (creating it unless read-only). Read-write opens switch to WAL and require the

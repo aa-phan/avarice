@@ -4,7 +4,7 @@
 export type Enforcer = 'host' | 'external-platform' | 'avarice';
 
 export type PortError =
-  | { kind: 'unsupported'; capability: string; reducedMode?: string }
+  | { kind: 'unsupported'; capability: string; reducedMode?: string; detail?: string }
   | { kind: 'denied'; rule: string; enforcer: Enforcer }
   | { kind: 'unauthenticated'; credentialRef: string; recovery: string }
   | { kind: 'not_found'; ref: string }

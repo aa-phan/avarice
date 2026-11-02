@@ -56,12 +56,9 @@ export function systemIds(clock: Clock): IdSource {
 }
 
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
-  let profile;
-  try {
-    profile = resolveProfile(env);
-  } catch (e) {
-    return failure('cannot prepare the profile directories', e instanceof Error ? e.message : String(e));
-  }
+  const resolved = resolveProfile(env);
+  if (!resolved.ok) return failure('cannot prepare the profile directories', describeError(resolved.error));
+  const profile = resolved.value;
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
   const ids = overrides.ids ?? systemIds(clock);
