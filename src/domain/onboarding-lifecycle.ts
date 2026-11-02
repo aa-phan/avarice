@@ -103,6 +103,11 @@ export function assertTransition(from: OnboardingState, to: OnboardingState): Re
   });
 }
 
+// A run can be interrupted in any state before activation; `resume` continues from the committed state.
+export function isResumable(state: OnboardingState): boolean {
+  return PRE_ACTIVATION.includes(state);
+}
+
 const STOP_STATES: ReadonlySet<string> = new Set(['active', 'blocked', 'incompatible', 'deactivated']);
 
 export function isStopState(state: OnboardingState): boolean {

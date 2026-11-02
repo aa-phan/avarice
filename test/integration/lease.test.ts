@@ -289,13 +289,17 @@ describe('avarice resume', () => {
 });
 
 describe('two processes race for an expired lease', () => {
-  it('exactly one resume proceeds, the other exits 3 on the held lease, and the loser changes nothing', async () => {
+  it('exactly one resume proceeds, the others exit 3 on the held lease (a late arrival included), and the losers change nothing', async () => {
     const { roots, id } = killedAtMapping();
     sleepSync(EXPIRY_WAIT_MS);
     // The winner holds the lease for 1.5 s while the fake host sleeps; its renewal timer keeps the 200 ms lease alive.
-    const racers = await Promise.all([spawnCli(['resume', id], roots, { sleepMs: 1_500 }), spawnCli(['resume', id], roots, { sleepMs: 1_500 })]);
+    const early = [spawnCli(['resume', id], roots, { sleepMs: 1_500 }), spawnCli(['resume', id], roots, { sleepMs: 1_500 })];
+    // A third process arrives after the original 200 ms expiry has long passed; only the renewal timer keeps it out.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const late = spawnCli(['resume', id], roots, { sleepMs: 1_500 });
+    const racers = await Promise.all([...early, late]);
     const codes = racers.map((r) => r.code).sort();
-    assert.deepEqual(codes, [0, 3], racers.map((r) => r.stdout + r.stderr).join('\n---\n'));
+    assert.deepEqual(codes, [0, 3, 3], racers.map((r) => r.stdout + r.stderr).join('\n---\n'));
     const loser = racers.find((r) => r.code === 3);
     assert.match(loser?.stderr ?? '', /lease/);
 

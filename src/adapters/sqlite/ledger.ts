@@ -249,16 +249,19 @@ export class SqliteLedger implements Ledger {
 
   // ---- leases ------------------------------------------------------------------------------------
 
+  // One UPDATE decides the race: it takes a free lease, or one whose expiry instant has passed, and
+  // bumps the fence so the previous holder's next transition fails. Zero changed rows means a live holder.
   acquireLease(onboardingId: string, holder: string, ttlMs: number, nowMs: number): Result<LeaseGrant> {
     return tx(this.db, () => {
       const expiresAt = iso(nowMs + ttlMs);
-      // Expiry takeover arrives in plan 01-06; until then a lease is free only when nobody holds it.
       const changed = this.db
-        .prepare('UPDATE onboardings SET lease_holder = ?, lease_expires_at = ?, lease_fence = lease_fence + 1 WHERE onboarding_id = ? AND lease_holder IS NULL')
-        .run(holder, expiresAt, onboardingId).changes;
+        .prepare(
+          'UPDATE onboardings SET lease_holder = ?, lease_expires_at = ?, lease_fence = lease_fence + 1 WHERE onboarding_id = ? AND (lease_holder IS NULL OR lease_expires_at < ?)',
+        )
+        .run(holder, expiresAt, onboardingId, iso(nowMs)).changes;
       const row = this.lockRow(onboardingId);
       if (Number(changed) === 0) {
-        abort({ kind: 'conflict', expected: 'a free lease', actual: `held by ${str(row['lease_holder'])} until ${str(row['lease_expires_at'])}` });
+        abort({ kind: 'conflict', expected: 'a free or expired lease', actual: `held by ${str(row['lease_holder'])} until ${str(row['lease_expires_at'])}` });
       }
       return { fence: Number(row['lease_fence']), expiresAt };
     });

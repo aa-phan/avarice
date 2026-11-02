@@ -4,7 +4,7 @@
 // in the stage context fire the generic kill points, so no stage carries fault code.
 import { hostname } from 'node:os';
 import { err, ok } from '../domain/result.ts';
-import type { Result } from '../domain/result.ts';
+import type { PortError, Result } from '../domain/result.ts';
 import { isStopState } from '../domain/onboarding-lifecycle.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
 import type { OnboardingRow } from '../ports/ledger.ts';
@@ -27,7 +27,7 @@ export function faultPoint(name: string): void {
   if (process.env['AVARICE_FAULT'] === name) process.kill(process.pid, 'SIGKILL');
 }
 
-function leaseTtlMs(): number {
+export function leaseTtlMs(): number {
   const raw = Number(process.env['AVARICE_LEASE_TTL_MS']);
   return Number.isSafeInteger(raw) && raw > 0 ? raw : DEFAULT_LEASE_TTL_MS;
 }
@@ -66,7 +66,7 @@ export interface OnboardingOutcome {
   message: string | null;
 }
 
-function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: string[]): StageContext {
+export function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: string[]): StageContext {
   return {
     deps,
     onboardingId,
@@ -130,16 +130,41 @@ function holderId(deps: AppDeps): string {
   return `${hostname()}:${process.pid}:${deps.ids.next('onb_').slice('onb_'.length)}`;
 }
 
-export async function runOnboarding(deps: AppDeps, onboardingId: string): Promise<Result<OnboardingOutcome>> {
+export interface RunOptions {
+  // Runs once under the lease, before the stage loop (resume reconciles an interrupted invocation here).
+  prelude?: (ctx: StageContext) => Promise<Result<void>> | Result<void>;
+}
+
+// Takes the lease (a free one, or one whose expiry has passed), renews it every ttl/3 while stages run,
+// loops the stages until a stop state, and releases the lease on the way out.
+export async function runOnboarding(deps: AppDeps, onboardingId: string, options: RunOptions = {}): Promise<Result<OnboardingOutcome>> {
   const holder = holderId(deps);
-  const grant = deps.ledger.acquireLease(onboardingId, holder, leaseTtlMs(), deps.clock.nowMs());
+  const ttl = leaseTtlMs();
+  const grant = deps.ledger.acquireLease(onboardingId, holder, ttl, deps.clock.nowMs());
   if (!grant.ok) return grant;
   const fence = grant.value.fence;
   const notes: string[] = [];
   const ctx = makeContext(deps, onboardingId, fence, notes);
 
+  // A stage that waits on the host does not return to the loop, so a timer keeps the lease alive. A failed
+  // renewal means another process took over; the loop stops at its next check.
+  const lease: { lost: PortError | null } = { lost: null };
+  const timer = setInterval(() => {
+    const renewed = deps.ledger.renewLease(onboardingId, holder, fence, ttl, deps.clock.nowMs());
+    if (!renewed.ok) {
+      lease.lost = renewed.error;
+      clearInterval(timer);
+    }
+  }, Math.max(1, Math.floor(ttl / 3)));
+  timer.unref();
+
   try {
+    if (options.prelude !== undefined) {
+      const prepared = await options.prelude(ctx);
+      if (!prepared.ok) return prepared;
+    }
     for (;;) {
+      if (lease.lost !== null) return err(lease.lost);
       const current = deps.ledger.getOnboarding(onboardingId);
       if (!current.ok) return current;
       const row = current.value;
@@ -148,7 +173,7 @@ export async function runOnboarding(deps: AppDeps, onboardingId: string): Promis
         return ok({ onboardingId, state: row.state, reason: row.reason, message: notes.at(-1) ?? null });
       }
 
-      const renewed = deps.ledger.renewLease(onboardingId, holder, fence, leaseTtlMs(), deps.clock.nowMs());
+      const renewed = deps.ledger.renewLease(onboardingId, holder, fence, ttl, deps.clock.nowMs());
       if (!renewed.ok) return renewed;
       const ran = await stage(ctx, row);
       if (!ran.ok) return ran;
@@ -161,6 +186,7 @@ export async function runOnboarding(deps: AppDeps, onboardingId: string): Promis
       }
     }
   } finally {
+    clearInterval(timer);
     deps.ledger.releaseLease(onboardingId, holder, fence);
   }
 }
