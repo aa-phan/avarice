@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { runGsd } from '../../src/adapters/gsd/gsd-tools.ts';
 import { GsdOnboardingAdapter } from '../../src/adapters/gsd/gsd-onboarding.ts';
+import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../src/ports/gsd-onboarding.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -23,6 +24,7 @@ const REPO_FILES = {
   'src/index.ts': 'export const answer = 42;\n',
 };
 
+const executor = new SandboxedExecutor();
 const cleanup: string[] = [];
 after(() => {
   for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
@@ -142,18 +144,18 @@ describe('runGsd', () => {
       ].join('\n'),
     });
     const cwd = temp('cwd');
-    const unavailable = await runGsd(dir, ['unavailable'], { cwd });
+    const unavailable = await runGsd(executor, dir, ['unavailable'], { cwd });
     assert.ok(!unavailable.ok);
     assert.equal(unavailable.error.kind, 'unavailable');
-    const broken = await runGsd(dir, ['broken'], { cwd });
+    const broken = await runGsd(executor, dir, ['broken'], { cwd });
     assert.ok(!broken.ok);
     assert.equal(broken.error.kind, 'internal');
-    const echoed = await runGsd(dir, ['echo', 'x'], { cwd });
+    const echoed = await runGsd(executor, dir, ['echo', 'x'], { cwd });
     assert.ok(echoed.ok, JSON.stringify(echoed));
     const value = echoed.value as { args: string[]; cwd: string };
     assert.deepEqual(value.args, ['echo', 'x']);
     assert.equal(value.cwd.endsWith(cwd.split('/').pop() as string), true, 'runs with the requested cwd');
-    const hung = await runGsd(dir, ['hang'], { cwd, timeoutMs: 300 });
+    const hung = await runGsd(executor, dir, ['hang'], { cwd, timeoutMs: 300 });
     assert.ok(!hung.ok);
     assert.equal(hung.error.kind, 'timeout');
   });
@@ -166,7 +168,7 @@ describe('runGsd', () => {
       version: '1.17.0',
       script: `if (args[0] === 'big') { process.stdout.write(${JSON.stringify(`@file:${payload}`)}); process.exit(0); }`,
     });
-    const result = await runGsd(dir, ['big'], { cwd: temp('cwd') });
+    const result = await runGsd(executor, dir, ['big'], { cwd: temp('cwd') });
     assert.ok(result.ok, JSON.stringify(result));
     assert.deepEqual(result.value, { big: true });
   });
@@ -176,7 +178,7 @@ describe('GsdOnboardingAdapter against the installed GSD', () => {
   it('inspect reports the identity, the agents directory and the Phase 1 capabilities', () => {
     const located = locateGsdCore({ HOME: REAL_HOME, CLAUDE_CONFIG_DIR: temp('cfg') });
     assert.ok(located.ok);
-    const adapter = new GsdOnboardingAdapter(located.value);
+    const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: temp('data'), home: REAL_HOME });
     const snapshot = adapter.inspect();
     assert.ok(snapshot.ok, JSON.stringify(snapshot));
     assert.equal(snapshot.value.packageName, GSD_ADMITTED_PACKAGE);

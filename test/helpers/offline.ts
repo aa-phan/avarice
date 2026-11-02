@@ -42,6 +42,8 @@ export function runOffline(argv: readonly string[], options: OfflineOptions): Cl
     env: {
       AVARICE_FAKE_HOST: JSON.stringify(options.host ?? {}),
       AVARICE_LEASE_TTL_MS: String(OFFLINE_LEASE_TTL_MS),
+      // `sandbox-exec` cannot nest, so the test entry swaps the executor for one that relies on this wrapper.
+      AVARICE_TEST_OUTER_SANDBOX: '1',
       ...options.env,
     },
   });

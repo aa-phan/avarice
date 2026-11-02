@@ -2,6 +2,7 @@
 // arrive as JSON in AVARICE_FAKE_HOST. bin/avarice.ts never reads that variable and never imports this file.
 import { main } from '../../src/cli/main.ts';
 import { FakeAgentHost } from './fake-agent-host.ts';
+import { InheritedSandboxExecutor } from './inherited-sandbox-executor.ts';
 import type { FakeHostOptions } from './fake-agent-host.ts';
 
 // `node --test` with no file list also loads every file under test/. Under the runner NODE_TEST_CONTEXT is
@@ -9,5 +10,7 @@ import type { FakeHostOptions } from './fake-agent-host.ts';
 if (process.env['NODE_TEST_CONTEXT'] === undefined) {
   const raw = process.env['AVARICE_FAKE_HOST'];
   const options = (raw === undefined || raw === '' ? {} : JSON.parse(raw)) as FakeHostOptions;
-  process.exitCode = await main(process.argv.slice(2), { host: new FakeAgentHost(options) });
+  // Under the offline wrapper the whole process is already inside a sandbox, which cannot nest.
+  const outer = process.env['AVARICE_TEST_OUTER_SANDBOX'] === '1';
+  process.exitCode = await main(process.argv.slice(2), { host: new FakeAgentHost(options), ...(outer ? { executor: new InheritedSandboxExecutor() } : {}) });
 }

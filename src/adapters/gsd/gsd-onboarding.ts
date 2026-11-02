@@ -61,9 +61,14 @@ export interface GsdAdapterOptions {
 export class GsdOnboardingAdapter implements GsdOnboarding {
   readonly descriptor: CapabilityDescriptor;
   readonly located: LocatedGsd;
+  readonly #executor: CommandExecutor;
+  // What every verb may not read: the data root and the user's credential stores.
+  readonly #denyRead: readonly string[];
 
-  constructor(located: LocatedGsd, _options?: GsdAdapterOptions) {
+  constructor(located: LocatedGsd, options: GsdAdapterOptions) {
     this.located = located;
+    this.#executor = options.executor;
+    this.#denyRead = [options.dataRoot, join(options.home, '.ssh'), join(options.home, '.aws'), join(options.home, '.config', 'gh')];
     this.descriptor = {
       port: 'gsd-onboarding',
       adapter: 'gsd-onboarding',
@@ -73,6 +78,16 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
       attributes: { gsdVersion: located.version, packageName: located.packageName, gsdCoreDir: located.gsdCoreDir },
       offline: true,
     };
+  }
+
+  // Every verb goes through the executor with cwd = staging. A verb that writes GSD state may write staging
+  // `.planning` and nothing else; a read verb may write nothing.
+  #run(staging: string, args: readonly string[], writes: boolean): Promise<Result<unknown>> {
+    return runGsd(this.#executor, this.located.gsdCoreDir, args, {
+      cwd: staging,
+      writePaths: writes ? [join(staging, '.planning')] : [],
+      denyReadPaths: this.#denyRead,
+    });
   }
 
   inspect(): Result<GsdCapabilitySnapshot> {
@@ -98,7 +113,7 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
   }
 
   async probeState(staging: string): Promise<Result<GsdProjectState>> {
-    const ran = await runGsd(this.located.gsdCoreDir, ['init', 'onboard', '--raw'], { cwd: staging });
+    const ran = await this.#run(staging, ['init', 'onboard', '--raw'], true);
     if (!ran.ok) return ran;
     const d = record(ran.value);
     const readiness = d['map_readiness'];
@@ -130,7 +145,7 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
     for (const [key, value] of settings) {
       if (!SETTING_KEY.test(key)) return invalid('setting key', `${JSON.stringify(key)} is not a dotted key`);
       if (!SETTING_VALUE.test(value)) return invalid(`setting ${key}`, `${JSON.stringify(value)} is not a plain value`);
-      const ran = await runGsd(this.located.gsdCoreDir, ['config-set', key, value], { cwd: staging });
+      const ran = await this.#run(staging, ['config-set', key, value], true);
       if (!ran.ok) return ran;
       if (record(ran.value)['updated'] !== true) return err({ kind: 'internal', cause: `config-set ${key} did not report updated` });
       applied.push({ key, value });
@@ -147,7 +162,7 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
       if (bad !== undefined) return invalid('stamp files', `${JSON.stringify(bad)} is not a map file name`);
       args.push('--files', names.join(','));
     }
-    const ran = await runGsd(this.located.gsdCoreDir, args, { cwd: staging });
+    const ran = await this.#run(staging, args, true);
     if (!ran.ok) return ran;
     const d = record(ran.value);
     return ok({
@@ -159,7 +174,7 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
   }
 
   async checkDrift(staging: string): Promise<Result<GsdDriftResult>> {
-    const ran = await runGsd(this.located.gsdCoreDir, ['verify', 'codebase-drift'], { cwd: staging });
+    const ran = await this.#run(staging, ['verify', 'codebase-drift'], false);
     if (!ran.ok) return ran;
     const d = record(ran.value);
     return ok({

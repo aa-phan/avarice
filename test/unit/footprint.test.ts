@@ -58,8 +58,16 @@ describe('no source file reaches the network or starts a background process', ()
 
   it('never calls fetch, opens a listener or detaches a child', () => {
     const banned = /\bfetch\s*\(|\.listen\s*\(|detached\s*:\s*true|\bnew\s+WebSocket\b|\bXMLHttpRequest\b/;
-    const offenders = files.filter((f) => banned.test(readFileSync(f, 'utf8')));
+    // The sandboxed executor is the one place that starts a process group of its own (`detached: true`, so a
+    // timeout can kill the whole group). It must kill that group when the command ends; executor.test.ts proves
+    // nothing is left behind.
+    const groupLeader = join(REPO_ROOT, 'src', 'adapters', 'exec', 'sandboxed-executor.ts');
+    const offenders = files.filter((f) => f !== groupLeader && banned.test(readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, []);
+    const executor = readFileSync(groupLeader, 'utf8');
+    assert.match(executor, /process\.kill\(-pid, signal\)/, 'the executor kills the process group it creates');
+    assert.match(executor, /killGroup\(child\.pid, 'SIGKILL'\)/, 'and kills what is left when the command ends');
+    assert.equal(/\.unref\s*\(/.test(executor), false, 'and never detaches a child from its own lifetime');
   });
 });
 

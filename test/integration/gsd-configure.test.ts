@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createDeps } from '../../src/cli/composition.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
+import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { runGsd } from '../../src/adapters/gsd/gsd-tools.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import type { InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
@@ -141,7 +142,7 @@ describe('configure-gsd: probe, plan and configure in staging', () => {
     assert.equal(config.intel.enabled, true);
     assert.equal(config.graphify.enabled, true);
 
-    const committed = await runGsd(realGsd(), ['query', 'commit', 'x', '--files', '.planning/config.json'], { cwd: staging });
+    const committed = await runGsd(new SandboxedExecutor(), realGsd(), ['query', 'commit', 'x', '--files', '.planning/config.json'], { cwd: staging });
     assert.ok(committed.ok, JSON.stringify(committed));
     assert.equal((committed.value as { reason: string }).reason, 'skipped_commit_docs_false');
     assert.equal(git(staging, ['rev-list', '--count', `${repo.head}..HEAD`]).trim(), '0', 'no commit was made in staging');
