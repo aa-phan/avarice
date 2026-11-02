@@ -98,7 +98,7 @@ Plans:
 
 **Goal**: `avarice start --brief b.md --policy routine` takes one work item to `ready_for_review` without prompts, or to `blocked_on_decision` with a decision record, inside enforced containment, surviving a kill at any point
 **Depends on**: Phase 1 (an active project record for the target repository; a spike confirming the sandbox runtime can wrap AVARICE's own check commands)
-**Requirements**: RC-1, RC-2, RC-3, RC-4, RC-5, CON-1, CON-2, CON-3, CON-5, CON-6, CON-7, CON-8, CON-9, CON-13, CON-14, CON-16, AUT-7, AUT-8, AUT-9, FR-1, FR-2, FR-4, FR-5, FR-6, FR-7, FR-11, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9, OPS-2, ONB-10
+**Requirements**: RC-1, RC-2, RC-3, RC-4, RC-5, CON-1, CON-2, CON-3, CON-5, CON-6, CON-7, CON-8, CON-9, CON-13, CON-14, CON-16, AUT-7, AUT-8, AUT-9, FR-1, FR-2, FR-4, FR-5, FR-6, FR-7, FR-11, FR-27, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9, OPS-2, OPS-7, ONB-10
 **Partial coverage** (owned by the later phase): AUT-2 (decision record only) and AUT-12 (states and cancellation for one item) in Phase 3; SEC-2 (scrubbed environment, no credentials in the run) in Phase 4; FR-3 (context packs from the four MVP adapters) in Phase 3. FR-4 here is Stage 1 only; the Stage 2 capability extends it in Phase 6
 **Success Criteria** (what must be TRUE):
   1. Three R1 benchmark tasks (routine, no decisions expected) on a real repository, each started with `avarice start --brief <file> --policy routine`, reach `ready_for_review` with no human input after start
@@ -106,9 +106,11 @@ Plans:
   3. A scripted out-of-scope write through Bash, Python and Edit fails on each path, and a broken hook or missing sandbox blocks the protected operation and moves the run to `blocked_on_decision` (reason `enforcement_failure`)
   4. Killing the supervisor and running `avarice resume` continues from the last checkpoint, and after a forced kill during verification `resume` identifies the interrupted attempt in 100% of fault-injection cases (AC-3)
   5. A crashed or timed-out invocation with no external side effect is discarded and retried once from the item's last checkpoint, without resetting or deleting changes the run did not make
+  6. `avarice` with no arguments in a terminal opens the interactive shell (ADR-013): the user starts, watches and resumes the Phase 2 run from it, closing the shell leaves the supervisor running, and the same command outside a terminal or under `AVARICE_RUN` prints usage and exits 64
+  7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
 
 **Plans**: TBD
-**Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
+**Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
 ### Phase 3: Decisions, independent work and amendments
 

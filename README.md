@@ -56,7 +56,7 @@ $ avarice status run_01JC8
 | [docs/operations-and-testing.md](docs/operations-and-testing.md) | Diagnostics, operation budgets, observability, containment suite, tests, acceptance scenarios S-1 to S-59 |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | Eight vertical slices (0 to 7) with exit criteria; GSD-compatible planning input |
 | [docs/gsd-ingest-manifest.yaml](docs/gsd-ingest-manifest.yaml) | Manifest for `/gsd-ingest-docs` |
-| [docs/decisions/](docs/decisions/) | ADR-001 runtime, ADR-002 GSD integration, ADR-003 persistence, ADR-004 modular monolith, ADR-005 policy and profiles, ADR-006 unattended delegation, ADR-007 mutation gate, ADR-008 repository onboarding, ADR-009 credential broker, ADR-010 serverless baseline with optional local services, ADR-011 static dashboard, ADR-012 architecture model |
+| [docs/decisions/](docs/decisions/) | ADR-001 runtime, ADR-002 GSD integration, ADR-003 persistence, ADR-004 modular monolith, ADR-005 policy and profiles, ADR-006 unattended delegation, ADR-007 mutation gate, ADR-008 repository onboarding, ADR-009 credential broker, ADR-010 serverless baseline with optional local services, ADR-011 static dashboard, ADR-012 architecture model, ADR-013 interactive shell |
 
 ## Answers to the design questions
 

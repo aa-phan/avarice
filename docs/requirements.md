@@ -89,6 +89,7 @@ There is one primary user: a developer orchestrating their own work with coding 
 | FR-24 | Each machine that runs work for a profile must have a host record with its identity, capability descriptor and status. A host must not be deactivated while an active project or run still depends on it. | Later |
 | FR-25 | A repository may declare an architecture model in `.avarice/architecture.json`: components with path globs, allowed edges between them with contract symbols, and shared resources with UUIDs. AVARICE must draft it deterministically from the code graph as a proposal that takes effect only after the user approves it, and an `architecture-model` check must report code that departs from it ([ADR-012](decisions/ADR-012-architecture-model.md)). | MVP |
 | FR-26 | `avarice dashboard` must render one self-contained, read-only HTML page from the profile's ledger, with no server, no listening port and no network access, redacted like events and limited to one profile ([ADR-011](decisions/ADR-011-static-dashboard.md)). | MVP |
+| FR-27 | `avarice` with no arguments, when standard input and standard output are both terminals, must open an interactive shell. The shell shows the profile's runs, onboardings, open decisions and live progress, and runs every command in the same process with the same checks as the one-shot command. When either is not a terminal, or when the `AVARICE_RUN` marker is set, `avarice` with no arguments must print usage and exit 64. The shell must add no daemon, no listening port and no runtime dependency ([ADR-013](decisions/ADR-013-interactive-shell.md)). | MVP |
 
 ### Run contract
 
@@ -218,6 +219,7 @@ The onboarding lifecycle, ownership matrix and project profile are defined in [r
 | OPS-4 | Retention limits must apply to events, evidence payloads and artifacts, configurable per profile. | MVP |
 | OPS-5 | The resource bounds (concurrency, context budget, artifact quota, queue length) must be configurable and enforced, with defined degradation when a bound is reached. | MVP |
 | OPS-6 | Upgrading GSD, the agent host or AVARICE must be detectable by `doctor`. Incompatible versions must fail with an actionable message, not partial behavior. | MVP |
+| OPS-7 | Human-readable output must follow the one style defined in [extensions.md](extensions.md#human-readable-output), shared by the one-shot commands and the shell. `--json` output must not depend on that style. | MVP |
 
 ## Measurable acceptance criteria
 

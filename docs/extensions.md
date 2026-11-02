@@ -38,6 +38,19 @@ Ordered by priority. "MVP" means required for the first usable release.
 | Failure behavior | Typed errors per [contracts-and-state.md](contracts-and-state.md#results-and-errors); never reports success for skipped work |
 | Tests | Contract, workflow, crash, migration, isolation suites ([operations-and-testing.md](operations-and-testing.md#test-strategy)) |
 
+#### Human-readable output
+
+These rules are the target format for human-readable text from every command and from the interactive shell (entry 2j), which renders through the same functions ([ADR-013](decisions/ADR-013-interactive-shell.md) decision 6); OPS-7 makes the style a requirement. `onboard` and `resume` meet the result-line rule today. `init`, `repo`, `status` and some error lines of the dispatcher in `src/cli/main.ts` depart from the table and do not yet meet OPS-7. The rules bind the text format only; `--json` output is the stable interface for scripts, and its shape never depends on them.
+
+| Element | Rule |
+|---|---|
+| Result line | The first line on standard output states the outcome: the ID it applies to and the state reached, with the reason where one exists, as `onboard` prints `onboarding <id>: blocked (enforcement_failure)`. Details follow it. |
+| Tables | Columns are aligned, a header row names each column, and rows are cut to the terminal width with `…`. IDs, states and paths that are the subject of the row are never cut. |
+| States | A state is printed as the ledger's own word (`active`, `blocked`, `ready_for_review`), followed by its reason in parentheses where one exists. Colour, when present, repeats what the word already says. |
+| Errors | Errors go to standard error. An error that a command or its usage check reports starts with `avarice <command>: `, and a subcommand may follow the command (`avarice repo add: `). An error raised before a command is chosen, such as an unknown command, starts with `avarice: `. A usage error follows with the usage text; any other error follows with one line naming the command that resolves or inspects the problem, when one exists. |
+| Numbers | Money is in USD with two decimals, durations use the largest whole unit (`3 min 10 s`), and times are local with a relative form (`14:02, 3 min ago`). |
+| Colour and escapes | Colour and cursor escapes are printed only when standard output is a terminal, `NO_COLOR` is unset and `TERM` is not `dumb`. |
+
 ### 2. Run hook set: `avarice hook pre-tool-use | post-tool-use | config-change` (MVP)
 
 | Field | Value |
@@ -152,6 +165,19 @@ Set in the run's worktree with `gsd_run config-set` before the first invocation:
 | Permissions | Read-only; `.avarice/**` is protected in every contract, so only the user changes the model |
 | Failure behavior | No code graph or no model: the check is `unavailable`, never `passed`; a finding that needs a design change becomes a decision |
 | Tests | S-58, S-59 |
+
+### 2j. Interactive shell: `avarice` with no arguments (MVP)
+
+| Field | Value |
+|---|---|
+| Purpose | One entry point to act on the profile and watch running work: a home view of runs, onboardings, open decisions and spend, an action menu, and a command line that takes the one-shot grammar (FR-27, [ADR-013](decisions/ADR-013-interactive-shell.md)) |
+| Trigger | `avarice` with no arguments, when standard input and standard output are both terminals and `AVARICE_RUN` is unset; otherwise usage and exit 64 |
+| Inputs | The profile's ledger, read again for every action and on a polling interval of about one second for progress; key input; the history file |
+| Outputs | Human-readable views in the style of [human-readable output](#human-readable-output), redrawn on terminal resize, and a line-mode prompt without full-screen redraw when `TERM` is `dumb`; whatever the invoked command writes; history in the profile data root, mode `0600` |
+| Dependencies | The command modules of entry 1, called in the same process; `node:readline` and ANSI escape sequences, no runtime dependency |
+| Permissions | Those of the command it invokes; starts `avarice supervise` through the same commands as the one-shot path ([process view](architecture.md#process-view)), detached from the shell's process; no socket, no listening port |
+| Failure behavior | Refuses to start under `AVARICE_RUN`; a ledger read failure shows the failing query in the view and leaves the shell open; leaving the shell sends no signal to a supervisor; `decide`, `contract amend` and `approve` run their one-shot checks and ask for confirmation before applying |
+| Tests | Driven through an injected input stream and output sink: refusal without a terminal and under `AVARICE_RUN`, parity of each command's result with the one-shot path, a supervisor surviving the shell's exit, no listener, and confirmation before a decision applies |
 
 ### 3. Skill `avarice-run` (MVP)
 

@@ -42,18 +42,21 @@ AVARICE never calls a model API. Every model call happens inside the agent host,
 
 ## Process view
 
+"Present on day one" is `Yes` for what the MVP ships as part of the default flow, which includes the shell that bare `avarice` opens. It is `Optional` for what the MVP ships but runs only when the user opts in, by installing a timer or passing a flag. It is `No` for what arrives after the MVP.
+
 | Element | Kind | Lifetime | Present on day one |
 |---|---|---|---|
 | `avarice` CLI and library | In-process modules | One command | Yes |
-| `avarice supervise <run>` | Process started by `avarice start`, `resume` or `decide` | Until the run reaches `ready_for_review`, `waiting_external`, `blocked_on_decision`, `failed`, `cancelled` or `paused` | Yes |
+| `avarice supervise <run>` | Process started by `avarice start`, `resume` or `decide`, typed as a one-shot command or in the interactive shell | Until the run reaches `ready_for_review`, `waiting_external`, `blocked_on_decision`, `failed`, `cancelled` or `paused` | Yes |
 | Contained host invocation (`claude -p` with generated settings, sandbox and hooks) | Subprocess of the supervisor | One GSD unit, bounded by wall-clock and cost caps | Yes |
 | `avarice hook <event>` | Subprocess started by the agent host for every tool call | One hook call, timeout 5 s, fail-closed | Yes |
 | `avarice digest` | Started by a user-level launchd agent or systemd timer at check-in times | One command | Optional |
+| `avarice` interactive shell ([ADR-013](decisions/ADR-013-interactive-shell.md)) | Foreground command the user starts in a terminal | Until the user ends it; runs it starts continue in `avarice supervise`, which the shell does not signal on exit | Yes |
 | `avarice dashboard --watch` | Foreground command the user starts | Until the user ends it | Optional |
 | `git`, `gsd_run`, `gh`, repository check commands | Subprocesses started by the `exec` module | One command, with a timeout | Yes |
 | Profile store (`state.db` plus `artifacts/`) | Local files | Persistent | Yes |
 | GSD capability `avarice-bridge` | Manifest plus command module inside GSD | Stage 2 | No |
-| `avarice mcp` stdio server | Optional subprocess of the host | Only if a host needs typed tools | No |
+| `avarice mcp` stdio server | Subprocess of the host | Only if a host needs typed tools | No |
 | Remote worker | Separate service on a NAS or homelab | Later | No |
 | Coordination service | Separate service with its own database | Later, only for concurrent workers | No |
 

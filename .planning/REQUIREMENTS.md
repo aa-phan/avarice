@@ -32,7 +32,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-14** [MVP]: Content retrieved from tickets, documents, web pages or tool output grants no authority and changes no policy.
 - [ ] **FR-15** [MVP]: Queued privileged actions never replay automatically after connectivity returns; each needs a fresh decision.
 
-### Integration (FR-16 to FR-26)
+### Integration (FR-16 to FR-27)
 
 - [ ] **FR-16** [Contract]: Every port declares its capabilities; calling an unsupported capability returns a typed `Unsupported` error naming the capability and the documented reduced mode, never a simulated success.
 - [ ] **FR-17** [Contract]: Provider-specific features are reachable through namespaced extensions and do not widen the core port.
@@ -44,6 +44,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-24** [Later]: Each machine that runs work for a profile has a host record (identity, capability descriptor, status); a host is not deactivated while an active project or run depends on it.
 - [ ] **FR-25** [MVP]: A repository may declare an architecture model in `.avarice/architecture.json` (components with path globs, allowed edges with contract symbols, shared resources with UUIDs); AVARICE drafts it deterministically from the code graph as a proposal that takes effect only after user approval, and an `architecture-model` check reports departures (ADR-012).
 - [ ] **FR-26** [MVP]: `avarice dashboard` renders one self-contained, read-only HTML page from the profile's ledger, with no server, no listening port and no network access, redacted like events and limited to one profile (ADR-011).
+- [ ] **FR-27** [MVP]: `avarice` with no arguments, when standard input and standard output are both terminals, opens an interactive shell that shows the profile's runs, onboardings, open decisions and live progress and runs every command in-process with the one-shot checks; otherwise, or under `AVARICE_RUN`, it prints usage and exits 64; no daemon, listening port or runtime dependency (ADR-013).
 
 ### Run contract (RC-1 to RC-8)
 
@@ -136,7 +137,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **SEC-7** [MVP]: Employer-specific configuration and data stay outside the personal framework distribution and repository.
 - [ ] **SEC-8** [MVP]: Every credential resolution attempt is recorded as an event with reference, purpose, calling module, profile, run and invocation IDs, outcome and duration, and never the value, its length or a digest of it.
 
-### Operability (OPS-1 to OPS-6)
+### Operability (OPS-1 to OPS-7)
 
 - [ ] **OPS-1** [MVP]: A `doctor` command reports configuration, versions, capabilities and dependency health without revealing secrets and works offline.
 - [ ] **OPS-2** [MVP]: Structured events carry the correlation IDs defined in the contracts specification.
@@ -144,6 +145,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
 - [ ] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
 - [ ] **OPS-6** [MVP]: Upgrading GSD, the agent host or AVARICE is detectable by `doctor`; incompatible versions fail with an actionable message, not partial behavior.
+- [ ] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
 
 ## v2 Requirements (Deferred)
 
@@ -236,6 +238,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-24 | Phase 7 | Pending |
 | FR-25 | Phase 5 | Pending |
 | FR-26 | Phase 5 | Pending |
+| FR-27 | Phase 2 | Pending |
 | RC-1 | Phase 2 | Pending |
 | RC-2 | Phase 2 | Pending |
 | RC-3 | Phase 2 | Pending |
@@ -315,13 +318,14 @@ Each v1 requirement maps to exactly one phase.
 | OPS-4 | Phase 5 | Pending |
 | OPS-5 | Phase 4 | Pending |
 | OPS-6 | Phase 4 | Pending |
+| OPS-7 | Phase 2 | Pending |
 
 **Coverage:**
-- v1 requirements: 104 total (105 normative minus FR-23 deferred)
-- Mapped to phases: 104
+- v1 requirements: 106 total (107 normative minus FR-23 deferred)
+- Mapped to phases: 106
 - Unmapped: 0
-- Owned per phase: Phase 1: 14, Phase 2: 33, Phase 3: 13, Phase 4: 28, Phase 5: 13, Phase 6: 0, Phase 7: 1, Phase 8: 2
-- Milestone v1.0 (Phases 1-3): 60. Milestone v1.1 (Phases 4-5): 41. Milestone v2.0 (Phases 6-8): 3.
+- Owned per phase: Phase 1: 14, Phase 2: 35, Phase 3: 13, Phase 4: 28, Phase 5: 13, Phase 6: 0, Phase 7: 1, Phase 8: 2
+- Milestone v1.0 (Phases 1-3): 62. Milestone v1.1 (Phases 4-5): 41. Milestone v2.0 (Phases 6-8): 3.
 
 ## Partial and extension coverage
 
