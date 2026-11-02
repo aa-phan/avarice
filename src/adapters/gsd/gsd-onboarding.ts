@@ -16,6 +16,7 @@ import type {
   GsdSetting,
   GsdStampResult,
 } from '../../ports/gsd-onboarding.ts';
+import type { CommandExecutor } from '../../ports/command-executor.ts';
 import { join } from 'node:path';
 import { runGsd } from './gsd-tools.ts';
 import type { LocatedGsd } from './locate.ts';
@@ -51,11 +52,17 @@ function invalid(field: string, reason: string): Result<never> {
   return err({ kind: 'invalid', field, reason });
 }
 
+export interface GsdAdapterOptions {
+  executor: CommandExecutor;
+  dataRoot: string;
+  home: string;
+}
+
 export class GsdOnboardingAdapter implements GsdOnboarding {
   readonly descriptor: CapabilityDescriptor;
   readonly located: LocatedGsd;
 
-  constructor(located: LocatedGsd) {
+  constructor(located: LocatedGsd, _options?: GsdAdapterOptions) {
     this.located = located;
     this.descriptor = {
       port: 'gsd-onboarding',
