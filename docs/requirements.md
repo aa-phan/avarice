@@ -251,8 +251,8 @@ Each assumption is provisional. The right-hand column names what would settle it
 
 | ID | Assumption | Settled by |
 |---|---|---|
-| A-1 | Claude Code is the primary agent host. Other hosts that GSD supports are secondary. | User confirmation |
-| A-2 | GSD 1.17.0 is the baseline version. GSD updates are taken deliberately, not automatically. | User confirmation; GSD release cadence |
+| A-1 | Claude Code is the primary agent host. Other hosts that GSD supports are secondary. | Confirmed by the user 2026-11-01 |
+| A-2 | GSD 1.17.0 is the baseline version. GSD updates are taken deliberately, not automatically. | Confirmed by the user 2026-11-01; GSD release cadence |
 | A-3 | GitHub (github.com) is the personal SCM and CI. `gh` 2.100.0 is installed. | User confirmation |
 | A-4 | Personal tasks start as manual briefs. No personal tracker integration is needed for the MVP. | User confirmation |
 | A-5 | The future NAS can run a small long-lived process (container or native) and is reachable over a private network or VPN. | NAS model and OS |

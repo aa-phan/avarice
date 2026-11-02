@@ -169,8 +169,10 @@ Tests refer to suites in [operations-and-testing.md](docs/operations-and-testing
 
 ## Remaining decisions
 
-1. Confirm Claude Code as the primary host and GSD 1.17.0 as the baseline (assumptions A-1, A-2).
-2. Choose which Claude config directory AVARICE targets for attended use: `~/.claude-edu` (currently active) or `~/.claude`. Unattended runs load neither directory's settings.
+Slice 0 onboards `~/aa-phan-portfolio-v2` (decided 2026-11-01) for its exit criterion.
+
+1. Decided 2026-11-01: Claude Code is the primary host and GSD 1.17.0 is the baseline (assumptions A-1, A-2 confirmed).
+2. Decided 2026-11-01: attended use targets whichever directory `CLAUDE_CONFIG_DIR` names, falling back to `~/.claude`; no path is hard-coded in the MVP. The developer's active directory is `~/.claude-edu`. Unattended runs load neither directory's settings.
 3. Confirm GitHub as the personal SCM and manual briefs as the only personal task source for the MVP (A-3, A-4).
 4. Choose the default limits of the `routine` policy preset (the example contract's numbers are illustrative only) and whether `routine` may push a branch and open a draft PR.
 5. Choose the notification destination for decisions away from the desk (ntfy, Pushover or Telegram) and the check-in times.

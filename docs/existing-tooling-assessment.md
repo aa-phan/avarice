@@ -210,6 +210,6 @@ Maintenance cost is an estimate of ongoing effort: Low (rarely touched), Medium 
 
 These block nothing in the MVP; each has a provisional answer.
 
-1. Which config directory should AVARICE target: `~/.claude-edu` (active) or `~/.claude`? Provisional: the one in `CLAUDE_CONFIG_DIR`, with `doctor` warning when hooks differ.
+1. Which config directory should AVARICE target: `~/.claude-edu` (active) or `~/.claude`? Decided 2026-11-01: the one in `CLAUDE_CONFIG_DIR` (default `~/.claude`), with no directory hard-coded in the MVP, and `doctor` warning when hooks differ.
 2. Does the capability manifest format in GSD 1.17.0 match the unshipped reference docs it cites (`docs/reference/capability-manifest.md`)? Provisional: treat the validator source as the contract, pin `engines.gsd` to `>=1.17.0 <1.18.0`, and keep the manual handoff ([ADR-002](decisions/ADR-002-gsd-integration-mode.md)).
 3. Should the disabled `github` plugin be enabled? Provisional: no; `gh` is sufficient and keeps one credential path.
