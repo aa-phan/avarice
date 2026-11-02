@@ -4,6 +4,7 @@
 import { digestOf } from './digest.ts';
 import { completenessFor } from './mapping.ts';
 import type { Completeness, MappingMode } from './mapping.ts';
+import type { ProposedCommand } from './policy-narrowing.ts';
 
 export interface CodebaseArtifact {
   path: string;
@@ -25,8 +26,26 @@ export interface ProjectRecordInput {
   notMapped: readonly string[];
   // Version reported by the located gsd-core (`runtime-identity`); `unknown` when none was recorded.
   gsdVersion?: string;
+  // The GSD settings AVARICE applied in staging and the operations the located gsd-core supports.
+  gsd?: { config?: Readonly<Record<string, unknown>>; capabilities?: readonly string[] };
+  // Preflight facts, as recorded at registration (names and classifications, never contents).
+  existingState?: Readonly<Record<string, unknown>>;
+  instructionFiles?: readonly string[];
+  findings?: readonly RecordFinding[];
+  // The onboarding contract the record was produced under.
+  contract?: { runId: string; version: number; digest: string };
+  // Accepted proposals, already narrowed by policy-narrowing.ts.
   paths?: Partial<RecordPaths>;
+  commands?: readonly ProposedCommand[];
   execution?: Partial<RecordExecution>;
+}
+
+// Something validation or narrowing noted about this record: a name and a reason, never document text.
+export interface RecordFinding {
+  source: 'validation' | 'narrowing';
+  field: string;
+  reason: string;
+  detail?: string;
 }
 
 export interface RecordPaths {
@@ -53,7 +72,11 @@ export interface ProjectRecord {
   profile: string;
   policyPreset: 'routine';
   promotion: 'none';
-  gsd: { version: string };
+  gsd: { version: string; runtime: 'claude'; adapter: string; config: Record<string, unknown>; capabilities: string[] };
+  contract: { runId: string; version: number; digest: string } | null;
+  existingState: Record<string, unknown>;
+  instructionFiles: string[];
+  findings: RecordFinding[];
   artifacts: {
     location: 'staging';
     stagingPath: string;
@@ -71,7 +94,7 @@ export interface ProjectRecord {
   notMapped: string[];
   paths: RecordPaths;
   execution: RecordExecution;
-  commands: never[];
+  commands: ProposedCommand[];
 }
 
 // Defaults grant nothing: no write paths, no endpoints, no credentials. Repository proposals and later
@@ -92,7 +115,11 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     profile: input.profile,
     policyPreset: 'routine',
     promotion: 'none',
-    gsd: { version: input.gsdVersion ?? 'unknown' },
+    gsd: { version: input.gsdVersion ?? 'unknown', runtime: 'claude', adapter: 'gsd-onboarding@1.17', config: {}, capabilities: [] },
+    contract: null,
+    existingState: {},
+    instructionFiles: [],
+    findings: [],
     artifacts: {
       location: 'staging',
       stagingPath: input.stagingPath,
