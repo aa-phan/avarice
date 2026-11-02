@@ -14,6 +14,9 @@ import type {
   ActiveRecord,
   AdapterConfigInput,
   ArtifactInput,
+  BudgetReservation,
+  BudgetRow,
+  BudgetRowInput,
   AttemptInput,
   AttemptRow,
   CheckpointInput,
@@ -539,6 +542,28 @@ export class SqliteLedger implements Ledger {
       if (e instanceof EventDataError) abort({ kind: 'invalid', field: e.field, reason: e.reason });
       throw e;
     }
+  }
+
+  // ---- budgets (STUBS for the RED commit) -------------------------------------------------------------
+
+  createBudgets(_runId: string, _contractVersion: number, _rows: readonly BudgetRowInput[]): Result<BudgetRow[]> {
+    return err({ kind: 'unsupported', capability: 'budgets' });
+  }
+
+  reserveBudget(_runId: string, _name: string, _amount: number): Result<BudgetReservation> {
+    return err({ kind: 'unsupported', capability: 'budgets' });
+  }
+
+  chargeBudget(_runId: string, _name: string, _amount: number, _options: { fromReserved: boolean }): Result<BudgetRow> {
+    return err({ kind: 'unsupported', capability: 'budgets' });
+  }
+
+  getBudgets(_runId: string): Result<BudgetRow[]> {
+    return err({ kind: 'unsupported', capability: 'budgets' });
+  }
+
+  countBudgetDenials(_runId: string, _invocationId: string): Result<number> {
+    return err({ kind: 'unsupported', capability: 'budgets' });
   }
 
   recordArtifact(input: ArtifactInput): Result<void> {

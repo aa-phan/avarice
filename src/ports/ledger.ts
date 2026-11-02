@@ -1,5 +1,5 @@
 // Ledger port (docs/contracts-and-state.md "Persisted entities", "Concurrency control"; SKELETON.md "Ports").
-// The onboarding subset. Plan 01-12 adds the budget methods. Every method returns a Result and never
+// The onboarding subset plus the budget methods (plan 01-12). Every method returns a Result and never
 // throws across the boundary. Every state-changing method is one atomic unit: either all of its rows
 // are written or none are (NFR-6, NFR-9). Times are epoch milliseconds passed in by the caller, so the
 // adapter reads no clock.
@@ -93,10 +93,34 @@ export interface LeaseGrant {
   expiresAt: string;
 }
 
+export interface BudgetRowInput {
+  name: string;
+  limit: number;
+  exactness: 'exact' | 'estimated';
+}
+
+export interface BudgetRow {
+  runId: string;
+  name: string;
+  limit: number;
+  used: number;
+  reserved: number;
+  exactness: 'exact' | 'estimated';
+  contractVersion: number;
+}
+
+export interface BudgetReservation {
+  // False when `used + reserved + amount` would pass the limit; nothing was reserved then.
+  granted: boolean;
+  budget: BudgetRow;
+}
+
 export interface StoreContractInput {
   // The carrier run ID; the onboarding contract is stored as a run contract.
   runId: string;
   version?: number;
+  // Budget rows created in the same transaction as the contract (docs/contracts-and-state.md "Budget accounting").
+  budgets?: readonly BudgetRowInput[];
   digest: string;
   body: unknown;
   policyRevision: string;
@@ -244,6 +268,18 @@ export interface Ledger {
 
   insertRecordAndActivate(onboardingId: string, guard: TransitionGuard, input: ActivateInput): Result<ActivationResult>;
   getActiveRecord(projectId: string): Result<ActiveRecord | null>;
+
+  // Budgets (CON-13). The rows are created from the contract and only ever grow in `used`: createBudgets leaves
+  // an existing row untouched, and nothing refunds, resets or raises a limit (RC-5).
+  createBudgets(runId: string, contractVersion: number, rows: readonly BudgetRowInput[]): Result<BudgetRow[]>;
+  // One conditional UPDATE on `reserved`: it changes a row only while used + reserved + amount stays within the limit.
+  reserveBudget(runId: string, name: string, amount: number): Result<BudgetReservation>;
+  // Adds `amount` to `used`. With `fromReserved` the amount moves out of `reserved` first (a reservation settling);
+  // without it the amount is charged directly (an estimated cost after the fact), and may pass the limit.
+  chargeBudget(runId: string, name: string, amount: number, options: { fromReserved: boolean }): Result<BudgetRow>;
+  getBudgets(runId: string): Result<BudgetRow[]>;
+  // How many hook denials with rule `budget_exhausted` the invocation recorded.
+  countBudgetDenials(runId: string, invocationId: string): Result<number>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
   recordArtifact(input: ArtifactInput): Result<void>;
