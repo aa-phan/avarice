@@ -27,6 +27,12 @@ export interface FakeHostOptions {
   extraWrites?: Readonly<Record<string, string>>;
   // Text appended to every document (for example instruction-like text the validator must treat as data).
   inject?: string;
+  // Complete replacement content for a map file, by name, written verbatim (no stamp is added).
+  rawFiles?: Readonly<Record<string, string>>;
+  // Template H2 headings to leave out of a map file, by name.
+  omitHeadings?: Readonly<Record<string, readonly string[]>>;
+  // Filler appended to every document, in bytes (for the size cap).
+  padBytes?: number;
   // Delay before returning.
   sleepMs?: number;
   // SIGKILL this process after writing this many files (mid-invocation kill point).
@@ -36,12 +42,20 @@ export interface FakeHostOptions {
   costUsd?: number;
 }
 
+// H2 headings the GSD 1.17.0 templates define for the two documents that have a template (stack.md and
+// architecture.md under gsd-core/templates/codebase/). Copied here, not imported, so the validator's own constant
+// is checked against an independent copy.
+const TEMPLATE_H2: Readonly<Record<string, readonly string[]>> = {
+  'STACK.md': ['Languages', 'Runtime', 'Frameworks', 'Key Dependencies', 'Configuration', 'Platform Requirements'],
+  'ARCHITECTURE.md': ['Pattern Overview', 'Layers', 'Data Flow', 'Key Abstractions', 'Entry Points', 'Error Handling', 'Cross-Cutting Concerns'],
+};
+
 function title(file: string): string {
   const name = file.replace(/\.md$/, '');
   return name.charAt(0) + name.slice(1).toLowerCase();
 }
 
-function document(file: string, stamp: string | false, trackedPaths: readonly string[], inject: string | undefined): string {
+function document(file: string, stamp: string | false, trackedPaths: readonly string[], inject: string | undefined, omitHeadings: readonly string[] = [], padBytes = 0): string {
   const paths = trackedPaths.slice(0, 10).map((p) => `- \`${p}\``).join('\n');
   return [
     ...(stamp === false ? [] : ['---', `last_mapped_commit: ${stamp}`, 'last_mapped_at: 2026-01-01T00:00:00.000Z', '---']),
@@ -51,10 +65,12 @@ function document(file: string, stamp: string | false, trackedPaths: readonly st
     '',
     `${FAKE_DOCUMENT_MARKER} describes the ${title(file).toLowerCase()} of this repository.`,
     '',
+    ...(TEMPLATE_H2[file] ?? []).filter((h) => !omitHeadings.includes(h)).flatMap((heading) => [`## ${heading}`, '', `Notes on ${heading.toLowerCase()}.`, '']),
     '## Details',
     '',
     paths.length > 0 ? paths : '- (no tracked files)',
     ...(inject !== undefined ? ['', inject] : []),
+    ...(padBytes > 0 ? ['', 'x'.repeat(padBytes)] : []),
     '',
   ].join('\n');
 }
@@ -90,7 +106,8 @@ export class FakeAgentHost implements AgentHost {
     for (const file of files) {
       const target = join(req.cwd, '.planning', 'codebase', file);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, document(file, stamp, tracked, o.inject));
+      const raw = o.rawFiles?.[file];
+      writeFileSync(target, raw ?? document(file, stamp, tracked, o.inject, o.omitHeadings?.[file], o.padBytes));
       written += 1;
       if (o.killAfterFiles !== undefined && written >= o.killAfterFiles) process.kill(process.pid, 'SIGKILL');
     }

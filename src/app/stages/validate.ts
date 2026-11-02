@@ -24,7 +24,14 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   if (!documents.ok) return documents;
 
   const validation = validateMapArtifacts(
-    { stagingHead: head.value, files: documents.value.map((d) => ({ path: d.path, lastMappedCommit: d.lastMappedCommit })) },
+    {
+      stagingHead: head.value,
+      files: documents.value.map((d) => ({ path: d.path, lastMappedCommit: d.lastMappedCommit, text: d.text, bytes: Buffer.byteLength(d.text, 'utf8') })),
+      changes: { modified: [], added: [], deleted: [] },
+      allowedWrite: [],
+      trackedWritable: [],
+      knownPaths: [],
+    },
     { mode: mode.value },
   );
 

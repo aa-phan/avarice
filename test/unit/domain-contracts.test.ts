@@ -23,6 +23,7 @@ import {
   completenessFor,
 } from '../../src/domain/mapping.ts';
 import { validateMapArtifacts } from '../../src/domain/validation.ts';
+import type { MapArtifactFacts } from '../../src/domain/validation.ts';
 import { buildProjectRecord, recordDigest } from '../../src/domain/project-record.ts';
 
 function unwrap<T>(r: Result<T>): T {
@@ -433,11 +434,28 @@ describe('mapping', () => {
 });
 
 describe('validateMapArtifacts', () => {
+  // Presence and stamp are judged here; the other checks have their own file (validation.test.ts), so the
+  // documents are minimal but well-formed and nothing else changed in staging.
+  const TEMPLATE: Record<string, string[]> = {
+    'STACK.md': ['Languages', 'Runtime', 'Frameworks', 'Key Dependencies', 'Configuration', 'Platform Requirements'],
+    'ARCHITECTURE.md': ['Pattern Overview', 'Layers', 'Data Flow', 'Key Abstractions', 'Entry Points', 'Error Handling', 'Cross-Cutting Concerns'],
+  };
+  const factsOf = (stagingHead: string, files: ReadonlyArray<{ path: string; lastMappedCommit: string | null }>): MapArtifactFacts => ({
+    stagingHead,
+    files: files.map((f) => {
+      const text = ['# Doc', '', ...(TEMPLATE[f.path.split('/').pop() ?? ''] ?? []).map((h) => `## ${h}\n`)].join('\n');
+      return { ...f, text, bytes: text.length };
+    }),
+    changes: { modified: [], added: [], deleted: [] },
+    allowedWrite: ['.planning/codebase/**'],
+    trackedWritable: ['.planning/codebase/**'],
+    knownPaths: [],
+  });
   const stamped = (paths: readonly string[], commit: string | null = HEAD) =>
     paths.map((path) => ({ path, lastMappedCommit: commit }));
 
   it('accepts seven files stamped with the staging HEAD in full mode', () => {
-    const v = validateMapArtifacts({ stagingHead: HEAD, files: stamped(SEVEN) }, { mode: 'full' });
+    const v = validateMapArtifacts(factsOf(HEAD, stamped(SEVEN)), { mode: 'full' });
     assert.equal(v.accepted, true);
     assert.ok(v.checks.length >= 2);
     assert.ok(v.checks.every((c) => c.passed));
@@ -445,14 +463,14 @@ describe('validateMapArtifacts', () => {
 
   it('accepts four files in fast mode and rejects the same four in full mode', () => {
     const files = stamped(FOUR);
-    assert.equal(validateMapArtifacts({ stagingHead: HEAD, files }, { mode: 'fast' }).accepted, true);
-    const full = validateMapArtifacts({ stagingHead: HEAD, files }, { mode: 'full' });
+    assert.equal(validateMapArtifacts(factsOf(HEAD, files), { mode: 'fast' }).accepted, true);
+    const full = validateMapArtifacts(factsOf(HEAD, files), { mode: 'full' });
     assert.equal(full.accepted, false);
     assert.equal(full.checks.find((c) => c.name === 'presence')?.passed, false);
   });
 
   it('rejects a missing file and names the presence check and the file', () => {
-    const v = validateMapArtifacts({ stagingHead: HEAD, files: stamped(SEVEN.slice(1)) }, { mode: 'full' });
+    const v = validateMapArtifacts(factsOf(HEAD, stamped(SEVEN.slice(1))), { mode: 'full' });
     assert.equal(v.accepted, false);
     const presence = v.checks.find((c) => c.name === 'presence');
     assert.equal(presence?.passed, false);
@@ -462,7 +480,7 @@ describe('validateMapArtifacts', () => {
   it('rejects one stale stamp and names the stamp check and the file', () => {
     const files = stamped(SEVEN);
     files[3] = { path: files[3]!.path, lastMappedCommit: 'deadbeef' };
-    const v = validateMapArtifacts({ stagingHead: HEAD, files }, { mode: 'full' });
+    const v = validateMapArtifacts(factsOf(HEAD, files), { mode: 'full' });
     assert.equal(v.accepted, false);
     const stamp = v.checks.find((c) => c.name === 'stamp');
     assert.equal(stamp?.passed, false);
@@ -472,19 +490,19 @@ describe('validateMapArtifacts', () => {
 
   it('rejects a missing stamp, and an empty stamp that equals an empty HEAD', () => {
     const none = validateMapArtifacts(
-      { stagingHead: HEAD, files: stamped(SEVEN, null) },
+      factsOf(HEAD, stamped(SEVEN, null)),
       { mode: 'full' },
     );
     assert.equal(none.accepted, false);
     assert.equal(none.checks.find((c) => c.name === 'stamp')?.passed, false);
-    const empty = validateMapArtifacts({ stagingHead: '', files: stamped(SEVEN, '') }, { mode: 'full' });
+    const empty = validateMapArtifacts(factsOf('', stamped(SEVEN, '')), { mode: 'full' });
     assert.equal(empty.accepted, false);
     assert.equal(empty.checks.find((c) => c.name === 'stamp')?.passed, false);
   });
 
   it('accepts the git: prefixed and bare forms of the same commit', () => {
     const v = validateMapArtifacts(
-      { stagingHead: `git:${HEAD}`, files: stamped(SEVEN) },
+      factsOf(`git:${HEAD}`, stamped(SEVEN)),
       { mode: 'full' },
     );
     assert.equal(v.accepted, true);
@@ -492,7 +510,7 @@ describe('validateMapArtifacts', () => {
 
   it('ignores extra files and does not require stamps on them', () => {
     const files = [...stamped(SEVEN), { path: '.planning/codebase/NOTES.md', lastMappedCommit: null }];
-    assert.equal(validateMapArtifacts({ stagingHead: HEAD, files }, { mode: 'full' }).accepted, true);
+    assert.equal(validateMapArtifacts(factsOf(HEAD, files), { mode: 'full' }).accepted, true);
   });
 });
 
