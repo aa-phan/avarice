@@ -99,8 +99,8 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 - [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
 - [x] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
-- [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
-- [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
+- [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
+- [x] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [ ] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
@@ -108,7 +108,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [ ] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
 - [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
-- [ ] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
+- [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
 - [ ] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
 - [ ] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
 - [ ] **ONB-15** [MVP]: Refresh re-extracts only changed documents for the knowledge pass and adds GSD phase files (`.planning/phases/**`, `STATE.md`) once incremental refresh exists.
@@ -279,8 +279,8 @@ Each v1 requirement maps to exactly one phase.
 | AUT-17 | Phase 5 | Pending |
 | ONB-1 | Phase 1 | Complete |
 | ONB-2 | Phase 1 | Complete |
-| ONB-3 | Phase 1 | Pending |
-| ONB-4 | Phase 1 | Pending |
+| ONB-3 | Phase 1 | Complete |
+| ONB-4 | Phase 1 | Complete |
 | ONB-5 | Phase 1 | Pending |
 | ONB-6 | Phase 4 | Pending |
 | ONB-7 | Phase 1 | Pending |
@@ -288,7 +288,7 @@ Each v1 requirement maps to exactly one phase.
 | ONB-9 | Phase 1 | Pending |
 | ONB-10 | Phase 2 | Pending |
 | ONB-11 | Phase 4 | Pending |
-| ONB-12 | Phase 1 | Pending |
+| ONB-12 | Phase 1 | Complete |
 | ONB-13 | Phase 1 | Pending |
 | ONB-14 | Phase 1 | Pending |
 | ONB-15 | Phase 4 | Pending |

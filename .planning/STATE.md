@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-11-02T19:18:32.116Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-11-02T19:26:47.573Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 414084b064cb775a5c1847321b0a3869aeeb563e
+state_head: 47946bb3543b4ec455f44005ee21087506dba196
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 4 of 20
+Plan: 5 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 25 min | 3 tasks | 14 files |
 | Phase 01 P02 | 84 min | 2 tasks | 68 files |
 | Phase 01 P03 | 11 min | 2 tasks | 16 files |
+| Phase 01 P04 | 15min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: acquireLease grants only a free lease in 01-03; expiry takeover is 01-06
 - [Phase 01]: Command modules export run, readOnly and booleanFlags; status opens the store read-only after migrating
 - [Phase 01]: Events limited to 1024-char strings and 8192 chars; stored bodies limited to 1 MiB (enforces no document text in the ledger)
+- [Phase 01]: 01-04: prepare reuses a staging worktree whose HEAD contains the pin; pin, onboarding ID and work root validated before any side effect
+- [Phase 01]: 01-04: S0-B recommends the local clone over the worktree (source .git ref writable); worktree kept behind STAGING_STRATEGY until 01-08 and the owner decide
 
 ### Pending Todos
 
@@ -125,6 +128,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T19:18:32.080Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-11-02T19:26:47.556Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
