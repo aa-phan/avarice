@@ -11,7 +11,7 @@ In AVARICE (Agent Verification, Automation, Runtime Integration, and Coordinatio
 ```text
 avarice doctor   (proposal: illustrative output)
 profile        personal-local (class personal)   data root: local APFS, 41 MiB
-runtime        node 26.9.0  ok (>= 22.13)        sqlite 3.53.4 (bundled)
+runtime        node 26.9.0  ok (>= 22.22.3)        sqlite 3.53.4 (bundled)
 store          schema 1  ok   WAL  ok   integrity_check ok   last backup 2 days ago
 host           claude 2.1.316   config dir ~/.claude-edu   enforcement: enforced (sandbox ok, dontAsk ok, onFailure:block ok)
                warning: ~/.claude also registers hooks with different settings
@@ -159,7 +159,7 @@ The workflow suite runs twice: once with local adapters, once with fake-remote a
 ## Acceptance scenarios
 
 **S-1 Fresh local setup**
-Given a Mac with Node 22.13 or newer, git, and GSD 1.17.0, and no AVARICE data,
+Given a Mac with Node 22.22.3 or newer, git, and GSD 1.17.0, and no AVARICE data,
 when the user installs AVARICE, runs `avarice init --profile personal-local`, `avarice repo add` in a repository with `.avarice/config.json`, and `avarice doctor`,
 then `doctor` reports runtime, store, host and GSD as ok, with no admin prompt and no background process running.
 

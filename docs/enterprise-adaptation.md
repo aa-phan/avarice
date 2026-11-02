@@ -11,7 +11,7 @@ The MVP covers the "MVP stance" column. Everything else is decided during onboar
 | Constraint | MVP stance | Degraded or manual mode | Needs an environment-specific implementation |
 |---|---|---|---|
 | Managed device, no admin rights | Supported: user-space install, no services | n/a | No |
-| Restricted binaries (Node blocked or pinned below 22.13) | Not supported | None; AVARICE cannot run | Yes: a different runtime build ([ADR-001](decisions/ADR-001-language-and-runtime.md) revisit trigger) |
+| Restricted binaries (Node blocked or pinned below 22.22.3) | Not supported | None; AVARICE cannot run | Yes: a different runtime build ([ADR-001](decisions/ADR-001-language-and-runtime.md) revisit trigger) |
 | Containers blocked | Supported: nothing needs containers | n/a | No |
 | Containers or daemons permitted | Optional local-services deployment of the slice 6 services on `localhost` ([ADR-010](decisions/ADR-010-serverless-baseline-local-services.md)); none may replace a company system of record | Baseline without services | No |
 | Background daemons forbidden | Supported: the supervisor lives only while a run computes; the digest scheduler is optional | Check-ins only through `avarice status` | No |
@@ -150,7 +150,7 @@ Every integration has a manual equivalent that keeps the workflow useful when th
 Answer these before writing any enterprise adapter. Each answer maps to a configuration key or an adapter decision.
 
 **Device and runtime**
-1. Is Node 22.13 or newer allowed on developer machines? From which source (internal registry, software center)?
+1. Is Node 22.22.3 or newer allowed on developer machines? From which source (internal registry, software center)?
 2. Are user-space CLIs in `~/.local/bin` allowed? Are unsigned scripts allowed?
 3. Are local databases and local logs of work activity allowed? Where, and must they be encrypted?
 4. Which agent hosts and versions are approved? Are managed settings deployed, and do they set `allowManagedHooksOnly`?

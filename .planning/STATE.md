@@ -60,11 +60,14 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 
 None yet.
 
-### Pre-Build Spikes (pending; must close before Phase 0 execution)
+### Pre-Build Spikes (closed 2026-11-01)
 
-1. **Containment host limitations 1, 2, 5, 6, 7** (`docs/containment.md`, "Unresolved host limitations"): (1) PreToolUse coverage for background Bash and in `-p` mode with `dontAsk`; (2) AskUserQuestion behavior in `-p`; (5) whether sandbox `denyWrite` applies to single files or only directories on macOS Seatbelt; (6) `excludedCommands` empty with `allowUnsandboxedCommands: false`; (7) whether `--setting-sources ""` loads no settings while GSD skills and `/graphify` stay available (fallback `--setting-sources project`).
-2. **Knowledge pass** (`docs/implementation-plan.md` Slice 0): can `/graphify` scope to the listed documents; where it writes output; its command set; whether `graphify merge-graphs` keeps confidence tiers GSD's built-in reader accepts.
-3. **SQLite and WAL** (ADR-001): which SQLite version Node 22.13 bundles and whether it has the WAL-reset fix (3.44.6, 3.50.7 or 3.51.3 by release line). The minimum Node version may be raised. This machine runs Node v26.9.0 (SQLite 3.53.4), so the check needs a real Node 22.13 install.
+Results in `spikes/2026-11-01-pre-slice-0/README.md`; the spec was updated the same day.
+
+1. **Containment limitations 1, 2, 5, 6** pass on Claude Code 2.1.316. **Limitation 7** fails as specified: `--setting-sources ""` drops every user skill and agent. Decision: the launch line adds a generated `--plugin-dir` (skills) and `--agents` file (GSD subagents), both verified.
+2. **New:** the sandbox always allows shell writes under the working directory. Decision: `denyWrite` every existing out-of-scope worktree entry, and let the diff gate detect new entries. Worktrees and scratch must not live under `~/.claude*`.
+3. **Knowledge pass:** scope with `.graphifyignore` (allowlist negation works); `graphify extract --out` keeps the tree clean; `merge-graphs` keeps confidence tiers but namespaces node IDs and drops `built_at_commit`. Decision: AVARICE merges code and document graphs itself in one ID space.
+4. **SQLite:** Node 22.13.0 bundles SQLite 3.47.2 without the WAL-reset fix. Decision: minimum Node 22.22.3 (SQLite 3.51.3) or 24.15.0.
 
 Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 8 (Phase 1); host limitations 3 and 4 and the graphify relation-to-read-rule mapping (Phase 3).
 

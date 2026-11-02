@@ -54,14 +54,14 @@ Milestone v2.0 Post-MVP Extensions (Phases 5-7, planned, trigger-driven):
 - **Host baseline (decided 2026-11-01):** Claude Code is the primary host and GSD 1.17.0 the baseline; GSD updates are taken deliberately. Installed: Claude Code 2.1.316 (admitted versions: 2.1.312 and 2.1.316). Attended use targets whichever directory `CLAUDE_CONFIG_DIR` names, default `~/.claude`; nothing is hard-coded. The developer's active directory is `~/.claude-edu`. Unattended runs load neither directory's settings.
 - **Slice 0 exit-criterion target:** `~/aa-phan-portfolio-v2`, an existing repository with committed GSD planning (its own milestone v2, Phase 4 of 6 executing) and no codebase map, intel or graph. It exercises detection and non-overwrite of existing planning state (ONB-6, detection and refusal). Adoption of an existing stamped map is a Phase 3 deliverable and this target cannot exercise it unless a map exists first.
 - **Success metric:** acceptance criteria AC-1..AC-15 (PRD). The first milestone verifies AC-1 and AC-3 directly and reports containment failures (AC-11) from its containment suites; the rest are measured in Phases 3-5 (mapping in REQUIREMENTS.md).
-- **Pre-build spikes pending before Phase 0 execution:** containment host limitations 1, 2, 5, 6, 7; the knowledge-pass spike (`/graphify` scoping, output location, command set, `merge-graphs` confidence); the SQLite version bundled with Node 22.13 and the WAL-reset fix. Tracked in STATE.md.
+- **Pre-build spikes closed 2026-11-01** (`spikes/2026-11-01-pre-slice-0/README.md`): launch line gains `--plugin-dir` and `--agents`; out-of-scope worktree entries get `denyWrite`; the knowledge pass uses an AVARICE graph merge instead of `merge-graphs`; minimum Node raised to 22.22.3.
 - **Open owner decisions (README items 3-9):** GitHub and manual briefs as the only personal SCM and task source (A-3, A-4); `routine` preset default limits and whether it may push and open a draft PR; notification destination and check-in times; unattended only while the Mac is awake (A-8); NAS model and OS before slice 6 (A-5); default promotion mode (`none`, `copy`, `commit`); enterprise questionnaire (A-6).
 - **Maintenance cost (estimate):** re-run the GSD integration suite on GSD upgrades and the containment suite on every Claude Code upgrade; re-run all suites on Node majors. The containment suite is likely the largest recurring cost.
 - **Reference systems:** the 3dmk comparison documents are design inspiration and not a requirements source.
 
 ## Constraints
 
-- **Tech stack:** TypeScript restricted to erasable syntax on Node >= 22.13, `node:sqlite`, no native dependencies, bundled JavaScript build for distribution — Node is already required by GSD (ADR-001, proposed). The floor may rise after the SQLite WAL spike.
+- **Tech stack:** TypeScript restricted to erasable syntax on Node >= 22.22.3 (or >= 24.15.0), `node:sqlite`, no native dependencies, bundled JavaScript build for distribution — Node is already required by GSD (ADR-001, proposed). The floor may rise after the SQLite WAL spike.
 - **Host compatibility:** Claude Code unattended runs only on admitted versions after the containment suite passes on that version; otherwise restricted mode only. GSD 1.17.x only; AVARICE never runs `/gsd-update`.
 - **Platform:** macOS 15 arm64 is the MVP target; install is user-space with no admin rights.
 - **Baseline footprint:** no daemon, container runtime, server, NAS or cloud account on one Mac (NFR-1); an optional localhost local-services deployment is allowed outside the baseline (ADR-010).
@@ -77,7 +77,7 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| ADR-001 TypeScript on Node with built-in SQLite (Node 22.13+) | No native dependencies; Node already required by GSD; `doctor` checks bundled SQLite against the WAL-reset fix | Proposed |
+| ADR-001 TypeScript on Node with built-in SQLite (Node 22.22.3+) | No native dependencies; Node already required by GSD; `doctor` checks bundled SQLite against the WAL-reset fix | Proposed |
 | ADR-002 AVARICE supplies services to GSD and never orchestrates the loop | GSD owns plan to ship; two integration stages (files and observation, then a GSD capability) | Proposed (partly superseded by ADR-006) |
 | ADR-003 One local SQLite database per profile, artifact bytes in a content-addressed store | Atomic reservations without a server; `VACUUM INTO` backups; network mounts refused | Proposed (amended by ADR-010) |
 | ADR-004 Modular monolith, ports only at realistic migration boundaries | Policy is not a port; MCP is not an internal transport | Proposed (amended by ADR-010) |

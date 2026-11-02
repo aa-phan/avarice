@@ -33,7 +33,7 @@ Ordered by priority. "MVP" means required for the first usable release.
 | Trigger | User commands; called by every other extension |
 | Inputs | Profile configuration, repository `.avarice/config.json`, brief files, `gsd_run` output, git state |
 | Outputs | Ledger records, artifacts, JSON on `--json`, human text otherwise; exit codes 0 success, 1 domain failure, 2 policy denial, 64 usage, 69 unavailable, 70 internal (aligned with GSD's registry) |
-| Dependencies | Node 22.13 or newer, git; optional `gsd_run`, `gh` |
+| Dependencies | Node 22.22.3 or newer, git; optional `gsd_run`, `gh` |
 | Permissions | User's own files; profile data root; subprocesses it is configured to run |
 | Failure behavior | Typed errors per [contracts-and-state.md](contracts-and-state.md#results-and-errors); never reports success for skipped work |
 | Tests | Contract, workflow, crash, migration, isolation suites ([operations-and-testing.md](operations-and-testing.md#test-strategy)) |
@@ -332,7 +332,7 @@ Tracker, documentation, CI and audit-sink adapters per environment. Each lives i
 
 | Component | Supported range | Checked by | On mismatch |
 |---|---|---|---|
-| Node | 22.13 or newer | `doctor`, CLI startup | Refuse to start, print the found version |
+| Node | 22.22.3 or newer (or 24.15.0 or newer) | `doctor`, CLI startup | Refuse to start, print the found version |
 | GSD | 1.17.x tested; Stage 1 needs only `state.json` contract `1.x` | `doctor` reads `gsd-core/VERSION` and `state.json` `contract` | Stage 1: warn if minor differs, refuse if contract major differs. Stage 2: capability disabled by `engines.gsd` |
 | Claude Code | Admitted for unattended runs: 2.1.312 and 2.1.316. `--setting-sources`, `--permission-prompts`, `--max-budget-usd` and `--restricted` were checked with `claude --help` on both (2026-10-29 and 2026-11-01), and the repository owner admitted 2.1.316 on 2026-11-01. `onFailure: "block"` is documented from 2.1.295. On every admitted version, unattended runs start only after the containment suite has passed on it | `doctor` runs `claude --version` and validates generated settings keys | Unadmitted version: unattended runs refused, restricted mode only |
 | Store schema | Equal to the binary's schema version, or older with migrations available | CLI startup | Older: migrate with backup first. Newer: refuse ("written by a newer AVARICE") |

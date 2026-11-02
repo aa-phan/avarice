@@ -257,7 +257,7 @@ Each assumption is provisional. The right-hand column names what would settle it
 | A-4 | Personal tasks start as manual briefs. No personal tracker integration is needed for the MVP. | User confirmation |
 | A-5 | The future NAS can run a small long-lived process (container or native) and is reachable over a private network or VPN. | NAS model and OS |
 | A-6 | The employer's tracker, SCM, CI, identity provider, approved models and audit sink are unknown. | Enterprise onboarding questionnaire |
-| A-7 | Node.js 22.13 or newer is acceptable as the only runtime dependency, because GSD already requires Node. | [ADR-001](decisions/ADR-001-language-and-runtime.md) revisit trigger |
+| A-7 | Node.js 22.22.3 or newer is acceptable as the only runtime dependency, because GSD already requires Node. | [ADR-001](decisions/ADR-001-language-and-runtime.md) revisit trigger |
 | A-8 | Unattended runs execute on the Mac while it is awake and on power. A sleeping Mac stops computing; continuing during sleep needs the later remote worker. | User confirmation |
 | A-9 | Model usage is billed per token through the host, and the host reports usage only at the end of each headless invocation, so per-invocation limits are the enforceable budget unit. | Host research in [containment.md](containment.md#budgets-and-usage-visibility) |
 | A-10 | Onboarding targets one Git repository at a time on local storage; monorepos are handled by path scope inside that repository. | Survey of the user's own repositories |

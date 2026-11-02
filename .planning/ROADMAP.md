@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 0: Contained onboarding of one repository
 **Goal**: `avarice onboard --policy onboarding` takes one existing local Git repository (`~/aa-phan-portfolio-v2`) to an active project record, with GSD as the semantic mapper, GSD intel and graph indexes recorded, source read-only and writes confined to the staging worktree
-**Depends on**: Nothing (first phase). Pre-execution spikes are pending (see STATE.md): containment host limitations 1, 2, 5, 6, 7; the knowledge-pass spike; the SQLite and WAL check on Node 22.13
+**Depends on**: Nothing (first phase). Pre-execution spikes closed 2026-11-01 (see STATE.md and `spikes/2026-11-01-pre-slice-0/README.md`)
 **Requirements**: ONB-1, ONB-2, ONB-3, ONB-4, ONB-5, ONB-7, ONB-8, ONB-9, ONB-12, ONB-13, ONB-14, FR-20, SEC-5, NFR-2
 **Partial coverage** (owned by the later phase): CON-2, CON-3, CON-5, CON-6, CON-13, NFR-1, NFR-3, NFR-5, NFR-6, NFR-9 (Phase 1, delivered here for the onboarding contract); ONB-6 (Phase 3; this phase delivers detection and refusal only)
 **Success Criteria** (what must be TRUE):

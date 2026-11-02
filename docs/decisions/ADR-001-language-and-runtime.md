@@ -19,7 +19,7 @@ Observed on the target Mac on 2026-10-29:
 
 ## Decision
 
-We write AVARICE in TypeScript, restricted to erasable syntax so Node runs it with type stripping and no build step during development. A bundled JavaScript build is shipped for distribution. Persistence uses `node:sqlite`, so AVARICE has no native dependencies. The minimum supported runtime is Node 22.13. From v22.13.0 and v23.4.0, `node:sqlite` is no longer behind `--experimental-sqlite` but is still experimental; from v25.7.0 it is a release candidate (stability 1.2; https://nodejs.org/api/sqlite.html, retrieved 2026-11-01). On 22.x and 24.x, AVARICE accepts the module's experimental status, and `doctor` reports it. `doctor` does not rely on the version number alone: it imports `node:sqlite`, opens an in-memory database, and reads `sqlite_version()`. A bundled SQLite older than the WAL-reset fix (3.44.6, 3.50.7 or 3.51.3 in their release lines; https://sqlite.org/wal.html) makes `doctor` refuse to run more than one AVARICE process against a store.
+We write AVARICE in TypeScript, restricted to erasable syntax so Node runs it with type stripping and no build step during development. A bundled JavaScript build is shipped for distribution. Persistence uses `node:sqlite`, so AVARICE has no native dependencies. The minimum supported runtime is Node 22.22.3 on the 22.x line and 24.15.0 on the 24.x line: the first releases that bundle SQLite 3.51.3, which contains the WAL-reset fix (https://sqlite.org/wal.html). Node 22.13.0 bundles SQLite 3.47.2 without the fix and cannot run `.ts` files without `--experimental-strip-types`; 22.22.3 runs them unflagged ([pre-slice-0 spikes](../../spikes/2026-11-01-pre-slice-0/README.md), 2026-11-01). From v22.13.0 and v23.4.0, `node:sqlite` is no longer behind `--experimental-sqlite` but is still experimental; from v25.7.0 it is a release candidate (stability 1.2; https://nodejs.org/api/sqlite.html, retrieved 2026-11-01). On 22.x and 24.x, AVARICE accepts the module's experimental status, and `doctor` reports it. `doctor` does not rely on the version number alone: it imports `node:sqlite`, opens an in-memory database, and reads `sqlite_version()`. A bundled SQLite older than the WAL-reset fix (3.44.6, 3.50.7 or 3.51.3 in their release lines) makes `doctor` refuse to start, so AVARICE never ships a single-process restriction.
 
 ## Consequences
 
@@ -39,7 +39,7 @@ We write AVARICE in TypeScript, restricted to erasable syntax so Node runs it wi
 
 ## Revisit when
 
-- An enterprise environment provides Python but blocks or pins Node below 22.13.
+- An enterprise environment provides Python but blocks or pins Node below 22.22.3.
 - `node:sqlite` changes its stability status or is removed.
 - `status` latency misses AC-2 (p95 under 300 ms with 1,000 runs) in [requirements.md](../requirements.md#measurable-acceptance-criteria).
 
