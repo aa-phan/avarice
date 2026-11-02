@@ -133,7 +133,7 @@ completed: 2026-11-02
 - **Duration:** about 19 min (start 19:38Z, from the previous plan's last commit; end 19:57Z)
 - **Tasks:** 3 of 3 (Task 1 and Task 3 TDD, Task 2 test-only)
 - **Files created:** 9, modified: 5 (14 changed in total, 1428 insertions, 23 deletions)
-- **Suite:** 191 of 191 passing (137 before), `npx tsc -p .` and `node scripts/check-boundaries.ts` clean
+- **Suite:** 191 of 191 passing, `npx tsc -p .` and `node scripts/check-boundaries.ts` clean
 
 ## Accomplishments
 
