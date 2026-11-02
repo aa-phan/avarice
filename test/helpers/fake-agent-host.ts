@@ -18,8 +18,9 @@ export const ALL_MAP_FILES = ['STACK.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CO
 export interface FakeHostOptions {
   // Map files to write, by name; default all seven.
   files?: readonly string[];
-  // Value for last_mapped_commit; default `git rev-parse HEAD` of the invocation cwd.
-  stamp?: string;
+  // Value for last_mapped_commit; default `git rev-parse HEAD` of the invocation cwd. `false` writes no
+  // frontmatter stamp at all (a mapper that leaves stamping to AVARICE, as a fast map does).
+  stamp?: string | false;
   // Map files to leave out.
   omit?: readonly string[];
   // Extra files to write, relative to cwd (for example outside the agent write set).
@@ -40,13 +41,10 @@ function title(file: string): string {
   return name.charAt(0) + name.slice(1).toLowerCase();
 }
 
-function document(file: string, stamp: string, trackedPaths: readonly string[], inject: string | undefined): string {
+function document(file: string, stamp: string | false, trackedPaths: readonly string[], inject: string | undefined): string {
   const paths = trackedPaths.slice(0, 10).map((p) => `- \`${p}\``).join('\n');
   return [
-    '---',
-    `last_mapped_commit: ${stamp}`,
-    'last_mapped_at: 2026-01-01T00:00:00.000Z',
-    '---',
+    ...(stamp === false ? [] : ['---', `last_mapped_commit: ${stamp}`, 'last_mapped_at: 2026-01-01T00:00:00.000Z', '---']),
     `# ${title(file)}`,
     '',
     '## Overview',

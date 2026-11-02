@@ -1,5 +1,8 @@
 // Mapping modes, the GSD map file sets and completeness labels
 // (docs/repository-onboarding.md "Mapping-mode decision table", "Validation").
+import { err } from './result.ts';
+import type { Result } from './result.ts';
+import type { ExistingMapClass } from './preflight.ts';
 
 export const MAPPING_MODES = ['skip', 'adopt', 'fast', 'full', 'paths'] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
@@ -65,4 +68,22 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
     default:
       throw new TypeError(`unknown mapping mode ${String(mode)}`);
   }
+}
+
+export interface MappingModeInput {
+  isBrownfield: boolean;
+  requested?: string;
+  existingMap?: ExistingMapClass;
+}
+
+export interface MappingModeDecision {
+  mode: MappingMode;
+  completeness: Completeness;
+  existingMap: ExistingMapClass;
+  reason: string;
+}
+
+// Stub until the GREEN commit of plan 01-09 Task 2.
+export function chooseMappingMode(_input: MappingModeInput): Result<MappingModeDecision> {
+  return err({ kind: 'internal', cause: 'not implemented' });
 }

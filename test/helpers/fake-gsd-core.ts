@@ -29,3 +29,26 @@ export function writeFakeGsdCore(dir: string, options: FakeGsdCoreOptions): stri
   chmodSync(target, 0o755);
   return dir;
 }
+
+// A gsd-core whose gsd-tools.cjs appends {cwd, args} to `logPath` for every call and then delegates to the real
+// gsd-tools.cjs at `realTools` (same output, same exit code). Used to observe where and in what order AVARICE
+// runs GSD verbs while the verbs themselves still do their real work.
+export function writeLoggingGsdCore(dir: string, logPath: string, realTools: string): string {
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const source = [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    "const { appendFileSync } = require('node:fs');",
+    "const { spawnSync } = require('node:child_process');",
+    'const args = process.argv.slice(2);',
+    `appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');`,
+    `const r = spawnSync(process.execPath, [${JSON.stringify(realTools)}, ...args], { stdio: 'inherit', env: process.env });`,
+    'process.exit(r.status === null ? 1 : r.status);',
+    '',
+  ].join('\n');
+  const target = join(bin, 'gsd-tools.cjs');
+  writeFileSync(target, source);
+  chmodSync(target, 0o755);
+  return dir;
+}
