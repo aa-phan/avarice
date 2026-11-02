@@ -283,3 +283,95 @@ describe('the ledger holds no map document text', () => {
     assert.match(body.artifacts.snapshot, /^sha256:[0-9a-f]{64}$/);
   });
 });
+
+describe('the production path fails closed', () => {
+  it('blocks with enforcement_failure, never invokes a host and leaves staging .planning/codebase empty', () => {
+    const { roots, repo } = fixture();
+    const before = checkoutSnapshot(repo.path);
+    const r = runCli(['onboard', '--policy', 'onboarding', repo.path], { roots });
+    assert.equal(r.code, 3, r.stderr + r.stdout);
+    assert.match(r.stdout, /onboarding onb_[0-9A-Z]{26}: blocked \(enforcement_failure\)/);
+
+    const [onboarding] = rows<{ state: string }>(roots, 'SELECT state FROM onboardings');
+    assert.equal(onboarding?.state, 'blocked');
+    const reasons = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'onboarding.transition' ORDER BY seq DESC LIMIT 1");
+    assert.equal((JSON.parse(reasons[0]?.data_json ?? '{}') as { reason?: string }).reason, 'enforcement_failure');
+    assert.deepEqual(
+      rows<{ step: string }>(roots, 'SELECT step FROM onboarding_steps'),
+      [],
+      'no launch:map step: the host was never called',
+    );
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
+
+    const codebase = join(stagingOf(roots), '.planning', 'codebase');
+    assert.deepEqual(existsSync(codebase) ? readdirSync(codebase) : [], [], 'no map file and no invocation file in staging');
+    assert.deepEqual(checkoutSnapshot(repo.path), before);
+
+    const status = runCli(['status', '--json'], { roots });
+    const entries = JSON.parse(status.stdout) as Array<{ state: string; reason: string; recordVersion: number | null }>;
+    assert.deepEqual([entries[0]?.state, entries[0]?.reason, entries[0]?.recordVersion], ['blocked', 'enforcement_failure', null]);
+  });
+
+  it('records the production host as unavailable with enforcement none', () => {
+    const { roots, repo } = fixture();
+    runCli(['onboard', '--policy', 'onboarding', repo.path], { roots });
+    const [config] = rows<{ adapter: string; descriptor_json: string }>(roots, "SELECT adapter, descriptor_json FROM adapter_configs WHERE port = 'agent-host'");
+    assert.equal(config?.adapter, 'unavailable');
+    assert.equal((JSON.parse(config?.descriptor_json ?? '{}') as { attributes: { enforcement: string } }).attributes.enforcement, 'none');
+  });
+});
+
+describe('a malformed map is retried once, then blocks with a decision', () => {
+  it('validation_failed twice, two attempts, blocked (decision), no record', () => {
+    const { roots, repo } = fixture();
+    const before = checkoutSnapshot(repo.path);
+    const r = onboardWithFake(roots, repo, { omit: ['TESTING.md'] });
+    assert.equal(r.code, 3, r.stderr + r.stdout);
+    assert.match(r.stdout, /blocked \(decision\)/);
+
+    const states = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'onboarding.transition' ORDER BY seq").map(
+      (e) => (JSON.parse(e.data_json) as { to: string }).to,
+    );
+    assert.deepEqual(states, [
+      'discovered', 'contract_proposed', 'mapping', 'validating', 'validation_failed',
+      'mapping', 'validating', 'validation_failed', 'blocked',
+    ]);
+    assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM attempts").at(0)?.n, 2);
+    assert.deepEqual(
+      rows<{ step: string; attempt: number }>(roots, "SELECT step, attempt FROM onboarding_steps WHERE step = 'launch:map' ORDER BY attempt").map((s) => s.attempt),
+      [1, 2],
+      'the host ran twice',
+    );
+    const rejected = rows<{ result_json: string }>(roots, "SELECT result_json FROM onboarding_steps WHERE step = 'validate' AND status = 'rejected'");
+    assert.equal(rejected.length, 2);
+    assert.match(rejected[0]?.result_json ?? '', /TESTING\.md/, 'the failing check names the missing file');
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
+    assert.deepEqual(checkoutSnapshot(repo.path), before);
+  });
+
+  it('also rejects a map stamped with the wrong commit', () => {
+    const { roots, repo } = fixture();
+    const r = onboardWithFake(roots, repo, { stamp: 'deadbeef' });
+    assert.equal(r.code, 3, r.stderr + r.stdout);
+    assert.match(r.stdout, /blocked \(decision\)/);
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
+  });
+});
+
+describe('promotion other than none is refused', () => {
+  it('--promote copy exits 3 with the compiler message before any staging exists', () => {
+    const { roots, repo } = fixture();
+    const before = checkoutSnapshot(repo.path);
+    const r = onboardWithFake(roots, repo, {}, ['--promote', 'copy']);
+    assert.equal(r.code, 3, r.stderr + r.stdout);
+    assert.match(r.stdout, /blocked \(decision\)/);
+    assert.match(r.stdout, /request\.promote: promotion "copy" is not authorized: the onboarding preset allows only "none"/);
+
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
+    const [onboarding] = rows<{ staging_worktree: string | null; contract_run_id: string | null }>(roots, 'SELECT staging_worktree, contract_run_id FROM onboardings');
+    assert.equal(onboarding?.staging_worktree, null);
+    assert.equal(onboarding?.contract_run_id, null, 'no contract was stored');
+    assert.deepEqual(readdirSync(roots.AVARICE_WORK_ROOT), [], 'nothing was created under the work root');
+    assert.deepEqual(checkoutSnapshot(repo.path), before);
+  });
+});
