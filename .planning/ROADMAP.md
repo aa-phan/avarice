@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 7/20 plans executed
+**Plans:** 8/20 plans executed
 
 Plans:
 **Wave 1**
@@ -68,7 +68,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 01-06-PLAN.md — Resume, leases, kill-point suite, migration safety
 - [x] 01-07-PLAN.md — `avarice init`, root rules, SQLite runtime gate, AC-1 timing, offline suite
-- [ ] 01-08-PLAN.md — Staging strategy decision, safe git hardening, preflight, ONB-6 detection and refusal, `repo add`
+- [x] 01-08-PLAN.md — Staging strategy decision, safe git hardening, preflight, ONB-6 detection and refusal, `repo add`
 - [ ] 01-09-PLAN.md — GSD 1.17 adapter: locate, identity, staging probe and configure, fast-map stamp, mapping mode
 - [ ] 01-10-PLAN.md — Full artifact validation, completeness labels, record builder, narrowing, snapshot
 - [ ] 01-11-PLAN.md — Bash strategy decision, invocation scope, Claude settings, env, launch argv, agents, plugin, launch preflight
@@ -210,7 +210,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 0. Contained onboarding of one repository | v1.0 | 7/20 | In Progress | - |
+| 0. Contained onboarding of one repository | v1.0 | 8/20 | In Progress | - |
 | 1. Contained unattended run of one work item | v1.0 | 0/TBD | Not started | - |
 | 2. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 3. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
