@@ -1,15 +1,19 @@
 // Staging adapters: pinned worktree, safe git, confined reads (ONB-3, ONB-4). Every repository is a scratch
 // repository under os.tmpdir(); nothing here runs git against the AVARICE checkout.
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync as renameReal, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 
+import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
 import { runGit } from '../../src/adapters/git/safe-git.ts';
 import { STAGING_STRATEGY, createStagingWorkspace } from '../../src/adapters/git/staging-strategy.ts';
 import { WorktreeStagingWorkspace } from '../../src/adapters/git/staging-worktree.ts';
+import { UnavailableAgentHost } from '../../src/adapters/host/unavailable-host.ts';
 import type { Result } from '../../src/domain/result.ts';
+import type { InvocationRequest } from '../../src/ports/agent-host.ts';
 import type { StagingInfo } from '../../src/ports/staging-workspace.ts';
 import { checkoutSnapshot, git, makeScratchRepo, treeDigest, writeExecutable } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -295,5 +299,114 @@ describe('safe git (ONB-4)', () => {
 
     assert.equal(existsSync(hookMark), false, 'post-checkout hook ran during staging');
     assert.equal(existsSync(fsmonitorMark), false, 'fsmonitor command ran during staging');
+  });
+});
+
+function sha(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function blobFiles(dataRoot: string): string[] {
+  const root = join(dataRoot, 'artifacts');
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name));
+}
+
+describe('LocalArtifactStore', () => {
+  const META = { kind: 'transcript' };
+
+  it('stores content-addressed blobs idempotently at {dataRoot}/artifacts/{sha[0:2]}/{sha} and reads them back', () => {
+    const dataRoot = tempDir('avarice-data-');
+    const store = new LocalArtifactStore(dataRoot);
+    const bytes = new TextEncoder().encode('hello artifact\n');
+    const hex = sha(bytes);
+
+    assert.deepEqual(must(store.has(`sha256:${hex}`)), false);
+    const first = must(store.put(bytes, META));
+    const second = must(store.put(bytes, META));
+    assert.deepEqual(first, { digest: `sha256:${hex}`, size: bytes.length });
+    assert.deepEqual(second, first);
+    assert.deepEqual(blobFiles(dataRoot), [join(dataRoot, 'artifacts', hex.slice(0, 2), hex)], 'one blob, no temp files');
+    assert.deepEqual(must(store.has(first.digest)), true);
+    assert.deepEqual(Buffer.from(must(store.get(first.digest))), Buffer.from(bytes));
+    assert.equal(statSync(blobFiles(dataRoot)[0] as string).mode & 0o777, 0o600);
+  });
+
+  it('stores the empty content and refuses a digest that is not sha256 plus 64 hex characters', () => {
+    const store = new LocalArtifactStore(tempDir('avarice-data-'));
+    const empty = must(store.put(new Uint8Array(0), META));
+    assert.equal(empty.digest, `sha256:${sha(new Uint8Array(0))}`);
+    assert.equal(empty.size, 0);
+
+    for (const bad of ['', 'sha256:', `sha256:${'A'.repeat(64)}`, `sha256:../../${'a'.repeat(52)}`, 'a'.repeat(64), `sha256:${'a'.repeat(63)}`]) {
+      assert.equal(mustFail(store.get(bad)).kind, 'invalid', `get ${bad}`);
+      assert.equal(mustFail(store.has(bad)).kind, 'invalid', `has ${bad}`);
+    }
+    assert.equal(mustFail(store.get(`sha256:${'a'.repeat(64)}`)).kind, 'not_found');
+  });
+
+  it('syncs the temp file before the rename and does not rewrite content that is already stored', () => {
+    const dataRoot = tempDir('avarice-data-');
+    const calls: string[] = [];
+    const store = new LocalArtifactStore(dataRoot, {
+      fsyncSync: () => { calls.push('fsync'); },
+      renameSync: (from, to) => { calls.push('rename'); renameReal(from, to); },
+    });
+    const bytes = new TextEncoder().encode('ordered');
+    must(store.put(bytes, META));
+    assert.ok(calls.indexOf('fsync') >= 0 && calls.indexOf('fsync') < calls.indexOf('rename'), `order was ${calls.join(',')}`);
+    const renames = calls.filter((c) => c === 'rename').length;
+    must(store.put(bytes, META));
+    assert.equal(calls.filter((c) => c === 'rename').length, renames, 'second put is a no-op');
+  });
+
+  it('leaves no file under the digest path and no temp file when the put fails after the temp write', () => {
+    const dataRoot = tempDir('avarice-data-');
+    const store = new LocalArtifactStore(dataRoot, {
+      renameSync: () => { throw new Error('injected failure after the temp write'); },
+    });
+    const bytes = new TextEncoder().encode('never published');
+    const result = store.put(bytes, META);
+
+    assert.equal(mustFail(result).kind, 'internal');
+    assert.deepEqual(blobFiles(dataRoot), []);
+    assert.equal(must(store.has(`sha256:${sha(bytes)}`)), false);
+  });
+
+  it('reports a blob whose bytes no longer match its digest as corrupt instead of returning it', () => {
+    const dataRoot = tempDir('avarice-data-');
+    const store = new LocalArtifactStore(dataRoot);
+    const stored = must(store.put(new TextEncoder().encode('original'), META));
+    writeFileSync(blobFiles(dataRoot)[0] as string, 'tampered');
+
+    assert.equal(mustFail(store.get(stored.digest)).kind, 'internal');
+  });
+});
+
+describe('UnavailableAgentHost (ONB-12 fail-closed default)', () => {
+  const REQUEST: InvocationRequest = {
+    onboardingId: ONB, runId: 'run_01TEST', invocationId: 'inv_01TEST', purpose: 'map', contractVersion: 1,
+    contractDigest: `sha256:${'0'.repeat(64)}`, prompt: '/gsd-map-codebase', cwd: '/nonexistent', model: 'sonnet',
+    costCapUsd: 1, wallClockMs: 1000,
+  };
+
+  it('reports enforcement none and no contained-invocation capability', () => {
+    const host = new UnavailableAgentHost();
+    assert.equal(host.descriptor.port, 'agent-host');
+    assert.equal(host.descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(host.descriptor.capabilities['contained-invocation'], false);
+  });
+
+  it('answers every invocation with unsupported contained-invocation and does nothing else', async () => {
+    const host = new UnavailableAgentHost();
+    const result = await host.invoke(REQUEST, new AbortController().signal);
+    assert.equal(result.ok, false);
+    assert.deepEqual((result as { ok: false; error: unknown }).error, {
+      kind: 'unsupported',
+      capability: 'contained-invocation',
+      reducedMode: 'none until the Claude Code host adapter is admitted',
+    });
   });
 });
