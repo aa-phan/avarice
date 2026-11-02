@@ -27,7 +27,7 @@ export function faultPoint(name: string): void {
   if (process.env['AVARICE_FAULT'] === name) process.kill(process.pid, 'SIGKILL');
 }
 
-export function leaseTtlMs(): number {
+function leaseTtlMs(): number {
   const raw = Number(process.env['AVARICE_LEASE_TTL_MS']);
   return Number.isSafeInteger(raw) && raw > 0 ? raw : DEFAULT_LEASE_TTL_MS;
 }
@@ -66,7 +66,7 @@ export interface OnboardingOutcome {
   message: string | null;
 }
 
-export function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: string[]): StageContext {
+function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: string[]): StageContext {
   return {
     deps,
     onboardingId,
