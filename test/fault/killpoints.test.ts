@@ -1,0 +1,201 @@
+// Kill-point suite (SKELETON.md "Kill points"; research "Kill-point catalog for the fault suite"; success
+// criterion 4: killing onboarding part-way and running `avarice resume` reaches the same active record).
+// For every catalog point: onboard a scratch repository in profile A with the point armed (the child dies by
+// SIGKILL, no cleanup runs), check that `status` shows the onboarding as interrupted and never active, resume
+// it, and compare the result with an uninterrupted run of the same repository in a second profile. The fake
+// host is the only host; no model is called.
+import { after, before, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import type { CliRoots } from '../helpers/run-cli.ts';
+import { checkoutSnapshot, makeScratchRepo, treeDigest } from '../helpers/scratch-repo.ts';
+import type { ScratchRepo } from '../helpers/scratch-repo.ts';
+import {
+  EXPIRY_WAIT_MS,
+  KILL_POINTS,
+  REPO_FILES,
+  freshProfile,
+  normalizeRecord,
+  normalizeText,
+  onboardingIdOf,
+  openRaw,
+  resumeCli,
+  rows,
+  runToCompletion,
+  runWithFault,
+  sleepSync,
+  statusCli,
+  transitionsOf,
+} from '../helpers/fault-run.ts';
+import type { KillPoint } from '../helpers/fault-run.ts';
+
+const cleanup: string[] = [];
+after(() => {
+  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
+});
+
+// The state and the next action `status` must report right after the kill. A transition writes the
+// checkpoint of the action that follows it, so `after-checkpoint:validate` and `after-checkpoint:activate`
+// fire in the same instant as the transition that produced them.
+const EXPECTED_AT_KILL: Readonly<Record<KillPoint, { state: string; nextAction: string }>> = {
+  'after-transition:discovered': { state: 'discovered', nextAction: 'compile-contract' },
+  'after-transition:contract_proposed': { state: 'contract_proposed', nextAction: 'prepare-workspace' },
+  'after-checkpoint:prepare-workspace': { state: 'contract_proposed', nextAction: 'prepare-workspace' },
+  'after-checkpoint:configure-gsd': { state: 'contract_proposed', nextAction: 'configure-gsd' },
+  'after-checkpoint:verify-enforcement': { state: 'contract_proposed', nextAction: 'verify-enforcement' },
+  'after-transition:mapping': { state: 'mapping', nextAction: 'launch:map' },
+  'mid-invocation': { state: 'mapping', nextAction: 'launch:map' },
+  'after-transition:validating': { state: 'validating', nextAction: 'validate' },
+  'after-checkpoint:validate': { state: 'validating', nextAction: 'validate' },
+  'after-transition:planning_ready': { state: 'planning_ready', nextAction: 'activate' },
+  'after-checkpoint:activate': { state: 'planning_ready', nextAction: 'activate' },
+};
+
+interface StatusEntry {
+  state: string;
+  recordVersion: number | null;
+  interrupted?: { state: string; nextAction: string; resumeCommand: string };
+}
+
+interface Outcome {
+  record: unknown;
+  rawRecord: { artifacts: { snapshot: string; codebase: Array<{ digest: string }>; stagingPath: string } };
+  manifest: unknown;
+  codebaseDigests: string[];
+  stagingDigest: string;
+  recordCount: number;
+}
+
+function outcomeOf(roots: CliRoots): Outcome {
+  const records = rows<{ body_json: string }>(roots, 'SELECT body_json FROM project_records ORDER BY version');
+  assert.equal(records.length, 1, 'exactly one project record version');
+  const body = JSON.parse((records[0] as { body_json: string }).body_json) as Outcome['rawRecord'];
+  const store = new LocalArtifactStore(roots.AVARICE_DATA_ROOT);
+  const manifestBytes = store.get(body.artifacts.snapshot);
+  assert.ok(manifestBytes.ok, 'the snapshot manifest is in the artifact store');
+  const codebaseDigests = rows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE kind = 'codebase-map' ORDER BY digest").map((r) => r.digest);
+  return {
+    record: normalizeRecord(body),
+    rawRecord: body,
+    manifest: JSON.parse(normalizeText(Buffer.from(manifestBytes.value).toString('utf8'))),
+    codebaseDigests,
+    stagingDigest: treeDigest(body.artifacts.stagingPath),
+    recordCount: records.length,
+  };
+}
+
+let repo: ScratchRepo;
+let pristine: ReturnType<typeof checkoutSnapshot>;
+let reference: Outcome;
+
+before(() => {
+  repo = makeScratchRepo({ files: REPO_FILES });
+  cleanup.push(repo.base);
+  pristine = checkoutSnapshot(repo.path);
+  const roots = freshProfile();
+  cleanup.push(roots.base);
+  const run = runToCompletion(roots, repo);
+  assert.equal(run.code, 0, run.stdout + run.stderr);
+  reference = outcomeOf(roots);
+});
+
+describe('the uninterrupted reference run', () => {
+  it('is reproducible: a second profile onboarding the same repository gives an equal normalized record', () => {
+    const roots = freshProfile();
+    cleanup.push(roots.base);
+    const run = runToCompletion(roots, repo);
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+    const second = outcomeOf(roots);
+    assert.deepEqual(second.record, reference.record);
+    assert.deepEqual(second.manifest, reference.manifest);
+    assert.deepEqual(second.codebaseDigests, reference.codebaseDigests);
+    assert.equal(second.stagingDigest, reference.stagingDigest);
+    assert.notEqual(second.rawRecord.artifacts.stagingPath, reference.rawRecord.artifacts.stagingPath, 'the profiles are separate, so the raw records differ before normalization');
+  });
+
+  it('leaves the user checkout as it found it', () => {
+    assert.deepEqual(checkoutSnapshot(repo.path), pristine);
+  });
+
+  it('has 7 codebase map documents and a manifest naming them', () => {
+    assert.equal(reference.rawRecord.artifacts.codebase.length, 7);
+    assert.equal(reference.codebaseDigests.length, 7);
+  });
+});
+
+describe('kill, then resume, reaches the record of an uninterrupted run', () => {
+  for (const point of KILL_POINTS) {
+    it(point, () => {
+      const roots = freshProfile();
+      cleanup.push(roots.base);
+      const killed = runWithFault(roots, repo, point);
+      assert.equal(killed.signal, 'SIGKILL');
+      const id = onboardingIdOf(roots);
+
+      // Crash consistency: the store opens, is intact, and holds no activated record.
+      const db = openRaw(roots);
+      try {
+        assert.deepEqual({ ...(db.prepare('PRAGMA integrity_check').get() as object) }, { integrity_check: 'ok' });
+        assert.equal((db.prepare('PRAGMA foreign_key_check').all() as unknown[]).length, 0);
+      } finally {
+        db.close();
+      }
+      assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0, 'no activated record after the kill');
+      if (point === 'mid-invocation') {
+        const staged = readdirSync(join(rows<{ staging_worktree: string }>(roots, 'SELECT staging_worktree FROM onboardings')[0]?.staging_worktree as string, '.planning', 'codebase'));
+        assert.equal(staged.length, 3, 'the invocation was killed after writing three of the seven map files');
+        const launch = rows<{ status: string }>(roots, "SELECT status FROM onboarding_steps WHERE step = 'launch:map'");
+        assert.deepEqual(launch, [{ status: 'started' }], 'the killed invocation is visible as a started launch');
+      }
+
+      // status: interrupted in its last state with the exact command, never active.
+      sleepSync(EXPIRY_WAIT_MS);
+      const text = statusCli(roots);
+      assert.equal(text.code, 0, text.stderr);
+      assert.ok(text.stdout.includes(`avarice resume ${id}`), text.stdout);
+      assert.match(text.stdout, /interrupted in /);
+      assert.ok(!/: active/.test(text.stdout), `an interrupted onboarding is never shown as active:\n${text.stdout}`);
+      const [entry] = JSON.parse(statusCli(roots, '--json').stdout) as StatusEntry[];
+      assert.ok(entry);
+      assert.equal(entry.recordVersion, null);
+      assert.deepEqual(entry.interrupted, { ...EXPECTED_AT_KILL[point], resumeCommand: `avarice resume ${id}` });
+      assert.equal(entry.state, EXPECTED_AT_KILL[point].state);
+
+      // resume reaches active.
+      const resumed = resumeCli(roots, id);
+      assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+      assert.match(resumed.stdout, new RegExp(`onboarding ${id}: active`));
+      const [after] = JSON.parse(statusCli(roots, '--json').stdout) as StatusEntry[];
+      assert.equal(after?.state, 'active');
+      assert.equal(after?.interrupted, undefined);
+
+      // The record, the map documents, the snapshot manifest, the staging tree and the user checkout equal an uninterrupted run.
+      const outcome = outcomeOf(roots);
+      assert.deepEqual(outcome.record, reference.record, 'normalized project record body');
+      assert.deepEqual(outcome.codebaseDigests, reference.codebaseDigests, 'map document digests');
+      assert.deepEqual(outcome.manifest, reference.manifest, 'snapshot manifest');
+      assert.equal(outcome.stagingDigest, reference.stagingDigest, 'staging tree');
+      assert.deepEqual(checkoutSnapshot(repo.path), pristine, 'the user checkout is byte-identical');
+
+      // Every launch is recorded, and none is left in flight.
+      const launches = rows<{ attempt: number; status: string }>(roots, "SELECT attempt, status FROM onboarding_steps WHERE step = 'launch:map' ORDER BY attempt");
+      assert.ok(launches.length >= 1, 'a launch row exists per invocation');
+      assert.ok(launches.every((l) => l.status !== 'started'), `no launch left in flight: ${JSON.stringify(launches)}`);
+      if (point === 'mid-invocation') {
+        assert.deepEqual(launches, [
+          { attempt: 1, status: 'interrupted' },
+          { attempt: 2, status: 'completed' },
+        ]);
+      } else {
+        assert.equal(launches.filter((l) => l.status === 'completed').length, 1, 'one completed invocation');
+      }
+
+      // The lifecycle ends active exactly once.
+      const transitions = transitionsOf(roots);
+      assert.equal(transitions.filter((t) => t.to === 'active').length, 1);
+      assert.equal(transitions.at(-1)?.to, 'active');
+    });
+  }
+});
