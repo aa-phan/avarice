@@ -11,6 +11,7 @@ import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import { loadContract, loadMappingPlan, MAP_DIR, stagingPathOf, stampFastMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
+import { reserveInvocation, settleInvocation } from '../budget.ts';
 
 const MAP_PROMPT = '/gsd-map-codebase';
 const FAST_MAP_PROMPT = '/gsd-map-codebase --fast';
@@ -50,7 +51,18 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   if (!steps.ok) return steps;
   const attempt = steps.value.filter((s) => s.step === 'launch:map').length + 1;
 
-  const { budgets, execution } = contract.value.body;
+  // Reserve the invocation before anything is launched: with no invocation, wall clock or cost left the
+  // onboarding ends blocked (budget_exhausted) and the host is never called (ONB-8, CON-13).
+  const reserved = reserveInvocation(deps, row, 'map');
+  if (!reserved.ok) return reserved;
+  if (!reserved.value.granted) {
+    ctx.note(`the ${reserved.value.budget} budget is exhausted, so no map invocation was started`);
+    const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'budget_exhausted', data: { budget: reserved.value.budget } });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
+  const reservation = reserved.value.reservation;
+
+  const { execution } = contract.value.body;
   const request: InvocationRequest = {
     onboardingId: row.onboardingId,
     runId: contract.value.runId,
@@ -61,8 +73,8 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
     prompt: promptFor(mode, plan.value?.existingMapAnswer),
     cwd: staging.value,
     model: execution.model,
-    costCapUsd: budgets.costUsd.perInvocation,
-    wallClockMs: budgets.wallClockShares.map * 60_000,
+    costCapUsd: reservation.costCapUsd,
+    wallClockMs: reservation.wallClockMs,
   };
 
   const startedMs = deps.clock.nowMs();
@@ -76,6 +88,12 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   if (!started.ok) return started;
 
   const outcome = await deps.host.invoke(request, AbortSignal.timeout(Math.max(request.wallClockMs, 1)));
+  // Settle first, whatever happened: the invocation ran, so its unit, its time and its cost are spent.
+  const settled = settleInvocation(deps, reservation, {
+    durationMs: outcome.ok ? outcome.value.durationMs : deps.clock.nowMs() - startedMs,
+    costUsd: outcome.ok ? outcome.value.costUsd : 0,
+  });
+  if (!settled.ok) return settled;
   if (!outcome.ok) {
     const failed = deps.ledger.recordStepResult(row.onboardingId, {
       step: 'launch:map',
@@ -116,8 +134,13 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
     if (!stamped.ok) return stamped;
   }
 
-  const data = { invocationId: request.invocationId, outcome: o.kind, costUsd: o.costUsd };
-  switch (o.kind) {
+  // A hook denial for budget_exhausted during the invocation ends the onboarding the same way as the host
+  // reporting it: the run cannot continue on a budget that is spent.
+  const denials = deps.ledger.countBudgetDenials(request.runId, request.invocationId);
+  if (!denials.ok) return denials;
+  const kind = denials.value > 0 ? 'budget_exhausted' : o.kind;
+  const data = { invocationId: request.invocationId, outcome: kind, costUsd: o.costUsd };
+  switch (kind) {
     case 'progressed': {
       const moved = ctx.transition(row, 'validating', 'validate', { data });
       return moved.ok ? ok(undefined) : moved;
@@ -141,6 +164,6 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
       return moved.ok ? ok(undefined) : moved;
     }
     default:
-      return err({ kind: 'internal', cause: `unknown invocation outcome ${String(o.kind)}` });
+      return err({ kind: 'internal', cause: `unknown invocation outcome ${String(kind)}` });
   }
 };

@@ -4,10 +4,12 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { compileOnboardingContract, contractDigest } from '../../domain/onboarding-contract.ts';
+import type { OnboardingContract } from '../../domain/onboarding-contract.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { stopIncompatible } from './shared.ts';
+import { budgetRowsOf } from '../budget.ts';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -69,10 +71,20 @@ export const contractStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
         body: compiled.value,
         policyRevision: compiled.value.policyRevision,
         authorizedBy: 'policy:onboarding',
+        budgets: budgetRowsOf(compiled.value),
         nowMs,
       },
     );
     if (!stored.ok) return stored;
+  } else {
+    // The contract exists: the budget rows are created with it, so this finds them and changes nothing. It only
+    // fills in rows a store written before budgets existed lacks (createBudgets never resets or raises a row).
+    const existing = deps.ledger.getContract(row.onboardingId);
+    if (!existing.ok) return existing;
+    if (existing.value !== null) {
+      const ensured = deps.ledger.createBudgets(existing.value.runId, existing.value.version, budgetRowsOf(existing.value.body as OnboardingContract));
+      if (!ensured.ok) return ensured;
+    }
   }
 
   // The row's version is unchanged by storeContract, so the stage's row is still current.

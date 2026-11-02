@@ -7,6 +7,8 @@
 export interface ParsedArgs {
   positionals: string[];
   flags: Record<string, string | true>;
+  // Every value a flag was given, in order, for repeatable flags (`--budget a=1 --budget b=2`); `flags` keeps the last.
+  repeated?: Record<string, string[]>;
 }
 
 export interface ParseOptions {
@@ -18,6 +20,10 @@ export function parseArgs(argv: readonly string[], options: ParseOptions = {}): 
   const booleans = new Set(options.boolean ?? []);
   const positionals: string[] = [];
   const flags: Record<string, string | true> = {};
+  const repeated: Record<string, string[]> = {};
+  const note = (name: string, value: string): void => {
+    (repeated[name] ??= []).push(value);
+  };
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i] as string;
     if (word === '--') {
@@ -31,18 +37,20 @@ export function parseArgs(argv: readonly string[], options: ParseOptions = {}): 
     const eq = word.indexOf('=');
     if (eq !== -1) {
       flags[word.slice(2, eq)] = word.slice(eq + 1);
+      note(word.slice(2, eq), word.slice(eq + 1));
       continue;
     }
     const name = word.slice(2);
     const next = argv[i + 1];
     if (!booleans.has(name) && next !== undefined && !next.startsWith('--')) {
       flags[name] = next;
+      note(name, next);
       i += 1;
     } else {
       flags[name] = true;
     }
   }
-  return { positionals, flags };
+  return { positionals, flags, repeated };
 }
 
 export interface Io {

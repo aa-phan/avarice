@@ -412,6 +412,7 @@ export class SqliteLedger implements Ledger {
         .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(input.runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, now);
       this.db.prepare('UPDATE onboardings SET contract_run_id = ?, updated_at = ? WHERE onboarding_id = ?').run(input.runId, now, onboardingId);
+      if (input.budgets !== undefined) this.insertBudgets(input.runId, version, input.budgets);
       this.insertEvent({ type: 'contract.stored', runId: input.runId, data: { onboardingId, runId: input.runId, version, digest: input.digest }, nowMs: input.nowMs });
       return toContract(this.db.prepare('SELECT * FROM contracts WHERE run_id = ? AND version = ?').get(input.runId, version) as Row);
     });
@@ -544,26 +545,76 @@ export class SqliteLedger implements Ledger {
     }
   }
 
-  // ---- budgets (STUBS for the RED commit) -------------------------------------------------------------
+  // ---- budgets --------------------------------------------------------------------------------------
 
-  createBudgets(_runId: string, _contractVersion: number, _rows: readonly BudgetRowInput[]): Result<BudgetRow[]> {
-    return err({ kind: 'unsupported', capability: 'budgets' });
+  // Creates the rows that do not exist yet and leaves existing ones alone, so a retry or a resume can never
+  // reset a counter or raise a limit (RC-5, ONB-8). Returns every row of the run.
+  createBudgets(runId: string, contractVersion: number, rows: readonly BudgetRowInput[]): Result<BudgetRow[]> {
+    return tx(this.db, () => {
+      this.insertBudgets(runId, contractVersion, rows);
+      return this.readBudgets(runId);
+    });
   }
 
-  reserveBudget(_runId: string, _name: string, _amount: number): Result<BudgetReservation> {
-    return err({ kind: 'unsupported', capability: 'budgets' });
+  private insertBudgets(runId: string, contractVersion: number, rows: readonly BudgetRowInput[]): void {
+    const insert = this.db.prepare(
+      'INSERT OR IGNORE INTO budgets (run_id, name, limit_value, used, reserved, exactness, contract_version) VALUES (?, ?, ?, 0, 0, ?, ?)',
+    );
+    for (const row of rows) {
+      if (row.name === '') abort({ kind: 'invalid', field: 'budget.name', reason: 'a budget needs a name' });
+      if (!Number.isFinite(row.limit) || row.limit < 0) abort({ kind: 'invalid', field: `budget.${row.name}`, reason: 'a budget limit is a finite non-negative number' });
+      insert.run(runId, row.name, row.limit, row.exactness, contractVersion);
+    }
   }
 
-  chargeBudget(_runId: string, _name: string, _amount: number, _options: { fromReserved: boolean }): Result<BudgetRow> {
-    return err({ kind: 'unsupported', capability: 'budgets' });
+  private readBudgets(runId: string): BudgetRow[] {
+    return (this.db.prepare('SELECT * FROM budgets WHERE run_id = ? ORDER BY name').all(runId) as Row[]).map(toBudget);
   }
 
-  getBudgets(_runId: string): Result<BudgetRow[]> {
-    return err({ kind: 'unsupported', capability: 'budgets' });
+  private readBudget(runId: string, name: string): BudgetRow {
+    const row = this.db.prepare('SELECT * FROM budgets WHERE run_id = ? AND name = ?').get(runId, name) as Row | undefined;
+    if (!row) throw notFound(`budget ${name} of ${runId}`);
+    return toBudget(row);
   }
 
-  countBudgetDenials(_runId: string, _invocationId: string): Result<number> {
-    return err({ kind: 'unsupported', capability: 'budgets' });
+  // The spec's single conditional UPDATE: it changes one row only while the reservation still fits.
+  reserveBudget(runId: string, name: string, amount: number): Result<BudgetReservation> {
+    return tx(this.db, () => {
+      checkAmount(amount);
+      const changed = this.db
+        .prepare('UPDATE budgets SET reserved = reserved + ? WHERE run_id = ? AND name = ? AND used + reserved + ? <= limit_value')
+        .run(amount, runId, name, amount).changes;
+      return { granted: Number(changed) > 0, budget: this.readBudget(runId, name) };
+    });
+  }
+
+  chargeBudget(runId: string, name: string, amount: number, options: { fromReserved: boolean }): Result<BudgetRow> {
+    return tx(this.db, () => {
+      checkAmount(amount);
+      this.readBudget(runId, name);
+      if (options.fromReserved) {
+        const changed = this.db
+          .prepare('UPDATE budgets SET reserved = reserved - ?, used = used + ? WHERE run_id = ? AND name = ? AND reserved >= ?')
+          .run(amount, amount, runId, name, amount).changes;
+        if (Number(changed) === 0) abort({ kind: 'conflict', expected: `a reservation of at least ${amount} on ${name}`, actual: `reserved ${this.readBudget(runId, name).reserved}` });
+      } else {
+        this.db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ?').run(amount, runId, name);
+      }
+      return this.readBudget(runId, name);
+    });
+  }
+
+  getBudgets(runId: string): Result<BudgetRow[]> {
+    return guarded(() => this.readBudgets(runId));
+  }
+
+  countBudgetDenials(runId: string, invocationId: string): Result<number> {
+    return guarded(() => {
+      const row = this.db
+        .prepare("SELECT count(*) AS n FROM events WHERE type = 'hook.decision' AND run_id = ? AND invocation_id = ? AND json_extract(data_json, '$.rule') = 'budget_exhausted'")
+        .get(runId, invocationId) as { n: number };
+      return Number(row.n);
+    });
   }
 
   recordArtifact(input: ArtifactInput): Result<void> {
@@ -588,6 +639,22 @@ export class SqliteLedger implements Ledger {
 
 function notFound(ref: string): LedgerAbort {
   return new LedgerAbort({ kind: 'not_found', ref });
+}
+
+function checkAmount(amount: number): void {
+  if (!Number.isFinite(amount) || amount < 0) abort({ kind: 'invalid', field: 'amount', reason: 'a budget amount is a finite non-negative number' });
+}
+
+function toBudget(r: Row): BudgetRow {
+  return {
+    runId: str(r['run_id']),
+    name: str(r['name']),
+    limit: Number(r['limit_value']),
+    used: Number(r['used']),
+    reserved: Number(r['reserved']),
+    exactness: str(r['exactness']) as BudgetRow['exactness'],
+    contractVersion: Number(r['contract_version']),
+  };
 }
 
 function toContract(r: Row): ContractRow {
