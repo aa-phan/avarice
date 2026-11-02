@@ -63,10 +63,12 @@ const TARGET_FILES: Readonly<Record<string, string>> = {
 function targetShaped(): { repo: ScratchRepo; pin: string } {
   const repo = makeScratchRepo({ files: TARGET_FILES });
   cleanups.push(repo.dispose);
-  // A gitlink (mode 160000) without a checked-out directory, committed straight from the index.
+  // A gitlink (mode 160000), committed straight from the index.
   git(repo.path, ['update-index', '--add', '--cacheinfo', `160000,${repo.head},vendor/sub`]);
   git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'add a submodule entry']);
   const pin = git(repo.path, ['rev-parse', 'HEAD']).trim();
+  // git leaves an empty directory where an uninitialized submodule is; without it status reports a deletion.
+  mkdirSync(join(repo.path, 'vendor', 'sub'), { recursive: true });
   writeFileSync(join(repo.path, 'src', 'index.ts'), 'export const answer = 43;\n');
   writeFileSync(join(repo.path, '.env'), `API_KEY=${SECRET}\n`);
   mkdirSync(join(repo.path, 'scratch'));

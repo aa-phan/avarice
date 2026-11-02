@@ -1,7 +1,8 @@
 // avarice onboard --policy onboarding [--promote none] <repo>
 // Registers the repository, runs the onboarding stages under a lease and prints where it ended.
 // Exit 0 when the project is active, 3 when onboarding stopped without activating (blocked,
-// incompatible, paused), 64 for a usage error, 70 for an internal failure.
+// incompatible, paused) or was refused (existing_state_conflict), 64 for a usage error (including a
+// promotion other than none), 70 for an internal failure.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { ONBOARDING_POLICY, runOnboarding, startOnboarding } from '../../app/onboarding-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
@@ -26,7 +27,8 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
 
   const started = startOnboarding(deps, { repoPath, policy, ...(promote !== undefined ? { promote } : {}) });
   if (!started.ok) {
-    io.err(`avarice onboard: ${describeError(started.error)}\n`);
+    io.err(`avarice onboard: ${started.error.kind === 'conflict' ? 'refused: ' : ''}${describeError(started.error)}\n`);
+    if (started.error.kind === 'conflict') return EXIT_NOT_ACTIVE;
     return started.error.kind === 'invalid' || started.error.kind === 'not_found' ? EXIT_USAGE : EXIT_INTERNAL;
   }
 

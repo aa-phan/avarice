@@ -16,6 +16,7 @@ import type {
   StagingWorkspace,
   WorkspaceDescription,
 } from '../../ports/staging-workspace.ts';
+import { collectRepoFacts, parseStatus } from './repo-facts.ts';
 import { runGit } from './safe-git.ts';
 
 export const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -77,50 +78,6 @@ function checkRelative(relPath: string): Result<string[]> {
   if (segments.includes('..')) return denied('staging-paths-stay-inside-staging');
   if (segments.length === 0) return invalid('relPath', 'a relative path is required');
   return ok(segments);
-}
-
-function stripCredentials(url: string): string {
-  return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1');
-}
-
-interface StatusEntries {
-  modified: string[];
-  untracked: string[];
-}
-
-// `git status --porcelain=v2 -z`: records are NUL separated; a rename or copy record (`2`) is followed by
-// one extra NUL-separated field, its original path.
-function parseStatus(stdout: string): StatusEntries {
-  const modified: string[] = [];
-  const untracked: string[] = [];
-  const fields = stdout.split('\0');
-  const pathAfter = (record: string, spaces: number): string => {
-    let from = 0;
-    for (let i = 0; i < spaces; i++) from = record.indexOf(' ', from) + 1;
-    return record.slice(from);
-  };
-  for (let i = 0; i < fields.length; i++) {
-    const record = fields[i] as string;
-    if (record.length === 0) continue;
-    switch (record[0]) {
-      case '1':
-        modified.push(pathAfter(record, 8));
-        break;
-      case '2':
-        modified.push(pathAfter(record, 9));
-        i++;
-        break;
-      case 'u':
-        modified.push(pathAfter(record, 10));
-        break;
-      case '?':
-        untracked.push(record.slice(2));
-        break;
-      default:
-        break;
-    }
-  }
-  return { modified: modified.sort(), untracked: untracked.sort() };
 }
 
 export abstract class GitStagingWorkspace implements StagingWorkspace {
@@ -268,43 +225,6 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
   }
 
   inspectRepo(repoPath: string): Result<RepoFacts> {
-    const cwd = repoPath;
-    const top = runGit(['rev-parse', '--show-toplevel'], { cwd });
-    if (!top.ok) return failure(top.error);
-    const roots = runGit(['rev-list', '--max-parents=0', 'HEAD'], { cwd });
-    if (!roots.ok) return failure(roots.error);
-    const pin = runGit(['rev-parse', 'HEAD'], { cwd });
-    if (!pin.ok) return failure(pin.error);
-    const branch = runGit(['branch', '--show-current'], { cwd });
-    if (!branch.ok) return failure(branch.error);
-    const status = runGit(['status', '--porcelain=v2', '-z', '--untracked-files=all'], { cwd, neutralizeFilters: true });
-    if (!status.ok) return failure(status.error);
-    const remote = runGit(['remote', 'get-url', 'origin'], { cwd });
-
-    // A repository can have several root commits; the lowest SHA is a stable, deterministic choice.
-    const rootCommit = roots.value.stdout.split('\n').filter((line) => line.length > 0).sort()[0];
-    if (rootCommit === undefined) return err({ kind: 'internal', cause: 'repository has no root commit' });
-    const parsed = parseStatus(status.value.stdout);
-    const facts: RepoFacts = {
-      gitRoot: top.value.stdout.trim(),
-      rootCommit,
-      pin: pin.value.stdout.trim(),
-      branch: branch.value.stdout.trim(),
-      modified: parsed.modified,
-      untracked: parsed.untracked,
-      defaultBranch: null,
-      planningFiles: [],
-      codebaseMapFiles: [],
-      submodules: [],
-      nestedRepos: [],
-      workspaceManifests: [],
-      instructionFiles: [],
-      adrDirs: [],
-      runtimes: [],
-      trackedFiles: 0,
-      trackedBytes: 0,
-    };
-    if (remote.ok && remote.value.stdout.trim().length > 0) facts.remote = stripCredentials(remote.value.stdout.trim());
-    return ok(facts);
+    return collectRepoFacts(repoPath);
   }
 }

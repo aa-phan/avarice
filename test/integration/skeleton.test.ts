@@ -359,18 +359,19 @@ describe('a malformed map is retried once, then blocks with a decision', () => {
 });
 
 describe('promotion other than none is refused', () => {
-  it('--promote copy exits 3 with the compiler message before any staging exists', () => {
+  // Plan 01-08 moved this refusal from the contract stage (blocked, exit 3, after an onboarding row exists) to
+  // preflight: a usage error, exit 64, before a project, an onboarding, a contract or any staging exists. The
+  // contract compiler still refuses it too (test/unit/domain-contracts.test.ts), as defence in depth.
+  it('--promote copy exits 64 with the compiler message before any onboarding or staging exists', () => {
     const { roots, repo } = fixture();
     const before = checkoutSnapshot(repo.path);
     const r = onboardWithFake(roots, repo, {}, ['--promote', 'copy']);
-    assert.equal(r.code, 3, r.stderr + r.stdout);
-    assert.match(r.stdout, /blocked \(decision\)/);
-    assert.match(r.stdout, /request\.promote: promotion "copy" is not authorized: the onboarding preset allows only "none"/);
+    assert.equal(r.code, 64, r.stderr + r.stdout);
+    assert.match(r.stderr, /request\.promote: promotion "copy" is not authorized: the onboarding preset allows only "none"/);
 
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
-    const [onboarding] = rows<{ staging_worktree: string | null; contract_run_id: string | null }>(roots, 'SELECT staging_worktree, contract_run_id FROM onboardings');
-    assert.equal(onboarding?.staging_worktree, null);
-    assert.equal(onboarding?.contract_run_id, null, 'no contract was stored');
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM onboardings')[0]?.n, 0, 'no onboarding row');
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM projects')[0]?.n, 0, 'no project row');
     assert.deepEqual(readdirSync(roots.AVARICE_WORK_ROOT), [], 'nothing was created under the work root');
     assert.deepEqual(checkoutSnapshot(repo.path), before);
   });
