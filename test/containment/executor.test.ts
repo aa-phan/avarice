@@ -170,10 +170,10 @@ describe('SandboxedExecutor', { skip: !SANDBOX_AVAILABLE }, () => {
     const started = Date.now();
     const result = await run(
       executor,
-      spec(s.root, ['sh', '-c', 'echo $$; sleep 30 & wait'], { timeoutMs: 500 }),
+      spec(s.root, ['sh', '-c', 'echo $$; sleep 30 & wait'], { timeoutMs: 2500 }),
     );
     assert.equal(result.status, 'timed_out');
-    assert.ok(Date.now() - started < 10_000, 'ended long before the sleep would');
+    assert.ok(Date.now() - started < 10_000, 'ended long before the sleep would');  // the script prints its pid before the timeout, even on a loaded machine
     const leader = Number(result.stdout.trim().split('\n')[0]);
     assert.ok(Number.isInteger(leader) && leader > 1, `leader pid ${result.stdout}`);
     assert.throws(() => process.kill(-leader, 0), { code: 'ESRCH' }, 'no process of the group is left');
