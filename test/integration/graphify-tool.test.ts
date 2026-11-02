@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { createDeps } from '../../src/cli/composition.ts';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { GraphifyTool } from '../../src/adapters/graph/graphify.ts';
 import type { CommandExecutor, CommandSpec } from '../../src/ports/command-executor.ts';
-import { REPO_ROOT } from '../helpers/run-cli.ts';
+import { REPO_ROOT, makeRoots } from '../helpers/run-cli.ts';
 import { checkoutSnapshot, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
@@ -58,6 +60,7 @@ function tool(executor: CommandExecutor = new SandboxedExecutor(), env: NodeJS.P
   });
 }
 
+// Records every command the tool runs except `graphify --version` (locate), which is not what the tests count.
 function recording(inner: CommandExecutor): { executor: CommandExecutor; specs: CommandSpec[] } {
   const specs: CommandSpec[] = [];
   return {
@@ -65,7 +68,7 @@ function recording(inner: CommandExecutor): { executor: CommandExecutor; specs: 
     executor: {
       descriptor: inner.descriptor,
       run: (cmd, signal) => {
-        specs.push(cmd);
+        if (cmd.argv[1] !== '--version') specs.push(cmd);
         return inner.run(cmd, signal);
       },
     },
@@ -222,5 +225,29 @@ describe('GraphifyTool without graphify or a sandbox', () => {
     assert.equal(d.port, 'graph-tool');
     assert.equal(d.adapter, 'graphify');
     assert.equal(d.offline, true);
+  });
+});
+
+describe('composition', () => {
+  it('wires one sandboxed executor and the graph tool, and records both as adapter_configs rows', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    const composed = createDeps({ ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT });
+    assert.ok(composed.ok, JSON.stringify(composed));
+    try {
+      assert.ok(composed.value.deps.executor instanceof SandboxedExecutor);
+      assert.equal(composed.value.deps.graph.descriptor.adapter, 'graphify');
+    } finally {
+      composed.value.close();
+    }
+    const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+    try {
+      const rows = db.prepare('SELECT name, port, adapter FROM adapter_configs ORDER BY name').all() as Array<{ name: string; port: string; adapter: string }>;
+      const byName = Object.fromEntries(rows.map((r) => [r.name, `${r.port}/${r.adapter}`]));
+      assert.equal(byName['graph'], 'graph-tool/graphify');
+      assert.equal(byName['executor'], 'executor/local-sandbox-exec');
+    } finally {
+      db.close();
+    }
   });
 });

@@ -17,6 +17,7 @@ import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
+import { GraphifyTool } from '../adapters/graph/graphify.ts';
 import { UnavailableAgentHost } from '../adapters/host/unavailable-host.ts';
 import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
@@ -135,6 +136,23 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       return failure('cannot record the executor adapter', describeError(recorded.error));
     }
   }
+  // The graph tool. Building its descriptor executes nothing; the graphify version is read by locate() when the
+  // index stage uses it. A missing graphify is not a composition failure.
+  const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
+  const graph = new GraphifyTool(executor, { env, dataRoot: profile.dataRoot, home });
+  if (options.readOnly !== true) {
+    const recorded = ledger.upsertAdapterConfig({
+      name: 'graph',
+      port: graph.descriptor.port,
+      adapter: graph.descriptor.adapter,
+      configDigest: digestOf(graph.descriptor),
+      descriptor: graph.descriptor,
+    });
+    if (!recorded.ok) {
+      store.close();
+      return failure('cannot record the graph adapter', describeError(recorded.error));
+    }
+  }
   // Locate GSD (ONB-12). A read-only command (status) never runs GSD, so it does not look for it. Without an
   // admitted gsd-core no adapter exists and onboarding stops `incompatible` at the contract stage.
   let gsd: GsdOnboarding | undefined;
@@ -142,7 +160,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   if (options.readOnly !== true) {
     const located = locateGsdCore(env);
     if (located.ok) {
-      const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: profile.dataRoot, home: env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir() });
+      const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: profile.dataRoot, home });
       const stored = ledger.upsertAdapterConfig({
         name: 'gsd',
         port: adapter.descriptor.port,
@@ -168,7 +186,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile },
+      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile },
       close: () => {
         try {
           store.close();

@@ -3,6 +3,7 @@ import type { IdPrefix } from '../domain/ids.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
+import type { GraphTool } from '../ports/graph-tool.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
@@ -37,6 +38,9 @@ export interface AppDeps {
   // Runs every command AVARICE itself starts against staging (gsd-tools verbs, graphify) inside an OS sandbox
   // with the network denied; refuses to run when the sandbox is unavailable.
   executor: CommandExecutor;
+  // The code-graph tool (graphify), run through `executor`. Present even when graphify is not installed;
+  // `graph.locate()` then reports `unavailable` (graphify-missing).
+  graph: GraphTool;
   // The GSD adapter, present only when discovery found an admitted gsd-core (@opengsd/gsd-core 1.17.x).
   gsd?: GsdOnboarding;
   // Why `gsd` is absent: what discovery found and what is admitted. Onboarding stops `incompatible` with it.
