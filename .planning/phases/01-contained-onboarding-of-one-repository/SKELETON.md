@@ -129,4 +129,5 @@ Each later phase adds one vertical slice on this skeleton without changing the d
 | 01-16 | 7 | Live containment suite T3 on a scratch repository (authorized spend) |
 | 01-17 | 7 | Intel index step, `gsd-intel` and `gsd-graph` adapters, `avarice context` |
 | 01-18 | 7 | Knowledge pass, AVARICE graph merge, document-node validation |
-| 01-19 | 8 | Rehearsal and exit run on `~/aa-phan-portfolio-v2` with kill and resume (T4), AC-1 recorded |
+| 01-20 | 8 | Mutation and adversarial testing of the containment, validation and ledger units (FC-1 to FC-12); runs before the exit run |
+| 01-19 | 9 | Rehearsal and exit run on `~/aa-phan-portfolio-v2` with kill and resume (T4), AC-1 recorded |

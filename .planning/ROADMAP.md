@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 19 plans
+**Plans:** 20 plans
 
 Plans:
 **Wave 1**
@@ -87,6 +87,9 @@ Plans:
 - [ ] 01-18-PLAN.md — Knowledge pass with AVARICE graph merge and document-node validation
 
 **Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 01-20-PLAN.md — Mutation and adversarial testing of the containment, validation and ledger units before the exit run
+
+**Wave 9** *(blocked on Wave 8 completion)*
 - [ ] 01-19-PLAN.md — Rehearsal and exit run on ~/aa-phan-portfolio-v2 with kill and resume, AC-1 recorded
 
 **Notes**: Technical goal: `avarice onboard --policy onboarding` takes one existing local Git repository (`~/aa-phan-portfolio-v2`) to an active project record, with GSD as the semantic mapper, GSD intel and graph indexes recorded, source read-only and writes confined to the staging worktree. Suits `/gsd-mvp-phase`. Kernel built here: package skeleton with import-boundary lint, ledger on `node:sqlite`, contract compiler with the `onboarding` preset, staging worktree, generated host settings and hook set, contained Claude Code host adapter, `GsdOnboarding` adapter for GSD 1.17.x, index stage and knowledge pass, `gsd-intel` and `gsd-graph` adapters. The target already has committed GSD planning but no codebase map, so this phase exercises detection and non-overwrite of existing planning state, not adoption of a stamped map (Phase 4). Excluded: remote workers, dashboard, `ingest-docs`, path-scoped and incremental refresh, promotion `copy` and `commit`, active command validation.
@@ -207,7 +210,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 0. Contained onboarding of one repository | v1.0 | 0/19 | Planned | - |
+| 0. Contained onboarding of one repository | v1.0 | 0/20 | Planned | - |
 | 1. Contained unattended run of one work item | v1.0 | 0/TBD | Not started | - |
 | 2. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 3. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
