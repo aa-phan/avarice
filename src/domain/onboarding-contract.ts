@@ -8,6 +8,21 @@ import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import { MAPPING_MODES } from './mapping.ts';
 import type { MappingMode } from './mapping.ts';
+import { CORPUS_LIMITS } from './knowledge-corpus.ts';
+
+// How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, times
+// the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
+// so the number is explained by the contract that carries it.
+export interface SubagentDerivation {
+  mode: MappingMode;
+  mapAgents: number;
+  mapRounds: number;
+  knowledgeAllowance: number;
+  intelAgents: number;
+  // The derived ceiling; `budgets.subagentsTotal` is this value or a lower override.
+  total: number;
+  formula: string;
+}
 
 export interface OnboardingBudgets {
   wallClockMinutes: number;
@@ -16,6 +31,7 @@ export interface OnboardingBudgets {
   toolCalls: number;
   subagentsConcurrent: number;
   subagentsTotal: number;
+  subagentsDerivation: SubagentDerivation;
   costUsd: { perInvocation: number; perRun: number; exactness: 'estimated' | 'exact' };
   retry: number;
 }
@@ -127,9 +143,17 @@ export const ONBOARDING_PRESET = {
     invocations: 4,
     toolCalls: 600,
     subagentsConcurrent: 4,
-    subagentsTotal: 7,
     costUsd: { perInvocation: 3.0, perRun: 12.0, exactness: 'estimated' },
     retry: 1,
+  },
+  // The subagent total is derived from the mapping mode (see deriveSubagents), not a flat number.
+  subagents: {
+    // What one map round spawns: GSD's full map spawns 4 mappers, its fast map (scan, tech+arch) one; `paths` needs the full
+    // file set, `skip` and `adopt` run no mapper.
+    mapAgents: { full: 4, fast: 1, paths: 4, skip: 0, adopt: 0 },
+    // The knowledge pass spawns one subagent per `documentsPerSubagent` documents, up to the corpus cap.
+    knowledgeAllowance: Math.ceil(CORPUS_LIMITS.maxFiles / CORPUS_LIMITS.documentsPerSubagent),
+    intelAgents: 0,
   },
   indexes: { codeGraph: true, intel: true, knowledge: true },
 } as const;
@@ -149,7 +173,8 @@ const OVERRIDE_LIMITS: Readonly<Record<OverrideKey, { limit: number; integer: bo
   invocations: { limit: ONBOARDING_PRESET.budgets.invocations, integer: true },
   toolCalls: { limit: ONBOARDING_PRESET.budgets.toolCalls, integer: true },
   subagentsConcurrent: { limit: ONBOARDING_PRESET.budgets.subagentsConcurrent, integer: true },
-  subagentsTotal: { limit: ONBOARDING_PRESET.budgets.subagentsTotal, integer: true },
+  // The ceiling is derived from the mapping mode and the retry limit, so it is checked after the other overrides apply.
+  subagentsTotal: { limit: Number.POSITIVE_INFINITY, integer: true },
   costUsdPerInvocation: { limit: ONBOARDING_PRESET.budgets.costUsd.perInvocation, integer: false },
   costUsdPerRun: { limit: ONBOARDING_PRESET.budgets.costUsd.perRun, integer: false },
   retry: { limit: ONBOARDING_PRESET.budgets.retry, integer: true },
@@ -189,7 +214,25 @@ function readDirectories(field: string, raw: unknown): Result<string[]> {
 
 const unique = (items: readonly string[]): string[] => [...new Set(items)];
 
-function applyBudgetOverrides(raw: unknown): Result<OnboardingBudgets> {
+// The subagent total for a mapping mode and a map retry limit: map agents for the mode x (1 + retries) + the knowledge pass
+// allowance + intel's none (docs/repository-onboarding.md "Onboarding contract").
+export function deriveSubagents(mode: MappingMode, retry: number): SubagentDerivation {
+  const { mapAgents, knowledgeAllowance, intelAgents } = ONBOARDING_PRESET.subagents;
+  const perRound = mapAgents[mode];
+  const mapRounds = 1 + retry;
+  const total = perRound * mapRounds + knowledgeAllowance + intelAgents;
+  return {
+    mode,
+    mapAgents: perRound,
+    mapRounds,
+    knowledgeAllowance,
+    intelAgents,
+    total,
+    formula: `${perRound} map agents (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (ceil(${CORPUS_LIMITS.maxFiles} documents / ${CORPUS_LIMITS.documentsPerSubagent} per subagent)) + ${intelAgents} intel = ${total}`,
+  };
+}
+
+function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<OnboardingBudgets> {
   const preset = ONBOARDING_PRESET.budgets;
   const budgets: OnboardingBudgets = {
     wallClockMinutes: preset.wallClockMinutes,
@@ -197,12 +240,15 @@ function applyBudgetOverrides(raw: unknown): Result<OnboardingBudgets> {
     invocations: preset.invocations,
     toolCalls: preset.toolCalls,
     subagentsConcurrent: preset.subagentsConcurrent,
-    subagentsTotal: preset.subagentsTotal,
+    subagentsTotal: 0,
+    subagentsDerivation: deriveSubagents(mode, preset.retry),
     costUsd: { ...preset.costUsd },
     retry: preset.retry,
   };
+  budgets.subagentsTotal = budgets.subagentsDerivation.total;
   if (raw === undefined) return ok(budgets);
   if (!isPlainObject(raw)) return invalid('request.budgetOverrides', 'must be an object');
+  let requestedSubagentsTotal: number | undefined;
 
   for (const [key, value] of Object.entries(raw)) {
     const field = `request.budgetOverrides.${key}`;
@@ -229,7 +275,7 @@ function applyBudgetOverrides(raw: unknown): Result<OnboardingBudgets> {
         budgets.subagentsConcurrent = value;
         break;
       case 'subagentsTotal':
-        budgets.subagentsTotal = value;
+        requestedSubagentsTotal = value;
         break;
       case 'costUsdPerInvocation':
         budgets.costUsd.perInvocation = value;
@@ -241,6 +287,19 @@ function applyBudgetOverrides(raw: unknown): Result<OnboardingBudgets> {
         budgets.retry = value;
         break;
     }
+  }
+
+  // The derived total follows the retry limit in force; an override may only lower it.
+  budgets.subagentsDerivation = deriveSubagents(mode, budgets.retry);
+  budgets.subagentsTotal = budgets.subagentsDerivation.total;
+  if (requestedSubagentsTotal !== undefined) {
+    if (requestedSubagentsTotal > budgets.subagentsDerivation.total) {
+      return invalid(
+        'request.budgetOverrides.subagentsTotal',
+        `budgets can only be lowered: ${requestedSubagentsTotal} is above the ${budgets.subagentsDerivation.total} derived for mapping mode ${mode} (${budgets.subagentsDerivation.formula})`,
+      );
+    }
+    budgets.subagentsTotal = requestedSubagentsTotal;
   }
 
   // The per-purpose shares of the wall clock scale down with it, so they never sum above the total.
@@ -275,7 +334,7 @@ export function compileOnboardingContract(input: CompileInput): Result<Onboardin
     mode = request.mode as MappingMode;
   }
 
-  const budgets = applyBudgetOverrides(request.budgetOverrides);
+  const budgets = applyBudgetOverrides(request.budgetOverrides, mode);
   if (!budgets.ok) return budgets;
 
   const excluded = readDirectories('preflight.excludedDirectories', preflight.excludedDirectories);

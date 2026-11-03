@@ -286,12 +286,13 @@ describe('reservation and settlement', () => {
       assert.equal(toolCalls.limit, 600);
       assert.equal(toolCalls.used, 5);
 
-      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 7);
+      // The subagent limit of a full map: 4 x 2 + 10 (deferred item 11).
+      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 18);
       assert.ok(fits.ok && fits.value.granted);
       const over = deps.ledger.reserveBudget(runId, 'subagentsTotal', 1);
       assert.ok(over.ok);
       assert.equal(over.value.granted, false);
-      assert.equal(over.value.budget.reserved, 7);
+      assert.equal(over.value.budget.reserved, 18);
       assert.equal(deps.ledger.reserveBudget(runId, 'nope', 1).ok, false);
     });
   });
