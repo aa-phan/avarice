@@ -37,6 +37,15 @@ export const INVOCATION_PURPOSES = {
   knowledge: { writeDir: '.avarice-knowledge', cwd: 'write-dir' },
 } as const satisfies Record<InvocationPurpose, PurposeSpec>;
 
+// What each contained invocation may load: the skills the generated plugin directory links and the agents the
+// generated --agents file carries. map: the fast and full map skill and its mapper agent. intel: no skill, because
+// `claude -p --agent gsd-intel-updater` runs the agent directly (S0-D). knowledge: the graphify skill.
+export const PURPOSE_EXTENSIONS: Readonly<Record<InvocationPurpose, { skills: readonly string[]; agents: readonly string[] }>> = {
+  map: { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] },
+  intel: { skills: [], agents: ['gsd-intel-updater'] },
+  knowledge: { skills: ['graphify'], agents: [] },
+};
+
 // Commands the hook admits without a GSD verb. `find` is admitted only without the actions in
 // FIND_DENIED_ACTIONS; the other entries are admitted as written (the hook also refuses redirections, `git -c`
 // and `git log --output`).

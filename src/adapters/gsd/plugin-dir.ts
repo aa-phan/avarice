@@ -7,18 +7,13 @@ import { join } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
-import type { InvocationPurpose } from '../../domain/invocation-scope.ts';
 import { PLAIN_NAME } from './agents-json.ts';
 
 export const PLUGIN_NAME = 'avarice-run-skills';
 
-// What each contained invocation may load. map: the fast and full map skill and its mapper agent. intel: no skill,
-// because `claude -p --agent gsd-intel-updater` runs the agent directly (S0-D). knowledge: the graphify skill.
-export const PURPOSE_EXTENSIONS: Readonly<Record<InvocationPurpose, { skills: readonly string[]; agents: readonly string[] }>> = {
-  map: { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] },
-  intel: { skills: [], agents: ['gsd-intel-updater'] },
-  knowledge: { skills: ['graphify'], agents: [] },
-};
+// What each contained invocation may load is PURPOSE_EXTENSIONS (src/domain/invocation-scope.ts); re-exported here, where
+// the plugin directory and the --agents file are built from it.
+export { PURPOSE_EXTENSIONS } from '../../domain/invocation-scope.ts';
 
 export function buildPluginDir(outDir: string, skillsRoot: string, names: readonly string[]): Result<{ dir: string; skills: string[] }> {
   // Resolve every skill before creating anything, so a missing skill leaves no half-built plugin.
