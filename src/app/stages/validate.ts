@@ -6,6 +6,7 @@
 // containment finding (T-01-23). App code never runs git or reads the filesystem directly.
 import { ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import { referencesOf } from '../../domain/path-references.ts';
 import { VALIDATION_LIMITS, validateMapArtifacts, writeSetsFor } from '../../domain/validation.ts';
 import type { MapValidation } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
@@ -42,6 +43,11 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   if (!extra.ok) return extra;
   const tracked = deps.staging.listTracked(staging.value, pin);
   if (!tracked.ok) return tracked;
+  // A reference the repository's own committed .gitignore rules ignore is declared build output or local config, so it counts as
+  // known (deferred item 10). Git decides which references those are, from the rules at the pin.
+  const references = referencesOf(documents.value.map((d) => d.text));
+  const ignored = references.length === 0 ? ok([] as string[]) : deps.staging.ignoredByCommittedRules(staging.value, pin, references);
+  if (!ignored.ok) return ignored;
 
   // The agent write sets of the invocations that ran (steps `launch:<purpose>`), plus the AVARICE write set.
   const steps = deps.ledger.getStepResults(row.onboardingId);
@@ -63,6 +69,7 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
       allowedWrite: writeSets.allowedWrite,
       trackedWritable: writeSets.trackedWritable,
       knownPaths: tracked.value,
+      ignoredReferences: ignored.value,
     },
     { mode: mode.value },
     VALIDATION_LIMITS,

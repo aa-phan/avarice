@@ -93,7 +93,8 @@ describe('ignoredByCommittedRules: git matches the committed .gitignore files at
   it('does not honour a .gitignore that is a symbolic link in the tree', () => {
     const repo = scratch({ files: FILES });
     mkdirSync(join(repo.path, 'link'));
-    symlinkSync('../sub/.gitignore', join(repo.path, 'link', '.gitignore'));
+    // The link target text is itself a valid rule (`gen`), so a reader that treated the link's blob as a rule file would ignore link/gen.
+    symlinkSync('gen', join(repo.path, 'link', '.gitignore'));
     git(repo.path, ['add', '-A']);
     git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'link']);
     const pin = git(repo.path, ['rev-parse', 'HEAD']).trim();
@@ -129,7 +130,7 @@ describe('ignoredByCommittedRules: git matches the committed .gitignore files at
 });
 
 // The real full map of ~/aa-phan-portfolio-v2 from the 01-19 rehearsal 3 (test/fixtures/live-full-map: the seven documents the mapper
-// wrote, the tracked paths and the root .gitignore at the pin). 32 of 311 named paths dangled before this rule.
+// wrote, the tracked paths and the root .gitignore at the pin). 32 of 311 named paths dangled before this rule, 28 after.
 describe('the real full map of the exit rehearsal', () => {
   const fixture = (name: string): string => readFileSync(join(REPO_ROOT, 'test', 'fixtures', 'live-full-map', name), 'utf8');
   const documents = FULL_MAP_FILES.map((path) => ({ path, text: fixture(path.split('/').at(-1) as string) }));
@@ -147,15 +148,15 @@ describe('the real full map of the exit rehearsal', () => {
     const { ws, staging } = stagingOf(repo);
     const unique = [...new Set(refs)];
     const ignored = must(ws.ignoredByCommittedRules(staging, repo.head, unique));
-    assert.deepEqual(ignored.filter((r) => before.dangling.includes(r)), ['dist', 'node_modules', 'node_modules/.bin/oxlint']);
+    // git's own matching: the unanchored rule `dist` also matches `lenis/dist/lenis.css`, a path inside an npm package.
+    const forgiven = ['lenis/dist/lenis.css', 'dist', 'node_modules', 'node_modules/.bin/oxlint'];
+    assert.deepEqual(ignored.filter((r) => before.dangling.includes(r)), forgiven);
 
     const after = danglingShare(refs, known, own, ignored);
     assert.equal(after.total, 311);
-    assert.deepEqual(
-      after.dangling,
-      before.dangling.filter((r) => !['dist', 'node_modules', 'node_modules/.bin/oxlint'].includes(r)),
-    );
-    assert.equal(after.dangling.length, 29);
+    assert.deepEqual(after.ignored, forgiven.slice(0).sort((a, b) => unique.indexOf(a) - unique.indexOf(b)));
+    assert.deepEqual(after.dangling, before.dangling.filter((r) => !forgiven.includes(r)));
+    assert.equal(after.dangling.length, 28);
     // Still above the 5% limit: this rule alone does not make the real map pass. Nothing else was relaxed.
     assert.ok(after.share > 0.05, `${after.share}`);
   });
@@ -164,8 +165,8 @@ describe('the real full map of the exit rehearsal', () => {
 // End to end with the fake host: the map documents name build output the repository's own .gitignore declares.
 describe('validation through the CLI', () => {
   const IGNORED_REFS = Array.from({ length: 10 }, (_, i) => `dist/out-${i}.js`);
-  const inject = `Build output (not committed): ${IGNORED_REFS.map((p) => `\`${p}\``).join(', ')}.`;
-  const injectMissing = `Build output: ${IGNORED_REFS.map((p) => `\`${p.replace('dist/', 'build/')}\``).join(', ')}.`;
+  const inject = `The bundler writes ${IGNORED_REFS.map((p) => `\`${p}\``).join(', ')}.`;
+  const injectMissing = `The bundler writes ${IGNORED_REFS.map((p) => `\`${p.replace('dist/', 'build/')}\``).join(', ')}.`;
 
   function onboard(repo: ScratchRepo, roots: CliRoots, host: object) {
     return runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify(host) } });

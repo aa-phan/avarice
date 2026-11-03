@@ -39,6 +39,11 @@ export interface RunGitOptions {
   // Neutralize every filter driver of the repository at `cwd` for this call. Use it on every call that
   // compares or writes working-tree files (`status`, `diff`, `checkout`, `worktree add`).
   neutralizeFilters?: boolean;
+  // Exit statuses besides 0 that are an answer, not a failure (`git check-ignore` exits 1 when nothing is ignored).
+  acceptExit?: readonly number[];
+  // Ignore the user's and the machine's exclude files (`core.excludesFile` is set to /dev/null for the call), so only the
+  // repository's own rules decide what `check-ignore` reports.
+  noUserExcludes?: boolean;
 }
 
 export interface GitOutput {
@@ -116,14 +121,18 @@ export function runGit(args: readonly string[], options: RunGitOptions): Result<
   const timeoutMs = options.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS;
   const refusal = refuseUnsafeArgs(args);
   if (refusal !== null) return err({ kind: 'invalid', field: 'git argv', reason: refusal });
-  const env = safeGitEnv(process.env, options.neutralizeFilters === true ? filterOverrides(options.cwd) : []);
+  const extraConfig: ConfigEntry[] = [
+    ...(options.neutralizeFilters === true ? filterOverrides(options.cwd) : []),
+    ...(options.noUserExcludes === true ? ([['core.excludesFile', '/dev/null']] as const) : []),
+  ];
+  const env = safeGitEnv(process.env, extraConfig);
   const result = spawnGit(args, options.cwd, env, timeoutMs);
   if (result.error) {
     const code = (result.error as NodeJS.ErrnoException).code;
     if (code === 'ETIMEDOUT') return err({ kind: 'timeout', afterMs: timeoutMs, sideEffect: 'unknown' });
     return err({ kind: 'unavailable', cause: `git could not run: ${code ?? result.error.message}` });
   }
-  if (result.status !== 0) {
+  if (result.status !== 0 && !(result.status !== null && (options.acceptExit ?? []).includes(result.status))) {
     const reason = (result.stderr ?? '').trim().split('\n')[0] ?? '';
     return err({ kind: 'internal', cause: `git ${args[0] ?? ''} exited ${result.status ?? `by signal ${result.signal ?? 'unknown'}`}: ${reason}` });
   }

@@ -11,7 +11,8 @@
 //     (`actions/checkout@v4`), a dotted identifier (`process.env`, `res.json`);
 //   - a clause that says the thing is absent, or ignored by git ("there is no X", "not present", "does not
 //     exist", "without a .env", "`.gitignore` excludes X") names nothing that must exist, so its paths are skipped.
-// A real path that does not exist, named in a neutral clause, still counts and still dangles.
+// A real path that does not exist, named in a neutral clause, still counts and still dangles, unless the repository's own
+// committed .gitignore rules ignore it (see danglingShare).
 // Pure: knownPaths is an argument.
 
 import { matchesAny } from './glob.ts';
@@ -117,6 +118,13 @@ function clausesOf(line: string): string[] {
   return line.split(/[;|]|(?<=[.!?])\s+(?=[A-Z`(])/).filter((c) => c.trim() !== '');
 }
 
+// The unique references of several documents, in first-seen order.
+export function referencesOf(texts: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  for (const text of texts) for (const ref of extractPathReferences(text)) seen.add(ref);
+  return [...seen];
+}
+
 // Unique, normalized references in first-seen order.
 export function extractPathReferences(markdown: string): string[] {
   const seen = new Set<string>();
@@ -140,14 +148,23 @@ export function extractPathReferences(markdown: string): string[] {
 export interface DanglingResult {
   total: number;
   dangling: string[];
+  // References that resolved only because the repository's own committed .gitignore rules ignore them.
+  ignored: string[];
   // dangling / total; 0 when there are no references.
   share: number;
 }
 
 // A reference resolves when it is a known file, a directory containing a known file, matches an own glob (the
-// paths AVARICE itself writes in staging, `dir/**` covers the directory and what lies below it), or (with no
-// slash) is the name of a known file or directory somewhere in the tree.
-export function danglingShare(refs: readonly string[], knownPaths: Iterable<string>, ownGlobs: readonly string[] = [], _ignored: Iterable<string> = []): DanglingResult {
+// paths AVARICE itself writes in staging, `dir/**` covers the directory and what lies below it), (with no
+// slash) is the name of a known file or directory somewhere in the tree, or is one of `ignored`: the references the
+// repository's own committed .gitignore rules ignore (declared build output or local config; git decides which, the
+// caller asks it). The share limit is applied by the caller and is not widened by any of this.
+export function danglingShare(
+  refs: readonly string[],
+  knownPaths: Iterable<string>,
+  ownGlobs: readonly string[] = [],
+  ignored: Iterable<string> = [],
+): DanglingResult {
   const files = new Set<string>();
   const directories = new Set<string>();
   const names = new Set<string>();
@@ -165,9 +182,14 @@ export function danglingShare(refs: readonly string[], knownPaths: Iterable<stri
     const parts = glob.replace(/[*?].*$/, '').split('/').filter((part) => part !== '');
     for (let i = 1; i <= parts.length; i += 1) directories.add(parts.slice(0, i).join('/'));
   }
+  const ignoredSet = new Set(ignored);
   const unique = [...new Set(refs)];
-  const dangling = unique.filter(
-    (ref) => !(files.has(ref) || directories.has(ref) || (!ref.includes('/') && names.has(ref)) || matchesAny(ref, ownGlobs)),
-  );
-  return { total: unique.length, dangling, share: unique.length === 0 ? 0 : dangling.length / unique.length };
+  const dangling: string[] = [];
+  const byIgnoreRule: string[] = [];
+  for (const ref of unique) {
+    if (files.has(ref) || directories.has(ref) || (!ref.includes('/') && names.has(ref)) || matchesAny(ref, ownGlobs)) continue;
+    if (ignoredSet.has(ref)) byIgnoreRule.push(ref);
+    else dangling.push(ref);
+  }
+  return { total: unique.length, dangling, ignored: byIgnoreRule, share: unique.length === 0 ? 0 : dangling.length / unique.length };
 }

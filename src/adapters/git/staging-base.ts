@@ -3,8 +3,8 @@
 // directories the sandbox must deny; reads, edits-against-the-pin, listing and confined file access are common.
 // Every git call goes through runGit, which carries the safe-git environment; calls that compare or write
 // working-tree files also neutralize the repository's filter drivers.
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
@@ -21,6 +21,18 @@ import { runGit } from './safe-git.ts';
 
 export const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 export const ONBOARDING_ID = /^[A-Za-z0-9_]{1,64}$/;
+
+// Limits of the ignore-rule reader (see ignoredByCommittedRules).
+const MAX_IGNORE_FILES = 200;
+const MAX_IGNORE_FILE_BYTES = 1024 * 1024;
+const MAX_IGNORE_CANDIDATES = 5000;
+const IGNORE_CHUNK = 500;
+
+// A candidate git can be asked about on its command line without quoting or option confusion: plain path characters only.
+const isCheckable = (candidate: string): boolean => /^[A-Za-z0-9._+@][A-Za-z0-9._+@/-]*$/.test(candidate) && !candidate.split('/').some((segment) => segment === '' || segment === '.' || segment === '..');
+
+// A last segment with no extension may name a directory (`dist`, `.shots`, `node_modules`).
+const mayBeDirectory = (candidate: string): boolean => (candidate.split('/').at(-1) as string).lastIndexOf('.') <= 0;
 
 export function invalid(field: string, reason: string): Result<never> {
   return err({ kind: 'invalid', field, reason });
@@ -136,8 +148,78 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
   }
 
-  ignoredByCommittedRules(_path: string, _pin: string, _candidates: readonly string[]): Result<string[]> {
-    return ok([]);
+  // Which candidates the repository's own committed `.gitignore` files ignore at the pin (deferred item 10). The rule files are
+  // read as blobs of the pinned tree and written into a throwaway repository beside staging (a fresh `git init` with no
+  // template, no user or system excludes), and `git check-ignore --no-index` there decides, so git's own matching applies
+  // (anchoring, nesting, negation, directory rules, ignored parents) and nothing the staging working tree, its
+  // `.git/info/exclude`, the user's checkout or the machine's configuration says can add a rule. A symbolic link named
+  // `.gitignore` is not a rule file (git does not follow it either). More rule files than the cap, or one above the size cap,
+  // answers "nothing is ignored" and never a partial rule set: that can only keep a reference dangling, never forgive one.
+  ignoredByCommittedRules(path: string, pin: string, candidates: readonly string[]): Result<string[]> {
+    if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');
+    const wanted = [...new Set(candidates)].filter(isCheckable).slice(0, MAX_IGNORE_CANDIDATES);
+    if (wanted.length === 0) return ok([]);
+
+    const listed = runGit(['ls-tree', '-r', '-z', pin], { cwd: path });
+    if (!listed.ok) return failure(listed.error);
+    const ruleFiles: Array<{ path: string; sha: string }> = [];
+    for (const entry of nulSplit(listed.value.stdout)) {
+      const tab = entry.indexOf('\t');
+      if (tab === -1) continue;
+      const [mode, type, sha] = entry.slice(0, tab).split(' ');
+      const file = entry.slice(tab + 1);
+      if (type !== 'blob' || !(mode ?? '').startsWith('100') || sha === undefined) continue;
+      if (file.split('/').at(-1) !== '.gitignore') continue;
+      if (file.split('/').some((segment) => segment.toLowerCase() === '.git')) continue;
+      ruleFiles.push({ path: file, sha });
+    }
+    if (ruleFiles.length === 0) return ok([]);
+    if (ruleFiles.length > MAX_IGNORE_FILES) return ok([]);
+
+    let scratchDir: string;
+    try {
+      scratchDir = mkdtempSync(join(dirname(path), 'ignore-'));
+    } catch (error) {
+      return err({ kind: 'internal', cause: `cannot create a directory for the ignore rules: ${(error as NodeJS.ErrnoException).code ?? String(error)}` });
+    }
+    try {
+      const initialized = runGit(['init', '-q', '--template='], { cwd: scratchDir });
+      if (!initialized.ok) return failure(initialized.error);
+      for (const file of ruleFiles) {
+        const blob = runGit(['cat-file', 'blob', file.sha], { cwd: path });
+        if (!blob.ok) return failure(blob.error);
+        if (Buffer.byteLength(blob.value.stdout, 'utf8') > MAX_IGNORE_FILE_BYTES) return ok([]);
+        const target = join(scratchDir, ...file.path.split('/'));
+        if (!inside(scratchDir, resolve(target))) return ok([]);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, blob.value.stdout);
+      }
+
+      // Each candidate is asked as written; one that may be a directory (no extension on its last segment) is asked with a
+      // trailing slash too, because a rule such as `dist/` matches only a directory and git cannot tell that `dist` is one.
+      const asked = new Map<string, string>();
+      for (const candidate of wanted) {
+        asked.set(candidate, candidate);
+        if (mayBeDirectory(candidate)) asked.set(`${candidate}/`, candidate);
+      }
+      const names = [...asked.keys()];
+      const ignored = new Set<string>();
+      for (let start = 0; start < names.length; start += IGNORE_CHUNK) {
+        const answer = runGit(['check-ignore', '--no-index', '--', ...names.slice(start, start + IGNORE_CHUNK)], {
+          cwd: scratchDir,
+          acceptExit: [1],
+          noUserExcludes: true,
+        });
+        if (!answer.ok) return failure(answer.error);
+        for (const line of answer.value.stdout.split('\n')) {
+          const origin = asked.get(line);
+          if (origin !== undefined) ignored.add(origin);
+        }
+      }
+      return ok(wanted.filter((candidate) => ignored.has(candidate)));
+    } finally {
+      rmSync(scratchDir, { recursive: true, force: true });
+    }
   }
 
   read(path: string, relPath: string, maxBytes: number): Result<string | null> {

@@ -243,7 +243,7 @@ describe('references the repository ignores count as known', () => {
   });
 
   it('validation passes a map whose only dangling references are ignored, and says so', () => {
-    const ignored = ['dist', 'dist/index.html', 'dist/resume.pdf', '.env.local'];
+    const ignored = ['dist/index.html', 'dist/resume.pdf', 'dist/app.js', 'config/local.yml'];
     const named = [...KNOWN_PATHS.slice(0, 10), ...ignored];
     const without = judge(named);
     assert.equal(without?.passed, false, 'four ignored references dangle without the rule');
@@ -254,8 +254,8 @@ describe('references the repository ignores count as known', () => {
   });
 
   it('keeps the 5% limit: a real missing path still fails however many references are ignored', () => {
-    const named = [...KNOWN_PATHS.slice(0, 10), 'dist', 'dist/index.html', 'lib/missing-a.ts', 'lib/missing-b.ts'];
-    const verdict = judge(named, ['dist', 'dist/index.html']);
+    const named = [...KNOWN_PATHS.slice(0, 10), 'dist/index.html', 'dist/app.js', 'lib/missing-a.ts', 'lib/missing-b.ts'];
+    const verdict = judge(named, ['dist/index.html', 'dist/app.js']);
     assert.equal(verdict?.passed, false, verdict?.detail);
     assert.match(verdict?.detail ?? '', /^2 of \d+ named path\(s\) dangling.*lib\/missing-a\.ts/);
   });

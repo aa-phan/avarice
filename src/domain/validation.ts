@@ -6,7 +6,7 @@
 import { FAST_MAP_FILES, completenessFor, requiredFilesFor } from './mapping.ts';
 import type { Completeness, MappingPlan } from './mapping.ts';
 import { matchesAny } from './glob.ts';
-import { danglingShare, extractPathReferences } from './path-references.ts';
+import { danglingShare, referencesOf } from './path-references.ts';
 import { findSecrets } from './secret-patterns.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 
@@ -233,17 +233,18 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   };
 
   // 4. Path references, over the documents that could be read.
-  const refs: string[] = [];
-  for (const f of facts.files) refs.push(...extractPathReferences(f.text));
+  const refs = referencesOf(facts.files.map((f) => f.text));
   // AVARICE's own staging files (the config and the index output are untracked at the pin) are known references.
   const ownGlobs = [...AVARICE_WRITE_SET, ...AVARICE_TRACKED_WRITABLE, ...STAGING_SCAFFOLD];
-  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs);
+  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs, facts.ignoredReferences ?? []);
   const withinLimit = resolved.share <= limits.danglingShare;
   const counts = `${resolved.dangling.length} of ${resolved.total} named path(s) dangling (${percent(resolved.share)}, limit ${percent(limits.danglingShare)})`;
+  const byRule =
+    resolved.ignored.length === 0 ? '' : `; ${resolved.ignored.length} named path(s) ignored by the repository's own .gitignore rules, counted as known: ${listed(resolved.ignored, 3)}`;
   const pathReferences: ValidationCheck = {
     name: 'path-references',
     passed: withinLimit,
-    detail: withinLimit ? counts : `${counts}: ${listed(resolved.dangling)}`,
+    detail: withinLimit ? `${counts}${byRule}` : `${counts}: ${listed(resolved.dangling)}${byRule}`,
   };
 
   // 5. Secrets: GSD's scan plus AVARICE's redactor patterns. Names and lines only.
