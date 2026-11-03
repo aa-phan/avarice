@@ -70,6 +70,9 @@ export interface OpenOptions {
   readOnly?: boolean;
   // Replaces the sqlite_version() probe. Tests only; production never passes it.
   sqliteVersionProbe?: () => string;
+  // The user ID treated as the current user when store ownership is checked. Tests only (a test cannot chown a file to another
+  // user); production leaves it unset and the process's own user ID is used.
+  currentUid?: number;
 }
 
 let probedVersion: string | undefined;
