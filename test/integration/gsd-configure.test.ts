@@ -29,6 +29,7 @@ const REPO_FILES = {
   'src/index.ts': 'export const answer = 42;\n',
 };
 const FAST_FILES = ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md'];
+const FULL_FILES = ['STACK.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'INTEGRATIONS.md', 'CONCERNS.md'];
 
 const cleanup: string[] = [];
 after(() => {
@@ -251,7 +252,42 @@ describe('mapping mode', () => {
     const [record] = rows<{ mapping_mode: string; completeness: string }>(roots, 'SELECT mapping_mode, completeness FROM project_records');
     assert.equal(record?.mapping_mode, 'full');
     assert.equal(record?.completeness, 'complete');
-    assert.equal(rows(roots, "SELECT 1 FROM onboarding_steps WHERE step = 'gsd:stamp'").length, 0);
+  });
+
+  // Found by the live exit rehearsal (plan 01-19, deferred item 9): the mapper's closing `stamp-codebase-map` call is denied by
+  // the hook (the verb writes, S0-F), so a real full map arrives unstamped and validation `stamp` failed on all seven files.
+  // AVARICE stamps a full map itself, as it does a fast map; the hook stays as strict as it was.
+  it('stamps a full map itself with --files for exactly the seven full-map files, after the invocation and before validation', async () => {
+    const { roots, repo } = fixture();
+    const { outcome, atInvoke, calls } = await onboardLogged(roots, repo, { stamp: false });
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(atInvoke[0]?.prompt.split('\n')[0], '/gsd-map-codebase');
+
+    const staging = stagingOf(roots);
+    const head = git(staging, ['rev-parse', 'HEAD']).trim();
+    const stampCalls = calls.filter((c) => c.args[0] === 'stamp-codebase-map');
+    assert.equal(stampCalls.length, 1);
+    assert.deepEqual(stampCalls[0]?.args, ['stamp-codebase-map', '--files', FULL_FILES.join(',')]);
+    assert.equal(realpathSync(stampCalls[0]?.cwd ?? ''), realpathSync(staging));
+    assert.ok((stampCalls[0] as LoggedCall).cwd !== '', 'the stamp ran in staging');
+
+    for (const name of FULL_FILES) {
+      const text = readFileSync(join(staging, '.planning', 'codebase', name), 'utf8');
+      assert.match(text, new RegExp(`^---\\nlast_mapped_commit: ${head}\\n`), `${name} is stamped with the staging HEAD`);
+    }
+    const stamped = step<{ stamped: string[]; failed: string[]; commit: string }>(roots, 'gsd:stamp');
+    assert.deepEqual([...stamped.stamped].sort(), [...FULL_FILES].sort());
+    assert.equal(stamped.commit, head);
+
+    // The stamp comes after the map invocation and before the validation that needs it.
+    const order = rows<{ step: string }>(roots, "SELECT step FROM onboarding_steps WHERE step IN ('launch:map', 'gsd:stamp', 'validate') ORDER BY rowid").map((r) => r.step);
+    assert.deepEqual(order, ['launch:map', 'gsd:stamp', 'validate']);
+    const validation = step<{ checks: Array<{ name: string; passed: boolean }> }>(roots, 'validate');
+    assert.equal(validation.checks.find((c) => c.name === 'stamp')?.passed, true);
+
+    const [record] = rows<{ mapping_mode: string; completeness: string }>(roots, 'SELECT mapping_mode, completeness FROM project_records');
+    assert.equal(record?.mapping_mode, 'full');
+    assert.equal(record?.completeness, 'complete');
   });
 
   // Found by the live exit rehearsal (plan 01-19): AVARICE creates `.planning/codebase` (empty) before the mapper starts, and
