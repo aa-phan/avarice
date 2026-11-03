@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-16-PLAN.md (T3 case 14 open gate)
-last_updated: "2026-11-03T02:38:29.029Z"
+stopped_at: Completed 01-17-PLAN.md
+last_updated: "2026-11-03T03:17:03.994Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: f3ab0db9b0e299f6a7d8b54452ccde5c9ee46699
+state_head: a4f9e4271f9862526c162c0170b213f0868d2a82
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 17 of 20
+Plan: 18 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P14 | 22 min | 2 tasks | 24 files |
 | Phase 01 P15 | 25 min | 2 tasks | 29 files |
 | Phase 01 P16 | 95 min | 3 tasks | 8 files |
+| Phase 01 P17 | 60 min | 2 tasks | 28 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: The T3 live containment run (plan 01-16) found 0 containment failures on Claude Code 2.1.316 (20 live cases) at 0.2635 of 5.80 USD; case 14 (real fast onboarding) is blocked by validation path-references, a validator tolerance decision left to the owner or 01-19
 - [Phase 01]: Live T3 harness drives the real ClaudeHostAdapter on the request the real onboarding stages produce, with the hook removed from a settings copy for defense-in-depth and missing-hook cases
 - [Phase 01]: The stream-json parser reads decision_reason_type from the real system/permission_denied event
+- [Phase 01]: 01-17: intel prompt is 'focus: full; project root: .' (S0-D form); intel accepted only when intel validate and intel diff pass; context sources are stateless and take the staging path in the query; non-code graph nodes are fenced as untrusted data; intel gets at most half the context budget
 
 ### Pending Todos
 
@@ -176,6 +178,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T02:38:03.118Z
-Stopped at: Completed 01-16-PLAN.md (T3 case 14 open gate)
+Last session: 2026-11-03T03:17:03.972Z
+Stopped at: Completed 01-17-PLAN.md
 Resume file: None
