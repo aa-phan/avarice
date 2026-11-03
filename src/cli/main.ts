@@ -72,7 +72,7 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return EXIT_USAGE;
   }
 
-  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true });
+  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true });
   if (!composed.ok) {
     io.err(composed.message + '\n');
     return composed.code;

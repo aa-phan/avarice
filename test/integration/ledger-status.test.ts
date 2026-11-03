@@ -2,7 +2,8 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
@@ -12,7 +13,7 @@ import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { buildProjectRecord } from '../../src/domain/project-record.ts';
 import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
 import type { OnboardingRow } from '../../src/ports/ledger.ts';
-import { makeRoots, PRODUCTION_ENTRY, runCli } from '../helpers/run-cli.ts';
+import { makeRoots, PRODUCTION_ENTRY, REPO_ROOT, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 
 const cleanup: string[] = [];
@@ -101,8 +102,15 @@ describe('CLI dispatch', () => {
     assert.equal(existsSync(roots.AVARICE_DATA_ROOT), false);
   });
 
-  it('exits 64 for an allowlisted command whose module is not built yet', () => {
-    const r = runCli(['context'], { roots: freshRoots() });
+  it('exits 64 for an allowlisted command whose module is not built', () => {
+    // Every command is built now (plan 01-17 added `context`), so the dispatch is run from a copy of the tree that lacks one.
+    const copy = mkdtempSync(join(tmpdir(), 'avarice-dispatch-'));
+    cleanup.push(copy);
+    cpSync(join(REPO_ROOT, 'src'), join(copy, 'src'), { recursive: true });
+    cpSync(join(REPO_ROOT, 'bin'), join(copy, 'bin'), { recursive: true });
+    cpSync(join(REPO_ROOT, 'package.json'), join(copy, 'package.json'));
+    rmSync(join(copy, 'src', 'cli', 'commands', 'context.ts'));
+    const r = runCli(['context'], { roots: freshRoots(), entry: join(copy, 'bin', 'avarice.ts') });
     assert.equal(r.code, 64);
     assert.match(r.stderr, /not available in this build/);
   });

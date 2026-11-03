@@ -62,6 +62,8 @@ export interface Io {
 export interface CommandModule<Deps> {
   run(args: ParsedArgs, deps: Deps, io: Io): Promise<number> | number;
   readOnly?: boolean;
+  // Composition also locates GSD and builds its adapter (a read-only command that reads the indexes through GSD).
+  needsGsd?: boolean;
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
   usage?(args: ParsedArgs): string | undefined;

@@ -18,6 +18,8 @@ import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
+import { GsdGraphContext } from '../adapters/context/gsd-graph.ts';
+import { GsdIntelContext } from '../adapters/context/gsd-intel.ts';
 import { GraphifyTool } from '../adapters/graph/graphify.ts';
 import { UnavailableAgentHost } from '../adapters/host/unavailable-host.ts';
 import { ClaudeHostAdapter } from '../adapters/host-claude/claude-host.ts';
@@ -52,7 +54,8 @@ export interface DepsOverrides {
 export interface CreateDepsOptions {
   // Open the store read-only (after making sure it is migrated). Used by status.
   readOnly?: boolean;
-  // Locate GSD even though the store is read-only (`context` reads the indexes through GSD's own readers).
+  // Locate GSD even though the store is read-only: a command that only reads the indexes through GSD's own readers
+  // (`context`) needs the adapter but records nothing.
   gsd?: boolean;
 }
 
@@ -201,26 +204,29 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       return failure('cannot record the graph adapter', describeError(recorded.error));
     }
   }
-  // Locate GSD (ONB-12). A read-only command (status) never runs GSD, so it does not look for it. Without an
-  // admitted gsd-core no adapter exists and onboarding stops `incompatible` at the contract stage.
+  // Locate GSD (ONB-12). A read-only command (status) never runs GSD, so it does not look for it, unless it asks for
+  // the adapter to read the indexes (`context`). Without an admitted gsd-core no adapter exists and onboarding stops
+  // `incompatible` at the contract stage.
   let gsd: GsdOnboarding | undefined;
   let gsdProblem: GsdProblem | undefined;
   let locatedGsd: LocatedGsd | undefined;
-  if (options.readOnly !== true) {
+  if (options.readOnly !== true || options.gsd === true) {
     const located = locateGsdCore(env);
     if (located.ok) {
       locatedGsd = located.value;
       const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: profile.dataRoot, home });
-      const stored = ledger.upsertAdapterConfig({
-        name: 'gsd',
-        port: adapter.descriptor.port,
-        adapter: adapter.descriptor.adapter,
-        configDigest: digestOf(adapter.descriptor),
-        descriptor: adapter.descriptor,
-      });
-      if (!stored.ok) {
-        store.close();
-        return failure('cannot record the gsd adapter', describeError(stored.error));
+      if (options.readOnly !== true) {
+        const stored = ledger.upsertAdapterConfig({
+          name: 'gsd',
+          port: adapter.descriptor.port,
+          adapter: adapter.descriptor.adapter,
+          configDigest: digestOf(adapter.descriptor),
+          descriptor: adapter.descriptor,
+        });
+        if (!stored.ok) {
+          store.close();
+          return failure('cannot record the gsd adapter', describeError(stored.error));
+        }
       }
       gsd = adapter;
     } else {
@@ -251,10 +257,12 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       return failure('cannot record the host adapter', describeError(recorded.error));
     }
   }
+  // The context sources read the indexes through GSD's own readers, so they exist exactly when the GSD adapter does.
+  const context = gsd !== undefined ? { intel: new GsdIntelContext(gsd, { nowMs: () => clock.nowMs() }), graph: new GsdGraphContext(gsd, { nowMs: () => clock.nowMs() }) } : undefined;
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile, home },
+      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
       close: () => {
         try {
           store.close();

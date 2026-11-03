@@ -255,6 +255,21 @@ describe('avarice context over an onboarded repository (FR-20, S-41)', () => {
   });
 });
 
+describe('the budget is shared, intel first (FR-20)', () => {
+  it('lets intel use at most half of the budget, so the graph is always asked', async () => {
+    const o = await onboard({ graphifyBin: fakeGraphifyBin() });
+    installGraph(o, { directed: false, built_at_commit: o.repo.head, nodes: [{ id: 's1', label: 'strings helper', file_type: 'code', source_file: 'src/util/strings.ts' }], links: [] });
+    // Three intel entries match `strings` (file roles, the overview, the component) and together are larger than half of 90.
+    const roomy = await contextJson(o, ['strings', '--budget', '100000']);
+    const intelTokens = roomy.items.filter((i) => i.source === 'gsd-intel').reduce((sum, i) => sum + i.estTokens, 0);
+    assert.ok(intelTokens > 45, `the fixture is big enough to need the split (${intelTokens})`);
+    const tight = await contextJson(o, ['strings', '--budget', '90']);
+    assert.ok(tight.items.some((i) => i.source === 'gsd-graph'), 'the graph answered');
+    assert.ok(tight.items.filter((i) => i.source === 'gsd-intel').reduce((sum, i) => sum + i.estTokens, 0) <= 45, 'intel stayed within half');
+    assert.ok(tight.omitted.some((i) => i.source === 'gsd-intel'), 'what intel could not fit is listed');
+  });
+});
+
 describe('freshness against the repository HEAD (S-40 second half)', () => {
   it('marks every item stale after a new commit and confirms each cited path against the current HEAD', async () => {
     const o = await onboard({ graphifyBin: fakeGraphifyBin() });
