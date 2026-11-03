@@ -6,6 +6,7 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -594,7 +595,8 @@ describe('ClaudeHostAdapter.reap', () => {
 
   it('ends a process that carries the session ID, with its group, and reports one terminated', async () => {
     const adapter = reaper();
-    const sessionId = '5b3a9d1c-0f2e-4c6a-8d7b-1e2f3a4b5c6d';
+    // Unique per run: reap finds processes by this ID in the whole process table, so a fixed ID lets two suites on one machine end each other's child.
+    const sessionId = randomUUID();
     const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
     child.unref();
     assert.ok(child.pid !== undefined && alive(child.pid));
