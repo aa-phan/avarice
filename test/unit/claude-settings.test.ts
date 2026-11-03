@@ -153,6 +153,8 @@ function expectedSettings(over: {
     hooks: {
       PreToolUse: [{ matcher: '.*', hooks: [hookEntry('pre', { onFailure: 'block' })] }],
       PostToolUse: [{ matcher: '.*', hooks: [hookEntry('post', {})] }],
+      // O-1: a subagent call that fails ends in PostToolUseFailure, not PostToolUse, and both free a concurrency slot.
+      PostToolUseFailure: [{ matcher: '.*', hooks: [hookEntry('post', {})] }],
       ConfigChange: [{ hooks: [hookEntry('config-change', { onFailure: 'block' })] }],
     },
   };
@@ -228,6 +230,19 @@ describe('renderClaudeSettings invariants', () => {
       assert.equal(settings.hooks.ConfigChange[0].hooks[0].onFailure, 'block');
       assert.equal(settings.hooks.PostToolUse[0].hooks[0].onFailure, undefined);
       assert.equal(settings.hooks.PreToolUse[0].hooks[0].timeout, 5);
+    }
+  });
+
+  it('registers AVARICE\'s post hook for completed and for failed tool calls (the in-flight subagent count needs both)', () => {
+    for (const purpose of purposes) {
+      const settings = render(scope(purpose)) as Record<string, any>;
+      for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+        assert.equal(settings.hooks[event].length, 1, event);
+        assert.equal(settings.hooks[event][0].matcher, '.*', event);
+        const args = settings.hooks[event][0].hooks[0].args as string[];
+        assert.equal(args[args.indexOf('--event') + 1], 'post', event);
+        assert.equal(args.at(-1), POLICY, event);
+      }
     }
   });
 

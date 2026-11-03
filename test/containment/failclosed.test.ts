@@ -195,6 +195,27 @@ describe('launch preflight refuses (no launch)', () => {
     assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:config-hook-missing');
   });
 
+  // O-1 (fixed in 01-20): the hook counts in-flight subagents from the completions it hears, so a settings file that does not
+  // register the post hook for both a completed and a failed tool call would leave the concurrency limit stuck or off.
+  it('when the PostToolUse hook is missing', () => {
+    for (const edit of [(s: Record<string, any>) => delete s.hooks.PostToolUse, (s: Record<string, any>) => (s.hooks.PostToolUse = []), (s: Record<string, any>) => (s.hooks.PostToolUse[0].hooks[0].args[s.hooks.PostToolUse[0].hooks[0].args.indexOf('post')] = 'pre')]) {
+      assert.equal(refusal(checkLaunchReady({ settingsFile: settingsFile(edit), claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:post-hook-missing');
+    }
+  });
+
+  it('when the PostToolUseFailure hook is missing', () => {
+    for (const edit of [(s: Record<string, any>) => delete s.hooks.PostToolUseFailure, (s: Record<string, any>) => (s.hooks.PostToolUseFailure = [])]) {
+      assert.equal(refusal(checkLaunchReady({ settingsFile: settingsFile(edit), claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:post-failure-hook-missing');
+    }
+  });
+
+  it('when the script of a post hook is not readable', () => {
+    for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+      const file = settingsFile((s) => (s.hooks[event][0].hooks[0].args[1] = join(root, 'no-such-hook.ts')));
+      assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:hook-script-unreadable', event);
+    }
+  });
+
   it('when the hook script path is not readable', () => {
     const file = settingsFile((s) => (s.hooks.PreToolUse[0].hooks[0].args[1] = join(root, 'no-such-hook.ts')));
     assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:hook-script-unreadable');

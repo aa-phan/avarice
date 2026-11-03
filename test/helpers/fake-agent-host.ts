@@ -119,6 +119,7 @@ function writeHookPolicyFor(req: InvocationRequest): string {
       preambleLength: PREAMBLE_STUB.length,
     },
     subagentTypes: ['gsd-codebase-mapper'],
+    subagentsConcurrent: 4,
   };
   const dir = mkdtempSync(join(tmpdir(), 'avarice-fake-hook-'));
   const file = join(dir, 'hook-policy.json');

@@ -42,6 +42,7 @@ function policy(overrides: Partial<HookPolicy> = {}, commands: Partial<HookPolic
       ...commands,
     },
     subagentTypes: ['gsd-codebase-mapper'],
+    subagentsConcurrent: 4,
     ...overrides,
   };
 }
@@ -310,5 +311,15 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     for (const bad of [null, [], {}, { ...good, schema: 2 }, { ...good, writeRoots: 'x' }, { ...good, commands: undefined }, { ...good, runId: 4 }]) {
       assert.equal(parseHookPolicy(bad).ok, false);
     }
+  });
+
+  // O-1: a policy without the concurrency limit would silently leave the control off, so it does not parse.
+  it('requires subagentsConcurrent, a non-negative integer', () => {
+    const good = policy();
+    const { subagentsConcurrent: _dropped, ...without } = good;
+    for (const bad of [without, { ...good, subagentsConcurrent: -1 }, { ...good, subagentsConcurrent: 1.5 }, { ...good, subagentsConcurrent: '4' }, { ...good, subagentsConcurrent: null }]) {
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad.subagentsConcurrent));
+    }
+    assert.equal(parseHookPolicy({ ...good, subagentsConcurrent: 0 }).ok, true);
   });
 });

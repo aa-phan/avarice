@@ -78,6 +78,7 @@ export function makeHookFixture(options: FixtureOptions = {}): HookFixture {
       ...options.commands,
     },
     subagentTypes: ['gsd-codebase-mapper'],
+    subagentsConcurrent: 4,
     ...options.policy,
   };
   const policyPath = join(dir, 'hook-policy.json');

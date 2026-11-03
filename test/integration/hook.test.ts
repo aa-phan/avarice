@@ -259,6 +259,168 @@ describe('fail closed (CON-3)', () => {
   });
 });
 
+// O-1 (01-MUTATION.md, fixed in 01-20): the contract's subagentsConcurrent binds in the hook. An Agent call is denied with rule
+// budget:subagentsConcurrent when the invocation's in-flight subagents (admitted calls minus completed ones) are at the limit.
+// A completion arrives as PostToolUse (success) or PostToolUseFailure (both run `--event post`) and frees a slot once; a background
+// call is held for the invocation (its PostToolUse reports the launch, not the end); the count is per invocation ID.
+describe('subagent concurrency (O-1)', () => {
+  const agent = (toolUseId: string | undefined, extra: Record<string, unknown> = {}) => ({
+    tool_name: 'Agent',
+    ...(toolUseId !== undefined ? { tool_use_id: toolUseId } : {}),
+    tool_input: { subagent_type: 'gsd-codebase-mapper', prompt: 'x', ...extra },
+  });
+  const reasonOf = (stdout: string): string => (stdout === '' ? 'allowed' : parsed(stdout).hookSpecificOutput.permissionDecisionReason);
+  const pre = (fx: HookFixture, toolUseId: string | undefined, extra: Record<string, unknown> = {}, policyPath?: string): string =>
+    reasonOf(runHook(fx, 'pre', agent(toolUseId, extra), policyPath).stdout);
+  const done = (fx: HookFixture, toolUseId: string | undefined, extra: Record<string, unknown> = {}, event = 'PostToolUse'): void => {
+    const result = runHook(fx, 'post', { ...agent(toolUseId, extra), hook_event_name: event, tool_response: { status: 'completed' } });
+    assert.equal(result.code, 0, result.stderr);
+  };
+  const limited = (concurrent: number, total = 10): HookFixture => fixture({ limits: { subagentsTotal: total }, policy: { subagentsConcurrent: concurrent } });
+
+  it('denies an Agent call when the in-flight subagents are at the limit, charging nothing for it', () => {
+    const fx = limited(2);
+    assert.equal(pre(fx, 'a1'), 'allowed');
+    assert.equal(pre(fx, 'a2'), 'allowed');
+    assert.equal(pre(fx, 'a3'), 'avarice: budget:subagentsConcurrent');
+    assert.equal(budgetUsed(fx, 'subagentsTotal'), 2);
+    const last = decisions(fx).at(-1);
+    assert.deepEqual([last?.decision, last?.rule], ['deny', 'budget:subagentsConcurrent']);
+    assert.ok(chainIsIntact(fx.ledgerPath));
+  });
+
+  it('a completed subagent frees its slot', () => {
+    const fx = limited(2);
+    pre(fx, 'a1');
+    pre(fx, 'a2');
+    done(fx, 'a1');
+    assert.equal(pre(fx, 'a3'), 'allowed');
+    assert.equal(pre(fx, 'a4'), 'avarice: budget:subagentsConcurrent');
+    assert.equal(budgetUsed(fx, 'subagentsTotal'), 3);
+  });
+
+  it('a failed subagent (PostToolUseFailure) frees its slot too', () => {
+    const fx = limited(1);
+    pre(fx, 'a1');
+    assert.equal(pre(fx, 'a2'), 'avarice: budget:subagentsConcurrent');
+    done(fx, 'a1', {}, 'PostToolUseFailure');
+    assert.equal(pre(fx, 'a2'), 'allowed');
+  });
+
+  it('counts a completion exactly once: a repeated completion, an unknown ID and another tool free nothing', () => {
+    const fx = limited(2);
+    pre(fx, 'a1');
+    pre(fx, 'a2');
+    done(fx, 'a1');
+    done(fx, 'a1');
+    done(fx, 'a1', {}, 'PostToolUseFailure');
+    done(fx, 'never-admitted');
+    runHook(fx, 'post', { tool_name: 'Read', tool_use_id: 'a2', tool_input: { file_path: join(fx.staging, 'a') } });
+    assert.equal(pre(fx, 'a3'), 'allowed');
+    assert.equal(pre(fx, 'a4'), 'avarice: budget:subagentsConcurrent');
+    const released = eventRows(fx, 'tool.completed').map((r) => JSON.parse(r.data_json) as Record<string, unknown>).filter((d) => d['subagentReleased'] === true);
+    assert.equal(released.length, 1);
+  });
+
+  it('without a tool_use_id, a completion frees one slot and the count never goes below zero', () => {
+    const fx = limited(2);
+    pre(fx, undefined);
+    pre(fx, undefined);
+    done(fx, undefined);
+    done(fx, undefined);
+    done(fx, undefined);
+    assert.equal(pre(fx, undefined), 'allowed');
+    assert.equal(pre(fx, undefined), 'allowed');
+    assert.equal(pre(fx, undefined), 'avarice: budget:subagentsConcurrent');
+  });
+
+  it('scopes the count to the invocation: a killed invocation leaves no phantom that blocks a later one', () => {
+    const fx = limited(2);
+    pre(fx, 'a1');
+    pre(fx, 'a2');
+    assert.equal(pre(fx, 'a3'), 'avarice: budget:subagentsConcurrent');
+    const later = join(fx.dir, 'hook-policy-inv2.json');
+    writeFileSync(later, JSON.stringify({ ...fx.policy, invocationId: 'inv_2' }), { mode: 0o600 });
+    assert.equal(pre(fx, 'b1', {}, later), 'allowed');
+    assert.equal(pre(fx, 'b2', {}, later), 'allowed');
+    assert.equal(pre(fx, 'b3', {}, later), 'avarice: budget:subagentsConcurrent');
+    // a completion in the later invocation does not release a slot of the first one
+    done(fx, 'a1', {}, 'PostToolUse');
+    const lateDone = runHook(fx, 'post', { ...agent('b1'), tool_response: {} }, later);
+    assert.equal(lateDone.code, 0);
+    assert.equal(pre(fx, 'a4'), 'allowed');
+    assert.equal(pre(fx, 'a5'), 'avarice: budget:subagentsConcurrent');
+  });
+
+  it('holds a background subagent for the rest of the invocation, because its PostToolUse reports the launch', () => {
+    const fx = limited(2);
+    assert.equal(pre(fx, 'bg1', { run_in_background: true }), 'allowed');
+    assert.equal(pre(fx, 'a1'), 'allowed');
+    done(fx, 'bg1', { run_in_background: true });
+    done(fx, 'a1');
+    assert.equal(pre(fx, 'a2'), 'allowed');
+    assert.equal(pre(fx, 'a3'), 'avarice: budget:subagentsConcurrent');
+    const bg = eventRows(fx, 'tool.completed').map((r) => JSON.parse(r.data_json) as Record<string, unknown>).find((d) => d['toolUseId'] === 'bg1');
+    assert.equal(bg?.['subagentReleased'], false);
+  });
+
+  it('holds a background subagent even when its completion carries no run_in_background of its own', () => {
+    const fx = limited(1);
+    assert.equal(pre(fx, 'bg1', { run_in_background: true }), 'allowed');
+    runHook(fx, 'post', { tool_name: 'Agent', tool_use_id: 'bg1', tool_input: { subagent_type: 'gsd-codebase-mapper', prompt: 'x' }, tool_response: {} });
+    assert.equal(pre(fx, 'a1'), 'avarice: budget:subagentsConcurrent');
+  });
+
+  it('a limit of zero admits no subagent, and the total budget is reported first when it is also spent', () => {
+    assert.equal(pre(limited(0), 'a1'), 'avarice: budget:subagentsConcurrent');
+    const fx = limited(2, 2);
+    pre(fx, 'a1');
+    pre(fx, 'a2');
+    assert.equal(pre(fx, 'a3'), 'avarice: budget_exhausted');
+  });
+
+  it('admits exactly the limit when the calls race (BEGIN IMMEDIATE serializes the check and the charge)', async () => {
+    const fx = limited(3);
+    const results = await Promise.all(Array.from({ length: 8 }, (_, n) => runHookAsync(fx, 'pre', agent(`r${n}`))));
+    assert.ok(results.every((r) => r.code === 0));
+    assert.equal(results.filter((r) => r.stdout === '').length, 3);
+    assert.equal(results.filter((r) => /budget:subagentsConcurrent/.test(r.stdout)).length, 5);
+    assert.equal(budgetUsed(fx, 'subagentsTotal'), 3);
+    assert.ok(chainIsIntact(fx.ledgerPath));
+  });
+
+  it('records the completion of a subagent with IDs only and keeps the chain', () => {
+    const fx = limited(2);
+    pre(fx, 'a1');
+    done(fx, 'a1');
+    const [row] = eventRows(fx, 'tool.completed');
+    assert.deepEqual(JSON.parse((row as { data_json: string }).data_json), { onboardingId: 'onb_1', invocationId: 'inv_1', tool: 'Agent', toolUseId: 'a1', subagentReleased: true });
+    assert.ok(chainIsIntact(fx.ledgerPath));
+  });
+});
+
+describe('writeHookPolicy carries the concurrency limit (O-1)', () => {
+  it('writes the scope limit as subagentsConcurrent, and 0 for the intel invocation', () => {
+    const fx = fixture();
+    for (const [purpose, expected] of [['map', 4], ['intel', 0]] as const) {
+      const scope = computeInvocationScope({
+        purpose,
+        contract: contractFor(),
+        stagingPath: fx.staging,
+        repoPath: fx.repo,
+        dataRoot: join(fx.dir, 'data'),
+        home: join(fx.dir, 'home'),
+        workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
+        readRoots: [],
+      });
+      const written = writeHookPolicy(join(fx.dir, `inv-${purpose}`), scope, { onboardingId: 'onb_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: [] }, fx.ledgerPath);
+      assert.ok(written.ok);
+      assert.equal(written.value.policy.subagentsConcurrent, expected, purpose);
+      assert.equal((JSON.parse(readFileSync(written.value.file, 'utf8')) as HookPolicy).subagentsConcurrent, expected, purpose);
+    }
+  });
+});
+
 describe('events: attribution, no payloads, hash chain (S-31, T-01-35)', () => {
   it('records tool.completed with the staging-relative target of a write', () => {
     const fx = fixture();

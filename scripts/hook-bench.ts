@@ -44,6 +44,7 @@ try {
     denyReadGlobs: ['**/.env'],
     commands: { strategy: 'blanket-bash-hook-identity', readOnly: [...READ_ONLY_COMMANDS], gsdReadVerbs: [...GSD_READ_VERBS.map], deniedPrefixes: [...DENIED_COMMAND_PREFIXES] },
     subagentTypes: ['gsd-codebase-mapper'],
+    subagentsConcurrent: 4,
   };
   const policyPath = join(dir, 'hook-policy.json');
   writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
