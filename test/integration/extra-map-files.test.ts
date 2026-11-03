@@ -13,6 +13,9 @@ import type { CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import type { FakeHostOptions } from '../helpers/fake-agent-host.ts';
+import { readMapDocuments } from '../../src/app/stages/shared.ts';
+import { ok } from '../../src/domain/result.ts';
+import type { StagingWorkspace } from '../../src/ports/staging-workspace.ts';
 
 const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
 const REPO_FILES = { 'README.md': '# scratch\n', 'package.json': '{"name":"scratch"}\n', 'src/index.ts': 'export const answer = 42;\n' };
@@ -88,10 +91,14 @@ describe('an extra file under .planning/codebase (deferred item 4)', () => {
     assert.deepEqual(record.mapping.scope, FAST_FILES.map(dirPath));
     assert.equal(record.mapping.completeness, 'partial');
     assert.equal(rows(roots, "SELECT 1 FROM artifacts WHERE kind = 'map-document'").length, 4);
+    const [validated] = rows<{ result_json: string }>(roots, "SELECT result_json FROM onboarding_steps WHERE step = 'validate'");
+    assert.deepEqual((JSON.parse(validated?.result_json ?? '{}') as { extraFiles: string[]; files: number }).extraFiles, [dirPath('CONVENTIONS.md')]);
+    assert.equal((JSON.parse(validated?.result_json ?? '{}') as { files: number }).files, 4);
 
     const [snapshot] = rows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE kind = 'map-snapshot'");
     assert.equal(snapshot?.digest, record.artifacts.snapshot);
-    const manifest = JSON.parse(readFileSync(join(roots.AVARICE_DATA_ROOT, 'artifacts', (snapshot?.digest as string).slice(0, 2), snapshot?.digest as string), 'utf8')) as { files: Array<{ path: string }> };
+    const hex = (snapshot?.digest as string).replace(/^sha256:/, '');
+    const manifest = JSON.parse(readFileSync(join(roots.AVARICE_DATA_ROOT, 'artifacts', hex.slice(0, 2), hex), 'utf8')) as { files: Array<{ path: string }> };
     assert.deepEqual(manifest.files.map((f) => f.path).sort(), FAST_FILES.map(dirPath).sort());
   });
 
@@ -154,5 +161,26 @@ describe('required files are still enforced', () => {
     const r = onboard(roots, repo, { files: FAST_FILES, stamp: false, inject: `token ${secret}` }, ['--mode', 'fast']);
     assert.equal(r.code, 3, r.stdout + r.stderr);
     assert.equal(validateChecks(roots).find((c) => c.name === 'secrets')?.passed, false);
+  });
+});
+
+describe('the files read as map documents follow the mapping plan', () => {
+  const everything = [...FULL_FILES, dirPath('NOTES.md')].map((p) => (p.startsWith('.planning') ? p : dirPath(p)));
+  const staging = { read: (_root: string, path: string) => ok(everything.includes(path) ? `---\nlast_mapped_commit: abc\n---\n# ${path}\n` : null) } as unknown as StagingWorkspace;
+  const paths = (mode: 'fast' | 'full' | 'adopt' | 'paths' | 'skip') => {
+    const read = readMapDocuments(staging, '/staging', mode);
+    assert.ok(read.ok);
+    return read.value.map((d) => d.path).sort();
+  };
+
+  it('fast reads the four files, full and paths the seven, skip none; never another file under the directory', () => {
+    assert.deepEqual(paths('fast'), FAST_FILES.map(dirPath).sort());
+    assert.deepEqual(paths('full'), FULL_FILES.map(dirPath).sort());
+    assert.deepEqual(paths('paths'), FULL_FILES.map(dirPath).sort());
+    assert.deepEqual(paths('skip'), []);
+  });
+
+  it('adopt keeps reading every full-map file that exists, so an adopted complete map stays complete', () => {
+    assert.deepEqual(paths('adopt'), FULL_FILES.map(dirPath).sort());
   });
 });

@@ -142,11 +142,13 @@ export async function stampFastMap(deps: AppDeps, onboardingId: string, staging:
   return recorded.ok ? ok(undefined) : recorded;
 }
 
-// The map documents present in staging: the files the mode requires plus any other full-map file.
-// A file above the read limit counts as present with no stamp, so it fails validation instead of
-// aborting the run.
+// The map documents of an onboarding: the files the mapping plan requires (four for fast, seven for full), read from
+// staging. Another file under the map directory is not a map document (see extraMapFiles). An adopted map may carry
+// any of the seven full-map files, so adopt also reads the others that exist; they are the existing map, not mapper
+// output. A file above the read limit counts as present with no stamp, so it fails validation instead of aborting
+// the run.
 export function readMapDocuments(staging: StagingWorkspace, stagingPath: string, mode: MappingMode): Result<MapDocument[]> {
-  const names = [...new Set([...requiredFilesFor(mode), ...FULL_MAP_FILES])];
+  const names = [...new Set([...requiredFilesFor(mode), ...(mode === 'adopt' ? FULL_MAP_FILES : [])])];
   const documents: MapDocument[] = [];
   for (const path of names) {
     const read = staging.read(stagingPath, path, MAX_MAP_DOCUMENT_BYTES);
@@ -162,3 +164,16 @@ export function readMapDocuments(staging: StagingWorkspace, stagingPath: string,
   }
   return ok(documents);
 }
+
+// Files the mapper wrote under the map directory that the mapping plan does not require (the live haiku fast map
+// carried an unstamped placeholder CONVENTIONS.md). They are neither validated nor stored as map artifacts nor listed
+// in the snapshot manifest; the record states each one as a finding, by path only. Sorted.
+export function extraMapFiles(deps: AppDeps, stagingPath: string, pin: string, documents: readonly MapDocument[]): Result<string[]> {
+  const changes = deps.staging.changes(stagingPath, pin);
+  if (!changes.ok) return changes;
+  const documented = new Set(documents.map((d) => d.path));
+  const extra = changes.value.added.filter((path) => path.startsWith(`${MAP_DIR}/`) && !documented.has(path));
+  return ok([...new Set(extra)].sort());
+}
+
+export const EXTRA_MAP_FILE_REASON = 'extra file in the map directory: not a map artifact, not stored and not in the snapshot';

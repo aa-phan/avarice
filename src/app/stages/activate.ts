@@ -12,7 +12,7 @@ import { AVARICE_TRACKED_WRITABLE, scopeViolationsOf, writeSetsFor } from '../..
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import { loadIndexResults } from './index-steps.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { effectiveMappingMode, loadAcceptedValidation, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { EXTRA_MAP_FILE_REASON, effectiveMappingMode, extraMapFiles, loadAcceptedValidation, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
 const STORE = 'local';
 // Artifacts of an onboarding live as long as the record that references them (docs/contracts-and-state.md
@@ -137,6 +137,8 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   if (!mode.ok) return mode;
   const documents = readMapDocuments(deps.staging, staging.value, mode.value);
   if (!documents.ok) return documents;
+  const extra = extraMapFiles(deps, staging.value, contract.value.body.workspace.baseRevision, documents.value);
+  if (!extra.ok) return extra;
   // The coverage scope is what validation judged (ONB-7): the four files for a fast map, `.` for a full one.
   const validated = loadAcceptedValidation(deps, row.onboardingId);
   if (!validated.ok) return validated;
@@ -199,7 +201,8 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   const indexResults = loadIndexResults(deps, row.onboardingId);
   if (!indexResults.ok) return indexResults;
   const mapped = new Date(nowMs).toISOString();
-  const findings = [...validationFindings(steps.value), ...proposal.value.findings].slice(0, MAX_FINDINGS);
+  const extraFindings: RecordFinding[] = extra.value.map((path) => ({ source: 'validation', field: clip(path), reason: EXTRA_MAP_FILE_REASON }));
+  const findings = [...validationFindings(steps.value), ...extraFindings, ...proposal.value.findings].slice(0, MAX_FINDINGS);
 
   const record = buildProjectRecord({
     projectId: row.projectId,

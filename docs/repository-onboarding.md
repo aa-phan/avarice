@@ -123,7 +123,7 @@ An artifact set is accepted only when every check holds:
 
 | Check | Rule |
 |---|---|
-| Presence | All files the mode requires exist (7 for full and path-scoped, 4 for fast) |
+| Presence | All files the mode requires exist (7 for full and path-scoped, 4 for fast). Validation and activation judge, store and snapshot those files only; any other file the mapper wrote under `.planning/codebase` does not fail the onboarding, is not a map artifact and is not in the snapshot, and is recorded as a finding by path |
 | Stamp | `last_mapped_commit` exists in each file and equals the staging `HEAD` |
 | Scope of writes | The staging diff touches only the agent write set and the AVARICE write set from the [onboarding contract](#onboarding-contract); any other change fails validation and is reported as a containment finding. `graphify-out/` and `.avarice-knowledge/` are working directories that are never promoted |
 | Path references | Directory and file paths named in the documents exist at the stamped revision; a configurable share of dangling references (default 5%) fails validation. Extraction is narrow: a bare extension (`.ts`), a `name@version` token, a dotted identifier (`process.env`) and any path in a clause that says it is absent or git-ignored are not references. AVARICE's own staging files (`.planning/config.json`, the `AVARICE_WRITE_SET` paths, the clone's `.git` and the host's `.claude/.cc-writes`) count as known |

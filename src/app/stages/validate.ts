@@ -10,7 +10,7 @@ import { VALIDATION_LIMITS, validateMapArtifacts, writeSetsFor } from '../../dom
 import type { MapValidation } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { effectiveMappingMode, extraMapFiles, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
 const MAX_PATHS_IN_EVENT = 20;
 const MAX_PATH_CHARS = 200;
@@ -38,6 +38,8 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   const pin = contract.value.body.workspace.baseRevision;
   const changes = deps.staging.changes(staging.value, pin);
   if (!changes.ok) return changes;
+  const extra = extraMapFiles(deps, staging.value, pin, documents.value);
+  if (!extra.ok) return extra;
   const tracked = deps.staging.listTracked(staging.value, pin);
   if (!tracked.ok) return tracked;
 
@@ -76,6 +78,7 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
       checks: validation.checks,
       stagingHead: head.value,
       files: documents.value.length,
+      extraFiles: extra.value.slice(0, MAX_PATHS_IN_EVENT).map(clip),
       completeness: validation.completeness,
       scope: validation.scope,
       scopeViolations: validation.scopeViolations,
