@@ -14,7 +14,7 @@ import { git } from './scratch-repo.ts';
 
 export interface FakeKnowledgeOptions {
   // The graph the skill leaves: a value, or a function of the request (to read the corpus the pass was given).
-  graph?: unknown | ((request: InvocationRequest) => unknown);
+  graph?: Record<string, unknown> | ((request: InvocationRequest) => unknown);
   // Written verbatim instead of a graph (for example text that is not JSON).
   rawGraph?: string;
   // Outcome kind to report; default progressed.

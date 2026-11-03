@@ -20,7 +20,11 @@ export type FakeGraphifyMode =
   // graph.json has no built_at_commit.
   | 'no-commit'
   // `cluster-only` finishes without writing GRAPH_REPORT.md.
-  | 'no-report';
+  | 'no-report'
+  // `cluster-only` on the merged knowledge graph (a directory named `merged`) exits 4; the code graph clusters normally.
+  | 'merged-cluster-fails'
+  // `cluster-only` on the merged knowledge graph rewrites graph.json without `built_at_commit`.
+  | 'merged-drops-commit';
 
 export const FAKE_GRAPH_NODES = { code: 2, concept: 1, document: 0 };
 export const FAKE_GRAPH_EDGES = { EXTRACTED: 1 };
@@ -63,6 +67,17 @@ if (args[0] === 'extract') {
     process.exit(0);
   }
 } else if (args[0] === 'cluster-only') {
+  const merged = args[1].split('/').includes('merged');
+  if (merged && mode === 'merged-cluster-fails') {
+    process.stderr.write('graphify: cannot cluster the merged graph\\n');
+    process.exit(4);
+  }
+  if (merged && mode === 'merged-drops-commit') {
+    const file = join(args[1], 'graphify-out', 'graph.json');
+    const graph = JSON.parse(require('node:fs').readFileSync(file, 'utf8'));
+    delete graph.built_at_commit;
+    writeFileSync(file, JSON.stringify(graph));
+  }
   if (mode !== 'no-report') writeFileSync(join(args[1], 'graphify-out', 'GRAPH_REPORT.md'), '# Graph report\\n\\nNo communities were labeled.\\n');
   process.exit(0);
 } else {

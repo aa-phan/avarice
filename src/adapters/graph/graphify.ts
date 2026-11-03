@@ -15,7 +15,7 @@ import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { CommandExecutor, CommandResult } from '../../ports/command-executor.ts';
 import type { CorpusDrop, KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
-import type { GraphBuild, GraphData, GraphInstallFiles, GraphTool, LocatedGraphTool } from '../../ports/graph-tool.ts';
+import type { GraphBuild, GraphData, GraphInstallFiles, GraphTool, LocatedGraphTool, MergedGraphBuild } from '../../ports/graph-tool.ts';
 import { realpathNearest } from '../fs/profile-paths.ts';
 import { safeGitEnv } from '../git/safe-git.ts';
 import { fileSizes, materializeCorpus, readSkillGraph } from './knowledge-corpus.ts';
@@ -274,6 +274,18 @@ export class GraphifyTool implements GraphTool {
 
   readSkillGraph(stagingPath: string): Result<GraphData> {
     return readSkillGraph(stagingPath, (file) => this.readGraph(file));
+  }
+
+  async clusterMerged(graph: Record<string, unknown>, workDir: string): Promise<Result<MergedGraphBuild>> {
+    void graph;
+    void workDir;
+    return err({ kind: 'internal', cause: 'RED stub' });
+  }
+
+  installMergedGraph(stagingPath: string, files: GraphInstallFiles): Result<string[]> {
+    void stagingPath;
+    void files;
+    return err({ kind: 'internal', cause: 'RED stub' });
   }
 }
 

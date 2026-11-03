@@ -37,6 +37,15 @@ export interface GraphInstallFiles {
   report: string;
 }
 
+// A merged graph after `cluster-only`: the clustered file, its report and the graph read back (so the caller can check
+// that `built_at_commit` survived).
+export interface MergedGraphBuild {
+  outDir: string;
+  graphFile: string;
+  reportFile: string;
+  graph: GraphData;
+}
+
 export interface GraphTool {
   readonly descriptor: CapabilityDescriptor;
   // `unavailable` (cause starting `graphify-missing`) when the tool is not installed.
@@ -59,4 +68,10 @@ export interface GraphTool {
   materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped?: readonly CorpusDrop[]): Result<{ manifest: KnowledgeManifest }>;
   // The graph the graphify skill left in `{staging}/.avarice-knowledge/graphify-out/graph.json`; `not_found` when there is none.
   readSkillGraph(stagingPath: string): Result<GraphData>;
+  // Writes AVARICE's merged graph to `{workDir}/graphify-out/graph.json` (workDir outside staging), runs
+  // `graphify cluster-only --no-label --no-viz` on it, reads it back and fails when `built_at_commit` did not survive.
+  clusterMerged(graph: Record<string, unknown>, workDir: string): Promise<Result<MergedGraphBuild>>;
+  // Replaces `.planning/graphs/graph.json` and `GRAPH_REPORT.md` in staging with the merged graph and its report, and
+  // writes nothing else (`code-graph.json` stays the code-only graph).
+  installMergedGraph(stagingPath: string, files: GraphInstallFiles): Result<string[]>;
 }
