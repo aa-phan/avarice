@@ -83,16 +83,18 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     });
     return blocked.ok ? ok(undefined) : blocked;
   }
-  // The contract's answer to GSD's "map already exists" question, passed to the mapper when staging holds a map.
+  // The contract's answer to GSD's "map already exists" question, always passed to the mapper. Staging holds
+  // `.planning/codebase` when the mapper starts even for a repository with no map, because AVARICE creates the
+  // directory empty before the launch (prepareInvocation), and GSD's workflow reads an existing directory as an
+  // existing map and asks; a headless session cannot answer (found by the live exit rehearsal, plan 01-19).
   const answer = contract.value.body.decisions.defaults.find((d) => d.class === 'existing-map')?.default;
-  const holdsMap = existingMap !== 'none' || probe.value.mapReadiness !== 'none';
   const plan = {
     mode: decision.value.mode,
     completeness: decision.value.completeness,
     existingMap,
     reason: decision.value.reason,
     requested: contract.value.body.mapping.mode,
-    ...(holdsMap && (answer === 'refresh' || answer === 'update' || answer === 'skip') ? { existingMapAnswer: answer } : {}),
+    ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
   };
   const planned = deps.ledger.recordStepResult(row.onboardingId, {
     step: 'mapping:plan',
