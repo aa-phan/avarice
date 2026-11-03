@@ -73,7 +73,8 @@ function title(file: string): string {
   return name.charAt(0) + name.slice(1).toLowerCase();
 }
 
-function document(file: string, stamp: string | false, trackedPaths: readonly string[], inject: string | undefined, omitHeadings: readonly string[] = [], padBytes = 0): string {
+// The map document the fake host writes; the fake claude binary (test/fixtures/claude-fake) renders the same text.
+export function fakeMapDocument(file: string, stamp: string | false, trackedPaths: readonly string[], inject: string | undefined, omitHeadings: readonly string[] = [], padBytes = 0): string {
   const paths = trackedPaths.slice(0, 10).map((p) => `- \`${p}\``).join('\n');
   return [
     ...(stamp === false ? [] : ['---', `last_mapped_commit: ${stamp}`, 'last_mapped_at: 2026-01-01T00:00:00.000Z', '---']),
@@ -192,7 +193,7 @@ export class FakeAgentHost implements AgentHost {
       const target = join(req.cwd, '.planning', 'codebase', file);
       mkdirSync(dirname(target), { recursive: true });
       const raw = o.rawFiles?.[file];
-      writeFileSync(target, raw ?? document(file, stamp, tracked, o.inject, o.omitHeadings?.[file], o.padBytes));
+      writeFileSync(target, raw ?? fakeMapDocument(file, stamp, tracked, o.inject, o.omitHeadings?.[file], o.padBytes));
       written += 1;
       if (o.killAfterFiles !== undefined && written >= o.killAfterFiles) process.kill(process.pid, 'SIGKILL');
     }
