@@ -1,0 +1,50 @@
+[
+  {
+    "timestamp": "2026-11-03T10:59:34Z",
+    "commit": "f88ca1e31147bc70990fe002df006c4a3066eb07",
+    "testsAfterCommit": "90dafb124d909cc7518fd558ea7bf73b8220a1ec",
+    "publishedTag": null,
+    "commitsAheadOfTag": null,
+    "scope": [
+      "src/hook/pre-tool-use.ts",
+      "src/domain/hook-decision.ts",
+      "src/adapters/host-claude/hook-policy.ts",
+      "src/adapters/fs/canonical-path.ts",
+      "src/app/budget.ts",
+      "src/adapters/sqlite/ledger.ts",
+      "src/adapters/host-claude/settings.ts",
+      "src/adapters/host-claude/launch-args.ts",
+      "src/adapters/host-claude/launch-preflight.ts",
+      "src/adapters/host-claude/env.ts",
+      "src/domain/invocation-scope.ts",
+      "src/adapters/exec/sandboxed-executor.ts",
+      "src/domain/validation.ts",
+      "src/app/stages/validate.ts",
+      "src/domain/graph-validation.ts",
+      "src/domain/knowledge-validation.ts",
+      "src/domain/onboarding-lifecycle.ts",
+      "src/domain/project-record.ts",
+      "src/domain/policy-narrowing.ts",
+      "src/adapters/sqlite/migrations/0001-initial.ts"
+    ],
+    "tool": "mutation-probe (adversarial-mutation-test plugin 0.35.0 source, cargo build --locked, rustc 1.99.1)",
+    "skillVersion": "0.35.0",
+    "summary": {
+      "behaviours": 249,
+      "killedByExisting": 133,
+      "killedByNew": 49,
+      "killedBySuiteAfterTask3": 62,
+      "equivalent": 4,
+      "surviving": 1,
+      "testsBefore": 928,
+      "testsAfter": 980,
+      "findings": [
+        "MF-01",
+        "MF-02",
+        "MF-03",
+        "MF-04"
+      ],
+      "findingsPublished": false
+    }
+  }
+]

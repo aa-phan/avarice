@@ -66,6 +66,7 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | NFR-5 | `init` refuses a data root on a non-local mount | T1 | `node --test "test/unit/localfs.test.ts"` | ❌ W0 | ⬜ pending |
 | NFR-9 | Fixture DBs migrate forward; interrupted migration leaves the old schema | T2 | `node --test "test/fault/migrations.test.ts"` | ❌ W0 | ⬜ pending |
 | AC-1 | Clone to first `status` under 10 min, no admin | T4 | `scripts/ac1-timing.sh` (scratch `HOME`) | ❌ W0 | ⬜ pending |
+| Mutation (plan 01-20) | FC-1..FC-12 pinned: every fail-closed behavior in the Target Units table has a mutant that the suite kills (133 by tests that existed, 49 by tests this plan added or strengthened, 62 by the suite after Task 3; 4 equivalent with an argument; 1 non-FC survivor, B-87). Open findings MF-02, MF-03, MF-04 are todo tests | T1+T2 | `node --test "test/unit/**/*.test.ts" "test/integration/**/*.test.ts" "test/containment/executor.test.ts" "test/containment/failclosed.test.ts" "test/fault/**/*.test.ts" "test/mutation/**/*.test.ts"` | ✅ | ✅ green (980 pass, 0 fail, 3 todo on Node 22.22.3 and 26.9.0) |
 | Exit 1 | Active record on the target; code and document nodes; intel and graph build commit = onboarded revision; checkout unchanged | T4 | `scripts/exit-run.sh` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
