@@ -41,6 +41,11 @@ const CONFIG_JSON = '.planning/config.json';
 // does, because the index steps run in between and write exactly these files.
 export const AVARICE_TRACKED_WRITABLE: readonly string[] = ['.planning/graphs/**'];
 
+// Staging entries that exist while a map is validated yet are never tracked at the pin: the clone's own git
+// metadata and the empty scaffold directory the host creates in its working directory (live-harness S0 finding).
+// Together with AVARICE_WRITE_SET and AVARICE_TRACKED_WRITABLE they are known to the path-reference check.
+export const STAGING_SCAFFOLD: readonly string[] = ['.git/**', '.claude/.cc-writes/**'];
+
 export interface WriteSets {
   // Globs the staging diff may touch.
   allowedWrite: string[];
@@ -227,7 +232,9 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   // 4. Path references, over the documents that could be read.
   const refs: string[] = [];
   for (const f of facts.files) refs.push(...extractPathReferences(f.text));
-  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path)]);
+  // AVARICE's own staging files (the config and the index output are untracked at the pin) are known references.
+  const ownGlobs = [...AVARICE_WRITE_SET, ...AVARICE_TRACKED_WRITABLE, ...STAGING_SCAFFOLD];
+  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs);
   const withinLimit = resolved.share <= limits.danglingShare;
   const counts = `${resolved.dangling.length} of ${resolved.total} named path(s) dangling (${percent(resolved.share)}, limit ${percent(limits.danglingShare)})`;
   const pathReferences: ValidationCheck = {

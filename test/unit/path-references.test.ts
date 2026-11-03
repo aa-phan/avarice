@@ -47,13 +47,21 @@ describe('extractPathReferences: names that are not path references', () => {
   });
 
   for (const sentence of [
-    'There is no `node_modules` directory in the repository.',
+    'There is no legacy module at `src/legacy/old.ts` in the repository.',
+    'This package contains no directory src/gen/ yet.',
+    'The `pkg/` directory was not found.',
+    'The `config/prod.yml` copy is not committed.',
+    'The `config/dev.yml` copy is not tracked.',
     'No `node_modules/` present.',
     'The file `.github/workflows/deploy.yml` does not exist.',
     'The directory `legacy/` is not present.',
     'CI is not configured: no `.gitlab-ci.yml` and no `.github/workflows` for deploys.',
     'The service runs without a .env file or `config/local.yml`.',
     'A `vendor/` directory is absent.',
+    "The `build/` directory doesn't exist until the first build.",
+    'The `.env` file is untracked.',
+    'The `dist/` directory is ignored by git.',
+    'Generated output in `out/` is excluded from the repository.',
   ]) {
     it(`a path inside a sentence that states it is absent is not a reference: ${sentence}`, () => {
       assert.deepEqual(refs(line(sentence)), []);
@@ -66,6 +74,7 @@ describe('extractPathReferences: names that are not path references', () => {
 
   it('an absence clause does not hide a real reference in another sentence or clause of the same line', () => {
     assert.deepEqual(refs(line('There is no `node_modules` here; see `src/real.ts`. Entry is `src/index.ts`.')), ['src/real.ts', 'src/index.ts']);
+    assert.deepEqual(refs(line('There is no legacy module at `src/old.ts`. Entry is `src/index.ts`.')), ['src/index.ts']);
   });
 
   it('a genuinely missing path in a neutral sentence is still a reference, and then dangles', () => {
