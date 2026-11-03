@@ -598,6 +598,10 @@ describe('ClaudeHostAdapter.reap', () => {
     const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
     child.unref();
     assert.ok(child.pid !== undefined && alive(child.pid));
+    // The process must still be running after node has parsed its arguments, or reap has nothing to find and the result
+    // depends on whether pgrep wins a race with the child's start-up.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.ok(alive(child.pid), 'the process that carries the session ID is still running');
     const reaped = await adapter.reap({ sessionId });
     assert.deepEqual(reaped, { ok: true, value: { terminated: 1 } });
     assert.equal(alive(child.pid), false);
