@@ -595,7 +595,7 @@ describe('ClaudeHostAdapter.reap', () => {
   it('ends a process that carries the session ID, with its group, and reports one terminated', async () => {
     const adapter = reaper();
     const sessionId = '5b3a9d1c-0f2e-4c6a-8d7b-1e2f3a4b5c6d';
-    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
     child.unref();
     assert.ok(child.pid !== undefined && alive(child.pid));
     // The process must still be running after node has parsed its arguments, or reap has nothing to find and the result
