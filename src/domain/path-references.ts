@@ -50,6 +50,18 @@ const ABSENCE_CLAUSE: readonly RegExp[] = [
   /\b(?:git-?ignored|ignored\s+by|untracked|excluded\s+from|excludes?)\b/i,
 ];
 
+// Infix words of a compound extension (`.test.ts`, `.d.ts`, `.stories.tsx`).
+const INFIX_EXTENSIONS: ReadonlySet<string> = new Set(['test', 'spec', 'd', 'stories', 'story', 'config', 'min', 'module', 'e2e', 'snap', 'bench']);
+
+// `.test.ts`: a leading dot and only dot-separated parts that are known extensions or infix words. A real dotfile such as
+// `.eslintrc.json` has a part that is neither, so it stays a reference.
+const isCompoundExtension = (token: string): boolean =>
+  /^\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$/.test(token) && token.slice(1).split('.').every((part) => KNOWN_EXTENSIONS.has(part.toLowerCase()) || INFIX_EXTENSIONS.has(part.toLowerCase()));
+
+// A placeholder segment: one capital letter repeated three or more times (`NNNN-kebab-title.md`, `XXXX`, `YYYY-MM-DD.md`). Real
+// all-capital names (`README.md`, `CLAUDE.md`, `LICENSE`) are not repeats of one letter.
+const isPlaceholderSegment = (segment: string): boolean => segment.split(/[-_.]/).some((part) => /^([A-Z])\1{2,}$/.test(part));
+
 const MIME_TYPES: ReadonlySet<string> = new Set(['application', 'text', 'image', 'audio', 'video', 'multipart', 'font', 'message', 'model']);
 
 function stripFrontmatter(markdown: string): string {
@@ -92,11 +104,13 @@ function normalize(raw: string, backticked: boolean): string | null {
   if (/^[/~@#-]/.test(token) || token.startsWith('../')) return null;
   if (PRODUCT_NAMES.has(token.toLowerCase())) return null;
 
+  if (isCompoundExtension(token)) return null;
   const trailingSlash = token.endsWith('/');
   let path = token.replace(/^(?:\.\/)+/, '').replace(/\/+$/, '');
   if (path.length === 0) return null;
   const segments = path.split('/');
   if (segments.some((s) => s === '.' || s === '..' || !/^[A-Za-z0-9._+@-]+$/.test(s))) return null;
+  if (segments.some(isPlaceholderSegment)) return null;
   if (segments.length === 2 && MIME_TYPES.has((segments[0] as string).toLowerCase())) return null;
 
   const hasSlash = segments.length > 1 || trailingSlash;
@@ -145,6 +159,14 @@ export function extractPathReferences(markdown: string): string[] {
   return [...seen];
 }
 
+const IMPORT_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+
+// The package a module specifier names: `@scope/name` for a scoped one, else the first segment.
+function moduleNameOf(ref: string): string {
+  const parts = ref.split('/');
+  return ref.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] as string);
+}
+
 // Facts read from the repository at the pin that let a reference be a module, a rule or an action rather than a path.
 export interface ReferenceResolvers {
   // Dependency names of the repository's committed package.json files.
@@ -174,7 +196,7 @@ export function danglingShare(
   knownPaths: Iterable<string>,
   ownGlobs: readonly string[] = [],
   ignored: Iterable<string> = [],
-  _resolvers: ReferenceResolvers = {},
+  resolvers: ReferenceResolvers = {},
 ): DanglingResult {
   const files = new Set<string>();
   const directories = new Set<string>();
@@ -194,13 +216,36 @@ export function danglingShare(
     for (let i = 1; i <= parts.length; i += 1) directories.add(parts.slice(0, i).join('/'));
   }
   const ignoredSet = new Set(ignored);
+  const moduleSet = new Set(resolvers.moduleNames ?? []);
+  const actionSet = new Set(resolvers.actionRefs ?? []);
+  let suffixCounts: Map<string, number> | undefined;
+  const suffixes = (): Map<string, number> => {
+    if (suffixCounts === undefined) {
+      suffixCounts = new Map();
+      for (const file of files) {
+        const parts = file.split('/');
+        for (let i = 1; i < parts.length; i += 1) {
+          const suffix = parts.slice(i).join('/');
+          suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
+        }
+      }
+    }
+    return suffixCounts;
+  };
   const unique = [...new Set(refs)];
   const dangling: string[] = [];
   const byIgnoreRule: string[] = [];
+  const byRule = { specifier: [] as string[], suffix: [] as string[], module: [] as string[], action: [] as string[] };
   for (const ref of unique) {
     if (files.has(ref) || directories.has(ref) || (!ref.includes('/') && names.has(ref)) || matchesAny(ref, ownGlobs)) continue;
     if (ignoredSet.has(ref)) byIgnoreRule.push(ref);
+    // An import specifier: the file exists once a source extension (or /index.<ext>) is appended.
+    else if (IMPORT_EXTENSIONS.some((ext) => files.has(`${ref}${ext}`) || files.has(`${ref}/index${ext}`))) byRule.specifier.push(ref);
+    // The trailing path segments of exactly one tracked file (a directory is not a target; two matches stay dangling).
+    else if (suffixes().get(ref) === 1) byRule.suffix.push(ref);
+    else if (moduleSet.has(moduleNameOf(ref))) byRule.module.push(ref);
+    else if (actionSet.has(ref)) byRule.action.push(ref);
     else dangling.push(ref);
   }
-  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule: { specifier: [], suffix: [], module: [], action: [] }, share: unique.length === 0 ? 0 : dangling.length / unique.length };
+  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule, share: unique.length === 0 ? 0 : dangling.length / unique.length };
 }

@@ -26,6 +26,7 @@ export const ONBOARDING_ID = /^[A-Za-z0-9_]{1,64}$/;
 const MAX_IGNORE_FILES = 200;
 const MAX_IGNORE_FILE_BYTES = 1024 * 1024;
 const MAX_IGNORE_CANDIDATES = 5000;
+const MAX_READ_FILES = 200;
 const IGNORE_CHUNK = 500;
 
 // A candidate git can be asked about on its command line without quoting or option confusion: plain path characters only.
@@ -148,8 +149,17 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
   }
 
-  readTrackedAtPin(_path: string, _pin: string, _relPaths: readonly string[]): Result<Record<string, string>> {
-    return ok({});
+  // Blobs of the pinned tree, by `git cat-file blob <pin>:<path>`: an edit in staging or in the user's checkout is never seen. A path
+  // that is unsafe on a command line, not tracked at the pin, unreadable or above the size cap is left out.
+  readTrackedAtPin(path: string, pin: string, relPaths: readonly string[]): Result<Record<string, string>> {
+    if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');
+    const texts: Record<string, string> = {};
+    for (const rel of [...new Set(relPaths)].filter(isCheckable).slice(0, MAX_READ_FILES)) {
+      const blob = runGit(['cat-file', 'blob', `${pin}:${rel}`], { cwd: path });
+      if (!blob.ok || Buffer.byteLength(blob.value.stdout, 'utf8') > MAX_IGNORE_FILE_BYTES) continue;
+      texts[rel] = blob.value.stdout;
+    }
+    return ok(texts);
   }
 
   // Which candidates the repository's own committed `.gitignore` files ignore at the pin (deferred item 10). The rule files are

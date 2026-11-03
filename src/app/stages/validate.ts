@@ -7,6 +7,8 @@
 import { ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { referencesOf } from '../../domain/path-references.ts';
+import { actionRefsOf, dependencyNamesOf, packageJsonPathsFor, workflowPathsFor } from '../../domain/reference-sources.ts';
+import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
 import { VALIDATION_LIMITS, validateMapArtifacts, writeSetsFor } from '../../domain/validation.ts';
 import type { MapValidation } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
@@ -20,6 +22,25 @@ const clip = (text: string): string => (text.length <= MAX_PATH_CHARS ? text : `
 
 function failedNames(validation: MapValidation): string[] {
   return validation.checks.filter((c) => !c.passed).map((c) => c.name);
+}
+
+function readReferenceSources(
+  staging: StagingWorkspace,
+  stagingPath: string,
+  pin: string,
+  tracked: readonly string[],
+): Result<{ moduleNames: string[]; actionRefs: string[] }> {
+  const root = staging.readTrackedAtPin(stagingPath, pin, ['package.json']);
+  if (!root.ok) return root;
+  const packagePaths = packageJsonPathsFor(tracked, root.value['package.json'] ?? null);
+  const workflowPaths = workflowPathsFor(tracked);
+  const rest = staging.readTrackedAtPin(stagingPath, pin, [...packagePaths.filter((p) => p !== 'package.json'), ...workflowPaths]);
+  if (!rest.ok) return rest;
+  const texts = { ...root.value, ...rest.value };
+  return ok({
+    moduleNames: dependencyNamesOf(packagePaths.flatMap((p) => (texts[p] === undefined ? [] : [texts[p] as string]))),
+    actionRefs: actionRefsOf(workflowPaths.flatMap((p) => (texts[p] === undefined ? [] : [texts[p] as string]))),
+  });
 }
 
 export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Result<void> => {
@@ -48,6 +69,10 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   const references = referencesOf(documents.value.map((d) => d.text));
   const ignored = references.length === 0 ? ok([] as string[]) : deps.staging.ignoredByCommittedRules(staging.value, pin, references);
   if (!ignored.ok) return ignored;
+  // A token whose first segment is a dependency of a committed package.json is a module or rule specifier, and an owner/name that a
+  // committed workflow `uses:` is an action; both are read from git objects at the pin (second owner decision on item 10).
+  const sources = references.length === 0 ? ok({ moduleNames: [] as string[], actionRefs: [] as string[] }) : readReferenceSources(deps.staging, staging.value, pin, tracked.value);
+  if (!sources.ok) return sources;
 
   // The agent write sets of the invocations that ran (steps `launch:<purpose>`), plus the AVARICE write set.
   const steps = deps.ledger.getStepResults(row.onboardingId);
@@ -70,6 +95,8 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
       trackedWritable: writeSets.trackedWritable,
       knownPaths: tracked.value,
       ignoredReferences: ignored.value,
+      moduleNames: sources.value.moduleNames,
+      actionRefs: sources.value.actionRefs,
     },
     { mode: mode.value },
     VALIDATION_LIMITS,

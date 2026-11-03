@@ -148,13 +148,13 @@ describe('the real full map of the exit rehearsal', () => {
   it('is under the 5% limit after the ignore rule and the four reference rules, with exactly the six unexplained tokens left', () => {
     const baseline = danglingShare(refs, known, own);
     assert.equal(baseline.total, 308, 'the three placeholder tokens are no longer references');
-    assert.equal(baseline.dangling.length, 29);
+    assert.equal(baseline.dangling.length, 20, '29 before the import and suffix rules (which need no repository facts), 20 after');
 
     const repo = scratch({ files: { '.gitignore': fixture('repo-gitignore.txt'), 'README.md': '# the portfolio stand-in\n' } });
     const { ws, staging } = stagingOf(repo);
     const ignored = must(ws.ignoredByCommittedRules(staging, repo.head, [...new Set(refs)]));
     const afterIgnore = danglingShare(refs, known, own, ignored);
-    assert.equal(afterIgnore.dangling.length, 25, 'dist, node_modules, node_modules/.bin/oxlint and lenis/dist/lenis.css are forgiven by the ignore rule');
+    assert.equal(afterIgnore.dangling.length, 16, 'dist, node_modules, node_modules/.bin/oxlint and lenis/dist/lenis.css are forgiven by the ignore rule');
 
     const after = danglingShare(refs, known, own, ignored, resolvers);
     assert.equal(after.total, 308);

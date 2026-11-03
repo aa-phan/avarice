@@ -239,11 +239,19 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   const refs = referencesOf(facts.files.map((f) => f.text));
   // AVARICE's own staging files (the config and the index output are untracked at the pin) are known references.
   const ownGlobs = [...AVARICE_WRITE_SET, ...AVARICE_TRACKED_WRITABLE, ...STAGING_SCAFFOLD];
-  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs, facts.ignoredReferences ?? []);
+  const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs, facts.ignoredReferences ?? [], {
+    moduleNames: facts.moduleNames ?? [],
+    actionRefs: facts.actionRefs ?? [],
+  });
   const withinLimit = resolved.share <= limits.danglingShare;
   const counts = `${resolved.dangling.length} of ${resolved.total} named path(s) dangling (${percent(resolved.share)}, limit ${percent(limits.danglingShare)})`;
-  const byRule =
-    resolved.ignored.length === 0 ? '' : `; ${resolved.ignored.length} named path(s) ignored by the repository's own .gitignore rules, counted as known: ${listed(resolved.ignored, 3)}`;
+  const forgiven: string[] = [];
+  if (resolved.ignored.length > 0) forgiven.push(`${resolved.ignored.length} named path(s) ignored by the repository's own .gitignore rules (${listed(resolved.ignored, 3)})`);
+  if (resolved.byRule.specifier.length > 0) forgiven.push(`${resolved.byRule.specifier.length} import specifier(s) (a source extension appended)`);
+  if (resolved.byRule.suffix.length > 0) forgiven.push(`${resolved.byRule.suffix.length} unique path suffix(es) of a tracked file`);
+  if (resolved.byRule.module.length > 0) forgiven.push(`${resolved.byRule.module.length} module specifier(s) of a committed dependency`);
+  if (resolved.byRule.action.length > 0) forgiven.push(`${resolved.byRule.action.length} workflow action(s) named by a committed workflow`);
+  const byRule = forgiven.length === 0 ? '' : `; counted as known: ${forgiven.join('; ')}`;
   const pathReferences: ValidationCheck = {
     name: 'path-references',
     passed: withinLimit,
