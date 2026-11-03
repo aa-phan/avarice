@@ -93,15 +93,16 @@ export function writeExecutable(path: string, content: string): string {
   return path;
 }
 
-// Digest of every file under root outside .git: relative path and bytes, in sorted order.
-export function treeDigest(root: string): string {
+// Digest of every file under root outside .git: relative path and bytes, in sorted order. `skip` names relative
+// paths to leave out (a file that carries a timestamp, for example).
+export function treeDigest(root: string, skip: (relPath: string) => boolean = () => false): string {
   const hash = createHash('sha256');
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (dir === root && entry.name === '.git') continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.isFile()) hash.update(relative(root, full)).update('\0').update(readFileSync(full)).update('\0');
+      else if (entry.isFile() && !skip(relative(root, full))) hash.update(relative(root, full)).update('\0').update(readFileSync(full)).update('\0');
     }
   };
   walk(root);

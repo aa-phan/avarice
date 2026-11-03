@@ -2,7 +2,8 @@
 // (no slash commands, no GSD files read or written by this adapter). Every verb that can write runs with
 // cwd = the staging workspace the caller names; a verb is never aimed at the user's checkout. AVARICE never
 // edits `.planning/codebase/*.md` itself (ONB-2): the only writes this adapter causes are `config-set` and
-// `stamp-codebase-map`, both GSD's own.
+// `stamp-codebase-map`, both GSD's own, and (plan 01-14) `graphify build snapshot`, which writes the diff snapshot
+// of the graph AVARICE installed into `.planning/graphs`.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
@@ -50,6 +51,10 @@ function strings(value: unknown, limit: number): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string').slice(0, limit) : [];
 }
 
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
 function invalid(field: string, reason: string): Result<never> {
   return err({ kind: 'invalid', field, reason });
 }
@@ -84,10 +89,10 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
 
   // Every verb goes through the executor with cwd = staging. A verb that writes GSD state may write staging
   // `.planning` and nothing else; a read verb may write nothing.
-  #run(staging: string, args: readonly string[], writes: boolean): Promise<Result<unknown>> {
+  #run(staging: string, args: readonly string[], writes: boolean | readonly string[]): Promise<Result<unknown>> {
     return runGsd(this.#executor, this.located.gsdCoreDir, args, {
       cwd: staging,
-      writePaths: writes ? [join(staging, '.planning')] : [],
+      writePaths: Array.isArray(writes) ? writes : writes === true ? [join(staging, '.planning')] : [],
       denyReadPaths: this.#denyRead,
     });
   }
@@ -190,13 +195,35 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
     });
   }
 
-  // RED stubs (plan 01-14 Task 2).
-  async graphifySnapshot(_staging: string): Promise<Result<GsdGraphSnapshot>> {
-    return err({ kind: 'internal', cause: 'graphifySnapshot is not implemented' });
+  // `graphify build snapshot` writes `.planning/graphs/.last-build-snapshot.json` and nothing else, so the verb may
+  // write that one directory (the installed graph must already be there).
+  async graphifySnapshot(staging: string): Promise<Result<GsdGraphSnapshot>> {
+    const ran = await this.#run(staging, ['graphify', 'build', 'snapshot'], [join(staging, '.planning', 'graphs')]);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (typeof d['error'] === 'string') return err({ kind: 'internal', cause: `graphify build snapshot: ${d['error'].slice(0, 200)}` });
+    if (d['saved'] !== true) return err({ kind: 'internal', cause: 'graphify build snapshot did not report saved' });
+    return ok({ saved: true, nodeCount: count(d['node_count']), edgeCount: count(d['edge_count']) });
   }
 
-  async graphifyStatus(_staging: string): Promise<Result<GsdGraphStatus>> {
-    return err({ kind: 'internal', cause: 'graphifyStatus is not implemented' });
+  // `graphify status` reads the config, the graph and git; it writes nothing. A disabled capability and a missing
+  // graph are results, not errors; an `error` field (an unparseable graph) is an error.
+  async graphifyStatus(staging: string): Promise<Result<GsdGraphStatus>> {
+    const ran = await this.#run(staging, ['graphify', 'status'], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (typeof d['error'] === 'string') return err({ kind: 'internal', cause: `graphify status: ${d['error'].slice(0, 200)}` });
+    return ok({
+      disabled: d['disabled'] === true,
+      exists: d['exists'] === true,
+      stale: d['stale'] === true,
+      commitStale: typeof d['commit_stale'] === 'boolean' ? d['commit_stale'] : null,
+      commitsBehind: typeof d['commits_behind'] === 'number' ? d['commits_behind'] : null,
+      builtAtCommit: typeof d['built_at_commit'] === 'string' ? d['built_at_commit'] : null,
+      currentCommit: typeof d['current_commit'] === 'string' ? d['current_commit'] : null,
+      nodeCount: count(d['node_count']),
+      edgeCount: count(d['edge_count']),
+    });
   }
 
   initPlanning(): Result<never> {

@@ -4,7 +4,7 @@
 // sandboxed executor. Scratch repositories and temp directories only; no model is called.
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { accessSync, constants, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -13,6 +13,7 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import type { OnboardingOutcome } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
+import { GraphifyTool } from '../../src/adapters/graph/graphify.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import type { CommandExecutor, CommandSpec } from '../../src/ports/command-executor.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -202,7 +203,8 @@ describe('the code-graph step with a graphify that works', () => {
     assert.deepEqual(build[0]?.argv.slice(1, 3), ['extract', staging]);
     assert.ok(build[0]?.argv.includes('--code-only'));
     assert.deepEqual(build[1]?.writePaths, [out]);
-    assert.deepEqual(build[2]?.writePaths, [join(staging, '.planning', 'graphs')]);
+    // The sandbox profile resolves every path itself; compare what the command was allowed to write, resolved.
+    assert.deepEqual(build[2]?.writePaths.map((p) => realpathSync(p)), [join(staging, '.planning', 'graphs')]);
     assert.deepEqual(build[3]?.writePaths, [], 'the status verb writes nothing');
     assert.equal(build[0]?.timeoutMs, 300_000);
   });
@@ -239,7 +241,9 @@ describe('a graphify that is missing or fails never blocks activation (S-40, ONB
     assert.ok(!existsSync(join(stagingOf(roots), '.planning', 'graphs', 'graph.json')), 'nothing was installed');
     assert.equal(rows<{ graph_commit: string | null }>(roots, 'SELECT graph_commit FROM project_records')[0]?.graph_commit, null);
     const event = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => JSON.parse(e.data_json) as { index: string; reason: string });
-    assert.deepEqual(event.find((e) => e.index === 'code-graph'), { index: 'code-graph', reason: 'graphify-missing', onboardingId: rows<{ onboarding_id: string }>(roots, 'SELECT onboarding_id FROM onboardings')[0]?.onboarding_id });
+    const finding = event.find((e) => e.index === 'code-graph') as { index: string; reason: string; detail?: string; onboardingId?: string } | undefined;
+    assert.equal(finding?.reason, 'graphify-missing');
+    assert.match(finding?.detail ?? '', /AVARICE_GRAPHIFY_BIN names no executable file/, 'the event says why');
     const status = runCli(['status'], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: '{}' } });
     assert.match(status.stdout, /graph absent \(graphify-missing\)/);
   });
@@ -325,6 +329,22 @@ describe('the final scope check covers writes by an index step (T-01-67)', () =>
     assert.equal(rows<{ n: number }>(run.roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
     const [finding] = rows<{ data_json: string }>(run.roots, "SELECT data_json FROM events WHERE type = 'containment.finding' ORDER BY seq");
     assert.deepEqual((JSON.parse(finding?.data_json ?? '{}') as { check: string; paths: string[] }).paths, ['rogue.txt']);
+  });
+});
+
+describe('a build that was cut short does not leave files behind for the next one', () => {
+  it('extractCode clears the previous graphify-out in its output directory, and only that', async () => {
+    const repo = makeScratchRepo({ files: REPO_FILES });
+    cleanup.push(repo.base);
+    const outDir = join(temp('graph-out'), 'code');
+    mkdirSync(join(outDir, 'graphify-out'), { recursive: true });
+    writeFileSync(join(outDir, 'graphify-out', 'left-over.txt'), 'from a killed build\n');
+    writeFileSync(join(outDir, 'keep.txt'), 'not graphify output\n');
+    const tool = new GraphifyTool(new SandboxedExecutor(), { env: { PATH: '/usr/bin:/bin', HOME: tmpdir(), AVARICE_GRAPHIFY_BIN: fakeBin() }, dataRoot: join(temp('graph-data'), 'data'), home: tmpdir() });
+    const built = await tool.extractCode(repo.path, outDir);
+    assert.ok(built.ok, built.ok ? '' : JSON.stringify(built.error));
+    assert.deepEqual(readdirSync(join(outDir, 'graphify-out')), ['graph.json']);
+    assert.ok(existsSync(join(outDir, 'keep.txt')));
   });
 });
 

@@ -6,7 +6,7 @@
 // host is the only host; no model is called.
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -64,12 +64,27 @@ interface StatusEntry {
   interrupted?: { state: string; nextAction: string; resumeCommand: string };
 }
 
+// GSD's graph snapshot carries the time it was written, so the staging tree is compared without it and the snapshot
+// is compared on its own without that field.
+const VOLATILE_STAGING_FILE = '.planning/graphs/.last-build-snapshot.json';
+
+function snapshotWithoutTimestamp(staging: string): unknown {
+  try {
+    const { timestamp, ...rest } = JSON.parse(readFileSync(join(staging, VOLATILE_STAGING_FILE), 'utf8')) as Record<string, unknown>;
+    void timestamp;
+    return rest;
+  } catch {
+    return null;
+  }
+}
+
 interface Outcome {
   record: unknown;
   rawRecord: { artifacts: { snapshot: string; codebase: Array<{ digest: string }>; stagingPath: string } };
   manifest: unknown;
   codebaseDigests: string[];
   stagingDigest: string;
+  graphSnapshot: unknown;
   recordCount: number;
 }
 
@@ -86,7 +101,8 @@ function outcomeOf(roots: CliRoots): Outcome {
     rawRecord: body,
     manifest: JSON.parse(normalizeText(Buffer.from(manifestBytes.value).toString('utf8'))),
     codebaseDigests,
-    stagingDigest: treeDigest(body.artifacts.stagingPath),
+    stagingDigest: treeDigest(body.artifacts.stagingPath, (rel) => rel === VOLATILE_STAGING_FILE),
+    graphSnapshot: snapshotWithoutTimestamp(body.artifacts.stagingPath),
     recordCount: records.length,
   };
 }
@@ -117,6 +133,7 @@ describe('the uninterrupted reference run', () => {
     assert.deepEqual(second.manifest, reference.manifest);
     assert.deepEqual(second.codebaseDigests, reference.codebaseDigests);
     assert.equal(second.stagingDigest, reference.stagingDigest);
+    assert.deepEqual(second.graphSnapshot, reference.graphSnapshot);
     assert.notEqual(second.rawRecord.artifacts.stagingPath, reference.rawRecord.artifacts.stagingPath, 'the profiles are separate, so the raw records differ before normalization');
   });
 
@@ -182,6 +199,7 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
       assert.deepEqual(outcome.codebaseDigests, reference.codebaseDigests, 'map document digests');
       assert.deepEqual(outcome.manifest, reference.manifest, 'snapshot manifest');
       assert.equal(outcome.stagingDigest, reference.stagingDigest, 'staging tree');
+      assert.deepEqual(outcome.graphSnapshot, reference.graphSnapshot, 'the GSD graph snapshot, without its timestamp');
       assert.deepEqual(checkoutSnapshot(repo.path), pristine, 'the user checkout is byte-identical');
 
       // Every launch is recorded, and none is left in flight.

@@ -154,6 +154,12 @@ export class GraphifyTool implements GraphTool {
     } catch (e) {
       return err({ kind: 'internal', cause: `cannot create the graph output directory: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
     }
+    // A build that was cut short (a killed onboarding, resumed) must not leave its files behind for this one.
+    try {
+      rmSync(join(out, GRAPH_DIR), { recursive: true, force: true });
+    } catch (e) {
+      return err({ kind: 'internal', cause: `cannot clear the previous graph output: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+    }
     const ran = await this.#run(located.value.bin, ['extract', staging, '--code-only', '--out', out, '--max-workers', '1'], staging, [out], EXTRACT_TIMEOUT_MS, 'extract');
     if (!ran.ok) return ran;
     if (ran.value.status !== 'passed') return failure('graphify extract', ran.value);

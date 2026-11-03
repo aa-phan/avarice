@@ -201,7 +201,11 @@ describe('configure-gsd: probe, plan and configure in staging', () => {
       ['init onboard --raw', 'config-set commit_docs false', 'config-set workflow.text_mode true', 'config-set intel.enabled true', 'config-set graphify.enabled true'],
     );
     assert.equal(atInvoke.length, 1);
-    assert.equal(atInvoke[0]?.logged, calls.length, 'every GSD call was made before the host was invoked (and none after, for a full map)');
+    // After the host, the index stage asks GSD for the graph snapshot and status (plan 01-14); nothing else.
+    const afterHost = calls.slice(atInvoke[0]?.logged ?? 0);
+    assert.ok(afterHost.every((c) => c.args[0] === 'graphify'), `only graphify verbs run after the host: ${JSON.stringify(afterHost.map((c) => c.args))}`);
+    assert.equal(atInvoke[0]?.logged, calls.filter((c) => c.args[0] !== 'graphify').length, 'every other GSD call was made before the host was invoked (and none after, for a full map)');
+    for (const call of afterHost) assert.equal(realpathSync(call.cwd), staging, `${call.args.join(' ')} ran in staging`);
     assert.equal(calls.some((c) => c.args[0] === 'stamp-codebase-map'), false, 'a full map is not stamped by AVARICE');
   });
 });
