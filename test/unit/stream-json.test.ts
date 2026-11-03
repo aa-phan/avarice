@@ -93,6 +93,22 @@ describe('parseStreamJson', () => {
     assert.ok(!JSON.stringify(parsed).includes('example.invalid'), 'the denied command is not carried');
   });
 
+  it('reads the reason code of the real 2.1.316 permission_denied event (recorded live in plan 01-16) and drops its long message', () => {
+    const event = JSON.stringify({
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: 'Write',
+      tool_use_id: 'toolu_01',
+      decision_reason_type: 'mode',
+      message: "Permission to use Write has been denied because Claude Code is running in don't ask mode. IMPORTANT: ...",
+      uuid: 'd5f40fc7-7e2b-4743-a763-448d29d2efb1',
+      session_id: SESSION,
+    });
+    const parsed = parseStreamJson(`${event}\n`);
+    assert.deepEqual(parsed.permissionDenied, [{ tool: 'Write', reason: 'mode' }]);
+    assert.ok(!JSON.stringify(parsed).includes("don't ask"), 'the host message is not carried');
+  });
+
   it('counts garbage lines and keeps parsing the lines around them', () => {
     const mixed = `not json at all\n\n[1,2,3]\n"a string"\n${success}{"type":\n`;
     const parsed = parseStreamJson(mixed);

@@ -84,8 +84,9 @@ function denial(entry: unknown): StreamPermissionDenial | null {
   if (!isObject(entry)) return null;
   const tool = text(entry['tool_name']) ?? text(entry['tool']);
   if (tool === undefined) return null;
-  // The host's reason, when it gives a short one; the tool input is never read.
-  return { tool, reason: text(entry['reason'], 200) ?? 'permission_denied' };
+  // The host's reason, when it gives a short one: a `reason`, or the `decision_reason_type` code the real 2.1.316
+  // `system/permission_denied` event carries (`mode`). The tool input and the long `message` are never read.
+  return { tool, reason: text(entry['reason'], 200) ?? text(entry['decision_reason_type'], 64) ?? 'permission_denied' };
 }
 
 function subagentStats(value: unknown): SubagentStats | undefined {
