@@ -206,3 +206,57 @@ describe('the real haiku fast map of the live T3 run (plan 01-16, case 14)', () 
     assert.equal(v.accepted, false);
   });
 });
+
+// Deferred item 10 (plan 01-19): the real full map of a repository names its own build output (`dist`) and local config. A reference
+// matched by the repository's own committed .gitignore rules is declared build output or local config, so it counts as known. The
+// pure resolver takes the ignored references as an argument; git decides which they are (test/integration/gitignore-references.test.ts).
+describe('references the repository ignores count as known', () => {
+  const HEAD = 'a'.repeat(40);
+  const KNOWN_PATHS = Array.from({ length: 30 }, (_, i) => `lib/f${String(i).padStart(2, '0')}.ts`);
+  const stamped = (path: string, extra: string): MapFileFact => {
+    const text = ['---', `last_mapped_commit: ${HEAD}`, '---', '# Doc', '', extra, ''].join('\n');
+    return { path, lastMappedCommit: HEAD, text, bytes: text.length };
+  };
+  const judge = (named: readonly string[], ignoredReferences?: readonly string[]) =>
+    validateMapArtifacts(
+      {
+        stagingHead: HEAD,
+        files: FAST_MAP_FILES.map((path) => stamped(path, path.endsWith('STRUCTURE.md') ? named.map((p) => `- \`${p}\``).join('\n') : '')),
+        changes: { modified: [], added: [], deleted: [] },
+        allowedWrite: ['.planning/codebase/**'],
+        trackedWritable: ['.planning/codebase/**'],
+        knownPaths: KNOWN_PATHS,
+        ...(ignoredReferences === undefined ? {} : { ignoredReferences }),
+      },
+      { mode: 'fast' },
+    ).checks.find((c) => c.name === 'path-references');
+
+  it('does not count an ignored reference as dangling, and still counts it in the total', () => {
+    const r = danglingShare(['lib/f00.ts', 'dist', 'dist/index.html', 'build/out.js'], KNOWN_PATHS, [], ['dist', 'dist/index.html']);
+    assert.equal(r.total, 4);
+    assert.deepEqual(r.dangling, ['build/out.js']);
+    assert.equal(r.share, 0.25);
+  });
+
+  it('resolves only the references it is given: a reference outside the ignored set dangles', () => {
+    assert.deepEqual(danglingShare(['lib/gone.ts'], KNOWN_PATHS, [], ['dist']).dangling, ['lib/gone.ts']);
+  });
+
+  it('validation passes a map whose only dangling references are ignored, and says so', () => {
+    const ignored = ['dist', 'dist/index.html', 'dist/resume.pdf', '.env.local'];
+    const named = [...KNOWN_PATHS.slice(0, 10), ...ignored];
+    const without = judge(named);
+    assert.equal(without?.passed, false, 'four ignored references dangle without the rule');
+    const withRule = judge(named, ignored);
+    assert.equal(withRule?.passed, true, withRule?.detail);
+    assert.match(withRule?.detail ?? '', /^0 of \d+ named path\(s\) dangling/);
+    assert.match(withRule?.detail ?? '', /4 .*ignored by the repository's own \.gitignore/);
+  });
+
+  it('keeps the 5% limit: a real missing path still fails however many references are ignored', () => {
+    const named = [...KNOWN_PATHS.slice(0, 10), 'dist', 'dist/index.html', 'lib/missing-a.ts', 'lib/missing-b.ts'];
+    const verdict = judge(named, ['dist', 'dist/index.html']);
+    assert.equal(verdict?.passed, false, verdict?.detail);
+    assert.match(verdict?.detail ?? '', /^2 of \d+ named path\(s\) dangling.*lib\/missing-a\.ts/);
+  });
+});

@@ -213,6 +213,7 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
       changes: (p, pin) => real.staging.changes(p, pin),
       describe: (p, pin) => real.staging.describe(p, pin),
       listTracked: (p, pin) => real.staging.listTracked(p, pin),
+      ignoredByCommittedRules: (p, pin, candidates) => real.staging.ignoredByCommittedRules(p, pin, candidates),
       read: (p, rel, max) => real.staging.read(p, rel, max),
       ensureDir: (p, rel) => {
         observed.push(`ensureDir after ${latest()}`);
@@ -484,6 +485,7 @@ describe('activation re-checks the whole staging diff against every write set (p
       },
       describe: (p, pin) => real.staging.describe(p, pin),
       listTracked: (p, pin) => real.staging.listTracked(p, pin),
+      ignoredByCommittedRules: (p, pin, candidates) => real.staging.ignoredByCommittedRules(p, pin, candidates),
       read: (p, rel, max) => real.staging.read(p, rel, max),
       ensureDir: (p, rel) => real.staging.ensureDir(p, rel),
       inspectRepo: (p) => real.staging.inspectRepo(p),

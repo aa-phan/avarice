@@ -147,7 +147,7 @@ export interface DanglingResult {
 // A reference resolves when it is a known file, a directory containing a known file, matches an own glob (the
 // paths AVARICE itself writes in staging, `dir/**` covers the directory and what lies below it), or (with no
 // slash) is the name of a known file or directory somewhere in the tree.
-export function danglingShare(refs: readonly string[], knownPaths: Iterable<string>, ownGlobs: readonly string[] = []): DanglingResult {
+export function danglingShare(refs: readonly string[], knownPaths: Iterable<string>, ownGlobs: readonly string[] = [], _ignored: Iterable<string> = []): DanglingResult {
   const files = new Set<string>();
   const directories = new Set<string>();
   const names = new Set<string>();

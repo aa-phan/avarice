@@ -136,6 +136,10 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
   }
 
+  ignoredByCommittedRules(_path: string, _pin: string, _candidates: readonly string[]): Result<string[]> {
+    return ok([]);
+  }
+
   read(path: string, relPath: string, maxBytes: number): Result<string | null> {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return invalid('maxBytes', 'a non-negative integer is required');
     const segments = checkRelative(relPath);

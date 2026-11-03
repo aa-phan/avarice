@@ -1,0 +1,22 @@
+.DS_Store
+references/
+node_modules
+dist
+dist-ssr
+*.local
+logs
+*.log
+npm-debug.log*
+.vscode/*
+!.vscode/extensions.json
+.idea
+test-results/
+playwright-report/
+playwright/.cache/
+coverage
+
+# Machine lock file written by the planning tool; no documentation value
+.planning/milestone.lock
+
+# Local QA loop output (awwwards screenshots, audit text); never committed
+.shots/

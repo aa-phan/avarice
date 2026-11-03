@@ -111,6 +111,9 @@ export interface MapArtifactFacts {
   trackedWritable: readonly string[];
   // Tracked paths at the pin; the documents' own paths count as known too.
   knownPaths: readonly string[];
+  // The references the repository's own committed .gitignore rules ignore at the pin (declared build output, local config); they
+  // count as known, not dangling.
+  ignoredReferences?: readonly string[];
 }
 
 export interface ValidationCheck {
