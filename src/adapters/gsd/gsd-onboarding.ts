@@ -11,6 +11,8 @@ import type {
   GsdAppliedSetting,
   GsdCapabilitySnapshot,
   GsdDriftResult,
+  GsdGraphSnapshot,
+  GsdGraphStatus,
   GsdOnboarding,
   GsdProjectState,
   GsdSetting,
@@ -186,6 +188,15 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
       action: typeof d['action'] === 'string' ? d['action'] : null,
       affectedPaths: strings(d['affected_paths'], 200),
     });
+  }
+
+  // RED stubs (plan 01-14 Task 2).
+  async graphifySnapshot(_staging: string): Promise<Result<GsdGraphSnapshot>> {
+    return err({ kind: 'internal', cause: 'graphifySnapshot is not implemented' });
+  }
+
+  async graphifyStatus(_staging: string): Promise<Result<GsdGraphStatus>> {
+    return err({ kind: 'internal', cause: 'graphifyStatus is not implemented' });
   }
 
   initPlanning(): Result<never> {

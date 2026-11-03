@@ -60,6 +60,28 @@ export interface GsdDriftResult {
   affectedPaths: string[];
 }
 
+// `graphify build snapshot` output: the diff snapshot GSD writes next to the installed graph.
+export interface GsdGraphSnapshot {
+  saved: boolean;
+  nodeCount: number;
+  edgeCount: number;
+}
+
+// `graphify status` output, reduced. `exists` is false (and the counts zero) when GSD finds no graph; `disabled` is
+// true when `graphify.enabled` is off in the staging config. `stale` folds GSD's age rule with the auto-update
+// status; `commitStale` is null when GSD could not compare the build commit with HEAD.
+export interface GsdGraphStatus {
+  disabled: boolean;
+  exists: boolean;
+  stale: boolean;
+  commitStale: boolean | null;
+  commitsBehind: number | null;
+  builtAtCommit: string | null;
+  currentCommit: string | null;
+  nodeCount: number;
+  edgeCount: number;
+}
+
 export interface GsdOnboarding {
   readonly descriptor: CapabilityDescriptor;
   // What this GSD can do. No side effects; `unsupported` when the located gsd-core is outside the range.
@@ -72,6 +94,10 @@ export interface GsdOnboarding {
   stamp(staging: string, files?: readonly string[]): Promise<Result<GsdStampResult>>;
   // `verify codebase-drift` with cwd = staging. Read-only.
   checkDrift(staging: string): Promise<Result<GsdDriftResult>>;
+  // `graphify build snapshot` with cwd = staging; writes only `.planning/graphs` (the installed graph must exist).
+  graphifySnapshot(staging: string): Promise<Result<GsdGraphSnapshot>>;
+  // `graphify status` with cwd = staging. Read-only; the result says whether GSD sees the installed graph as fresh.
+  graphifyStatus(staging: string): Promise<Result<GsdGraphStatus>>;
   // Planning initialization is out of scope for Phase 1; always `unsupported`.
   initPlanning(): Result<never>;
 }
