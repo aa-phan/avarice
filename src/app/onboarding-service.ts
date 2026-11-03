@@ -22,9 +22,21 @@ import type { Stage, StageContext, TransitionOptions } from './stages/stage.ts';
 export const DEFAULT_LEASE_TTL_MS = 180_000;
 export const ONBOARDING_POLICY = 'onboarding';
 
+// How many times each point has been reached in this process, for the counted form `name#N`.
+const faultHits = new Map<string, number>();
+
 // SIGKILLs this process when AVARICE_FAULT names the point (test-only fault injection, no cleanup runs).
+// `name` fires at the first time the point is reached; `name#N` at the Nth time, for a checkpoint that is committed
+// more than once (the transition that names it, then the stage that takes it before its side effect).
 export function faultPoint(name: string): void {
-  if (process.env['AVARICE_FAULT'] === name) process.kill(process.pid, 'SIGKILL');
+  const armed = process.env['AVARICE_FAULT'];
+  if (armed === undefined) return;
+  if (armed === name) process.kill(process.pid, 'SIGKILL');
+  const counted = /^(.+)#([1-9][0-9]*)$/.exec(armed);
+  if (counted === null || counted[1] !== name) return;
+  const hits = (faultHits.get(name) ?? 0) + 1;
+  faultHits.set(name, hits);
+  if (hits === Number(counted[2])) process.kill(process.pid, 'SIGKILL');
 }
 
 function leaseTtlMs(): number {
@@ -110,7 +122,7 @@ function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: 
   };
 }
 
-// `planning_ready`: the index steps (plan 01-14), then activation.
+// `planning_ready`: the index steps, then activation.
 const planningReadyStage: Stage = async (ctx, row) => {
   const indexed = await indexStage(ctx, row);
   if (!indexed.ok) return indexed;

@@ -206,6 +206,17 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
 });
 
 describe('index steps resume from their stored results (plan 01-14)', () => {
+  it('the counted point #2 is the stage checkpoint, a second row after the transition checkpoint that the plain point stops at', () => {
+    const checkpointsOf = (point: 'after-checkpoint:index:code-graph' | 'after-checkpoint:index:code-graph#2'): number => {
+      const roots = freshProfile();
+      cleanup.push(roots.base);
+      runWithFault(roots, repo, point);
+      return rows<{ n: number }>(roots, "SELECT count(*) AS n FROM checkpoints WHERE next_action = 'index:code-graph'")[0]?.n ?? -1;
+    };
+    assert.equal(checkpointsOf('after-checkpoint:index:code-graph'), 1, 'killed in the same instant as the transition');
+    assert.equal(checkpointsOf('after-checkpoint:index:code-graph#2'), 2, 'killed after the stage committed its own checkpoint, before the step ran');
+  });
+
   it('killed after the checkpoint of index:knowledge, resume skips the two steps that have a stored result and runs the last', () => {
     const roots = freshProfile();
     cleanup.push(roots.base);

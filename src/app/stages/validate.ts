@@ -105,7 +105,7 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   }
 
   if (validation.accepted) {
-    const moved = ctx.transition(row, 'planning_ready', 'activate', { data: { files: documents.value.length } });
+    const moved = ctx.transition(row, 'planning_ready', 'index:code-graph', { data: { files: documents.value.length } });
     return moved.ok ? ok(undefined) : moved;
   }
   if (validation.block) {

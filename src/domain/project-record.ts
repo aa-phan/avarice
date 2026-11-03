@@ -219,13 +219,114 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
   };
 }
 
-// RED stub (plan 01-14 Task 1): the real folding arrives in the GREEN commit.
-function copyIndexes(_indexes: RecordIndexes | undefined): RecordIndexes {
-  return {};
+function copyIndexes(indexes: RecordIndexes | undefined): RecordIndexes {
+  const copy: RecordIndexes = {};
+  if (indexes?.graph !== undefined) {
+    const graph = indexes.graph;
+    copy.graph = {
+      path: graph.path,
+      codeGraphPath: graph.codeGraphPath,
+      digest: graph.digest,
+      builtAtCommit: graph.builtAtCommit,
+      tool: graph.tool,
+      freshness: graph.freshness,
+      nodes: { ...graph.nodes },
+      edges: { ...graph.edges },
+      ...(graph.knowledge !== undefined ? { knowledge: { ...graph.knowledge } } : {}),
+    };
+  }
+  if (indexes?.intel !== undefined) copy.intel = { ...indexes.intel };
+  if (indexes?.absent !== undefined && indexes.absent.length > 0) copy.absent = indexes.absent.map((a) => ({ index: a.index, reason: a.reason }));
+  return copy;
 }
 
-export function foldIndexResults(_results: readonly IndexStepResult[]): RecordIndexes {
-  return {};
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isString = (value: unknown): value is string => typeof value === 'string' && value !== '';
+const isFreshness = (value: unknown): value is 'fresh' | 'stale' => value === 'fresh' || value === 'stale';
+
+function counts(value: unknown): Record<string, number> | undefined {
+  if (!isObject(value)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [key, count] of Object.entries(value)) {
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return undefined;
+    out[key] = count;
+  }
+  return out;
+}
+
+function graphIndexOf(result: Record<string, unknown> | undefined): RecordGraphIndex | undefined {
+  if (result === undefined) return undefined;
+  const nodes = counts(result['nodes']);
+  const edges = counts(result['edges']);
+  if (
+    !isString(result['path']) ||
+    !isString(result['codeGraphPath']) ||
+    !isString(result['digest']) ||
+    !isString(result['builtAtCommit']) ||
+    !isString(result['tool']) ||
+    !isFreshness(result['freshness']) ||
+    nodes === undefined ||
+    edges === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    path: result['path'],
+    codeGraphPath: result['codeGraphPath'],
+    digest: result['digest'],
+    builtAtCommit: result['builtAtCommit'],
+    tool: result['tool'],
+    freshness: result['freshness'],
+    nodes,
+    edges,
+  };
+}
+
+function intelIndexOf(result: Record<string, unknown> | undefined): RecordIntelIndex | undefined {
+  if (result === undefined) return undefined;
+  const files = result['files'];
+  if (!isString(result['path']) || !isString(result['digest']) || !isString(result['refreshedAtCommit']) || !isFreshness(result['freshness']) || typeof files !== 'number' || !Number.isSafeInteger(files) || files < 0) {
+    return undefined;
+  }
+  return { path: result['path'], digest: result['digest'], refreshedAtCommit: result['refreshedAtCommit'], freshness: result['freshness'], files };
+}
+
+// Folds the stored index step results into the record's `indexes`, in registry order:
+//   code-graph present -> indexes.graph        intel present -> indexes.intel
+//   knowledge present  -> indexes.graph.digest = result.graphDigest and indexes.graph.knowledge = result.knowledge
+//   every absent step  -> an indexes.absent entry (the code graph is named `graph`)
+// A disabled step says nothing. A present step whose result is not in the expected shape counts as absent, so a
+// malformed result never reaches the record. Knowledge words only make sense on a graph: without one they are absent.
+export function foldIndexResults(results: readonly IndexStepResult[]): RecordIndexes {
+  const absent: RecordAbsentIndex[] = [];
+  let graph: RecordGraphIndex | undefined;
+  let intel: RecordIntelIndex | undefined;
+  let knowledge: { graphDigest: string; knowledge: Record<string, unknown> } | undefined;
+  for (const step of results) {
+    const recordName = step.index === 'code-graph' ? 'graph' : step.index;
+    if (step.status === 'disabled') continue;
+    if (step.status === 'absent') {
+      absent.push({ index: recordName, reason: step.reason ?? 'unknown' });
+      continue;
+    }
+    if (step.index === 'code-graph') {
+      graph = graphIndexOf(step.result);
+      if (graph === undefined) absent.push({ index: recordName, reason: 'invalid-result' });
+    } else if (step.index === 'intel') {
+      intel = intelIndexOf(step.result);
+      if (intel === undefined) absent.push({ index: recordName, reason: 'invalid-result' });
+    } else {
+      const graphDigest = step.result?.['graphDigest'];
+      const documents = step.result?.['knowledge'];
+      if (isString(graphDigest) && isObject(documents)) knowledge = { graphDigest, knowledge: documents };
+      else absent.push({ index: recordName, reason: 'invalid-result' });
+    }
+  }
+  if (knowledge !== undefined) {
+    if (graph === undefined) absent.push({ index: 'knowledge', reason: 'graph-absent' });
+    else graph = { ...graph, digest: knowledge.graphDigest, knowledge: knowledge.knowledge };
+  }
+  return { ...(graph !== undefined ? { graph } : {}), ...(intel !== undefined ? { intel } : {}), ...(absent.length > 0 ? { absent } : {}) };
 }
 
 export function recordDigest(record: unknown): string {

@@ -6,9 +6,11 @@ import type { Result } from '../../domain/result.ts';
 import { canonicalJson } from '../../domain/digest.ts';
 import { narrowProposals, PROFILE_POLICY } from '../../domain/policy-narrowing.ts';
 import type { NarrowedProposals } from '../../domain/policy-narrowing.ts';
-import { buildProjectRecord } from '../../domain/project-record.ts';
+import { buildProjectRecord, foldIndexResults } from '../../domain/project-record.ts';
 import type { CodebaseArtifact, RecordFinding } from '../../domain/project-record.ts';
+import { AVARICE_TRACKED_WRITABLE, scopeViolationsOf, writeSetsFor } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
+import { loadIndexResults } from './index-steps.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { effectiveMappingMode, loadAcceptedValidation, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
@@ -21,6 +23,7 @@ const PROPOSAL_PATH = '.avarice/config.json';
 const MAX_PROPOSAL_BYTES = 65536;
 const MAX_FINDINGS = 50;
 const MAX_DETAIL = 200;
+const MAX_PATHS_IN_EVENT = 20;
 
 const clip = (text: string): string => (text.length <= MAX_DETAIL ? text : `${text.slice(0, MAX_DETAIL - 1)}…`);
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -78,6 +81,39 @@ function appliedConfig(result: unknown): Record<string, unknown> {
   return config;
 }
 
+// The last look at the staging tree before a record is built (T-01-67): the whole diff against the pin must lie inside
+// the union of the write sets of every invocation that ran and AVARICE's own, whoever wrote it and whenever. Validation
+// judged the diff before the index steps; this judges it after, so a write by an index step or a late invocation
+// cannot reach an active record. A violation is a containment finding, and the onboarding blocks.
+function scopeCheck(ctx: StageContext, row: OnboardingRow, staging: string, pin: string, runId: string, files: Parameters<typeof writeSetsFor>[0]): Result<string[]> {
+  const { deps } = ctx;
+  const changes = deps.staging.changes(staging, pin);
+  if (!changes.ok) return changes;
+  const tracked = deps.staging.listTracked(staging, pin);
+  if (!tracked.ok) return tracked;
+  const steps = deps.ledger.getStepResults(row.onboardingId);
+  if (!steps.ok) return steps;
+  const purposesRun = steps.value.filter((s) => s.step.startsWith('launch:')).map((s) => s.step.slice('launch:'.length));
+  const sets = writeSetsFor(files, purposesRun);
+  const violations = scopeViolationsOf(changes.value, tracked.value, sets.allowedWrite, [...sets.trackedWritable, ...AVARICE_TRACKED_WRITABLE]);
+  if (violations.length > 0) {
+    const finding = deps.ledger.appendEvent({
+      type: 'containment.finding',
+      level: 'warn',
+      runId,
+      data: {
+        onboardingId: row.onboardingId,
+        check: 'activation-scope',
+        count: violations.length,
+        paths: violations.slice(0, MAX_PATHS_IN_EVENT).map(clip),
+      },
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!finding.ok) return finding;
+  }
+  return ok(violations);
+}
+
 export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Result<void> => {
   const { deps } = ctx;
   const contract = loadContract(deps, row.onboardingId);
@@ -90,6 +126,13 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
 
   const head = deps.staging.head(staging.value);
   if (!head.ok) return head;
+  const violations = scopeCheck(ctx, row, staging.value, contract.value.body.workspace.baseRevision, contract.value.runId, contract.value.body.files);
+  if (!violations.ok) return violations;
+  if (violations.value.length > 0) {
+    ctx.note(`${violations.value.length} path(s) in the staging tree lie outside every write set (${violations.value.slice(0, 5).map(clip).join(', ')}); the project cannot be activated`);
+    const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'enforcement_failure', data: { check: 'activation-scope', count: violations.value.length } });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
   const mode = effectiveMappingMode(deps, row.onboardingId, contract.value.body);
   if (!mode.ok) return mode;
   const documents = readMapDocuments(deps.staging, staging.value, mode.value);
@@ -153,6 +196,8 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
 
   const preflight = isObject(row.preflight) ? row.preflight : {};
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((n): n is string => typeof n === 'string') : []);
+  const indexResults = loadIndexResults(deps, row.onboardingId);
+  if (!indexResults.ok) return indexResults;
   const mapped = new Date(nowMs).toISOString();
   const findings = [...validationFindings(steps.value), ...proposal.value.findings].slice(0, MAX_FINDINGS);
 
@@ -179,6 +224,7 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
     contract: { runId: contract.value.runId, version: contract.value.version, digest: contract.value.digest },
     paths: proposal.value.narrowed.accepted.paths,
     commands: proposal.value.narrowed.accepted.commands,
+    indexes: foldIndexResults(indexResults.value),
   });
 
   const activated = ctx.activate(row, record as unknown as Readonly<Record<string, unknown>>);

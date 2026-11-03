@@ -36,6 +36,11 @@ export const AVARICE_WRITE_SET: readonly string[] = ['.planning/config.json', '.
 
 const CONFIG_JSON = '.planning/config.json';
 
+// Where AVARICE's own index steps regenerate a file a repository may already track (a committed GSD graph). The
+// map validation never allows a tracked change here, because no invocation writes it; the check before activation
+// does, because the index steps run in between and write exactly these files.
+export const AVARICE_TRACKED_WRITABLE: readonly string[] = ['.planning/graphs/**'];
+
 export interface WriteSets {
   // Globs the staging diff may touch.
   allowedWrite: string[];
@@ -57,6 +62,28 @@ export function writeSetsFor(files: OnboardingContract['files'], purposesRun: re
     allowedWrite: [...new Set([...agentSets, ...files.avariceWrite, ...AVARICE_WRITE_SET])],
     trackedWritable: [...new Set([CONFIG_JSON, ...agentSets])],
   };
+}
+
+// The paths of a staging diff that lie outside the write sets, sorted. A modified or deleted path must be inside the
+// write set and in a place where a tracked file may change; an added path must be inside the write set, and must not
+// be a tracked path outside the places where a tracked file may change (a deleted-and-recreated file). Shared by the
+// validation stage and the check before activation, so both judge the diff the same way.
+export function scopeViolationsOf(
+  changes: { modified: readonly string[]; added: readonly string[]; deleted: readonly string[] },
+  knownPaths: readonly string[],
+  allowedWrite: readonly string[],
+  trackedWritable: readonly string[],
+): string[] {
+  const known = new Set(knownPaths);
+  const violations = new Set<string>();
+  for (const path of [...changes.modified, ...changes.deleted]) {
+    if (!(matchesAny(path, trackedWritable) && matchesAny(path, allowedWrite))) violations.add(path);
+  }
+  for (const path of changes.added) {
+    if (!matchesAny(path, allowedWrite)) violations.add(path);
+    else if (known.has(path) && !matchesAny(path, trackedWritable)) violations.add(path);
+  }
+  return [...violations].sort();
 }
 
 export interface MapFileFact {
@@ -187,16 +214,7 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   };
 
   // 3. Scope of writes: the staging diff touches only the write sets; a tracked file changes only where allowed.
-  const known = new Set(facts.knownPaths);
-  const violations = new Set<string>();
-  for (const path of [...facts.changes.modified, ...facts.changes.deleted]) {
-    if (!(matchesAny(path, facts.trackedWritable) && matchesAny(path, facts.allowedWrite))) violations.add(path);
-  }
-  for (const path of facts.changes.added) {
-    if (!matchesAny(path, facts.allowedWrite)) violations.add(path);
-    else if (known.has(path) && !matchesAny(path, facts.trackedWritable)) violations.add(path);
-  }
-  const scopeViolations = [...violations].sort();
+  const scopeViolations = scopeViolationsOf(facts.changes, facts.knownPaths, facts.allowedWrite, facts.trackedWritable);
   const scopeOfWrites: ValidationCheck = {
     name: 'scope-of-writes',
     passed: scopeViolations.length === 0,
