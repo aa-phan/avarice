@@ -483,8 +483,10 @@ test('live 14 S-26 fast, S-31: `avarice onboard --mode fast` on a scratch reposi
 });
 
 // The staging paths the fast onboarding may leave changed: the map directory, the intel directory (the intel launch
-// of plan 01-17), AVARICE's own config and graph output.
-const STAGING_ALLOWED: readonly RegExp[] = [/^\.planning\/codebase\//, /^\.planning\/intel\//, /^\.planning\/config\.json$/, /^\.planning\/graphs\//];
+// of plan 01-17), AVARICE's own config and graph output, and the knowledge corpus AVARICE copies into
+// `.avarice-knowledge/` (plan 01-18; in `AVARICE_WRITE_SET`). The attribution check below still requires that no write
+// the host made is outside the map and intel directories, so the corpus copy cannot hide a host write.
+const STAGING_ALLOWED: readonly RegExp[] = [/^\.planning\/codebase\//, /^\.planning\/intel\//, /^\.planning\/config\.json$/, /^\.planning\/graphs\//, /^\.avarice-knowledge\//];
 
 // What the live run proves about containment, asserted before anything about the onboarding's outcome so that a run
 // the validator rejects still shows whether the host stayed inside its write set.
