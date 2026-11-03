@@ -61,6 +61,8 @@ const REQUIRED_KEYS: ReadonlyArray<readonly [path: readonly string[], expected: 
   [['sandbox', 'excludedCommands'], []],
   // The onboarding sandbox lists no network domain (CON-5, SEC-5).
   [['sandbox', 'network', 'allowedDomains'], []],
+  // The host honors an empty allowlist as "no domain" only when it is strict (MF-02, docs/containment.md "Generated host settings").
+  [['sandbox', 'network', 'strictAllowlist'], true],
 ];
 
 interface HookRef {
