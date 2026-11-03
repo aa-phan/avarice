@@ -1,0 +1,373 @@
+{
+  "schema": 1,
+  "mode": "rehearsal",
+  "repo": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-QEYnvp/clone",
+  "source": "/Users/aphan/aa-phan-portfolio-v2",
+  "runDir": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-QEYnvp/data/exit-run/rehearsal-20261103T210001Z",
+  "startedAtEpoch": 1793739602,
+  "finishedAtEpoch": 1793740024,
+  "wallSeconds": 422,
+  "authorization": {
+    "selection": "rehearsal-then-target",
+    "capUsd": 24,
+    "perRunCapUsd": 12,
+    "spentUsdSoFar": 0.0171,
+    "decidedBy": "user (aphan)",
+    "decidedOn": "2026-11-03",
+    "decidedThrough": "execute-phase orchestrator, resolving the Task 2 checkpoint:decision (gate blocking-human) of plan 01-19",
+    "noCommitConfirmed": true,
+    "noCommitConfirmation": "The user confirmed they will not commit to ~/aa-phan-portfolio-v2 while the run is in progress",
+    "contextGiven": "measured cost so far well under 1 USD per onboarding; caps are ceilings; clone staging writes nothing to the target"
+  },
+  "tooling": {
+    "node": "v22.22.3",
+    "claude": {
+      "path": "/Users/aphan/.local/share/claude/versions/2.1.316",
+      "version": "2.1.316"
+    },
+    "stagingStrategy": "clone"
+  },
+  "onboardingId": "onb_01M6HKCFD338P8CPPCCZZWW0S4",
+  "outcome": {
+    "killedProcessExit": 137,
+    "resumeExit": 3,
+    "finalState": "blocked"
+  },
+  "record": {
+    "ok": false,
+    "onboardingId": "onb_01M6HKCFD338P8CPPCCZZWW0S4",
+    "projectId": "proj_01M6HKCFD3390RGWYC8N38HB67",
+    "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-QEYnvp/clone",
+    "state": "blocked",
+    "recordVersion": null,
+    "promotion": null,
+    "onboardedRevision": null,
+    "mapping": null,
+    "nodes": null,
+    "edges": null,
+    "documentNodes": null,
+    "graphBuiltAtCommit": null,
+    "intelRefreshedAtCommit": null,
+    "intelFiles": null,
+    "absentIndexes": null,
+    "problems": [
+      "the onboarding state is blocked, not active",
+      "no active project record for project proj_01M6HKCFD3390RGWYC8N38HB67"
+    ]
+  },
+  "checkoutBefore": {
+    "head": "1e2a239f38d0c26f3b5af28f8760bd1b2217b26b",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "3627337c824f921b84feb8f69282574579def8e254fa634f1b3f8e993e21330c",
+    "worktreesDigest": "9f0565af194b147ede36f21655265ba934a6864630342328c7e762914e64709d",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutAfter": {
+    "head": "1e2a239f38d0c26f3b5af28f8760bd1b2217b26b",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "3627337c824f921b84feb8f69282574579def8e254fa634f1b3f8e993e21330c",
+    "worktreesDigest": "9f0565af194b147ede36f21655265ba934a6864630342328c7e762914e64709d",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutUnchanged": {
+    "head": true,
+    "branch": true,
+    "statusDigest": true,
+    "filesDigest": true,
+    "refsDigest": true,
+    "worktreesDigest": true
+  },
+  "killAndResume": {
+    "killAfterSecondsRequested": 60,
+    "mapLaunchStartedObservedAtEpoch": 1793739605,
+    "killedAtEpoch": 1793739668,
+    "secondsFromMapStartToKill": 63,
+    "avaricePid": 27391,
+    "signal": "KILL",
+    "killedSessionId": "c393d109-38bb-4f78-8aa0-25136b7c74ec",
+    "stateWhenKilled": "mapping",
+    "survivingHostProcessesAfterKill": 1,
+    "interruptedSeenAtEpoch": 1793739845,
+    "secondsFromKillToInterrupted": 177,
+    "interruptedStatus": {
+      "projectId": "proj_01M6HKCFD3390RGWYC8N38HB67",
+      "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-QEYnvp/clone",
+      "onboardingId": "onb_01M6HKCFD338P8CPPCCZZWW0S4",
+      "state": "mapping",
+      "reason": null,
+      "interrupted": {
+        "state": "mapping",
+        "nextAction": "launch:map",
+        "resumeCommand": "avarice resume onb_01M6HKCFD338P8CPPCCZZWW0S4"
+      },
+      "recordVersion": null,
+      "onboardedRevision": null,
+      "mapping": null,
+      "indexes": {}
+    },
+    "resumeCommand": "avarice resume onb_01M6HKCFD338P8CPPCCZZWW0S4",
+    "resumeSeconds": 179,
+    "resumeExit": 3,
+    "sameOnboardingId": true,
+    "sameOnboardedRevision": true,
+    "pinBefore": "1e2a239f38d0c26f3b5af28f8760bd1b2217b26b",
+    "pinAfter": "1e2a239f38d0c26f3b5af28f8760bd1b2217b26b",
+    "processesWithKilledSessionAfterResume": 0,
+    "processesWithAnySessionAfterResume": 0
+  },
+  "costs": {
+    "totalUsd": 0.148638,
+    "budgetCostUsedUsd": 0.14863750499999998,
+    "perStep": [
+      {
+        "step": "launch:map",
+        "attempt": 2,
+        "costUsd": 0.14863750499999998,
+        "durationMs": 178234,
+        "invocationId": "inv_01M6HKKWCJVXXF59ZP3WY1WXEZ"
+      }
+    ],
+    "budgets": [
+      {
+        "name": "costUsd",
+        "limit_value": 12,
+        "used": 0.14863750499999998,
+        "reserved": 0,
+        "exactness": "estimated"
+      },
+      {
+        "name": "invocations",
+        "limit_value": 4,
+        "used": 2,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "subagentsTotal",
+        "limit_value": 7,
+        "used": 7,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "toolCalls",
+        "limit_value": 600,
+        "used": 222,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "wallClockMs",
+        "limit_value": 2700000,
+        "used": 178234,
+        "reserved": 0,
+        "exactness": "exact"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "gsd:inspect",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T21:00:03.364Z",
+      "completedAt": "2026-11-03T21:00:03.364Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:probe",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T21:00:03.736Z",
+      "completedAt": "2026-11-03T21:00:03.847Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "mapping:plan",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T21:00:03.848Z",
+      "completedAt": "2026-11-03T21:00:03.848Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:configure",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T21:00:03.848Z",
+      "completedAt": "2026-11-03T21:00:04.125Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 1,
+      "status": "reconciled",
+      "startedAt": "2026-11-03T21:00:04.147Z",
+      "completedAt": "2026-11-03T21:04:05.855Z",
+      "invocationId": "inv_01M6HKCG5KMT5TYCZFSAFY9PHR",
+      "sessionId": "c393d109-38bb-4f78-8aa0-25136b7c74ec",
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "validate",
+      "attempt": 1,
+      "status": "rejected",
+      "startedAt": "2026-11-03T21:04:06.008Z",
+      "completedAt": "2026-11-03T21:04:06.008Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 2,
+      "status": "completed",
+      "startedAt": "2026-11-03T21:04:06.034Z",
+      "completedAt": "2026-11-03T21:07:04.394Z",
+      "invocationId": "inv_01M6HKKWCJVXXF59ZP3WY1WXEZ",
+      "sessionId": "dae51694-8d40-407f-901c-33799aa8ac07",
+      "kind": "budget_exhausted",
+      "costUsd": 0.14863750499999998,
+      "durationMs": 178234,
+      "permissionDenials": 3
+    }
+  ],
+  "hookDecisions": {
+    "deny:shell-syntax": 44,
+    "allow:read-set": 166,
+    "allow:shell-identity": 38,
+    "deny:shell-not-allowed": 16,
+    "allow:subagent-type": 7,
+    "allow:write-set": 18,
+    "deny:budget_exhausted": 2
+  },
+  "eventTypes": {
+    "contract.stored": 1,
+    "hook.decision": 291,
+    "invocation.finished": 1,
+    "invocation.reconciled": 1,
+    "onboarding.checkpoint": 3,
+    "onboarding.transition": 9,
+    "tool.completed": 228
+  },
+  "reaped": [],
+  "containment": {
+    "contractVersions": [
+      {
+        "version": 1,
+        "digest": "sha256:830306ff183f9b5207f3eaf0db4ad66efcf9655894d367f4cdbacdcdf9959e83",
+        "policy_revision": "sha256:01a1a8806a2542290fee7ccb5d4e87ce18e01fbbe5d3dcdeec6cd2797d07c032",
+        "created_at": "2026-11-03T21:00:03.365Z"
+      }
+    ],
+    "contractsAtMapStart": {
+      "contracts": [
+        {
+          "version": 1,
+          "digest": "sha256:830306ff183f9b5207f3eaf0db4ad66efcf9655894d367f4cdbacdcdf9959e83",
+          "policy_revision": "sha256:01a1a8806a2542290fee7ccb5d4e87ce18e01fbbe5d3dcdeec6cd2797d07c032",
+          "created_at": "2026-11-03T21:00:03.365Z"
+        }
+      ]
+    },
+    "contractUnchanged": true,
+    "generatedFilesAtMapStart": {
+      "map-inv_01M6HKCG5KMT5TYCZFSAFY9PHR/hook-policy.json": "39b4957073c2c5171aa647303e5e7b91c072ef6bf7774bc9a3a24b8bbd9d5cf4",
+      "map-inv_01M6HKCG5KMT5TYCZFSAFY9PHR/host-settings.json": "f130404bcece66ea9f5d6118b213ab935f7007786909f3ddc00435389bf57bf7"
+    },
+    "generatedFilesAtEnd": {
+      "map-inv_01M6HKCG5KMT5TYCZFSAFY9PHR/hook-policy.json": "39b4957073c2c5171aa647303e5e7b91c072ef6bf7774bc9a3a24b8bbd9d5cf4",
+      "map-inv_01M6HKCG5KMT5TYCZFSAFY9PHR/host-settings.json": "f130404bcece66ea9f5d6118b213ab935f7007786909f3ddc00435389bf57bf7",
+      "map-inv_01M6HKKWCJVXXF59ZP3WY1WXEZ/hook-policy.json": "e49b5085203c7d586dfd7c08fb605ac94d09c35cd7f4a015be2d1cd3d3dfbd0c",
+      "map-inv_01M6HKKWCJVXXF59ZP3WY1WXEZ/host-settings.json": "dc9130e64d56e12d582477eaffa1c8f0c491eba93426848b90380994079a56b3"
+    },
+    "settingsAndPolicyUnchanged": true,
+    "pushOrCommitInTarget": null
+  },
+  "context": [
+    {
+      "term": "ADR-999",
+      "exit": 3,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    },
+    {
+      "term": "injected decision",
+      "exit": 3,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    },
+    {
+      "term": "push to main",
+      "exit": 3,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    }
+  ],
+  "problems": [
+    "assert-exit: the onboarding state is blocked, not active",
+    "assert-exit: no active project record for project proj_01M6HKCFD3390RGWYC8N38HB67",
+    "avarice context did not print the injected node inside the untrusted-data fence",
+    "avarice resume exited 3, not 0"
+  ]
+}

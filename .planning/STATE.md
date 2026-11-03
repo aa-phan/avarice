@@ -5,11 +5,11 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-20-PLAN.md
-last_updated: "2026-11-03T11:00:53.391Z"
+stopped_at: "01-19 blocked: rehearsal 3 blocked (validation stamp/path-references, subagent budget); target run not started"
+last_updated: "2026-11-03T21:09:21.839Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 0470f35aa21d9bafd087be91f57e37206d5ed1fe
+state_head: 2c5d1e61419242b6ffd7df66f123e5ffacd9806f
 progress:
   total_phases: 8
   completed_phases: 0
@@ -144,6 +144,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-18: a rejected merged graph is replaced by the code-only graph from the code step's build directory; the record states the merged node and edge counts next to the merged digest
 - [Phase 01]: 01-20: mutation probing runs in scratch clones of the scanned commit, so the working tree never holds a mutation
 - [Phase 01]: 01-20: MF-02 (strictAllowlist not a required key), MF-03 (nested node text uncapped), MF-04 (hook read check blind to glob/brace expansion) stay open as todo tests for the owner
+- [Phase 01]: 01-19: the empty .planning/codebase AVARICE creates made GSD ask Refresh/Update/Skip; the contract's existing-map answer is now always passed to the mapper (8cc18b6)
+- [Phase 01]: 01-19: exit run stopped after the rehearsals (0.1656 of 24 USD spent); target run withheld until the owner decides the full-map stamp, path-references tolerance and retry budget
 
 ### Pending Todos
 
@@ -173,6 +175,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
+- [Phase 1, plan 01-19] Exit run blocked: three live rehearsals did not reach active. Full map is never stamped (stamp check), real full map has 10.5% dangling paths (limit 5%), a map retry exceeds subagentsTotal 7; see 01-19-SUMMARY.md and deferred-items 9 to 11. Target run not started.
 
 ## Deferred Items
 
@@ -184,6 +187,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T11:00:53.348Z
-Stopped at: Completed 01-20-PLAN.md
-Resume file: None
+Last session: 2026-11-03T21:09:21.811Z
+Stopped at: 01-19 blocked: rehearsal 3 blocked (validation stamp/path-references, subagent budget); target run not started
+Resume file: .planning/phases/01-contained-onboarding-of-one-repository/01-19-SUMMARY.md

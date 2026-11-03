@@ -28,3 +28,11 @@ Out-of-scope discoveries logged by plan executors. Nothing here was fixed by the
 6. **Subagent budget limits the corpus in practice.** The run budget is 7 subagents; the full map spawns 4; the skill spawns one per 20 to 25 uncached documents, so about 60 documents fit. A corpus up to the 200-file cap is likely to end `budget_exhausted`. Option: lower the corpus cap from the subagent budget that remains when the step starts (read from the ledger), so the pass is smaller instead of cut short.
 7. **`docs/repository-onboarding.md` still says the pass runs `graphify update` for the code graph and keeps every tier as the skill wrote it.** The code uses `extract --code-only` (01-13) and lowers an EXTRACTED document edge to INFERRED (01-18, per spike S0-G). The doc rows for Graph index, Knowledge pass and Validation need those two sentences.
 8. **The skill graph's hyperedges are not merged**, only its nodes and edges.
+
+
+## From plan 01-19 (live exit rehearsal, 2026-11-03)
+
+9. **A full map is never stamped, so validation `stamp` fails on a real full onboarding.** The mapper's closing `stamp-codebase-map` call is denied by the hook (S0-F), AVARICE stamps only fast maps, and `stamp` needs `last_mapped_commit` at the staging HEAD. Rehearsal 3: all 7 files "no stamp". Options: AVARICE stamps a full map as it does a fast one; or the hook admits that one GSD verb. Not fixed.
+10. **`path-references` rejects the real full map of `~/aa-phan-portfolio-v2`: 32 of 306 dangling (10.5%, limit 5%)**, mostly gitignored build output (`dist`, `dist/index.html`, `dist/resume.pdf`), `.env` and font paths. Same class as item 1; limit unchanged; owner decision.
+11. **A map retry cannot fit `subagentsTotal` 7** (a full map spawns 4): after one rejected validation the second map is `budget_exhausted`. A host that survives `kill -9` keeps charging the budget until it finishes. Related to item 6.
+12. **Resolved in plan 01-19 (`8cc18b6`):** AVARICE's empty `.planning/codebase` made GSD's map workflow ask Refresh, Update or Skip on a repository with no map (two live runs, `blocked (decision)`); the contract's existing-map answer is now always passed. Also: the default `claude` on PATH is 2.1.317, not in `ADMITTED_CLAUDE_VERSIONS`; the default profile store is mode 0644 and AVARICE does not tighten an existing store.
