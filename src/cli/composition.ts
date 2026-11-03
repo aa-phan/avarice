@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newId } from '../domain/ids.ts';
 import type { IdPrefix } from '../domain/ids.ts';
@@ -20,7 +20,7 @@ import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/stagin
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
 import { GsdGraphContext } from '../adapters/context/gsd-graph.ts';
 import { GsdIntelContext } from '../adapters/context/gsd-intel.ts';
-import { GraphifyTool } from '../adapters/graph/graphify.ts';
+import { GraphifyTool, findGraphifyBinary } from '../adapters/graph/graphify.ts';
 import { UnavailableAgentHost } from '../adapters/host/unavailable-host.ts';
 import { ClaudeHostAdapter } from '../adapters/host-claude/claude-host.ts';
 import { fingerprintGsdPreamble } from '../adapters/gsd/preamble.ts';
@@ -116,6 +116,7 @@ function productionHost(inputs: HostInputs): AgentHost {
   const hookEntry = env['AVARICE_HOOK_ENTRY'] !== undefined && env['AVARICE_HOOK_ENTRY'] !== '' ? env['AVARICE_HOOK_ENTRY'] : fileURLToPath(new URL('../hook/pre-tool-use.ts', import.meta.url));
   const preamble = fingerprintGsdPreamble(located.gsdCoreDir);
   if (!preamble.ok) return new UnavailableAgentHost('the GSD shim preamble was not found in the located gsd-core');
+  const graphifyBin = findGraphifyBinary(env);
   const configDir = env['CLAUDE_CONFIG_DIR'] !== undefined && env['CLAUDE_CONFIG_DIR'] !== '' ? env['CLAUDE_CONFIG_DIR'] : join(home, '.claude');
   const adapter = new ClaudeHostAdapter({
     claudeBin,
@@ -127,6 +128,9 @@ function productionHost(inputs: HostInputs): AgentHost {
     staging: inputs.staging,
     countHookDenies: (invocationId) => inputs.ledger.countHookDenials(invocationId),
     env,
+    // The graphify skill resolves its interpreter from the graphify shebang, so the knowledge invocation (only) gets the
+    // directory of the graphify binary on PATH (spike S0-G); without a graphify there is no knowledge pass to run.
+    ...(graphifyBin !== undefined ? { knowledgePath: [dirname(graphifyBin)] } : {}),
   });
   const attributes = adapter.descriptor.attributes ?? {};
   return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(attributes['reason'] ?? 'the host adapter is not enforced');

@@ -126,6 +126,16 @@ describe('mergeKnowledgeGraph: one ID space, tiers kept (ONB-14, S-45)', () => {
     assert.deepEqual(graph['hyperedges'], [{ id: 'h1' }], 'other top-level keys of the code graph are kept');
   });
 
+  it('stamps built_at_commit with the onboarded revision whatever the code graph carried, with or without the git: prefix', () => {
+    const noCommit = codeGraph();
+    delete noCommit['built_at_commit'];
+    assert.equal(merge(skill([docNode('docs_guide', 'docs/guide.md')], []), noCommit).graph['built_at_commit'], PIN);
+    const stale = { ...codeGraph(), built_at_commit: 'f'.repeat(40) };
+    assert.equal(merge(skill([docNode('docs_guide', 'docs/guide.md')], []), stale).graph['built_at_commit'], PIN);
+    const prefixed = mergeKnowledgeGraph({ code: noCommit, docs: skill([docNode('docs_guide', 'docs/guide.md')], []), manifest: MANIFEST, onboardedRevision: REV });
+    assert.equal(prefixed.graph['built_at_commit'], PIN);
+  });
+
   it('rewrites `source_file` whichever way the skill spelled it, through the manifest, and leaves an unknown source for validation to refuse', () => {
     const docs = skill(
       [

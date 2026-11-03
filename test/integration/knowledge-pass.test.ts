@@ -324,7 +324,30 @@ describe('the knowledge step: merge, validation and the record (ONB-14, S-45)', 
   it('keeps graph.json byte-identical to code-graph.json and records validation-failed when a node cites a source the manifest does not know', async () => {
     const bad = skillGraph();
     (bad['nodes'] as Array<Record<string, unknown>>).push({ id: 'rogue', label: 'rogue', file_type: 'document', source_file: 'src/index.ts' });
-    const run = await onboard({ knowledge: { graph: bad } });
+    let clusterCalls = 0;
+    const run = await onboard({
+      knowledge: { graph: bad },
+      wrap: (deps) => ({
+        ...deps,
+        graph: {
+          descriptor: deps.graph.descriptor,
+          locate: () => deps.graph.locate(),
+          extractCode: (s, o) => deps.graph.extractCode(s, o),
+          cluster: (o) => deps.graph.cluster(o),
+          readGraph: (f) => deps.graph.readGraph(f),
+          install: (s, f) => deps.graph.install(s, f),
+          fileSizes: (s, p) => deps.graph.fileSizes(s, p),
+          materializeCorpus: (s, p, m, pin, d) => deps.graph.materializeCorpus(s, p, m, pin, d),
+          readSkillGraph: (s) => deps.graph.readSkillGraph(s),
+          clusterMerged: (g, d) => {
+            clusterCalls += 1;
+            return deps.graph.clusterMerged(g, d);
+          },
+          installMergedGraph: (s, f) => deps.graph.installMergedGraph(s, f),
+        },
+      }),
+    });
+    assert.equal(clusterCalls, 0, 'a merge that fails validation is not even clustered');
     assert.equal(run.outcome.state, 'active');
     assert.deepEqual(absentReasons(run).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'validation-failed' }]);
     assert.equal(graphBytes(run, 'graph.json'), graphBytes(run, 'code-graph.json'));

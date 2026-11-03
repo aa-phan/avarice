@@ -5,10 +5,16 @@
 // this file). Every failure is an absent index with a reason, never an error, and leaves `graph.json` the code-only graph:
 // an index that fails never blocks activation.
 import { join } from 'node:path';
+import { sha256Hex } from '../../domain/digest.ts';
+import { mergeKnowledgeGraph } from '../../domain/graph-merge.ts';
 import { CORPUS_LIMITS, KNOWLEDGE_DIR, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
+import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
+import { validateKnowledgeGraph } from '../../domain/knowledge-validation.ts';
+import { summarizeGraph } from '../../domain/graph-validation.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
 import { ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
+import type { GsdGraphStatus } from '../../ports/gsd-onboarding.ts';
 import type { AppDeps } from '../deps.ts';
 import { completeInvocation, prepareInvocation } from '../invocation.ts';
 import type { IndexStepContext } from './index-steps.ts';
@@ -17,6 +23,10 @@ import { effectiveMappingMode, mapFileNamesFor } from './shared.ts';
 const PROMPT = '/graphify .';
 // The skill writes `graphify-out/` in its working directory; the host judges `progressed` by this staging-relative file.
 const EXPECTED_GRAPH = `${KNOWLEDGE_DIR}/graphify-out/graph.json`;
+const GRAPH_PATH = '.planning/graphs/graph.json';
+const CODE_GRAPH_PATH = '.planning/graphs/code-graph.json';
+// Matches the size the graph tool refuses to read.
+const MAX_GRAPH_BYTES = 64 * 1024 * 1024;
 const MAX_DETAIL = 200;
 const STORE = 'local';
 const RETENTION = 'onboarding';
@@ -54,6 +64,34 @@ function codeGraphPresent(deps: AppDeps, onboardingId: string): Result<boolean> 
   if (!steps.ok) return steps;
   const found = [...steps.value].reverse().find((s) => s.step === 'index:code-graph' && s.status === 'completed');
   return ok(found !== undefined && isObject(found.result) && found.result['status'] === 'present');
+}
+
+// Why a tool or GSD call failed: a timeout is `timeout`, a missing graphify is `graphify-missing`, anything else is
+// `otherwise`, the reason of the stage the call belongs to.
+function reasonOf(error: PortError, otherwise: string): string {
+  if (error.kind === 'timeout') return 'timeout';
+  if (error.kind === 'unavailable' && error.cause.startsWith('graphify-missing')) return 'graphify-missing';
+  return otherwise;
+}
+
+// GSD sees the installed graph as present and fresh (the same judgment as the code-graph step).
+function gsdSeesFreshGraph(status: GsdGraphStatus): string | undefined {
+  if (status.disabled) return 'graphify is disabled in the staging GSD config';
+  if (!status.exists) return 'GSD finds no graph in .planning/graphs';
+  if (status.stale) return 'GSD reports the graph stale';
+  if (status.commitStale === true) return `GSD reports the graph ${status.commitsBehind ?? 'some'} commit(s) behind HEAD`;
+  return undefined;
+}
+
+// Puts the code-only graph back after a merged graph was installed and then rejected: the file the code-graph step built
+// (still in its work directory) goes over graph.json and GRAPH_REPORT.md, `code-graph.json` is rewritten with the same bytes,
+// and GSD's snapshot is taken again for it. Best effort: the answer says whether it worked.
+async function restoreCodeOnly(deps: AppDeps, ctx: IndexStepContext): Promise<boolean> {
+  const built = join(deps.profile.workRoot, ctx.row.onboardingId, 'graph-build', 'code', 'graphify-out');
+  const installed = deps.graph.install(ctx.staging, { graph: join(built, 'graph.json'), report: join(built, 'GRAPH_REPORT.md') });
+  if (!installed.ok) return false;
+  if (deps.gsd !== undefined) await deps.gsd.graphifySnapshot(ctx.staging);
+  return true;
 }
 
 export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Promise<Result<IndexStepResult>> {
@@ -132,6 +170,63 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
     return skill.error.kind === 'not_found' ? absent('no-output', 'the pass left no graphify-out/graph.json') : absent('validation-failed', describeError(skill.error));
   }
 
-  // The merge, validation, clustering and installation follow in the second half of this plan.
-  return absent('not-built-yet', `${corpusSummary(selection.paths).length} corpus entries ran; merge pending`);
+  return mergeAndInstall(deps, ctx, manifest, skill.value.raw);
+}
+
+// The second half: AVARICE merges the skill graph into the code graph (one ID space), validates the merge, has graphify
+// cluster it, validates what came back, and only then replaces graph.json. Every refusal leaves graph.json the code-only
+// graph byte for byte.
+async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: KnowledgeManifest, skillGraph: Record<string, unknown>): Promise<Result<IndexStepResult>> {
+  const { staging, head, row } = ctx;
+
+  const code = deps.graph.readGraph(join(staging, CODE_GRAPH_PATH));
+  if (!code.ok) return absent('validation-failed', `the code graph cannot be read for the merge: ${describeError(code.error)}`);
+  const { graph, stats } = mergeKnowledgeGraph({ code: code.value.raw, docs: skillGraph, manifest, onboardedRevision: head });
+  const checked = validateKnowledgeGraph(graph, manifest, stats);
+  if (!checked.valid) return absent('validation-failed', checked.problems.join('; '));
+
+  // Outside the staging tree: {workRoot}/{onb}/graph-build/merged (staging is {workRoot}/{onb}/staging).
+  const clustered = await deps.graph.clusterMerged(graph, join(deps.profile.workRoot, row.onboardingId, 'graph-build', 'merged'));
+  if (!clustered.ok) return absent(reasonOf(clustered.error, 'cluster-failed'), describeError(clustered.error));
+  // What graphify wrote back is what would be installed, so it is judged too.
+  const rechecked = validateKnowledgeGraph(clustered.value.graph.raw, manifest, stats);
+  if (!rechecked.valid) return absent('validation-failed', `after clustering: ${rechecked.problems.join('; ')}`);
+
+  const installed = deps.graph.installMergedGraph(staging, { graph: clustered.value.graphFile, report: clustered.value.reportFile });
+  if (!installed.ok) return absent('cluster-failed', `the merged graph cannot be installed: ${describeError(installed.error)}`);
+
+  // From here graph.json is the merge: any further failure puts the code-only graph back.
+  const rollback = async (reason: string, detail: string): Promise<Result<IndexStepResult>> => {
+    const restored = await restoreCodeOnly(deps, ctx);
+    return absent(reason, restored ? detail : `${detail}; the code-only graph could not be restored`);
+  };
+  const text = deps.staging.read(staging, GRAPH_PATH, MAX_GRAPH_BYTES);
+  if (!text.ok || text.value === null) return rollback('cluster-failed', 'the installed merged graph cannot be read back');
+  const graphDigest = `sha256:${sha256Hex(Buffer.from(text.value, 'utf8'))}`;
+
+  if (deps.gsd === undefined) return rollback('stale-after-install', 'no GSD adapter to snapshot the merged graph');
+  const snapshot = await deps.gsd.graphifySnapshot(staging);
+  if (!snapshot.ok) return rollback(reasonOf(snapshot.error, 'stale-after-install'), describeError(snapshot.error));
+  const status = await deps.gsd.graphifyStatus(staging);
+  if (!status.ok) return rollback(reasonOf(status.error, 'stale-after-install'), describeError(status.error));
+  const problem = gsdSeesFreshGraph(status.value);
+  if (problem !== undefined) return rollback('stale-after-install', problem);
+
+  const summary = summarizeGraph(clustered.value.graph.raw);
+  return ok({
+    index: 'knowledge',
+    status: 'present',
+    result: {
+      graphDigest,
+      // Counts of the merged file the digest is of: `document` is no longer zero.
+      nodes: { document: 0, ...summary.nodesByFileType },
+      edges: summary.edgesByConfidence,
+      knowledge: {
+        corpus: corpusSummary(manifest.entries.map((e) => e.sourcePath)),
+        documentsCommit: `git:${head}`,
+        documentNodes: stats.documentNodes,
+        dropped: { dangling: stats.dropped.dangling, astDocument: stats.dropped.astDocument },
+      },
+    },
+  });
 }

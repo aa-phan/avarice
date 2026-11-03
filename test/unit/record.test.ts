@@ -210,6 +210,17 @@ describe('foldIndexResults: how stored index step results become the record inde
     assert.deepEqual({ ...folded.graph, digest: GRAPH_RESULT.digest, knowledge: undefined }, { ...GRAPH_RESULT, knowledge: undefined });
   });
 
+  it('takes the node and edge counts of the merged graph from the knowledge step when it states them, so the record never says zero document nodes next to a document digest (plan 01-18)', () => {
+    const merged = { ...KNOWLEDGE_RESULT, nodes: { code: 996, concept: 60, document: 12 }, edges: { EXTRACTED: 1232, INFERRED: 40, AMBIGUOUS: 3 } };
+    const folded = foldIndexResults([present('code-graph', GRAPH_RESULT), present('knowledge', merged)]);
+    assert.deepEqual(folded.graph?.nodes, { code: 996, concept: 60, document: 12 });
+    assert.deepEqual(folded.graph?.edges, { EXTRACTED: 1232, INFERRED: 40, AMBIGUOUS: 3 });
+    assert.equal(folded.graph?.codeGraphPath, GRAPH_RESULT.codeGraphPath, 'the code graph stays the code-only file');
+    // Counts that are not counts are ignored, not folded.
+    const junk = foldIndexResults([present('code-graph', GRAPH_RESULT), present('knowledge', { ...KNOWLEDGE_RESULT, nodes: { document: 'many' } })]);
+    assert.deepEqual(junk.graph?.nodes, GRAPH_RESULT.nodes);
+  });
+
   it('lists every absent step in indexes.absent, naming the code graph graph, in registry order', () => {
     const folded = foldIndexResults([absent('code-graph', 'graphify-missing'), absent('intel', 'not-built-in-this-build'), absent('knowledge', 'not-built-in-this-build')]);
     assert.deepEqual(folded.absent, [

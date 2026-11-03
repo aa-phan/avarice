@@ -7,7 +7,10 @@
 // indexes Markdown (research Pitfall 3). `--max-workers 1` keeps AST extraction single-process, which sandboxes
 // require (spike). No command here calls a model. The graph is read back as plain JSON, and `install` copies
 // three files into the staging `.planning/graphs/`.
-import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+// The knowledge pass (plan 01-18) adds no graphify command of its own: the skill runs in the host. `clusterMerged`
+// writes AVARICE's merged graph outside staging and runs the same `cluster-only` on it; graphify's cross-repository
+// merge command is never used (it prefixes node IDs and drops `built_at_commit`).
+import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
@@ -49,7 +52,7 @@ function isExecutable(path: string): boolean {
 }
 
 // The graphify executable: AVARICE_GRAPHIFY_BIN when set (and then nothing else), else the first `graphify` on PATH.
-function findBinary(env: NodeJS.ProcessEnv): string | undefined {
+export function findGraphifyBinary(env: NodeJS.ProcessEnv): string | undefined {
   const named = env[GRAPHIFY_BIN_ENV];
   const candidates = named !== undefined && named !== '' ? [named] : (env['PATH'] ?? '').split(delimiter).filter((d) => isAbsolute(d)).map((d) => join(d, 'graphify'));
   for (const candidate of candidates) {
@@ -89,9 +92,9 @@ export class GraphifyTool implements GraphTool {
       port: 'graph-tool',
       adapter: 'graphify',
       version: '0.9',
-      capabilities: { 'extract-code': true, cluster: true, 'knowledge-pass': false },
+      capabilities: { 'extract-code': true, cluster: true, 'knowledge-pass': true },
       // The path only (nothing is executed to build a descriptor); the version is read by `locate`.
-      attributes: { binary: findBinary(this.#env) ?? 'missing' },
+      attributes: { binary: findGraphifyBinary(this.#env) ?? 'missing' },
       offline: true,
     };
   }
@@ -122,7 +125,7 @@ export class GraphifyTool implements GraphTool {
 
   async locate(): Promise<Result<LocatedGraphTool>> {
     if (this.#located !== undefined) return ok(this.#located);
-    const bin = findBinary(this.#env);
+    const bin = findGraphifyBinary(this.#env);
     if (bin === undefined) {
       const named = this.#env[GRAPHIFY_BIN_ENV];
       return missing(named !== undefined && named !== '' ? `${GRAPHIFY_BIN_ENV} names no executable file (${named})` : 'no executable named graphify on PATH');
@@ -222,37 +225,16 @@ export class GraphifyTool implements GraphTool {
   }
 
   install(stagingPath: string, files: GraphInstallFiles): Result<string[]> {
-    let staging: string;
-    try {
-      staging = realpathSync(stagingPath);
-    } catch {
-      return err({ kind: 'invalid', field: 'stagingPath', reason: 'cannot be resolved' });
-    }
     for (const [field, source] of [['graph', files.graph], ['report', files.report]] as const) {
       if (!isAbsolute(source) || !existsFile(source)) return err({ kind: 'invalid', field, reason: 'must be an absolute path of a regular file' });
     }
-    // A repository can commit `.planning` or `.planning/graphs` as a symlink; never write through one.
-    const planning = join(staging, '.planning');
-    const graphs = join(planning, 'graphs');
+    const dir = graphsDirOf(stagingPath);
+    if (!dir.ok) return dir;
     try {
-      for (const dir of [planning, graphs]) {
-        let stat;
-        try {
-          stat = lstatSync(dir);
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-            mkdirSync(dir);
-            continue;
-          }
-          throw e;
-        }
-        if (stat.isSymbolicLink() || !stat.isDirectory()) return err({ kind: 'invalid', field: 'stagingPath', reason: `${relative(staging, dir)} is a symlink or not a directory` });
-      }
-      if (!inside(staging, realpathSync(graphs))) return err({ kind: 'invalid', field: 'stagingPath', reason: '.planning/graphs resolves outside the staging tree' });
       const targets: Array<[string, string]> = [
-        [files.graph, join(graphs, 'graph.json')],
-        [files.graph, join(graphs, 'code-graph.json')],
-        [files.report, join(graphs, 'GRAPH_REPORT.md')],
+        [files.graph, join(dir.value, 'graph.json')],
+        [files.graph, join(dir.value, 'code-graph.json')],
+        [files.report, join(dir.value, 'GRAPH_REPORT.md')],
       ];
       for (const [source, target] of targets) {
         rmSync(target, { force: true });
@@ -277,16 +259,87 @@ export class GraphifyTool implements GraphTool {
   }
 
   async clusterMerged(graph: Record<string, unknown>, workDir: string): Promise<Result<MergedGraphBuild>> {
-    void graph;
-    void workDir;
-    return err({ kind: 'internal', cause: 'RED stub' });
+    if (!isAbsolute(workDir)) return err({ kind: 'invalid', field: 'workDir', reason: 'must be an absolute path' });
+    const built = graph['built_at_commit'];
+    if (typeof built !== 'string' || built === '') return err({ kind: 'invalid', field: 'graph', reason: 'the merged graph has no built_at_commit' });
+    let dir: string;
+    try {
+      dir = realpathNearest(workDir);
+      mkdirSync(join(dir, GRAPH_DIR), { recursive: true });
+      // A merge that was cut short (a killed onboarding, resumed) must not leave its files behind for this one.
+      rmSync(join(dir, GRAPH_DIR), { recursive: true, force: true });
+      mkdirSync(join(dir, GRAPH_DIR), { recursive: true });
+      writeFileSync(join(dir, GRAPH_DIR, 'graph.json'), JSON.stringify(graph));
+    } catch (e) {
+      return err({ kind: 'internal', cause: `cannot write the merged graph: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+    }
+    const clustered = await this.cluster(dir);
+    if (!clustered.ok) return clustered;
+    if (clustered.value.reportFile === undefined) return err({ kind: 'internal', cause: 'graphify cluster-only wrote no report' });
+    const read = this.readGraph(clustered.value.graphFile);
+    if (!read.ok) return read;
+    if (read.value.builtAtCommit !== built) return err({ kind: 'internal', cause: 'graphify cluster-only did not keep built_at_commit on the merged graph' });
+    return ok({ outDir: clustered.value.outDir, graphFile: clustered.value.graphFile, reportFile: clustered.value.reportFile, graph: read.value });
   }
 
   installMergedGraph(stagingPath: string, files: GraphInstallFiles): Result<string[]> {
-    void stagingPath;
-    void files;
-    return err({ kind: 'internal', cause: 'RED stub' });
+    for (const [field, source] of [['graph', files.graph], ['report', files.report]] as const) {
+      if (!isAbsolute(source) || !existsFile(source)) return err({ kind: 'invalid', field, reason: 'must be an absolute path of a regular file' });
+    }
+    const dir = graphsDirOf(stagingPath);
+    if (!dir.ok) return dir;
+    const targets: Array<[string, string]> = [
+      [files.graph, join(dir.value, 'graph.json')],
+      [files.report, join(dir.value, 'GRAPH_REPORT.md')],
+    ];
+    const temps: string[] = [];
+    try {
+      // Each file is copied beside its target and renamed over it, so a failure leaves the code-only graph in place.
+      for (const [source, target] of targets) {
+        const temp = `${target}.tmp-${process.pid}`;
+        temps.push(temp);
+        rmSync(temp, { force: true });
+        copyFileSync(source, temp, constants.COPYFILE_EXCL);
+      }
+      targets.forEach(([, target], index) => renameSync(temps[index] as string, target));
+      return ok(targets.map(([, target]) => target));
+    } catch (e) {
+      for (const temp of temps) rmSync(temp, { force: true });
+      return err({ kind: 'internal', cause: `cannot install the merged graph into .planning/graphs: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+    }
   }
+}
+
+// `.planning/graphs` inside staging, created when absent; never through a symlink (a repository can commit `.planning` or
+// `.planning/graphs` as one).
+function graphsDirOf(stagingPath: string): Result<string> {
+  let staging: string;
+  try {
+    staging = realpathSync(stagingPath);
+  } catch {
+    return err({ kind: 'invalid', field: 'stagingPath', reason: 'cannot be resolved' });
+  }
+  const planning = join(staging, '.planning');
+  const graphs = join(planning, 'graphs');
+  try {
+    for (const dir of [planning, graphs]) {
+      let stat;
+      try {
+        stat = lstatSync(dir);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+          mkdirSync(dir);
+          continue;
+        }
+        throw e;
+      }
+      if (stat.isSymbolicLink() || !stat.isDirectory()) return err({ kind: 'invalid', field: 'stagingPath', reason: `${relative(staging, dir)} is a symlink or not a directory` });
+    }
+    if (!inside(staging, realpathSync(graphs))) return err({ kind: 'invalid', field: 'stagingPath', reason: '.planning/graphs resolves outside the staging tree' });
+  } catch (e) {
+    return err({ kind: 'internal', cause: `cannot prepare .planning/graphs: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+  }
+  return ok(graphs);
 }
 
 function existsFile(path: string): boolean {

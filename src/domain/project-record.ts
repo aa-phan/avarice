@@ -293,7 +293,8 @@ function intelIndexOf(result: Record<string, unknown> | undefined): RecordIntelI
 
 // Folds the stored index step results into the record's `indexes`, in registry order:
 //   code-graph present -> indexes.graph        intel present -> indexes.intel
-//   knowledge present  -> indexes.graph.digest = result.graphDigest and indexes.graph.knowledge = result.knowledge
+//   knowledge present  -> indexes.graph.digest = result.graphDigest and indexes.graph.knowledge = result.knowledge (and
+//                         indexes.graph.nodes / edges = result.nodes / edges when the step states the merged counts)
 //   every absent step  -> an indexes.absent entry (the code graph is named `graph`)
 // A disabled step says nothing. A present step whose result is not in the expected shape counts as absent, so a
 // malformed result never reaches the record. Knowledge words only make sense on a graph: without one they are absent.
@@ -301,7 +302,7 @@ export function foldIndexResults(results: readonly IndexStepResult[]): RecordInd
   const absent: RecordAbsentIndex[] = [];
   let graph: RecordGraphIndex | undefined;
   let intel: RecordIntelIndex | undefined;
-  let knowledge: { graphDigest: string; knowledge: Record<string, unknown> } | undefined;
+  let knowledge: { graphDigest: string; knowledge: Record<string, unknown>; nodes?: Record<string, number>; edges?: Record<string, number> } | undefined;
   for (const step of results) {
     const recordName = step.index === 'code-graph' ? 'graph' : step.index;
     if (step.status === 'disabled') continue;
@@ -318,13 +319,16 @@ export function foldIndexResults(results: readonly IndexStepResult[]): RecordInd
     } else {
       const graphDigest = step.result?.['graphDigest'];
       const documents = step.result?.['knowledge'];
-      if (isString(graphDigest) && isObject(documents)) knowledge = { graphDigest, knowledge: documents };
+      // The merged graph's own counts, when the step states them (plan 01-18): the digest is of that file.
+      const nodes = counts(step.result?.['nodes']);
+      const edges = counts(step.result?.['edges']);
+      if (isString(graphDigest) && isObject(documents)) knowledge = { graphDigest, knowledge: documents, ...(nodes !== undefined ? { nodes } : {}), ...(edges !== undefined ? { edges } : {}) };
       else absent.push({ index: recordName, reason: 'invalid-result' });
     }
   }
   if (knowledge !== undefined) {
     if (graph === undefined) absent.push({ index: 'knowledge', reason: 'graph-absent' });
-    else graph = { ...graph, digest: knowledge.graphDigest, knowledge: knowledge.knowledge };
+    else graph = { ...graph, digest: knowledge.graphDigest, knowledge: knowledge.knowledge, ...(knowledge.nodes !== undefined ? { nodes: knowledge.nodes } : {}), ...(knowledge.edges !== undefined ? { edges: knowledge.edges } : {}) };
   }
   return { ...(graph !== undefined ? { graph } : {}), ...(intel !== undefined ? { intel } : {}), ...(absent.length > 0 ? { absent } : {}) };
 }
