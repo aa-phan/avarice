@@ -277,3 +277,15 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     for (const junk of [null, 'x', [], { nodes: 1 }]) assert.equal(validate(junk, stats).valid, false);
   });
 });
+
+// Open finding MF-03 (01-MUTATION.md): the cap counts the string-valued fields of a node, so text held in a nested array or
+// object field of a knowledge-pass node is not counted. Left as a todo until the owner decides whether the cap is on all
+// strings of a node (spec: "each node's text is under a size cap") or on the flat fields the skill writes.
+describe('open finding MF-03: nested node text and the 2 KiB cap', () => {
+  it('counts text held in a nested field of a document node toward the cap', { todo: 'MF-03: textBytes counts top-level string fields only' }, () => {
+    const { graph, stats } = mergedFixture();
+    const nested = clone(graph);
+    (byId(nested, 'docs_guide') as Json)['notes'] = ['x'.repeat(KNOWLEDGE_LIMITS.nodeTextBytes + 1)];
+    assert.match(problemsOf(validate(nested, stats)).join('\n'), /docs_guide.*2048/);
+  });
+});

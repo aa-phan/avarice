@@ -126,6 +126,17 @@ describe('scope of writes', () => {
     }
   });
 
+  it('fails a write under .planning/intel/ while only the map invocation has run (the write set follows the invocations that ran)', () => {
+    const { roots, repo } = fixture();
+    const r = onboard(roots, repo, { extraWrites: { '.planning/intel/leak.json': '{}\n' } });
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    assert.deepEqual(finalState(roots), { state: 'blocked', reason: 'decision' });
+    const [first] = validateSteps(roots);
+    assert.ok(first);
+    assert.deepEqual(failedNames(first), ['scope-of-writes']);
+    assert.match(first.checks.find((c) => c.name === 'scope-of-writes')?.detail ?? '', /\.planning\/intel\/leak\.json/);
+  });
+
   it('accepts a change to .planning/config.json and an untracked file under .planning/graphs/', () => {
     const { roots, repo } = fixture();
     const r = onboard(roots, repo, { extraWrites: { '.planning/config.json': '{"commit_docs":false}\n', '.planning/graphs/x.json': '{}\n' } });
