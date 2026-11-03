@@ -12,8 +12,13 @@ import type {
   GsdAppliedSetting,
   GsdCapabilitySnapshot,
   GsdDriftResult,
+  GsdGraphQueryResult,
   GsdGraphSnapshot,
   GsdGraphStatus,
+  GsdIntelDiff,
+  GsdIntelQueryResult,
+  GsdIntelStatus,
+  GsdIntelValidation,
   GsdOnboarding,
   GsdProjectState,
   GsdSetting,
@@ -224,6 +229,26 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
       nodeCount: count(d['node_count']),
       edgeCount: count(d['edge_count']),
     });
+  }
+
+  async intelValidate(_staging: string): Promise<Result<GsdIntelValidation>> {
+    return err({ kind: 'internal', cause: 'intel validate is not implemented' });
+  }
+
+  async intelDiff(_staging: string): Promise<Result<GsdIntelDiff>> {
+    return err({ kind: 'internal', cause: 'intel diff is not implemented' });
+  }
+
+  async intelStatus(_staging: string): Promise<Result<GsdIntelStatus>> {
+    return err({ kind: 'internal', cause: 'intel status is not implemented' });
+  }
+
+  async intelQuery(_staging: string, _term: string): Promise<Result<GsdIntelQueryResult>> {
+    return err({ kind: 'internal', cause: 'intel query is not implemented' });
+  }
+
+  async graphifyQuery(_staging: string, _term: string, _budget: number): Promise<Result<GsdGraphQueryResult>> {
+    return err({ kind: 'internal', cause: 'graphify query is not implemented' });
   }
 
   initPlanning(): Result<never> {

@@ -291,6 +291,11 @@ describe('a graphify that is missing or fails never blocks activation (S-40, ONB
             stamp: (s, files) => gsd.stamp(s, files),
             checkDrift: (s) => gsd.checkDrift(s),
             graphifySnapshot: (s) => gsd.graphifySnapshot(s),
+            intelValidate: (s) => gsd.intelValidate(s),
+            intelDiff: (s) => gsd.intelDiff(s),
+            intelStatus: (s) => gsd.intelStatus(s),
+            intelQuery: (s, term) => gsd.intelQuery(s, term),
+            graphifyQuery: (s, term, budget) => gsd.graphifyQuery(s, term, budget),
             graphifyStatus: async (s) => {
               const real = await gsd.graphifyStatus(s);
               return real.ok ? { ok: true, value: { ...real.value, stale: true, commitStale: true, commitsBehind: 3 } } : real;
