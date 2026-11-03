@@ -10,7 +10,7 @@ import type { KnowledgeManifest } from './knowledge-corpus.ts';
 import { findSecrets } from './secret-patterns.ts';
 
 export const KNOWLEDGE_LIMITS = {
-  // The text of one node of the pass: the UTF-8 bytes of all its string fields.
+  // The text of one node of the pass: the UTF-8 bytes of all its string values, nested ones included.
   nodeTextBytes: 2048,
   // Dropped dangling edges over the edges the pass produced.
   danglingShare: 0.1,
@@ -28,8 +28,20 @@ function endpoint(value: unknown): string | undefined {
   return isObject(value) && typeof value['id'] === 'string' ? value['id'] : undefined;
 }
 
-const textBytes = (node: Record<string, unknown>): number =>
-  Object.values(node).reduce<number>((total, value) => (typeof value === 'string' ? total + Buffer.byteLength(value, 'utf8') : total), 0);
+// The UTF-8 bytes of every string value of a node, at any depth (arrays and objects included): "each node's text" of the spec is the
+// whole node, so text cannot be parked in a nested field to get past the cap (MF-03). Object keys are names, not text, and are not
+// counted. An explicit stack, so a deeply nested value cannot overflow the call stack.
+function textBytes(node: Record<string, unknown>): number {
+  let total = 0;
+  const pending: unknown[] = [node];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === 'string') total += Buffer.byteLength(value, 'utf8');
+    else if (Array.isArray(value)) for (const item of value) pending.push(item);
+    else if (isObject(value)) for (const item of Object.values(value)) pending.push(item);
+  }
+  return total;
+}
 
 // Paths the corpus never holds in Phase 1 (S-45): a node cannot come from them whatever the manifest says.
 const forbiddenSource = (path: string): boolean => path.startsWith('.planning/phases/') || path === '.planning/STATE.md';
