@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-11-03T01:03:49.407Z"
+stopped_at: Completed 01-15-PLAN.md
+last_updated: "2026-11-03T01:36:45.027Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 30233c9064cd3959662dc8808aefacfdef2605bc
+state_head: e418fd3fdd8af1b8be97c02406acdf8e8565e3f8
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 15 of 20
+Plan: 16 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P12 | 19 min | 2 tasks | 20 files |
 | Phase 01 P13 | 25 min | 2 tasks | 18 files |
 | Phase 01 P14 | 22 min | 2 tasks | 24 files |
+| Phase 01 P15 | 25 min | 2 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,10 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: An absent index (graphify missing, extract failed, invalid graph, timeout, stale after install) is recorded in indexes.absent with its reason and never blocks activation; disabled steps are not listed
 - [Phase 01]: Activation re-checks the whole staging diff against every write set and blocks with enforcement_failure after a containment.finding event; AVARICE_TRACKED_WRITABLE lets a committed .planning/graphs file be regenerated
 - [Phase 01]: Counted fault points name#N tell apart the two commits of one checkpoint; planning_ready now names index:code-graph as its first action
+- [Phase 01]: The classifier puts a moved staging HEAD first (failed, headMoved) ahead of all other rules; a result with no boolean is_error, a non-zero exit or a signal is failed, never success
+- [Phase 01]: An inconclusive host ending goes to validation so the retry rule applies once; denied, failed and no_progress block with a decision and are never retried
+- [Phase 01]: The caller chooses the invocation session ID and records it in the launch step before launch, so resume can reap a surviving host by --session-id; the adapter reads the GSD preamble fingerprint from the located gsd-core and the unavailable host is kept when it is missing
+- [Phase 01]: runCli defaults AVARICE_CLAUDE_BIN to a missing binary so no test launches a real claude; env knobs never replace the sandbox probe or the hook self-test
 
 ### Pending Todos
 
@@ -166,6 +171,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T01:03:49.384Z
-Stopped at: Completed 01-14-PLAN.md
+Last session: 2026-11-03T01:36:45.006Z
+Stopped at: Completed 01-15-PLAN.md
 Resume file: None
