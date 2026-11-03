@@ -15,8 +15,9 @@ import { openDb } from '../sqlite/db.ts';
 import { migrate } from '../sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../sqlite/migrations/0001-initial.ts';
 
-// Host versions the containment suite has run against (spike S0 and the pre-slice spike).
-export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316'];
+// Host versions the containment suite has run against (spike S0 and the pre-slice spike; the live T3 suite on 2.1.316 and
+// 2.1.317). A version is added only after a live T3 run on it shows 0 containment failures (test/containment/LIVE-CASES.md).
+export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317'];
 
 // Seatbelt must be able to apply a profile; /usr/bin/true is the confined process.
 const DEFAULT_SANDBOX_PROBE: readonly string[] = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'];
