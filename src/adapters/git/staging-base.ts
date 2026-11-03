@@ -148,6 +148,10 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
   }
 
+  readTrackedAtPin(_path: string, _pin: string, _relPaths: readonly string[]): Result<Record<string, string>> {
+    return ok({});
+  }
+
   // Which candidates the repository's own committed `.gitignore` files ignore at the pin (deferred item 10). The rule files are
   // read as blobs of the pinned tree and written into a throwaway repository beside staging (a fresh `git init` with no
   // template, no user or system excludes), and `git check-ignore --no-index` there decides, so git's own matching applies

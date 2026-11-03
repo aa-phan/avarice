@@ -1,0 +1,59 @@
+{
+  "name": "aa-phan-portfolio-v2",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "lint": "oxlint --deny-warnings --ignore-path .oxlintignore",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run check:case && npm run check:colors && npm run check:contrast && npm run build && npm run check:meta && npm run check:budget && npm run check:no-phone && npm run check:images",
+    "check:budget": "node scripts/check-js-budget.mjs",
+    "check:case": "node scripts/check-path-case.mjs",
+    "check:colors": "node scripts/check-colors.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check:no-phone": "node scripts/check-no-phone.mjs",
+    "check:images": "node scripts/check-images.mjs",
+    "check:meta": "node scripts/check-meta.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "~5.3.0",
+    "@react-spring/web": "~10.1.2",
+    "clsx": "^2.1.1",
+    "lenis": "1.3.27",
+    "motion": "~14.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.64.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/dom": "^10",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "axe-core": "4.13.0",
+    "jsdom": "^30.1.2",
+    "oxlint": "^1.87.0",
+    "pdfjs-dist": "6.3.289",
+    "prettier": "^3.9.9",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4",
+    "vite-imagetools": "~12.0.1",
+    "vitest": "^5.0.3"
+  }
+}

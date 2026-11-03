@@ -260,3 +260,120 @@ describe('references the repository ignores count as known', () => {
     assert.match(verdict?.detail ?? '', /^2 of \d+ named path\(s\) dangling.*lib\/missing-a\.ts/);
   });
 });
+
+// Deferred item 10, second owner decision (plan 01-19): four more rules, each narrow.
+describe('placeholders are not references', () => {
+  const refs = (text: string): string[] => extractPathReferences(text);
+
+  it('a compound bare extension (`.test.ts`, `.d.ts`, `.spec.tsx`, `.stories.tsx`) is not a reference', () => {
+    for (const token of ['.test.ts', '.test.tsx', '.d.ts', '.spec.tsx', '.stories.tsx']) assert.deepEqual(refs(`Files named \`${token}\` sit beside the source.`), [], token);
+  });
+
+  it('a real dotfile with a compound name is still a reference', () => {
+    assert.deepEqual(refs('Lint config lives in `.eslintrc.json` and `.env`.'), ['.eslintrc.json', '.env']);
+  });
+
+  it('a path segment that is a repeated capital letter (NNNN, XXXX, YYYY) makes the token a placeholder', () => {
+    for (const token of ['NNNN-kebab-title.md', 'docs/adr/NNNN-title.md', 'XXXX/notes.md', 'docs/YYYY-MM-DD.md', 'docs/adr/ZZZ_draft.md']) {
+      assert.deepEqual(refs(`Records are named \`${token}\`.`), [], token);
+    }
+  });
+
+  it('real all-capital file names are still references, and so are two repeated letters', () => {
+    assert.deepEqual(refs('See `README.md`, `docs/CLAUDE.md`, `LICENSE.md` and `docs/NN-notes.md`.'), ['README.md', 'docs/CLAUDE.md', 'LICENSE.md', 'docs/NN-notes.md']);
+  });
+});
+
+describe('import-style and suffix resolution', () => {
+  const known = ['src/components/ui/Toast.tsx', 'src/lib/utils.ts', 'src/data.json', 'src/widgets/Panel/index.jsx', 'src/sections/About/About.tsx', 'src/legacy/Contact/Contact.tsx', 'src/new/Contact/Contact.tsx', 'src/anim/declarative/Flip.tsx', 'src/mod/helper.mjs', 'src/mod/lib.cjs'];
+  const dangling = (refs: string[]) => danglingShare(refs, known).dangling;
+
+  it('a reference resolves after appending a source extension: .ts .tsx .js .jsx .mjs .cjs, or /index.<ext>', () => {
+    assert.deepEqual(dangling(['src/components/ui/Toast', 'src/lib/utils', 'src/mod/helper', 'src/mod/lib', 'src/widgets/Panel']), []);
+    const r = danglingShare(['src/components/ui/Toast', 'src/lib/utils'], known);
+    assert.deepEqual(r.byRule.specifier, ['src/components/ui/Toast', 'src/lib/utils']);
+  });
+
+  it('does not append other extensions, and a missing module stays dangling', () => {
+    assert.deepEqual(dangling(['src/data', 'src/lib/missing']), ['src/data', 'src/lib/missing']);
+  });
+
+  it('an `/index.<ext>` that exists resolves a path that is not itself a known directory entry', () => {
+    assert.deepEqual(danglingShare(['pkg/thing'], ['pkg/thing/index.ts']).dangling, []);
+  });
+
+  it('a reference that is the trailing path segments of exactly one tracked file resolves', () => {
+    const r = danglingShare(['About/About.tsx', 'sections/About/About.tsx'], known);
+    assert.deepEqual(r.dangling, []);
+    assert.deepEqual(r.byRule.suffix, ['About/About.tsx', 'sections/About/About.tsx']);
+  });
+
+  it('two or more suffix matches stay dangling, and a suffix must start at a segment boundary', () => {
+    assert.deepEqual(dangling(['Contact/Contact.tsx']), ['Contact/Contact.tsx']);
+    assert.deepEqual(dangling(['bout/About.tsx']), ['bout/About.tsx']);
+  });
+
+  it('a directory is not a suffix target: `anim/declarative` stays dangling while a file under it exists', () => {
+    assert.deepEqual(dangling(['anim/declarative']), ['anim/declarative']);
+  });
+});
+
+describe('package names and action references are not paths', () => {
+  const modules = ['react', 'motion', '@scope/pkg'];
+  const actions = ['actions/checkout', 'owner/name'];
+  const r = (refs: string[]) => danglingShare(refs, ['src/index.ts'], [], [], { moduleNames: modules, actionRefs: actions });
+
+  it('a token whose first segment is a dependency (or whose first two are an @scope/name) is a module or rule specifier', () => {
+    const result = r(['motion/react', 'react/rules-of-hooks', '@scope/pkg/sub', 'react/only-export-components']);
+    assert.deepEqual(result.dangling, []);
+    assert.deepEqual(result.byRule.module, ['motion/react', 'react/rules-of-hooks', '@scope/pkg/sub', 'react/only-export-components']);
+  });
+
+  it('only a dependency counts: a longer name, another scope or a missing package stays dangling', () => {
+    assert.deepEqual(r(['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react']).dangling, ['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react']);
+  });
+
+  it('an owner/name used by a workflow is an action, not a path', () => {
+    const result = r(['actions/checkout', 'owner/name']);
+    assert.deepEqual(result.dangling, []);
+    assert.deepEqual(result.byRule.action, ['actions/checkout', 'owner/name']);
+  });
+
+  it('an action name the workflows do not use stays dangling', () => {
+    assert.deepEqual(r(['actions/setup-node', 'actions/checkout/extra']).dangling, ['actions/setup-node', 'actions/checkout/extra']);
+  });
+
+  it('build-emitted files and dotenv files are not forgiven by any of these rules', () => {
+    assert.deepEqual(r(['sitemap.xml', 'robots.txt', '.env']).dangling, ['sitemap.xml', 'robots.txt', '.env']);
+  });
+
+  it('validation says how many references each rule forgave and keeps the 5% limit', () => {
+    const KNOWN = Array.from({ length: 30 }, (_, i) => `lib/f${String(i).padStart(2, '0')}.ts`);
+    const HEAD = 'a'.repeat(40);
+    const stampedDoc = (path: string, extra: string): MapFileFact => {
+      const text = ['---', `last_mapped_commit: ${HEAD}`, '---', '# Doc', '', extra, ''].join('\n');
+      return { path, lastMappedCommit: HEAD, text, bytes: text.length };
+    };
+    const judge = (named: readonly string[], withSources: boolean) =>
+      validateMapArtifacts(
+        {
+          stagingHead: HEAD,
+          files: FAST_MAP_FILES.map((path) => stampedDoc(path, path.endsWith('STRUCTURE.md') ? named.map((p) => `- \`${p}\``).join('\n') : '')),
+          changes: { modified: [], added: [], deleted: [] },
+          allowedWrite: ['.planning/codebase/**'],
+          trackedWritable: ['.planning/codebase/**'],
+          knownPaths: KNOWN,
+          ...(withSources ? { moduleNames: ['react'], actionRefs: ['actions/checkout'] } : {}),
+        },
+        { mode: 'fast' },
+      ).checks.find((c) => c.name === 'path-references');
+    const named = [...KNOWN.slice(0, 12), 'react/rules-of-hooks', 'actions/checkout', 'lib/f01'];
+    assert.equal(judge(named, false)?.passed, false);
+    const ok = judge(named, true);
+    assert.equal(ok?.passed, true, ok?.detail);
+    assert.match(ok?.detail ?? '', /1 module specifier/);
+    assert.match(ok?.detail ?? '', /1 workflow action/);
+    const over = judge([...named, 'lib/missing-a.ts', 'lib/missing-b.ts'], true);
+    assert.equal(over?.passed, false, over?.detail);
+  });
+});

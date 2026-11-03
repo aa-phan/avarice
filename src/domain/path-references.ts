@@ -145,11 +145,21 @@ export function extractPathReferences(markdown: string): string[] {
   return [...seen];
 }
 
+// Facts read from the repository at the pin that let a reference be a module, a rule or an action rather than a path.
+export interface ReferenceResolvers {
+  // Dependency names of the repository's committed package.json files.
+  moduleNames?: Iterable<string>;
+  // `owner/name` of every `uses:` in the committed workflow files.
+  actionRefs?: Iterable<string>;
+}
+
 export interface DanglingResult {
   total: number;
   dangling: string[];
   // References that resolved only because the repository's own committed .gitignore rules ignore them.
   ignored: string[];
+  // References that resolved by one of the import, suffix, package and action rules (deferred item 10, second decision).
+  byRule: { specifier: string[]; suffix: string[]; module: string[]; action: string[] };
   // dangling / total; 0 when there are no references.
   share: number;
 }
@@ -164,6 +174,7 @@ export function danglingShare(
   knownPaths: Iterable<string>,
   ownGlobs: readonly string[] = [],
   ignored: Iterable<string> = [],
+  _resolvers: ReferenceResolvers = {},
 ): DanglingResult {
   const files = new Set<string>();
   const directories = new Set<string>();
@@ -191,5 +202,5 @@ export function danglingShare(
     if (ignoredSet.has(ref)) byIgnoreRule.push(ref);
     else dangling.push(ref);
   }
-  return { total: unique.length, dangling, ignored: byIgnoreRule, share: unique.length === 0 ? 0 : dangling.length / unique.length };
+  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule: { specifier: [], suffix: [], module: [], action: [] }, share: unique.length === 0 ? 0 : dangling.length / unique.length };
 }

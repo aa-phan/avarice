@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
 import { danglingShare, extractPathReferences } from '../../src/domain/path-references.ts';
+import { actionRefsOf, dependencyNamesOf } from '../../src/domain/reference-sources.ts';
 import { AVARICE_TRACKED_WRITABLE, AVARICE_WRITE_SET, STAGING_SCAFFOLD } from '../../src/domain/validation.ts';
 import { FULL_MAP_FILES } from '../../src/domain/mapping.ts';
 import type { Result } from '../../src/domain/result.ts';
@@ -130,7 +131,8 @@ describe('ignoredByCommittedRules: git matches the committed .gitignore files at
 });
 
 // The real full map of ~/aa-phan-portfolio-v2 from the 01-19 rehearsal 3 (test/fixtures/live-full-map: the seven documents the mapper
-// wrote, the tracked paths and the root .gitignore at the pin). 32 of 311 named paths dangled before this rule, 28 after.
+// wrote, the tracked paths, the root .gitignore, package.json and the workflow files at the pin). Before any rule 32 of 311 named
+// paths dangled; the placeholder rule removes three tokens that are not references (308 remain).
 describe('the real full map of the exit rehearsal', () => {
   const fixture = (name: string): string => readFileSync(join(REPO_ROOT, 'test', 'fixtures', 'live-full-map', name), 'utf8');
   const documents = FULL_MAP_FILES.map((path) => ({ path, text: fixture(path.split('/').at(-1) as string) }));
@@ -138,27 +140,54 @@ describe('the real full map of the exit rehearsal', () => {
   const refs = documents.flatMap((d) => extractPathReferences(d.text));
   const known = [...tracked, ...documents.map((d) => d.path), '.planning/config.json'];
   const own = [...AVARICE_WRITE_SET, ...AVARICE_TRACKED_WRITABLE, ...STAGING_SCAFFOLD];
+  const resolvers = {
+    moduleNames: dependencyNamesOf([fixture('repo-package.json.txt')]),
+    actionRefs: actionRefsOf(['ci.yml.txt', 'deploy.yml.txt'].map((name) => fixture(`repo-workflows/${name}`))),
+  };
 
-  it('dangled at 32 of 311 before the rule, and the remaining tokens after it are the ones the user wants to see', () => {
-    const before = danglingShare(refs, known, own);
-    assert.equal(before.total, 311);
-    assert.equal(before.dangling.length, 32);
+  it('is under the 5% limit after the ignore rule and the four reference rules, with exactly the six unexplained tokens left', () => {
+    const baseline = danglingShare(refs, known, own);
+    assert.equal(baseline.total, 308, 'the three placeholder tokens are no longer references');
+    assert.equal(baseline.dangling.length, 29);
 
     const repo = scratch({ files: { '.gitignore': fixture('repo-gitignore.txt'), 'README.md': '# the portfolio stand-in\n' } });
     const { ws, staging } = stagingOf(repo);
-    const unique = [...new Set(refs)];
-    const ignored = must(ws.ignoredByCommittedRules(staging, repo.head, unique));
-    // git's own matching: the unanchored rule `dist` also matches `lenis/dist/lenis.css`, a path inside an npm package.
-    const forgiven = ['lenis/dist/lenis.css', 'dist', 'node_modules', 'node_modules/.bin/oxlint'];
-    assert.deepEqual(ignored.filter((r) => before.dangling.includes(r)), forgiven);
+    const ignored = must(ws.ignoredByCommittedRules(staging, repo.head, [...new Set(refs)]));
+    const afterIgnore = danglingShare(refs, known, own, ignored);
+    assert.equal(afterIgnore.dangling.length, 25, 'dist, node_modules, node_modules/.bin/oxlint and lenis/dist/lenis.css are forgiven by the ignore rule');
 
-    const after = danglingShare(refs, known, own, ignored);
-    assert.equal(after.total, 311);
-    assert.deepEqual(after.ignored, forgiven.slice(0).sort((a, b) => unique.indexOf(a) - unique.indexOf(b)));
-    assert.deepEqual(after.dangling, before.dangling.filter((r) => !forgiven.includes(r)));
-    assert.equal(after.dangling.length, 28);
-    // Still above the 5% limit: this rule alone does not make the real map pass. Nothing else was relaxed.
-    assert.ok(after.share > 0.05, `${after.share}`);
+    const after = danglingShare(refs, known, own, ignored, resolvers);
+    assert.equal(after.total, 308);
+    assert.deepEqual([...after.dangling].sort(), ['.env', 'anim/declarative', 'lib/cn.ts', 'robots.txt', 'sitemap.xml', 'src/anim/declarative/TextReveal.tsx']);
+    assert.equal(after.dangling.length, 6);
+    assert.ok(after.share < 0.05, `${after.share}`);
+    // Named explicitly: these three are real mistakes of the mapper and must keep dangling.
+    for (const stillWrong of ['lib/cn.ts', 'anim/declarative', 'src/anim/declarative/TextReveal.tsx']) assert.ok(after.dangling.includes(stillWrong), stillWrong);
+    // Build-emitted files and dotenv files have no rule.
+    for (const noRule of ['sitemap.xml', 'robots.txt', '.env']) assert.ok(after.dangling.includes(noRule), noRule);
+
+    assert.equal(after.byRule.specifier.length, 3);
+    assert.equal(after.byRule.suffix.length, 6);
+    assert.deepEqual([...after.byRule.module].sort(), ['lenis/react', 'motion/react', 'motion/react-m', 'react/only-export-components', 'react/rules-of-hooks']);
+    assert.deepEqual([...after.byRule.action].sort(), ['actions/checkout', 'actions/configure-pages', 'actions/deploy-pages', 'actions/setup-node', 'actions/upload-pages-artifact']);
+  });
+});
+
+describe('readTrackedAtPin reads blobs of the pinned tree', () => {
+  it('returns the committed text of tracked files, not an edit in staging or in the user checkout', () => {
+    const repo = scratch({ files: { 'package.json': '{"dependencies":{"react":"1"}}\n', '.github/workflows/ci.yml': '- uses: actions/checkout@v4\n', 'src/a.ts': 'x\n' }, modified: { 'package.json': '{"dependencies":{"evil":"1"}}\n' } });
+    const pin = git(repo.path, ['rev-parse', 'HEAD']).trim();
+    const { ws, staging } = stagingOf(repo, pin);
+    writeFileSync(join(staging, 'package.json'), '{"dependencies":{"staging-edit":"1"}}\n');
+    const read = must(ws.readTrackedAtPin(staging, pin, ['package.json', '.github/workflows/ci.yml']));
+    assert.deepEqual(read, { 'package.json': '{"dependencies":{"react":"1"}}\n', '.github/workflows/ci.yml': '- uses: actions/checkout@v4\n' });
+  });
+
+  it('leaves out a path that is not tracked at the pin, a path above the size cap and an unsafe path; refuses a bad pin', () => {
+    const repo = scratch({ files: { 'big.json': `{"x":"${'a'.repeat(1024 * 1024 + 1)}"}`, 'ok.json': '{}' }, untracked: { 'later.json': '{}' } });
+    const { ws, staging } = stagingOf(repo);
+    assert.deepEqual(must(ws.readTrackedAtPin(staging, repo.head, ['ok.json', 'big.json', 'later.json', 'missing.json', '../x', '--help', ':/ok.json'])), { 'ok.json': '{}' });
+    assert.equal(ws.readTrackedAtPin(staging, 'HEAD', ['ok.json']).ok, false);
   });
 });
 
@@ -208,5 +237,42 @@ describe('validation through the CLI', () => {
     const r = onboard(repo, roots, { inject: injectMissing });
     assert.equal(r.code, 3, r.stdout + r.stderr);
     assert.equal(pathReferencesCheck(roots)?.passed, false);
+  });
+});
+
+// End to end: references that are modules, rules and actions of the repository's own committed package.json and workflows.
+describe('validation through the CLI: package and action references', () => {
+  const inject = 'Components use `react/hooks-a`, `react/hooks-b`, `react/hooks-c`, `react/hooks-d`, `acme/tool-a` and `acme/tool-b`.';
+  const FILES = {
+    'README.md': '# scratch\n',
+    'src/index.ts': 'export const answer = 42;\n',
+    '.github/workflows/ci.yml': 'jobs:\n  a:\n    steps:\n      - uses: acme/tool-a@v1\n      - uses: acme/tool-b\n',
+  };
+  function run(packageJson: string) {
+    const roots = makeRoots();
+    const repo = makeScratchRepo({ files: { ...FILES, 'package.json': packageJson } });
+    cleanup.push(roots.base, repo.base);
+    const r = runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify({ inject }) } });
+    return { r, roots };
+  }
+
+  it('accepts a map whose dangling references are dependencies and the actions the workflows use', () => {
+    const { r, roots } = run('{"name":"scratch","dependencies":{"react":"^19"}}\n');
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+    try {
+      const row = db.prepare("SELECT result_json FROM onboarding_steps WHERE step = 'validate' ORDER BY attempt DESC").get() as { result_json: string };
+      const detail = (JSON.parse(row.result_json) as { checks: Array<{ name: string; detail: string }> }).checks.find((c) => c.name === 'path-references')?.detail ?? '';
+      assert.match(detail, /^0 of \d+ named path\(s\) dangling/);
+      assert.match(detail, /4 module specifier/);
+      assert.match(detail, /2 workflow action/);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects the same references when the package.json does not list the dependency', () => {
+    const { r } = run('{"name":"scratch","dependencies":{"vue":"^3"}}\n');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
   });
 });

@@ -114,6 +114,9 @@ export interface MapArtifactFacts {
   // The references the repository's own committed .gitignore rules ignore at the pin (declared build output, local config); they
   // count as known, not dangling.
   ignoredReferences?: readonly string[];
+  // Dependency names of the committed package.json files and the `owner/name` of the committed workflows' `uses:` lines.
+  moduleNames?: readonly string[];
+  actionRefs?: readonly string[];
 }
 
 export interface ValidationCheck {

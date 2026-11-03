@@ -48,6 +48,9 @@ export interface StagingWorkspace {
   // The subset of `candidates` (repository-relative paths) that the repository's own committed `.gitignore` files ignore at
   // `pin` (deferred item 10): the files are read from git objects at the pin, never from the staging or the user's working
   // tree, and matched by git itself. Nothing else counts as a rule (no `.git/info/exclude`, no user or system excludes).
+  // UTF-8 text of tracked files, read as blobs of the pinned tree (never from a working tree). A path that is not a tracked blob at the pin,
+  // or is above the size cap, is left out of the answer.
+  readTrackedAtPin(path: string, pin: string, relPaths: readonly string[]): Result<Record<string, string>>;
   ignoredByCommittedRules(path: string, pin: string, candidates: readonly string[]): Result<string[]>;
   // UTF-8 text of a staging file; null when absent; refuses traversal, absolute paths and symlinks that
   // leave staging, and files above maxBytes.
