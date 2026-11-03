@@ -40,6 +40,7 @@ function summarize(r: LiveCaseResult): Record<string, unknown> {
   return {
     case: r.name,
     claudeVersion: r.claudeVersion,
+    initVersion: r.parsed.init?.['claude_code_version'],
     costUsd: r.costUsd,
     costAssumed: r.costAssumed,
     durationMs: r.durationMs,
@@ -458,6 +459,7 @@ test('live 14 S-26 fast, S-31: `avarice onboard --mode fast` on a scratch reposi
     record({
       case: '14-fast-onboarding',
       claudeVersion: run.claudeVersion,
+      initVersion: run.parsed.init?.['claude_code_version'],
       costUsd: run.costUsd,
       costAssumed: run.costAssumed,
       durationMs: run.durationMs,

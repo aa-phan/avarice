@@ -22,6 +22,7 @@ import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
 import { fingerprintGsdPreamble } from '../../src/adapters/gsd/preamble.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
+import { ADMITTED_CLAUDE_VERSIONS } from '../../src/adapters/host-claude/launch-preflight.ts';
 import type { BeforeSpawn, ClaudeHostOptions } from '../../src/adapters/host-claude/claude-host.ts';
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { writeInvocationFiles } from '../../src/adapters/host-claude/invocation-files.ts';
@@ -201,14 +202,47 @@ export function claudeVersion(bin: string): string {
   return execFileSync(bin, ['--version'], { encoding: 'utf8', timeout: 20_000 }).trim();
 }
 
+// Test-only admission of a host version that is not yet in ADMITTED_CLAUDE_VERSIONS (the T3 run that decides whether to
+// admit it). Only this harness reads AVARICE_LIVE_ADMIT_CLAUDE_VERSION; production code never does (a unit test proves
+// it). The override works by the launch-marker wrapper answering `--version` with an admitted number while every other
+// argument runs the real binary; it applies only when the real binary reports exactly the named version, so it cannot
+// mask any other version. The harness records the real version, and the host's own init event is checked against it.
+export const ADMIT_ENV = 'AVARICE_LIVE_ADMIT_CLAUDE_VERSION';
+
+export function launchMarkerWrapperScript(real: string, marker: string, versionOverride?: { reported: string; as: string }): string {
+  const versionCase =
+    versionOverride === undefined
+      ? ''
+      : `case "$1" in --version) exec /bin/echo '${versionOverride.as} (Claude Code, harness-only admission override; real host ${versionOverride.reported})';; esac\n`;
+  return `#!/bin/sh\n${versionCase}case "$1" in -p) : > '${marker}';; esac\nexec '${real}' "$@"\n`;
+}
+
+// The override for a real binary reporting `reported`, or undefined when none is asked for or it names another version.
+export function admissionOverride(reported: string, env: NodeJS.ProcessEnv = process.env): { reported: string; as: string } | undefined {
+  const asked = env[ADMIT_ENV];
+  if (asked === undefined || asked === '' || asked !== reported) return undefined;
+  if (ADMITTED_CLAUDE_VERSIONS.includes(reported)) return undefined;
+  const as = ADMITTED_CLAUDE_VERSIONS[ADMITTED_CLAUDE_VERSIONS.length - 1];
+  return as === undefined ? undefined : { reported, as };
+}
+
+const versionNumber = (reported: string): string => /^\s*(\d+\.\d+\.\d+)\b/.exec(reported)?.[1] ?? reported;
+
 // A shell wrapper that records that a `-p` launch started, then runs the real binary: refusal cases assert the marker
 // never appears.
-function makeLaunchMarkerWrapper(dir: string, real: string): { bin: string; marker: string } {
+function makeLaunchMarkerWrapper(dir: string, real: string, reportedVersion: string): { bin: string; marker: string } {
   const bin = join(dir, 'claude-marker');
   const marker = join(dir, 'host-started.marker');
-  writeFileSync(bin, `#!/bin/sh\ncase "$1" in -p) : > '${marker}';; esac\nexec '${real}' "$@"\n`);
+  writeFileSync(bin, launchMarkerWrapperScript(real, marker, admissionOverride(versionNumber(reportedVersion))));
   chmodSync(bin, 0o755);
   return { bin, marker };
+}
+
+// With the override on, the host that ran must be the version the override names.
+function assertHostIsRealVersion(parsed: ParsedTranscript, reportedVersion: string): void {
+  if (admissionOverride(versionNumber(reportedVersion)) === undefined) return;
+  const seen = parsed.init?.['claude_code_version'];
+  if (typeof seen === 'string' && seen !== versionNumber(reportedVersion)) throw new Error(`the host's init event says ${seen}, not ${versionNumber(reportedVersion)}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -528,8 +562,8 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const dataRoot = p.deps.profile.dataRoot;
   const evidenceDir = p.roots.base;
   const realClaude = liveClaudeBin();
-  const wrapper = makeLaunchMarkerWrapper(evidenceDir, realClaude);
   const version = claudeVersion(realClaude);
+  const wrapper = makeLaunchMarkerWrapper(evidenceDir, realClaude, version);
 
   const request: InvocationRequest = { ...p.request, model: LIVE_MODEL, costCapUsd: costCap, wallClockMs: spec.wallClockMs ?? 240_000, expectedFiles: spec.expectedFiles ?? [], sessionId: randomUUID() };
   const invDir = join(dataRoot, 'onboard', request.onboardingId, `${request.purpose}-${request.invocationId}`);
@@ -647,6 +681,7 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   }
 
   const parsed = parseTranscript(transcript);
+  assertHostIsRealVersion(parsed, version);
   const result: LiveCaseResult = {
     name: spec.name,
     outcome,
@@ -736,8 +771,8 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const roots = makeRoots();
   const repo = writeScratchRepo();
   const realClaude = liveClaudeBin();
-  const wrapper = makeLaunchMarkerWrapper(roots.base, realClaude);
   const version = claudeVersion(realClaude);
+  const wrapper = makeLaunchMarkerWrapper(roots.base, realClaude, version);
   const before = { refs: refsDigest(repo.path), tree: treeDigest(repo.path) };
   const started = Date.now();
   const budgets = [`costUsdPerInvocation=${costCap}`, `costUsdPerRun=${costCap}`, 'retry=1', 'invocations=2', 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
@@ -774,6 +809,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     if (bytes.ok) transcript += `${new TextDecoder().decode(bytes.value)}\n`;
   }
   writeFileSync(join(roots.base, 'transcript.jsonl'), transcript);
+  assertHostIsRealVersion(parseTranscript(transcript), version);
   const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map', 'launch:intel') ORDER BY started_at");
   const validation = steps
     .filter((r) => r.step === 'validate')
