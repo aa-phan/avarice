@@ -207,6 +207,32 @@ describe('reservation and settlement', () => {
     });
   });
 
+  it('refuses to reserve when exactly nothing is left of the cost or the wall clock (the boundary, not only overspending)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const current = deps.ledger.getOnboarding(onboardingId);
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(current.ok && contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const left = (name: string): number => {
+        const budgets = deps.ledger.getBudgets(runId);
+        assert.ok(budgets.ok);
+        const found = budgets.value.find((b: BudgetRow) => b.name === name) as BudgetRow;
+        return found.limit - found.used - found.reserved;
+      };
+      assert.ok(deps.ledger.chargeBudget(runId, 'costUsd', left('costUsd'), { fromReserved: false }).ok);
+      assert.equal(left('costUsd'), 0);
+      const noCost = reserveInvocation(deps, current.value, 'map');
+      assert.ok(noCost.ok);
+      assert.deepEqual(noCost.value, { granted: false, budget: 'costUsd' });
+      assert.ok(deps.ledger.chargeBudget(runId, 'wallClockMs', left('wallClockMs'), { fromReserved: false }).ok);
+      assert.equal(left('wallClockMs'), 0);
+      const noClock = reserveInvocation(deps, current.value, 'map');
+      assert.ok(noClock.ok);
+      assert.deepEqual(noClock.value, { granted: false, budget: 'wallClockMs' });
+    });
+  });
+
   it('settles the measured duration and the host cost, and releases the reservation', async () => {
     const { roots, repo } = fixture();
     await inProcess(roots, repo, {}, (deps, onboardingId) => {

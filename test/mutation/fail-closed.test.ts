@@ -8,12 +8,13 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 
+import { checkLaunchReady } from '../../src/adapters/host-claude/launch-preflight.ts';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
 import { decideToolCall, normalizeToolCall } from '../../src/domain/hook-decision.ts';
 import type { NormalizedToolCall } from '../../src/domain/hook-decision.ts';
-import { PREAMBLE, budgetUsed, makeHookFixture, runHook } from '../helpers/hook-fixture.ts';
+import { PREAMBLE, budgetUsed, makeHookFixture, runHook, withDb } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 
 const fixtures: HookFixture[] = [];
@@ -32,6 +33,17 @@ function setBudget(fx: HookFixture, name: string, used: number, reserved: number
     db.prepare('UPDATE budgets SET used = ?, reserved = ? WHERE run_id = ? AND name = ?').run(used, reserved, 'run_1', name);
   } finally {
     db.close();
+  }
+}
+
+// True on a volume that treats names that differ only in case as the same file (the macOS default).
+function caseInsensitive(): boolean {
+  const dir = mkdtempSync(join(tmpdir(), 'avarice-case-'));
+  try {
+    writeFileSync(join(dir, 'a'), '');
+    return existsSync(join(dir, 'A'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -58,6 +70,31 @@ describe('FC-2: a path outside the write set is denied after canonicalization', 
     assert.equal(canonicalAbsolute(join(fx.writeRoot, 'a', 'x.md')), null);
     const decision = decideToolCall({ kind: 'file-write', tool: 'Write', paths: [join(fx.writeRoot, 'a', 'x.md')] }, fx.policy, canonicalAbsolute);
     assert.deepEqual([decision.decision, decision.rule], ['deny', 'unresolvable-path']);
+  });
+});
+
+describe('FC-2 adversarial: path forms that differ from the policy path only in spelling', () => {
+  it('resolves .. after a symlink against the symlink target, as the kernel does', () => {
+    const fx = fixture();
+    symlinkSync(join(fx.staging, 'src'), join(fx.writeRoot, 'link'));
+    // link -> <staging>/src, so link/.. is <staging>, not the write root: <staging>/x.md is outside the write set.
+    const viaLink = `${fx.writeRoot}/link/../x.md`;
+    assert.equal(canonicalAbsolute(viaLink), `${fx.staging}/x.md`);
+    const decision = decideToolCall({ kind: 'file-write', tool: 'Write', paths: [viaLink] }, fx.policy, canonicalAbsolute);
+    assert.deepEqual([decision.decision, decision.rule], ['deny', 'outside-write-set']);
+  });
+
+  it('treats a differently-cased spelling of an existing directory as that directory (case-insensitive volume)', () => {
+    // On a case-sensitive volume a differently-cased name is a different name, so there is nothing to check.
+    if (!caseInsensitive()) return;
+    const fx = fixture();
+    const upperRoot = fx.writeRoot.replace('/.planning/codebase', '/.PLANNING/CODEBASE');
+    assert.equal(canonicalAbsolute(`${upperRoot}/NEW.md`), `${fx.writeRoot}/NEW.md`);
+    const inside = decideToolCall({ kind: 'file-write', tool: 'Write', paths: [`${upperRoot}/NEW.md`] }, fx.policy, canonicalAbsolute);
+    assert.equal(inside.decision, 'allow');
+    const upperSrc = join(fx.staging, 'SRC', 'a.ts');
+    const outside = decideToolCall({ kind: 'file-write', tool: 'Write', paths: [upperSrc] }, fx.policy, canonicalAbsolute);
+    assert.deepEqual([outside.decision, outside.rule], ['deny', 'outside-write-set']);
   });
 });
 
@@ -123,6 +160,21 @@ describe('FC-4: a reservation is honored by the hook charge', () => {
   });
 });
 
+describe('FC-1: every hook verdict is recorded with its level', () => {
+  it('writes an allow at info and a deny at warn, both in the ledger the hook charged', () => {
+    const fx = fixture();
+    runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.staging, 'src', 'a.ts') } });
+    runHook(fx, 'pre', { tool_name: 'Write', tool_input: { file_path: join(fx.staging, 'src', 'a.ts'), content: 'x' } });
+    const levels = withDb(fx.ledgerPath, (db) =>
+      (db.prepare("SELECT level, json_extract(data_json, '$.decision') AS decision FROM events WHERE type = 'hook.decision' ORDER BY seq").all() as Array<{ level: string; decision: string }>).map((r) => [r.decision, r.level]),
+    );
+    assert.deepEqual(levels, [
+      ['allow', 'info'],
+      ['deny', 'warn'],
+    ]);
+  });
+});
+
 describe('command identity: deny beats allow, and the GSD preamble ends at a line boundary', () => {
   it('refuses a denied prefix even when a broad read-only entry would otherwise admit the command', () => {
     const fx = fixture({ commands: { readOnly: ['git', 'ls'], deniedPrefixes: ['git push', 'git config'] } });
@@ -139,6 +191,21 @@ describe('command identity: deny beats allow, and the GSD preamble ends at a lin
     assert.deepEqual([decision.decision, decision.rule], ['deny', 'shell-preamble-trailing']);
     const onNextLine = decideToolCall(shell(fx, `${PREAMBLE}\ngsd_run state json`), fx.policy, canonicalAbsolute);
     assert.equal(onNextLine.decision, 'allow');
+  });
+});
+
+// Open finding MF-04 (01-MUTATION.md): the hook's shell read check compares each word as a literal path, so an unquoted glob or
+// brace expansion names a path the check never sees. The sandbox denyRead (docs/containment.md, coverage matrix row 2) is what stops
+// the read; the hook layer does not. Left as a todo until the owner decides how to refuse unquoted expansion characters without
+// refusing the quoted `find -name '*.ts'` form.
+describe('open finding MF-04: shell expansion characters and the hook read check', () => {
+  it('denies a shell read that names a denied directory through an unquoted brace or glob expansion', { todo: 'MF-04: the hook allows cat /denied/.s{s,s}h/id_rsa' }, () => {
+    const fx = fixture();
+    // <dir>/repo is a denied root; each spelling below expands to a file under it.
+    for (const command of [`cat ${fx.dir}/re{po,xx}/x`, `cat ${fx.dir}/re*/x`, `cat ${fx.dir}/rep?/x`]) {
+      const decision = decideToolCall(shell(fx, command), fx.policy, canonicalAbsolute);
+      assert.equal(decision.decision, 'deny', command);
+    }
   });
 });
 
@@ -209,5 +276,119 @@ describe('FC-10: a sandbox that cannot run the command reports unavailable', () 
     assert.equal(result.error.kind, 'invalid');
     assert.equal(result.error.kind === 'invalid' ? result.error.field : '', 'cwd');
     assert.ok(existsSync('.'));
+  });
+});
+
+describe('FC-1 and FC-2: remaining refusal paths of the hook and the canonicalizer', () => {
+  it('refuses hook input larger than 1 MiB', () => {
+    const fx = fixture();
+    const big = JSON.stringify({ cwd: fx.staging, tool_name: 'Read', tool_input: { file_path: join(fx.staging, 'src', 'a.ts'), pad: 'x'.repeat(1024 * 1024 + 1024) } });
+    const result = runHook(fx, 'pre', big);
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /larger than 1 MiB/);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+  });
+
+  it('says why it refused an input that is not a JSON object (an array, null, a number)', () => {
+    const fx = fixture();
+    for (const input of ['[]', 'null', '5']) {
+      const result = runHook(fx, 'pre', input);
+      assert.equal(result.code, 2, input);
+      assert.match(result.stderr, /not a JSON object/, input);
+    }
+  });
+
+  it('treats a chain of more than 40 dangling symlinks as undecidable, and a short chain as the target it leads to', () => {
+    const fx = fixture();
+    const link = (n: number): string => join(fx.writeRoot, `l${n}`);
+    for (let i = 0; i < 45; i += 1) symlinkSync(i === 44 ? join(fx.writeRoot, 'nowhere') : link(i + 1), link(i));
+    assert.equal(canonicalAbsolute(link(0)), null);
+    assert.equal(canonicalAbsolute(link(40)), join(fx.writeRoot, 'nowhere'));
+  });
+
+  it('refuses a shell command longer than 16384 characters', () => {
+    const fx = fixture();
+    const decision = decideToolCall(shell(fx, `ls ${'a'.repeat(16_400)}`), fx.policy, canonicalAbsolute);
+    assert.deepEqual([decision.decision, decision.rule], ['deny', 'shell-syntax']);
+    assert.equal(decideToolCall(shell(fx, `ls ${'a'.repeat(100)}`), fx.policy, canonicalAbsolute).decision, 'allow');
+  });
+
+  it('refuses an unterminated quote, single or double', () => {
+    const fx = fixture();
+    for (const command of ["cat 'unterminated", 'cat "unterminated']) {
+      const decision = decideToolCall(shell(fx, command), fx.policy, canonicalAbsolute);
+      assert.deepEqual([decision.decision, decision.rule], ['deny', 'shell-syntax'], command);
+    }
+  });
+
+  it('charges a tool call for an allowed shell command', () => {
+    const fx = fixture();
+    assert.equal(runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: 'ls' } }).code, 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 1);
+  });
+});
+
+describe('FC-8: the settings file itself', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const probe = ['/usr/bin/true'] as const;
+
+  it('names a missing file, an unreadable file and a file that is not an object differently, and launches none', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-settings-')));
+    dirs.push(dir);
+    const rule = (file: string): string => {
+      const result = checkLaunchReady({ settingsFile: file, claudeBin: '/nonexistent/claude', sandboxProbe: probe });
+      assert.ok(!result.ok && result.error.kind === 'denied');
+      return result.ok || result.error.kind !== 'denied' ? '' : result.error.rule;
+    };
+    assert.equal(rule(join(dir, 'absent.json')), 'enforcement_failure:settings-missing');
+    assert.equal(rule(dir), 'enforcement_failure:settings-invalid');
+    for (const [name, text] of [['array.json', '[]'], ['null.json', 'null'], ['string.json', '"x"'], ['broken.json', '{']] as const) {
+      writeFileSync(join(dir, name), text);
+      assert.equal(rule(join(dir, name)), 'enforcement_failure:settings-invalid', name);
+    }
+  });
+});
+
+describe('FC-10 and cancellation: the executor', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const base = (cwd: string): Parameters<SandboxedExecutor['run']>[0] => ({ argv: ['/bin/sh', '-c', 'echo ran > ran.txt'], cwd, env: { PATH: '/usr/bin:/bin' }, timeoutMs: 10_000, invocationId: 'inv_1', writePaths: [cwd], denyReadPaths: [] });
+  const work = (): string => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-exec-')));
+    dirs.push(dir);
+    return dir;
+  };
+
+  it('refuses a zero timeout', async () => {
+    const result = await new SandboxedExecutor().run({ ...base(work()), timeoutMs: 0 });
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind === 'invalid' ? result.error.field : result.error.kind, 'timeoutMs');
+  });
+
+  it('starts nothing when the signal is already aborted', async () => {
+    const cwd = work();
+    const result = await new SandboxedExecutor().run(base(cwd), AbortSignal.abort());
+    assert.ok(result.ok);
+    assert.equal(result.value.status, 'cancelled');
+    assert.equal(existsSync(join(cwd, 'ran.txt')), false);
+  });
+
+  it('ends the whole process group when the command settles, so a background child does not outlive it', async () => {
+    const result = await new SandboxedExecutor().run({ ...base(work()), argv: ['/bin/sh', '-c', 'sleep 60 & echo $!'] });
+    assert.ok(result.ok);
+    const pid = Number(result.value.stdout.trim());
+    assert.ok(Number.isInteger(pid) && pid > 1);
+    let alive = true;
+    try {
+      process.kill(pid, 0);
+    } catch {
+      alive = false;
+    }
+    assert.equal(alive, false, 'the background child was killed with its group');
   });
 });
