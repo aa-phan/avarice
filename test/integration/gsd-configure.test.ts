@@ -97,11 +97,15 @@ async function onboardLogged(roots: CliRoots, repo: ScratchRepo, hostOptions: Fa
           .filter((line) => line.length > 0)
           .map((line) => JSON.parse(line) as LoggedCall)
       : [];
-  const atInvoke: Array<{ prompt: string; logged: number }> = [];
+  // `codebaseEntries`: what `.planning/codebase` holds when the host is invoked (null when it does not exist).
+  const atInvoke: Array<{ prompt: string; logged: number; codebaseEntries: string[] | null }> = [];
   class Spy extends FakeAgentHost {
     override invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
       // These tests are about the map invocation; the intel step (plan 01-17) has its own tests.
-      if (req.purpose === 'map') atInvoke.push({ prompt: req.prompt, logged: readLog().length });
+      if (req.purpose === 'map') {
+        const mapDir = join(req.scope.stagingPath, '.planning', 'codebase');
+        atInvoke.push({ prompt: req.prompt, logged: readLog().length, codebaseEntries: existsSync(mapDir) ? readdirSync(mapDir) : null });
+      }
       return super.invoke(req, signal);
     }
   }
@@ -243,11 +247,30 @@ describe('mapping mode', () => {
     const { roots, repo } = fixture();
     const { outcome, atInvoke } = await onboardLogged(roots, repo, {});
     assert.equal(outcome.state, 'active');
-    assert.equal(atInvoke[0]?.prompt, '/gsd-map-codebase');
+    assert.equal(atInvoke[0]?.prompt.split('\n')[0], '/gsd-map-codebase');
     const [record] = rows<{ mapping_mode: string; completeness: string }>(roots, 'SELECT mapping_mode, completeness FROM project_records');
     assert.equal(record?.mapping_mode, 'full');
     assert.equal(record?.completeness, 'complete');
     assert.equal(rows(roots, "SELECT 1 FROM onboarding_steps WHERE step = 'gsd:stamp'").length, 0);
+  });
+
+  // Found by the live exit rehearsal (plan 01-19): AVARICE creates `.planning/codebase` (empty) before the mapper starts, and
+  // GSD's map workflow treats an existing directory as an existing map and asks Refresh, Update or Skip, which a headless
+  // session cannot answer. The mapper ended without a file (outcome denied, blocked decision) on a repository with no map.
+  it('answers the existing-map question up front for a repository with no map, because AVARICE creates .planning/codebase empty before the mapper starts', async () => {
+    const { roots, repo } = fixture();
+    const { outcome, atInvoke } = await onboardLogged(roots, repo, {});
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(step<{ existingMap: string }>(roots, 'mapping:plan').existingMap, 'none', 'the repository has no map');
+    assert.deepEqual(atInvoke[0]?.codebaseEntries, [], 'the directory exists and is empty when the mapper starts');
+    assert.equal(atInvoke[0]?.prompt, '/gsd-map-codebase\nIf .planning/codebase already exists, answer the question about it with: Refresh.');
+  });
+
+  it('answers the existing-map question up front in fast mode too', async () => {
+    const { roots, repo } = fixture();
+    const { outcome, atInvoke } = await onboardLogged(roots, repo, { files: FAST_FILES, stamp: false }, 'fast');
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(atInvoke[0]?.prompt, '/gsd-map-codebase --fast\nIf .planning/codebase already exists, answer the question about it with: Refresh.');
   });
 
   it('skips mapping for a repository that is not brownfield: no invocation, completeness none', async () => {
