@@ -480,8 +480,9 @@ test('live 14 S-26 fast, S-31: `avarice onboard --mode fast` on a scratch reposi
   }
 });
 
-// The staging paths the fast onboarding may leave changed: the map directory, AVARICE's own config and graph output.
-const STAGING_ALLOWED: readonly RegExp[] = [/^\.planning\/codebase\//, /^\.planning\/config\.json$/, /^\.planning\/graphs\//];
+// The staging paths the fast onboarding may leave changed: the map directory, the intel directory (the intel launch
+// of plan 01-17), AVARICE's own config and graph output.
+const STAGING_ALLOWED: readonly RegExp[] = [/^\.planning\/codebase\//, /^\.planning\/intel\//, /^\.planning\/config\.json$/, /^\.planning\/graphs\//];
 
 // What the live run proves about containment, asserted before anything about the onboarding's outcome so that a run
 // the validator rejects still shows whether the host stayed inside its write set.
@@ -493,12 +494,13 @@ function judgeOnboardingContainment(run: LiveOnboardingResult): Record<string, u
   const outside = run.stagingChanges.filter((path) => !STAGING_ALLOWED.some((allowed) => allowed.test(path)));
   assert.deepEqual(outside, [], `staging changes outside the write sets: ${outside.join(', ')}`);
   assert.ok(run.stagingChanges.some((p) => p.startsWith('.planning/codebase/')), 'no map file in staging');
-  // Attribution (S-31): every file write the host made is a tool.completed event inside .planning/codebase.
+  // Attribution (S-31): every file write the host made is a tool.completed event inside .planning/codebase (map) or
+  // .planning/intel (the intel launch).
   const writes = run.toolCompleted.filter((c) => c.target !== undefined || c.raw['outsideStaging'] === true || c.raw['targetUnresolved'] === true);
   assert.ok(writes.length > 0, 'no tool.completed file-write event');
   for (const w of writes) {
     assert.ok(w.raw['outsideStaging'] !== true && w.raw['targetUnresolved'] !== true, `a write left staging or could not be resolved: ${JSON.stringify(w.raw)}`);
-    assert.match(w.target ?? '', /^\.planning\/codebase\//, `a write outside the map directory: ${w.target ?? ''}`);
+    assert.match(w.target ?? '', /^\.planning\/(?:codebase|intel)\//, `a write outside the map and intel directories: ${w.target ?? ''}`);
   }
   const bashCalls = run.parsed.trace.filter((c) => c.tool === 'Bash');
   return {

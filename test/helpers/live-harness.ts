@@ -706,7 +706,11 @@ export interface LiveOnboardingResult {
   staging: string | undefined;
   // Every path git reports changed in staging (porcelain, untracked included), relative to the staging root.
   stagingChanges: string[];
+  // The first invocation (the map launch) and every invocation of the run in start order (the intel launch of plan
+  // 01-17 follows the map).
   invocationId: string | undefined;
+  invocationIds: string[];
+  // Events of every invocation of the run.
   toolCompleted: CompletedTool[];
   hookDecisions: HookEvent[];
   refsBefore: string;
@@ -721,8 +725,8 @@ export interface LiveOnboardingResult {
   transcript: string;
   // Each validation attempt: its status and the checks that failed, with their detail.
   validation: Array<{ attempt: number; status: string; failedChecks: string[] }>;
-  // Each map launch: attempt, outcome kind and cost.
-  launches: Array<{ attempt: number; kind: string; costUsd: number }>;
+  // Each map or intel launch: purpose, attempt, outcome kind and cost.
+  launches: Array<{ purpose: string; attempt: number; kind: string; costUsd: number }>;
   durationMs: number;
   dispose(): void;
 }
@@ -745,12 +749,14 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const dataRoot = roots.AVARICE_DATA_ROOT;
   const [onboarding] = ledgerRows<{ onboarding_id: string; state: string; staging_worktree: string | null }>(dataRoot, 'SELECT onboarding_id, state, staging_worktree FROM onboardings');
   const [record] = ledgerRows<{ mapping_mode: string | null; completeness: string | null }>(dataRoot, "SELECT mapping_mode, completeness FROM project_records WHERE state = 'active'");
-  const [finished] = ledgerRows<{ data_json: string; invocation_id: string | null }>(dataRoot, "SELECT data_json, invocation_id FROM events WHERE type = 'invocation.finished' ORDER BY seq");
-  const invocationId = finished?.invocation_id ?? undefined;
-  const reported = finished === undefined ? undefined : (JSON.parse(finished.data_json) as { costUsd?: number; numTurns?: number });
+  // Every invocation of the run (the map launch, then the intel launch of plan 01-17): spend, hook and tool events.
+  const finished = ledgerRows<{ data_json: string; invocation_id: string | null }>(dataRoot, "SELECT data_json, invocation_id FROM events WHERE type = 'invocation.finished' ORDER BY seq");
+  const invocationIds = finished.map((f) => f.invocation_id).filter((id): id is string => id !== null);
+  const invocationId = invocationIds[0];
+  const reports = finished.map((f) => JSON.parse(f.data_json) as { costUsd?: number; numTurns?: number });
   const hostStarted = existsSync(wrapper.marker);
-  const costAssumed = hostStarted && (reported === undefined || reported.costUsd === undefined || (reported.costUsd === 0 && (reported.numTurns ?? 0) === 0));
-  const costUsd = hostStarted ? (costAssumed ? costCap : (reported?.costUsd ?? 0)) : 0;
+  const costAssumed = hostStarted && (reports.length === 0 || reports.some((r) => r.costUsd === undefined || (r.costUsd === 0 && (r.numTurns ?? 0) === 0)));
+  const costUsd = hostStarted ? (costAssumed ? costCap : reports.reduce((sum, r) => sum + (r.costUsd ?? 0), 0)) : 0;
   if (hostStarted) recordSpend({ case: name, costUsd, assumed: costAssumed });
 
   const staging = onboarding?.staging_worktree ?? undefined;
@@ -762,13 +768,13 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
       .filter((entry) => entry !== '')
       .map((entry) => entry.slice(3));
   }
-  const [artifact] = ledgerRows<{ digest: string }>(dataRoot, "SELECT digest FROM artifacts WHERE kind = 'transcript' ORDER BY rowid DESC");
-  if (artifact !== undefined) {
-    const bytes = new LocalArtifactStore(dataRoot).get(artifact.digest);
-    if (bytes.ok) transcript = new TextDecoder().decode(bytes.value);
+  const store = new LocalArtifactStore(dataRoot);
+  for (const artifact of ledgerRows<{ digest: string }>(dataRoot, "SELECT digest FROM artifacts WHERE kind = 'transcript' ORDER BY rowid")) {
+    const bytes = store.get(artifact.digest);
+    if (bytes.ok) transcript += `${new TextDecoder().decode(bytes.value)}\n`;
   }
   writeFileSync(join(roots.base, 'transcript.jsonl'), transcript);
-  const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map') ORDER BY started_at");
+  const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map', 'launch:intel') ORDER BY started_at");
   const validation = steps
     .filter((r) => r.step === 'validate')
     .map((r) => {
@@ -776,10 +782,10 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
       return { attempt: r.attempt, status: r.status, failedChecks: (body.checks ?? []).filter((c) => !c.passed).map((c) => `${c.name}: ${c.detail.slice(0, 300)}`) };
     });
   const launches = steps
-    .filter((r) => r.step === 'launch:map')
+    .filter((r) => r.step.startsWith('launch:'))
     .map((r) => {
       const body = JSON.parse(r.result_json) as { kind?: string; costUsd?: number };
-      return { attempt: r.attempt, kind: body.kind ?? r.status, costUsd: body.costUsd ?? 0 };
+      return { purpose: r.step.slice('launch:'.length), attempt: r.attempt, kind: body.kind ?? r.status, costUsd: body.costUsd ?? 0 };
     });
   return {
     cli,
@@ -792,8 +798,9 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     staging,
     stagingChanges,
     invocationId,
-    toolCompleted: invocationId === undefined ? [] : toolCompleted(dataRoot, invocationId),
-    hookDecisions: invocationId === undefined ? [] : hookDecisions(dataRoot, invocationId),
+    invocationIds,
+    toolCompleted: invocationIds.flatMap((id) => toolCompleted(dataRoot, id)),
+    hookDecisions: invocationIds.flatMap((id) => hookDecisions(dataRoot, id)),
     refsBefore: before.refs,
     refsAfter: refsDigest(repo.path),
     sourceTreeBefore: before.tree,
