@@ -24,10 +24,28 @@ export interface SubagentDerivation {
   formula: string;
 }
 
+// How the run's invocation count is derived (plan 01-19, user decision): the map invocations of every map round (the first
+// map and its retries), the relaunches an interruption costs (a killed invocation stays charged and is run again), plus one
+// intel and one knowledge invocation. Stored beside `subagentsDerivation`.
+export interface InvocationDerivation {
+  mode: MappingMode;
+  // Map invocations in one round: 1 when the mode runs a mapper, else 0.
+  mapInvocations: number;
+  mapRounds: number;
+  // One relaunch per map round when a mapper runs, else 1 (an intel or knowledge invocation killed once).
+  interruptionAllowance: number;
+  intelInvocations: number;
+  knowledgeInvocations: number;
+  // The derived ceiling; `budgets.invocations` is this value or a lower override.
+  total: number;
+  formula: string;
+}
+
 export interface OnboardingBudgets {
   wallClockMinutes: number;
   wallClockShares: { map: number; intel: number; knowledge: number };
   invocations: number;
+  invocationsDerivation: InvocationDerivation;
   toolCalls: number;
   subagentsConcurrent: number;
   subagentsTotal: number;
@@ -140,7 +158,6 @@ export const ONBOARDING_PRESET = {
   budgets: {
     wallClockMinutes: 45,
     wallClockShares: { map: 20, intel: 10, knowledge: 15 },
-    invocations: 4,
     toolCalls: 600,
     subagentsConcurrent: 4,
     costUsd: { perInvocation: 3.0, perRun: 12.0, exactness: 'estimated' },
@@ -170,7 +187,8 @@ type OverrideKey =
 
 const OVERRIDE_LIMITS: Readonly<Record<OverrideKey, { limit: number; integer: boolean }>> = {
   wallClockMinutes: { limit: ONBOARDING_PRESET.budgets.wallClockMinutes, integer: true },
-  invocations: { limit: ONBOARDING_PRESET.budgets.invocations, integer: true },
+  // Like subagentsTotal, the ceiling is derived from the mapping mode and the retry limit, so it is checked after the other overrides apply.
+  invocations: { limit: Number.POSITIVE_INFINITY, integer: true },
   toolCalls: { limit: ONBOARDING_PRESET.budgets.toolCalls, integer: true },
   subagentsConcurrent: { limit: ONBOARDING_PRESET.budgets.subagentsConcurrent, integer: true },
   // The ceiling is derived from the mapping mode and the retry limit, so it is checked after the other overrides apply.
@@ -232,12 +250,33 @@ export function deriveSubagents(mode: MappingMode, retry: number): SubagentDeriv
   };
 }
 
+// The invocation count for a mapping mode and a map retry limit: map invocations (1 per round when the mode runs a mapper) x
+// (1 + retries) + the interruption relaunches + 1 intel + 1 knowledge.
+export function deriveInvocations(mode: MappingMode, retry: number): InvocationDerivation {
+  const mapInvocations = ONBOARDING_PRESET.subagents.mapAgents[mode] > 0 ? 1 : 0;
+  const mapRounds = 1 + retry;
+  const interruptionAllowance = mapInvocations > 0 ? mapInvocations * mapRounds : 1;
+  const total = mapInvocations * mapRounds + interruptionAllowance + 1 + 1;
+  const allowanceText = mapInvocations > 0 ? `${interruptionAllowance} interruption relaunches (1 per map round)` : `${interruptionAllowance} interruption relaunches (1 for a run with no mapper)`;
+  return {
+    mode,
+    mapInvocations,
+    mapRounds,
+    interruptionAllowance,
+    intelInvocations: 1,
+    knowledgeInvocations: 1,
+    total,
+    formula: `${mapInvocations} map invocation (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${allowanceText} + 1 intel + 1 knowledge = ${total}`,
+  };
+}
+
 function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<OnboardingBudgets> {
   const preset = ONBOARDING_PRESET.budgets;
   const budgets: OnboardingBudgets = {
     wallClockMinutes: preset.wallClockMinutes,
     wallClockShares: { ...preset.wallClockShares },
-    invocations: preset.invocations,
+    invocations: 0,
+    invocationsDerivation: deriveInvocations(mode, preset.retry),
     toolCalls: preset.toolCalls,
     subagentsConcurrent: preset.subagentsConcurrent,
     subagentsTotal: 0,
@@ -246,9 +285,11 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
     retry: preset.retry,
   };
   budgets.subagentsTotal = budgets.subagentsDerivation.total;
+  budgets.invocations = budgets.invocationsDerivation.total;
   if (raw === undefined) return ok(budgets);
   if (!isPlainObject(raw)) return invalid('request.budgetOverrides', 'must be an object');
   let requestedSubagentsTotal: number | undefined;
+  let requestedInvocations: number | undefined;
 
   for (const [key, value] of Object.entries(raw)) {
     const field = `request.budgetOverrides.${key}`;
@@ -266,7 +307,7 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
         budgets.wallClockMinutes = value;
         break;
       case 'invocations':
-        budgets.invocations = value;
+        requestedInvocations = value;
         break;
       case 'toolCalls':
         budgets.toolCalls = value;
@@ -300,6 +341,19 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
       );
     }
     budgets.subagentsTotal = requestedSubagentsTotal;
+  }
+
+  // The same for the invocation count: derived from the retry limit in force, lowered only.
+  budgets.invocationsDerivation = deriveInvocations(mode, budgets.retry);
+  budgets.invocations = budgets.invocationsDerivation.total;
+  if (requestedInvocations !== undefined) {
+    if (requestedInvocations > budgets.invocationsDerivation.total) {
+      return invalid(
+        'request.budgetOverrides.invocations',
+        `budgets can only be lowered: ${requestedInvocations} is above the ${budgets.invocationsDerivation.total} derived for mapping mode ${mode} (${budgets.invocationsDerivation.formula})`,
+      );
+    }
+    budgets.invocations = requestedInvocations;
   }
 
   // The per-purpose shares of the wall clock scale down with it, so they never sum above the total.
