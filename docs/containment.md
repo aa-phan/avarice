@@ -82,6 +82,7 @@ AVARICE never passes `--bare` (it skips settings and plugin hooks), `bypassPermi
   "hooks": {
     "PreToolUse": [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "avarice hook pre-tool-use --run <run>", "timeout": 5, "onFailure": "block" }] }],
     "PostToolUse": [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "avarice hook post-tool-use --run <run>", "timeout": 5 }] }],
+    "PostToolUseFailure": [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "avarice hook post-tool-use --run <run>", "timeout": 5 }] }],
     "ConfigChange": [{ "hooks": [{ "type": "command", "command": "avarice hook config-change --run <run>", "timeout": 5, "onFailure": "block" }] }]
   }
 }
@@ -178,7 +179,7 @@ Caches store source version, retrieval time, profile and access scope. A cached 
 | Model cost | USD per invocation and per run | `--max-budget-usd` per invocation; run total accumulated from each `result.total_cost_usd` | Client-side estimate reported at the end of an invocation; the run total can exceed the plan by at most one invocation's cap |
 | Retrieval | Queries, bytes, pages | AVARICE adapters | Exact for AVARICE adapters |
 | Repair attempts | Count per failing check | Gate evaluation | Exact |
-| Subagents | Concurrent and total | PreToolUse on the Agent tool | Exact for count; the host also caps nesting depth at 3 and concurrency at 20 by default |
+| Subagents | Concurrent and total | PreToolUse on the Agent tool: the total is charged, the concurrent limit is checked against the in-flight count the hook keeps (see [Subagents, background work and remote tools](#subagents-background-work-and-remote-tools)) | Exact for count; AVARICE enforces both limits, and the host's own caps (nesting depth 3, concurrency 20 by default) sit above them |
 | Artifacts | Bytes | `ArtifactStore.put` | Exact |
 | Mutation probe | Mutants, minutes per pass, seconds per mutant | Before each probe pass, from `verification.mutation` | Exact |
 
@@ -188,6 +189,8 @@ Reservations are single atomic statements in the run's ledger ([budget accountin
 
 - **Inheritance.** Subagents inherit the session's permission rules and sandbox. Under a `dontAsk` parent a subagent's frontmatter can request `acceptEdits` or `auto`, so the generated settings deny any agent definition that sets `permissionMode`, and the hook denies Agent calls naming such agents. The run is effectively capped at the parent's authority (CON-15).
 - **Budget.** Every subagent tool call passes the same PreToolUse hook with `agent_id`, so it draws from the parent run's balance.
+- **Concurrency.** AVARICE's hook enforces the contract's `subagentsConcurrent`, not the host (whose cap of 20 sits far above it). An Agent call is denied with rule `budget:subagentsConcurrent` when the invocation already has that many subagents in flight; when the total is also spent the call is denied as `budget_exhausted` instead. In flight means the Agent calls the hook admitted in this invocation minus the completions it recorded, counted from the invocation's own events inside the same `BEGIN IMMEDIATE` transaction that charges the total and appends the `hook.decision` row, so racing calls admit exactly the limit. A completion arrives as `PostToolUse` (the call returned) or `PostToolUseFailure` (the call failed); both run the hook with `--event post`, the generated settings register both, and the launch preflight refuses a settings file missing either (`enforcement_failure:post-hook-missing`, `enforcement_failure:post-failure-hook-missing`). A completion frees a slot once per `tool_use_id`; a repeat, or an ID the hook never admitted, frees nothing. The count is scoped to the invocation ID, so an invocation that was killed leaves nothing a later invocation would count. A completion that never arrives (the hook crashed, the host did not call it) keeps its slot held for the rest of that invocation, which makes the limit stricter, never looser.
+- **Background subagents.** An Agent call with `run_in_background: true` is allowed (the full map starts its four mappers that way) and counts against both limits. Its `PostToolUse` reports that the call was launched, not that the subagent ended, so the hook never frees that slot: a background subagent holds its slot until the invocation ends. With the onboarding preset (4 concurrent, 4 in the full map) the four mappers fit; a fifth subagent while they are held is denied.
 - **Background Bash.** Commands run with `run_in_background` are inside the same sandbox as any Bash call, and PreToolUse fires for them with `run_in_background: true` in the tool input (verified on 2.1.316, [spikes](../spikes/2026-11-01-pre-slice-0/README.md)). The containment suite re-tests it on every host upgrade.
 - **Remote side effects in progress.** When AVARICE stops an invocation, a request already accepted by a remote service (an MCP tool call, an API write) may still complete. AVARICE records such calls as `sideEffect: unknown` and reconciles them before any retry; it never claims to have stopped them.
 

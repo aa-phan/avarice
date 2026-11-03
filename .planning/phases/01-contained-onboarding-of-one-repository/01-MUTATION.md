@@ -42,7 +42,7 @@ Selection: **rustup-user**. The owner chose, through the orchestrator and before
 | Equivalent | 4 |
 | Surviving | 1 (B-87, a non-FC row) |
 | FC rows surviving | 0: every FC-1 to FC-12 row is killed, or equivalent with an argument (FC-2g) |
-| Findings | MF-01 fixed; MF-02, MF-03, MF-04 open with a todo test each |
+| Findings | MF-01 fixed; MF-02, MF-03, MF-04 and observation O-1 were open at the end of the campaign and are resolved by the user's decision, see Resolutions (appended below) |
 | Tests | 908 at the scanned commit; 980 pass, 0 fail, 21 live skipped, 3 todo on Node 22.22.3 and on Node 26.9.0 after Task 3 |
 
 How to read the ledger: `pass 1 verdict` is the verdict of the suite as it stood at the scanned commit (a `survivor` is a mutant that suite did not kill) (rows marked "(pass 3)" were not probed in pass 1 and show the pass 3 verdict instead). `killing test` names the first test the probe reported (a describe or test title, in `test/`). `final verdict` is the state after Task 3. Notes record what was added, strengthened or argued.
@@ -315,7 +315,7 @@ Findings stay in this file (nothing was published, no issue was filed, nothing w
 * **Second defect in the same test (found by the clone runs).** The session ID was a constant, and `reap` finds processes by `--session-id` in the whole process table. Two suite runs at the same time (the two probe clones) matched and ended each other's child: 11 of 12 concurrent runs of the test failed. Commit `90dafb1` makes the ID a random UUID.
 * **Cost it caused in this campaign.** Eleven reruns of this file in the clone runs before the fix, and a few after it, from the concurrent runs described in O-6.
 
-### MF-02 Open: the launch preflight does not require `sandbox.network.strictAllowlist`
+### MF-02 Open at the campaign, resolved in Resolutions: the launch preflight does not require `sandbox.network.strictAllowlist`
 
 * **Unit.** `src/adapters/host-claude/launch-preflight.ts`, `REQUIRED_KEYS`.
 * **Oracle.** docs/containment.md "Generated host settings" shows `"network": { ..., "strictAllowlist": true }`; "Generated settings missing or invalid: the host adapter refuses to launch".
@@ -323,7 +323,7 @@ Findings stay in this file (nothing was published, no issue was filed, nothing w
 * **Repro.** `test/containment/failclosed.test.ts`, "when the sandbox network allowlist is not strict" (a `todo` test that currently fails).
 * **Why open.** Which keys the preflight must verify is not stated in the documents, and what the host does with `strictAllowlist: false` and no listed domain is unverified. The settings file is generated into the data root, which a contained run cannot write, so exposure needs another failure first. The fix is one entry in `REQUIRED_KEYS` plus the already written test; it needs the owner's decision.
 
-### MF-03 Open: the 2 KiB cap on a document node counts top-level string fields only
+### MF-03 Open at the campaign, resolved in Resolutions: the 2 KiB cap on a document node counts top-level string fields only
 
 * **Unit.** `src/domain/knowledge-validation.ts`, `textBytes`.
 * **Oracle.** docs/repository-onboarding.md "Validation", Document nodes row: "each node's text is under a size cap (default 2 KiB)".
@@ -331,7 +331,7 @@ Findings stay in this file (nothing was published, no issue was filed, nothing w
 * **Repro.** `test/unit/graph-merge.test.ts`, "counts text held in a nested field of a document node toward the cap" (a `todo` test that currently fails).
 * **Why open.** The code comment states the intent as "the UTF-8 bytes of all its string fields". Counting nested strings could reject the real skill's output, which no plan has seen yet (deferred item 5), so the stricter rule needs the owner's decision and one live run.
 
-### MF-04 Open: the hook's shell read check does not see unquoted glob or brace expansion
+### MF-04 Open at the campaign, resolved in Resolutions: the hook's shell read check does not see unquoted glob or brace expansion
 
 * **Unit.** `src/domain/hook-decision.ts`, `checkSegment` and `lex`.
 * **Oracle.** docs/containment.md coverage matrix row 2 (no reads of secrets, other profiles or the AVARICE store: sandbox `denyRead`, `Read(...)` deny rules, hook path check).
@@ -341,7 +341,7 @@ Findings stay in this file (nothing was published, no issue was filed, nothing w
 
 ## Observations (not findings: no spec statement is violated, or the statement is ambiguous)
 
-* **O-1.** `InvocationScope.subagents.concurrent` is computed from the contract (`subagentsConcurrent`) and never read anywhere in `src/`. Only the total is enforced by the hook; docs/containment.md says the host caps concurrency at 20. If concurrency 4 is meant to bind, nothing enforces it.
+* **O-1 (resolved, see Resolutions).** `InvocationScope.subagents.concurrent` is computed from the contract (`subagentsConcurrent`) and never read anywhere in `src/`. Only the total is enforced by the hook; docs/containment.md says the host caps concurrency at 20. If concurrency 4 is meant to bind, nothing enforces it.
 * **O-2.** `test/integration/lease.test.ts` failed once and passed on the wrapper's rerun four times during the clone runs, which held about 18 test files in flight. It did not fail in three isolated runs under 14 busy loops. Not investigated further; the suspect is the wall-clock lease TTL waits (`EXPIRY_WAIT_MS`).
 * **O-3.** The unused staging-worktree strategy puts the repository's git directory on `repoReadAllow`, which exempts `.git/config` (remote URLs, possibly credentials) from `denyRead`. `STAGING_STRATEGY` is `clone`, whose allow list is empty, so this is dormant until the strategy changes.
 * **O-4.** The migration blocks `UPDATE` of a record's body and digest (killed by the suite) but has no `DELETE` trigger on `project_records`; the ledger port offers no delete, so immutability against deletion rests on the API.
@@ -357,3 +357,28 @@ Units outside the plan's Target Units were not probed: CLI formatting, `status` 
 * B-87 survives: killing it needs a SIGKILL between the attempt row and the transition in `retryOrBlockStage` (a fault-injection case).
 * Owner triage of MF-02, MF-03 and MF-04 before the exit run (01-19); each has a todo test that fails today and will pass when the behavior is changed.
 
+## Resolutions (2026-11-03)
+
+The owner decided to fix MF-02, MF-03, MF-04 and O-1 before the exit run (01-19). Each has a RED test commit (the todo test became a real test where one existed) and a GREEN fix commit. The text above is the record at the end of the campaign and is unchanged.
+
+| Finding | RED | GREEN | Rule |
+|---|---|---|---|
+| MF-02 | `7636203` | `a620ed3` | `REQUIRED_KEYS` gains `sandbox.network.strictAllowlist === true`; absent, false or a non-boolean refuses with `enforcement_failure:settings-key:sandbox.network.strictAllowlist`. The settings renderer already emitted it. |
+| MF-03 | `c0c1b67` | `6a89140` | `textBytes` sums the UTF-8 bytes of every string value of a node at any depth (iterative). |
+| MF-04 | `3878074` | `d102659` | `lex` marks a segment holding an unquoted `*`, `?`, `[` or `{`; `checkSegment` denies an admitted read command so marked with rule `shell-syntax`. |
+| O-1 | `e92a85f` | `7dc21d1` | An Agent call is denied with `budget:subagentsConcurrent` at the in-flight limit; see below. |
+
+**MF-03 decision.** The existing code did not tell structural ids from text: `id`, `source_file`, `source_revision` and the other top-level strings were already counted. The rule therefore stays "all string values of the node", now at any depth. Object keys and non-string values are not counted. Risk carried to the exit run: if the real graphify skill puts more than 2 KiB of nested strings into one knowledge-pass document node, the knowledge step now fails validation; deferred item 5 (no plan has seen the real skill's output) is still the place to confirm it.
+
+**MF-04 decision.** Quoted text keeps its treatment (`find . -name '*.ts'` stays allowed); mixed words such as `"a"*` are refused because the `*` is unquoted. The check covers the read-only commands, in every pipeline segment and in options (`--include=*.ts` unquoted is refused). `gsd_run` segments are unchanged, and the real 2.5 KB GSD preamble and the `gsd_run` read verbs the hook admitted are still admitted (`test/unit/hook-decision.test.ts` keeps the test with the real preamble fingerprint; `test/mutation/fail-closed.test.ts` adds the read-verb lines). What a read command now refuses that it allowed: unquoted `ls src/*.ts`, `grep -rn foo --include=*.ts src`, `git log -- *.ts`; the model must quote the pattern or name the files.
+
+**O-1 design.** In flight = `hook.decision` allow rows that charged `subagentsTotal` minus `tool.completed` rows with `subagentReleased`, both filtered by `invocation_id`, computed in the same `BEGIN IMMEDIATE` transaction as the charge, so the event hash chain continues unchanged. The policy carries `subagentsConcurrent` (required, taken from `InvocationScope.subagents.concurrent`; 0 for intel). A completion is the existing `--event post` path, registered for `PostToolUse` and the new `PostToolUseFailure` (the host runs PostToolUse after a successful call only; both events carry `tool_use_id`, read from the host 2.1.316 hook schemas). Exactly once: a completion frees a slot only if a foreground admission with that `tool_use_id` exists in this invocation and no earlier completion released it; without a `tool_use_id` it frees one only while a foreground admission is unreleased. Background Agent calls are not denied (the full map needs them); they hold their slot for the invocation because their `PostToolUse` reports the launch. When the total is also exhausted the call is reported as `budget_exhausted`, which keeps the S-35 tests as written. Preflight requires both post hooks, with readable scripts. Residual: no index on `events(invocation_id)` (no new migration), so an Agent call scans the events table; an Agent pre and post call against a ledger of 5,000 events measured p50 126 ms, the same as a Read call.
+
+**Mutation checks.** Each new rule was removed or altered from a saved copy and the new tests failed: MF-02 (key removed: 1 test fails); MF-03 (top-level only, characters instead of bytes, keys counted: 3, 1 and 2 fail); MF-04 (deny removed, each of the four characters dropped from the set, quoted text marked: all fail); O-1 (check disabled, `>` for `>=`, total precedence dropped, background guard dropped, dedupe dropped, invocation scope dropped, admission lookup dropped, no-ID count `>=`, background flag not recorded, release never set, failed flag not recorded, post-hook preflight checks dropped, PostToolUseFailure not registered, policy field wrong or unparsed: all fail). Three first-pass survivors in the O-1 set (background guard on the completion side, the failed flag, the no-ID background mix) got tests and are killed.
+
+**Suite after the fixes.** 1029 tests, 1008 pass, 0 fail, 21 live skipped, 0 todo, on Node 22.22.3 and Node 26.9.0 (`--test-concurrency=4`; see the load note in the hand-off). `tsc -p .` and `check-boundaries` are clean. Hook bench on Node 22.22.3 (Read input, 30 runs, limit 150 ms) on a machine carrying 14 stray busy loops from the campaign: p95 134.2, 139.1 and 134.1 ms on the code before these fixes; 145.7, 149.5, 138.5, 140.2, 134.9 and 134.3 ms after them. Every run is under the limit, two are within 5 ms of it, and the stray load (p50 about 126 ms) inflates both sets; the Read path itself is unchanged by these fixes.
+
+### Still open
+
+* Live check at the exit run: graphify's chunk fan-out against `subagentsConcurrent` 4 (a fifth parallel Agent call is now denied), and the real skill's nested node text against the 2 KiB cap.
+* B-87 (unchanged).
