@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-18-PLAN.md
-last_updated: "2026-11-03T05:29:01.223Z"
+stopped_at: Completed 01-20-PLAN.md
+last_updated: "2026-11-03T11:00:53.391Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 7718182c136e62f8286d8f2b1dc3cedab47cd480
+state_head: 0470f35aa21d9bafd087be91f57e37206d5ed1fe
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 19 of 20
+Plan: 20 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P16 | 95 min | 3 tasks | 8 files |
 | Phase 01 P17 | 60 min | 2 tasks | 28 files |
 | Phase 01 P18 | 33 min | 2 tasks | 25 files |
+| Phase 01 P20 | 314 min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-17: intel prompt is 'focus: full; project root: .' (S0-D form); intel accepted only when intel validate and intel diff pass; context sources are stateless and take the staging path in the query; non-code graph nodes are fenced as untrusted data; intel gets at most half the context budget
 - [Phase 01]: 01-18: the merge lowers an EXTRACTED document edge to INFERRED (never raises a tier); expectedFiles for the knowledge pass is staging-relative (.avarice-knowledge/graphify-out/graph.json); general-purpose subagent admitted for the knowledge purpose only
 - [Phase 01]: 01-18: a rejected merged graph is replaced by the code-only graph from the code step's build directory; the record states the merged node and edge counts next to the merged digest
+- [Phase 01]: 01-20: mutation probing runs in scratch clones of the scanned commit, so the working tree never holds a mutation
+- [Phase 01]: 01-20: MF-02 (strictAllowlist not a required key), MF-03 (nested node text uncapped), MF-04 (hook read check blind to glob/brace expansion) stay open as todo tests for the owner
 
 ### Pending Todos
 
@@ -181,6 +184,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T05:29:01.196Z
-Stopped at: Completed 01-18-PLAN.md
+Last session: 2026-11-03T11:00:53.348Z
+Stopped at: Completed 01-20-PLAN.md
 Resume file: None

@@ -105,7 +105,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [x] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
-- [ ] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
+- [x] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
 - [x] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [ ] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
 - [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
@@ -132,7 +132,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **SEC-2** [MVP]: Credentials are resolved by reference at the moment of use from an approved provider (ADR-009); an environment variable is not a provider; tokens are never written to prompts, state, evidence, artifacts or logs.
 - [ ] **SEC-3** [MVP]: Events and logs pass through a redactor before persistence; full tool payloads are not retained by default.
 - [ ] **SEC-4** [MVP model, Onboarding sources]: Enterprise policy outranks repository and user settings; a repository file cannot loosen an organization rule.
-- [ ] **SEC-5** [MVP]: AVARICE never disables TLS verification, weakens authentication, creates an alternate egress path or substitutes an unapproved service to make an adapter work.
+- [x] **SEC-5** [MVP]: AVARICE never disables TLS verification, weakens authentication, creates an alternate egress path or substitutes an unapproved service to make an adapter work.
 - [ ] **SEC-6** [MVP]: Every control is documented with its enforcer (host, external platform or AVARICE) and its bypass limitations.
 - [ ] **SEC-7** [MVP]: Employer-specific configuration and data stay outside the personal framework distribution and repository.
 - [ ] **SEC-8** [MVP]: Every credential resolution attempt is recorded as an event with reference, purpose, calling module, profile, run and invocation IDs, outcome and duration, and never the value, its length or a digest of it.
@@ -287,7 +287,7 @@ Each v1 requirement maps to exactly one phase.
 | ONB-5 | Phase 1 | Complete |
 | ONB-6 | Phase 4 | Pending |
 | ONB-7 | Phase 1 | Complete |
-| ONB-8 | Phase 1 | Pending |
+| ONB-8 | Phase 1 | Complete |
 | ONB-9 | Phase 1 | Complete |
 | ONB-10 | Phase 2 | Pending |
 | ONB-11 | Phase 4 | Pending |
@@ -308,7 +308,7 @@ Each v1 requirement maps to exactly one phase.
 | SEC-2 | Phase 4 | Pending |
 | SEC-3 | Phase 4 | Pending |
 | SEC-4 | Phase 4 | Pending |
-| SEC-5 | Phase 1 | Pending |
+| SEC-5 | Phase 1 | Complete |
 | SEC-6 | Phase 4 | Pending |
 | SEC-7 | Phase 4 | Pending |
 | SEC-8 | Phase 5 | Pending |
