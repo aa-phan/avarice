@@ -133,6 +133,9 @@ export function renderClaudeSettings(scope: InvocationScope, options: RenderOpti
     hooks: {
       PreToolUse: preTool,
       PostToolUse: [{ matcher: '.*', hooks: [hookEntry(options.hook, options.policyFile, 'post', false)] }],
+      // A tool call that fails ends in PostToolUseFailure instead of PostToolUse. The hook counts in-flight subagents from both, so
+      // a failed Agent call does not hold a concurrency slot for the rest of the invocation (O-1).
+      PostToolUseFailure: [{ matcher: '.*', hooks: [hookEntry(options.hook, options.policyFile, 'post', false)] }],
       ConfigChange: [{ hooks: [hookEntry(options.hook, options.policyFile, 'config-change', true)] }],
     },
   };

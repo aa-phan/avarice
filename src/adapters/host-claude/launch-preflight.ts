@@ -257,7 +257,13 @@ export function checkLaunchReady(input: LaunchReadyInput): Result<{ claudeVersio
   const config = avariceHooks(settings, 'ConfigChange', 'config-change');
   if (config.length === 0) return refuse('config-hook-missing');
   if (config.some((hook) => hook.onFailure !== 'block')) return refuse('hook-not-blocking');
-  for (const hook of [...pre, ...config]) {
+  // The in-flight subagent count (the contract's subagentsConcurrent) is built from these completions: a settings file without
+  // them would leave the limit stuck or off (O-1). They need not block; a completion that cannot be recorded only keeps a slot held.
+  const post = avariceHooks(settings, 'PostToolUse', 'post');
+  if (post.length === 0) return refuse('post-hook-missing');
+  const postFailure = avariceHooks(settings, 'PostToolUseFailure', 'post');
+  if (postFailure.length === 0) return refuse('post-failure-hook-missing');
+  for (const hook of [...pre, ...config, ...post, ...postFailure]) {
     if (!readable(hookScript(hook))) return refuse('hook-script-unreadable');
   }
 

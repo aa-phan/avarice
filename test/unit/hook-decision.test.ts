@@ -318,7 +318,7 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     const good = policy();
     const { subagentsConcurrent: _dropped, ...without } = good;
     for (const bad of [without, { ...good, subagentsConcurrent: -1 }, { ...good, subagentsConcurrent: 1.5 }, { ...good, subagentsConcurrent: '4' }, { ...good, subagentsConcurrent: null }]) {
-      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad.subagentsConcurrent));
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify((bad as { subagentsConcurrent?: unknown }).subagentsConcurrent));
     }
     assert.equal(parseHookPolicy({ ...good, subagentsConcurrent: 0 }).ok, true);
   });

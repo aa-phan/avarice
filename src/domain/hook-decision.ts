@@ -47,6 +47,9 @@ export interface HookPolicy {
   };
   // Agent types the invocation may start (the names in its --agents file).
   subagentTypes: string[];
+  // The most subagents the invocation may have in flight at once (the contract's subagentsConcurrent, as the scope computes it).
+  // The hook counts them in the ledger; a policy without the limit is refused, because it would leave the control off (O-1).
+  subagentsConcurrent: number;
 }
 
 export interface HookDecision {
@@ -61,6 +64,9 @@ export interface HookDecision {
 export type Canon = (path: string) => string | null;
 export type NormalizeResult = { ok: true; call: NormalizedToolCall } | { ok: false; reason: string };
 export type PolicyResult = { ok: true; policy: HookPolicy } | { ok: false; reason: string };
+
+// The rule of an Agent call refused because the invocation already has `subagentsConcurrent` subagents in flight (O-1).
+export const SUBAGENT_CONCURRENT_RULE = 'budget:subagentsConcurrent';
 
 const GENERAL_PURPOSE = 'general-purpose';
 const MAX_COMMAND_CHARS = 16_384;
@@ -150,6 +156,9 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   if (typeof commands['strategy'] !== 'string' || !STRATEGIES.includes(commands['strategy'])) return bad('has an unknown command strategy');
   for (const key of ['readOnly', 'gsdReadVerbs', 'deniedPrefixes']) {
     if (!isStrings(commands[key])) return bad(`needs a list of strings commands.${key}`);
+  }
+  if (!(typeof raw['subagentsConcurrent'] === 'number' && Number.isInteger(raw['subagentsConcurrent']) && raw['subagentsConcurrent'] >= 0)) {
+    return bad('needs a non-negative integer subagentsConcurrent');
   }
   if (commands['preambleSha256'] !== undefined && typeof commands['preambleSha256'] !== 'string') return bad('has a malformed preambleSha256');
   if (commands['preambleLength'] !== undefined && !(typeof commands['preambleLength'] === 'number' && Number.isInteger(commands['preambleLength']) && commands['preambleLength'] > 0)) {

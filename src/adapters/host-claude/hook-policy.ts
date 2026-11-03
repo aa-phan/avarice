@@ -57,6 +57,7 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
       ...(sha !== undefined && preamble !== undefined ? { preambleSha256: sha, preambleLength: preamble.length } : {}),
     },
     subagentTypes: [...ids.subagentTypes],
+    subagentsConcurrent: scope.subagents.concurrent,
   });
 }
 

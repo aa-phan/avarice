@@ -305,6 +305,8 @@ describe('subagent concurrency (O-1)', () => {
     assert.equal(pre(fx, 'a2'), 'avarice: budget:subagentsConcurrent');
     done(fx, 'a1', {}, 'PostToolUseFailure');
     assert.equal(pre(fx, 'a2'), 'allowed');
+    const [row] = eventRows(fx, 'tool.completed');
+    assert.deepEqual(JSON.parse((row as { data_json: string }).data_json), { onboardingId: 'onb_1', invocationId: 'inv_1', tool: 'Agent', toolUseId: 'a1', subagentReleased: true, failed: true });
   });
 
   it('counts a completion exactly once: a repeated completion, an unknown ID and another tool free nothing', () => {
@@ -369,6 +371,23 @@ describe('subagent concurrency (O-1)', () => {
     assert.equal(pre(fx, 'bg1', { run_in_background: true }), 'allowed');
     runHook(fx, 'post', { tool_name: 'Agent', tool_use_id: 'bg1', tool_input: { subagent_type: 'gsd-codebase-mapper', prompt: 'x' }, tool_response: {} });
     assert.equal(pre(fx, 'a1'), 'avarice: budget:subagentsConcurrent');
+  });
+
+  it('without tool_use_ids, the completion of a background call does not free the slot of a foreground one', () => {
+    const fx = limited(2);
+    pre(fx, undefined);
+    pre(fx, undefined, { run_in_background: true });
+    done(fx, undefined, { run_in_background: true });
+    assert.equal(pre(fx, undefined), 'avarice: budget:subagentsConcurrent');
+    done(fx, undefined);
+    assert.equal(pre(fx, undefined), 'allowed');
+  });
+
+  it('a completion that reports background is held even for a call admitted as foreground', () => {
+    const fx = limited(1);
+    pre(fx, 'a1');
+    done(fx, 'a1', { run_in_background: true });
+    assert.equal(pre(fx, 'a2'), 'avarice: budget:subagentsConcurrent');
   });
 
   it('a limit of zero admits no subagent, and the total budget is reported first when it is also spent', () => {

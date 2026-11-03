@@ -13,8 +13,8 @@ import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs
 import { DatabaseSync } from 'node:sqlite';
 import { relative } from 'node:path';
 import { sha256Hex } from '../domain/digest.ts';
-import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
-import type { HookDecision, HookPolicy } from '../domain/hook-decision.ts';
+import { SUBAGENT_CONCURRENT_RULE, decideToolCall, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import type { HookDecision, HookPolicy, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -119,6 +119,49 @@ function identity(policy: HookPolicy, tool: string, agentId: unknown): Record<st
   return { onboardingId: policy.onboardingId, invocationId: policy.invocationId, tool: short(tool), ...(typeof agentId === 'string' && agentId !== '' ? { agentId: short(agentId) } : {}) };
 }
 
+// Subagents in flight for one invocation, from its own events (O-1): the Agent calls the hook admitted (a `hook.decision` allow that
+// charged subagentsTotal) minus the completions that freed a slot (`tool.completed` with subagentReleased). The count is scoped to the
+// invocation ID, so an invocation that was killed leaves nothing behind that a later invocation would count. The caller's BEGIN
+// IMMEDIATE transaction is open: the count, the charge and the event row that records the admission are one step.
+const ADMITTED = "type = 'hook.decision' AND json_extract(data_json, '$.decision') = 'allow' AND json_extract(data_json, '$.budget') = 'subagentsTotal'";
+const RELEASED = "type = 'tool.completed' AND json_extract(data_json, '$.subagentReleased') = 1";
+
+function countEvents(db: DatabaseSync, invocationId: string, condition: string, ...params: string[]): number {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM events WHERE invocation_id = ? AND ${condition}`).get(invocationId, ...params) as { n: number };
+  return Number(row.n);
+}
+
+const inFlightSubagents = (db: DatabaseSync, invocationId: string): number => countEvents(db, invocationId, ADMITTED) - countEvents(db, invocationId, RELEASED);
+
+// Whether the completion of a subagent call frees a slot, each call at most once:
+//   - a background call is never released: its PostToolUse reports the launch, not the end, so it holds its slot for the invocation;
+//   - with a tool_use_id, the call must have been admitted in this invocation as a foreground call and not released before;
+//   - without one, a completion frees a slot only while a foreground admission is unreleased, so the count never goes below zero.
+function releasesSubagent(db: DatabaseSync, invocationId: string, toolUseId: string | undefined, background: boolean): boolean {
+  if (background) return false;
+  if (toolUseId === undefined) {
+    return countEvents(db, invocationId, `${ADMITTED} AND json_extract(data_json, '$.background') IS NOT 1`) > countEvents(db, invocationId, RELEASED);
+  }
+  const admitted = db
+    .prepare(`SELECT data_json FROM events WHERE invocation_id = ? AND ${ADMITTED} AND json_extract(data_json, '$.toolUseId') = ? ORDER BY seq LIMIT 1`)
+    .get(invocationId, toolUseId) as { data_json: string } | undefined;
+  if (admitted === undefined || (JSON.parse(admitted.data_json) as { background?: unknown }).background === true) return false;
+  return countEvents(db, invocationId, `${RELEASED} AND json_extract(data_json, '$.toolUseId') = ?`, toolUseId) === 0;
+}
+
+function toolUseIdOf(input: Record<string, unknown>): string | undefined {
+  const id = input['tool_use_id'];
+  return typeof id === 'string' && id !== '' ? short(id) : undefined;
+}
+
+// What a later completion needs to find a subagent admission again: the call's tool_use_id, and whether it runs in the background.
+function subagentIdentity(call: NormalizedToolCall, toolInput: unknown, input: Record<string, unknown>): Record<string, unknown> {
+  if (call.kind !== 'subagent') return {};
+  const id = toolUseIdOf(input);
+  const background = typeof toolInput === 'object' && toolInput !== null && (toolInput as Record<string, unknown>)['run_in_background'] === true;
+  return { ...(id !== undefined ? { toolUseId: id } : {}), ...(background ? { background: true } : {}) };
+}
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -137,7 +180,12 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   try {
     final = inTransaction(db, () => {
       let result = decided;
-      if (decided.decision === 'allow' && decided.budget !== undefined) {
+      // O-1: at the concurrency limit, a subagent call is refused before it is charged. When the total is also spent the charge below
+      // reports that (budget_exhausted), so the more fundamental limit is the one named.
+      const totalHasRoom = (): boolean => db.prepare("SELECT 1 AS room FROM budgets WHERE run_id = ? AND name = 'subagentsTotal' AND used + reserved + 1 <= limit_value").get(policy.runId) !== undefined;
+      if (decided.decision === 'allow' && decided.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
+        result = { decision: 'deny', rule: SUBAGENT_CONCURRENT_RULE };
+      } else if (decided.decision === 'allow' && decided.budget !== undefined) {
         const charged = db
           .prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value')
           .run(policy.runId, decided.budget);
@@ -154,7 +202,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         level: result.decision === 'deny' ? 'warn' : 'info',
         runId: policy.runId,
         invocationId: policy.invocationId,
-        data: { ...identity(policy, tool, input['agent_id']), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}) },
+        data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}) },
         nowMs: Date.now(),
       });
       return result;
@@ -196,9 +244,19 @@ function postToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       data['target'] = rel;
     }
   }
+  if (input['hook_event_name'] === 'PostToolUseFailure') data['failed'] = true;
   const db = openLedger(policy.ledgerPath);
   try {
-    inTransaction(db, () => appendEventRow(db, { type: 'tool.completed', runId: policy.runId, invocationId: policy.invocationId, data, nowMs: Date.now() }));
+    inTransaction(db, () => {
+      // O-1: the completion of a subagent call frees its concurrency slot, decided and recorded in the same transaction as the event.
+      if (normalized.call.kind === 'subagent') {
+        const id = toolUseIdOf(input);
+        const background = typeof toolInput === 'object' && toolInput !== null && (toolInput as Record<string, unknown>)['run_in_background'] === true;
+        if (id !== undefined) data['toolUseId'] = id;
+        data['subagentReleased'] = releasesSubagent(db, policy.invocationId, id, background);
+      }
+      appendEventRow(db, { type: 'tool.completed', runId: policy.runId, invocationId: policy.invocationId, data, nowMs: Date.now() });
+    });
   } finally {
     db.close();
   }
