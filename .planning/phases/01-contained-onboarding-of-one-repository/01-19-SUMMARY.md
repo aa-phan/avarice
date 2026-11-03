@@ -15,9 +15,9 @@ status: blocked
 actuals:
   tokens: 19000
   tasks: 2
-  commits: 5
+  commits: 24
 plan_head_before: c35f3dcf6904b96986e68a17cbabf0f72ecb541e
-plan_head_after: 2c5d1e61419242b6ffd7df66f123e5ffacd9806f
+plan_head_after: 6477c32c46eb69de3196a32cea002ea6bd5724b4
 tech-stack:
   added: []
   patterns: [evidence JSON assembled from a run directory, read-only ledger tooling for live runs]
@@ -25,13 +25,13 @@ key-files:
   created: [scripts/checkout-digest.ts, scripts/assert-exit.ts, scripts/exit-run-tools.ts, scripts/exit-run.sh, test/unit/checkout-digest.test.ts, 01-19-evidence-rehearsal-1.json, 01-19-evidence-rehearsal-2.json, 01-19-evidence-rehearsal-3.json]
   modified: [src/app/stages/workspace.ts, test/integration/gsd-configure.test.ts]
 key-decisions:
-  - "Plan 01-19 stops after the third rehearsal: the target run was not started because the full map cannot pass validation on this repository (stamp and path-references) and the retry does not fit the subagent budget; each needs an owner decision"
+  - "Plan 01-19 stops after rehearsal 4: the target run was not started because the intel snapshot and the knowledge pass cannot run under the hook, so SC1 cannot be met; each needs an owner decision"
   - "The only code change is the existing-map answer (plainly a bug); no validation limit, budget or policy was changed"
 ---
 
 # Phase 1 Plan 19: Exit run Summary
 
-**Exit-run tooling is done and proven; the live rehearsal found and fixed one bug, then stopped at three owner decisions (full-map stamp, path-references on the real map, subagent budget for a retry). No onboarding reached `active`; the target run and the real-repository SC1 and SC4 evidence are blocked, not met.**
+**Exit-run tooling is done and proven. After the orchestrator's gap fixes (stamp, path-references, subagent and invocation budgets) rehearsal 4 reached `active` through a real kill -9 and resume with the checkout unchanged, but its record has no intel index and no document nodes (intel snapshot not taken, knowledge pass denied by the hook), so SC1 cannot be met. The target run was not started; two new blockers need owner decisions.**
 
 ## Task 1: tooling (done, TDD)
 
@@ -78,6 +78,29 @@ The target run was not started: it would hit the same two validation failures on
 - The injected ADR (S-46 live): the knowledge pass was never reached, so `avarice context` could not print the injected node; S-46 live is **not shown** (T2 tests only).
 - Target checkout before any run and now: HEAD `9f1cd8d`, branch `gsd/phase-02-deployed-themed-skeleton`, status `?? .env`, 363 tracked files, digests identical (`statusDigest 63ae0454...`, `filesDigest 833ee38a...`, `refsDigest f1b676af...`). The target run's before and after comparison is therefore not recorded; only the pre-run and post-rehearsal reads match.
 - AC-1: `scripts/ac1-timing.sh`: **AC-1 elapsed 1s (target 600s)**, no admin rights.
+
+### Resumed session: invocation budget fix and rehearsal 4
+
+Commits in this session: `727363b` (RED, `01-19-red-evidence-invocations.json`), `6477c32` (GREEN). Derived `budgets.invocations` with its formula in `budgets.invocationsDerivation` (`deriveInvocations`, `src/domain/onboarding-contract.ts`): map invocations per round (1 with a mapper, 0 for skip and adopt) x (1 + retry) + interruption relaunches (1 per map round with a mapper, else 1) + 1 intel + 1 knowledge. Full, fast and paths with one retry: **6**; skip and adopt: **3**; full with no retry: 4. An override can only lower it (above the derived value is refused, with the retry in force). Note on the formula: the instruction said "1 interruption allowance (6 for full with one retry)"; 1 x 2 + 1 + 1 + 1 is 5, so I read the allowance as one relaunch per map round (2), which gives the stated 6. Mutation check: 10 of 10 mutants (total, rounds, mapper flag, intel, allowance, ceiling operator, ceiling off, override ignored, stale retry, skip allowance) killed by `test/unit/domain-contracts.test.ts` in a scratch clone. Both nodes green via `scripts/test-matrix.sh`: 1105 pass, 0 fail, 21 skipped on Node 22.22.3 and 26.9.0; tsc and boundaries green. Docs: `docs/repository-onboarding.md` budgets row.
+
+**Rehearsal 4** (`01-19-evidence-rehearsal-4.json`, claude 2.1.317 from PATH, Node 22.22.3, ledger cost 0.0412 USD, wall 375 s):
+- Kill: `kill -9` 63 s after `launch:map` started (state `mapping`, exit 137). `status --json` showed `interrupted` (mapping, next `launch:map`, `avarice resume onb_01M6HWMPMJQ96ZKSS1J4N11DK2`) 178 s later.
+- Resume: 130 s, exit 0, **`active`, same onboarding ID and pin (`075cb1f3...`)**. The surviving host (1 process after the kill) had finished by itself; after the resume no process carried the session or the onboarding directory.
+- Reconciled map (7 files) was stamped by AVARICE (`gsd:stamp`, 7 stamped), validation accepted on attempt 1 (`path-references` 10 of 307 dangling, 3.3%, limit 5%, 17 suffix, 5 gitignore, 3 package, 5 action references counted as known). Code graph present (996 code, 55 concept, 0 document nodes, built at the onboarded revision).
+- Budgets at the end: invocations 3 of 6, subagentsTotal 4 of 18, toolCalls 155 of 600, cost 0.0412 of 12.
+- Checkout digests identical before and after (head, branch, status, files, refs, worktrees); stored contract and generated settings and hook policy unchanged. SC4 is shown on the rehearsal clone (kill, interrupted, resume, same ID and pin, active, no orphan); it is not shown on the target.
+- assert-exit failed for SC1: **intel absent (`diff-changed`: "the refresh left no snapshot to compare the files with")** and **knowledge absent (`invocation-failed`)**, so no document nodes (and no S-46 live context output).
+
+**New blocker A, intel snapshot never taken.** The gsd-intel-updater wrote the five intel files, then needed `gsd_run intel validate` and the snapshot. Bare `gsd_run` was denied (`shell-gsd-no-preamble`), the model's retyped shim preamble was denied (`shell-syntax`), and it gave up ("INTEL UPDATE FAILED"). AVARICE then finds no baseline, so intel is recorded absent by design (never blocks). The ledger shows the host ended `progressed` with 9 permission denials. Options: AVARICE takes the intel snapshot itself after validating the files (as it stamps the map), or the hook admits that GSD verb; or the invocation is told to stop after the writes.
+
+**New blocker B, the knowledge pass cannot run under the hook (deferred item 5 confirmed live).** The graphify skill's shell steps (interpreter detection with `$(...)`, `;` chains, `which graphify`, `python3 -c`, `pwd`) were all denied (`shell-syntax`, `shell-not-allowed`); the run ended `denied` after 15 s (0.0096 USD) with no document graph. Needs an owner decision: admit specific graphify commands for the knowledge purpose, or AVARICE runs the shell steps (detect, extract) itself and leaves only the model reads to the host.
+
+**Cost accounting gap.** A killed invocation settles at 0 USD, but the surviving host finishes its work (rehearsal 3 and 4 each had a full map run by the orphan, about 0.13 USD each by S0-F). The ledger total understates real spend; estimated true spend so far is roughly 0.47 USD (ledger 0.2068 plus two orphan maps), still far under the 24 USD cap.
+
+**Spend:** ledger 0.2068 USD of 24 USD (0.1656 before this session plus 0.0412). The target run was not started and nothing was spent on it. Stopped after rehearsal 4 as instructed, because both blockers need decisions and the target run would end `active` with no intel and no documents.
+
+### Not yet done (blocked behind A and B)
+Target run, `scripts/assert-exit.ts` on the target, `store mode 0600` check on the default profile (the next read-write open of the 0644 store; not opened read-write yet), ROADMAP "0." row to 20/20, requirement marks. AC-1 was re-run earlier: 1 s.
 
 ### Newly enforced rules, live (rehearsal 3, two map invocations)
 

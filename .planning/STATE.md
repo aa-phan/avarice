@@ -5,11 +5,11 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: "01-19 blocked: rehearsal 3 blocked (validation stamp/path-references, subagent budget); target run not started"
-last_updated: "2026-11-03T21:09:21.839Z"
+stopped_at: "01-19 blocked after rehearsal 4: intel snapshot and knowledge pass denied by the hook; target run not started"
+last_updated: "2026-11-03T23:49:38.961Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 2c5d1e61419242b6ffd7df66f123e5ffacd9806f
+state_head: 6477c32c46eb69de3196a32cea002ea6bd5724b4
 progress:
   total_phases: 8
   completed_phases: 0
@@ -146,6 +146,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-20: MF-02 (strictAllowlist not a required key), MF-03 (nested node text uncapped), MF-04 (hook read check blind to glob/brace expansion) stay open as todo tests for the owner
 - [Phase 01]: 01-19: the empty .planning/codebase AVARICE creates made GSD ask Refresh/Update/Skip; the contract's existing-map answer is now always passed to the mapper (8cc18b6)
 - [Phase 01]: 01-19: exit run stopped after the rehearsals (0.1656 of 24 USD spent); target run withheld until the owner decides the full-map stamp, path-references tolerance and retry budget
+- [Phase 01]: 01-19: invocations budget derived per mode (full/fast/paths 6, skip/adopt 3) with invocationsDerivation; killed invocations stay charged; overrides only lower (6477c32)
 
 ### Pending Todos
 
@@ -176,6 +177,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
 - [Phase 1, plan 01-19] Exit run blocked: three live rehearsals did not reach active. Full map is never stamped (stamp check), real full map has 10.5% dangling paths (limit 5%), a map retry exceeds subagentsTotal 7; see 01-19-SUMMARY.md and deferred-items 9 to 11. Target run not started.
+- [Phase 1, plan 01-19] Rehearsal 4 reached active via kill+resume but intel snapshot (hook denies gsd_run preamble) and knowledge pass (hook denies graphify shell steps) fail; target run not started; deferred items 13, 14
 
 ## Deferred Items
 
@@ -187,6 +189,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T21:09:21.811Z
-Stopped at: 01-19 blocked: rehearsal 3 blocked (validation stamp/path-references, subagent budget); target run not started
+Last session: 2026-11-03T23:49:38.934Z
+Stopped at: 01-19 blocked after rehearsal 4: intel snapshot and knowledge pass denied by the hook; target run not started
 Resume file: .planning/phases/01-contained-onboarding-of-one-repository/01-19-SUMMARY.md

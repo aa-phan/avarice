@@ -1,0 +1,477 @@
+{
+  "schema": 1,
+  "mode": "rehearsal",
+  "repo": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-qxsENt/clone",
+  "source": "/Users/aphan/aa-phan-portfolio-v2",
+  "runDir": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-qxsENt/data/exit-run/rehearsal-20261103T234148Z",
+  "startedAtEpoch": 1793749308,
+  "finishedAtEpoch": 1793749683,
+  "wallSeconds": 375,
+  "authorization": {
+    "selection": "rehearsal-then-target",
+    "capUsd": 24,
+    "perRunCapUsd": 12,
+    "spentUsdSoFar": 0.1656,
+    "decidedBy": "user (aphan)",
+    "decidedOn": "2026-11-03",
+    "decidedThrough": "execute-phase orchestrator, resolving the Task 2 checkpoint:decision (gate blocking-human) of plan 01-19",
+    "noCommitConfirmed": true,
+    "noCommitConfirmation": "The user confirmed they will not commit to ~/aa-phan-portfolio-v2 while the run is in progress",
+    "contextGiven": "measured cost so far well under 1 USD per onboarding; caps are ceilings; clone staging writes nothing to the target"
+  },
+  "tooling": {
+    "node": "v22.22.3",
+    "claude": {
+      "path": "/Users/aphan/.local/bin/claude",
+      "version": "2.1.317"
+    },
+    "stagingStrategy": "clone"
+  },
+  "onboardingId": "onb_01M6HWMPMJQ96ZKSS1J4N11DK2",
+  "outcome": {
+    "killedProcessExit": 137,
+    "resumeExit": 0,
+    "finalState": "active"
+  },
+  "record": {
+    "ok": false,
+    "onboardingId": "onb_01M6HWMPMJQ96ZKSS1J4N11DK2",
+    "projectId": "proj_01M6HWMPMH94DGRRCQM2AF5E58",
+    "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-qxsENt/clone",
+    "state": "active",
+    "recordVersion": 1,
+    "promotion": "none",
+    "onboardedRevision": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "2026-11-03T23:48:03.131Z",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "nodes": {
+      "code": 996,
+      "concept": 55,
+      "document": 0
+    },
+    "edges": {
+      "EXTRACTED": 1232,
+      "INFERRED": 25
+    },
+    "documentNodes": null,
+    "graphBuiltAtCommit": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "intelRefreshedAtCommit": null,
+    "intelFiles": null,
+    "absentIndexes": [
+      {
+        "index": "intel",
+        "reason": "diff-changed"
+      },
+      {
+        "index": "knowledge",
+        "reason": "invocation-failed"
+      }
+    ],
+    "problems": [
+      "the graph lists no document nodes (nodes.document 0, knowledge.documentNodes absent)",
+      "the record has no intel index"
+    ]
+  },
+  "checkoutBefore": {
+    "head": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "2863e2d9e0910b2cf03fbc2c4a430d674395dae4ec8125de9fc90a7f3c6d0be0",
+    "worktreesDigest": "289d575d4b76625c2e9568c7ee08f095d6ac167da6b8c6416b14d329cb081902",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutAfter": {
+    "head": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "2863e2d9e0910b2cf03fbc2c4a430d674395dae4ec8125de9fc90a7f3c6d0be0",
+    "worktreesDigest": "289d575d4b76625c2e9568c7ee08f095d6ac167da6b8c6416b14d329cb081902",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutUnchanged": {
+    "head": true,
+    "branch": true,
+    "statusDigest": true,
+    "filesDigest": true,
+    "refsDigest": true,
+    "worktreesDigest": true
+  },
+  "killAndResume": {
+    "killAfterSecondsRequested": 60,
+    "mapLaunchStartedObservedAtEpoch": 1793749312,
+    "killedAtEpoch": 1793749375,
+    "secondsFromMapStartToKill": 63,
+    "avaricePid": 8947,
+    "signal": "KILL",
+    "killedSessionId": "3685b7fa-f412-4561-b289-17cb589cf85c",
+    "stateWhenKilled": "mapping",
+    "survivingHostProcessesAfterKill": 1,
+    "interruptedSeenAtEpoch": 1793749553,
+    "secondsFromKillToInterrupted": 178,
+    "interruptedStatus": {
+      "projectId": "proj_01M6HWMPMH94DGRRCQM2AF5E58",
+      "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-qxsENt/clone",
+      "onboardingId": "onb_01M6HWMPMJQ96ZKSS1J4N11DK2",
+      "state": "mapping",
+      "reason": null,
+      "interrupted": {
+        "state": "mapping",
+        "nextAction": "launch:map",
+        "resumeCommand": "avarice resume onb_01M6HWMPMJQ96ZKSS1J4N11DK2"
+      },
+      "recordVersion": null,
+      "onboardedRevision": null,
+      "mapping": null,
+      "indexes": {}
+    },
+    "resumeCommand": "avarice resume onb_01M6HWMPMJQ96ZKSS1J4N11DK2",
+    "resumeSeconds": 130,
+    "resumeExit": 0,
+    "sameOnboardingId": true,
+    "sameOnboardedRevision": true,
+    "pinBefore": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "pinAfter": "075cb1f3bcee79e841625be0625b986d7c3aaaaa",
+    "processesWithKilledSessionAfterResume": 0,
+    "processesWithAnySessionAfterResume": 0
+  },
+  "costs": {
+    "totalUsd": 0.041232,
+    "budgetCostUsedUsd": 0.0412316,
+    "perStep": [
+      {
+        "step": "launch:intel",
+        "attempt": 1,
+        "costUsd": 0.03167937,
+        "durationMs": 110592,
+        "invocationId": "inv_01M6HWW756EHP3D15EQPNNM213"
+      },
+      {
+        "step": "launch:knowledge",
+        "attempt": 1,
+        "costUsd": 0.00955223,
+        "durationMs": 15464,
+        "invocationId": "inv_01M6HWZKJC57AHJEZGE6BVH5QB"
+      }
+    ],
+    "budgets": [
+      {
+        "name": "costUsd",
+        "limit_value": 12,
+        "used": 0.0412316,
+        "reserved": 0,
+        "exactness": "estimated"
+      },
+      {
+        "name": "invocations",
+        "limit_value": 6,
+        "used": 3,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "subagentsTotal",
+        "limit_value": 18,
+        "used": 4,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "toolCalls",
+        "limit_value": 600,
+        "used": 155,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "wallClockMs",
+        "limit_value": 2700000,
+        "used": 126056,
+        "reserved": 0,
+        "exactness": "exact"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "gsd:inspect",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:41:50.099Z",
+      "completedAt": "2026-11-03T23:41:50.099Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:probe",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:41:50.511Z",
+      "completedAt": "2026-11-03T23:41:50.617Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "mapping:plan",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:41:50.618Z",
+      "completedAt": "2026-11-03T23:41:50.618Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:configure",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:41:50.618Z",
+      "completedAt": "2026-11-03T23:41:50.903Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 1,
+      "status": "reconciled",
+      "startedAt": "2026-11-03T23:41:50.929Z",
+      "completedAt": "2026-11-03T23:45:53.665Z",
+      "invocationId": "inv_01M6HWMQEGXVHDSY8KMQ6FYW1V",
+      "sessionId": "3685b7fa-f412-4561-b289-17cb589cf85c",
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:stamp",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:45:53.665Z",
+      "completedAt": "2026-11-03T23:45:53.742Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "validate",
+      "attempt": 1,
+      "status": "accepted",
+      "startedAt": "2026-11-03T23:45:53.950Z",
+      "completedAt": "2026-11-03T23:45:53.950Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:code-graph",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:45:53.958Z",
+      "completedAt": "2026-11-03T23:45:56.367Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:45:56.390Z",
+      "completedAt": "2026-11-03T23:47:47.107Z",
+      "invocationId": "inv_01M6HWW756EHP3D15EQPNNM213",
+      "sessionId": "65b331c2-2fed-4818-97dc-97b482f7e3ee",
+      "kind": "progressed",
+      "costUsd": 0.03167937,
+      "durationMs": 110592,
+      "permissionDenials": 9
+    },
+    {
+      "step": "index:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:45:56.368Z",
+      "completedAt": "2026-11-03T23:47:47.346Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:47:47.404Z",
+      "completedAt": "2026-11-03T23:48:02.992Z",
+      "invocationId": "inv_01M6HWZKJC57AHJEZGE6BVH5QB",
+      "sessionId": "6346379d-19bb-493e-a23e-4c7f63b9eaab",
+      "kind": "denied",
+      "costUsd": 0.00955223,
+      "durationMs": 15464,
+      "permissionDenials": 5
+    },
+    {
+      "step": "index:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-03T23:47:47.347Z",
+      "completedAt": "2026-11-03T23:48:02.992Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    }
+  ],
+  "hookDecisions": {
+    "deny:shell-syntax": 34,
+    "allow:read-set": 77,
+    "allow:shell-identity": 64,
+    "deny:shell-not-allowed": 9,
+    "allow:subagent-type": 4,
+    "allow:write-set": 14,
+    "deny:shell-gsd-no-preamble": 1
+  },
+  "eventTypes": {
+    "contract.stored": 1,
+    "hook.decision": 203,
+    "index.absent": 2,
+    "invocation.finished": 2,
+    "invocation.reconciled": 1,
+    "onboarding.checkpoint": 7,
+    "onboarding.transition": 8,
+    "tool.completed": 159
+  },
+  "reaped": [],
+  "containment": {
+    "contractVersions": [
+      {
+        "version": 1,
+        "digest": "sha256:54c20785ab22932e0fa660f83c6ea8bd6bf31a8f1e3b1383032052284b93fd99",
+        "policy_revision": "sha256:52d874cbca525ec1fc3ab0e9f77bed728edb32736f9d3f81dc2bc3fffb39d105",
+        "created_at": "2026-11-03T23:41:50.099Z"
+      }
+    ],
+    "contractsAtMapStart": {
+      "contracts": [
+        {
+          "version": 1,
+          "digest": "sha256:54c20785ab22932e0fa660f83c6ea8bd6bf31a8f1e3b1383032052284b93fd99",
+          "policy_revision": "sha256:52d874cbca525ec1fc3ab0e9f77bed728edb32736f9d3f81dc2bc3fffb39d105",
+          "created_at": "2026-11-03T23:41:50.099Z"
+        }
+      ]
+    },
+    "contractUnchanged": true,
+    "generatedFilesAtMapStart": {
+      "map-inv_01M6HWMQEGXVHDSY8KMQ6FYW1V/hook-policy.json": "f23530088d8d09dce6d03acc9be87587c52f934e6af5c344f0d715ca135ebc2e",
+      "map-inv_01M6HWMQEGXVHDSY8KMQ6FYW1V/host-settings.json": "e93a55d59b30385c5935144cbd29d95b4d01200d0299dcf875c2d7cec54ceaaf"
+    },
+    "generatedFilesAtEnd": {
+      "intel-inv_01M6HWW756EHP3D15EQPNNM213/hook-policy.json": "07a3e44b2f2ded80162ba36df3089552a815719efdeb05c089a1385fc5e4c903",
+      "intel-inv_01M6HWW756EHP3D15EQPNNM213/host-settings.json": "e1024174d304f909894a1c9f2c9733459cf68a6130000e50dc2719a8c624cf8a",
+      "knowledge-inv_01M6HWZKJC57AHJEZGE6BVH5QB/hook-policy.json": "6eb0df92c4f7482bba82d4407dccdcda036bb383b07fa24e58db7fea444f9c79",
+      "knowledge-inv_01M6HWZKJC57AHJEZGE6BVH5QB/host-settings.json": "83d04fc8a9b2c6155ed0017c9a34c85326e95874587fbae3f23bf89584345c20",
+      "map-inv_01M6HWMQEGXVHDSY8KMQ6FYW1V/hook-policy.json": "f23530088d8d09dce6d03acc9be87587c52f934e6af5c344f0d715ca135ebc2e",
+      "map-inv_01M6HWMQEGXVHDSY8KMQ6FYW1V/host-settings.json": "e93a55d59b30385c5935144cbd29d95b4d01200d0299dcf875c2d7cec54ceaaf"
+    },
+    "settingsAndPolicyUnchanged": true,
+    "pushOrCommitInTarget": null
+  },
+  "context": [
+    {
+      "term": "ADR-999",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": [
+        "the intel index is not in the project record (absent: diff-changed)"
+      ]
+    },
+    {
+      "term": "injected decision",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": [
+        "the intel index is not in the project record (absent: diff-changed)"
+      ]
+    },
+    {
+      "term": "push to main",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": false,
+      "sources": [],
+      "notes": [
+        "the intel index is not in the project record (absent: diff-changed)"
+      ]
+    }
+  ],
+  "problems": [
+    "assert-exit: the graph lists no document nodes (nodes.document 0, knowledge.documentNodes absent)",
+    "assert-exit: the record has no intel index",
+    "avarice context did not print the injected node inside the untrusted-data fence"
+  ]
+}
