@@ -1,7 +1,7 @@
 // node:sqlite connection and transaction helpers (SKELETON.md "Persistence"; research Pattern 1).
 // Every write is a BEGIN IMMEDIATE transaction, so a writer conflict surfaces at the start and a
 // SIGKILLed writer's open transaction rolls back on the next open.
-import { closeSync, existsSync, openSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, openSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { ok, err } from '../../domain/result.ts';
 import { checkSqliteVersion } from '../../domain/runtime-support.ts';
@@ -107,8 +107,41 @@ export function checkRuntime(probe: () => string = bundledSqliteVersion): Result
   });
 }
 
+const STORE_SIBLINGS = ['', '-wal', '-shm'];
+
+// The store file and its -wal and -shm siblings are the user's alone. Each one that exists must be owned by the current user,
+// otherwise the store is refused (nothing is chmodded, nothing is opened). A read-write open then tightens an owned file that
+// group or others can reach to 0600; a stricter mode (0400) is left alone, and a read-only open never changes a mode.
+function secureStore(path: string, readOnly: boolean, uid: number | undefined): Result<void> {
+  for (const suffix of STORE_SIBLINGS) {
+    const file = `${path}${suffix}`;
+    let stat;
+    try {
+      stat = statSync(file);
+    } catch (e) {
+      if ((e as { code?: unknown }).code === 'ENOENT') continue;
+      return err({ kind: 'internal', cause: `cannot inspect ${file}: ${e instanceof Error ? e.message : String(e)}` });
+    }
+    if (uid !== undefined && stat.uid !== uid) {
+      return err({
+        kind: 'unavailable',
+        cause: `the store file ${file} is owned by user ${stat.uid}, not by the current user ${uid}; refusing to open it (use a data root you own, or take ownership of the file)`,
+      });
+    }
+    if (!readOnly && (stat.mode & 0o077) !== 0) {
+      try {
+        chmodSync(file, 0o600);
+      } catch (e) {
+        return err({ kind: 'unavailable', cause: `cannot set ${file} to mode 0600: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+  }
+  return ok(undefined);
+}
+
 // Opens the database (creating it unless read-only). The runtime gate runs first. A new store file is
-// created with mode 0600 (SQLite gives its -wal and -shm files the same mode). Read-write opens switch to WAL
+// created with mode 0600 (SQLite gives its -wal and -shm files the same mode); an existing store the current user owns is
+// tightened to 0600 and one another user owns is refused (secureStore). Read-write opens switch to WAL
 // and require the switch to take effect, because WAL on a filesystem that cannot share memory is unsafe (NFR-5).
 export function openDb(path: string, options: OpenOptions = {}): Result<Db> {
   const supported = checkRuntime(options.sqliteVersionProbe);
@@ -116,7 +149,13 @@ export function openDb(path: string, options: OpenOptions = {}): Result<Db> {
   let db: DatabaseSync | undefined;
   try {
     const readOnly = options.readOnly === true;
-    if (!readOnly && path !== ':memory:' && path !== '' && !existsSync(path)) {
+    const onDisk = path !== ':memory:' && path !== '';
+    const uid = options.currentUid ?? (typeof process.getuid === 'function' ? process.getuid() : undefined);
+    if (onDisk) {
+      const secured = secureStore(path, readOnly, uid);
+      if (!secured.ok) return secured;
+    }
+    if (!readOnly && onDisk && !existsSync(path)) {
       try {
         closeSync(openSync(path, 'wx', 0o600));
       } catch (e) {
