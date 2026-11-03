@@ -278,6 +278,17 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
   });
 });
 
+describe('validateKnowledgeGraph: the corpus never holds .planning/STATE.md or phase files (S-45)', () => {
+  it('refuses a node sourced from STATE.md or from .planning/phases, whatever its origin', () => {
+    const { graph, stats } = mergedFixture();
+    for (const source of ['.planning/STATE.md', '.planning/phases/01-x/01-01-PLAN.md']) {
+      const sourced = clone(graph);
+      (byId(sourced, 'src_store_db') as Json)['source_file'] = source;
+      assert.match(problemsOf(validate(sourced, stats)).join('\n'), /src_store_db: sourced from .*which the corpus never holds/, source);
+    }
+  });
+});
+
 // Open finding MF-03 (01-MUTATION.md): the cap counts the string-valued fields of a node, so text held in a nested array or
 // object field of a knowledge-pass node is not counted. Left as a todo until the owner decides whether the cap is on all
 // strings of a node (spec: "each node's text is under a size cap") or on the flat fields the skill writes.
