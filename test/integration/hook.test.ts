@@ -186,12 +186,15 @@ describe('the tool-call budget', () => {
 describe('fail closed (CON-3)', () => {
   it('exits 2 with a reason on malformed stdin, on input without a tool name and on a missing field', () => {
     const fx = fixture();
-    for (const input of ['not json', '[]', '{"hook_event_name":"PreToolUse"}', JSON.stringify({ tool_name: 'Write', tool_input: {} })]) {
+    // The third input names a readable file but no tool: it must not be treated as some default tool.
+    const noTool = JSON.stringify({ cwd: fx.staging, tool_input: { file_path: join(fx.staging, 'src', 'a.ts') } });
+    for (const input of ['not json', '[]', '{"hook_event_name":"PreToolUse"}', noTool, JSON.stringify({ tool_name: 'Write', tool_input: {} })]) {
       const result = runHook(fx, 'pre', input);
       assert.equal(result.code, 2, input);
       assert.notEqual(result.stderr.trim(), '');
       assert.equal(result.stdout, '');
     }
+    assert.match(runHook(fx, 'pre', noTool).stderr, /no tool_name/);
     assert.equal(budgetUsed(fx, 'toolCalls'), 0);
   });
 
@@ -204,7 +207,9 @@ describe('fail closed (CON-3)', () => {
     assert.equal(runHook(fx, 'pre', input, broken).code, 2);
     const wrong = join(fx.dir, 'wrong.json');
     writeFileSync(wrong, JSON.stringify({ schema: 1 }));
-    assert.equal(runHook(fx, 'pre', input, wrong).code, 2);
+    const refused = runHook(fx, 'pre', input, wrong);
+    assert.equal(refused.code, 2);
+    assert.match(refused.stderr, /hook policy needs a string onboardingId/, 'the refusal names the policy problem, not a later crash');
     assert.equal(runHook(fx, 'pre', input, null).code, 2);
     assert.equal(runHook(fx, 'bogus', input).code, 2);
   });
@@ -217,6 +222,13 @@ describe('fail closed (CON-3)', () => {
     const result = runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.staging, 'a') } }, policyPath);
     assert.equal(result.code, 2);
     assert.equal(existsSync(missing), false);
+    // A missing file in a directory that exists: opening it would create an empty database, so it must be refused first.
+    const absent = join(fx.dir, 'data', 'absent-state.db');
+    writeFileSync(policyPath, JSON.stringify({ ...fx.policy, ledgerPath: absent }));
+    const noFile = runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.staging, 'a') } }, policyPath);
+    assert.equal(noFile.code, 2);
+    assert.match(noFile.stderr, /does not exist/);
+    assert.equal(existsSync(absent), false, 'refusing must not create an empty ledger');
     const notDb = join(fx.dir, 'garbage.db');
     writeFileSync(notDb, 'this is not a database'.repeat(50));
     writeFileSync(policyPath, JSON.stringify({ ...fx.policy, ledgerPath: notDb }));

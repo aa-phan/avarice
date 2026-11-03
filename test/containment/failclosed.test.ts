@@ -9,7 +9,7 @@ import { join } from 'node:path';
 
 import { computeInvocationScope } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
-import { ADMITTED_CLAUDE_VERSIONS, checkLaunchReady } from '../../src/adapters/host-claude/launch-preflight.ts';
+import { ADMITTED_CLAUDE_VERSIONS, checkHostReady, checkLaunchReady } from '../../src/adapters/host-claude/launch-preflight.ts';
 import { renderClaudeSettings } from '../../src/adapters/host-claude/settings.ts';
 
 const HAS_SANDBOX_EXEC = existsSync('/usr/bin/sandbox-exec');
@@ -172,6 +172,18 @@ describe('launch preflight refuses (no launch)', () => {
     assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:hook-not-blocking');
   });
 
+  it('when the ConfigChange hook would fail open (no onFailure block)', () => {
+    const file = settingsFile((s) => delete s.hooks.ConfigChange[0].hooks[0].onFailure);
+    assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:hook-not-blocking');
+  });
+
+  // Open finding MF-02 (01-MUTATION.md): the required-key list omits sandbox.network.strictAllowlist, which docs/containment.md
+  // ("Generated host settings") shows as true. Left as a todo until the owner decides whether the preflight checks it.
+  it('when the sandbox network allowlist is not strict', { todo: 'MF-02: sandbox.network.strictAllowlist is not a required settings key' }, () => {
+    const file = settingsFile((s) => (s.sandbox.network.strictAllowlist = false));
+    assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:settings-key:sandbox.network.strictAllowlist');
+  });
+
   it('when the ConfigChange hook is missing', () => {
     const file = settingsFile((s) => delete s.hooks.ConfigChange);
     assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:config-hook-missing');
@@ -211,6 +223,13 @@ describe('launch preflight refuses (no launch)', () => {
     assert.equal(refusal(checkLaunchReady({ settingsFile: settingsFile(), claudeBin: join(root, 'no-such-claude'), sandboxProbe: PROBE_OK })), 'enforcement_failure:host-unavailable');
   });
 
+  it('when claude --version prints an admitted version but exits non-zero', () => {
+    const bin = join(fresh('claude'), 'claude');
+    writeFileSync(bin, '#!/bin/sh\necho "2.1.316 (Claude Code)"\nexit 3\n');
+    chmodSync(bin, 0o755);
+    assert.equal(refusal(checkLaunchReady({ settingsFile: settingsFile(), claudeBin: bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:host-unavailable');
+  });
+
   it('when claude --version hangs past the timeout', () => {
     const bin = join(fresh('claude'), 'claude');
     writeFileSync(bin, '#!/bin/sh\nsleep 20\n');
@@ -235,5 +254,21 @@ describe('launch preflight refuses (no launch)', () => {
     const before = readFileSync(file, 'utf8');
     checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: ['/usr/bin/false'] });
     assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+describe('the startup readiness check behind the host descriptor (checkHostReady)', () => {
+  it('refuses when the hook entry script cannot be read, before it looks at the sandbox or the host', () => {
+    const c = fakeClaude('2.1.316');
+    const result = checkHostReady({ claudeBin: c.bin, hookEntry: join(root, 'no-such-hook.ts'), sandboxProbe: PROBE_OK });
+    assert.ok(!result.ok && result.error.kind === 'denied');
+    assert.equal(!result.ok && result.error.kind === 'denied' ? result.error.rule : '', 'enforcement_failure:hook-script-unreadable');
+    assert.ok(!existsSync(c.marker), 'the host binary must not be run when the hook entry is unreadable');
+  });
+
+  it('passes with a readable hook entry, a working sandbox probe and an admitted version', () => {
+    const result = checkHostReady({ claudeBin: fakeClaude('2.1.312').bin, hookEntry: hookScript, sandboxProbe: PROBE_OK });
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(result.ok && result.value.claudeVersion, '2.1.312');
   });
 });
