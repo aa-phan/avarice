@@ -52,6 +52,8 @@ export interface DepsOverrides {
 export interface CreateDepsOptions {
   // Open the store read-only (after making sure it is migrated). Used by status.
   readOnly?: boolean;
+  // Locate GSD even though the store is read-only (`context` reads the indexes through GSD's own readers).
+  gsd?: boolean;
 }
 
 export interface Composition {

@@ -3,6 +3,7 @@ import type { IdPrefix } from '../domain/ids.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
+import type { ContextSource } from '../ports/context-source.ts';
 import type { GraphTool } from '../ports/graph-tool.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { Ledger } from '../ports/ledger.ts';
@@ -46,6 +47,8 @@ export interface AppDeps {
   gsd?: GsdOnboarding;
   // Why `gsd` is absent: what discovery found and what is admitted. Onboarding stops `incompatible` with it.
   gsdProblem?: GsdProblem;
+  // The index-first context sources (plan 01-17), present exactly when `gsd` is: both read through GSD's own readers.
+  context?: { intel?: ContextSource; graph?: ContextSource };
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;
