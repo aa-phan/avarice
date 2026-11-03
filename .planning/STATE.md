@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-11-02T23:53:13.499Z"
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-11-03T01:03:49.407Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: fbe9ab7fd63316629f27d99b7609f52cc0c23836
+state_head: 30233c9064cd3959662dc8808aefacfdef2605bc
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 14 of 20
+Plan: 15 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P11 | 15min | 3 tasks | 17 files |
 | Phase 01 P12 | 19 min | 2 tasks | 20 files |
 | Phase 01 P13 | 25 min | 2 tasks | 18 files |
+| Phase 01 P14 | 22 min | 2 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,10 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-13: the Seatbelt profile protects the command's cwd after the temp-area allowance and re-allows only declared write paths; no sandbox means no run (unavailable), never unsandboxed
 - [Phase 01]: 01-13: sandbox-exec cannot nest, so offline tests inject a test-only InheritedSandboxExecutor through test-cli (AVARICE_TEST_OUTER_SANDBOX); production composition always uses SandboxedExecutor
 - [Phase 01]: 01-13: graphify runs code-only with --max-workers 1, cwd staging, only outDir (outside staging) writable; install copies three files into .planning/graphs and refuses symlinked targets
+- [Phase 01]: Index steps are an ordered registry (INDEX_STEPS) whose stored results fold into the record (foldIndexResults), so intel and knowledge plans fill a step without editing the stage loop or activate.ts
+- [Phase 01]: An absent index (graphify missing, extract failed, invalid graph, timeout, stale after install) is recorded in indexes.absent with its reason and never blocks activation; disabled steps are not listed
+- [Phase 01]: Activation re-checks the whole staging diff against every write set and blocks with enforcement_failure after a containment.finding event; AVARICE_TRACKED_WRITABLE lets a committed .planning/graphs file be regenerated
+- [Phase 01]: Counted fault points name#N tell apart the two commits of one checkpoint; planning_ready now names index:code-graph as its first action
 
 ### Pending Todos
 
@@ -161,6 +166,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T23:53:13.478Z
-Stopped at: Completed 01-13-PLAN.md
+Last session: 2026-11-03T01:03:49.384Z
+Stopped at: Completed 01-14-PLAN.md
 Resume file: None
