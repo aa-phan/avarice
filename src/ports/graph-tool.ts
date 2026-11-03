@@ -1,6 +1,8 @@
 // GraphTool port: builds and reads the code graph for onboarding (ONB-4). Phase 1 admits one adapter,
 // graphify 0.9.x, which runs through the sandboxed CommandExecutor: no model, no network, and writes only to a
-// directory outside the staging tree. Plan 01-18 adds the knowledge-pass methods.
+// directory outside the staging tree. The knowledge-pass methods (plan 01-18) materialize the document corpus, read the
+// skill's graph and, after AVARICE's own merge, cluster and install the merged graph.
+import type { CorpusDrop, KnowledgeManifest } from '../domain/knowledge-corpus.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
 
@@ -47,4 +49,14 @@ export interface GraphTool {
   // Copies graph.json (as `graph.json` and `code-graph.json`) and GRAPH_REPORT.md into
   // `{staging}/.planning/graphs/` and writes nothing else.
   install(stagingPath: string, files: GraphInstallFiles): Result<string[]>;
+
+  // Byte size of each repository-relative path that is a regular file inside staging; a symlink or a missing file has no
+  // entry. Reads no content.
+  fileSizes(stagingPath: string, paths: readonly string[]): Result<Record<string, number>>;
+  // Copies the selected files to `{staging}/.avarice-knowledge/{path}`, writes `.graphifyignore` there and the manifest
+  // (mode 0600) to `manifestFile` outside the corpus. A file that is a symlink, too large or secret-bearing is left out
+  // and listed in `manifest.excluded` next to `dropped`. Replaces any corpus an earlier attempt left.
+  materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped?: readonly CorpusDrop[]): Result<{ manifest: KnowledgeManifest }>;
+  // The graph the graphify skill left in `{staging}/.avarice-knowledge/graphify-out/graph.json`; `not_found` when there is none.
+  readSkillGraph(stagingPath: string): Result<GraphData>;
 }

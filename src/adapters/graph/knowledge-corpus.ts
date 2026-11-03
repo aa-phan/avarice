@@ -1,19 +1,163 @@
-// RED stub (plan 01-18 Task 1).
+// Corpus materialization for the knowledge pass (plan 01-18, ONB-14). AVARICE, not the agent, copies the selected
+// documents into `{staging}/.avarice-knowledge/` at their repository-relative paths (so node IDs the skill derives from
+// paths equal the code graph's), writes a `.graphifyignore` that keeps the skill's own output out of its input, and writes
+// the manifest tying each copy to its source path, revision and SHA-256. The manifest lives in the data root, never inside
+// the corpus. A source that is a symlink, outside the staging tree, too large or carrying a secret is left out and said so.
+import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, sep } from 'node:path';
+import { sha256Hex } from '../../domain/digest.ts';
+import { CORPUS_LIMITS, KNOWLEDGE_DIR, copyPathOf } from '../../domain/knowledge-corpus.ts';
+import type { CorpusDrop, KnowledgeManifest, KnowledgeManifestEntry } from '../../domain/knowledge-corpus.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
-import type { CorpusDrop, KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
+import { findSecrets } from '../../domain/secret-patterns.ts';
+import type { GraphData } from '../../ports/graph-tool.ts';
 
-export function fileSizes(stagingPath: string, paths: readonly string[]): Result<Record<string, number>> {
-  void stagingPath;
-  void paths;
-  return ok({});
+const FULL_COMMIT = /^[0-9a-f]{40}$/;
+const GRAPHIFY_OUT = 'graphify-out';
+
+function inside(parent: string, child: string): boolean {
+  return child === parent || child.startsWith(parent.endsWith(sep) ? parent : parent + sep);
 }
 
-export function materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped: readonly CorpusDrop[] = []): Result<{ manifest: KnowledgeManifest }> {
-  void stagingPath;
-  void paths;
-  void manifestFile;
-  void pin;
-  void dropped;
-  return err({ kind: 'internal', cause: 'RED stub' });
+// A repository-relative path: no NUL, no backslash, not absolute, no `.` or `..` segment.
+function segmentsOf(relPath: string): string[] | undefined {
+  if (typeof relPath !== 'string' || relPath === '' || relPath.includes('\0') || relPath.includes('\\') || isAbsolute(relPath)) return undefined;
+  const segments = relPath.split('/');
+  return segments.some((s) => s === '' || s === '.' || s === '..') ? undefined : segments;
+}
+
+// The real path of a regular, non-symlink file inside the staging tree; undefined when it is anything else.
+function regularFile(root: string, segments: readonly string[]): { file: string; size: number } | undefined {
+  try {
+    const parent = realpathSync(join(root, ...segments.slice(0, -1)));
+    if (!inside(root, parent)) return undefined;
+    const file = join(parent, segments[segments.length - 1] as string);
+    const stat = lstatSync(file);
+    return stat.isFile() ? { file, size: stat.size } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function stagingRoot(stagingPath: string): Result<string> {
+  try {
+    return ok(realpathSync(stagingPath));
+  } catch {
+    return err({ kind: 'invalid', field: 'stagingPath', reason: 'cannot be resolved' });
+  }
+}
+
+// Byte size of each path that is a regular file inside staging (a symlink or a missing file has no entry).
+export function fileSizes(stagingPath: string, paths: readonly string[]): Result<Record<string, number>> {
+  const root = stagingRoot(stagingPath);
+  if (!root.ok) return root;
+  const sizes: Record<string, number> = {};
+  for (const path of paths) {
+    const segments = segmentsOf(path);
+    if (segments === undefined) continue;
+    const found = regularFile(root.value, segments);
+    if (found !== undefined) sizes[path] = found.size;
+  }
+  return ok(sizes);
+}
+
+export function materializeCorpus(
+  stagingPath: string,
+  paths: readonly string[],
+  manifestFile: string,
+  pin: string,
+  dropped: readonly CorpusDrop[] = [],
+): Result<{ manifest: KnowledgeManifest }> {
+  if (!FULL_COMMIT.test(pin)) return err({ kind: 'invalid', field: 'pin', reason: 'a full lowercase commit SHA is required' });
+  if (!isAbsolute(manifestFile)) return err({ kind: 'invalid', field: 'manifestFile', reason: 'must be an absolute path' });
+  const root = stagingRoot(stagingPath);
+  if (!root.ok) return root;
+  const wanted = [...new Set(paths)].sort();
+  for (const path of wanted) {
+    if (segmentsOf(path) === undefined) return err({ kind: 'invalid', field: 'paths', reason: `${JSON.stringify(path)} is not a repository-relative path inside the tree` });
+  }
+
+  const corpus = join(root.value, KNOWLEDGE_DIR);
+  try {
+    // A symlink where the corpus directory should be is never followed or kept.
+    rmSync(corpus, { recursive: true, force: true });
+    mkdirSync(corpus);
+  } catch (e) {
+    return err({ kind: 'internal', cause: `cannot prepare the corpus directory: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+  }
+
+  const revision = `git:${pin}`;
+  const entries: KnowledgeManifestEntry[] = [];
+  const excluded: CorpusDrop[] = [...dropped];
+  for (const path of wanted) {
+    const segments = segmentsOf(path) as string[];
+    const found = regularFile(root.value, segments);
+    if (found === undefined) {
+      excluded.push({ path, reason: 'missing' });
+      continue;
+    }
+    if (found.size > CORPUS_LIMITS.maxFileBytes) {
+      excluded.push({ path, reason: 'too-large' });
+      continue;
+    }
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(found.file);
+    } catch {
+      excluded.push({ path, reason: 'missing' });
+      continue;
+    }
+    if (findSecrets(bytes.toString('utf8')).length > 0) {
+      excluded.push({ path, reason: 'secret-content' });
+      continue;
+    }
+    try {
+      const target = join(corpus, ...segments);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, bytes, { mode: 0o644 });
+    } catch (e) {
+      return err({ kind: 'internal', cause: `cannot copy ${path} into the corpus: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+    }
+    entries.push({ copyPath: copyPathOf(path), sourcePath: path, revision, sha256: sha256Hex(bytes) });
+  }
+
+  try {
+    writeFileSync(join(corpus, '.graphifyignore'), `${GRAPHIFY_OUT}/\n`, { mode: 0o644 });
+  } catch (e) {
+    return err({ kind: 'internal', cause: `cannot write .graphifyignore: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+  }
+
+  excluded.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0));
+  const manifest: KnowledgeManifest = { schema: 1, revision, entries, excluded };
+  try {
+    mkdirSync(dirname(manifestFile), { recursive: true, mode: 0o700 });
+    // Beside the target and renamed, so an existing wider file is replaced, never kept.
+    const temp = `${manifestFile}.tmp-${process.pid}`;
+    writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+    chmodSync(temp, 0o600);
+    renameSync(temp, manifestFile);
+  } catch (e) {
+    return err({ kind: 'internal', cause: `cannot write the manifest: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+  }
+  return ok({ manifest });
+}
+
+// The skill's graph: `{staging}/.avarice-knowledge/graphify-out/graph.json`, read only when every directory on the way is a
+// real directory (the agent wrote there, so a symlink may sit in the way) and the file is a regular file.
+export function readSkillGraph(stagingPath: string, read: (file: string) => Result<GraphData>): Result<GraphData> {
+  const root = stagingRoot(stagingPath);
+  if (!root.ok) return root;
+  const file = join(root.value, KNOWLEDGE_DIR, GRAPHIFY_OUT, 'graph.json');
+  try {
+    for (const dir of [join(root.value, KNOWLEDGE_DIR), join(root.value, KNOWLEDGE_DIR, GRAPHIFY_OUT)]) {
+      const stat = lstatSync(dir);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) return err({ kind: 'invalid', field: 'graph', reason: `${dir.slice(root.value.length + 1)} is a symlink or not a directory` });
+    }
+    if (!lstatSync(file).isFile()) return err({ kind: 'invalid', field: 'graph', reason: 'graphify-out/graph.json is not a regular file' });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return err({ kind: 'not_found', ref: `${KNOWLEDGE_DIR}/${GRAPHIFY_OUT}/graph.json` });
+    return err({ kind: 'internal', cause: `cannot read the skill graph: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+  }
+  return read(file);
 }

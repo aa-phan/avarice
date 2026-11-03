@@ -326,6 +326,9 @@ describe('the final scope check covers writes by an index step (T-01-67)', () =>
             writeFileSync(join(staging, 'rogue.txt'), 'written by an index step\n');
             return deps.graph.install(staging, files);
           },
+          fileSizes: (s, p) => deps.graph.fileSizes(s, p),
+          materializeCorpus: (s, p, m, pin, d) => deps.graph.materializeCorpus(s, p, m, pin, d),
+          readSkillGraph: (s) => deps.graph.readSkillGraph(s),
         },
       }),
     });

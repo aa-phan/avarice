@@ -13,7 +13,7 @@ export const PLUGIN_NAME = 'avarice-run-skills';
 
 // What each contained invocation may load is PURPOSE_EXTENSIONS (src/domain/invocation-scope.ts); re-exported here, where
 // the plugin directory and the --agents file are built from it.
-export { PURPOSE_EXTENSIONS } from '../../domain/invocation-scope.ts';
+export { PURPOSE_EXTENSIONS, PURPOSE_SUBAGENT_TYPES } from '../../domain/invocation-scope.ts';
 
 export function buildPluginDir(outDir: string, skillsRoot: string, names: readonly string[]): Result<{ dir: string; skills: string[] }> {
   // Resolve every skill before creating anything, so a missing skill leaves no half-built plugin.

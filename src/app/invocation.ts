@@ -27,6 +27,8 @@ export interface PrepareOptions {
   agentName?: string;
   // Staging-relative files the invocation is expected to leave.
   expectedFiles: readonly string[];
+  // Subagent total for this invocation when lower than the contract's (the knowledge pass: one per 20 documents).
+  subagentsTotal?: number;
 }
 
 export interface PreparedInvocation {
@@ -88,6 +90,7 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
     home: deps.home ?? homedir(),
     workspace: workspace.value,
     readRoots: [gsdCoreDir, agentsDir],
+    ...(options.subagentsTotal !== undefined ? { subagentsTotal: options.subagentsTotal } : {}),
   });
   const extensions = PURPOSE_EXTENSIONS[purpose];
   const request: InvocationRequest = {

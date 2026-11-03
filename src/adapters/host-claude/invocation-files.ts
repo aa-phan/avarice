@@ -15,6 +15,7 @@ import { join } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import { PURPOSE_SUBAGENT_TYPES } from '../../domain/invocation-scope.ts';
 import type { InvocationScope } from '../../domain/invocation-scope.ts';
 import type { InvocationRequest } from '../../ports/agent-host.ts';
 import { buildAgentsJson } from '../gsd/agents-json.ts';
@@ -95,7 +96,7 @@ export function writeInvocationFiles(input: InvocationFilesInput): Result<Invoca
   const policy = writeHookPolicy(
     invDir,
     scope,
-    { onboardingId: request.onboardingId, runId: request.runId, invocationId: request.invocationId, subagentTypes: request.extensions.agents },
+    { onboardingId: request.onboardingId, runId: request.runId, invocationId: request.invocationId, subagentTypes: [...new Set([...request.extensions.agents, ...PURPOSE_SUBAGENT_TYPES[scope.purpose]])] },
     input.ledgerPath,
     input.preamble,
   );

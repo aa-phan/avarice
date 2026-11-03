@@ -46,6 +46,15 @@ export const PURPOSE_EXTENSIONS: Readonly<Record<InvocationPurpose, { skills: re
   knowledge: { skills: ['graphify'], agents: [] },
 };
 
+// Subagent types a purpose may start besides the agents it loads (PURPOSE_EXTENSIONS.agents are always allowed). Built-in
+// types need no agent file. The graphify skill spawns one `general-purpose` subagent per chunk of documents (spike S0-G,
+// by_type general-purpose: 1), so the knowledge pass admits exactly that type; map and intel admit none beyond their agents.
+export const PURPOSE_SUBAGENT_TYPES: Readonly<Record<InvocationPurpose, readonly string[]>> = {
+  map: [],
+  intel: [],
+  knowledge: ['general-purpose'],
+};
+
 // Commands the hook admits without a GSD verb. `find` is admitted only without the actions in
 // FIND_DENIED_ACTIONS; the other entries are admitted as written (the hook also refuses redirections, `git -c`
 // and `git log --output`).
@@ -169,6 +178,9 @@ export interface ScopeInput {
   strategy?: BashStrategy;
   // SHA-256 of the GSD preamble's first line, fingerprinted by the GSD adapter at inspect.
   preambleSha256?: string;
+  // Lowers the subagent total for this invocation below the contract's (never raises it): the knowledge pass asks for one
+  // subagent per 20 documents.
+  subagentsTotal?: number;
 }
 
 const trimTrailingSlashes = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, '') : path);
@@ -210,7 +222,10 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const subagents =
     purpose === 'intel'
       ? { total: 0, concurrent: 0 }
-      : { total: contract.budgets.subagentsTotal, concurrent: contract.budgets.subagentsConcurrent };
+      : {
+          total: Math.min(contract.budgets.subagentsTotal, input.subagentsTotal ?? contract.budgets.subagentsTotal),
+          concurrent: Math.min(contract.budgets.subagentsConcurrent, input.subagentsTotal ?? contract.budgets.subagentsConcurrent),
+        };
 
   return {
     purpose,

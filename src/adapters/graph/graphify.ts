@@ -14,9 +14,11 @@ import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { CommandExecutor, CommandResult } from '../../ports/command-executor.ts';
+import type { CorpusDrop, KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
 import type { GraphBuild, GraphData, GraphInstallFiles, GraphTool, LocatedGraphTool } from '../../ports/graph-tool.ts';
 import { realpathNearest } from '../fs/profile-paths.ts';
 import { safeGitEnv } from '../git/safe-git.ts';
+import { fileSizes, materializeCorpus, readSkillGraph } from './knowledge-corpus.ts';
 
 // Operation budgets: a code extraction may take five minutes, the other graphify commands far less.
 export const EXTRACT_TIMEOUT_MS = 300_000;
@@ -260,6 +262,18 @@ export class GraphifyTool implements GraphTool {
     } catch (e) {
       return err({ kind: 'internal', cause: `cannot install the graph into .planning/graphs: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
     }
+  }
+
+  fileSizes(stagingPath: string, paths: readonly string[]): Result<Record<string, number>> {
+    return fileSizes(stagingPath, paths);
+  }
+
+  materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped: readonly CorpusDrop[] = []): Result<{ manifest: KnowledgeManifest }> {
+    return materializeCorpus(stagingPath, paths, manifestFile, pin, dropped);
+  }
+
+  readSkillGraph(stagingPath: string): Result<GraphData> {
+    return readSkillGraph(stagingPath, (file) => this.readGraph(file));
   }
 }
 

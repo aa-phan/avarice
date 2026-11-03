@@ -124,7 +124,8 @@ describe('no competing index (ONB-2, S-27)', () => {
   it('stores each accepted document as a map-document artifact and a path-to-digest manifest as a map-snapshot, retention onboarding', () => {
     const { roots, repo } = fixture();
     assert.equal(onboard(roots, repo).code, 0);
-    const kinds = rows<{ kind: string; retention: string; n: number }>(roots, 'SELECT kind, retention, count(*) AS n FROM artifacts GROUP BY kind, retention ORDER BY kind');
+    // `knowledge-manifest` exists only where graphify is installed (the knowledge step copies a corpus for a code graph to join).
+    const kinds = rows<{ kind: string; retention: string; n: number }>(roots, "SELECT kind, retention, count(*) AS n FROM artifacts WHERE kind != 'knowledge-manifest' GROUP BY kind, retention ORDER BY kind");
     assert.deepEqual(kinds, [
       { kind: 'map-document', retention: 'onboarding', n: 7 },
       { kind: 'map-snapshot', retention: 'onboarding', n: 1 },

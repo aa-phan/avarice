@@ -175,7 +175,9 @@ describe('onboard with the fake host, then status (tracer)', () => {
 describe('stage ordering: the checkpoint is committed before the side effect it names', () => {
   it('has the matching checkpoint in the ledger when the worktree, the invocation and the artifact store are touched', async () => {
     const { roots, repo } = fixture();
-    const env = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+    // No graphify, so the knowledge step starts no invocation and this test stays about the map and intel stages
+    // (test/integration/knowledge-pass.test.ts covers the ordering of the knowledge step).
+    const env = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT, AVARICE_GRAPHIFY_BIN: '/nonexistent/avarice-test-graphify' };
     const observed: string[] = [];
     let onboardingId = '';
     let ledger: Ledger | undefined;
@@ -401,7 +403,8 @@ describe('index steps (plan 01-14)', () => {
     // invocation fails and the index is absent without blocking.
     const intelResult = JSON.parse(steps[1]?.result_json ?? '{}') as { index: string; status: string; reason: string };
     assert.deepEqual([intelResult.index, intelResult.status, intelResult.reason], ['intel', 'absent', 'invocation-failed']);
-    assert.deepEqual(JSON.parse(steps[2]?.result_json ?? '{}'), { index: 'knowledge', status: 'absent', reason: 'not-built-in-this-build' });
+    // Without a code graph the knowledge step starts no invocation: document nodes need a graph to join (plan 01-18).
+    assert.deepEqual(JSON.parse(steps[2]?.result_json ?? '{}'), { index: 'knowledge', status: 'absent', reason: 'graph-absent', detail: 'there is no code graph for document nodes to join' });
 
     const [record] = rows<{ body_json: string; graph_commit: string | null; intel_commit: string | null; knowledge_commit: string | null }>(
       roots,
@@ -411,13 +414,13 @@ describe('index steps (plan 01-14)', () => {
     assert.equal(body.indexes.intel, undefined);
     assert.deepEqual(body.indexes.absent.filter((a) => a.index !== 'graph'), [
       { index: 'intel', reason: 'invocation-failed' },
-      { index: 'knowledge', reason: 'not-built-in-this-build' },
+      { index: 'knowledge', reason: 'graph-absent' },
     ]);
     assert.equal(record?.intel_commit, null, 'the ledger column follows the body: no intel, no commit');
     assert.equal(record?.knowledge_commit, null);
 
     const events = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => JSON.parse(e.data_json) as { index: string; reason: string });
-    assert.deepEqual(events.filter((e) => e.index !== 'code-graph').map((e) => [e.index, e.reason]), [['intel', 'invocation-failed'], ['knowledge', 'not-built-in-this-build']]);
+    assert.deepEqual(events.filter((e) => e.index !== 'code-graph').map((e) => [e.index, e.reason]), [['intel', 'invocation-failed'], ['knowledge', 'graph-absent']]);
   });
 
   it('status says which indexes are absent and why', () => {
@@ -426,7 +429,7 @@ describe('index steps (plan 01-14)', () => {
     const status = runCli(['status'], { roots, entry: TEST_CLI, env: NO_GRAPHIFY });
     assert.equal(status.code, 0, status.stderr);
     assert.match(status.stdout, /intel absent \(invocation-failed\)/);
-    assert.match(status.stdout, /knowledge absent \(not-built-in-this-build\)/);
+    assert.match(status.stdout, /knowledge absent \(graph-absent\)/);
   });
 });
 

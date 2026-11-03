@@ -147,8 +147,12 @@ export async function stampFastMap(deps: AppDeps, onboardingId: string, staging:
 // any of the seven full-map files, so adopt also reads the others that exist; they are the existing map, not mapper
 // output. A file above the read limit counts as present with no stamp, so it fails validation instead of aborting
 // the run.
+export function mapFileNamesFor(mode: MappingMode): string[] {
+  return [...new Set([...requiredFilesFor(mode), ...(mode === 'adopt' ? FULL_MAP_FILES : [])])];
+}
+
 export function readMapDocuments(staging: StagingWorkspace, stagingPath: string, mode: MappingMode): Result<MapDocument[]> {
-  const names = [...new Set([...requiredFilesFor(mode), ...(mode === 'adopt' ? FULL_MAP_FILES : [])])];
+  const names = mapFileNamesFor(mode);
   const documents: MapDocument[] = [];
   for (const path of names) {
     const read = staging.read(stagingPath, path, MAX_MAP_DOCUMENT_BYTES);

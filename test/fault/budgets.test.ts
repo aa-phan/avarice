@@ -4,8 +4,8 @@
 // hook against the profile's ledger; no model is called.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, rmSync } from 'node:fs';
+import { delimiter, isAbsolute, join } from 'node:path';
 
 import { reserveInvocation, settleInvocation } from '../../src/app/budget.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
@@ -66,8 +66,15 @@ function stateOf(roots: CliRoots): { state: string } {
   return rows<{ state: string }>(roots, 'SELECT state FROM onboardings')[0] as { state: string };
 }
 
+// The in-process budget tests are about reservations, not graphs: with no graphify the knowledge step starts no invocation
+// and leaves invocations for the test to reserve itself.
 function envFor(roots: CliRoots): NodeJS.ProcessEnv {
-  return { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+  return { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT, AVARICE_GRAPHIFY_BIN: '/nonexistent/avarice-test-graphify' };
+}
+
+// Whether the CLI runs below find a graphify (the onboard helper passes the ambient PATH).
+function graphifyInstalled(): boolean {
+  return (process.env['PATH'] ?? '').split(delimiter).some((dir) => dir !== '' && isAbsolute(dir) && existsSync(join(dir, 'graphify')));
 }
 
 // Runs one onboarding to a stop state in this process and hands the deps to the callback.
@@ -136,8 +143,9 @@ describe('budget rows come from the contract', () => {
     assert.equal(result.code, 0, result.stdout + result.stderr);
     const invocations = row(roots, 'invocations');
     // The map, and the intel invocation the index step asks for (plan 01-17), which the fake map host cannot serve:
-    // it was reserved and started, so its unit is spent, at no cost.
-    assert.equal(invocations.used, 2);
+    // it was reserved and started, so its unit is spent, at no cost. With graphify installed the knowledge step (plan
+    // 01-18) is a third such invocation; without it the step starts none.
+    assert.equal(invocations.used, graphifyInstalled() ? 3 : 2);
     assert.equal(invocations.reserved, 0);
     assert.equal(row(roots, 'costUsd').used, 0.25);
     assert.ok(row(roots, 'wallClockMs').used >= 0);

@@ -5,6 +5,7 @@
 // repository tracks them, every Markdown file under the ADR directories preflight found, and the files the
 // contract's `knowledge.documents` globs name (default `docs/**/*.md`). It never holds GSD phase files or
 // `.planning/STATE.md` (they churn; slice 3 adds phases), a file above the size cap, or a secret-bearing path.
+import { matchesAny, matchesGlob } from './glob.ts';
 
 export const KNOWLEDGE_DIR = '.avarice-knowledge';
 
@@ -49,24 +50,64 @@ export interface KnowledgeCorpusSelection {
   dropped: CorpusDrop[];
 }
 
+const PHASES = '.planning/phases/**';
+const STATE_FILE = '.planning/STATE.md';
 
 // Every path the rules would admit before sizes are known, in priority order (map, planning documents, ADRs, other
 // documents; each group sorted), without duplicates. The stage stats exactly these.
 export function knowledgeCandidates(input: Pick<KnowledgeCorpusInput, 'trackedPaths' | 'mapFiles' | 'adrDirs' | 'documentGlobs'>): string[] {
-  void input;
-  return []; // RED stub
+  const tracked = new Set(input.trackedPaths);
+  const adr = (path: string): boolean => path.endsWith('.md') && input.adrDirs.some((dir) => path.startsWith(`${dir.replace(/\/+$/, '')}/`));
+  const groups: string[][] = [
+    [...input.mapFiles].sort(),
+    PLANNING_DOCUMENTS.filter((path) => tracked.has(path)),
+    [...tracked].filter(adr).sort(),
+    [...tracked].filter((path) => matchesAny(path, input.documentGlobs)).sort(),
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const group of groups) {
+    for (const path of group) {
+      if (!seen.has(path)) {
+        seen.add(path);
+        out.push(path);
+      }
+    }
+  }
+  return out;
 }
 
 export function selectKnowledgeCorpus(input: KnowledgeCorpusInput): KnowledgeCorpusSelection {
-  void input;
-  return { paths: [], dropped: [] }; // RED stub
+  const maxFileBytes = input.limits?.maxFileBytes ?? CORPUS_LIMITS.maxFileBytes;
+  const maxFiles = input.limits?.maxFiles ?? CORPUS_LIMITS.maxFiles;
+  const secretGlobs = input.secretGlobs ?? [];
+  const kept: string[] = [];
+  const dropped: CorpusDrop[] = [];
+  for (const path of knowledgeCandidates(input)) {
+    if (matchesGlob(path, PHASES)) dropped.push({ path, reason: 'phase-file' });
+    else if (path === STATE_FILE) dropped.push({ path, reason: 'state-file' });
+    else if (matchesAny(path, secretGlobs)) dropped.push({ path, reason: 'secret-path' });
+    else if (input.sizes[path] === undefined) dropped.push({ path, reason: 'missing' });
+    else if ((input.sizes[path] as number) > maxFileBytes) dropped.push({ path, reason: 'too-large' });
+    else if (kept.length >= maxFiles) dropped.push({ path, reason: 'cap' });
+    else kept.push(path);
+  }
+  return { paths: kept.sort(), dropped };
 }
 
 // What the record states as the corpus: the map directory and each planning document by name, any other document by its
 // directory (`docs/decisions/`), a file at the root by name. Sorted, without duplicates.
 export function corpusSummary(paths: readonly string[]): string[] {
-  void paths;
-  return []; // RED stub
+  const out = new Set<string>();
+  for (const path of paths) {
+    if (path.startsWith('.planning/codebase/')) out.add('.planning/codebase/');
+    else if (path.startsWith('.planning/')) out.add(path);
+    else {
+      const slash = path.lastIndexOf('/');
+      out.add(slash === -1 ? path : `${path.slice(0, slash + 1)}`);
+    }
+  }
+  return [...out].sort();
 }
 
 // One copy in the corpus directory, tied to its source and revision (never stored inside the corpus).
