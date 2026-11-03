@@ -12,7 +12,7 @@ import type { AppDeps } from './deps.ts';
 import { runOnboarding } from './onboarding-service.ts';
 import type { OnboardingOutcome } from './onboarding-service.ts';
 import type { StageContext } from './stages/stage.ts';
-import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf, stampFastMap } from './stages/shared.ts';
+import { effectiveMappingMode, isStampedMode, loadContract, readMapDocuments, stagingPathOf, stampMap } from './stages/shared.ts';
 
 const LAUNCH = 'launch:map';
 const VALIDATE = 'validate';
@@ -109,9 +109,9 @@ async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
     nowMs: deps.clock.nowMs(),
   });
   if (!event.ok) return event;
-  // The interrupted invocation was a fast map: it still owes its AVARICE-run stamp.
-  if (mode.value === 'fast') {
-    const stamped = await stampFastMap(deps, onboardingId, staging.value);
+  // The interrupted invocation was a fast or full map: it still owes its AVARICE-run stamp.
+  if (isStampedMode(mode.value)) {
+    const stamped = await stampMap(deps, onboardingId, staging.value, mode.value);
     if (!stamped.ok) return stamped;
   }
   const validating = ctx.transition(resumed.value, 'validating', VALIDATE, { data: { reconciled: true } });

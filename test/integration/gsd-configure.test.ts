@@ -203,16 +203,17 @@ describe('configure-gsd: probe, plan and configure in staging', () => {
     for (const call of mutating) assert.equal(realpathSync(call.cwd), staging, `${call.args.join(' ')} ran in staging`);
     for (const call of calls) assert.notEqual(realpathSync(call.cwd), realpathSync(repo.path), `${call.args.join(' ')} never ran in the user checkout`);
     assert.deepEqual(
-      mutating.map((c) => c.args.slice(0, 3).join(' ')),
+      mutating.filter((c) => c.args[0] !== 'stamp-codebase-map').map((c) => c.args.slice(0, 3).join(' ')),
       ['init onboard --raw', 'config-set commit_docs false', 'config-set workflow.text_mode true', 'config-set intel.enabled true', 'config-set graphify.enabled true'],
     );
     assert.equal(atInvoke.length, 1);
-    // After the host, the index stage asks GSD for the graph snapshot and status (plan 01-14); nothing else.
+    // After the host: AVARICE's own stamp of the map it just had written (deferred item 9), then the index stage's graph
+    // snapshot and status (plan 01-14); nothing else.
     const afterHost = calls.slice(atInvoke[0]?.logged ?? 0);
-    assert.ok(afterHost.every((c) => c.args[0] === 'graphify'), `only graphify verbs run after the host: ${JSON.stringify(afterHost.map((c) => c.args))}`);
-    assert.equal(atInvoke[0]?.logged, calls.filter((c) => c.args[0] !== 'graphify').length, 'every other GSD call was made before the host was invoked (and none after, for a full map)');
+    assert.ok(afterHost.every((c) => c.args[0] === 'stamp-codebase-map' || c.args[0] === 'graphify'), `only the stamp and graphify verbs run after the host: ${JSON.stringify(afterHost.map((c) => c.args))}`);
+    assert.equal(atInvoke[0]?.logged, calls.filter((c) => c.args[0] !== 'graphify' && c.args[0] !== 'stamp-codebase-map').length, 'every other GSD call was made before the host was invoked');
     for (const call of afterHost) assert.equal(realpathSync(call.cwd), staging, `${call.args.join(' ')} ran in staging`);
-    assert.equal(calls.some((c) => c.args[0] === 'stamp-codebase-map'), false, 'a full map is not stamped by AVARICE');
+    assert.equal(afterHost.filter((c) => c.args[0] === 'stamp-codebase-map').length, 1, 'a full map is stamped once by AVARICE, after the host');
   });
 });
 

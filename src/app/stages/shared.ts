@@ -126,12 +126,14 @@ export function stopIncompatible(ctx: StageContext, row: OnboardingRow, found: s
   return moved.ok ? ok(undefined) : moved;
 }
 
-// A fast map is stamped by AVARICE, not by the mapper (ONB-7, spike S0-A): `stamp-codebase-map --files` for the four
-// fast-map files, run by GSD in staging. The outcome is recorded as step `gsd:stamp`. A stamp that fails is
-// recorded as failed and not raised: the unstamped files fail validation, which owns the retry and the block.
-export async function stampFastMap(deps: AppDeps, onboardingId: string, staging: string): Promise<Result<void>> {
+// A map AVARICE ran is stamped by AVARICE, not by the mapper (ONB-7, spike S0-A, deferred item 9): `stamp-codebase-map
+// --files` for the files the mode requires (four for fast, seven for full), run by GSD in staging. The mapper's own
+// closing stamp call writes, so the hook denies it, and neither a fast nor a full map ever arrives stamped. The outcome is
+// recorded as step `gsd:stamp`. A stamp that fails is recorded as failed and not raised: the unstamped files fail
+// validation, which owns the retry and the block.
+export async function stampMap(deps: AppDeps, onboardingId: string, staging: string, mode: MappingMode): Promise<Result<void>> {
   const startedMs = deps.clock.nowMs();
-  const stamped = deps.gsd === undefined ? undefined : await deps.gsd.stamp(staging, FAST_MAP_FILES);
+  const stamped = deps.gsd === undefined ? undefined : await deps.gsd.stamp(staging, requiredFilesFor(mode));
   const recorded = deps.ledger.recordStepResult(onboardingId, {
     step: 'gsd:stamp',
     status: stamped?.ok ? 'completed' : 'failed',
@@ -141,6 +143,9 @@ export async function stampFastMap(deps: AppDeps, onboardingId: string, staging:
   });
   return recorded.ok ? ok(undefined) : recorded;
 }
+
+// The modes whose map AVARICE stamps after the mapper ran (`adopt` takes a map nobody ran, `skip` maps nothing).
+export const isStampedMode = (mode: MappingMode): boolean => mode === 'fast' || mode === 'full';
 
 // The map documents of an onboarding: the files the mapping plan requires (four for fast, seven for full), read from
 // staging. Another file under the map directory is not a map document (see extraMapFiles). An adopted map may carry

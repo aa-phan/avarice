@@ -3,7 +3,8 @@
 // with the fake AgentHost, and `status` reads it offline. Later plans re-run this file.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createDeps } from '../../src/cli/composition.ts';
@@ -18,6 +19,8 @@ import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { checkoutSnapshot, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import { FAKE_DOCUMENT_MARKER, FakeAgentHost } from '../helpers/fake-agent-host.ts';
+import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
+import { writeStampFailingGsdCore } from '../helpers/fake-gsd-core.ts';
 import type { FakeHostOptions } from '../helpers/fake-agent-host.ts';
 
 const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
@@ -359,12 +362,30 @@ describe('a malformed map is retried once, then blocks with a decision', () => {
     assert.deepEqual(checkoutSnapshot(repo.path), before);
   });
 
-  it('also rejects a map stamped with the wrong commit', () => {
+  // AVARICE stamps the map itself (deferred item 9), so a wrong stamp the mapper wrote is overwritten; the check still rejects a
+  // wrong stamp when AVARICE's own stamp could not be applied.
+  it('also rejects a map stamped with the wrong commit when the stamp AVARICE runs fails', () => {
     const { roots, repo } = fixture();
-    const r = onboardWithFake(roots, repo, { stamp: 'deadbeef' });
+    const located = locateGsdCore({ HOME: process.env['HOME'] ?? homedir() });
+    assert.ok(located.ok, 'the installed gsd-core is admitted');
+    const dir = mkdtempSync(join(tmpdir(), 'avarice-failstamp-'));
+    cleanup.push(dir);
+    const gsdHome = writeStampFailingGsdCore(join(dir, 'gsd-core'), join(located.value.gsdCoreDir, 'bin', 'gsd-tools.cjs'));
+    const r = runCli(['onboard', '--policy', 'onboarding', repo.path], {
+      roots,
+      entry: TEST_CLI,
+      env: { AVARICE_FAKE_HOST: JSON.stringify({ stamp: 'deadbeef' }), GSD_HOME: gsdHome },
+    });
     assert.equal(r.code, 3, r.stderr + r.stdout);
     assert.match(r.stdout, /blocked \(decision\)/);
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
+  });
+
+  it('overwrites a wrong stamp the mapper wrote: AVARICE stamps the map and it validates', () => {
+    const { roots, repo } = fixture();
+    const r = onboardWithFake(roots, repo, { stamp: 'deadbeef' });
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 1);
   });
 });
 

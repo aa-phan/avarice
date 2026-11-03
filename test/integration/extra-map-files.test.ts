@@ -5,7 +5,8 @@
 // that is missing or unstamped still fails validation.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -14,6 +15,8 @@ import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import type { FakeHostOptions } from '../helpers/fake-agent-host.ts';
 import { readMapDocuments } from '../../src/app/stages/shared.ts';
+import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
+import { writeStampFailingGsdCore } from '../helpers/fake-gsd-core.ts';
 import { ok } from '../../src/domain/result.ts';
 import type { StagingWorkspace } from '../../src/ports/staging-workspace.ts';
 
@@ -37,8 +40,17 @@ function fixture(): { roots: CliRoots; repo: ScratchRepo } {
   return { roots, repo };
 }
 
-function onboard(roots: CliRoots, repo: ScratchRepo, host: FakeHostOptions, extra: readonly string[] = []) {
-  return runCli(['onboard', '--policy', 'onboarding', ...extra, repo.path], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify(host) } });
+function onboard(roots: CliRoots, repo: ScratchRepo, host: FakeHostOptions, extra: readonly string[] = [], env: Record<string, string> = {}) {
+  return runCli(['onboard', '--policy', 'onboarding', ...extra, repo.path], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify(host), ...env } });
+}
+
+// GSD_HOME at a gsd-core that runs every verb for real except `stamp-codebase-map`, which fails.
+function failingStampEnv(): Record<string, string> {
+  const located = locateGsdCore({ HOME: process.env['HOME'] ?? homedir() });
+  assert.ok(located.ok, 'the installed gsd-core is admitted');
+  const dir = mkdtempSync(join(tmpdir(), 'avarice-failstamp-'));
+  cleanup.push(dir);
+  return { GSD_HOME: writeStampFailingGsdCore(join(dir, 'gsd-core'), join(located.value.gsdCoreDir, 'bin', 'gsd-tools.cjs')) };
 }
 
 function rows<T>(roots: CliRoots, sql: string): T[] {
@@ -143,15 +155,26 @@ describe('required files are still enforced', () => {
     assert.equal(rows(roots, 'SELECT 1 FROM project_records').length, 0);
   });
 
-  it('an unstamped required file fails validation (stamp) in a full map', () => {
+  // Since deferred item 9 AVARICE stamps a full map itself, so a mapper that leaves a file unstamped (the live full map left
+  // all seven) no longer fails. Validation still judges the stamp when AVARICE's own stamp could not be applied.
+  it('an unstamped required file in a full map is stamped by AVARICE and validates', () => {
     const { roots, repo } = fixture();
     const unstamped = '# Testing\n\nno frontmatter stamp\n';
     const r = onboard(roots, repo, { files: FULL_FILES, rawFiles: { 'TESTING.md': unstamped } });
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    assert.equal(validateChecks(roots).find((c) => c.name === 'stamp')?.passed, true);
+  });
+
+  it('an unstamped required file fails validation (stamp) in a full map when the stamp AVARICE runs fails', () => {
+    const { roots, repo } = fixture();
+    const unstamped = '# Testing\n\nno frontmatter stamp\n';
+    const r = onboard(roots, repo, { files: FULL_FILES, rawFiles: { 'TESTING.md': unstamped } }, [], failingStampEnv());
     assert.equal(r.code, 3, r.stdout + r.stderr);
     assert.equal(state(roots), 'blocked');
     const failed = validateChecks(roots).filter((c) => !c.passed);
     assert.deepEqual(failed.map((c) => c.name), ['stamp']);
     assert.match(failed[0]?.detail ?? '', /TESTING\.md/);
+    assert.ok(rows<{ status: string }>(roots, "SELECT status FROM onboarding_steps WHERE step = 'gsd:stamp'").every((row) => row.status === 'failed'), 'the failed stamp is recorded, not raised');
     assert.equal(rows(roots, 'SELECT 1 FROM project_records').length, 0);
   });
 

@@ -1,6 +1,6 @@
 // Stage for `mapping`: one contained host invocation that writes the codebase map into the staging
 // worktree, in the mode the workspace stage planned (`mapping:plan`): `skip` invokes nothing, `fast` runs
-// `/gsd-map-codebase --fast` and is then stamped by AVARICE, `full` runs `/gsd-map-codebase`. This file writes no
+// `/gsd-map-codebase --fast`, `full` runs `/gsd-map-codebase`; both maps are then stamped by AVARICE. This file writes no
 // map document itself (ONB-2). The step `launch:map` is recorded before the host is called. The host's outcome
 // decides the next state; the map itself is judged by validation, never by the outcome.
 import { err, ok } from '../../domain/result.ts';
@@ -8,7 +8,7 @@ import type { Result } from '../../domain/result.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
-import { loadContract, loadMappingPlan, stagingPathOf, stampFastMap, stopIncompatible } from './shared.ts';
+import { isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import { requiredFilesFor } from '../../domain/mapping.ts';
 import { completeInvocation, prepareInvocation } from '../invocation.ts';
@@ -81,10 +81,10 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
     });
     if (!finding.ok) return finding;
   }
-  // A fast map is stamped by AVARICE after the invocation, whether or not the mapper made progress (validation
+  // A fast or full map is stamped by AVARICE after the invocation, whether or not the mapper made progress (validation
   // judges the files; the stamp only has to be there for the files that exist).
-  if (mode === 'fast' && (o.kind === 'progressed' || o.kind === 'no_progress' || o.kind === 'inconclusive')) {
-    const stamped = await stampFastMap(deps, row.onboardingId, staging.value);
+  if (isStampedMode(mode) && (o.kind === 'progressed' || o.kind === 'no_progress' || o.kind === 'inconclusive')) {
+    const stamped = await stampMap(deps, row.onboardingId, staging.value, mode);
     if (!stamped.ok) return stamped;
   }
 

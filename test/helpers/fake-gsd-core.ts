@@ -52,3 +52,24 @@ export function writeLoggingGsdCore(dir: string, logPath: string, realTools: str
   chmodSync(target, 0o755);
   return dir;
 }
+
+// A gsd-core that delegates every verb to the real gsd-tools.cjs at `realTools` except `stamp-codebase-map`, which
+// fails (exit 1). Used to show that validation still judges a map whose AVARICE-run stamp could not be applied.
+export function writeStampFailingGsdCore(dir: string, realTools: string): string {
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const source = [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    "const { spawnSync } = require('node:child_process');",
+    'const args = process.argv.slice(2);',
+    "if (args[0] === 'stamp-codebase-map') { process.stderr.write('stamp-codebase-map: refused by the test double\\n'); process.exit(1); }",
+    `const r = spawnSync(process.execPath, [${JSON.stringify(realTools)}, ...args], { stdio: 'inherit', env: process.env });`,
+    'process.exit(r.status === null ? 1 : r.status);',
+    '',
+  ].join('\n');
+  const target = join(bin, 'gsd-tools.cjs');
+  writeFileSync(target, source);
+  chmodSync(target, 0o755);
+  return dir;
+}
