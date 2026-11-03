@@ -238,6 +238,9 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
       'prepare after prepare-workspace',
       'ensureDir after launch:map',
       'invoke after launch:map with steps [launch:map]',
+      // The intel step (plan 01-17) is the second contained invocation, behind its own checkpoint.
+      'ensureDir after index:intel',
+      'invoke after index:intel with steps [launch:map,launch:intel]',
       'put after activate',
     ]);
   });
@@ -394,7 +397,10 @@ describe('index steps (plan 01-14)', () => {
     const steps = rows<{ step: string; status: string; result_json: string }>(roots, "SELECT step, status, result_json FROM onboarding_steps WHERE step LIKE 'index:%' ORDER BY rowid");
     assert.deepEqual(steps.map((s) => s.step), ['index:code-graph', 'index:intel', 'index:knowledge']);
     assert.ok(steps.every((s) => s.status === 'completed'));
-    assert.deepEqual(JSON.parse(steps[1]?.result_json ?? '{}'), { index: 'intel', status: 'absent', reason: 'not-built-in-this-build' });
+    // The fake map host cannot do the intel purpose (plan 01-17 tests the step with a fake intel host), so the
+    // invocation fails and the index is absent without blocking.
+    const intelResult = JSON.parse(steps[1]?.result_json ?? '{}') as { index: string; status: string; reason: string };
+    assert.deepEqual([intelResult.index, intelResult.status, intelResult.reason], ['intel', 'absent', 'invocation-failed']);
     assert.deepEqual(JSON.parse(steps[2]?.result_json ?? '{}'), { index: 'knowledge', status: 'absent', reason: 'not-built-in-this-build' });
 
     const [record] = rows<{ body_json: string; graph_commit: string | null; intel_commit: string | null; knowledge_commit: string | null }>(
@@ -404,14 +410,14 @@ describe('index steps (plan 01-14)', () => {
     const body = JSON.parse(record?.body_json ?? '{}') as { indexes: { intel?: unknown; absent: Array<{ index: string; reason: string }> } };
     assert.equal(body.indexes.intel, undefined);
     assert.deepEqual(body.indexes.absent.filter((a) => a.index !== 'graph'), [
-      { index: 'intel', reason: 'not-built-in-this-build' },
+      { index: 'intel', reason: 'invocation-failed' },
       { index: 'knowledge', reason: 'not-built-in-this-build' },
     ]);
     assert.equal(record?.intel_commit, null, 'the ledger column follows the body: no intel, no commit');
     assert.equal(record?.knowledge_commit, null);
 
     const events = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => JSON.parse(e.data_json) as { index: string; reason: string });
-    assert.deepEqual(events.filter((e) => e.index !== 'code-graph').map((e) => [e.index, e.reason]), [['intel', 'not-built-in-this-build'], ['knowledge', 'not-built-in-this-build']]);
+    assert.deepEqual(events.filter((e) => e.index !== 'code-graph').map((e) => [e.index, e.reason]), [['intel', 'invocation-failed'], ['knowledge', 'not-built-in-this-build']]);
   });
 
   it('status says which indexes are absent and why', () => {
@@ -419,7 +425,7 @@ describe('index steps (plan 01-14)', () => {
     assert.equal(runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: NO_GRAPHIFY }).code, 0);
     const status = runCli(['status'], { roots, entry: TEST_CLI, env: NO_GRAPHIFY });
     assert.equal(status.code, 0, status.stderr);
-    assert.match(status.stdout, /intel absent \(not-built-in-this-build\)/);
+    assert.match(status.stdout, /intel absent \(invocation-failed\)/);
     assert.match(status.stdout, /knowledge absent \(not-built-in-this-build\)/);
   });
 });
@@ -474,7 +480,7 @@ describe('activation re-checks the whole staging diff against every write set (p
     ['an added file outside every write set', { added: ['rogue.txt'] }],
     ['a modified tracked source file', { modified: ['package.json'] }],
     ['a deleted tracked source file', { deleted: ['src/index.ts'] }],
-    ['an intel file when no intel invocation ran', { added: ['.planning/intel/files.json'] }],
+    ['a planning file outside every write set', { added: ['.planning/phases/01/PLAN.md'] }],
     ['a new top-level directory', { added: ['dist/out.js'] }],
   ] as const) {
     it(`blocks activation for ${name}, with a containment.finding event and no record`, async () => {

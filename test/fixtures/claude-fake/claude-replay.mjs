@@ -9,7 +9,10 @@
 // strips the environment it launches with), next to a directory FAKE_CLAUDE_DIR for the logs:
 //   version          string    answer to --version
 //   transcript       string    one of success, apiError, maxBudget, hookBlock (test/fixtures/stream-json.ts); null prints nothing
-//   mapFiles         "all" | "fast" | string[]   map documents to write under .planning/codebase (names such as STACK.md)
+//   mapFiles         "all" | "fast" | string[]   map documents to write under .planning/codebase (names such as STACK.md); not on a
+//                    launch that names an agent (`--agent`), which is the intel purpose
+//   intel            boolean   on a launch of `--agent gsd-intel-updater`, write the five intel documents and the refresh snapshot
+//                    (test/fixtures/index-fixtures.ts) under .planning/intel
 //   stamp            string | false   last_mapped_commit for the documents (default: git HEAD of the working directory)
 //   writes           { relPath: content }   other files to write, relative to the working directory
 //   extraLines       string[]  raw lines printed before the transcript's result (for example text a secret scan must catch)
@@ -27,6 +30,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { transcript } from '../stream-json.ts';
 import { fakeMapDocument } from '../../helpers/fake-agent-host.ts';
+import { INTEL_FILE_NAMES, intelDocuments, refreshSnapshot, serializeIntel } from '../index-fixtures.ts';
 
 const argv = process.argv.slice(2);
 const scriptPath = process.env.FAKE_CLAUDE_SCRIPT;
@@ -70,7 +74,7 @@ const writeFile = (rel, content) => {
   writeFileSync(target, content);
 };
 
-if (script.mapFiles !== undefined) {
+if (flag('--agent') === undefined && script.mapFiles !== undefined) {
   const names =
     script.mapFiles === 'all'
       ? ['STACK.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'INTEGRATIONS.md', 'CONCERNS.md']
@@ -80,6 +84,11 @@ if (script.mapFiles !== undefined) {
   const stamp = script.stamp === undefined ? git('rev-parse', 'HEAD') : script.stamp;
   const tracked = git('ls-files').split('\n').filter((l) => l !== '');
   for (const name of names) writeFile(join('.planning', 'codebase', name), fakeMapDocument(name, stamp, tracked, undefined));
+}
+if (flag('--agent') === 'gsd-intel-updater' && script.intel === true) {
+  const files = serializeIntel(intelDocuments());
+  for (const name of INTEL_FILE_NAMES) writeFile(join('.planning', 'intel', name), files[name]);
+  writeFile(join('.planning', 'intel', '.last-refresh.json'), refreshSnapshot(files));
 }
 for (const [rel, content] of Object.entries(script.writes ?? {})) writeFile(rel, content);
 if (script.commit === true) git('-c', 'user.name=Fake', '-c', 'user.email=fake@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'moved by the fake host');

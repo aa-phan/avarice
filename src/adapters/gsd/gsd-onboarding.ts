@@ -12,10 +12,14 @@ import type {
   GsdAppliedSetting,
   GsdCapabilitySnapshot,
   GsdDriftResult,
+  GsdGraphEdge,
+  GsdGraphNode,
   GsdGraphQueryResult,
   GsdGraphSnapshot,
   GsdGraphStatus,
   GsdIntelDiff,
+  GsdIntelEntry,
+  GsdIntelFileStatus,
   GsdIntelQueryResult,
   GsdIntelStatus,
   GsdIntelValidation,
@@ -35,6 +39,13 @@ const SETTING_KEY = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*$/;
 const SETTING_VALUE = /^[A-Za-z0-9_.-]+$/;
 const MAP_FILE_NAME = /^[A-Z][A-Z_]*\.md$/;
 const ADMITTED_VERSION = /^1\.17\.\d+$/;
+const MAX_MESSAGES = 50;
+const MAX_INTEL_SOURCES = 10;
+const MAX_INTEL_ENTRIES = 100;
+const MAX_GRAPH_NODES = 500;
+const MAX_GRAPH_EDGES = 2000;
+const MAX_GRAPH_BUDGET = 1_000_000;
+const MAX_TERM_CHARS = 200;
 
 // Static capabilities of the 1.17.x surface this adapter drives. `map-paths` and `ingest-docs` exist in GSD
 // but belong to Phase 4, so they are reported false here.
@@ -58,6 +69,16 @@ function strings(value: unknown, limit: number): string[] {
 
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+// A query term goes to GSD as one argv word: it may not look like an option, carry control characters or run on.
+function refuseTerm(term: string): string | null {
+  if (term.trim() === '') return 'empty';
+  if (term.length > MAX_TERM_CHARS) return `longer than ${MAX_TERM_CHARS} characters`;
+  if (term.startsWith('-')) return 'starts with a dash';
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(term)) return 'contains a control character';
+  return null;
 }
 
 function invalid(field: string, reason: string): Result<never> {
@@ -231,24 +252,114 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
     });
   }
 
-  async intelValidate(_staging: string): Promise<Result<GsdIntelValidation>> {
-    return err({ kind: 'internal', cause: 'intel validate is not implemented' });
+  // `intel validate` reads the five intel files and the config; it writes nothing. A disabled capability is a result.
+  async intelValidate(staging: string): Promise<Result<GsdIntelValidation>> {
+    const ran = await this.#run(staging, ['intel', 'validate'], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (d['disabled'] === true) return ok({ disabled: true, valid: false, errors: [], warnings: [] });
+    if (typeof d['valid'] !== 'boolean') return invalid('intel validate valid', 'not a boolean');
+    return ok({ disabled: false, valid: d['valid'], errors: strings(d['errors'], MAX_MESSAGES), warnings: strings(d['warnings'], MAX_MESSAGES) });
   }
 
-  async intelDiff(_staging: string): Promise<Result<GsdIntelDiff>> {
-    return err({ kind: 'internal', cause: 'intel diff is not implemented' });
+  // `intel diff` compares the intel files with the hashes `intel snapshot` saved; it writes nothing.
+  async intelDiff(staging: string): Promise<Result<GsdIntelDiff>> {
+    const ran = await this.#run(staging, ['intel', 'diff'], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    return ok({
+      disabled: d['disabled'] === true,
+      noBaseline: d['no_baseline'] === true,
+      changed: strings(d['changed'], MAX_MESSAGES),
+      added: strings(d['added'], MAX_MESSAGES),
+      removed: strings(d['removed'], MAX_MESSAGES),
+    });
   }
 
-  async intelStatus(_staging: string): Promise<Result<GsdIntelStatus>> {
-    return err({ kind: 'internal', cause: 'intel status is not implemented' });
+  async intelStatus(staging: string): Promise<Result<GsdIntelStatus>> {
+    const ran = await this.#run(staging, ['intel', 'status'], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    const files: Record<string, GsdIntelFileStatus> = {};
+    for (const [name, value] of Object.entries(record(d['files'])).slice(0, MAX_MESSAGES)) {
+      const f = record(value);
+      files[name] = { exists: f['exists'] === true, updatedAt: typeof f['updated_at'] === 'string' ? f['updated_at'] : null, stale: f['stale'] === true };
+    }
+    return ok({ disabled: d['disabled'] === true, files, overallStale: d['overall_stale'] === true });
   }
 
-  async intelQuery(_staging: string, _term: string): Promise<Result<GsdIntelQueryResult>> {
-    return err({ kind: 'internal', cause: 'intel query is not implemented' });
+  // `intel query <term>`: GSD's own search over the intel files' keys and values. A read verb.
+  async intelQuery(staging: string, term: string): Promise<Result<GsdIntelQueryResult>> {
+    const refused = refuseTerm(term);
+    if (refused !== null) return invalid('query term', refused);
+    const ran = await this.#run(staging, ['intel', 'query', term], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (d['disabled'] === true) return ok({ disabled: true, matches: [], total: 0, truncated: false });
+    const matches: GsdIntelQueryResult['matches'] = [];
+    if (Array.isArray(d['matches'])) {
+      for (const match of d['matches'].slice(0, MAX_INTEL_SOURCES)) {
+        const m = record(match);
+        if (typeof m['source'] !== 'string' || !Array.isArray(m['entries'])) continue;
+        const entries: GsdIntelEntry[] = [];
+        for (const entry of m['entries'].slice(0, MAX_INTEL_ENTRIES)) {
+          const e = record(entry);
+          if (typeof e['key'] === 'string') entries.push({ key: e['key'], value: e['value'] });
+        }
+        matches.push({ source: m['source'], entries });
+      }
+    }
+    return ok({ disabled: false, matches, total: count(d['total']), truncated: d['truncated'] === true });
   }
 
-  async graphifyQuery(_staging: string, _term: string, _budget: number): Promise<Result<GsdGraphQueryResult>> {
-    return err({ kind: 'internal', cause: 'graphify query is not implemented' });
+  // `graphify query <term> --budget <n>` is GSD's built-in reader (never the standalone `graphify query`: the two
+  // return different shapes and read `--budget` in different units). It writes nothing. A missing graph is an error.
+  async graphifyQuery(staging: string, term: string, budget: number): Promise<Result<GsdGraphQueryResult>> {
+    const refused = refuseTerm(term);
+    if (refused !== null) return invalid('query term', refused);
+    if (!Number.isSafeInteger(budget) || budget < 0 || budget > MAX_GRAPH_BUDGET) return invalid('graph budget', `${String(budget)} is not an integer from 0 to ${MAX_GRAPH_BUDGET}`);
+    const ran = await this.#run(staging, ['graphify', 'query', term, '--budget', String(budget)], false);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (d['disabled'] === true) return ok({ disabled: true, nodes: [], edges: [], trimmed: null, budgetMet: null, budgetEstimate: null });
+    if (typeof d['error'] === 'string') return err({ kind: 'internal', cause: `graphify query: ${d['error'].slice(0, 200)}` });
+    const nodes: GsdGraphNode[] = [];
+    if (Array.isArray(d['nodes'])) {
+      for (const raw of d['nodes'].slice(0, MAX_GRAPH_NODES)) {
+        const n = record(raw);
+        const id = n['id'];
+        if (typeof id !== 'string' && typeof id !== 'number') continue;
+        nodes.push({
+          id: String(id),
+          label: typeof n['label'] === 'string' ? n['label'] : String(id),
+          fileType: typeof n['file_type'] === 'string' ? n['file_type'] : null,
+          sourceFile: typeof n['source_file'] === 'string' ? n['source_file'] : null,
+          description: typeof n['description'] === 'string' ? n['description'] : null,
+        });
+      }
+    }
+    const edges: GsdGraphEdge[] = [];
+    if (Array.isArray(d['edges'])) {
+      for (const raw of d['edges'].slice(0, MAX_GRAPH_EDGES)) {
+        const e = record(raw);
+        if ((typeof e['source'] !== 'string' && typeof e['source'] !== 'number') || (typeof e['target'] !== 'string' && typeof e['target'] !== 'number')) continue;
+        const tier = e['confidence'];
+        edges.push({
+          source: String(e['source']),
+          target: String(e['target']),
+          relation: typeof e['relation'] === 'string' ? e['relation'] : null,
+          confidence: tier === 'EXTRACTED' || tier === 'INFERRED' || tier === 'AMBIGUOUS' ? tier : null,
+        });
+      }
+    }
+    return ok({
+      disabled: false,
+      nodes,
+      edges,
+      trimmed: typeof d['trimmed'] === 'string' ? d['trimmed'] : null,
+      budgetMet: typeof d['budget_met'] === 'boolean' ? d['budget_met'] : null,
+      budgetEstimate: typeof d['budget_estimate'] === 'number' ? d['budget_estimate'] : null,
+    });
   }
 
   initPlanning(): Result<never> {

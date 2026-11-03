@@ -13,6 +13,8 @@ export interface FakeClaudeScript {
   version?: string;
   transcript?: TranscriptName | null;
   mapFiles?: 'all' | 'fast' | readonly string[];
+  // Write the intel documents on a launch of `--agent gsd-intel-updater`.
+  intel?: boolean;
   stamp?: string | false;
   writes?: Readonly<Record<string, string>>;
   extraLines?: readonly string[];
@@ -44,6 +46,8 @@ export interface FakeClaude {
   startedMarker: string;
   started(): boolean;
   launches(): Launch[];
+  // The launches by purpose: the intel purpose runs with `--agent`, the map purpose without.
+  launchesOf(purpose: 'map' | 'intel'): Launch[];
   argvs(): LoggedArgv[];
   // The environment of each launch.
   envs(): Array<Record<string, string>>;
@@ -69,6 +73,10 @@ export function makeFakeClaude(script: FakeClaudeScript = {}, parent?: string): 
     startedMarker: join(logs, 'started'),
     started: () => existsSync(join(logs, 'started')),
     launches: () => lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch),
+    launchesOf: (purpose) => {
+      const intel = new Set(lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv).filter((a) => a.argv.includes('--agent')).map((a) => a.pid));
+      return lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch).filter((l) => intel.has(l.pid) === (purpose === 'intel'));
+    },
     argvs: () => lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv),
     envs: () => lines(join(logs, 'env.jsonl')).map((l) => JSON.parse(l) as Record<string, string>),
     children: () => lines(join(logs, 'children.log')).map(Number),

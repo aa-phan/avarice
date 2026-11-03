@@ -253,6 +253,8 @@ describe('retry', () => {
       this.hosts = options.map((o) => new FakeAgentHost(o));
     }
     invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
+      // Only the map invocations are sequenced; the intel step (plan 01-17) is not what these tests are about.
+      if (req.purpose !== 'map') return (this.hosts[0] as FakeAgentHost).invoke(req, signal);
       const host = this.hosts[Math.min(this.calls, this.hosts.length - 1)] as FakeAgentHost;
       this.calls += 1;
       return host.invoke(req, signal);

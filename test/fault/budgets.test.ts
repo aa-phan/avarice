@@ -135,7 +135,9 @@ describe('budget rows come from the contract', () => {
     const result = onboard(roots, repo, { costUsd: 0.25 });
     assert.equal(result.code, 0, result.stdout + result.stderr);
     const invocations = row(roots, 'invocations');
-    assert.equal(invocations.used, 1);
+    // The map, and the intel invocation the index step asks for (plan 01-17), which the fake map host cannot serve:
+    // it was reserved and started, so its unit is spent, at no cost.
+    assert.equal(invocations.used, 2);
     assert.equal(invocations.reserved, 0);
     assert.equal(row(roots, 'costUsd').used, 0.25);
     assert.ok(row(roots, 'wallClockMs').used >= 0);

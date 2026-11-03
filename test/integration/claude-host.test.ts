@@ -118,11 +118,12 @@ function invocationDirs(roots: CliRoots): string[] {
 
 describe('onboarding through the real ClaudeHostAdapter and a fake claude', () => {
   it('reaches active, and the invocation directory holds the five generated inputs with modes 0600 and 0700', () => {
-    const s = setup({ transcript: 'success', mapFiles: 'all' });
+    const s = setup({ transcript: 'success', mapFiles: 'all', intel: true });
     const r = onboard(s);
     assert.equal(r.code, 0, r.stdout + r.stderr);
     assert.equal(stateOf(s.roots), 'active');
-    assert.equal(s.fake.launches().length, 1, 'one host launch');
+    assert.equal(s.fake.launchesOf('map').length, 1, 'one map launch');
+    assert.equal(s.fake.launchesOf('intel').length, 1, 'and one intel launch');
 
     const [dir, ...more] = invocationDirs(s.roots);
     assert.ok(dir && more.length === 0, 'one invocation directory under onboard/{onb}/map-{inv}');
@@ -146,6 +147,34 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.deepEqual(policy.subagentTypes, ['gsd-codebase-mapper']);
     assert.equal(policy.commands.preambleSha256, GSD_PREAMBLE_SHA256, "the policy carries the fingerprint of the located GSD's own shim preamble");
     assert.equal(policy.commands.preambleLength, 2573);
+  });
+
+  it('runs the intel purpose through the real adapter: --agent, an agents file with the intel updater only, no skill, and an intel index in the record', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', intel: true });
+    const r = onboard(s);
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    const base = join(s.roots.AVARICE_DATA_ROOT, 'onboard', onboardingId(s.roots));
+    const [dir, ...more] = readdirSync(base).filter((n) => n.startsWith('intel-')).map((n) => join(base, n));
+    assert.ok(dir && more.length === 0, 'one invocation directory under onboard/{onb}/intel-{inv}');
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(dir, 'agents.json'), 'utf8')) as object), ['gsd-intel-updater']);
+    assert.deepEqual(existsSync(join(dir, 'plugin', 'skills')) ? readdirSync(join(dir, 'plugin', 'skills')) : [], [], 'the intel purpose loads no skill');
+    const settings = JSON.parse(readFileSync(join(dir, 'host-settings.json'), 'utf8')) as { sandbox: { enabled: boolean } };
+    assert.equal(settings.sandbox.enabled, true);
+
+    const intelArgv = s.fake.argvs().filter((a) => a.argv.includes('--agent'));
+    assert.equal(intelArgv.length, 1);
+    const argv = intelArgv[0]?.argv ?? [];
+    assert.equal(argv[argv.indexOf('--agent') + 1], 'gsd-intel-updater');
+    assert.equal(argv[argv.indexOf('-p') + 1], 'focus: full; project root: .');
+    const [staging] = rows<{ staging_worktree: string }>(s.roots, 'SELECT staging_worktree FROM onboardings');
+    assert.equal(intelArgv[0]?.cwd, realpathSync(staging?.staging_worktree ?? ''));
+
+    const [record] = rows<{ body_json: string }>(s.roots, 'SELECT body_json FROM project_records ORDER BY version DESC LIMIT 1');
+    const intel = (JSON.parse(record?.body_json ?? '{}') as { indexes: { intel?: { freshness: string; files: number } } }).indexes.intel;
+    assert.deepEqual([intel?.freshness, intel?.files], ['fresh', 5]);
+    const [step] = rows<{ status: string; result_json: string }>(s.roots, "SELECT status, result_json FROM onboarding_steps WHERE step = 'launch:intel'");
+    assert.equal(step?.status, 'completed');
+    assert.equal((JSON.parse(step?.result_json ?? '{}') as { kind: string }).kind, 'progressed');
   });
 
   it('records the contained host as the production agent-host, enforced, in adapter_configs', () => {
@@ -372,8 +401,11 @@ async function inProcess(s: Setup, adapterOptions: Partial<ClaudeHostOptions> = 
   }
 }
 
-const finishedEvents = (roots: CliRoots): Array<Record<string, unknown>> =>
-  rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+// The invocations of one purpose (the map unless told otherwise), oldest first.
+const finishedEvents = (roots: CliRoots, purpose = 'map'): Array<Record<string, unknown>> =>
+  rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq")
+    .map((r) => JSON.parse(r.data_json) as Record<string, unknown>)
+    .filter((event) => event['purpose'] === purpose);
 
 const alive = (pid: number): boolean => {
   try {

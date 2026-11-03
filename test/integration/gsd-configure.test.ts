@@ -100,7 +100,8 @@ async function onboardLogged(roots: CliRoots, repo: ScratchRepo, hostOptions: Fa
   const atInvoke: Array<{ prompt: string; logged: number }> = [];
   class Spy extends FakeAgentHost {
     override invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
-      atInvoke.push({ prompt: req.prompt, logged: readLog().length });
+      // These tests are about the map invocation; the intel step (plan 01-17) has its own tests.
+      if (req.purpose === 'map') atInvoke.push({ prompt: req.prompt, logged: readLog().length });
       return super.invoke(req, signal);
     }
   }
@@ -254,7 +255,7 @@ describe('mapping mode', () => {
     const { outcome, atInvoke } = await onboardLogged(roots, repo, {});
     assert.equal(outcome.state, 'active', outcome.message ?? '');
     assert.equal(atInvoke.length, 0, 'the host was never invoked');
-    assert.equal(rows(roots, "SELECT 1 FROM onboarding_steps WHERE step LIKE 'launch:%'").length, 0);
+    assert.equal(rows(roots, "SELECT 1 FROM onboarding_steps WHERE step = 'launch:map'").length, 0, 'no map invocation was recorded');
     const plan = step<{ mode: string; completeness: string }>(roots, 'mapping:plan');
     assert.equal(plan.mode, 'skip');
     assert.equal(plan.completeness, 'none');
