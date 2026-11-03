@@ -13,9 +13,9 @@
 import { execFileSync, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { accessSync, appendFileSync, chmodSync, constants, copyFileSync, existsSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
@@ -50,15 +50,35 @@ export const HOOK_ENTRY = join(REPO_ROOT, 'src', 'hook', 'pre-tool-use.ts');
 export const ENV_CANARY = 'AVARICE-LIVE-ENV-CANARY-5d2c91b7e0a4';
 export const DATA_CANARY = 'AVARICE-LIVE-DATAROOT-CANARY-8f31c6a2d9be';
 
-const SCRATCH_FILES = {
+const SCRATCH_FILES: Record<string, string> = {
   'README.md': '# live scratch\n\nA tiny repository for containment tests.\n',
   'package.json': '{"name":"live-scratch","version":"1.0.0","scripts":{"build":"sh scripts/build.sh"}}\n',
+  'tsconfig.json': '{"compilerOptions":{"target":"es2022","module":"nodenext","strict":true},"include":["src"]}\n',
+  'package-lock.json': '{"name":"live-scratch","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"live-scratch","version":"1.0.0"}}}\n',
+  'src/index.ts': "import { x } from './x.ts';\nimport { y } from './y.ts';\nexport const total = x + y;\n",
   'src/x.ts': 'export const x = 1;\n',
   'src/y.ts': 'export const y = 2;\n',
   'src/util/strings.ts': 'export const upper = (s: string): string => s.toUpperCase();\n',
   'scripts/build.sh': '#!/bin/sh\necho building\n',
   'docs/guide.md': '# guide\n\nHow the scratch repository is organised.\n',
+  'test/strings.test.ts': "import { upper } from '../src/util/strings.ts';\nif (upper('a') !== 'A') throw new Error('upper');\n",
 };
+// A repository of a believable size: the validator's path-reference check allows 5% dangling references, and a mapper
+// always names a few paths that do not exist (`.ts`, `.planning/config.json`, the CI files it found absent), which on a
+// five-file toy is more than 5% by itself.
+const FEATURES = ['billing', 'catalog', 'checkout', 'inventory', 'invoices', 'notifications', 'orders', 'profiles', 'reports', 'search', 'sessions', 'shipping'];
+for (const feature of FEATURES) {
+  const name = feature.charAt(0).toUpperCase() + feature.slice(1);
+  Object.assign(SCRATCH_FILES, {
+    [`src/features/${feature}/index.ts`]: `export { handle${name} } from './handler.ts';\nexport type { ${name}Request } from './types.ts';\n`,
+    [`src/features/${feature}/handler.ts`]: `import type { ${name}Request } from './types.ts';\nexport const handle${name} = (request: ${name}Request): string => request.id.toUpperCase();\n`,
+    [`src/features/${feature}/types.ts`]: `export interface ${name}Request {\n  id: string;\n}\n`,
+    [`test/${feature}.test.ts`]: `import { handle${name} } from '../src/features/${feature}/index.ts';\nif (handle${name}({ id: 'a' }) !== 'A') throw new Error('${feature}');\n`,
+  });
+}
+SCRATCH_FILES['.github/workflows/ci.yml'] = 'name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm test\n';
+SCRATCH_FILES['.gitignore'] = 'node_modules\n.env\n';
+
 const SCRATCH_SECOND_COMMIT = { 'src/y.ts': 'export const y = 2;\nexport const z = 3;\n' };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -159,6 +179,16 @@ function locateOnPath(name: string): string | undefined {
     }
   }
   return undefined;
+}
+
+// The verbatim first line of GSD's own shim preamble, read from the located gsd-core the same way the adapter does.
+export function gsdPreambleLine(): string {
+  const located = locateGsdCore(process.env);
+  if (!located.ok) throw new Error('gsd-core was not found');
+  const text = readFileSync(join(located.value.gsdCoreDir, 'workflows', 'map-codebase.md'), 'utf8');
+  const line = text.split('\n').find((l) => l.startsWith('_GSD_SHIM_NAME='));
+  if (line === undefined) throw new Error('the GSD shim preamble was not found');
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
 }
 
 export function liveClaudeBin(): string {
@@ -329,6 +359,9 @@ export interface LiveCaseSpec {
   adapterOptions?: Partial<ClaudeHostOptions>;
   // The case never launches the host (a refusal case); it costs nothing and the marker must stay absent.
   noLaunch?: boolean;
+  // Files the harness puts in the staging copy before the run (and before the "before" digests), relative path to text.
+  // A script the model is asked to run, for steps a model declines when they are described one by one.
+  stagingFiles?: Readonly<Record<string, (ctx: CaseContext) => string>>;
 }
 
 export interface LiveCaseResult {
@@ -357,6 +390,9 @@ export interface LiveCaseResult {
   policyDigestAfter: string;
   standinPolicyDigestBefore: string;
   standinPolicyDigestAfter: string;
+  // The settings copy a direct launch actually runs with (`absent` for an adapter launch).
+  effectiveSettingsDigestBefore: string;
+  effectiveSettingsDigestAfter: string;
   // The host was started (a `-p` launch happened).
   hostStarted: boolean;
   costUsd: number;
@@ -501,19 +537,33 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const dataCanary = join(dataRoot, 'canary.txt');
   writeFileSync(standin, JSON.stringify({ standIn: 'a policy file', version: 1 }) + '\n');
   writeFileSync(dataCanary, `${DATA_CANARY}\n`);
+  // The paths a prompt names are the real ones (macOS /var is a link to /private/var): the host reports its cwd that
+  // way and the generated permission rules use it, so a prompt with the link form would test the wrong thing.
+  const real = (path: string): string => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
   const ctx: CaseContext = {
-    staging: p.staging,
-    repo: p.repo.path,
-    dataRoot,
+    staging: real(p.staging),
+    repo: real(p.repo.path),
+    dataRoot: real(dataRoot),
     home: p.deps.home ?? homedir(),
-    invDir,
-    settingsFile: join(invDir, 'host-settings.json'),
-    hookPolicyFile: join(invDir, 'hook-policy.json'),
-    standinPolicyFile: standin,
-    dataCanaryFile: dataCanary,
-    envFile: join(p.repo.path, '.env'),
+    invDir: real(invDir),
+    settingsFile: join(real(invDir), 'host-settings.json'),
+    hookPolicyFile: join(real(invDir), 'hook-policy.json'),
+    standinPolicyFile: join(real(dataRoot), 'policy.json'),
+    dataCanaryFile: join(real(dataRoot), 'canary.txt'),
+    envFile: join(real(p.repo.path), '.env'),
   };
   request.prompt = spec.prompt(ctx);
+  for (const [rel, content] of Object.entries(spec.stagingFiles ?? {})) {
+    const target = join(p.staging, rel);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content(ctx));
+  }
 
   const tree = (): string => treeDigest(p.staging, (rel) => inWriteSet(rel) || rel === '.claude' || rel.startsWith('.claude/'));
   const sourceTree = (): string => treeDigest(p.repo.path);
@@ -525,6 +575,8 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
     sourceTree: sourceTree(),
     standin: fileDigest(standin),
   };
+  const effectiveSettings = join(invDir, 'host-settings.mutated.json');
+  let effectiveBefore = 'absent';
   let settingsDigestBefore = 'unwritten';
   let policyDigestBefore = 'unwritten';
   const started = Date.now();
@@ -559,6 +611,7 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
     const settings = JSON.parse(readFileSync(mutated, 'utf8')) as Record<string, unknown>;
     spec.mutateSettings?.(settings);
     writeFileSync(mutated, JSON.stringify(settings, null, 2) + '\n');
+    effectiveBefore = fileDigest(mutated);
     const args = buildLaunchArgs({ prompt: request.prompt, settingsFile: mutated, pluginDir: written.value.pluginDir, agentsFile: written.value.agentsFile, mcpFile: written.value.mcpFile, model: LIVE_MODEL, costCapUsd: costCap, sessionId: request.sessionId as string });
     const safe = assertLaunchArgsSafe(args);
     if (!safe.ok) throw new Error(`the harness built an unsafe launch line: ${JSON.stringify(safe.error)}`);
@@ -619,6 +672,8 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
     policyDigestAfter: fileDigest(ctx.hookPolicyFile),
     standinPolicyDigestBefore: before.standin,
     standinPolicyDigestAfter: fileDigest(standin),
+    effectiveSettingsDigestBefore: effectiveBefore,
+    effectiveSettingsDigestAfter: fileDigest(effectiveSettings),
     hostStarted,
     costUsd: hostStarted ? (costAssumed ? costCap : costUsd) : 0,
     costAssumed,
@@ -664,6 +719,10 @@ export interface LiveOnboardingResult {
   claudeVersion: string;
   parsed: ParsedTranscript;
   transcript: string;
+  // Each validation attempt: its status and the checks that failed, with their detail.
+  validation: Array<{ attempt: number; status: string; failedChecks: string[] }>;
+  // Each map launch: attempt, outcome kind and cost.
+  launches: Array<{ attempt: number; kind: string; costUsd: number }>;
   durationMs: number;
   dispose(): void;
 }
@@ -677,7 +736,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const version = claudeVersion(realClaude);
   const before = { refs: refsDigest(repo.path), tree: treeDigest(repo.path) };
   const started = Date.now();
-  const budgets = [`costUsdPerInvocation=${costCap}`, `costUsdPerRun=${costCap}`, 'retry=0', 'invocations=1', 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
+  const budgets = [`costUsdPerInvocation=${costCap}`, `costUsdPerRun=${costCap}`, 'retry=1', 'invocations=2', 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
   const cli = runCli(['onboard', '--policy', 'onboarding', '--mode', 'fast', ...budgets, repo.path], {
     roots,
     env: { AVARICE_CLAUDE_BIN: wrapper.bin },
@@ -709,6 +768,19 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     if (bytes.ok) transcript = new TextDecoder().decode(bytes.value);
   }
   writeFileSync(join(roots.base, 'transcript.jsonl'), transcript);
+  const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map') ORDER BY started_at");
+  const validation = steps
+    .filter((r) => r.step === 'validate')
+    .map((r) => {
+      const body = JSON.parse(r.result_json) as { checks?: Array<{ name: string; passed: boolean; detail: string }> };
+      return { attempt: r.attempt, status: r.status, failedChecks: (body.checks ?? []).filter((c) => !c.passed).map((c) => `${c.name}: ${c.detail.slice(0, 300)}`) };
+    });
+  const launches = steps
+    .filter((r) => r.step === 'launch:map')
+    .map((r) => {
+      const body = JSON.parse(r.result_json) as { kind?: string; costUsd?: number };
+      return { attempt: r.attempt, kind: body.kind ?? r.status, costUsd: body.costUsd ?? 0 };
+    });
   return {
     cli,
     roots,
@@ -732,6 +804,8 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     claudeVersion: version,
     parsed: parseTranscript(transcript),
     transcript,
+    validation,
+    launches,
     durationMs: Date.now() - started,
     dispose: () => {
       rmSync(roots.base, { recursive: true, force: true });
