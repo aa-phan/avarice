@@ -289,14 +289,34 @@ describe('validateKnowledgeGraph: the corpus never holds .planning/STATE.md or p
   });
 });
 
-// Open finding MF-03 (01-MUTATION.md): the cap counts the string-valued fields of a node, so text held in a nested array or
-// object field of a knowledge-pass node is not counted. Left as a todo until the owner decides whether the cap is on all
-// strings of a node (spec: "each node's text is under a size cap") or on the flat fields the skill writes.
-describe('open finding MF-03: nested node text and the 2 KiB cap', () => {
-  it('counts text held in a nested field of a document node toward the cap', { todo: 'MF-03: textBytes counts top-level string fields only' }, () => {
+// MF-03 (01-MUTATION.md, fixed in 01-20): the cap of docs/repository-onboarding.md "Validation" is on "each node's text", so every string
+// value of a knowledge-pass node counts, whatever its depth, in the same way the flat fields did. Object keys are names, not text, and are
+// not counted. The code did not distinguish structural ids from text before (id, source_file and the like were already counted at the top
+// level), so the rule stays "all string values".
+describe('MF-03: nested node text and the 2 KiB cap', () => {
+  const cap = KNOWLEDGE_LIMITS.nodeTextBytes;
+  const problemFor = (mutate: (node: Json) => void): string => {
     const { graph, stats } = mergedFixture();
-    const nested = clone(graph);
-    (byId(nested, 'docs_guide') as Json)['notes'] = ['x'.repeat(KNOWLEDGE_LIMITS.nodeTextBytes + 1)];
-    assert.match(problemsOf(validate(nested, stats)).join('\n'), /docs_guide.*2048/);
+    const copy = clone(graph);
+    mutate(byId(copy, 'docs_guide') as Json);
+    return problemsOf(validate(copy, stats)).join('\n');
+  };
+
+  it('counts text held in a nested field of a document node toward the cap', () => {
+    assert.match(problemFor((node) => (node['notes'] = ['x'.repeat(cap + 1)])), /docs_guide.*2048/);
+    assert.match(problemFor((node) => (node['notes'] = { summary: { text: 'x'.repeat(cap + 1) } })), /docs_guide.*2048/);
+  });
+
+  it('adds the strings of an array and of several levels to one total', () => {
+    const half = 'y'.repeat(cap / 2);
+    assert.match(problemFor((node) => (node['notes'] = [half, [half, { deep: 'z' }]])), /docs_guide: text is \d+ bytes, above the 2048 limit/);
+  });
+
+  it('counts bytes, not characters, in a nested string', () => {
+    assert.match(problemFor((node) => (node['notes'] = ['é'.repeat(cap / 2 + 1)])), /docs_guide.*2048/);
+  });
+
+  it('does not count object keys, numbers or nested text under the cap', () => {
+    assert.equal(problemFor((node) => (node['notes'] = { ['k'.repeat(cap + 1)]: 1, count: 12345, flag: true, none: null, tags: ['a', 'b'] })), '');
   });
 });
