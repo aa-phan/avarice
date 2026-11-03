@@ -194,18 +194,41 @@ describe('command identity: deny beats allow, and the GSD preamble ends at a lin
   });
 });
 
-// Open finding MF-04 (01-MUTATION.md): the hook's shell read check compares each word as a literal path, so an unquoted glob or
-// brace expansion names a path the check never sees. The sandbox denyRead (docs/containment.md, coverage matrix row 2) is what stops
-// the read; the hook layer does not. Left as a todo until the owner decides how to refuse unquoted expansion characters without
-// refusing the quoted `find -name '*.ts'` form.
-describe('open finding MF-04: shell expansion characters and the hook read check', () => {
-  it('denies a shell read that names a denied directory through an unquoted brace or glob expansion', { todo: 'MF-04: the hook allows cat /denied/.s{s,s}h/id_rsa' }, () => {
+// MF-04 (01-MUTATION.md, fixed in 01-20): the shell read check compares each word as a literal path, so an unquoted glob or brace
+// expansion would name a path the check never sees. Any read-command word with an unquoted `*`, `?`, `[` or `{` is refused with rule
+// shell-syntax (fail closed). Quoted text is literal to the shell and keeps its treatment (`find . -name '*.ts'`).
+describe('MF-04: shell expansion characters and the hook read check', () => {
+  const denied = (fx: HookFixture, command: string): string =>
+    ((d) => `${d.decision}:${d.rule}`)(decideToolCall(shell(fx, command), fx.policy, canonicalAbsolute));
+
+  it('denies a shell read that names a denied directory through an unquoted brace or glob expansion', () => {
     const fx = fixture();
     // <dir>/repo is a denied root; each spelling below expands to a file under it.
-    for (const command of [`cat ${fx.dir}/re{po,xx}/x`, `cat ${fx.dir}/re*/x`, `cat ${fx.dir}/rep?/x`]) {
-      const decision = decideToolCall(shell(fx, command), fx.policy, canonicalAbsolute);
-      assert.equal(decision.decision, 'deny', command);
+    for (const command of [`cat ${fx.dir}/re{po,xx}/x`, `cat ${fx.dir}/re*/x`, `cat ${fx.dir}/rep?/x`, `cat ${fx.dir}/rep[o]/x`]) {
+      assert.equal(denied(fx, command), 'deny:shell-syntax', command);
     }
+  });
+
+  it('refuses each of the four characters in any read command, in any position and in any segment of a pipeline', () => {
+    const fx = fixture();
+    for (const command of ['ls *', 'ls src/?.ts', 'cat src/[ab].ts', 'cat {a,b}', 'head -n 3 src/*.ts', 'grep -rn foo --include=*.ts src', 'git log -- *.ts', 'cat src/a.ts | grep x*', 'wc -l src/a*', 'ls "src"/*']) {
+      assert.equal(denied(fx, command), 'deny:shell-syntax', command);
+    }
+  });
+
+  it('keeps the quoted forms: the shell does not expand inside quotes', () => {
+    const fx = fixture();
+    for (const command of ["find . -name '*.ts' -print", 'find . -name "*.ts" -print', 'grep -rn "a[b]c" src', "grep -rn 'x{1,2}' src", 'grep -rn "who?" src', "ls 'my dir'"]) {
+      assert.equal(denied(fx, command), 'allow:shell-identity', command);
+    }
+  });
+
+  it('keeps the hook allowing the GSD preamble and the gsd_run read verbs it admits today', () => {
+    const fx = fixture();
+    for (const line of ['gsd_run graphify status', 'gsd_run query init.map-codebase --raw', 'gsd_run intel status | head -5', 'INIT=$(gsd_run query init.map-codebase)']) {
+      assert.equal(denied(fx, `${PREAMBLE}\n${line}`), 'allow:shell-identity', line);
+    }
+    assert.equal(denied(fx, PREAMBLE), 'allow:shell-identity');
   });
 });
 
