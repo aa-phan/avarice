@@ -98,7 +98,7 @@ describe('budget rows come from the contract', () => {
     runWithFault(roots, repo, 'after-transition:contract_proposed');
     const budgets = budgetsOf(roots);
     assert.deepEqual(Object.keys(budgets).sort(), ['costUsd', 'invocations', 'subagentsTotal', 'toolCalls', 'wallClockMs']);
-    assert.equal(budgets['invocations']?.limit_value, 4);
+    assert.equal(budgets['invocations']?.limit_value, 6, 'a full map with its retry and interruption relaunches (4), intel (1) and knowledge (1)');
     assert.equal(budgets['toolCalls']?.limit_value, 600);
     assert.equal(budgets['subagentsTotal']?.limit_value, 18, 'a full map (4) and its retry (4), plus the knowledge pass (10)');
     assert.equal(budgets['wallClockMs']?.limit_value, 45 * 60_000);

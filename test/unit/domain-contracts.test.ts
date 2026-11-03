@@ -331,6 +331,68 @@ describe('the subagent budget derives from the mapping mode', () => {
   });
 });
 
+const FULL_INVOCATIONS = {
+  mode: 'full',
+  mapInvocations: 1,
+  mapRounds: 2,
+  interruptionAllowance: 2,
+  intelInvocations: 1,
+  knowledgeInvocations: 1,
+  total: 6,
+  formula: '1 map invocation (full) x 2 map rounds (1 + 1 retry) + 2 interruption relaunches (1 per map round) + 1 intel + 1 knowledge = 6',
+};
+
+// Plan 01-19 (user decision): the flat preset of 4 invocations could not hold the exit run's kill (a killed invocation stays
+// charged), a map retry, intel and knowledge. The count derives from the mapping mode and the retry limit, like the subagent total.
+describe('the invocation budget derives from the mapping mode', () => {
+  const budgets = (request: Record<string, unknown>) => unwrap(compileOnboardingContract(contractInput(request))).budgets;
+  const derivation = (request: Record<string, unknown>) => (budgets(request) as unknown as { invocationsDerivation: unknown }).invocationsDerivation;
+
+  it('full (and the default): 1 x 2 + 2 + 1 + 1 = 6, recorded with its formula beside subagentsDerivation', () => {
+    assert.equal(budgets({}).invocations, 6);
+    assert.equal(budgets({ mode: 'full' }).invocations, 6);
+    assert.deepEqual(derivation({}), FULL_INVOCATIONS);
+  });
+
+  it('fast and paths run one mapper invocation per round, so 6 as well; skip and adopt map nothing: 0 + 1 + 1 + 1 = 3', () => {
+    assert.equal(budgets({ mode: 'fast' }).invocations, 6);
+    assert.equal(budgets({ mode: 'paths' }).invocations, 6);
+    assert.equal(budgets({ mode: 'skip' }).invocations, 3);
+    assert.equal(budgets({ mode: 'adopt' }).invocations, 3);
+    assert.deepEqual(derivation({ mode: 'skip' }), {
+      mode: 'skip',
+      mapInvocations: 0,
+      mapRounds: 2,
+      interruptionAllowance: 1,
+      intelInvocations: 1,
+      knowledgeInvocations: 1,
+      total: 3,
+      formula: '0 map invocation (skip) x 2 map rounds (1 + 1 retry) + 1 interruption relaunches (1 for a run with no mapper) + 1 intel + 1 knowledge = 3',
+    });
+  });
+
+  it('a retry override changes the rounds: no retry is 1 x 1 + 1 + 1 + 1 = 4', () => {
+    assert.equal(budgets({ budgetOverrides: { retry: 0 } }).invocations, 4);
+    assert.equal(budgets({ mode: 'skip', budgetOverrides: { retry: 0 } }).invocations, 3);
+  });
+
+  it('an override can only lower it: below and at the derived value is used, above is refused, per mode', () => {
+    assert.equal(budgets({ budgetOverrides: { invocations: 3 } }).invocations, 3);
+    assert.equal(budgets({ budgetOverrides: { invocations: 6 } }).invocations, 6);
+    assert.equal(budgets({ budgetOverrides: { invocations: 0 } }).invocations, 0);
+    assert.deepEqual(derivation({ budgetOverrides: { invocations: 3 } }), FULL_INVOCATIONS, 'the record keeps the derived value, not the override');
+    for (const [mode, above] of [['full', 7], ['fast', 7], ['skip', 4], ['adopt', 4]] as const) {
+      const r = compileOnboardingContract(contractInput({ mode, budgetOverrides: { invocations: above } }));
+      assert.equal(r.ok, false, `${mode} ${above}`);
+      if (!r.ok && r.error.kind === 'invalid') {
+        assert.equal(r.error.field, 'request.budgetOverrides.invocations');
+        assert.match(r.error.reason, new RegExp(`budgets can only be lowered: ${above} is above the ${above - 1} derived for mapping mode ${mode}`));
+      }
+    }
+    assert.equal(compileOnboardingContract(contractInput({ budgetOverrides: { retry: 0, invocations: 5 } })).ok, false, 'the ceiling follows the contract\'s own rounds');
+  });
+});
+
 describe('compileOnboardingContract', () => {
   it('default body carries the onboarding preset values from repository-onboarding.md', () => {
     const c = unwrap(compileOnboardingContract(contractInput()));
@@ -356,7 +418,8 @@ describe('compileOnboardingContract', () => {
     assert.deepEqual(c.budgets, {
       wallClockMinutes: 45,
       wallClockShares: { map: 20, intel: 10, knowledge: 15 },
-      invocations: 4,
+      invocations: 6,
+      invocationsDerivation: FULL_INVOCATIONS,
       toolCalls: 600,
       subagentsConcurrent: 4,
       subagentsTotal: 18,
@@ -399,7 +462,7 @@ describe('compileOnboardingContract', () => {
   it('accepts a budget override at or below the preset and uses it', () => {
     const lowered = unwrap(compileOnboardingContract(contractInput({ budgetOverrides: { toolCalls: 300 } })));
     assert.equal(lowered.budgets.toolCalls, 300);
-    assert.equal(lowered.budgets.invocations, 4);
+    assert.equal(lowered.budgets.invocations, 6);
     const equal = unwrap(compileOnboardingContract(contractInput({ budgetOverrides: { toolCalls: 600 } })));
     assert.equal(equal.budgets.toolCalls, 600);
   });
@@ -408,7 +471,7 @@ describe('compileOnboardingContract', () => {
     for (const overrides of [
       { toolCalls: 999999 },
       { toolCalls: 601 },
-      { invocations: 5 },
+      { invocations: 7 },
       { wallClockMinutes: 46 },
       { subagentsTotal: 19 },
       { costUsdPerInvocation: 3.01 },
