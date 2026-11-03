@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-11-03T01:36:45.027Z"
+stopped_at: Completed 01-16-PLAN.md (T3 case 14 open gate)
+last_updated: "2026-11-03T02:38:29.029Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: e418fd3fdd8af1b8be97c02406acdf8e8565e3f8
+state_head: f3ab0db9b0e299f6a7d8b54452ccde5c9ee46699
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 16 of 20
+Plan: 17 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P13 | 25 min | 2 tasks | 18 files |
 | Phase 01 P14 | 22 min | 2 tasks | 24 files |
 | Phase 01 P15 | 25 min | 2 tasks | 29 files |
+| Phase 01 P16 | 95 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: An inconclusive host ending goes to validation so the retry rule applies once; denied, failed and no_progress block with a decision and are never retried
 - [Phase 01]: The caller chooses the invocation session ID and records it in the launch step before launch, so resume can reap a surviving host by --session-id; the adapter reads the GSD preamble fingerprint from the located gsd-core and the unavailable host is kept when it is missing
 - [Phase 01]: runCli defaults AVARICE_CLAUDE_BIN to a missing binary so no test launches a real claude; env knobs never replace the sandbox probe or the hook self-test
+- [Phase 01]: The T3 live containment run (plan 01-16) found 0 containment failures on Claude Code 2.1.316 (20 live cases) at 0.2635 of 5.80 USD; case 14 (real fast onboarding) is blocked by validation path-references, a validator tolerance decision left to the owner or 01-19
+- [Phase 01]: Live T3 harness drives the real ClaudeHostAdapter on the request the real onboarding stages produce, with the hook removed from a settings copy for defense-in-depth and missing-hook cases
+- [Phase 01]: The stream-json parser reads decision_reason_type from the real system/permission_denied event
 
 ### Pending Todos
 
@@ -160,6 +164,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Init]: No `.planning/config.json` yet (granularity, phase ID convention, workflow toggles).
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
+- T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
 
 ## Deferred Items
 
@@ -171,6 +176,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T01:36:45.006Z
-Stopped at: Completed 01-15-PLAN.md
+Last session: 2026-11-03T02:38:03.118Z
+Stopped at: Completed 01-16-PLAN.md (T3 case 14 open gate)
 Resume file: None

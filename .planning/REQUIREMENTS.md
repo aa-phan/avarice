@@ -60,11 +60,11 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 ### Containment (CON-1 to CON-16)
 
 - [ ] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
-- [ ] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
-- [ ] **CON-3** [MVP]: Required enforcement fails closed: missing configuration, invalid policy, enforcement timeout or crash blocks the protected operation.
+- [x] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
+- [x] **CON-3** [MVP]: Required enforcement fails closed: missing configuration, invalid policy, enforcement timeout or crash blocks the protected operation.
 - [ ] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
-- [ ] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
-- [ ] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
+- [x] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
+- [x] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
 - [ ] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
 - [ ] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
 - [ ] **CON-9** [MVP]: Recovery never resets or deletes changes the run did not make and never claims external effects were rolled back.
@@ -102,7 +102,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
 - [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [x] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
-- [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
+- [x] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [x] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
 - [ ] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
@@ -248,11 +248,11 @@ Each v1 requirement maps to exactly one phase.
 | RC-7 | Phase 3 | Pending |
 | RC-8 | Phase 3 | Pending |
 | CON-1 | Phase 2 | Pending |
-| CON-2 | Phase 2 | Pending |
-| CON-3 | Phase 2 | Pending |
+| CON-2 | Phase 2 | Complete |
+| CON-3 | Phase 2 | Complete |
 | CON-4 | Phase 4 | Pending |
-| CON-5 | Phase 2 | Pending |
-| CON-6 | Phase 2 | Pending |
+| CON-5 | Phase 2 | Complete |
+| CON-6 | Phase 2 | Complete |
 | CON-7 | Phase 2 | Pending |
 | CON-8 | Phase 2 | Pending |
 | CON-9 | Phase 2 | Pending |
@@ -284,7 +284,7 @@ Each v1 requirement maps to exactly one phase.
 | ONB-2 | Phase 1 | Complete |
 | ONB-3 | Phase 1 | Complete |
 | ONB-4 | Phase 1 | Complete |
-| ONB-5 | Phase 1 | Pending |
+| ONB-5 | Phase 1 | Complete |
 | ONB-6 | Phase 4 | Pending |
 | ONB-7 | Phase 1 | Complete |
 | ONB-8 | Phase 1 | Pending |
