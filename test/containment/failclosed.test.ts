@@ -177,11 +177,17 @@ describe('launch preflight refuses (no launch)', () => {
     assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:hook-not-blocking');
   });
 
-  // Open finding MF-02 (01-MUTATION.md): the required-key list omits sandbox.network.strictAllowlist, which docs/containment.md
-  // ("Generated host settings") shows as true. Left as a todo until the owner decides whether the preflight checks it.
-  it('when the sandbox network allowlist is not strict', { todo: 'MF-02: sandbox.network.strictAllowlist is not a required settings key' }, () => {
-    const file = settingsFile((s) => (s.sandbox.network.strictAllowlist = false));
-    assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:settings-key:sandbox.network.strictAllowlist');
+  // MF-02 (01-MUTATION.md, fixed in 01-20): docs/containment.md ("Generated host settings") shows `strictAllowlist: true`, so a settings
+  // file without it is not the generated one. Absent, false and a non-boolean value each refuse.
+  it('when the sandbox network allowlist is not strict', () => {
+    for (const edit of [
+      (s: Record<string, any>) => (s.sandbox.network.strictAllowlist = false),
+      (s: Record<string, any>) => delete s.sandbox.network.strictAllowlist,
+      (s: Record<string, any>) => (s.sandbox.network.strictAllowlist = 'true'),
+    ]) {
+      const file = settingsFile(edit);
+      assert.equal(refusal(checkLaunchReady({ settingsFile: file, claudeBin: claude().bin, sandboxProbe: PROBE_OK })), 'enforcement_failure:settings-key:sandbox.network.strictAllowlist');
+    }
   });
 
   it('when the ConfigChange hook is missing', () => {
