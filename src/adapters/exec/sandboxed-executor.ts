@@ -76,6 +76,27 @@ function killGroup(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
+// After SIGKILL a member can sit in the exiting state, reparented to launchd and not yet reaped; macOS answers
+// EPERM for it rather than ESRCH. run() resolves only once the group is gone, or after this bound.
+const GROUP_GONE_WAIT_MS = 2000;
+const GROUP_POLL_MS = 25;
+
+function groupGone(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+}
+
+async function waitGroupGone(pid: number): Promise<void> {
+  const deadline = Date.now() + GROUP_GONE_WAIT_MS;
+  while (!groupGone(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, GROUP_POLL_MS));
+  }
+}
+
 export class SandboxedExecutor implements CommandExecutor {
   readonly #sandboxExecPath: string;
 
@@ -155,16 +176,15 @@ export class SandboxedExecutor implements CommandExecutor {
         if (child.pid !== undefined) killGroup(child.pid, 'SIGKILL');
         const out = text(stdout);
         const errText = spawnError !== undefined ? spawnError : text(stderr);
+        let result: Result<CommandResult>;
         if (spawnError === undefined && exit !== undefined && ended === undefined && exit.code !== null && SANDBOX_EXEC_FAILURES.has(exit.code) && errText.startsWith('sandbox-exec:')) {
-          resolve(err({ kind: 'unavailable', cause: `the sandbox refused the command: ${errText.split('\n')[0] ?? ''}` }));
-          return;
-        }
-        let status: CommandStatus;
-        if (spawnError !== undefined) status = 'spawn_error';
-        else if (ended !== undefined) status = ended;
-        else status = exit !== undefined && exit.code === 0 ? 'passed' : 'failed';
-        resolve(
-          ok({
+          result = err({ kind: 'unavailable', cause: `the sandbox refused the command: ${errText.split('\n')[0] ?? ''}` });
+        } else {
+          let status: CommandStatus;
+          if (spawnError !== undefined) status = 'spawn_error';
+          else if (ended !== undefined) status = ended;
+          else status = exit !== undefined && exit.code === 0 ? 'passed' : 'failed';
+          result = ok({
             exitCode: exit?.code ?? null,
             signal: exit?.signal ?? null,
             status,
@@ -172,8 +192,10 @@ export class SandboxedExecutor implements CommandExecutor {
             stdout: out,
             stderr: errText,
             truncated: stdout.truncated || stderr.truncated,
-          }),
-        );
+          });
+        }
+        if (child.pid === undefined) resolve(result);
+        else void waitGroupGone(child.pid).then(() => resolve(result));
       };
 
       const terminate = (reason: 'timed_out' | 'cancelled'): void => {
