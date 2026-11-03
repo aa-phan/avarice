@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-17-PLAN.md
-last_updated: "2026-11-03T03:17:03.994Z"
+stopped_at: Completed 01-18-PLAN.md
+last_updated: "2026-11-03T05:29:01.223Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: a4f9e4271f9862526c162c0170b213f0868d2a82
+state_head: 7718182c136e62f8286d8f2b1dc3cedab47cd480
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 18 of 20
+Plan: 19 of 20
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 01 execution started
 
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P15 | 25 min | 2 tasks | 29 files |
 | Phase 01 P16 | 95 min | 3 tasks | 8 files |
 | Phase 01 P17 | 60 min | 2 tasks | 28 files |
+| Phase 01 P18 | 33 min | 2 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: Live T3 harness drives the real ClaudeHostAdapter on the request the real onboarding stages produce, with the hook removed from a settings copy for defense-in-depth and missing-hook cases
 - [Phase 01]: The stream-json parser reads decision_reason_type from the real system/permission_denied event
 - [Phase 01]: 01-17: intel prompt is 'focus: full; project root: .' (S0-D form); intel accepted only when intel validate and intel diff pass; context sources are stateless and take the staging path in the query; non-code graph nodes are fenced as untrusted data; intel gets at most half the context budget
+- [Phase 01]: 01-18: the merge lowers an EXTRACTED document edge to INFERRED (never raises a tier); expectedFiles for the knowledge pass is staging-relative (.avarice-knowledge/graphify-out/graph.json); general-purpose subagent admitted for the knowledge purpose only
+- [Phase 01]: 01-18: a rejected merged graph is replaced by the code-only graph from the code step's build directory; the record states the merged node and edge counts next to the merged digest
 
 ### Pending Todos
 
@@ -178,6 +181,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T03:17:03.972Z
-Stopped at: Completed 01-17-PLAN.md
+Last session: 2026-11-03T05:29:01.196Z
+Stopped at: Completed 01-18-PLAN.md
 Resume file: None

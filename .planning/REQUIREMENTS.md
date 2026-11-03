@@ -38,7 +38,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-17** [Contract]: Provider-specific features are reachable through namespaced extensions and do not widen the core port.
 - [ ] **FR-18** [Contract]: External references keep the provider's original identifiers; AVARICE mints no global identity that loses provenance.
 - [ ] **FR-19** [MVP]: Every external integration has a manual equivalent: paste a ticket, paste CI output, record an approval by hand.
-- [ ] **FR-20** [MVP]: Context assembly queries a fresh structured index (GSD intel and the GSD-managed graph, including document nodes) before reading whole files or sections, and ranks model-inferred graph edges below edges extracted from code.
+- [x] **FR-20** [MVP]: Context assembly queries a fresh structured index (GSD intel and the GSD-managed graph, including document nodes) before reading whole files or sections, and ranks model-inferred graph edges below edges extracted from code.
 - [ ] **FR-21** [Later]: Project records may belong to a project group that shares references to standards and scaffolds; membership never widens any member's authority.
 - [ ] **FR-22** [MVP]: Retrieval is handle-first (handles with token estimates before content; the assembler chooses within budget), and graph reads follow a rule per edge type: containment loads descendants, dependency one hop, reference only the target's ID.
 - [ ] **FR-24** [Later]: Each machine that runs work for a profile has a host record (identity, capability descriptor, status); a host is not deactivated while an active project or run depends on it.
@@ -232,7 +232,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-17 | Phase 4 | Pending |
 | FR-18 | Phase 4 | Pending |
 | FR-19 | Phase 4 | Pending |
-| FR-20 | Phase 1 | Pending |
+| FR-20 | Phase 1 | Complete |
 | FR-21 | Phase 8 | Pending |
 | FR-22 | Phase 4 | Pending |
 | FR-24 | Phase 7 | Pending |
