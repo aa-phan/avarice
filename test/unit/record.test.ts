@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { narrowProposals } from '../../src/domain/policy-narrowing.ts';
 import type { PolicyPaths } from '../../src/domain/policy-narrowing.ts';
-import { buildProjectRecord, recordDigest } from '../../src/domain/project-record.ts';
+import { buildProjectRecord, foldIndexResults, recordDigest } from '../../src/domain/project-record.ts';
+import type { IndexStepResult } from '../../src/domain/project-record.ts';
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
 
 const POLICY: PolicyPaths = {
@@ -167,6 +168,109 @@ describe('buildProjectRecord: the complete body', () => {
     assert.equal(recordDigest(r), recordDigest(shuffled));
     const withFinding = buildProjectRecord(recordInput({ gsd: { config: { b: 1, a: 2 } }, findings: [{ source: 'validation', field: 'x', reason: 'y' }] }));
     assert.notEqual(recordDigest(r), recordDigest(withFinding));
+  });
+});
+
+const GRAPH_RESULT = {
+  path: '.planning/graphs/graph.json',
+  codeGraphPath: '.planning/graphs/code-graph.json',
+  digest: 'sha256:c41d',
+  builtAtCommit: 'git:4f2c9e1',
+  tool: 'graphify@0.9.53',
+  freshness: 'fresh',
+  nodes: { code: 996, concept: 55, document: 0 },
+  edges: { EXTRACTED: 1232, INFERRED: 25 },
+};
+const INTEL_RESULT = { path: '.planning/intel/', digest: 'sha256:77b0', refreshedAtCommit: 'git:4f2c9e1', freshness: 'fresh', files: 6 };
+const KNOWLEDGE_RESULT = {
+  graphDigest: 'sha256:9a9a',
+  knowledge: { corpus: ['.planning/codebase/'], documentsCommit: 'git:4f2c9e1', documentNodes: 12 },
+};
+
+describe('foldIndexResults: how stored index step results become the record indexes (plan 01-14)', () => {
+  const present = (index: IndexStepResult['index'], result: Record<string, unknown>): IndexStepResult => ({ index, status: 'present', result });
+  const absent = (index: IndexStepResult['index'], reason: string): IndexStepResult => ({ index, status: 'absent', reason });
+
+  it('puts a present code graph under indexes.graph with its counts and build commit', () => {
+    const folded = foldIndexResults([present('code-graph', GRAPH_RESULT), absent('intel', 'not-built-in-this-build'), absent('knowledge', 'not-built-in-this-build')]);
+    assert.deepEqual(folded.graph, GRAPH_RESULT);
+    assert.equal(folded.graph?.nodes['document'], 0);
+    assert.equal(folded.intel, undefined);
+  });
+
+  it('puts a present intel index under indexes.intel', () => {
+    const folded = foldIndexResults([absent('code-graph', 'graphify-missing'), present('intel', INTEL_RESULT)]);
+    assert.deepEqual(folded.intel, INTEL_RESULT);
+  });
+
+  it('lets the knowledge step replace the graph digest and add indexes.graph.knowledge, without editing anything else of the graph', () => {
+    const folded = foldIndexResults([present('code-graph', GRAPH_RESULT), present('knowledge', KNOWLEDGE_RESULT)]);
+    assert.equal(folded.graph?.digest, 'sha256:9a9a');
+    assert.deepEqual(folded.graph?.knowledge, KNOWLEDGE_RESULT.knowledge);
+    assert.deepEqual({ ...folded.graph, digest: GRAPH_RESULT.digest, knowledge: undefined }, { ...GRAPH_RESULT, knowledge: undefined });
+  });
+
+  it('lists every absent step in indexes.absent, naming the code graph graph, in registry order', () => {
+    const folded = foldIndexResults([absent('code-graph', 'graphify-missing'), absent('intel', 'not-built-in-this-build'), absent('knowledge', 'not-built-in-this-build')]);
+    assert.deepEqual(folded.absent, [
+      { index: 'graph', reason: 'graphify-missing' },
+      { index: 'intel', reason: 'not-built-in-this-build' },
+      { index: 'knowledge', reason: 'not-built-in-this-build' },
+    ]);
+    assert.equal(folded.graph, undefined);
+  });
+
+  it('says nothing about a step the contract disabled, and is empty when nothing was built', () => {
+    assert.deepEqual(foldIndexResults([{ index: 'intel', status: 'disabled' }]), {});
+    assert.deepEqual(foldIndexResults([]), {});
+  });
+
+  it('counts a present step with a malformed result as absent, so a malformed result never reaches the record', () => {
+    const folded = foldIndexResults([present('code-graph', { ...GRAPH_RESULT, builtAtCommit: undefined }), present('intel', { path: '.planning/intel/' })]);
+    assert.equal(folded.graph, undefined);
+    assert.equal(folded.intel, undefined);
+    assert.deepEqual(folded.absent, [
+      { index: 'graph', reason: 'invalid-result' },
+      { index: 'intel', reason: 'invalid-result' },
+    ]);
+  });
+
+  it('refuses document nodes without a graph: knowledge is then absent with reason graph-absent', () => {
+    const folded = foldIndexResults([absent('code-graph', 'timeout'), present('knowledge', KNOWLEDGE_RESULT)]);
+    assert.equal(folded.graph, undefined);
+    assert.deepEqual(folded.absent, [
+      { index: 'graph', reason: 'timeout' },
+      { index: 'knowledge', reason: 'graph-absent' },
+    ]);
+  });
+});
+
+describe('buildProjectRecord: indexes', () => {
+  it('carries indexes.graph, indexes.intel and indexes.absent into the body and changes the digest', () => {
+    const without = buildProjectRecord(recordInput());
+    const folded = foldIndexResults([
+      { index: 'code-graph', status: 'present', result: GRAPH_RESULT },
+      { index: 'intel', status: 'present', result: INTEL_RESULT },
+      { index: 'knowledge', status: 'absent', reason: 'not-built-in-this-build' },
+    ]);
+    const withIndexes = buildProjectRecord(recordInput({ indexes: folded }));
+    assert.deepEqual(withIndexes.indexes.graph, GRAPH_RESULT);
+    assert.deepEqual(withIndexes.indexes.intel, INTEL_RESULT);
+    assert.deepEqual(withIndexes.indexes.absent, [{ index: 'knowledge', reason: 'not-built-in-this-build' }]);
+    assert.notEqual(recordDigest(without), recordDigest(withIndexes));
+  });
+
+  it('keeps the indexes an empty object when none were given, and omits absent when nothing is absent', () => {
+    assert.deepEqual(buildProjectRecord(recordInput()).indexes, {});
+    const onlyGraph = buildProjectRecord(recordInput({ indexes: foldIndexResults([{ index: 'code-graph', status: 'present', result: GRAPH_RESULT }]) }));
+    assert.equal('absent' in onlyGraph.indexes, false);
+  });
+
+  it('copies its input, so a later change to the folded value cannot change a built record', () => {
+    const folded = foldIndexResults([{ index: 'code-graph', status: 'present', result: { ...GRAPH_RESULT, nodes: { ...GRAPH_RESULT.nodes } } }]);
+    const built = buildProjectRecord(recordInput({ indexes: folded }));
+    (folded.graph as { nodes: Record<string, number> }).nodes['code'] = 1;
+    assert.equal(built.indexes.graph?.nodes['code'], 996);
   });
 });
 

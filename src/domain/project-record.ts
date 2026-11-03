@@ -39,6 +39,8 @@ export interface ProjectRecordInput {
   paths?: Partial<RecordPaths>;
   commands?: readonly ProposedCommand[];
   execution?: Partial<RecordExecution>;
+  // The indexes the index stage built, already folded from its step results (foldIndexResults).
+  indexes?: RecordIndexes;
 }
 
 // Something validation or narrowing noted about this record: a name and a reason, never document text.
@@ -47,6 +49,58 @@ export interface RecordFinding {
   field: string;
   reason: string;
   detail?: string;
+}
+
+// The code graph as the record states it (docs/repository-onboarding.md "Project record"): where it is, the digest
+// of the installed graph.json, the commit it was built at and the counts that show it holds code and no documents.
+export interface RecordGraphIndex {
+  path: string;
+  codeGraphPath: string;
+  digest: string;
+  builtAtCommit: string;
+  tool: string;
+  freshness: 'fresh' | 'stale';
+  // Node counts by `file_type` (`document` is present and zero for a code-only graph) and edge counts by `confidence`.
+  nodes: Record<string, number>;
+  edges: Record<string, number>;
+  // Present only when the knowledge pass added document nodes (plan 01-18).
+  knowledge?: Record<string, unknown>;
+}
+
+export interface RecordIntelIndex {
+  path: string;
+  digest: string;
+  refreshedAtCommit: string;
+  freshness: 'fresh' | 'stale';
+  files: number;
+}
+
+// An index that was not built: the record says so instead of listing it (ONB-13).
+export interface RecordAbsentIndex {
+  index: string;
+  reason: string;
+}
+
+export interface RecordIndexes {
+  graph?: RecordGraphIndex;
+  intel?: RecordIntelIndex;
+  // Only when at least one index is absent.
+  absent?: RecordAbsentIndex[];
+}
+
+export const INDEX_NAMES = ['code-graph', 'intel', 'knowledge'] as const;
+export type IndexName = (typeof INDEX_NAMES)[number];
+
+// What one index step returns and the ledger stores as step `index:{name}` (SKELETON.md "Application"). `present`
+// carries the result the record folds in; `absent` says why nothing was built; `disabled` means the contract
+// turned the index off, so the record states nothing about it.
+export interface IndexStepResult {
+  index: IndexName;
+  status: 'present' | 'absent' | 'disabled';
+  reason?: string;
+  // Short human-readable detail for the event only, never for the record.
+  detail?: string;
+  result?: Record<string, unknown>;
 }
 
 export interface RecordPaths {
@@ -91,7 +145,7 @@ export interface ProjectRecord {
     mappedAt: string;
     freshness: 'fresh' | 'stale';
   };
-  indexes: Record<string, never>;
+  indexes: RecordIndexes;
   notMapped: string[];
   paths: RecordPaths;
   execution: RecordExecution;
@@ -145,7 +199,7 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
       mappedAt: input.mapping.mappedAt,
       freshness: input.mapping.freshness ?? 'fresh',
     },
-    indexes: {},
+    indexes: copyIndexes(input.indexes),
     notMapped: [...input.notMapped],
     // The profile policy's grants, then the proposals that survived narrowing. Protection only accumulates.
     paths: {
@@ -163,6 +217,15 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     },
     commands: (input.commands ?? []).map((c) => ({ name: c.name, argv: [...c.argv], provenance: c.provenance, status: c.status })),
   };
+}
+
+// RED stub (plan 01-14 Task 1): the real folding arrives in the GREEN commit.
+function copyIndexes(_indexes: RecordIndexes | undefined): RecordIndexes {
+  return {};
+}
+
+export function foldIndexResults(_results: readonly IndexStepResult[]): RecordIndexes {
+  return {};
 }
 
 export function recordDigest(record: unknown): string {

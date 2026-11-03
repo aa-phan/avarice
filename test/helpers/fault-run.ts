@@ -35,6 +35,12 @@ export const KILL_POINTS = [
   'after-transition:validating',
   'after-checkpoint:validate',
   'after-transition:planning_ready',
+  'after-checkpoint:index:code-graph',
+  // The same checkpoint fires twice: once with the planning_ready transition that names it, once when the index
+  // stage commits it before the step's side effect. `#2` arms the second, which is the gap between the two.
+  'after-checkpoint:index:code-graph#2',
+  'after-checkpoint:index:intel',
+  'after-checkpoint:index:knowledge',
   'after-checkpoint:activate',
 ] as const;
 export type KillPoint = (typeof KILL_POINTS)[number];

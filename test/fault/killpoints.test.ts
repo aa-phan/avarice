@@ -37,8 +37,9 @@ after(() => {
 });
 
 // The state and the next action `status` must report right after the kill. A transition writes the
-// checkpoint of the action that follows it, so `after-checkpoint:validate` and `after-checkpoint:activate`
-// fire in the same instant as the transition that produced them.
+// checkpoint of the action that follows it, so `after-checkpoint:validate` and the first
+// `after-checkpoint:index:code-graph` fire in the same instant as the transition that produced them.
+// `after-checkpoint:index:code-graph#2` is the stage's own checkpoint of the same name, taken before the step runs.
 const EXPECTED_AT_KILL: Readonly<Record<KillPoint, { state: string; nextAction: string }>> = {
   'after-transition:discovered': { state: 'discovered', nextAction: 'compile-contract' },
   'after-transition:contract_proposed': { state: 'contract_proposed', nextAction: 'prepare-workspace' },
@@ -49,7 +50,11 @@ const EXPECTED_AT_KILL: Readonly<Record<KillPoint, { state: string; nextAction: 
   'mid-invocation': { state: 'mapping', nextAction: 'launch:map' },
   'after-transition:validating': { state: 'validating', nextAction: 'validate' },
   'after-checkpoint:validate': { state: 'validating', nextAction: 'validate' },
-  'after-transition:planning_ready': { state: 'planning_ready', nextAction: 'activate' },
+  'after-transition:planning_ready': { state: 'planning_ready', nextAction: 'index:code-graph' },
+  'after-checkpoint:index:code-graph': { state: 'planning_ready', nextAction: 'index:code-graph' },
+  'after-checkpoint:index:code-graph#2': { state: 'planning_ready', nextAction: 'index:code-graph' },
+  'after-checkpoint:index:intel': { state: 'planning_ready', nextAction: 'index:intel' },
+  'after-checkpoint:index:knowledge': { state: 'planning_ready', nextAction: 'index:knowledge' },
   'after-checkpoint:activate': { state: 'planning_ready', nextAction: 'activate' },
 };
 
@@ -198,4 +203,32 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
       assert.equal(transitions.at(-1)?.to, 'active');
     });
   }
+});
+
+describe('index steps resume from their stored results (plan 01-14)', () => {
+  it('killed after the checkpoint of index:knowledge, resume skips the two steps that have a stored result and runs the last', () => {
+    const roots = freshProfile();
+    cleanup.push(roots.base);
+    runWithFault(roots, repo, 'after-checkpoint:index:knowledge');
+    const id = onboardingIdOf(roots);
+
+    const stored = rows<{ step: string; status: string }>(roots, "SELECT step, status FROM onboarding_steps WHERE step LIKE 'index:%' ORDER BY rowid");
+    assert.deepEqual(stored, [
+      { step: 'index:code-graph', status: 'completed' },
+      { step: 'index:intel', status: 'completed' },
+    ]);
+    const absentBefore = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => (JSON.parse(e.data_json) as { index: string }).index);
+    assert.ok(absentBefore.includes('intel'), 'the intel step ran once before the kill');
+
+    sleepSync(EXPIRY_WAIT_MS);
+    const resumed = resumeCli(roots, id);
+    assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+
+    const after = rows<{ step: string; status: string }>(roots, "SELECT step, status FROM onboarding_steps WHERE step LIKE 'index:%' ORDER BY rowid");
+    assert.deepEqual(after.map((s) => s.step), ['index:code-graph', 'index:intel', 'index:knowledge']);
+    const absentAfter = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => (JSON.parse(e.data_json) as { index: string }).index);
+    assert.equal(absentAfter.filter((i) => i === 'intel').length, 1, 'the intel step did not run again');
+    assert.equal(absentAfter.filter((i) => i === 'knowledge').length, 1, 'the knowledge step ran once, after the resume');
+    assert.equal(absentAfter.filter((i) => i === 'code-graph').length, absentBefore.filter((i) => i === 'code-graph').length, 'the code-graph step did not run again');
+  });
 });

@@ -11,6 +11,7 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
 import type { ArtifactStore } from '../../src/ports/artifact-store.ts';
 import type { Ledger } from '../../src/ports/ledger.ts';
+import type { StagingChanges } from '../../src/ports/staging-workspace.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
@@ -131,7 +132,10 @@ describe('onboard with the fake host, then status (tracer)', () => {
         'verify-enforcement',
         'launch:map',
         'validate',
-        'activate', // the planning_ready transition
+        'index:code-graph', // the planning_ready transition
+        'index:code-graph', // the index stage, before the step runs
+        'index:intel',
+        'index:knowledge',
         'activate', // the index stage, before the record is built
         'none', // active
       ],
@@ -376,4 +380,127 @@ describe('promotion other than none is refused', () => {
     assert.deepEqual(readdirSync(roots.AVARICE_WORK_ROOT), [], 'nothing was created under the work root');
     assert.deepEqual(checkoutSnapshot(repo.path), before);
   });
+});
+
+describe('index steps (plan 01-14)', () => {
+  // No graphify, so the code-graph step is absent and these tests stay about the registry, not the tool.
+  const NO_GRAPHIFY = { AVARICE_FAKE_HOST: '{}', AVARICE_GRAPHIFY_BIN: '/nonexistent' };
+
+  it('runs code-graph, intel and knowledge in order, one stored result each, and records the intel and knowledge steps as absent', () => {
+    const { roots, repo } = fixture();
+    const r = runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: NO_GRAPHIFY });
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+
+    const steps = rows<{ step: string; status: string; result_json: string }>(roots, "SELECT step, status, result_json FROM onboarding_steps WHERE step LIKE 'index:%' ORDER BY rowid");
+    assert.deepEqual(steps.map((s) => s.step), ['index:code-graph', 'index:intel', 'index:knowledge']);
+    assert.ok(steps.every((s) => s.status === 'completed'));
+    assert.deepEqual(JSON.parse(steps[1]?.result_json ?? '{}'), { index: 'intel', status: 'absent', reason: 'not-built-in-this-build' });
+    assert.deepEqual(JSON.parse(steps[2]?.result_json ?? '{}'), { index: 'knowledge', status: 'absent', reason: 'not-built-in-this-build' });
+
+    const [record] = rows<{ body_json: string; graph_commit: string | null; intel_commit: string | null; knowledge_commit: string | null }>(
+      roots,
+      'SELECT body_json, graph_commit, intel_commit, knowledge_commit FROM project_records',
+    );
+    const body = JSON.parse(record?.body_json ?? '{}') as { indexes: { intel?: unknown; absent: Array<{ index: string; reason: string }> } };
+    assert.equal(body.indexes.intel, undefined);
+    assert.deepEqual(body.indexes.absent.filter((a) => a.index !== 'graph'), [
+      { index: 'intel', reason: 'not-built-in-this-build' },
+      { index: 'knowledge', reason: 'not-built-in-this-build' },
+    ]);
+    assert.equal(record?.intel_commit, null, 'the ledger column follows the body: no intel, no commit');
+    assert.equal(record?.knowledge_commit, null);
+
+    const events = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'index.absent' ORDER BY seq").map((e) => JSON.parse(e.data_json) as { index: string; reason: string });
+    assert.deepEqual(events.filter((e) => e.index !== 'code-graph').map((e) => [e.index, e.reason]), [['intel', 'not-built-in-this-build'], ['knowledge', 'not-built-in-this-build']]);
+  });
+
+  it('status says which indexes are absent and why', () => {
+    const { roots, repo } = fixture();
+    assert.equal(runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: NO_GRAPHIFY }).code, 0);
+    const status = runCli(['status'], { roots, entry: TEST_CLI, env: NO_GRAPHIFY });
+    assert.equal(status.code, 0, status.stderr);
+    assert.match(status.stdout, /intel absent \(not-built-in-this-build\)/);
+    assert.match(status.stdout, /knowledge absent \(not-built-in-this-build\)/);
+  });
+});
+
+// The final check before activation re-reads the whole staging diff (T-01-67). Late writes are simulated by
+// reporting extra changes on every read after the validation stage's.
+describe('activation re-checks the whole staging diff against every write set (plan 01-14)', () => {
+  async function onboardWithLateChanges(late: Readonly<Partial<Record<keyof StagingChanges, readonly string[]>>>): Promise<{ roots: CliRoots; state: string; reason: string | null }> {
+    const roots = makeRoots();
+    const repo = makeScratchRepo({ files: REPO_FILES });
+    cleanup.push(roots.base, repo.base);
+    const env = {
+      ...process.env,
+      AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+      AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+      AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+      AVARICE_GRAPHIFY_BIN: '/nonexistent',
+    };
+    const composed = createDeps(env, { host: new FakeAgentHost() });
+    assert.ok(composed.ok, 'composition');
+    const real = composed.value.deps;
+    let reads = 0;
+    const staging: typeof real.staging = {
+      prepare: (input) => real.staging.prepare(input),
+      head: (p) => real.staging.head(p),
+      changes: (p, pin) => {
+        const changes = real.staging.changes(p, pin);
+        reads += 1;
+        // The first read is the validation stage's; every later one is the activation check.
+        if (!changes.ok || reads === 1) return changes;
+        return { ok: true, value: { modified: [...changes.value.modified, ...(late.modified ?? [])], added: [...changes.value.added, ...(late.added ?? [])], deleted: [...changes.value.deleted, ...(late.deleted ?? [])] } };
+      },
+      describe: (p, pin) => real.staging.describe(p, pin),
+      listTracked: (p, pin) => real.staging.listTracked(p, pin),
+      read: (p, rel, max) => real.staging.read(p, rel, max),
+      ensureDir: (p, rel) => real.staging.ensureDir(p, rel),
+      inspectRepo: (p) => real.staging.inspectRepo(p),
+    };
+    try {
+      const started = startOnboarding({ ...real, staging }, { repoPath: repo.path, policy: 'onboarding' });
+      assert.ok(started.ok);
+      const outcome = await runOnboarding({ ...real, staging }, started.value.onboardingId);
+      assert.ok(outcome.ok, 'the run itself does not fail');
+      assert.ok(reads >= 2, 'the activation stage read the diff again');
+      return { roots, state: outcome.value.state, reason: outcome.value.reason };
+    } finally {
+      composed.value.close();
+    }
+  }
+
+  for (const [name, late] of [
+    ['an added file outside every write set', { added: ['rogue.txt'] }],
+    ['a modified tracked source file', { modified: ['package.json'] }],
+    ['a deleted tracked source file', { deleted: ['src/index.ts'] }],
+    ['an intel file when no intel invocation ran', { added: ['.planning/intel/files.json'] }],
+    ['a new top-level directory', { added: ['dist/out.js'] }],
+  ] as const) {
+    it(`blocks activation for ${name}, with a containment.finding event and no record`, async () => {
+      const { roots, state, reason } = await onboardWithLateChanges(late);
+      assert.equal(state, 'blocked');
+      assert.equal(reason, 'enforcement_failure');
+      assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0, 'no record was activated');
+      const findings = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'containment.finding' ORDER BY seq").map((e) => JSON.parse(e.data_json) as { check: string; count: number; paths: string[] });
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0]?.check, 'activation-scope');
+      const paths = [...(late.added ?? []), ...(late.modified ?? []), ...(late.deleted ?? [])];
+      assert.deepEqual(findings[0]?.paths, [...paths].sort());
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM artifacts WHERE kind = 'map-document'")[0]?.n, 0, 'nothing was stored for a map that cannot be activated');
+    });
+  }
+
+  for (const [name, late] of [
+    ['a new file under .planning/graphs/', { added: ['.planning/graphs/graph.json', '.planning/graphs/.last-build-snapshot.json'] }],
+    ['a committed graph that AVARICE regenerates', { modified: ['.planning/graphs/graph.json'] }],
+    ['the GSD config', { modified: ['.planning/config.json'] }],
+    ['a file under graphify-out/ and .avarice-knowledge/', { added: ['graphify-out/graph.json', '.avarice-knowledge/manifest.json'] }],
+  ] as const) {
+    it(`activates with ${name}`, async () => {
+      const { roots, state } = await onboardWithLateChanges(late);
+      assert.equal(state, 'active');
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'containment.finding'")[0]?.n, 0);
+    });
+  }
 });
