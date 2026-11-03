@@ -100,7 +100,7 @@ describe('budget rows come from the contract', () => {
     assert.deepEqual(Object.keys(budgets).sort(), ['costUsd', 'invocations', 'subagentsTotal', 'toolCalls', 'wallClockMs']);
     assert.equal(budgets['invocations']?.limit_value, 4);
     assert.equal(budgets['toolCalls']?.limit_value, 600);
-    assert.equal(budgets['subagentsTotal']?.limit_value, 7);
+    assert.equal(budgets['subagentsTotal']?.limit_value, 18, 'a full map (4) and its retry (4), plus the knowledge pass (10)');
     assert.equal(budgets['wallClockMs']?.limit_value, 45 * 60_000);
     assert.equal(budgets['costUsd']?.limit_value, 12);
     assert.equal(budgets['costUsd']?.exactness, 'estimated');
@@ -113,12 +113,25 @@ describe('budget rows come from the contract', () => {
     assert.equal(stateOf(roots).state, 'contract_proposed');
   });
 
+  it('derive the subagent limit from the mapping mode: a fast map has 12', () => {
+    const { roots, repo } = fixture();
+    const fast = onboard(roots, repo, { files: ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md'], stamp: false }, '--mode', 'fast');
+    assert.equal(fast.code, 0, fast.stdout + fast.stderr);
+    assert.equal(row(roots, 'subagentsTotal').limit_value, 12);
+  });
+
   it('take a lower limit from --budget and refuse a higher one (RC-5)', () => {
     const { roots, repo } = fixture();
     const lowered = onboard(roots, repo, {}, '--budget', 'toolCalls=10', '--budget', 'subagentsTotal=2');
     assert.equal(lowered.code, 0, lowered.stdout + lowered.stderr);
     assert.equal(row(roots, 'toolCalls').limit_value, 10);
     assert.equal(row(roots, 'subagentsTotal').limit_value, 2);
+
+    const aboveDerived = fixture();
+    const tooMany = onboard(aboveDerived.roots, aboveDerived.repo, {}, '--budget', 'subagentsTotal=19');
+    assert.notEqual(tooMany.code, 0);
+    assert.match(tooMany.stdout + tooMany.stderr, /budgets can only be lowered: 19 is above the 18 derived for mapping mode full/);
+    assert.equal(rows<{ n: number }>(aboveDerived.roots, 'SELECT count(*) AS n FROM budgets')[0]?.n, 0);
 
     const second = fixture();
     const raised = onboard(second.roots, second.repo, {}, '--budget', 'toolCalls=999999');

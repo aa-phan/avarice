@@ -259,6 +259,78 @@ function contractInput(request: Record<string, unknown> = {}) {
   };
 }
 
+const FULL_DERIVATION = {
+  mode: 'full',
+  mapAgents: 4,
+  mapRounds: 2,
+  knowledgeAllowance: 10,
+  intelAgents: 0,
+  total: 18,
+  formula: '4 map agents (full) x 2 map rounds (1 + 1 retry) + 10 knowledge (ceil(200 documents / 20 per subagent)) + 0 intel = 18',
+};
+
+// Deferred item 11 (plan 01-19): the flat preset of 7 subagents could not hold a full map (4) and its one retry (4 more). The total
+// derives from the mapping mode: map agents for the mode x (1 + map retries) + the knowledge pass allowance + intel's 0.
+describe('the subagent budget derives from the mapping mode', () => {
+  const total = (request: Record<string, unknown>) => unwrap(compileOnboardingContract(contractInput(request))).budgets;
+  const derivation = (request: Record<string, unknown>) => (total(request) as unknown as { subagentsDerivation: unknown }).subagentsDerivation;
+
+  it('full (and the default): 4 x 2 + 10 + 0 = 18, recorded with its formula', () => {
+    assert.equal(total({}).subagentsTotal, 18);
+    assert.equal(total({ mode: 'full' }).subagentsTotal, 18);
+    assert.deepEqual(derivation({}), FULL_DERIVATION);
+  });
+
+  it('fast: one mapper, so 1 x 2 + 10 + 0 = 12', () => {
+    assert.equal(total({ mode: 'fast' }).subagentsTotal, 12);
+    assert.deepEqual(derivation({ mode: 'fast' }), {
+      mode: 'fast',
+      mapAgents: 1,
+      mapRounds: 2,
+      knowledgeAllowance: 10,
+      intelAgents: 0,
+      total: 12,
+      formula: '1 map agents (fast) x 2 map rounds (1 + 1 retry) + 10 knowledge (ceil(200 documents / 20 per subagent)) + 0 intel = 12',
+    });
+  });
+
+  it('skip and adopt map nothing (0 map agents): only the knowledge allowance remains, 10; paths needs the full set, 18', () => {
+    assert.equal(total({ mode: 'skip' }).subagentsTotal, 10);
+    assert.equal(total({ mode: 'adopt' }).subagentsTotal, 10);
+    assert.equal(total({ mode: 'paths' }).subagentsTotal, 18);
+  });
+
+  it('a retry override changes the rounds: no retry is one round, 4 x 1 + 10 = 14 (fast 11)', () => {
+    assert.equal(total({ budgetOverrides: { retry: 0 } }).subagentsTotal, 14);
+    assert.equal(total({ mode: 'fast', budgetOverrides: { retry: 0 } }).subagentsTotal, 11);
+    assert.equal((derivation({ budgetOverrides: { retry: 0 } }) as { mapRounds: number }).mapRounds, 1);
+  });
+
+  it('keeps subagentsConcurrent at 4 in every mode', () => {
+    for (const mode of ['full', 'fast', 'skip', 'adopt', 'paths']) assert.equal(total({ mode }).subagentsConcurrent, 4, mode);
+  });
+
+  it('a budget override can only lower the derived total: below and at it is used, above it is refused, per mode', () => {
+    assert.equal(total({ budgetOverrides: { subagentsTotal: 5 } }).subagentsTotal, 5);
+    assert.equal(total({ budgetOverrides: { subagentsTotal: 18 } }).subagentsTotal, 18);
+    assert.equal(total({ mode: 'fast', budgetOverrides: { subagentsTotal: 12 } }).subagentsTotal, 12);
+    assert.deepEqual(derivation({ budgetOverrides: { subagentsTotal: 5 } }), FULL_DERIVATION, 'the record keeps the derived total, not the override');
+    for (const [mode, above] of [['full', 19], ['fast', 13], ['skip', 11], ['adopt', 11]] as const) {
+      const r = compileOnboardingContract(contractInput({ mode, budgetOverrides: { subagentsTotal: above } }));
+      assert.equal(r.ok, false, `${mode} ${above}`);
+      if (!r.ok && r.error.kind === 'invalid') {
+        assert.equal(r.error.field, 'request.budgetOverrides.subagentsTotal');
+        assert.match(r.error.reason, new RegExp(`budgets can only be lowered: ${above} is above the ${above - 1} derived for mapping mode ${mode}`));
+      }
+    }
+  });
+
+  it('refuses a total above the derived one for a lowered retry too (the ceiling follows the contract\'s own rounds)', () => {
+    const r = compileOnboardingContract(contractInput({ budgetOverrides: { retry: 0, subagentsTotal: 15 } }));
+    assert.equal(r.ok, false);
+  });
+});
+
 describe('compileOnboardingContract', () => {
   it('default body carries the onboarding preset values from repository-onboarding.md', () => {
     const c = unwrap(compileOnboardingContract(contractInput()));
@@ -287,7 +359,8 @@ describe('compileOnboardingContract', () => {
       invocations: 4,
       toolCalls: 600,
       subagentsConcurrent: 4,
-      subagentsTotal: 7,
+      subagentsTotal: 18,
+      subagentsDerivation: FULL_DERIVATION,
       costUsd: { perInvocation: 3.0, perRun: 12.0, exactness: 'estimated' },
       retry: 1,
     });
@@ -337,7 +410,7 @@ describe('compileOnboardingContract', () => {
       { toolCalls: 601 },
       { invocations: 5 },
       { wallClockMinutes: 46 },
-      { subagentsTotal: 8 },
+      { subagentsTotal: 19 },
       { costUsdPerInvocation: 3.01 },
       { costUsdPerRun: 12.5 },
     ]) {
