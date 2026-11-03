@@ -199,15 +199,25 @@ function checkWrite(paths: readonly string[], policy: HookPolicy, canon: Canon):
 // Bash command identity
 // ---------------------------------------------------------------------------------------------------------
 
+// One pipeline segment: its words, and whether any of them holds an unquoted `*`, `?`, `[` or `{` (the shell would expand it
+// into names the path check never sees, MF-04).
+interface Segment {
+  words: string[];
+  expands: boolean;
+}
+
+const EXPANSION_CHARS = '*?[{';
+
 // Splits one line into pipeline segments of words, or null when the line uses anything but quoting and `|`.
 // Outside quotes: `;`, `&`, `<`, `>`, backtick, `$`, `(`, `)`, `\`, newline, a leading `~` or `#` all refuse. Inside
-// double quotes `$`, backtick and `\` refuse (they would expand); single quotes are literal. `||` refuses.
-function lex(line: string): string[][] | null {
-  const segments: string[][] = [[]];
+// double quotes `$`, backtick and `\` refuse (they would expand); single quotes are literal. `||` refuses. An unquoted
+// `*`, `?`, `[` or `{` is kept in the word and marks the segment `expands`.
+function lex(line: string): Segment[] | null {
+  const segments: Segment[] = [{ words: [], expands: false }];
   let word = '';
   let inWord = false;
   const flush = (): void => {
-    if (inWord) (segments[segments.length - 1] as string[]).push(word);
+    if (inWord) (segments[segments.length - 1] as Segment).words.push(word);
     word = '';
     inWord = false;
   };
@@ -233,23 +243,24 @@ function lex(line: string): string[][] | null {
     } else if (c === '|') {
       if (line[i + 1] === '|') return null;
       flush();
-      if ((segments[segments.length - 1] as string[]).length === 0) return null;
-      segments.push([]);
+      if ((segments[segments.length - 1] as Segment).words.length === 0) return null;
+      segments.push({ words: [], expands: false });
     } else if (';&<>`$()\\\n\r'.includes(c) || (!inWord && (c === '~' || c === '#'))) {
       return null;
     } else {
+      if (EXPANSION_CHARS.includes(c)) (segments[segments.length - 1] as Segment).expands = true;
       word += c;
       inWord = true;
     }
   }
   flush();
-  return (segments[segments.length - 1] as string[]).length === 0 ? null : segments;
+  return (segments[segments.length - 1] as Segment).words.length === 0 ? null : segments;
 }
 
 const startsWithWords = (words: readonly string[], prefix: readonly string[]): boolean => prefix.length > 0 && prefix.every((word, i) => words[i] === word);
 const splitWords = (text: string): string[] => text.split(' ').filter((w) => w !== '');
 
-function checkSegment(words: readonly string[], preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
     if (!preamble) return 'shell-gsd-no-preamble';
@@ -259,6 +270,8 @@ function checkSegment(words: readonly string[], preamble: boolean, call: Extract
   if (commands.deniedPrefixes.some((prefix) => startsWithWords(words, splitWords(prefix)))) return 'shell-denied-prefix';
   const entry = commands.readOnly.map(splitWords).find((tokens) => startsWithWords(words, tokens));
   if (entry === undefined) return 'shell-not-allowed';
+  // Fail closed (MF-04): a word the shell would expand is a path set the check below cannot name.
+  if (expands) return 'shell-syntax';
   const args = words.slice(entry.length);
   if (words[0] === 'find' && args.some((arg) => FIND_DENIED_ACTIONS.includes(arg))) return 'shell-find-action';
   if (words[0] === 'git' && args.some((arg) => GIT_DENIED_OPTIONS.some((option) => arg === option || arg.startsWith(`${option}=`)))) return 'shell-git-option';
@@ -280,9 +293,9 @@ function checkLine(line: string, preamble: boolean, call: Extract<NormalizedTool
   }
   const segments = lex(text);
   if (segments === null) return 'shell-syntax';
-  if (substituted && (segments.length !== 1 || (segments[0] as string[])[0] !== 'gsd_run')) return 'shell-syntax';
-  for (const words of segments) {
-    const rule = checkSegment(words, preamble, call, policy, canon);
+  if (substituted && (segments.length !== 1 || (segments[0] as Segment).words[0] !== 'gsd_run')) return 'shell-syntax';
+  for (const segment of segments) {
+    const rule = checkSegment(segment, preamble, call, policy, canon);
     if (rule !== null) return rule;
   }
   return null;
