@@ -216,6 +216,8 @@ SESSION="$(facts --pick derived.mapSessionId)"
 # status --json shows the onboarding as interrupted, with the resume command, once the lease has expired.
 interrupted_deadline=$(( $(epoch) + 420 ))
 while [ -n "$ONB_ID" ] && [ "$(epoch)" -lt "$interrupted_deadline" ]; do
+  # An onboarding that already reached a stop state is not interrupted; there is nothing to wait for.
+  case "$(facts --pick onboarding.state)" in active|blocked|incompatible|deactivated) break ;; esac
   "${AVARICE[@]}" status --json > "$RUN_DIR/status-all.json" 2>/dev/null
   "${TOOLS[@]}" status-entry --repo "$REPO" < "$RUN_DIR/status-all.json" > "$RUN_DIR/status-interrupted.json" 2>/dev/null
   if [ -n "$("${TOOLS[@]}" status-entry --repo "$REPO" --pick interrupted.resumeCommand < "$RUN_DIR/status-all.json" 2>/dev/null)" ]; then
