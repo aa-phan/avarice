@@ -2,9 +2,10 @@
 // A refusal or failure here is returned as { ok: false, code, message }; main prints the message to
 // stderr and exits with the code. Plans after 01-03 add their adapters and refusals in this file.
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { newId } from '../domain/ids.ts';
 import type { IdPrefix } from '../domain/ids.ts';
 import { describeError, openDb } from '../adapters/sqlite/db.ts';
@@ -19,10 +20,16 @@ import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/stagin
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
 import { GraphifyTool } from '../adapters/graph/graphify.ts';
 import { UnavailableAgentHost } from '../adapters/host/unavailable-host.ts';
+import { ClaudeHostAdapter } from '../adapters/host-claude/claude-host.ts';
+import { fingerprintGsdPreamble } from '../adapters/gsd/preamble.ts';
 import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
+import type { LocatedGsd } from '../adapters/gsd/locate.ts';
 import { digestOf } from '../domain/digest.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
+import type { ArtifactStore } from '../ports/artifact-store.ts';
+import type { Ledger } from '../ports/ledger.ts';
+import type { StagingWorkspace } from '../ports/staging-workspace.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
@@ -34,8 +41,8 @@ export const EXIT_INTERNAL = 70;
 export interface DepsOverrides {
   clock?: Clock;
   ids?: IdSource;
-  // Replaces the production host. Only test entry points pass this; bin/avarice.ts never does, so the
-  // production path always runs the fail-closed UnavailableAgentHost until plan 01-15 admits a real host.
+  // Replaces the production host. Only test entry points pass this; bin/avarice.ts never does, so the production
+  // path always runs the contained ClaudeHostAdapter (when it is admitted) or the fail-closed UnavailableAgentHost.
   host?: AgentHost;
   // Replaces the sandboxed executor. Only test entries pass this (a test that already runs inside a sandbox,
   // where `sandbox-exec` cannot nest); bin/avarice.ts never does, so production always runs SandboxedExecutor.
@@ -64,6 +71,60 @@ export function systemClock(): Clock {
 
 export function systemIds(clock: Clock): IdSource {
   return { next: (prefix: IdPrefix) => newId(prefix, clock.nowMs(), randomBytes(10)) };
+}
+
+// The first executable file named `name` on `pathEnv`, or undefined.
+function locateOnPath(name: string, pathEnv: string | undefined): string | undefined {
+  for (const dir of (pathEnv ?? '').split(':')) {
+    if (dir === '') continue;
+    const candidate = join(dir, name);
+    try {
+      if (!statSync(candidate).isFile()) continue;
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // not here
+    }
+  }
+  return undefined;
+}
+
+interface HostInputs {
+  env: NodeJS.ProcessEnv;
+  home: string;
+  dataRoot: string;
+  located: LocatedGsd | undefined;
+  ledger: Ledger;
+  artifacts: ArtifactStore;
+  staging: StagingWorkspace;
+}
+
+// The production host: the contained Claude Code adapter when everything it needs is present and admitted (a
+// `claude` from AVARICE_CLAUDE_BIN or PATH at an admitted version, the sandbox, the hook entry from
+// AVARICE_HOOK_ENTRY or this checkout, an admitted gsd-core with its shim preamble), otherwise the host that refuses,
+// with the reason recorded in its descriptor (ONB-12, CON-3, SC3).
+function productionHost(inputs: HostInputs): AgentHost {
+  const { env, home, dataRoot, located } = inputs;
+  if (located === undefined) return new UnavailableAgentHost('no admitted gsd-core');
+  const claudeBin = env['AVARICE_CLAUDE_BIN'] !== undefined && env['AVARICE_CLAUDE_BIN'] !== '' ? env['AVARICE_CLAUDE_BIN'] : locateOnPath('claude', env['PATH']);
+  if (claudeBin === undefined) return new UnavailableAgentHost('claude was not found (set AVARICE_CLAUDE_BIN or put it on PATH)');
+  const hookEntry = env['AVARICE_HOOK_ENTRY'] !== undefined && env['AVARICE_HOOK_ENTRY'] !== '' ? env['AVARICE_HOOK_ENTRY'] : fileURLToPath(new URL('../hook/pre-tool-use.ts', import.meta.url));
+  const preamble = fingerprintGsdPreamble(located.gsdCoreDir);
+  if (!preamble.ok) return new UnavailableAgentHost('the GSD shim preamble was not found in the located gsd-core');
+  const configDir = env['CLAUDE_CONFIG_DIR'] !== undefined && env['CLAUDE_CONFIG_DIR'] !== '' ? env['CLAUDE_CONFIG_DIR'] : join(home, '.claude');
+  const adapter = new ClaudeHostAdapter({
+    claudeBin,
+    hookEntry,
+    ledgerPath: join(dataRoot, 'state.db'),
+    dataRoot,
+    gsd: { gsdCoreDir: located.gsdCoreDir, agentsDir: join(located.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir, preamble: preamble.value },
+    artifacts: inputs.artifacts,
+    staging: inputs.staging,
+    countHookDenies: (invocationId) => inputs.ledger.countHookDenials(invocationId),
+    env,
+  });
+  const attributes = adapter.descriptor.attributes ?? {};
+  return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(attributes['reason'] ?? 'the host adapter is not enforced');
 }
 
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
@@ -104,21 +165,6 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   }
   const store = db;
   const ledger = new SqliteLedger(store, (prefix) => ids.next(prefix));
-  const host = overrides.host ?? new UnavailableAgentHost();
-  if (options.readOnly !== true) {
-    // Record which host this profile ran with, so a later reader sees the enforcement level it had.
-    const recorded = ledger.upsertAdapterConfig({
-      name: host.descriptor.port,
-      port: host.descriptor.port,
-      adapter: host.descriptor.adapter,
-      configDigest: digestOf(host.descriptor),
-      descriptor: host.descriptor,
-    });
-    if (!recorded.ok) {
-      store.close();
-      return failure('cannot record the host adapter', describeError(recorded.error));
-    }
-  }
   // The executor for AVARICE's own subprocesses. A read-only command never runs one, so it neither probes the
   // sandbox nor records the executor.
   const executor = overrides.executor ?? new SandboxedExecutor();
@@ -157,9 +203,11 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   // admitted gsd-core no adapter exists and onboarding stops `incompatible` at the contract stage.
   let gsd: GsdOnboarding | undefined;
   let gsdProblem: GsdProblem | undefined;
+  let locatedGsd: LocatedGsd | undefined;
   if (options.readOnly !== true) {
     const located = locateGsdCore(env);
     if (located.ok) {
+      locatedGsd = located.value;
       const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: profile.dataRoot, home });
       const stored = ledger.upsertAdapterConfig({
         name: 'gsd',
@@ -183,10 +231,28 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   }
   const staging = createStagingWorkspace(STAGING_STRATEGY);
   const artifacts = new LocalArtifactStore(profile.dataRoot);
+  // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
+  const host =
+    overrides.host ??
+    (options.readOnly === true ? new UnavailableAgentHost() : productionHost({ env, home, dataRoot: profile.dataRoot, located: locatedGsd, ledger, artifacts, staging }));
+  if (options.readOnly !== true) {
+    // Record which host this profile ran with, so a later reader sees the enforcement level it had.
+    const recorded = ledger.upsertAdapterConfig({
+      name: host.descriptor.port,
+      port: host.descriptor.port,
+      adapter: host.descriptor.adapter,
+      configDigest: digestOf(host.descriptor),
+      descriptor: host.descriptor,
+    });
+    if (!recorded.ok) {
+      store.close();
+      return failure('cannot record the host adapter', describeError(recorded.error));
+    }
+  }
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile },
+      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), clock, ids, profile, home },
       close: () => {
         try {
           store.close();

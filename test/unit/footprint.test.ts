@@ -58,16 +58,20 @@ describe('no source file reaches the network or starts a background process', ()
 
   it('never calls fetch, opens a listener or detaches a child', () => {
     const banned = /\bfetch\s*\(|\.listen\s*\(|detached\s*:\s*true|\bnew\s+WebSocket\b|\bXMLHttpRequest\b/;
-    // The sandboxed executor is the one place that starts a process group of its own (`detached: true`, so a
-    // timeout can kill the whole group). It must kill that group when the command ends; executor.test.ts proves
-    // nothing is left behind.
-    const groupLeader = join(REPO_ROOT, 'src', 'adapters', 'exec', 'sandboxed-executor.ts');
-    const offenders = files.filter((f) => f !== groupLeader && banned.test(readFileSync(f, 'utf8')));
+    // Two adapters start a process group of their own (`detached: true`, so a timeout can kill the whole group): the
+    // sandboxed executor and the contained Claude Code host. Each must kill that group when its process ends; the
+    // executor and claude-host tests prove nothing is left behind.
+    const groupLeaders = [join(REPO_ROOT, 'src', 'adapters', 'exec', 'sandboxed-executor.ts'), join(REPO_ROOT, 'src', 'adapters', 'host-claude', 'claude-host.ts')];
+    const offenders = files.filter((f) => !groupLeaders.includes(f) && banned.test(readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, []);
-    const executor = readFileSync(groupLeader, 'utf8');
+    const executor = readFileSync(groupLeaders[0] as string, 'utf8');
     assert.match(executor, /process\.kill\(-pid, signal\)/, 'the executor kills the process group it creates');
     assert.match(executor, /killGroup\(child\.pid, 'SIGKILL'\)/, 'and kills what is left when the command ends');
     assert.equal(/\.unref\s*\(/.test(executor), false, 'and never detaches a child from its own lifetime');
+    const host = readFileSync(groupLeaders[1] as string, 'utf8');
+    assert.match(host, /process\.kill\(-pid, sig\)/, 'the host adapter kills the process group it creates');
+    assert.match(host, /killGroup\('SIGKILL'\);\n\s*if \(killTimer/, 'and sweeps what is left when the host process ends');
+    assert.equal(/\.unref\s*\(/.test(host), false, 'and never detaches a child from its own lifetime');
   });
 });
 

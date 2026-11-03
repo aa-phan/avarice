@@ -17,6 +17,28 @@ import { effectiveMappingMode, loadContract, readMapDocuments, stagingPathOf, st
 const LAUNCH = 'launch:map';
 const VALIDATE = 'validate';
 
+// Terminates the host process of an interrupted invocation, found by the session ID its `started` step recorded. A
+// host that cannot be searched for or ended stops the resume: relaunching beside a survivor is not an option.
+async function reapInterrupted(ctx: StageContext, started: unknown, runId: string): Promise<Result<void>> {
+  const { deps, onboardingId } = ctx;
+  const body = typeof started === 'object' && started !== null ? (started as Record<string, unknown>) : {};
+  const sessionId = body['sessionId'];
+  if (deps.host.reap === undefined || typeof sessionId !== 'string' || sessionId === '') return ok(undefined);
+  const reaped = await deps.host.reap({ sessionId });
+  if (!reaped.ok) return reaped;
+  if (reaped.value.terminated === 0) return ok(undefined);
+  const invocationId = body['invocationId'];
+  const event = deps.ledger.appendEvent({
+    type: 'invocation.reaped',
+    level: 'warn',
+    runId,
+    ...(typeof invocationId === 'string' ? { invocationId } : {}),
+    data: { onboardingId, ...(typeof invocationId === 'string' ? { invocationId } : {}), terminated: reaped.value.terminated },
+    nowMs: deps.clock.nowMs(),
+  });
+  return event.ok ? ok(undefined) : event;
+}
+
 // Decides the fate of the map invocation that was running when the previous holder died, and moves the
 // onboarding out of `paused` (`mapping` again, or on to `validating` when the invocation had finished).
 async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
@@ -41,6 +63,15 @@ async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
 
   const launches = steps.value.filter((s) => s.step === LAUNCH);
   const validations = steps.value.filter((s) => s.step === VALIDATE);
+
+  // The previous holder may have died while its host was still running (the host is detached, in its own process
+  // group). End any process that carries the interrupted invocation's session ID before looking at staging, so
+  // nothing writes while the map is reconciled and a relaunch never runs beside a survivor (T-01-44).
+  const interrupted = launches.at(-1);
+  if (interrupted !== undefined && interrupted.status === 'started') {
+    const reaped = await reapInterrupted(ctx, interrupted.result, contract.value.runId);
+    if (!reaped.ok) return reaped;
+  }
   // Each mapping round is one launch followed by one validation, so an extra launch is this round's invocation.
   const invoked = launches.length > validations.length;
   const mode = effectiveMappingMode(deps, onboardingId, contract.value.body);

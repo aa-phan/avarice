@@ -393,6 +393,14 @@ describe('UnavailableAgentHost (ONB-12 fail-closed default)', () => {
     onboardingId: ONB, runId: 'run_01TEST', invocationId: 'inv_01TEST', purpose: 'map', contractVersion: 1,
     contractDigest: `sha256:${'0'.repeat(64)}`, prompt: '/gsd-map-codebase', cwd: '/nonexistent', model: 'sonnet',
     costCapUsd: 1, wallClockMs: 1000,
+    scope: {
+      purpose: 'map', cwd: '/nonexistent', stagingPath: '/nonexistent', repoPath: '/nonexistent-repo', dataRoot: '/nonexistent-data',
+      writeRoots: [], denyWrite: [], denyRead: [], denyReadGlobs: [], allowRead: [], readRoots: [],
+      commands: { strategy: 'blanket-bash-hook-identity', readOnly: [], gsdReadVerbs: [], deniedPrefixes: [] },
+      subagents: { total: 0, concurrent: 0 }, allowedDomains: [],
+    },
+    extensions: { skills: [], agents: [] },
+    expectedFiles: [],
   };
 
   it('reports enforcement none and no contained-invocation capability', () => {

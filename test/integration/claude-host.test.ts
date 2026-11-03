@@ -6,11 +6,22 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { createStagingWorkspace, STAGING_STRATEGY } from '../../src/adapters/git/staging-strategy.ts';
+import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
+import type { ClaudeHostOptions } from '../../src/adapters/host-claude/claude-host.ts';
+import { fingerprintGsdPreamble } from '../../src/adapters/gsd/preamble.ts';
+import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
+import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
+import type { AppDeps } from '../../src/app/deps.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
+import type { Result } from '../../src/domain/result.ts';
+import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -24,6 +35,8 @@ const REPO_FILES = {
   'src/util/strings.ts': 'export const upper = (s: string): string => s.toUpperCase();\n',
   'docs/guide.md': '# guide\n',
 };
+// The fingerprint spike S0-A recorded for the GSD 1.17 shim preamble (spikes/slice-0-wave-0/README.md).
+const GSD_PREAMBLE_SHA256 = 'c71090e895dc5a024a60e879e621d201f1b7f1fc4a9d5649e90dcabfba52622b';
 const TTL_MS = 200;
 const EXPIRY_WAIT_MS = 400;
 
@@ -122,6 +135,17 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(dir, 'agents.json'), 'utf8')) as object), ['gsd-codebase-mapper']);
     assert.ok(existsSync(join(dir, 'plugin', 'skills', 'gsd-map-codebase')), 'the plugin carries the map skill');
     assert.ok(!existsSync(join(dir, 'plugin', 'skills', 'graphify')), 'and only the skills this purpose names');
+
+    const settingsText = readFileSync(join(dir, 'host-settings.json'), 'utf8');
+    const settings = JSON.parse(settingsText) as { permissions: { defaultMode: string; disableBypassPermissionsMode: string }; sandbox: { enabled: boolean; allowUnsandboxedCommands: boolean } };
+    assert.equal(settings.permissions.defaultMode, 'dontAsk');
+    assert.equal(settings.permissions.disableBypassPermissionsMode, 'disable');
+    assert.equal(settings.sandbox.enabled, true);
+    assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
+    const policy = JSON.parse(readFileSync(join(dir, 'hook-policy.json'), 'utf8')) as { commands: { preambleSha256?: string; preambleLength?: number }; subagentTypes: string[]; invocationId: string };
+    assert.deepEqual(policy.subagentTypes, ['gsd-codebase-mapper']);
+    assert.equal(policy.commands.preambleSha256, GSD_PREAMBLE_SHA256, "the policy carries the fingerprint of the located GSD's own shim preamble");
+    assert.equal(policy.commands.preambleLength, 2573);
   });
 
   it('records the contained host as the production agent-host, enforced, in adapter_configs', () => {
@@ -148,7 +172,7 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.equal(argv[argv.indexOf('--setting-sources') + 1], '');
     assert.ok(argv.includes('--strict-mcp-config'));
     const [staging] = rows<{ staging_worktree: string }>(s.roots, 'SELECT staging_worktree FROM onboardings');
-    assert.equal(launch.cwd, staging?.staging_worktree, 'the working directory is the staging copy');
+    assert.equal(launch.cwd, realpathSync(staging?.staging_worktree ?? ''), 'the working directory is the staging copy');
     const sessionId = argv[argv.indexOf('--session-id') + 1];
     assert.match(sessionId ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     const [step] = launchSteps(s.roots);
@@ -270,5 +294,306 @@ describe('a supervisor killed while the host runs (T-01-44)', () => {
     const steps = launchSteps(s.roots);
     assert.equal(steps[0]?.status, 'interrupted');
     assert.equal(steps.at(-1)?.status, 'completed');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// In-process runs: the adapter is built here, so a test can reach the seams a command line cannot (a hook between
+// the write and the launch checks, the sandbox probe, the wall clock, the hook counts). The rest is production code:
+// the same composition, ledger, staging, artifact store and stage loop as the command line.
+// ---------------------------------------------------------------------------------------------------------------
+const HOOK_ENTRY = join(REPO_ROOT, 'src', 'hook', 'pre-tool-use.ts');
+
+// Shortens the wall clock the contract grants (whole minutes at the least) so a test can reach the timeout.
+class ClampedHost implements AgentHost {
+  readonly #inner: AgentHost;
+  readonly #wallClockMs: number;
+  constructor(inner: AgentHost, wallClockMs: number) {
+    this.#inner = inner;
+    this.#wallClockMs = wallClockMs;
+  }
+  get descriptor(): AgentHost['descriptor'] {
+    return this.#inner.descriptor;
+  }
+  invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
+    return this.#inner.invoke({ ...req, wallClockMs: this.#wallClockMs }, signal);
+  }
+}
+
+interface RunResult {
+  deps: AppDeps;
+  onboardingId: string;
+  state: string;
+  reason: string | null;
+}
+
+async function inProcess(s: Setup, adapterOptions: Partial<ClaudeHostOptions> = {}, wrap?: (adapter: AgentHost) => AgentHost): Promise<RunResult> {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...envFor(s),
+    AVARICE_CONFIG_HOME: s.roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: s.roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: s.roots.AVARICE_WORK_ROOT,
+  };
+  const composed = createDeps(env);
+  assert.ok(composed.ok, 'composition');
+  const located = locateGsdCore(env);
+  assert.ok(located.ok, 'gsd-core is installed');
+  const preamble = fingerprintGsdPreamble(located.value.gsdCoreDir);
+  assert.ok(preamble.ok, 'the GSD preamble is found');
+  const { deps } = composed.value;
+  try {
+    const adapter = new ClaudeHostAdapter({
+      claudeBin: s.fake.bin,
+      hookEntry: HOOK_ENTRY,
+      ledgerPath: join(deps.profile.dataRoot, 'state.db'),
+      dataRoot: deps.profile.dataRoot,
+      gsd: {
+        gsdCoreDir: located.value.gsdCoreDir,
+        agentsDir: join(located.value.gsdCoreDir, '..', 'agents'),
+        skillsRoot: join(s.configDir, 'skills'),
+        preamble: preamble.value,
+      },
+      artifacts: deps.artifacts,
+      staging: deps.staging,
+      countHookDenies: (id) => deps.ledger.countHookDenials(id),
+      env,
+      ...adapterOptions,
+    });
+    const wired: AppDeps = { ...deps, host: wrap === undefined ? adapter : wrap(adapter) };
+    const started = startOnboarding(wired, { repoPath: s.repo.path, policy: 'onboarding', mode: 'full' });
+    assert.ok(started.ok, 'registration');
+    const outcome = await runOnboarding(wired, started.value.onboardingId);
+    // A host error the stage does not turn into a state (a cancelled invocation) ends the loop with that error.
+    if (!outcome.ok) return { deps: wired, onboardingId: started.value.onboardingId, state: `error:${outcome.error.kind}`, reason: null };
+    return { deps: wired, onboardingId: started.value.onboardingId, state: outcome.value.state, reason: outcome.value.reason };
+  } finally {
+    composed.value.close();
+  }
+}
+
+const finishedEvents = (roots: CliRoots): Array<Record<string, unknown>> =>
+  rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+describe('every containment layer is checked at launch, after the files are written (SC3)', () => {
+  const MUTATIONS: ReadonlyArray<readonly [name: string, rule: string, mutate: (settingsFile: string) => void]> = [
+    ['the settings file is gone', 'enforcement_failure:settings-missing', (f) => rmSync(f)],
+    [
+      'the sandbox is switched off in the settings',
+      'enforcement_failure:settings-key:sandbox.enabled',
+      (f) => edit(f, (j) => ((j['sandbox'] as Record<string, unknown>)['enabled'] = false)),
+    ],
+    [
+      'the permission mode is bypassPermissions',
+      'enforcement_failure:settings-key:permissions.defaultMode',
+      (f) => edit(f, (j) => ((j['permissions'] as Record<string, unknown>)['defaultMode'] = 'bypassPermissions')),
+    ],
+    ['the hooks are removed', 'enforcement_failure:hook-missing', (f) => edit(f, (j) => delete j['hooks'])],
+    [
+      'the hook no longer blocks on failure',
+      'enforcement_failure:hook-not-blocking',
+      (f) => edit(f, (j) => delete (((j['hooks'] as Record<string, unknown[]>)['PreToolUse'] as Array<{ hooks: Array<Record<string, unknown>> }>)[0] as { hooks: Array<Record<string, unknown>> }).hooks[0]?.['onFailure']),
+    ],
+    [
+      'the hook script is not there',
+      'enforcement_failure:hook-script-unreadable',
+      (f) =>
+        edit(f, (j) => {
+          const entry = (((j['hooks'] as Record<string, unknown[]>)['PreToolUse'] as Array<{ hooks: Array<{ args: string[] }> }>)[0] as { hooks: Array<{ args: string[] }> }).hooks[0] as { args: string[] };
+          entry.args = entry.args.map((a) => (a.endsWith('pre-tool-use.ts') ? '/nonexistent/pre-tool-use.ts' : a));
+        }),
+    ],
+  ];
+
+  function edit(file: string, change: (json: Record<string, unknown>) => unknown): void {
+    const json = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    change(json);
+    writeFileSync(file, JSON.stringify(json));
+  }
+
+  for (const [name, rule, mutate] of MUTATIONS) {
+    it(`blocks with enforcement_failure and starts nothing when ${name}`, async () => {
+      const s = setup({ transcript: 'success', mapFiles: 'all' });
+      const run = await inProcess(s, { onBeforeSpawn: ({ files }) => mutate(files.settingsFile) });
+      assert.deepEqual([run.state, run.reason], ['blocked', 'enforcement_failure']);
+      assert.equal(s.fake.started(), false, 'the host was never started');
+      const [step] = launchSteps(s.roots);
+      assert.equal(step?.status, 'failed');
+      assert.equal(step?.result['rule'], rule);
+    });
+  }
+
+  it('blocks with enforcement_failure when the sandbox probe fails, before anything is launched', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all' });
+    const run = await inProcess(s, { sandboxProbe: ['/usr/bin/false'] });
+    assert.deepEqual([run.state, run.reason], ['blocked', 'enforcement_failure']);
+    assert.equal(s.fake.started(), false);
+    assert.equal(launchSteps(s.roots).length, 0, 'no launch was even recorded: the enforcement check came first');
+  });
+
+  it('refuses when the hook allows the synthetic write: a hook that would not stop a write is no enforcement', () => {
+    for (const [name, source] of [['allows everything', 'process.exit(0);\n'], ['crashes', 'process.exit(1);\n'], ['prints an allow', 'console.log(JSON.stringify({ hookSpecificOutput: { permissionDecision: "allow" } }));\n']] as const) {
+      const s = setup({ transcript: 'success', mapFiles: 'all' });
+      const hook = join(s.fake.dir, 'hook.mjs');
+      writeFileSync(hook, source);
+      const r = onboard(s, { AVARICE_HOOK_ENTRY: hook });
+      assert.match(r.stdout + r.stderr, /blocked \(enforcement_failure\)/, `${name}: ${r.stdout}${r.stderr}`);
+      assert.equal(s.fake.started(), false, `${name}: the host was never started`);
+      assert.equal(launchSteps(s.roots)[0]?.result['rule'], 'enforcement_failure:hook-self-test', name);
+    }
+  });
+
+  it('records why the production host is the unavailable one, in the descriptor adapter_configs keeps', () => {
+    const s = setup({ version: '2.1.400 (Claude Code)', transcript: 'success' });
+    onboard(s);
+    const [host] = rows<{ adapter: string; descriptor_json: string }>(s.roots, "SELECT adapter, descriptor_json FROM adapter_configs WHERE port = 'agent-host'");
+    assert.equal(host?.adapter, 'unavailable');
+    const attributes = (JSON.parse(host?.descriptor_json ?? '{}') as { attributes: Record<string, string> }).attributes;
+    assert.equal(attributes['enforcement'], 'none');
+    assert.equal(attributes['reason'], 'enforcement_failure:host-version-not-admitted:2.1.400');
+  });
+});
+
+describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13)', () => {
+  it('ends an overrunning host with SIGTERM, leaves no process in its group, and retries once before it blocks', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, background: true });
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    assert.deepEqual([run.state, run.reason], ['blocked', 'decision']);
+    const launches = s.fake.launches();
+    assert.equal(launches.length, 2, 'one launch and the one retry the contract allows');
+    for (const l of launches) assert.equal(alive(l.pid), false, 'the host is gone');
+    assert.equal(s.fake.children().length, 2, 'each launch started a background process in its group');
+    for (const pid of s.fake.children()) assert.equal(alive(pid), false, 'and so is everything the host left running in its group');
+    const finished = finishedEvents(s.roots);
+    assert.deepEqual(finished.map((f) => [f['outcome'], f['timedOut'], f['signal']]), [['inconclusive', true, 'SIGTERM'], ['inconclusive', true, 'SIGTERM']]);
+    assert.deepEqual(launchSteps(s.roots).map((l) => l.result['kind']), ['inconclusive', 'inconclusive']);
+  });
+
+  it('judges an inconclusive ending by what staging holds: the retry rule completes a run whose second launch finishes', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, sleepFirstOnly: true });
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    assert.deepEqual([run.state, run.reason], ['active', null]);
+    assert.deepEqual(finishedEvents(s.roots).map((f) => f['outcome']), ['inconclusive', 'progressed']);
+  });
+
+  it('follows SIGTERM with SIGKILL after the grace when the host ignores SIGTERM', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, ignoreSigterm: true });
+    const started = Date.now();
+    const run = await inProcess(s, { killGraceMs: 300 }, (adapter) => new ClampedHost(adapter, 300));
+    assert.equal(run.state, 'blocked');
+    const [first] = finishedEvents(s.roots);
+    assert.deepEqual([first?.['outcome'], first?.['timedOut'], first?.['signal']], ['inconclusive', true, 'SIGKILL']);
+    for (const l of s.fake.launches()) assert.equal(alive(l.pid), false);
+    assert.ok(Date.now() - started < 30_000, 'the host did not hold the run');
+  });
+
+  it('calls a moved staging HEAD a containment finding and failed, even though the map files are there', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', commit: true });
+    const run = await inProcess(s);
+    assert.deepEqual([run.state, run.reason], ['blocked', 'decision']);
+    assert.equal(launchSteps(s.roots)[0]?.result['kind'], 'failed');
+    assert.equal(finishedEvents(s.roots)[0]?.['headMoved'], true);
+    const findings = rows<{ data_json: string }>(s.roots, "SELECT data_json FROM events WHERE type = 'containment.finding'").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    assert.ok(findings.some((f) => f['check'] === 'staging-head-moved'), 'a staging-head-moved finding is recorded');
+  });
+
+  it('maps hook budget_exhausted denials to budget_exhausted, even when the host says success and the files are there', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all' });
+    const run = await inProcess(s, { countHookDenies: () => ({ ok: true, value: { total: 2, budget: 2 } }) });
+    assert.deepEqual([run.state, run.reason], ['blocked', 'budget_exhausted']);
+    assert.equal(launchSteps(s.roots)[0]?.result['kind'], 'budget_exhausted');
+  });
+
+  it('reads stdout that arrives in small pieces, and keeps at most the transcript cap of it', async () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', chunkBytes: 37 });
+    const run = await inProcess(s, { maxTranscriptBytes: 1500 });
+    assert.equal(run.state, 'active', 'the result was parsed from all of the output, not only the kept part');
+    const [artifact] = rows<{ digest: string; size: number }>(s.roots, "SELECT digest, size FROM artifacts WHERE kind = 'transcript'");
+    assert.ok(artifact);
+    const hex = artifact.digest.replace('sha256:', '');
+    const stored = readFileSync(join(s.roots.AVARICE_DATA_ROOT, 'artifacts', hex.slice(0, 2), hex), 'utf8');
+    assert.match(stored, /\[avarice: transcript truncated at 1500 bytes\]/);
+    assert.ok(Buffer.byteLength(stored) < 1500 + 100);
+  });
+
+  it('returns cancelled and starts nothing when the signal is already aborted', async () => {
+    const s = setup({ transcript: 'success' });
+    let seen: Result<InvocationOutcome> | undefined;
+    const run = await inProcess(s, {}, (adapter) => ({
+      get descriptor() {
+        return adapter.descriptor;
+      },
+      async invoke(req, _signal) {
+        seen = await adapter.invoke(req, AbortSignal.abort());
+        return seen;
+      },
+    }));
+    assert.deepEqual(seen && !seen.ok ? seen.error : seen, { kind: 'cancelled', sideEffect: 'none' });
+    assert.equal(run.state, 'error:cancelled');
+    assert.equal(s.fake.started(), false);
+  });
+});
+
+describe('ClaudeHostAdapter.reap', () => {
+  // reap needs none of the launch inputs: it searches the process table for the session ID.
+  function reaper(): ClaudeHostAdapter {
+    const root = makeRoots();
+    cleanup.push(root.base);
+    return new ClaudeHostAdapter({
+      claudeBin: '/nonexistent/claude',
+      hookEntry: HOOK_ENTRY,
+      ledgerPath: join(root.base, 'state.db'),
+      dataRoot: root.AVARICE_DATA_ROOT,
+      gsd: { gsdCoreDir: root.base, agentsDir: root.base, skillsRoot: root.base },
+      artifacts: new LocalArtifactStore(root.AVARICE_DATA_ROOT),
+      staging: createStagingWorkspace(STAGING_STRATEGY),
+      countHookDenies: () => ({ ok: true, value: { total: 0, budget: 0 } }),
+    });
+  }
+
+  it('ends a process that carries the session ID, with its group, and reports one terminated', async () => {
+    const adapter = reaper();
+    const sessionId = '5b3a9d1c-0f2e-4c6a-8d7b-1e2f3a4b5c6d';
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
+    child.unref();
+    assert.ok(child.pid !== undefined && alive(child.pid));
+    const reaped = await adapter.reap({ sessionId });
+    assert.deepEqual(reaped, { ok: true, value: { terminated: 1 } });
+    assert.equal(alive(child.pid), false);
+  });
+
+  it('reports none terminated when no process carries the session ID, and refuses an ID that is not a UUID', async () => {
+    const adapter = reaper();
+    assert.deepEqual(await adapter.reap({ sessionId: '11111111-2222-4333-8444-555555555555' }), { ok: true, value: { terminated: 0 } });
+    const refused = await adapter.reap({ sessionId: '.* --session-id' });
+    assert.equal(refused.ok, false);
+  });
+});
+
+describe('the GSD shim preamble fingerprint', () => {
+  it('is read from the located gsd-core and equals the fingerprint spike S0-A recorded', () => {
+    const located = locateGsdCore(process.env);
+    assert.ok(located.ok, 'gsd-core is installed');
+    const fingerprint = fingerprintGsdPreamble(located.value.gsdCoreDir);
+    assert.ok(fingerprint.ok);
+    const recorded = (JSON.parse(readFileSync(join(REPO_ROOT, 'spikes', 'slice-0-wave-0', 'results.json'), 'utf8')) as { spikes: Record<string, { preamble: { sha256: string; chars: number } }> }).spikes['S0-A']?.preamble;
+    assert.deepEqual(fingerprint.value, { sha256: recorded?.sha256, length: recorded?.chars });
+    assert.equal(fingerprint.value.sha256, GSD_PREAMBLE_SHA256);
+  });
+
+  it('is not found in a directory without the workflow, which keeps the production host from being admitted', () => {
+    const empty = realpathSync(makeRoots().base);
+    cleanup.push(empty);
+    const fingerprint = fingerprintGsdPreamble(empty);
+    assert.equal(fingerprint.ok, false);
   });
 });

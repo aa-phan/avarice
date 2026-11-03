@@ -20,6 +20,9 @@ export interface FakeClaudeScript {
   sleepFirstOnly?: boolean;
   chunkBytes?: number;
   exitCode?: number;
+  ignoreSigterm?: boolean;
+  background?: boolean;
+  commit?: boolean;
 }
 
 export interface Launch {
@@ -44,6 +47,8 @@ export interface FakeClaude {
   argvs(): LoggedArgv[];
   // The environment of each launch.
   envs(): Array<Record<string, string>>;
+  // Pids of the background processes the fake started in its group.
+  children(): number[];
 }
 
 const lines = (path: string): string[] => (existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter((l) => l !== '') : []);
@@ -66,5 +71,6 @@ export function makeFakeClaude(script: FakeClaudeScript = {}, parent?: string): 
     launches: () => lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch),
     argvs: () => lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv),
     envs: () => lines(join(logs, 'env.jsonl')).map((l) => JSON.parse(l) as Record<string, string>),
+    children: () => lines(join(logs, 'children.log')).map(Number),
   };
 }

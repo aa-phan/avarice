@@ -17,8 +17,11 @@
 //   sleepFirstOnly   boolean   sleep only on the first launch (the log says which launch this is)
 //   chunkBytes       number    print stdout in pieces of this size, splitting lines
 //   exitCode         number
+//   ignoreSigterm    boolean   ignore SIGTERM, so only SIGKILL ends the process
+//   background       boolean   start a `sleep 300` in the same process group and log its pid (children.log)
+//   commit           boolean   make a commit in the working directory (moves HEAD)
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -35,6 +38,8 @@ if (argv.includes('--version')) {
   process.exit(0);
 }
 
+if (script.ignoreSigterm === true) process.on('SIGTERM', () => {});
+
 const flag = (name) => {
   const at = argv.indexOf(name);
   return at === -1 ? undefined : argv[at + 1];
@@ -49,6 +54,11 @@ if (dir !== undefined) {
   launch = readFileSync(join(dir, 'started.log'), 'utf8').split('\n').filter((l) => l !== '').length;
   appendFileSync(join(dir, 'argv.jsonl'), `${JSON.stringify({ argv, cwd: process.cwd(), pid: process.pid })}\n`);
   appendFileSync(join(dir, 'env.jsonl'), `${JSON.stringify(process.env)}\n`);
+}
+
+if (script.background === true) {
+  const child = spawn('sleep', ['300'], { stdio: 'ignore' });
+  if (dir !== undefined) appendFileSync(join(dir, 'children.log'), `${child.pid}\n`);
 }
 
 if (script.sleepMs !== undefined && (script.sleepFirstOnly !== true || launch === 1)) await sleep(script.sleepMs);
@@ -72,6 +82,7 @@ if (script.mapFiles !== undefined) {
   for (const name of names) writeFile(join('.planning', 'codebase', name), fakeMapDocument(name, stamp, tracked, undefined));
 }
 for (const [rel, content] of Object.entries(script.writes ?? {})) writeFile(rel, content);
+if (script.commit === true) git('-c', 'user.name=Fake', '-c', 'user.email=fake@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'moved by the fake host');
 
 if (script.transcript !== undefined && script.transcript !== null) {
   const lines = transcript(script.transcript, sessionId).split('\n');

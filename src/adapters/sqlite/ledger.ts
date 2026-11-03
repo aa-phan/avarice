@@ -617,6 +617,18 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  countHookDenials(invocationId: string): Result<{ total: number; budget: number }> {
+    return guarded(() => {
+      const row = this.db
+        .prepare(
+          `SELECT count(*) AS total, coalesce(sum(CASE WHEN json_extract(data_json, '$.rule') = 'budget_exhausted' THEN 1 ELSE 0 END), 0) AS budget
+           FROM events WHERE type = 'hook.decision' AND invocation_id = ? AND json_extract(data_json, '$.decision') = 'deny'`,
+        )
+        .get(invocationId) as { total: number; budget: number };
+      return { total: Number(row.total), budget: Number(row.budget) };
+    });
+  }
+
   recordArtifact(input: ArtifactInput): Result<void> {
     return tx(this.db, () => {
       this.db

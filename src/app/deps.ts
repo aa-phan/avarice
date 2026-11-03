@@ -30,8 +30,9 @@ export interface GsdProblem {
 
 export interface AppDeps {
   ledger: Ledger;
-  // The agent host. Production composition supplies the fail-closed UnavailableAgentHost until the
-  // contained Claude Code adapter (plan 01-15) is admitted; tests inject a fake through main() overrides.
+  // The agent host. Production composition supplies the contained ClaudeHostAdapter when an admitted claude, the
+  // sandbox and the hook entry are present, and the fail-closed UnavailableAgentHost otherwise (plan 01-15); tests
+  // inject a fake through main() overrides.
   host: AgentHost;
   staging: StagingWorkspace;
   artifacts: ArtifactStore;
@@ -48,4 +49,7 @@ export interface AppDeps {
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;
+  // The user's home directory as composition resolved it ($HOME, else the OS answer): the credential directories an
+  // invocation may not read are named from it. Absent only in a hand-built AppDeps.
+  home?: string;
 }

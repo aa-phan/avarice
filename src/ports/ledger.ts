@@ -280,6 +280,8 @@ export interface Ledger {
   getBudgets(runId: string): Result<BudgetRow[]>;
   // How many hook denials with rule `budget_exhausted` the invocation recorded.
   countBudgetDenials(runId: string, invocationId: string): Result<number>;
+  // Every hook denial the invocation recorded (`total`), and how many of them were budget_exhausted (`budget`).
+  countHookDenials(invocationId: string): Result<{ total: number; budget: number }>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
   recordArtifact(input: ArtifactInput): Result<void>;

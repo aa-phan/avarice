@@ -46,6 +46,9 @@ export function runCli(argv: readonly string[], options: RunCliOptions & { roots
     AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
     AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
     AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    // A test never launches a real `claude`: with no admitted host the production composition keeps the host that
+    // refuses. A test that exercises the contained host passes AVARICE_CLAUDE_BIN pointing at a fake.
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
     ...options.env,
   };
   // A child of `node --test` must not inherit the parent runner's context.

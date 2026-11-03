@@ -2,13 +2,18 @@
 // Nothing starts the contained host unless the generated settings carry every required key, the AVARICE hook
 // is configured to block on failure and its script can be read, the sandbox runs, and `claude --version` is a
 // version AVARICE has tested. Every refusal is `denied` with rule `enforcement_failure:{reason}`, so the
-// onboarding blocks with reason enforcement_failure. Plan 01-12 adds the hook self-test; plan 01-15 calls this
-// before every launch.
-import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+// onboarding blocks with reason enforcement_failure. Plan 01-15 adds the hook self-test and calls this before every
+// launch.
+import { accessSync, constants, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import { openDb } from '../sqlite/db.ts';
+import { migrate } from '../sqlite/migrate.ts';
+import { MIGRATION_0001 } from '../sqlite/migrations/0001-initial.ts';
 
 // Host versions the containment suite has run against (spike S0 and the pre-slice spike).
 export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316'];
@@ -23,6 +28,10 @@ export interface LaunchReadyInput {
   // The command (argv) whose exit status says whether the OS sandbox works. Tests inject another.
   sandboxProbe?: readonly string[];
   timeoutMs?: number;
+  // The generated hook policy. When given, the hook self-test runs against a scratch copy of it and the launch is
+  // refused unless the hook, started the way the settings start it, denies a write outside the write roots. The host
+  // adapter always passes it.
+  policyFile?: string;
 }
 
 function refuse(reason: string): Result<never> {
@@ -102,6 +111,122 @@ function probeEnv(): Record<string, string> {
   return env;
 }
 
+// The OS sandbox applies a profile.
+function checkSandbox(sandboxProbe: readonly string[] | undefined, timeout: number): Result<void> {
+  const probe = sandboxProbe ?? DEFAULT_SANDBOX_PROBE;
+  const [probeBin, ...probeArgs] = probe;
+  if (probeBin === undefined) return refuse('sandbox-unavailable');
+  const probed = spawnSync(probeBin, probeArgs, { timeout, stdio: 'ignore', env: probeEnv() });
+  if (probed.error !== undefined || probed.status !== 0) return refuse('sandbox-unavailable');
+  return ok(undefined);
+}
+
+// The host is a version the containment suite has run against.
+function checkHostVersion(claudeBin: string, timeout: number): Result<{ claudeVersion: string }> {
+  const version = spawnSync(claudeBin, ['--version'], {
+    timeout,
+    killSignal: 'SIGKILL',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    env: probeEnv(),
+  });
+  if (version.error !== undefined || version.status !== 0) return refuse('host-unavailable');
+  const reported = /^\s*(\d+\.\d+\.\d+)\b/.exec(version.stdout)?.[1];
+  if (reported === undefined) return refuse('host-version-unreadable');
+  if (!ADMITTED_CLAUDE_VERSIONS.includes(reported)) return refuse(`host-version-not-admitted:${reported}`);
+  return ok({ claudeVersion: reported });
+}
+
+export interface HostReadyInput {
+  claudeBin: string;
+  // The hook entry script the generated settings name.
+  hookEntry: string;
+  sandboxProbe?: readonly string[];
+  timeoutMs?: number;
+}
+
+// The startup check behind the host's `enforced` descriptor: the hook entry can be read, the sandbox runs and
+// `claude --version` is a version AVARICE has tested. Nothing is started that could run a model.
+export function checkHostReady(input: HostReadyInput): Result<{ claudeVersion: string }> {
+  const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!readable(input.hookEntry)) return refuse('hook-script-unreadable');
+  const sandbox = checkSandbox(input.sandboxProbe, timeout);
+  if (!sandbox.ok) return sandbox;
+  return checkHostVersion(input.claudeBin, timeout);
+}
+
+export interface HookSelfTestInput {
+  // The hook entry script (src/hook/pre-tool-use.ts).
+  hookEntry: string;
+  // The invocation's hook-policy.json; a scratch copy that points at a scratch ledger is what the test runs against.
+  policyFile: string;
+  // The command and its arguments before `--event`, as the generated settings start the hook. Default: this node
+  // with the warning switch and `hookEntry`.
+  command?: string;
+  leadArgs?: readonly string[];
+  timeoutMs?: number;
+}
+
+// Runs the hook the way the host will and requires it to deny a Write outside the write roots. A hook that cannot
+// start, cannot read its policy, crashes, or allows the call is a hook that would not stop a model-directed write,
+// so the launch is refused (`enforcement_failure:hook-self-test`). The real ledger is never touched: the policy copy
+// names a scratch ledger in a scratch directory, removed afterwards.
+export function hookSelfTest(input: HookSelfTestInput): Result<void> {
+  const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let policy: unknown;
+  try {
+    policy = JSON.parse(readFileSync(input.policyFile, 'utf8'));
+  } catch {
+    return refuse('hook-self-test');
+  }
+  if (!isObject(policy)) return refuse('hook-self-test');
+
+  let scratch: string | undefined;
+  try {
+    scratch = mkdtempSync(join(tmpdir(), 'avarice-hook-selftest-'));
+    const ledgerPath = join(scratch, 'state.db');
+    const opened = openDb(ledgerPath);
+    if (!opened.ok) return refuse('hook-self-test');
+    const migrated = migrate(opened.value, [MIGRATION_0001]);
+    opened.value.close();
+    if (!migrated.ok) return refuse('hook-self-test');
+
+    const policyCopy = join(scratch, 'hook-policy.json');
+    writeFileSync(policyCopy, JSON.stringify({ ...policy, ledgerPath }), { mode: 0o600 });
+    const stagingPath = typeof policy['stagingPath'] === 'string' ? policy['stagingPath'] : scratch;
+    const call = {
+      cwd: stagingPath,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Write',
+      // The scratch directory is not among the policy's write roots, whatever the policy says.
+      tool_input: { file_path: join(scratch, 'outside-the-write-roots.txt'), content: 'avarice hook self-test\n' },
+    };
+    const lead = input.leadArgs ?? ['--disable-warning=ExperimentalWarning', input.hookEntry];
+    const ran = spawnSync(input.command ?? process.execPath, [...lead, '--event', 'pre', '--policy', policyCopy], {
+      input: JSON.stringify(call),
+      encoding: 'utf8',
+      timeout,
+      killSignal: 'SIGKILL',
+      env: probeEnv(),
+      maxBuffer: 1024 * 1024,
+    });
+    if (ran.error !== undefined || ran.status !== 0) return refuse('hook-self-test');
+    let verdict: unknown;
+    try {
+      verdict = JSON.parse(ran.stdout.trim());
+    } catch {
+      return refuse('hook-self-test');
+    }
+    const output = isObject(verdict) ? verdict['hookSpecificOutput'] : undefined;
+    if (!isObject(output) || output['permissionDecision'] !== 'deny') return refuse('hook-self-test');
+    return ok(undefined);
+  } catch {
+    return refuse('hook-self-test');
+  } finally {
+    if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 export function checkLaunchReady(input: LaunchReadyInput): Result<{ claudeVersion: string }> {
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -134,24 +259,24 @@ export function checkLaunchReady(input: LaunchReadyInput): Result<{ claudeVersio
     if (!readable(hookScript(hook))) return refuse('hook-script-unreadable');
   }
 
+  // 2b. The hook, started the way the settings start it, denies a write outside the write roots.
+  if (input.policyFile !== undefined) {
+    const entry = pre[0] as HookRef;
+    const flag = entry.args.indexOf('--event');
+    const selfTest = hookSelfTest({
+      hookEntry: hookScript(entry),
+      policyFile: input.policyFile,
+      command: entry.command,
+      leadArgs: flag === -1 ? entry.args : entry.args.slice(0, flag),
+      timeoutMs: timeout,
+    });
+    if (!selfTest.ok) return selfTest;
+  }
+
   // 3. The OS sandbox applies a profile.
-  const probe = input.sandboxProbe ?? DEFAULT_SANDBOX_PROBE;
-  const [probeBin, ...probeArgs] = probe;
-  if (probeBin === undefined) return refuse('sandbox-unavailable');
-  const probed = spawnSync(probeBin, probeArgs, { timeout, stdio: 'ignore', env: probeEnv() });
-  if (probed.error !== undefined || probed.status !== 0) return refuse('sandbox-unavailable');
+  const sandbox = checkSandbox(input.sandboxProbe, timeout);
+  if (!sandbox.ok) return sandbox;
 
   // 4. The host is a version the containment suite has run against.
-  const version = spawnSync(input.claudeBin, ['--version'], {
-    timeout,
-    killSignal: 'SIGKILL',
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-    env: probeEnv(),
-  });
-  if (version.error !== undefined || version.status !== 0) return refuse('host-unavailable');
-  const reported = /^\s*(\d+\.\d+\.\d+)\b/.exec(version.stdout)?.[1];
-  if (reported === undefined) return refuse('host-version-unreadable');
-  if (!ADMITTED_CLAUDE_VERSIONS.includes(reported)) return refuse(`host-version-not-admitted:${reported}`);
-  return ok({ claudeVersion: reported });
+  return checkHostVersion(input.claudeBin, timeout);
 }
