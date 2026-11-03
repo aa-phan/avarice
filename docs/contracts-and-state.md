@@ -711,7 +711,7 @@ Repair loops are bounded per check (`repairAttemptsPerCheck`). On exhaustion the
 
 ## Persisted entities
 
-One SQLite database per profile at `<profile root>/state.db`, in WAL mode on local storage only (NFR-5, [ADR-003](decisions/ADR-003-local-persistence.md)). Schema version 1 is everything slice 1 needs: the tables below plus `budgets` ([budget accounting](#budget-accounting)) and `decisions` and `work_items` ([decision records](#decision-records)).
+One SQLite database per profile at `<profile root>/state.db`, in WAL mode on local storage only (NFR-5, [ADR-003](decisions/ADR-003-local-persistence.md)). The store file and its `-wal` and `-shm` siblings are mode `0600`: a new store is created that way, and `openDb` sets an existing one owned by the current user to `0600` on a read-write open (a stricter mode is kept, a read-only open changes nothing) and refuses to open one owned by another user (exit 70, naming the file and both user IDs). Schema version 1 is everything slice 1 needs: the tables below plus `budgets` ([budget accounting](#budget-accounting)) and `decisions` and `work_items` ([decision records](#decision-records)).
 
 ```sql
 -- Proposal. schema_version 1
