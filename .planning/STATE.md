@@ -5,7 +5,7 @@ milestone_name: Contained Kernel
 current_phase: 2
 current_phase_name: Contained unattended run of one work item
 status: planning
-stopped_at: Phase 01 complete, ready to plan Phase 2
+stopped_at: Phase 2 context gathered
 last_updated: "2026-11-05T08:47:56.670Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
@@ -217,5 +217,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-05T08:50:00Z
-Stopped at: Phase 01 complete, ready to plan Phase 2
-Resume file: None
+Stopped at: Phase 2 context gathered
+Resume file: .planning/phases/02-contained-unattended-run-of-one-work-item/02-CONTEXT.md
