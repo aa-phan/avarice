@@ -199,7 +199,7 @@ None. The changes narrow an existing surface (process-table `pgrep`/`kill` by UU
 
 Ready for 01-22. Gap P-1 `missing` items (generic reap, kill case inside intel, kill case inside knowledge) are closed. The knowledge kill case needs graphify and is skipped with a stated reason without it (WR-03(d) hardening stays out of scope per D-GAP-02).
 
-## Self-Check: PENDING
+## Self-Check: PASSED
 
 ---
 *Phase: 01-contained-onboarding-of-one-repository*

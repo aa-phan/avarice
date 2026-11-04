@@ -98,7 +98,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Codebase onboarding (ONB-1 to ONB-15)
 
-- [ ] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
+- [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
 - [ ] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
 - [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
@@ -280,7 +280,7 @@ Each v1 requirement maps to exactly one phase.
 | AUT-15 | Phase 8 | Pending |
 | AUT-16 | Phase 3 | Pending |
 | AUT-17 | Phase 5 | Pending |
-| ONB-1 | Phase 1 | Gaps Found |
+| ONB-1 | Phase 1 | Complete |
 | ONB-2 | Phase 1 | Gaps Found |
 | ONB-3 | Phase 1 | Gaps Found |
 | ONB-4 | Phase 1 | Gaps Found |

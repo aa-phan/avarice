@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 20/24 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
+**Plans:** 21/24 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
 
 Plans:
 **Wave 1**
@@ -93,7 +93,7 @@ Plans:
 - [x] 01-19-PLAN.md — Rehearsal and exit run on ~/aa-phan-portfolio-v2 with kill and resume, AC-1 recorded
 
 **Gap closure, Wave 1** *(from 01-VERIFICATION.md gaps P-1 to P-3)*
-- [ ] 01-21-PLAN.md — Resume reaps every interrupted launch (map, intel, knowledge) by session ID; kill cases inside the intel and knowledge invocations (CR-01)
+- [x] 01-21-PLAN.md — Resume reaps every interrupted launch (map, intel, knowledge) by session ID; kill cases inside the intel and knowledge invocations (CR-01)
 - [ ] 01-22-PLAN.md — Staging diff lists files a hostile `.gitignore` hides; hostile-repository tests for validate and activate (CR-03)
 - [ ] 01-23-PLAN.md — Hook read allow-list, attached option values and operands after `--`, recursive-grep rule; every P-3 case as a unit test (CR-02)
 
@@ -221,7 +221,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 0. Contained onboarding of one repository | v1.0 | 20/20 | In Progress | - |
-| 1. Contained unattended run of one work item | v1.0 | 0/TBD | Not started | - |
+| 1. Contained unattended run of one work item | v1.0 | 21/24 | In Progress | - |
 | 2. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 3. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 4. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-19-PLAN.md
-last_updated: "2026-11-04T07:34:00.381Z"
-last_activity: 2026-11-02
+stopped_at: Completed 01-21-PLAN.md
+last_updated: "2026-11-04T09:49:24.503Z"
+last_activity: 2026-11-04
 last_activity_desc: Phase 01 execution started
-state_head: d0c44058dee1af3d63ebb19b81ff1b2f56224971
+state_head: 5cfe59e4d008d6511e3694899ed6e68b46b11715
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 24
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 
 ## Current Position
 
-Phase: 01 (Contained onboarding of one repository) — READY TO EXECUTE
-Plan: 20 of 20
+Phase: 01 (Contained onboarding of one repository) — EXECUTING
+Plan: 2 of 24
 Status: Ready to execute
-Last activity: 2026-11-02 — Phase 01 execution started
+Last activity: 2026-11-04 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -77,6 +77,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P18 | 33 min | 2 tasks | 25 files |
 | Phase 01 P20 | 314 min | 4 tasks | 13 files |
 | Phase 01 P19 | about 6 hours across three resumes | 3 tasks | 22 files |
+| Phase 01 P21 | 14 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-19: invocations budget derived per mode (full/fast/paths 6, skip/adopt 3) with invocationsDerivation; killed invocations stay charged; overrides only lower (6477c32)
 - [Phase 01]: 01-19: knowledge validation's forbidden-source rule applies to planning documents for any node and to anything under .planning/phases for pass-added nodes, so a code node from a tracked script there no longer rejects the index (0d930f3)
 - [Phase 01]: 01-19: exit run complete: ~/aa-phan-portfolio-v2 active (1010 code, 24 document nodes, graph and intel at 9f1cd8d), kill -9 and resume to the same ID and pin, checkout unchanged, AC-1 1 s; default store tightened to 0600
+- [Phase 01]: 01-21: resume reaps every started launch:* row (map, intel, knowledge) by session ID in a prelude step before reconcileInvocation; a failing reap stops the resume with all rows still started — T-01-44/T-01-72: relaunching or reading staging beside a surviving detached host is unsafe
 
 ### Pending Todos
 
@@ -190,6 +192,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T02:10:18.190Z
-Stopped at: Completed 01-19-PLAN.md
+Last session: 2026-11-04T09:49:24.480Z
+Stopped at: Completed 01-21-PLAN.md
 Resume file: None
