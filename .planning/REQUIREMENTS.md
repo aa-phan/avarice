@@ -98,9 +98,9 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Codebase onboarding (ONB-1 to ONB-15)
 
-- [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
+- [ ] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
 - [ ] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
-- [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
+- [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
@@ -280,9 +280,9 @@ Each v1 requirement maps to exactly one phase.
 | AUT-15 | Phase 8 | Pending |
 | AUT-16 | Phase 3 | Pending |
 | AUT-17 | Phase 5 | Pending |
-| ONB-1 | Phase 1 | Complete |
+| ONB-1 | Phase 1 | Gaps Found |
 | ONB-2 | Phase 1 | Gaps Found |
-| ONB-3 | Phase 1 | Complete |
+| ONB-3 | Phase 1 | Gaps Found |
 | ONB-4 | Phase 1 | Gaps Found |
 | ONB-5 | Phase 1 | Gaps Found |
 | ONB-6 | Phase 4 | Pending |

@@ -1,8 +1,8 @@
 ---
 phase: 01-contained-onboarding-of-one-repository
-verified: 2026-11-04T08:00:00Z
+verified: 2026-11-04T10:30:00Z
 status: gaps_found
-score: 5/8 must-haves verified
+score: 7/8 must-haves verified
 covered_files:
   - .planning/phases/01-contained-onboarding-of-one-repository/01-01-PLAN.md
   - .planning/phases/01-contained-onboarding-of-one-repository/01-01-SUMMARY.md
@@ -44,53 +44,56 @@ covered_files:
   - .planning/phases/01-contained-onboarding-of-one-repository/01-19-SUMMARY.md
   - .planning/phases/01-contained-onboarding-of-one-repository/01-20-PLAN.md
   - .planning/phases/01-contained-onboarding-of-one-repository/01-20-SUMMARY.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-21-PLAN.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-21-SUMMARY.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-22-PLAN.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-22-SUMMARY.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-23-PLAN.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-23-SUMMARY.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-24-PLAN.md
+  - .planning/phases/01-contained-onboarding-of-one-repository/01-24-SUMMARY.md
+  - docs/containment.md
+  - src/adapters/git/repo-facts.ts
   - src/adapters/git/staging-base.ts
+  - src/adapters/host-claude/claude-host.ts
+  - src/adapters/host-claude/hook-policy.ts
+  - src/adapters/host-claude/settings.ts
+  - src/app/invocation.ts
   - src/app/resume.ts
-  - src/app/stages/index-stage.ts
-  - src/app/stages/index-steps.ts
   - src/domain/hook-decision.ts
   - src/domain/invocation-scope.ts
   - test/fault/killpoints.test.ts
-covered_digest: "v3:sha256:3178f7259680db8f6f9815b632a116c58b6e9bf5ecd3d90567f38c9f7a39a3a0"
+  - test/integration/claude-host.test.ts
+  - test/integration/ignored-writes.test.ts
+  - test/integration/resume-reap.test.ts
+  - test/unit/hook-decision.test.ts
+covered_digest: "v3:sha256:55f0c2cb72dd5a787f613f94f5b77d774cde58a05e3813f0d389c032f2e36378"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/8
+  gaps_closed:
+    - "P-1: every interrupted launch:* host (map, intel, knowledge) is reaped on resume (plan 01-21)"
+    - "P-2: staging diff sees ignored untracked files (plan 01-22)"
+  gaps_remaining:
+    - "P-3 (residual): the recursive-grep detector in the hook recognizes only the lowercase exact spelling 'recurse' of -d/--directories"
+  regressions: []
 gaps:
-  - truth: "On resume of an onboarding interrupted mid-invocation, any process still carrying that invocation's --session-id is terminated before reconciliation (plan 01-15 truth; T-01-44 'relaunching beside a survivor is not an option')"
+  - truth: "A recursive grep is denied with shell-recursive-read when it follows symlinks, or when a directory it walks lies in staging where a secret glob can match below it; with the default secret globs every recursive grep inside staging is denied (plan 01-23 truth 4, D-GAP-01); shell read confinement matches docs/containment.md"
     status: partial
-    reason: "Only the map invocation is reaped. reconcileInvocation handles only step launch:map and returns early unless state is mapping or paused; intel and knowledge invocations run in planning_ready, so a host started by index:intel or index:knowledge and orphaned by a supervisor SIGKILL is never reaped, and the resumed indexStage launches a second host beside it. launch:intel and launch:knowledge stay 'started' forever. The kill-point suite never kills inside an intel or knowledge invocation (the fake host answers unsupported for both)."
-    artifacts:
-      - path: "src/app/resume.ts"
-        issue: "const LAUNCH = 'launch:map' (line 17); reapInterrupted is called only from reconcileInvocation, which returns at `if (row.state !== 'paused')` (line ~49)"
-      - path: "src/app/stages/index-intel.ts"
-        issue: "prepareInvocation records launch:intel as started; nothing on resume consumes it"
-      - path: "src/app/stages/index-knowledge.ts"
-        issue: "same for launch:knowledge"
-    missing:
-      - "Generalize the resume prelude to every launch:* step still 'started' (reap by session ID, then mark interrupted)"
-      - "A fake-host kill case inside the intel invocation (and the knowledge invocation) in test/fault/killpoints.test.ts"
-  - truth: "Before activation AVARICE re-checks the whole staging diff against every agent and AVARICE write set, so a write outside them by any invocation or index step fails activation (plan 01-14 truth; ONB-3 detection backstop for entries 'created later at unlisted locations')"
-    status: partial
-    reason: "StagingBase.changes() combines `git diff --name-status <pin>` with `git status --porcelain=v2 --untracked-files=all` and never passes --ignored. Reproduced in /tmp: a repo whose committed .gitignore is `*` plus a new untracked evil.txt gives an empty status and an empty diff, and `! evil.txt` only with --ignored=matching. The repository (hostile input) controls its own .gitignore, so the scope-of-writes validation check, the extraMapFiles `added` list and the activation scopeCheck cannot see any untracked ignored path. Modified and deleted tracked files are still detected, and the primary controls (hook, per-entry sandbox denyWrite) still prevent writes to existing entries, so this is a detection-layer hole, not a demonstrated write."
-    artifacts:
-      - path: "src/adapters/git/staging-base.ts"
-        issue: "line ~109-129: status call lacks --ignored=matching"
-      - path: "src/adapters/git/repo-facts.ts"
-        issue: "parseStatus ignores '!' records"
-    missing:
-      - "Add --ignored=matching to the status call and treat '!' records as untracked in parseStatus, keeping AVARICE_WRITE_SET outputs admitted"
-      - "A hostile-repo test (.gitignore `*`, out-of-set write) for validate and activate"
-  - truth: "Shell read confinement matches docs/containment.md (denyRead includes '//<other profile roots>'; secret reads denied)"
-    status: partial
-    reason: "Reproduced by running the real decideToolCall: `cat <sibling staging>/secret.txt`, `cat ~/.netrc`, `grep -r token <home>`, `grep -r PASSWORD .` (recursion reaches **/.env and **/*.pem in staging) and `grep -f/home/u/.ssh/id_rsa README.md` are all ALLOWED (rule shell-identity); only the case a test would think of (`cat ~/.ssh/id_rsa`) and a literal staging `.env` are denied. denyRead in computeInvocationScope is the fixed list [repo, dataRoot, ~/.ssh, ~/.aws, ~/.config/gh]; workRoot (sibling onboardings) is not added although the doc lists it. Live case 09 only exercised the listed targets. Not a letter violation of ONB-3 (writes) but contradicts the documented containment spec and lets a prompt-injected mapper put other credential stores into the transcript."
+    reason: "The five cases VERIFICATION.md reproduced for P-3 are all denied now, and the allow-list, option-value parsing, work-root deny and docs row work as designed. But the recursion detector (hook-decision.ts:380-385) tests `-d`/`--directories` against the exact lowercase string 'recurse', so every other spelling of a recursing grep is allowed. Reproduced with the real decideToolCall and a production-shaped policy (default secret globs **/.env and **/*.pem, work root and repo in denyRead): `grep -dRECURSE PASSWORD .`, `grep -d RECURSE PASSWORD .`, `grep --directories=RECURSE PASSWORD .`, `grep --directories=Recurse`, `grep --dir=RECURSE`, `grep -d rec`, `grep -d dereference-recurse PASSWORD .`, `grep --directories=dereference-recurse`, `grep -ddereference-recurse` are all `allow shell-identity`, while `grep -r PASSWORD .` and `grep -drecurse PASSWORD .` are denied. Two of these really recurse on this machine: macOS /usr/bin/grep matches the value case-insensitively (`--directories=RECURSE`, `--dir=RECURSE` and `-dRECURSE` printed ./sub/.env:PASSWORD=hunter2 from a scratch tree), and the grep embedded in the Claude Code binary (ugrep, which the Bash tool's shell function substitutes for `grep`) accepts `-d dereference-recurse` and then FOLLOWS a symlink out of the tree (a symlink to a scratch file outside the tree was read). That last form is the one the rule exists to refuse (dereferences -> shell-recursive-read), and a tracked symlink in a hostile repository is materialized in staging. The sandbox denyRead covers the repository, data root, work root, ~/.ssh, ~/.aws and ~/.config/gh, not ~/.netrc or ~/.npmrc, so those stay reachable by this route. I ran these outside the sandbox and the live host; I did not run the escape end to end under a contained invocation."
     artifacts:
       - path: "src/domain/hook-decision.ts"
-        issue: "readRule/checkSegment: non-recursive deny list; attached option values (-fPATH, --file=PATH) never checked; recursion flags unchecked"
-      - path: "src/domain/invocation-scope.ts"
-        issue: "line ~234: denyRead omits workRoot and other credential stores"
+        issue: "line ~380-385: `shortValues.some(v => v.flag === 'd' && v.value === 'recurse')` and `(l.value ?? ...) === 'recurse'`; no case folding, no abbreviation, no 'dereference-recurse'; the dereference test (`flags.has('R')`, `--dereference-recursive`) does not include `-d dereference-recurse`"
+      - path: "docs/containment.md"
+        issue: "row 'No reads of secrets...' lists the known bypasses (git objects, host Grep tool) but not this one, and states recursive grep is covered; plan 01-24 prohibition 'MUST NOT state a read restriction the hook does not enforce' is not met for this spelling family"
+      - path: "test/unit/hook-decision.test.ts"
+        issue: "lines ~376-390 pin only the lowercase spellings; no case, abbreviation or dereference-recurse case"
     missing:
-      - "Allow-list shell reads (staging, policy readRoots, gsd-core dirs); reject recursive reads that can escape; check attached option values"
-      - "Add workRoot to hook and sandbox denyRead per docs/containment.md:78, or amend the doc to state the limit"
-      - "Add the reproduced cases to test/unit/hook-decision.test.ts"
+      - "Fail closed (review CR-01 fix): treat any -d / --directories value (attached or separate, any long-option prefix of --directories) that is not exactly `read` or `skip`, compared case-insensitively, as recursive; treat `dereference-recurse` (any case) as following links -> shell-recursive-read"
+      - "Tests for each reproduced spelling in test/unit/hook-decision.test.ts, expected shell-recursive-read"
+      - "Establish which grep the contained shell runs (review WR-02) or drop `grep` from READ_ONLY_COMMANDS and rely on the Grep tool, whose root the hook judges; record the result and the remaining bypass in docs/containment.md"
 deferred: []
 behavior_unverified_items: []
 coincidental_reliance_items:
@@ -102,14 +105,14 @@ coincidental_reliance_items:
 # Phase 1: Contained onboarding of one repository Verification Report
 
 **Phase Goal:** As a solo developer, I want to onboard one existing repository into AVARICE, so that later unattended runs start from an active project record with a code-and-document graph.
-**Verified:** 2026-11-04T08:00:00Z
+**Verified:** 2026-11-04T10:30:00Z
 **Status:** gaps_found
-**Re-verification:** No, initial verification
+**Re-verification:** Yes, after gap-closure plans 01-21 to 01-24
 **Mode:** mvp (goal passes the user-story format; the [outcome] clause, "an active project record with a code-and-document graph", is observably true)
 
 ## Verdict in one paragraph
 
-The deliverable the goal names exists and works: a real repository (`~/aa-phan-portfolio-v2`) sits behind an `active` project record with 1010 code nodes and 24 document nodes, and graph and intel both record the onboarded revision. All five ROADMAP success criteria are VERIFIED by evidence I re-checked, not by SUMMARY claims. The status is nevertheless `gaps_found`, because three open critical review findings (CR-01, CR-02, CR-03) are each reproduced against the real code, and each contradicts a stated plan truth or the written containment spec on the very layer this phase is meant to build in from the first slice. None of the three invalidates a ROADMAP success criterion as worded, and each is a narrow fix. The caller can plan a gap-closure round or accept the three explicitly with an owner decision.
+Gaps P-1 and P-2 are closed and I confirmed each against the code, not the SUMMARYs. Gap P-3 is closed for the cases VERIFICATION.md named (sibling staging, `~/.netrc`, `grep -r token ~`, `grep -r PASSWORD .`, `grep -f<path>`) but is still open in a narrower form: the fresh review's CR-01 is real, and it does reopen P-3 against plan 01-23's own must-have ("a recursive grep ... that follows symlinks ... is denied" and "every recursive grep inside staging is denied"). The recursion detector knows one spelling of the directories option. I reproduced nine allowed spellings through the real decision function, and confirmed on this machine that two real greps recurse on them, one of them following a symlink out of the tree. The deliverable the goal names (a real repository behind an `active` record with 1010 code and 24 document nodes) is unaffected, and no ROADMAP success criterion fails. The status is `gaps_found` because the read-confinement must-have, which this containment-first phase exists to establish, is not fully true, and the fix is one comparison plus tests.
 
 ## Goal Achievement
 
@@ -117,67 +120,74 @@ The deliverable the goal names exists and works: a real repository (`~/aa-phan-p
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| SC1 | `~/aa-phan-portfolio-v2` reaches an active project record (promotion `none`) whose graph lists code and document nodes, graph and intel each record a build commit equal to the onboarded revision, and the checkout is unchanged | VERIFIED | Ran `node bin/avarice.ts status --json` against the real profile: project `proj_01M6J4ATTQV9SQX67ATV0SB9EW`, onboarding `onb_01M6J4ATTTXW68YGE2P9V2QMH5` state `active`, record v1, onboardedRevision `git:9f1cd8d5...`, `indexes.graph.builtAtCommit` and `indexes.intel.refreshedAtCommit` both `git:9f1cd8d5...`, nodes code 1010 / document 24 / concept 114 / rationale 25, mapping full (complete, fresh). `01-19-evidence-target.json` records `promotion: none`. Target HEAD is still `9f1cd8d` and its only status entry is the untracked `.env`. Independent check beyond the shipped digest (which uses `--exclude-standard` and so cannot see ignored files): `find` over the whole target tree including ignored files and `.git` found nothing newer than the run start (19:56:14 CST 2026-11-03) apart from `.git` itself, whose mtime my own `git status` touched. |
-| SC2 | During mapping a scripted source edit through Edit, Bash and Python is blocked, and so is a scripted edit of the policy file | VERIFIED | Live T3 log `test/containment/live-run-2026-11-03-claude-2.1.317.jsonl` (22 records) and `LIVE-CASES.md`: cases 01 (Edit), 02 (Write), 03 (shell redirect), 04 (python3), 05 (node), 06a (stand-in policy.json by Edit, sh and python) all PASS with source and policy digests unchanged; 06b and 17 prove the sandbox layer alone with the hook removed (`Operation not permitted`). I did not re-run the live cases (they spend model budget). T2 `test/containment/executor.test.ts` passed in my run. Primary prevention rests on the hook plus a per-entry sandbox denyWrite, which CR-03 does not weaken. |
-| SC3 | With the hook removed, the generated settings missing or the sandbox unavailable, onboarding stays `blocked` and never runs unrestricted | VERIFIED | `test/containment/failclosed.test.ts` passed in my run. Live 12a/12b/12c refuse with `enforcement_failure:hook-script-unreadable`, `settings-missing` and `sandbox-unavailable`, host never started, cost 0; live 11 shows every tool call blocked by the host when the hook script is missing. |
-| SC4 | Killing mapping part-way and running `avarice resume` reaches the same active record | VERIFIED (coincidental-reliance; load-sensitive flake, see Warnings) | Behavioral evidence, not presence: `test/fault/killpoints.test.ts` passed 20/20 when I ran it alone (53 s, Node 26.9.0). Live: `01-19-evidence-target.json` records kill -9 (exit 137) 63 s into the real map, `resume` exit 0, final state `active`, same onboarding ID and pin. Caveat: the validation run recorded 12 of 12 kill-point cases failing once at about 630% CPU on the normalized-record deepEqual, green on the rerun. I could not reproduce it, and the cause is unproven (review WR-01..03 hypothesize a transient code-graph failure frozen into `indexes.absent`). Kill points inside the intel and knowledge invocations are not covered (see gap 1). |
-| SC5 | On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1) | VERIFIED | Re-ran `scripts/ac1-timing.sh`: `AC-1 elapsed 1s (target 600s)`, `bin/avarice status` printed "No projects registered." from a scratch HOME. Not a literal fresh Mac, but the script clones the repository into a scratch HOME with no installs, and the runtime has no dependencies. |
-| P-1 | On resume of an onboarding interrupted mid-invocation, any process still carrying that invocation's `--session-id` is terminated before reconciliation (plan 01-15; T-01-44) | FAILED (partial) | Holds for the map invocation (`resume.ts` `reapInterrupted`, `claude-host.test.ts` reap test). False for the intel and knowledge invocations added later by plans 01-17 and 01-18: `const LAUNCH = 'launch:map'` is the only step reconciled, and `reconcileInvocation` returns at `if (row.state !== 'paused') return ok(undefined)` for `planning_ready`. `grep launch: src` confirms `launch:intel` and `launch:knowledge` have no consumer. Reproduced by code reading, not by a live double-host run. |
-| P-2 | Before activation the whole staging diff against every write set is re-checked, so a write outside them by any invocation or index step fails activation (plan 01-14) | FAILED (partial) | Reproduced the mechanism in `/tmp/vf3`: with `.gitignore` = `*`, `git status --porcelain=v2 -z --untracked-files=all` and `git diff --name-status HEAD` are empty for a new file; only `--ignored=matching` shows `! evil.txt`. `staging-base.ts` `changes()` uses the first form. Tracked modifications and deletions are still caught. |
-| P-3 | Shell read confinement matches `docs/containment.md` (other profile roots denied) | FAILED (partial) | Ran the real `decideToolCall` with a policy built from `READ_ONLY_COMMANDS`, `GSD_READ_VERBS` and the scope's denyRead shape. Allowed: `cat /work/onb-2/staging/secret.txt`, `cat /home/u/.netrc`, `grep -r token /home/u`, `grep -r PASSWORD .`, `grep -f/home/u/.ssh/id_rsa README.md`. Denied: `cat /home/u/.ssh/id_rsa`, `cat <staging>/.env`. |
+| SC1 | `~/aa-phan-portfolio-v2` reaches an active project record whose graph lists code and document nodes, graph and intel record the onboarded revision, and the checkout is unchanged | VERIFIED (re-checked, no regression) | Re-ran `node bin/avarice.ts status --json`: onboarding `onb_01M6J4ATTTXW68YGE2P9V2QMH5` state `active`, record v1, `onboardedRevision git:9f1cd8d5...`, `indexes.graph.builtAtCommit` the same, nodes code 1010, document 24, concept 114, rationale 25, mapping complete and fresh. Target HEAD is still `9f1cd8d5...`; its only status entry is the untracked `.env`. |
+| SC2 | During mapping a scripted source or policy edit through Edit, Bash and Python is blocked | VERIFIED (carried, regression check) | Live T3 evidence from the first verification is unchanged (not re-run: it spends model budget). `test/integration/hook.test.ts` and `test/mutation/fail-closed.test.ts` pass in this run (222 tests across the six hook, host, scope and settings files, 0 fail). Write confinement is untouched by plans 01-21 to 01-24 except the scope's `allowRead` addition. |
+| SC3 | With the hook removed, settings missing or the sandbox unavailable, onboarding stays `blocked` and never runs unrestricted | VERIFIED (carried, regression check) | `test/mutation/fail-closed.test.ts` and `test/integration/claude-host.test.ts` pass. |
+| SC4 | Killing mapping part-way and running `avarice resume` reaches the same active record | VERIFIED (coincidental-reliance) | `node --test test/fault/killpoints.test.ts` alone: 22/22 pass, including the new `mid-invocation:intel`, `mid-invocation:knowledge` and `after-checkpoint:index:*` cases. The load-sensitive flake from the first report (WR-01..03 in the older review) is still not reproduced and still unresolved; it is a test-hardening item, not a failed truth. |
+| SC5 | Install to first successful `avarice status` takes under 10 minutes with no admin rights | VERIFIED (re-ran) | `bash scripts/ac1-timing.sh`: `AC-1 elapsed 1s (target 600s)`. |
+| P-1 | Every interrupted `launch:*` host is reaped before reconciliation, in every non-stop state including `planning_ready` (plan 01-21) | VERIFIED (closed) | `src/app/resume.ts` `reapStartedLaunches` selects every `launch:` step still `started` (not only `launch:map`), loads the contract only when one exists (empty edge), reaps every row before marking any, returns the first reap error with every row still `started`, and marks the rows `interrupted` except a `launch:map` of a `mapping` or `paused` onboarding, which `reconcileInvocation` decides. It runs from `reconcileOnResume` ahead of `reconcileInvocation`, so it is outside the `row.state !== 'paused'` early return that broke the old design. `reapBySessionId` is exported from `claude-host.ts` and is the same function the fake host calls. Behavioral evidence: the killpoint file passes 22/22 with a real surviving process carrying the session ID and an assertion of exactly one `invocation.reaped` event with `terminated: 1` (killpoints.test.ts:266-268); `test/integration/resume-reap.test.ts` passes (fail-closed reap, ledger order, no reap without a started launch). |
+| P-2 | Before activation the whole staging diff is re-checked against every write set, including paths the repository's own `.gitignore` hides (plan 01-22) | VERIFIED (closed) | `staging-base.ts:115` now calls `git status --porcelain=v2 -z --untracked-files=all --ignored=traditional`; `parseStatus` reads `!` records as untracked (repo-facts.ts:57-59) and sorts; `changes()` merges into a sorted, deduplicated `added`. I reproduced the git behavior independently in `/tmp/vf4` (committed `.gitignore` of `*`, new `evil.txt`, `evil/deep/a.sh`): output was `! evil.txt` and `! evil/deep/a.sh`, one record per file, no collapsed directory record. The plan's choice of `traditional` over the gap text's `matching` is justified by that observation. `collectRepoFacts` still uses a status call without an ignored mode, so the user's checkout is not listed (test T-01-77 passes). `test/integration/ignored-writes.test.ts` (validate, prefix adjacency, per-file naming, activation block, positive controls, graph/knowledge admitted) and `test/unit/repo-facts.test.ts` pass. Write sets were not widened. |
+| P-3 | Shell read confinement matches `docs/containment.md` (other profile roots denied; secret reads denied; a recursive grep that follows links or can reach a secret glob is denied) | FAILED (partial, BLOCKER) | See gap above. Closed: the original five cases, the allow-list for Read, Grep, Glob and every shell operand and attached option value, `workRoot` in hook and sandbox `denyRead` with own staging re-allowed, no `Read(...)` deny that contains staging, the docs row. Open: recursion detection by exact lowercase `recurse`. |
 
-**Score:** 5/8 truths verified (the five ROADMAP success criteria; P-1 to P-3 are plan-level or spec-level truths that are partially false). 0 present-but-behavior-unverified.
+**Score:** 7/8 truths verified (SC1-SC5, P-1, P-2); P-3 is partially false. 0 present-but-behavior-unverified.
+
+### Judgement on the review's CR-01 against gap P-3
+
+CR-01 is a genuine, reproduced defect and it does keep P-3 open, for three reasons. First, plan 01-23 truth 4 states the rule generally ("with the default secret globs every recursive grep inside staging is denied", "when it follows symlinks, ... denied"), and the tests enumerate only the spellings the author thought of; the general claim is false. Second, the exact class P-3 was opened for, a command whose spelling the parser did not model, recurs: the first verification already found `grep -r PASSWORD .` allowed, and an equivalent recursion spelling still is. Third, one of the spellings (`-d dereference-recurse`, ugrep) follows symlinks, which is the escape the hook was built to refuse, and which can leave staging and the allow-list. Mitigations I weighed and did not accept as closing it: (a) the documented known bypass `git show <rev>:<path>` already exposes committed secret-glob files, so recursion adds no new class of staging secret; that is true for secret-glob files, but it is not true for files outside staging reached by a symlink, and the docs do not name the grep route; (b) the sandbox denies the repository, data root, work root, `~/.ssh`, `~/.aws` and `~/.config/gh` at the OS layer, which holds for the highest-value targets but leaves `~/.netrc`, `~/.npmrc` and similar readable; (c) which grep the contained shell runs is unproven (review WR-02), though both candidates (BSD grep on this Mac, embedded ugrep) are exploitable. The severity is therefore narrower than the first report's P-3, not zero. The review's other findings (WR-01, long option with separate value shifting the walk root) do not change the verdict by themselves: with the production globs every `-r` under staging is denied regardless, so WR-01 only bites with narrow custom globs; WR-03 (optional `workRoot`) and WR-04 (a vacuous integration assertion, which I did not independently re-prove) are hardening items with no current exposed path.
 
 ### Deferred Items
 
-None. I checked Phases 2 to 8 in `ROADMAP.md`: Phase 2 owns run-worktree write prevention (CON-2 for runs) and Phase 4 owns scrubbed environment and credentials (SEC-2), neither names onboarding-invocation sibling-staging read confinement, intel and knowledge host reaping, or ignored-file detection in the staging diff. No match clear enough to defer.
+None. Phases 2 to 8 in `ROADMAP.md` do not name read confinement of onboarding-invocation shell commands; Phase 2 owns run-worktree write prevention, Phase 4 owns environment scrubbing. Not clear enough to defer.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `bin/avarice.ts` (+ `bin/avarice`) | CLI entry: onboard, resume, status, context, hook | VERIFIED | `status` ran against the real profile and a scratch HOME. Two identical copies (IN-01, info). |
-| `src/domain/onboarding-lifecycle.ts`, `project-record.ts`, `onboarding-contract.ts` | Pure contracts | VERIFIED | `transitions.test.ts` (196 ordered pairs), `record.test.ts` pass. |
-| `src/adapters/sqlite/ledger.ts` | Persisted ledger | VERIFIED | Real ledger answers `status`; lease and migration tests pass. |
-| `src/adapters/git/staging-base.ts` | Staging diff and facts | ORPHANED-in-part | Works for tracked and non-ignored paths; blind to ignored paths (P-2). |
-| `src/domain/hook-decision.ts`, `src/hook/pre-tool-use.ts` | Hook decision | VERIFIED for writes, STUB-in-part for reads | Write confinement and fail-closed behavior verified (`hook.test.ts` passes); read confinement is deny-list only (P-3). |
-| `src/adapters/host-claude/*` | Contained Claude host, preflight, reap | VERIFIED for map | Reap only reachable for `launch:map` (P-1). |
-| `src/app/stages/*`, `src/app/resume.ts` | Stage pipeline and resume | VERIFIED for map and index steps' stored results | `index-stage.ts` skips completed steps; transient failures stored as `completed` (WR-02). |
-| `src/app/context.ts`, `src/adapters/context/*` | `avarice context` (FR-20) | VERIFIED | `context.test.ts` passes (EXTRACTED survives trimming longest; stale marking). |
-| `scripts/ac1-timing.sh`, `scripts/exit-run.sh` | AC-1 and exit run | VERIFIED | AC-1 re-run 1 s. `exit-run.sh` spend guard fails open on a non-numeric value (WR-08, warning). |
+| `src/app/resume.ts` | Generic reap prelude | VERIFIED | Read in full; wired through `resumeOnboarding` -> `runOnboarding({ prelude })`. |
+| `src/adapters/host-claude/claude-host.ts` (`reapBySessionId`) | Shared session-ID reaper | VERIFIED | Exported, UUID-validated, pgrep by `--session-id <uuid>`, group-aware TERM then KILL, fails closed when pgrep or the kill cannot complete; shared by `ClaudeHostAdapter.reap` and `FakeAgentHost.reap`. |
+| `test/helpers/fake-agent-host.ts` (`killInPurpose`) | Dies inside intel or knowledge leaving a survivor | VERIFIED | Spawns a detached survivor carrying the session ID, writes its PID, SIGKILLs the supervisor. |
+| `src/adapters/git/staging-base.ts`, `repo-facts.ts` | Staging diff including ignored files | VERIFIED | See P-2. |
+| `src/domain/hook-decision.ts` | Allow-list read rule, option-value parsing, recursion rule | STUB-in-part | Allow-list and option parsing verified; recursion rule bypassable (P-3). |
+| `src/adapters/host-claude/hook-policy.ts`, `src/domain/invocation-scope.ts`, `src/adapters/host-claude/settings.ts`, `src/app/invocation.ts` | readRoots, work-root denyRead, own-staging allowRead, no containing Read deny | VERIFIED | `prepareInvocation` passes the profile work root; unit and production-path tests pass. `ScopeInput.workRoot` is optional (review WR-03, warning). |
+| `docs/containment.md` | CON-1 row with enforcement points, tests, known bypasses | PARTIAL | Row exists and is specific, but omits the recursion-spelling bypass, so it claims more than the hook enforces. |
+| `test/unit/hook-decision.test.ts` | Every reproduced P-3 case | VERIFIED for the listed cases | Passes. Does not cover other spellings. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `runOnboarding` | `reconcileInvocation` prelude | `resumeOnboarding` | PARTIAL | Wired, but the prelude consumes only `launch:map` (P-1). |
-| `prepareInvocation` | `host.reap` | `launch:{purpose}` step with session ID | PARTIAL | Recorded for all three purposes, consumed for one. |
-| `indexStage` | `StagingBase.changes` -> `validate`/`activate scopeCheck` | diff against pin | PARTIAL | Wired; `changes()` omits ignored files (P-2). |
-| `computeInvocationScope` | `buildHookPolicy` -> `decideToolCall` | `denyRead` | WIRED | Policy carries the fixed 5-entry list; `workRoot` absent (P-3). |
-| `finalize/activate` | `project_records` insert + record fence | `insertRecordAndActivate` | WIRED | Real record exists; insert-only versions tested. |
+| `reconcileOnResume` | `reapStartedLaunches` | prelude of `runOnboarding` | WIRED | Runs before `reconcileInvocation`. |
+| `prepareInvocation` | `host.reap` (on resume) | `launch:{purpose}` row carrying `sessionId` | WIRED | Consumed for map, intel and knowledge. |
+| `FakeAgentHost.reap` | `reapBySessionId` | direct import | WIRED | Tests exercise production reaper. |
+| `StagingBase.changes` | `parseStatus` -> `activate` scopeCheck / validate | `added` | WIRED | Includes `!` records. |
+| `prepareInvocation` | `computeInvocationScope` | `workRoot: deps.profile.workRoot` | WIRED | |
+| `computeInvocationScope` | settings and hook policy | `denyRead`, `allowRead` | WIRED | |
+| `buildHookPolicy` | `readRule` | `readRoots` | WIRED | |
+| `recursiveRule` | every recursion spelling | flag and option recognition | NOT_WIRED for non-lowercase / dereference-recurse spellings | P-3. |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| `avarice status` | record, indexes, nodes | `project_records.body_json` in the real SQLite ledger | Yes (1010 code, 24 document nodes read from the live ledger) | FLOWING |
-| `avarice context` | graph and intel hits | GSD `intel query` and `graphify query` against staging indexes | Yes (integration test with real GSD and graphify) | FLOWING |
-| Project record `indexes.graph` | counts, digest, builtAtCommit | merged `graph.json` validated in staging | Yes | FLOWING |
+| `avarice status` | record, indexes, nodes | `project_records.body_json` in the real SQLite ledger | Yes (1010 / 24 re-read) | FLOWING |
+| Resume prelude | `started` launch rows, `sessionId` | ledger `getStepResults` | Yes (rows written by `prepareInvocation`) | FLOWING |
+| `changes()` | `added` | `git status ... --ignored=traditional` | Yes (reproduced against a hostile `.gitignore`) | FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Type check and boundary lint | `npx tsc -p .` ; `node scripts/check-boundaries.ts` | exit 0 ; `ok (53 file(s))` | PASS |
-| Fail-closed, no-repo-exec, index stage, completeness, knowledge pass, context, offline, SEC-5, record, transitions | `node --test` over those 10 files | 155 pass, 0 fail | PASS |
-| No competing index, budgets, checkout unchanged, executor, hook, intel step | `node --test` over those 6 files | 108 pass, 0 fail | PASS |
-| Kill and resume at every kill point | `node --test test/fault/killpoints.test.ts` | 20/20 pass (alone, Node 26.9.0) | PASS |
-| Active record on the real target | `node bin/avarice.ts status [--json]` | state active, graph and intel at `9f1cd8d` | PASS |
+| Type check and boundary lint | `npx tsc -p .`; `node scripts/check-boundaries.ts` | exit 0; `ok (53 file(s))` | PASS |
+| Hook, integration host, scope, settings, fail-closed mutation | `node --test` over 6 files | 222 pass, 0 fail | PASS |
+| P-2 and P-1 tests | `node --test` over ignored-writes, repo-facts, resume-reap, staging-adapters (38 tests) | 38 pass, 0 fail | PASS |
+| Kill and resume at every kill point incl. intel and knowledge | `node --test test/fault/killpoints.test.ts` | 22/22 pass | PASS |
+| Hostile `.gitignore` is visible | `git status --porcelain=v2 -z --untracked-files=all --ignored=traditional` in `/tmp/vf4` | `! evil.txt`, `! evil/deep/a.sh` | PASS |
+| Recursion spellings through the real `decideToolCall` (production-shaped policy) | `/tmp/vfscript/probe.ts` | 9 recursing spellings `allow shell-identity`; `-r` and `-drecurse` denied | FAIL (confirms CR-01) |
+| Spellings recurse on a real grep | `/usr/bin/grep --directories=RECURSE`, `--dir=RECURSE`, `-dRECURSE` in a scratch tree; embedded ugrep `-d dereference-recurse` | secret-named file printed; ugrep also followed a symlink out of the tree | FAIL (confirms the bypass is real) |
+| Active record on the real target | `node bin/avarice.ts status --json` | active, graph at `9f1cd8d` | PASS |
 | AC-1 | `bash scripts/ac1-timing.sh` | 1 s | PASS |
-| Hostile `.gitignore` blinds the diff | git status/diff in `/tmp/vf3` | empty; only `--ignored` shows the file | FAIL (confirms CR-03) |
-| Hook read confinement | real `decideToolCall` probe | 5 escape cases allowed | FAIL (confirms CR-02) |
 
-I did not run the full workspace suite (validation already ran it twice); I ran 16 named files plus the kill-point file once each.
+I did not run the full workspace suite (the caller reports 1218 pass, 0 fail, 22 skipped); I ran 12 named files plus the kill-point file once each. A passing suite does not contradict the gap: no test exercises the failing spellings.
 
 ### Probe Execution
 
@@ -185,69 +195,49 @@ No `scripts/*/tests/probe-*.sh` exist and the phase declares none. SKIPPED (no p
 
 ### Requirements Coverage
 
-All 14 phase requirement IDs appear in at least one PLAN `requirements:` field and are `[x]` / Complete in REQUIREMENTS.md. No orphans: REQUIREMENTS.md maps no further ID to Phase 1. ONB-6, claimed by plan 01-08, is owned by Phase 4 (this phase delivers detection and refusal only, per the traceability note). Extra IDs in plans (CON-2/3/5/6/13, NFR-1/3/5/6/9) match ROADMAP "Partial coverage".
+All 14 requested IDs appear in at least one PLAN `requirements:` field (counts: ONB-1 7 plans, ONB-2 4, ONB-3 14, ONB-4 6, ONB-5 4, ONB-7 2, ONB-8 4, ONB-9 4, ONB-12 8, ONB-13 4, ONB-14 3, FR-20 2, SEC-5 2, NFR-2 7). REQUIREMENTS.md maps no further ID to Phase 1 beyond those and the "partial coverage" extras (CON-2/3/5/6/13/15, NFR-1/3/5/6/9, ONB-6). No orphans. Plans 01-23 and 01-24 additionally claim CON-1, which the traceability table maps to Phase 2 and marks Complete.
 
-| Requirement | Source Plans | Description | Status | Evidence |
-|-------------|--------------|-------------|--------|----------|
-| ONB-1 | 01-01, 03, 05, 06, 19, 20 | Persisted, resumable lifecycle; transition recorded before its side effect | SATISFIED, with warning | Transition table and fence tests pass; kill and resume proven live and at 20 kill points. Warning: intel and knowledge hosts are not reaped on resume (CR-01), and one load-induced flake in the kill-point suite. |
-| ONB-2 | 01-03, 05, 09, 10 | GSD owns semantic onboarding; AVARICE stores refs only | SATISFIED | `no-competing-index.test.ts` passes; record holds paths and digests. |
-| ONB-3 | 01-02, 04, 08, 11, 12, 13, 15, 16, 19, 20 | Source and config read-only on every exposed mutation path; artifacts only in staging | SATISFIED for prevention, gap in detection | SC2 live evidence, `executor.test.ts`, checkout untouched. Detection backstop blind to gitignored untracked files (CR-03). |
-| ONB-4 | 01-02, 04, 08, 11, 13, 16 | No repo command execution, no scripts, no services | SATISFIED | `no-repo-exec.test.ts` passes (hooks, fsmonitor neutralized via safe git). |
-| ONB-5 | 01-08, 09, 16, 19 | No commit of generated artifacts | SATISFIED | `no-repo-exec.test.ts` refs digests; live case 08 (`update-ref`, `branch -f`, `commit` denied); target refs digest unchanged. |
-| ONB-7 | 01-09, 10 | Accepted artifacts carry revision, scope, mode, completeness; fast map labeled partial | SATISFIED | `completeness.test.ts` passes; record shows `mapping.completeness`, `mode`, `scope`. |
-| ONB-8 | 01-02, 12, 15, 20 | Onboarding contract with budgets that persist across retries and restarts | SATISFIED | `budgets.test.ts` passes. Stale-lease writers lack a fence (WR-04, warning). |
-| ONB-9 | 01-01, 05, 10, 20 | Versioned project profile; instructions cannot grant permissions; activation validates | SATISFIED | `record.test.ts` (insert-only, narrowing only) passes; promotion `none`. |
-| ONB-12 | 01-04, 05, 09, 10, 11, 15, 16, 20 | Missing enforcement, incompatible GSD, malformed artifacts block, never unrestricted | SATISFIED | `failclosed.test.ts`; live 11, 12a to 12c. |
-| ONB-13 | 01-14, 17, 19 | Index stage builds intel and graph in staging with build commit; failed index never blocks activation | SATISFIED | Real record has both at the onboarded revision; `index-stage.test.ts` passes. A transient failure is frozen as permanently absent (WR-02). |
-| ONB-14 | 01-02, 18, 19 | Knowledge pass adds document nodes citing path and revision, one contained invocation, text is data | SATISFIED | 24 document nodes in the real record; `knowledge-pass.test.ts`; live case 19 (knowledge hook allowed set is Read and one Write only). Real-skill output seen in the live rehearsal. |
-| FR-20 | 01-17, 18 | Context queries a fresh index first; INFERRED ranks below EXTRACTED | SATISFIED | `context.test.ts` passes. |
-| SEC-5 | 01-11, 20 | No TLS disabling, no alternate egress | SATISFIED | `sec5.test.ts` static scan over `src/` passes; env allowlist test; live case 10 (curl denied). |
-| NFR-2 | 01-03, 05, 06, 07, 13, 17 | Local orchestration works offline | SATISFIED | `offline.test.ts` passes; `status` ran with no model. |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| ONB-1 | SATISFIED | Persisted lifecycle; resume reaps every interrupted launch (P-1 closed); 22/22 kill points. Warning: one unreproduced load-sensitive flake of the same suite. |
+| ONB-2 | SATISFIED | `no-competing-index` passes; record holds refs and digests. |
+| ONB-3 | SATISFIED | Prevention verified (SC2); detection backstop now sees ignored untracked files (P-2 closed). |
+| ONB-4 | SATISFIED | `no-repo-exec` passes; neutralized safe git. |
+| ONB-5 | SATISFIED | Refs digests unchanged; hook denies ref-moving git. |
+| ONB-7 | SATISFIED | Record carries mapping mode, scope, completeness, revision. |
+| ONB-8 | SATISFIED | Budgets persist across retries. |
+| ONB-9 | SATISFIED | Real versioned record on the target. |
+| ONB-12 | SATISFIED | Fail-closed suites pass. |
+| ONB-13 | SATISFIED | Graph and intel built in staging, recorded at the onboarded commit. |
+| ONB-14 | SATISFIED | 24 document nodes in the real record. |
+| FR-20 | SATISFIED | `avarice context` tests pass (carried). |
+| SEC-5 | SATISFIED | Carried; no TLS or auth weakening found in changed files. |
+| NFR-2 | SATISFIED | AC-1 1 s; status works offline from a scratch HOME. |
+
+Bookkeeping: REQUIREMENTS.md traceability currently lists most of these as `Gaps Found` and unchecked (the verifier-driven revert dd91e24 set them). That table is not evidence and was not edited here; the orchestrator should leave the P-3 dependent items (ONB-3, CON-1 read confinement) as they are until the P-3 gap closes, and may mark the others Complete.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (src, bin, scripts, test) | - | TBD / FIXME / XXX / TODO / HACK | none | Grep found zero debt markers. |
-| `src/adapters/git/staging-base.ts` | 109-129 | status without `--ignored` | BLOCKER (gap P-2) | Detection backstop is blind to ignored paths. |
-| `src/app/resume.ts` | 17, 49 | reconcile hard-wired to `launch:map` | BLOCKER (gap P-1) | Orphaned intel and knowledge hosts survive resume. |
-| `src/domain/hook-decision.ts` | 195-233 | deny-list, non-recursive read confinement | BLOCKER (gap P-3) | Sibling staging, `~/.netrc`, recursive reads allowed. |
-| `test/fault/killpoints.test.ts` | 66-71, 166 | `catch { return null }`; no healthy-reference assertion | WARNING | The suite can pass or fail vacuously (WR-03). |
-| `src/app/stages/index-stage.ts` | 55-90 | transient outcomes stored `completed` | WARNING | A slow call freezes `absent` for the life of the record (WR-02). |
-| `src/adapters/exec/sandboxed-executor.ts` | 20, 35-43 | 5 s probe cached forever as negative | WARNING | Fails closed but nondeterministically (WR-07). |
-| `src/cli/args.ts` | 24-26 | plain-object flags | WARNING | `--__proto__=x` crashes with exit 1 (WR-05). |
-| `scripts/exit-run.sh` | ~96-101 | NaN-comparison spend guard | WARNING | Fails open on a non-numeric value (WR-08). |
+| `src/domain/hook-decision.ts` | ~380-385 | exact, case-sensitive `=== 'recurse'` on an option value | BLOCKER (gap P-3) | See gap. |
+| `src/domain/hook-decision.ts` | ~326-331, 390-394 | long option with a separate value shifts the grep pattern (review WR-01) | WARNING | Masked by the `**/` production globs. |
+| `src/domain/invocation-scope.ts` | ~186, 237 | optional `workRoot` silently drops the work-root deny (review WR-03) | WARNING | No current exposed caller. |
+| `test/integration/claude-host.test.ts` | ~231-235 | vacuous `startsWith` assertion (review WR-04) | WARNING | Unit test pins the property; integration claim overstated. |
+| `src/app/resume.ts` | ~29, 63-79 | row marked `interrupted` when the host cannot reap or has no `sessionId` (review IN-02) | INFO | Production adapter always reaps. |
+| `test/fault/killpoints.test.ts` | catch-all, no healthy-reference assertion | WARNING (carried) | Can pass or fail vacuously. |
 
-### Weighing the review findings against the must-haves
-
-| Finding | Confirmed by me | Must-have affected | Classification |
-|---------|-----------------|--------------------|----------------|
-| CR-01 intel and knowledge hosts never reaped | Code read of `resume.ts`, `invocation.ts`, `grep launch:`; not run live | ONB-1 resumability, plan truth P-1, T-01-44 | BLOCKER (gap). SC4's wording ("killing mapping") is still met. |
-| CR-02 read confinement is a non-recursive deny list | Reproduced with the real `decideToolCall` (5 cases) | `docs/containment.md:78` and CON-1's "known bypasses" duty; not ONB-3 (writes) | BLOCKER (gap) for a containment-first phase; it is also the cleanest example of the doc claiming more than the code. Owner could instead amend the doc and accept the limit. |
-| CR-03 diff gate cannot see ignored files | Reproduced the git behavior and read `changes()` | ONB-3 detection backstop, plan truth P-2 | BLOCKER (gap), narrow: prevention holds, tracked changes still detected. |
-| WR-01, WR-02, WR-03 kill-point flake | WR-02 and WR-03 confirmed by code; the flake itself not reproduced (20/20 alone) | ONB-1 and SC4 ("same record") under load; ONB-13 | WARNING, UNCERTAIN cause. Not counted as FAILED because SC4 has passing behavioral evidence and a plausible but unproven mechanism. A human decision is requested: treat the flake as a test-hardening task (WR-03) and a retry policy decision (WR-02). |
-| WR-04 to WR-08, IN-01 to IN-05 | Read, not individually reproduced except where noted | ONB-8, NFR-6, hygiene | WARNING / info, no must-have falsified. |
-
-01-SECURITY.md reports 94/94 threats closed at grep depth. That does not contradict the gaps: the register has no threat for sibling-staging reads, intel and knowledge reaping or ignored-file detection, so "all registered threats closed" and "these three defects exist" are both true.
+No `TBD`, `FIXME` or `XXX` in the files changed by plans 01-21 to 01-24 (grep over the source files, no hit).
 
 ### Human Verification Required
 
-None needed to set the status; the three gaps are code-observable. Decisions requested from the owner:
-
-1. **CR-02 disposition.** Fix the hook (allow-list, workRoot in denyRead) or amend `docs/containment.md:78` and the SECURITY register to state the read limit. A prompt-injected mapper currently can read `~/.netrc`, `~/.npmrc` and sibling onboardings' staging trees and the content reaches the model transcript.
-2. **Kill-point flake.** Whether to harden `killpoints.test.ts` per WR-03 and to retry transient index failures per WR-02 before Phase 2 builds on the resume path.
+None needed to set the status. Decision requested from the owner: whether to fix CR-01 (recommended: the review's fail-closed rule plus the listed tests and a doc line) before Phase 2, or to remove `grep` from `READ_ONLY_COMMANDS` and rely on the Grep tool. Not a candidate for an override: the deviation is unintentional and the plan states the general rule.
 
 ### Gaps Summary
 
-Three gaps, all in the containment and recovery hardening of otherwise working onboarding, grouped by root cause:
-
-- **Late-added stages did not inherit earlier controls.** Plans 01-17 and 01-18 added the intel and knowledge invocations after 01-15 wrote map-only reaping and after the diff gate was written, and neither control was extended (P-1). The fix is generic reconciliation over `launch:*` plus a kill case inside those invocations.
-- **A detection gate trusts a git view the hostile repository controls** (P-2). One flag and one parser case.
-- **Read confinement is shallower than its documentation** (P-3). Needs an allow-list or an honest doc.
-
-No ROADMAP success criterion fails, no requirement is unmet by its letter, there are no stubs or debt markers, and the live target onboarding is real. The status is `gaps_found` rather than `passed` because three verified, open critical defects sit on the containment layer this phase exists to establish, and a green verdict would hide them from Phase 2, which builds directly on this kernel. If the owner prefers to accept them, record each as an override with a reason (they are not intentional deviations, so I did not suggest one) or defer by adding them to a Phase 2 plan.
+One gap remains, narrower than the first report's three. P-1 and P-2 are closed with behavioral evidence (kill-point cases with a real surviving process; a reproduced hostile `.gitignore`). P-3 is closed for everything the first verification reproduced and for the OS-layer work-root deny, but the recursion detector recognizes a single spelling of the directories option, so recursing greps spelled with other case, an abbreviation or `dereference-recurse` run past the hook; one of them follows symlinks out of the tree. The fix is local to `recursiveRule` (treat any `-d`/`--directories` value other than `read` or `skip`, case-insensitively, as recursive, and `dereference-recurse` as link-following), with a test per spelling and a line in the `docs/containment.md` bypass list. A re-verification after that change can pass without re-running the rest.
 
 ---
 
-_Verified: 2026-11-04T08:00:00Z_
+_Verified: 2026-11-04T10:30:00Z_
 _Verifier: Claude (gsd-verifier)_
