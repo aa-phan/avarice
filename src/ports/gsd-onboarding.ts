@@ -100,6 +100,14 @@ export interface GsdIntelDiff {
   removed: string[];
 }
 
+// `intel snapshot` output, reduced: GSD hashed the intel files into `.planning/intel/.last-refresh.json`, which `intel diff` then
+// compares against. `files` is how many files it hashed. `disabled` is true when `intel.enabled` is off in the staging config.
+export interface GsdIntelSnapshot {
+  disabled: boolean;
+  saved: boolean;
+  files: number;
+}
+
 export interface GsdIntelFileStatus {
   exists: boolean;
   updatedAt: string | null;
@@ -171,10 +179,14 @@ export interface GsdOnboarding {
   graphifySnapshot(staging: string): Promise<Result<GsdGraphSnapshot>>;
   // `graphify status` with cwd = staging. Read-only; the result says whether GSD sees the installed graph as fresh.
   graphifyStatus(staging: string): Promise<Result<GsdGraphStatus>>;
-  // `intel validate|diff|status` and `intel query <term>` with cwd = staging. Read-only: they write nothing and
-  // AVARICE never edits `.planning/intel` (it is written only by the contained intel invocation).
+  // `intel validate|diff|status` and `intel query <term>` with cwd = staging. Read-only: they write nothing. AVARICE never edits
+  // an intel document (they are written only by the contained intel invocation); its one write there is the snapshot below.
   intelValidate(staging: string): Promise<Result<GsdIntelValidation>>;
   intelDiff(staging: string): Promise<Result<GsdIntelDiff>>;
+  // `intel snapshot` with cwd = staging and `.planning/intel` the one writable directory (it writes only `.last-refresh.json`
+  // there). Run by AVARICE after the contained intel invocation ended, never inside it (decision A, 2026-11-03: the hook denies
+  // the verb to the model, so AVARICE takes the snapshot itself, as it stamps a map).
+  intelSnapshot(staging: string): Promise<Result<GsdIntelSnapshot>>;
   intelStatus(staging: string): Promise<Result<GsdIntelStatus>>;
   intelQuery(staging: string, term: string): Promise<Result<GsdIntelQueryResult>>;
   // `graphify query <term> --budget <n>` with cwd = staging: GSD's own reader, never the standalone `graphify query`.

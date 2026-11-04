@@ -1,6 +1,7 @@
 // FakeIntelHost: a decorator over FakeAgentHost that also answers the `intel` purpose without a model. It writes the
-// five intel documents of test/fixtures/index-fixtures.ts, and the `.last-refresh.json` that `gsd_run intel snapshot`
-// writes, into {cwd}/.planning/intel/ the way gsd-intel-updater would, with configurable misbehaviour. Every other
+// five intel documents of test/fixtures/index-fixtures.ts into {cwd}/.planning/intel/ the way gsd-intel-updater would, with
+// configurable misbehaviour. Like the real agent under the hook (rehearsal 4: `gsd_run intel snapshot` is denied inside the
+// invocation) it writes NO `.last-refresh.json` unless `hostSnapshot` says so: AVARICE takes the snapshot itself. Every other
 // purpose goes to the wrapped host. It lives in test/helpers, so no production path to an "active" record built from
 // fixtures exists; nothing under src/ or bin/ may import it.
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -18,10 +19,11 @@ export interface FakeIntelOptions {
   omit?: readonly IntelFileName[];
   // Complete replacement content for an intel file, written verbatim (the snapshot is taken of the original).
   raw?: Readonly<Partial<Record<IntelFileName, string>>>;
-  // A file changed after the snapshot was written, so `intel diff` reports it.
+  // The host also writes its own `.last-refresh.json`, a snapshot of the documents as first written (what an agent that could run
+  // `gsd_run intel snapshot` would leave). AVARICE's own snapshot replaces it.
+  hostSnapshot?: boolean;
+  // With `hostSnapshot`: a file changed after the host's snapshot, so it no longer matches what the host hashed.
   changeAfterSnapshot?: IntelFileName;
-  // Write no `.last-refresh.json`.
-  noSnapshot?: boolean;
   // Outcome kind to report; default progressed.
   outcomeKind?: InvocationOutcomeKind;
   // Return this error instead of an outcome (the host could not run).
@@ -73,7 +75,7 @@ export class FakeIntelHost implements AgentHost {
         if (omit.has(name)) continue;
         write(name, o.raw?.[name] ?? files[name]);
       }
-      if (o.noSnapshot !== true) write('.last-refresh.json', refreshSnapshot(files));
+      if (o.hostSnapshot === true) write('.last-refresh.json', refreshSnapshot(files));
       if (o.changeAfterSnapshot !== undefined) write(o.changeAfterSnapshot, `${files[o.changeAfterSnapshot].trimEnd()}\n\n`);
       for (const [rel, content] of Object.entries(o.extraWrites ?? {})) {
         mkdirSync(dirname(join(req.cwd, rel)), { recursive: true });

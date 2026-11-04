@@ -21,6 +21,7 @@ import type {
   GsdIntelEntry,
   GsdIntelFileStatus,
   GsdIntelQueryResult,
+  GsdIntelSnapshot,
   GsdIntelStatus,
   GsdIntelValidation,
   GsdOnboarding,
@@ -274,6 +275,11 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
       added: strings(d['added'], MAX_MESSAGES),
       removed: strings(d['removed'], MAX_MESSAGES),
     });
+  }
+
+  // RED stub: `intel snapshot` is not run yet.
+  async intelSnapshot(_staging: string): Promise<Result<GsdIntelSnapshot>> {
+    return err({ kind: 'internal', cause: 'intel snapshot is not run yet' });
   }
 
   async intelStatus(staging: string): Promise<Result<GsdIntelStatus>> {

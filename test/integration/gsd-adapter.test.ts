@@ -2,7 +2,7 @@
 // GsdOnboardingAdapter against the installed GSD. The fake gsd-core directories are generated here at run time.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,6 +16,7 @@ import type { CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import { writeFakeGsdCore } from '../helpers/fake-gsd-core.ts';
+import { INTEL_FILE_NAMES, intelDocuments, serializeIntel } from '../fixtures/index-fixtures.ts';
 
 const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
 const REPO_FILES = {
@@ -250,5 +251,52 @@ describe('onboarding with the discovered gsd-core', () => {
     const [record] = rows<{ gsd_version: string; body_json: string }>(roots, 'SELECT gsd_version, body_json FROM project_records');
     assert.equal(record?.gsd_version, snapshot.version);
     assert.equal((JSON.parse(record?.body_json ?? '{}') as { gsd: { version: string } }).gsd.version, snapshot.version);
+  });
+});
+
+describe('GsdOnboardingAdapter.intelSnapshot against the installed GSD (decision A)', () => {
+  function intelDir(): string {
+    const dir = temp('intel-snapshot');
+    mkdirSync(join(dir, '.planning', 'intel'), { recursive: true });
+    const files = serializeIntel(intelDocuments());
+    for (const name of INTEL_FILE_NAMES) writeFileSync(join(dir, '.planning', 'intel', name), files[name]);
+    // The one capability switch GSD checks.
+    mkdirSync(join(dir, '.planning'), { recursive: true });
+    writeFileSync(join(dir, '.planning', 'config.json'), JSON.stringify({ intel: { enabled: true } }));
+    return dir;
+  }
+
+  it('writes `.planning/intel/.last-refresh.json` with a hash of each of the five files and reports how many, then `intel diff` agrees', async () => {
+    const located = locateGsdCore({ HOME: REAL_HOME, CLAUDE_CONFIG_DIR: temp('cfg') });
+    assert.ok(located.ok);
+    const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: temp('data'), home: REAL_HOME });
+    const dir = intelDir();
+    const before = await adapter.intelDiff(dir);
+    assert.ok(before.ok && before.value.noBaseline, 'no snapshot yet');
+    const snapshot = await adapter.intelSnapshot(dir);
+    assert.ok(snapshot.ok, JSON.stringify(snapshot));
+    assert.deepEqual({ disabled: snapshot.value.disabled, saved: snapshot.value.saved, files: snapshot.value.files }, { disabled: false, saved: true, files: 5 });
+    const written = JSON.parse(readFileSync(join(dir, '.planning', 'intel', '.last-refresh.json'), 'utf8')) as { hashes: Record<string, string> };
+    assert.deepEqual(Object.keys(written.hashes).sort(), [...INTEL_FILE_NAMES].sort());
+    const after = await adapter.intelDiff(dir);
+    assert.ok(after.ok);
+    assert.deepEqual({ noBaseline: after.value.noBaseline, changed: after.value.changed, added: after.value.added, removed: after.value.removed }, { noBaseline: false, changed: [], added: [], removed: [] });
+    // A change after the snapshot is what `diff` then reports.
+    writeFileSync(join(dir, '.planning', 'intel', 'stack.json'), '{"_meta":{"updated_at":"2026-01-01T00:00:00.000Z","version":1},"entries":{"x":1}}\n');
+    const moved = await adapter.intelDiff(dir);
+    assert.ok(moved.ok);
+    assert.deepEqual(moved.value.changed, ['stack.json']);
+  });
+
+  it('writes nothing outside `.planning/intel` (the sandbox grants that one directory)', async () => {
+    const located = locateGsdCore({ HOME: REAL_HOME, CLAUDE_CONFIG_DIR: temp('cfg') });
+    assert.ok(located.ok);
+    const adapter = new GsdOnboardingAdapter(located.value, { executor, dataRoot: temp('data'), home: REAL_HOME });
+    const dir = intelDir();
+    const listing = (): string[] => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name).slice(dir.length + 1)).sort();
+    const before = listing();
+    const snapshot = await adapter.intelSnapshot(dir);
+    assert.ok(snapshot.ok);
+    assert.deepEqual(listing().filter((f) => !before.includes(f)), ['.planning/intel/.last-refresh.json']);
   });
 });

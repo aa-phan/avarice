@@ -3,7 +3,7 @@
 // sandboxed executor. Scratch repositories and temp directories only; no model is called.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createDeps } from '../../src/cli/composition.ts';
@@ -14,6 +14,7 @@ import type { IndexStepContext } from '../../src/app/stages/index-steps.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import type { PortError } from '../../src/domain/result.ts';
+import type { GsdOnboarding } from '../../src/ports/gsd-onboarding.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
@@ -63,7 +64,7 @@ interface Run {
   record: RecordBody;
 }
 
-async function onboard(intel: FakeIntelOptions = {}): Promise<Run> {
+async function onboard(intel: FakeIntelOptions = {}, wrap?: (deps: AppDeps) => AppDeps): Promise<Run> {
   const roots = makeRoots();
   const repo = makeScratchRepo({ files: REPO_FILES });
   cleanup.push(roots.base, repo.base);
@@ -79,9 +80,10 @@ async function onboard(intel: FakeIntelOptions = {}): Promise<Run> {
   const composed = createDeps(env, { host });
   assert.ok(composed.ok, 'composition');
   try {
-    const started = startOnboarding(composed.value.deps, { repoPath: repo.path, policy: 'onboarding' });
+    const deps = wrap?.(composed.value.deps) ?? composed.value.deps;
+    const started = startOnboarding(deps, { repoPath: repo.path, policy: 'onboarding' });
     assert.ok(started.ok);
-    const outcome = await runOnboarding(composed.value.deps, started.value.onboardingId);
+    const outcome = await runOnboarding(deps, started.value.onboardingId);
     assert.ok(outcome.ok, 'the run itself does not fail');
     const [onboarding] = rows<{ staging_worktree: string }>(roots, 'SELECT staging_worktree FROM onboardings');
     assert.ok(onboarding);
@@ -101,6 +103,28 @@ async function onboard(intel: FakeIntelOptions = {}): Promise<Run> {
 }
 
 const stateOf = (run: Run): string => run.outcome.state;
+
+// The real GSD adapter with some operations replaced.
+function wrapGsd(gsd: GsdOnboarding, over: Partial<GsdOnboarding>): GsdOnboarding {
+  return {
+    descriptor: gsd.descriptor,
+    inspect: () => gsd.inspect(),
+    probeState: (s) => gsd.probeState(s),
+    configure: (s, settings) => gsd.configure(s, settings),
+    stamp: (s, files) => gsd.stamp(s, files),
+    checkDrift: (s) => gsd.checkDrift(s),
+    graphifySnapshot: (s) => gsd.graphifySnapshot(s),
+    graphifyStatus: (s) => gsd.graphifyStatus(s),
+    intelValidate: (s) => gsd.intelValidate(s),
+    intelSnapshot: (s) => gsd.intelSnapshot(s),
+    intelDiff: (s) => gsd.intelDiff(s),
+    intelStatus: (s) => gsd.intelStatus(s),
+    intelQuery: (s, term) => gsd.intelQuery(s, term),
+    graphifyQuery: (s, term, budget) => gsd.graphifyQuery(s, term, budget),
+    initPlanning: () => gsd.initPlanning(),
+    ...over,
+  };
+}
 
 function absentReasons(run: Run): Array<{ index: string; reason: string }> {
   return run.record.indexes.absent ?? [];
@@ -179,17 +203,85 @@ describe('the intel step with a contained intel invocation (ONB-13, S-39 intel p
     assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'invocation-failed' }]);
   });
 
-  it('records the index absent when `intel diff` reports a file changed since the refresh (diff-changed)', async () => {
-    const run = await onboard({ changeAfterSnapshot: 'file-roles.json' });
+  // Decision A (2026-11-03): the intel-updater's own `gsd_run intel validate` and snapshot are denied under the hook, so AVARICE
+  // validates and takes the snapshot itself, as it stamps a map. `diff-changed` now proves one thing: after AVARICE's snapshot,
+  // `intel diff` finds every intel file byte for byte as the snapshot hashed it, so the digest in the record is of the files that
+  // were validated and snapshotted (nothing wrote between, such as a host process still running).
+  it('takes the snapshot itself: a host that wrote none (the live case) still gives a present index, with AVARICE\'s snapshot in staging', async () => {
+    const run = await onboard();
+    assert.equal(stateOf(run), 'active');
+    assert.ok(run.record.indexes.intel, 'the index is present although the host wrote no snapshot');
+    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), []);
+    const snapshot = JSON.parse(readFileSync(join(run.staging, '.planning', 'intel', '.last-refresh.json'), 'utf8')) as { hashes: Record<string, string> };
+    assert.deepEqual(Object.keys(snapshot.hashes).sort(), [...INTEL_FILE_NAMES].sort(), 'GSD hashed the five files');
+    const [step] = rows<{ status: string; result_json: string }>(run.roots, "SELECT status, result_json FROM onboarding_steps WHERE step = 'gsd:intel-snapshot'");
+    assert.equal(step?.status, 'completed', 'the snapshot AVARICE took is a recorded step');
+    assert.equal((JSON.parse(step?.result_json ?? '{}') as { files?: number }).files, 5);
+  });
+
+  it('replaces a snapshot the host wrote: a file the host changed after its own snapshot is accepted, because the baseline is AVARICE\'s', async () => {
+    const run = await onboard({ hostSnapshot: true, changeAfterSnapshot: 'file-roles.json' });
+    assert.equal(stateOf(run), 'active');
+    assert.ok(run.record.indexes.intel, 'present: the snapshot compared against is the one AVARICE took after the host ended');
+    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), []);
+  });
+
+  it('records the index absent when a file changes after AVARICE\'s snapshot (diff-changed), naming the file', async () => {
+    // A straggler: something still writing when the invocation ended. The real snapshot is taken, then the file changes.
+    const run = await onboard({}, (deps) => {
+      const gsd = deps.gsd;
+      assert.ok(gsd);
+      return { ...deps, gsd: wrapGsd(gsd, { intelSnapshot: async (s) => {
+        const real = await gsd.intelSnapshot(s);
+        writeFileSync(join(s, '.planning', 'intel', 'stack.json'), `${readFileSync(join(s, '.planning', 'intel', 'stack.json'), 'utf8').trimEnd()}\n\n`);
+        return real;
+      } }) };
+    });
     assert.equal(stateOf(run), 'active');
     assert.equal(run.record.indexes.intel, undefined);
     assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'diff-changed' }]);
+    const events = rows<{ data_json: string }>(run.roots, "SELECT data_json FROM events WHERE type = 'index.absent'");
+    assert.ok(events.some((e) => JSON.stringify(JSON.parse(e.data_json)).includes('stack.json')), 'the absent event names the changed file');
   });
 
-  it('records the index absent when the refresh left no snapshot to compare with (diff-changed)', async () => {
-    const run = await onboard({ noSnapshot: true });
-    assert.equal(stateOf(run), 'active');
-    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'diff-changed' }]);
+  it('records the index absent when AVARICE\'s own snapshot fails (snapshot-failed), whether GSD errors, refuses, or leaves no baseline', async () => {
+    const cases: Array<[string, Partial<GsdOnboarding>]> = [
+      ['GSD errors', { intelSnapshot: async () => ({ ok: false, error: { kind: 'internal', cause: 'intel snapshot exited 1' } }) }],
+      ['GSD does not report saved', { intelSnapshot: async () => ({ ok: true, value: { disabled: false, saved: false, files: 0 } }) }],
+      ['no baseline after the snapshot', { intelDiff: async () => ({ ok: true, value: { disabled: false, noBaseline: true, changed: [], added: [], removed: [] } }) }],
+    ];
+    for (const [label, over] of cases) {
+      const run = await onboard({}, (deps) => {
+        const gsd = deps.gsd;
+        assert.ok(gsd);
+        return { ...deps, gsd: wrapGsd(gsd, over) };
+      });
+      assert.equal(stateOf(run), 'active', label);
+      assert.equal(run.record.indexes.intel, undefined, label);
+      assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'snapshot-failed' }], label);
+    }
+  });
+
+  it('records the index absent (validate-failed) when AVARICE\'s own `intel validate` does not run, and takes no snapshot', async () => {
+    let snapshots = 0;
+    const run = await onboard({}, (deps) => {
+      const gsd = deps.gsd;
+      assert.ok(gsd);
+      return { ...deps, gsd: wrapGsd(gsd, { intelValidate: async () => ({ ok: false, error: { kind: 'internal', cause: 'intel validate exited 1' } }), intelSnapshot: (s) => { snapshots += 1; return gsd.intelSnapshot(s); } }) };
+    });
+    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'validate-failed' }]);
+    assert.equal(snapshots, 0, 'a snapshot is taken only of files that validated');
+  });
+
+  it('keeps the hook closed to the write verbs: no purpose admits `intel snapshot`, `intel patch-meta`-less shells, or a bare gsd_run (AVARICE runs the snapshot, not the invocation)', async () => {
+    const { INVOCATION_PURPOSES, GSD_READ_VERBS } = await import('../../src/domain/invocation-scope.ts');
+    assert.equal(INVOCATION_PURPOSES.intel.writeDir, '.planning/intel');
+    // The map and knowledge purposes admit none of the intel write verbs; the intel purpose's list is the one the preamble gates
+    // (a bare `gsd_run` is `shell-gsd-no-preamble`, asserted in hook-decision.test.ts) and nothing was added to it.
+    for (const purpose of ['map', 'knowledge'] as const) {
+      assert.equal(GSD_READ_VERBS[purpose].some((v: string) => /^intel (snapshot|patch-meta|validate)/.test(v)), false, purpose);
+    }
+    assert.deepEqual(GSD_READ_VERBS.intel.filter((v: string) => /^intel (snapshot|patch-meta|validate)/.test(v)), ['intel patch-meta', 'intel validate', 'intel snapshot']);
   });
 
   it('never writes intel itself: with a host that wrote nothing, staging holds no intel document', async () => {

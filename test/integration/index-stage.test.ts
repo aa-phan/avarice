@@ -292,6 +292,7 @@ describe('a graphify that is missing or fails never blocks activation (S-40, ONB
             checkDrift: (s) => gsd.checkDrift(s),
             graphifySnapshot: (s) => gsd.graphifySnapshot(s),
             intelValidate: (s) => gsd.intelValidate(s),
+            intelSnapshot: (s) => gsd.intelSnapshot(s),
             intelDiff: (s) => gsd.intelDiff(s),
             intelStatus: (s) => gsd.intelStatus(s),
             intelQuery: (s, term) => gsd.intelQuery(s, term),
