@@ -43,6 +43,7 @@ before(() => {
     repoPath: join(root, 'repo'),
     dataRoot: join(root, 'data'),
     home: join(root, 'home'),
+    workRoot: root,
     workspace: { topLevelEntries: ['src', '.git'], planningEntries: [], gitPaths: [join(staging, '.git')], repoReadAllow: [] },
     readRoots: [],
   });

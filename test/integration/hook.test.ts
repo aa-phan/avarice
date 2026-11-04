@@ -437,6 +437,7 @@ describe('writeHookPolicy carries the concurrency limit (O-1)', () => {
         repoPath: fx.repo,
         dataRoot: join(fx.dir, 'data'),
         home: join(fx.dir, 'home'),
+      workRoot: join(fx.dir, 'work'),
         workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
         readRoots: [],
       });
@@ -512,6 +513,7 @@ describe('writeHookPolicy', () => {
       repoPath: fx.repo,
       dataRoot: join(fx.dir, 'data'),
       home: join(fx.dir, 'home'),
+      workRoot: join(fx.dir, 'work'),
       workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [join(fx.repo, '.git')] },
       readRoots: [],
     });
@@ -549,6 +551,7 @@ describe('the knowledge purpose policy through the real hook entry (decision B)'
       repoPath: probe.repo,
       dataRoot: join(probe.dir, 'data'),
       home: join(probe.dir, 'home'),
+      workRoot: join(probe.dir, 'work'),
       workspace: { topLevelEntries: ['src', '.planning', '.avarice-knowledge'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
       readRoots: [],
     });
@@ -626,6 +629,7 @@ describe('the read allow-list through the real hook entry (CR-02, D-GAP-01)', ()
       repoPath: fx.repo,
       dataRoot: join(fx.dir, 'data'),
       home: join(fx.dir, 'home'),
+      workRoot: join(fx.dir, 'work'),
       workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
       readRoots: [gsd],
     });

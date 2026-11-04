@@ -23,6 +23,7 @@ describe('FC-6: the clone git metadata is always denied to a shell', () => {
       repoPath: '/work/repo',
       dataRoot: '/work/data',
       home: '/home/u',
+      workRoot: '/work',
       workspace: { topLevelEntries: ['src'], planningEntries: ['PROJECT.md'], gitPaths: [], repoReadAllow: [] },
       readRoots: [],
     });

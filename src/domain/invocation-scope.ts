@@ -182,8 +182,9 @@ export interface ScopeInput {
   dataRoot: string;
   home: string;
   // The profile work root that holds every onboarding's staging (`{workRoot}/{onboardingId}/staging`); denied to the invocation so it
-  // cannot read another onboarding (docs/containment.md:78), with its own staging re-allowed; prepareInvocation always passes it.
-  workRoot?: string;
+  // cannot read another onboarding (docs/containment.md:78), with its own staging re-allowed. Required, so the type makes every
+  // caller pass it and no caller can drop the work-root deny without notice (WR-03).
+  workRoot: string;
   workspace: WorkspaceShape;
   // Directories outside staging the invocation may read: the gsd-core directory, the agents directory and the
   // realpath of each allowed skill.
@@ -234,12 +235,12 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const home = trimTrailingSlashes(input.home);
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
-  const workRoot = input.workRoot !== undefined ? trimTrailingSlashes(input.workRoot) : undefined;
-  // The work root goes last so the existing entries keep their order. Without one (unit callers that model no profile) the list is as before.
-  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), ...(workRoot !== undefined ? [workRoot] : [])])];
+  const workRoot = trimTrailingSlashes(input.workRoot);
+  // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
+  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), workRoot])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
-  const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), ...(workRoot !== undefined ? [staging] : [])];
+  const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
 
   const subagents =
     purpose === 'intel' || purpose === 'knowledge'

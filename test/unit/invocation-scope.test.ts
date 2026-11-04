@@ -57,6 +57,7 @@ function scopeFor(purpose: InvocationPurpose, over: Partial<ScopeInput> = {}) {
     home: HOME,
     workspace: workspace(),
     readRoots: ['/gsd/core', '/gsd/agents'],
+    workRoot: '/work',
     ...over,
   });
 }
@@ -183,10 +184,10 @@ describe('computeInvocationScope: reads', () => {
     }
   });
 
-  it('re-allows only what the staging strategy lists', () => {
-    assert.deepEqual(scopeFor('map').allowRead, []);
+  it('re-allows only what the staging strategy lists, and the invocation staging (WR-03)', () => {
+    assert.deepEqual(scopeFor('map').allowRead, [STAGING]);
     const scope = scopeFor('map', { workspace: workspace({ repoReadAllow: [`${REPO}/.git`] }) });
-    assert.deepEqual(scope.allowRead, [`${REPO}/.git`]);
+    assert.deepEqual(scope.allowRead, [`${REPO}/.git`, STAGING]);
   });
 
   it('carries the extra read roots, the staging path and the contract secret globs', () => {
@@ -295,10 +296,11 @@ describe('the work root (CR-02, D-GAP-01)', () => {
     assert.equal(denyRead.filter((path) => path === DATA).length, 1);
   });
 
-  it('keeps the previous denyRead and allowRead when no work root is given', () => {
-    const scope = scopeFor('map');
-    assert.deepEqual(scope.denyRead, FIVE);
-    assert.deepEqual(scope.allowRead, []);
+  it('cannot be called without a work root (WR-03): the type rejects a ScopeInput that omits it', () => {
+    // tsc reports an unused directive here if workRoot ever becomes optional again. The literal is never passed on.
+    // @ts-expect-error WR-03: ScopeInput.workRoot is required
+    const withoutWorkRoot: ScopeInput = { purpose: 'map', contract: contract(), stagingPath: STAGING, repoPath: REPO, dataRoot: DATA, home: HOME, workspace: workspace(), readRoots: [] };
+    void withoutWorkRoot;
   });
 });
 

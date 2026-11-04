@@ -70,7 +70,7 @@ function scope(purpose: InvocationPurpose, over: { strategy?: BashStrategy; stag
     repoPath: repo,
     dataRoot: data,
     home,
-    ...(over.workRoot !== undefined ? { workRoot: over.workRoot } : {}),
+    workRoot: over.workRoot ?? join(root, 'work'),
     workspace: {
       topLevelEntries: ['.git', '.planning', 'docs', 'package.json', 'src'],
       planningEntries: ['PROJECT.md', 'config.json', 'phases'],
@@ -147,7 +147,9 @@ function expectedSettings(over: {
       filesystem: {
         allowWrite: [slash(over.writeRoot)],
         denyWrite: over.denyWrite.map(slash),
-        denyRead: [repo, data, join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh')].map(slash),
+        // WR-03: every scope denies the work root (last) and re-allows only its own staging.
+        denyRead: [repo, data, join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh'), join(root, 'work')].map(slash),
+        allowRead: [slash(staging)],
       },
       network: { allowedDomains: [], strictAllowlist: true },
     },
@@ -258,8 +260,12 @@ describe('renderClaudeSettings with a work root (CR-02, D-GAP-01)', () => {
     assert.ok(settings.permissions.deny.includes(`Read(${slash(staging)}-x/**)`));
   });
 
-  it('is unchanged when the scope carries no work root', () => {
-    const settings = render(scope('map')) as Record<string, any>;
+  // The renderer's branch for an empty allowRead and a denyRead without a work root. computeInvocationScope can no longer produce
+  // such a scope (WR-03), so the scope is built by hand from the production one.
+  it('renders no allowRead and the five base denyRead entries for a hand-built scope that carries neither a work root nor a re-allow', () => {
+    const base = scope('map');
+    const handBuilt: InvocationScope = { ...base, denyRead: base.denyRead.slice(0, 5), allowRead: [] };
+    const settings = render(handBuilt) as Record<string, any>;
     assert.equal(settings.sandbox.filesystem.allowRead, undefined);
     assert.equal(settings.sandbox.filesystem.denyRead.length, 5);
   });
@@ -320,9 +326,9 @@ describe('renderClaudeSettings invariants', () => {
   });
 
   it('emits allowRead only when the strategy lists a path, and keeps it out of the permission rules', () => {
-    const plain = render(scope('map')) as Record<string, any>;
-    assert.equal(plain.sandbox.filesystem.allowRead, undefined);
     const base = scope('map');
+    const plain = render({ ...base, allowRead: [] }) as Record<string, any>;
+    assert.equal(plain.sandbox.filesystem.allowRead, undefined);
     const withAllow = render({ ...base, allowRead: [join(repo, '.git')] }) as Record<string, any>;
     assert.deepEqual(withAllow.sandbox.filesystem.allowRead, [slash(join(repo, '.git'))]);
     assert.ok(!withAllow.permissions.allow.some((r: string) => r.includes('.git') && r.startsWith('Read(') && r.includes(repo)));
