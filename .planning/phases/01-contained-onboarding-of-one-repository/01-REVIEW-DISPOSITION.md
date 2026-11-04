@@ -3,38 +3,42 @@ phase: 01
 review: 01-REVIEW.md
 titles: json
 findings:
-  - id: CR-01
-    severity: critical
-    disposition: open
-    title: "`grep -d RECURSE` and `--directories=Recurse` bypass the recursive-grep secret-glob check"
   - id: WR-01
     severity: warning
     disposition: open
-    title: "A long option with a separate value shifts the grep pattern and hides the real walk root"
+    title: "`workRoot` is required by type only; an empty or relative value silently produces a policy that denies everything"
   - id: WR-02
     severity: warning
     disposition: open
-    title: "The recursive-grep detector models BSD and GNU grep, but Claude Code's Bash tool may run `grep` as embedded `ugrep`"
-  - id: WR-03
-    severity: warning
-    disposition: open
-    title: "`ScopeInput.workRoot` is optional, so omitting it silently drops the work-root deny"
-  - id: WR-04
-    severity: warning
-    disposition: open
-    title: "Integration assertion that the settings carry no containing Read deny is vacuous"
+    title: "The WR-03 type guard is not exercised by `npm test`"
   - id: IN-01
     severity: info
     disposition: open
-    title: "Every recursive grep is denied under the production secret globs, and the test rewrite hides it"
+    title: "Stale comment cites an option form that no longer has a value-taking owner"
   - id: IN-02
     severity: info
     disposition: open
-    title: "Resume marks a launch `interrupted` even when no reap happened"
+    title: "Redundant local and an unused export left behind by the deletion"
   - id: IN-03
     severity: info
     disposition: open
-    title: "`SHORT_VALUE_OPTIONS` is exported but unused outside its module"
+    title: "Misindented line, and the doc cites a test that does not cover the claim"
+  - id: IN-04
+    severity: info
+    disposition: open
+    title: "The agent gets no hint that shell grep is gone"
+  - id: CR-01
+    severity: critical
+    disposition: fixed
+    title: "`grep -d RECURSE` and `--directories=Recurse` bypass the recursive-grep secret-glob check"
+  - id: WR-03
+    severity: warning
+    disposition: fixed
+    title: "`ScopeInput.workRoot` is optional, so omitting it silently drops the work-root deny"
+  - id: WR-04
+    severity: warning
+    disposition: fixed
+    title: "Integration assertion that the settings carry no containing Read deny is vacuous"
   - id: CR-02
     severity: critical
     disposition: open
@@ -59,38 +63,34 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-  - id: IN-04
-    severity: info
-    disposition: open
-    title: "`reap` can throw on a failed `ps` spawn"
   - id: IN-05
     severity: info
     disposition: open
     title: "The profile `config.json` is written but never read"
-open: 16
+open: 13
 total: 16
-recorded: 2026-11-04T10:39:26.563Z
+recorded: 2026-11-04T22:06:00.000Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
+| IN-04 | info | open | - |
+| CR-01 | critical | fixed | quick 261104-jnc (5e67793), superseded by 261104-l3t (99dd4fb): shell grep denied by name (not in the current review) |
+| WR-03 | warning | fixed | quick 261104-jnc (974d8b1): ScopeInput.workRoot required (not in the current review) |
+| WR-04 | warning | fixed | quick 261104-jnc (89f4a39): vacuous Read-deny assertion fixed (not in the current review) |
 | CR-02 | critical | open | - (not in the current review) |
 | CR-03 | critical | open | - (not in the current review) |
 | WR-05 | warning | open | - (not in the current review) |
 | WR-06 | warning | open | - (not in the current review) |
 | WR-07 | warning | open | - (not in the current review) |
 | WR-08 | warning | open | - (not in the current review) |
-| IN-04 | info | open | - (not in the current review) |
 | IN-05 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
