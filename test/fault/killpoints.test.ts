@@ -6,9 +6,12 @@
 // host is the only host; no model is called.
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { findGraphifyBinary } from '../../src/adapters/graph/graphify.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { checkoutSnapshot, makeScratchRepo, treeDigest } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -27,12 +30,41 @@ import {
   runWithFault,
   sleepSync,
   statusCli,
+  survivorPidFile,
   transitionsOf,
 } from '../helpers/fault-run.ts';
 import type { KillPoint } from '../helpers/fault-run.ts';
 
 const cleanup: string[] = [];
+// Processes the kill cases leave running on purpose (a host that outlived its supervisor, a decoy): ended in `after`.
+const survivors: number[] = [];
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+// A detached process that carries `--session-id {sessionId}` in its command line, as a host would.
+function spawnKeepAlive(sessionId: string): number {
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', sessionId], { detached: true, stdio: 'ignore' });
+  child.unref();
+  assert.ok(child.pid !== undefined);
+  return child.pid;
+}
+
 after(() => {
+  for (const pid of survivors) {
+    if (!isAlive(pid)) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // already gone
+    }
+  }
   for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -54,7 +86,9 @@ const EXPECTED_AT_KILL: Readonly<Record<KillPoint, { state: string; nextAction: 
   'after-checkpoint:index:code-graph': { state: 'planning_ready', nextAction: 'index:code-graph' },
   'after-checkpoint:index:code-graph#2': { state: 'planning_ready', nextAction: 'index:code-graph' },
   'after-checkpoint:index:intel': { state: 'planning_ready', nextAction: 'index:intel' },
+  'mid-invocation:intel': { state: 'planning_ready', nextAction: 'index:intel' },
   'after-checkpoint:index:knowledge': { state: 'planning_ready', nextAction: 'index:knowledge' },
+  'mid-invocation:knowledge': { state: 'planning_ready', nextAction: 'index:knowledge' },
   'after-checkpoint:activate': { state: 'planning_ready', nextAction: 'activate' },
 };
 
@@ -148,8 +182,12 @@ describe('the uninterrupted reference run', () => {
 });
 
 describe('kill, then resume, reaches the record of an uninterrupted run', () => {
+  // The purpose whose invocation the supervisor dies in, for the points that leave a surviving host.
+  const purposeOf = (point: KillPoint): 'intel' | 'knowledge' | undefined => (point === 'mid-invocation:intel' ? 'intel' : point === 'mid-invocation:knowledge' ? 'knowledge' : undefined);
   for (const point of KILL_POINTS) {
-    it(point, () => {
+    // The knowledge invocation runs only when the code graph step left a graph, which needs graphify.
+    const skip = point === 'mid-invocation:knowledge' && findGraphifyBinary(process.env) === undefined ? 'graphify not installed: the knowledge invocation needs a code graph' : false;
+    it(point, { skip }, () => {
       const roots = freshProfile();
       cleanup.push(roots.base);
       const killed = runWithFault(roots, repo, point);
@@ -170,6 +208,26 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
         assert.equal(staged.length, 3, 'the invocation was killed after writing three of the seven map files');
         const launch = rows<{ status: string }>(roots, "SELECT status FROM onboarding_steps WHERE step = 'launch:map'");
         assert.deepEqual(launch, [{ status: 'started' }], 'the killed invocation is visible as a started launch');
+      }
+
+      // A kill inside the intel or knowledge invocation leaves its host running, carrying the session ID in its command line.
+      const purpose = purposeOf(point);
+      let survivor: number | undefined;
+      let decoy: number | undefined;
+      if (purpose !== undefined) {
+        survivor = Number(readFileSync(survivorPidFile(roots), 'utf8').trim());
+        assert.ok(Number.isInteger(survivor) && survivor > 1, 'the fake host recorded the survivor PID');
+        survivors.push(survivor);
+        assert.ok(isAlive(survivor), 'the host that carries the session ID outlived its supervisor');
+        const started = rows<{ status: string }>(roots, 'SELECT status FROM onboarding_steps WHERE step = ?', `launch:${purpose}`);
+        assert.deepEqual(started, [{ status: 'started' }], `the killed ${purpose} invocation is visible as a started launch`);
+      }
+      if (point === 'mid-invocation:intel') {
+        // A process that carries another session ID must not be touched by the reap.
+        decoy = spawnKeepAlive(randomUUID());
+        survivors.push(decoy);
+        sleepSync(500);
+        assert.ok(isAlive(decoy));
       }
 
       // status: interrupted in its last state with the exact command, never active.
@@ -201,6 +259,25 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
       assert.equal(outcome.stagingDigest, reference.stagingDigest, 'staging tree');
       assert.deepEqual(outcome.graphSnapshot, reference.graphSnapshot, 'the GSD graph snapshot, without its timestamp');
       assert.deepEqual(checkoutSnapshot(repo.path), pristine, 'the user checkout is byte-identical');
+
+      // The survivor was ended by its session ID (and only it), once, and its launch is marked interrupted.
+      if (purpose !== undefined && survivor !== undefined) {
+        assert.equal(isAlive(survivor), false, 'the resume ended the host that carried the interrupted session ID');
+        const reaped = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.reaped'");
+        assert.equal(reaped.length, 1, 'exactly one invocation.reaped event');
+        assert.equal((JSON.parse((reaped[0] as { data_json: string }).data_json) as { terminated: number }).terminated, 1);
+        const launched = rows<{ attempt: number; status: string }>(roots, 'SELECT attempt, status FROM onboarding_steps WHERE step = ? ORDER BY attempt', `launch:${purpose}`);
+        assert.deepEqual(launched, [
+          { attempt: 1, status: 'interrupted' },
+          { attempt: 2, status: 'failed' },
+        ]);
+      }
+      if (decoy !== undefined) assert.ok(isAlive(decoy), 'a process that carries another session ID is alive after the resume');
+      assert.deepEqual(
+        rows<{ step: string }>(roots, "SELECT step FROM onboarding_steps WHERE step LIKE 'launch:%' AND status = 'started'"),
+        [],
+        'no launch of any purpose is left in flight',
+      );
 
       // Every launch is recorded, and none is left in flight.
       const launches = rows<{ attempt: number; status: string }>(roots, "SELECT attempt, status FROM onboarding_steps WHERE step = 'launch:map' ORDER BY attempt");

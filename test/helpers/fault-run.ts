@@ -40,10 +40,18 @@ export const KILL_POINTS = [
   // stage commits it before the step's side effect. `#2` arms the second, which is the gap between the two.
   'after-checkpoint:index:code-graph#2',
   'after-checkpoint:index:intel',
+  // The supervisor dies inside the intel (or knowledge) invocation and a process carrying its session ID survives.
+  'mid-invocation:intel',
   'after-checkpoint:index:knowledge',
+  'mid-invocation:knowledge',
   'after-checkpoint:activate',
 ] as const;
 export type KillPoint = (typeof KILL_POINTS)[number];
+
+// Where the fake host writes the PID of the process it leaves running when it dies inside an invocation.
+export function survivorPidFile(roots: CliRoots): string {
+  return join(roots.base, 'survivor.pid');
+}
 
 export function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -64,11 +72,20 @@ export function runToCompletion(roots: CliRoots, repo: ScratchRepo, host: FakeHo
 
 // Onboards with the kill point armed and asserts the child ended by SIGKILL.
 export function runWithFault(roots: CliRoots, repo: ScratchRepo, point: KillPoint, host: FakeHostOptions = {}, env: Record<string, string | undefined> = {}): CliResult {
-  const midInvocation = point === 'mid-invocation';
+  // These points are fake-host options, not env faults: the host kills its own process inside the invocation.
+  let hostOptions = host;
+  let armed = true;
+  if (point === 'mid-invocation') {
+    hostOptions = { ...host, killAfterFiles: 3 };
+    armed = false;
+  } else if (point === 'mid-invocation:intel' || point === 'mid-invocation:knowledge') {
+    hostOptions = { ...host, killInPurpose: point === 'mid-invocation:intel' ? 'intel' : 'knowledge', survivorPidFile: survivorPidFile(roots) };
+    armed = false;
+  }
   const result = runCli(onboardArgs(repo), {
     roots,
     entry: TEST_CLI,
-    env: hostEnv(midInvocation ? { ...host, killAfterFiles: 3 } : host, midInvocation ? env : { AVARICE_FAULT: point, ...env }),
+    env: hostEnv(hostOptions, armed ? { AVARICE_FAULT: point, ...env } : env),
   });
   if (result.signal !== 'SIGKILL') {
     throw new Error(`kill point ${point}: expected the child to die by SIGKILL, got signal ${String(result.signal)} code ${String(result.code)}\n${result.stdout}${result.stderr}`);

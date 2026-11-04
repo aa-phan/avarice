@@ -2,14 +2,15 @@
 // into {cwd}/.planning/codebase/ the way the mapper would, with configurable misbehaviour. It lives in
 // test/helpers so that no production path to an "active" record built from fixtures exists (SKELETON.md "Fake
 // host"); nothing under src/ or bin/ may import it.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { err, ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
-import type { AgentHost, InvocationOutcome, InvocationOutcomeKind, InvocationRequest } from '../../src/ports/agent-host.ts';
+import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
+import type { AgentHost, InvocationOutcome, InvocationOutcomeKind, InvocationRequest, ReapRequest } from '../../src/ports/agent-host.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import { git } from './scratch-repo.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
@@ -55,6 +56,11 @@ export interface FakeHostOptions {
   subagents?: number;
   // SIGKILL this process after this many Read calls have gone through the hook (mid-invocation kill).
   killAfterToolCalls?: number;
+  // Die inside the invocation of this purpose (intel or knowledge): a detached process carrying the invocation's
+  // `--session-id` is left running, as a real host would be, and then this process is SIGKILLed.
+  killInPurpose?: 'intel' | 'knowledge';
+  // Where to write the PID of that surviving process.
+  survivorPidFile?: string;
 }
 
 export const HOOK_ENTRY = join(REPO_ROOT, 'src', 'hook', 'pre-tool-use.ts');
@@ -158,6 +164,17 @@ export class FakeAgentHost implements AgentHost {
 
   async invoke(req: InvocationRequest, _signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     this.calls.push(req);
+    if (req.purpose === this.options.killInPurpose) {
+      if (req.sessionId === undefined) throw new Error('the fake host needs a session ID to leave a survivor');
+      // stdio must be `ignore`: the supervisor's parent waits on this process's pipes otherwise.
+      const survivor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', req.sessionId], { detached: true, stdio: 'ignore' });
+      survivor.unref();
+      if (this.options.survivorPidFile !== undefined && survivor.pid !== undefined) writeFileSync(this.options.survivorPidFile, String(survivor.pid));
+      // Start-up margin: the process must have parsed its arguments before the supervisor dies (as in the claude-host reap test).
+      await sleep(500);
+      process.kill(process.pid, 'SIGKILL');
+      return err({ kind: 'internal', cause: 'the fake host was killed inside the invocation' });
+    }
     if (req.purpose !== 'map') return err({ kind: 'unsupported', capability: `fake-host:${req.purpose}` });
     const o = this.options;
     const startedMs = Date.now();
@@ -213,5 +230,10 @@ export class FakeAgentHost implements AgentHost {
       headBefore: head,
       headAfter: head,
     });
+  }
+
+  // The production reaper, so a resume that reaps through this host ends survivors the way the real adapter does.
+  async reap(request: ReapRequest): Promise<Result<{ terminated: number }>> {
+    return reapBySessionId(request.sessionId);
   }
 }
