@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-21-PLAN.md
-last_updated: "2026-11-04T09:49:24.503Z"
+stopped_at: Completed 01-22-PLAN.md
+last_updated: "2026-11-04T09:57:33.724Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 01 execution started
-state_head: 5cfe59e4d008d6511e3694899ed6e68b46b11715
+state_head: 1046027a39adffb14ceeec3c4a9da1c7f10ff668
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 24
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 2 of 24
+Plan: 3 of 24
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 01 execution started
 
@@ -78,6 +78,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P20 | 314 min | 4 tasks | 13 files |
 | Phase 01 P19 | about 6 hours across three resumes | 3 tasks | 22 files |
 | Phase 01 P21 | 14 min | 2 tasks | 8 files |
+| Phase 01 P22 | 7 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-19: knowledge validation's forbidden-source rule applies to planning documents for any node and to anything under .planning/phases for pass-added nodes, so a code node from a tracked script there no longer rejects the index (0d930f3)
 - [Phase 01]: 01-19: exit run complete: ~/aa-phan-portfolio-v2 active (1010 code, 24 document nodes, graph and intel at 9f1cd8d), kill -9 and resume to the same ID and pin, checkout unchanged, AC-1 1 s; default store tightened to 0600
 - [Phase 01]: 01-21: resume reaps every started launch:* row (map, intel, knowledge) by session ID in a prelude step before reconcileInvocation; a failing reap stops the resume with all rows still started — T-01-44/T-01-72: relaunching or reading staging beside a surviving detached host is unsafe
+- [Phase 01]: 01-22: staging diff uses --ignored=traditional (not --ignored=matching) with --untracked-files=all so a hostile committed .gitignore cannot hide an out-of-set write; parseStatus reads ! records as untracked; write sets unchanged; preflight status stays without an ignored mode
 
 ### Pending Todos
 
@@ -192,6 +194,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T09:49:24.480Z
-Stopped at: Completed 01-21-PLAN.md
+Last session: 2026-11-04T09:57:33.699Z
+Stopped at: Completed 01-22-PLAN.md
 Resume file: None
