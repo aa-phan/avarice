@@ -78,3 +78,5 @@
 {"case":"17-sandbox-only-writes","costUsd":0.004628060000000001,"assumed":false,"at":"2026-11-03T23:16:11.983Z"}
 {"case":"14-fast-onboarding","costUsd":0.039204329999999996,"assumed":false,"at":"2026-11-03T23:18:50.045Z"}
 {"case":"14-fast-onboarding","costUsd":0.03242271000000001,"assumed":false,"at":"2026-11-03T23:22:10.106Z"}
+{"case":"19-knowledge-onboarding","costUsd":0.053802995,"assumed":false,"at":"2026-11-04T01:12:53.051Z"}
+{"case":"19-knowledge-onboarding","costUsd":0.046741125,"assumed":false,"at":"2026-11-04T01:16:09.346Z"}
