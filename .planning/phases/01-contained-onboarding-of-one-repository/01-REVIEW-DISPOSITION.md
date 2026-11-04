@@ -5,11 +5,11 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "`workRoot` is required by type only; an empty or relative value silently produces a policy that denies everything"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The WR-03 type guard is not exercised by `npm test`"
   - id: IN-01
     severity: info
@@ -67,7 +67,7 @@ findings:
     severity: info
     disposition: open
     title: "The profile `config.json` is written but never read"
-open: 13
+open: 11
 total: 16
 recorded: 2026-11-04T22:06:00.000Z
 ---
@@ -76,8 +76,8 @@ recorded: 2026-11-04T22:06:00.000Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
+| WR-01 | warning | fixed | quick 261104-nxh (0923c03) |
+| WR-02 | warning | fixed | quick 261104-nxh (a942bc7) |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
