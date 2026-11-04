@@ -1,7 +1,9 @@
 // `resume`: continue an interrupted onboarding from its committed state (docs/contracts-and-state.md
 // "Recovery rules"; docs/repository-onboarding.md "Failure and recovery"). The lease is taken over only
-// when its expiry has passed, which fences out the previous holder. A run killed while the map invocation
-// was in flight is reconciled first: the staging map files decide whether the invocation finished.
+// when its expiry has passed, which fences out the previous holder. Every interrupted launch (map, intel and
+// knowledge) is reaped in any non-stop state before anything else runs: the host of a killed supervisor is
+// detached and may still be writing, so no stage and no relaunch may start beside it. A run killed while the
+// map invocation was in flight is then reconciled: the staging map files decide whether the invocation finished.
 // Every other stage is idempotent and simply runs again from the committed state.
 import { ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
@@ -15,6 +17,7 @@ import type { StageContext } from './stages/stage.ts';
 import { effectiveMappingMode, isStampedMode, loadContract, readMapDocuments, stagingPathOf, stampMap } from './stages/shared.ts';
 
 const LAUNCH = 'launch:map';
+const LAUNCH_PREFIX = 'launch:';
 const VALIDATE = 'validate';
 
 // Terminates the host process of an interrupted invocation, found by the session ID its `started` step recorded. A
@@ -37,6 +40,44 @@ async function reapInterrupted(ctx: StageContext, started: unknown, runId: strin
     nowMs: deps.clock.nowMs(),
   });
   return event.ok ? ok(undefined) : event;
+}
+
+// Ends the host of every `launch:{purpose}` step the previous holder left `started`, then marks those steps
+// `interrupted`. The previous holder may have died while its host was still running (the host is detached, in its own
+// process group). Every reap completes before any row is marked, so a reap that fails leaves every row `started` and the
+// next resume tries again; and it runs before staging is read or any stage runs, so nothing writes while the onboarding is
+// reconciled and a relaunch never runs beside a survivor (T-01-44). A map launch of a `mapping` or `paused` onboarding is
+// left `started` for `reconcileInvocation`, which decides from staging whether that invocation finished.
+async function reapStartedLaunches(ctx: StageContext): Promise<Result<void>> {
+  const { deps, onboardingId } = ctx;
+  const steps = deps.ledger.getStepResults(onboardingId);
+  if (!steps.ok) return steps;
+  const started = steps.value.filter((s) => s.step.startsWith(LAUNCH_PREFIX) && s.status === 'started');
+  if (started.length === 0) return ok(undefined);
+
+  const contract = loadContract(deps, onboardingId);
+  if (!contract.ok) return contract;
+  const current = deps.ledger.getOnboarding(onboardingId);
+  if (!current.ok) return current;
+
+  for (const launch of started) {
+    const reaped = await reapInterrupted(ctx, launch.result, contract.value.runId);
+    if (!reaped.ok) return reaped;
+  }
+  const mappingOwned = current.value.state === 'mapping' || current.value.state === 'paused';
+  for (const launch of started) {
+    if (launch.step === LAUNCH && mappingOwned) continue;
+    const marked = deps.ledger.recordStepResult(onboardingId, {
+      step: launch.step,
+      attempt: launch.attempt,
+      status: 'interrupted',
+      result: typeof launch.result === 'object' && launch.result !== null ? launch.result : {},
+      nowMs: Date.parse(launch.startedAt),
+      completedAtMs: deps.clock.nowMs(),
+    });
+    if (!marked.ok) return marked;
+  }
+  return ok(undefined);
 }
 
 // Decides the fate of the map invocation that was running when the previous holder died, and moves the
@@ -64,14 +105,6 @@ async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
   const launches = steps.value.filter((s) => s.step === LAUNCH);
   const validations = steps.value.filter((s) => s.step === VALIDATE);
 
-  // The previous holder may have died while its host was still running (the host is detached, in its own process
-  // group). End any process that carries the interrupted invocation's session ID before looking at staging, so
-  // nothing writes while the map is reconciled and a relaunch never runs beside a survivor (T-01-44).
-  const interrupted = launches.at(-1);
-  if (interrupted !== undefined && interrupted.status === 'started') {
-    const reaped = await reapInterrupted(ctx, interrupted.result, contract.value.runId);
-    if (!reaped.ok) return reaped;
-  }
   // Each mapping round is one launch followed by one validation, so an extra launch is this round's invocation.
   const invoked = launches.length > validations.length;
   const mode = effectiveMappingMode(deps, onboardingId, contract.value.body);
@@ -118,6 +151,13 @@ async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
   return validating.ok ? ok(undefined) : validating;
 }
 
+// What resume runs under the lease before the stage loop: reap first, then reconcile the map invocation.
+async function reconcileOnResume(ctx: StageContext): Promise<Result<void>> {
+  const reaped = await reapStartedLaunches(ctx);
+  if (!reaped.ok) return reaped;
+  return reconcileInvocation(ctx);
+}
+
 export async function resumeOnboarding(deps: AppDeps, onboardingId: string): Promise<Result<OnboardingOutcome>> {
   const found = deps.ledger.getOnboarding(onboardingId);
   if (!found.ok) return found;
@@ -126,5 +166,5 @@ export async function resumeOnboarding(deps: AppDeps, onboardingId: string): Pro
     // Nothing to continue: report where it ended without taking the lease.
     return ok({ onboardingId, state: row.state, reason: row.reason, message: null });
   }
-  return runOnboarding(deps, onboardingId, { prelude: reconcileInvocation });
+  return runOnboarding(deps, onboardingId, { prelude: reconcileOnResume });
 }
