@@ -295,6 +295,32 @@ export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
   'git status': 'uM',
 };
 
+// Long options that take a required value, per read-only command entry (same key as SHORT_VALUE_OPTIONS), matched by exact
+// name only: a prefix could resolve to a different option in another grep, which would hide a walk root. A listed option
+// consumes its next word whatever that word looks like, the way getopt consumes a required argument (WR-01). The list holds
+// options GNU grep gives a required argument and that /usr/bin/grep either consumes or rejects (a grep that rejects an option
+// exits before walking, so consuming its word hides no root). `--context` and `--color`/`--colour` are left out: their
+// argument is optional in at least one grep (BSD `--context` leaves its separate word in place), so they stay unmodelled.
+export const LONG_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  grep: [
+    '--after-context',
+    '--before-context',
+    '--binary-files',
+    '--devices',
+    '--directories',
+    '--exclude',
+    '--exclude-dir',
+    '--exclude-from',
+    '--file',
+    '--group-separator',
+    '--include',
+    '--include-dir',
+    '--label',
+    '--max-count',
+    '--regexp',
+  ],
+};
+
 // What the words after a read command's name say. The parser treats every operand and every attached or separate option
 // value as a path candidate (fail closed: a non-path value such as a search pattern starting with `/` is judged as a path).
 interface ReadArgs {
@@ -307,13 +333,17 @@ interface ReadArgs {
   longs: Array<{ name: string; value: string | null }>;
   // A character in a short cluster that is not an ASCII letter or digit and that no value-taking letter consumed.
   malformed: boolean;
+  // WR-01: a long option that is not in LONG_VALUE_OPTIONS (and does not name a recursion option) is followed by another
+  // argument, so the hook cannot prove whether that word is its value or an operand.
+  unprovenLong: boolean;
 }
 
 const isAsciiAlphanumeric = (char: string): boolean => /^[A-Za-z0-9]$/.test(char);
 
 function parseReadArgs(entryKey: string, args: readonly string[]): ReadArgs {
   const valueLetters = SHORT_VALUE_OPTIONS[entryKey] ?? '';
-  const parsed: ReadArgs = { positional: [], values: [], flags: new Set(), shortValues: [], longs: [], malformed: false };
+  const longValueOptions = LONG_VALUE_OPTIONS[entryKey] ?? [];
+  const parsed: ReadArgs = { positional: [], values: [], flags: new Set(), shortValues: [], longs: [], malformed: false, unprovenLong: false };
   let operandsOnly = false;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] as string;
@@ -326,7 +356,13 @@ function parseReadArgs(entryKey: string, args: readonly string[]): ReadArgs {
     } else if (arg.startsWith('--')) {
       const equals = arg.indexOf('=');
       const name = equals === -1 ? arg : arg.slice(0, equals);
-      const value = equals === -1 ? null : arg.slice(equals + 1);
+      let value = equals === -1 ? null : arg.slice(equals + 1);
+      if (value === null && longValueOptions.includes(name) && args[i + 1] !== undefined) {
+        value = args[i + 1] as string;
+        i += 1;
+      } else if (value === null && i + 1 < args.length && !longValueOptions.includes(name) && !isLongOption(name, '--recursive', 5) && !isLongOption(name, '--dereference-recursive', 5)) {
+        parsed.unprovenLong = true;
+      }
       parsed.longs.push({ name, value });
       if (value !== null && value !== '') parsed.values.push(value);
     } else if (!/^-[0-9]+$/.test(arg)) {
@@ -404,7 +440,9 @@ function recursiveRule(parsed: ReadArgs, call: Extract<NormalizedToolCall, { kin
     shortValues.some((v) => v.flag === 'e' || v.flag === 'f') || longs.some((l) => isLongOption(l.name, '--regexp', 4) || isLongOption(l.name, '--file', 4));
   const cwd = call.cwd.startsWith('/') ? call.cwd : policy.stagingPath;
   const walked = (patternFromOption ? positional : positional.slice(1)).map((path) => absolutize(cwd, path));
-  if (walked.length === 0) walked.push(cwd);
+  // WR-01: when an unmodelled long option may have swallowed an operand, the operand list is unprovable. The computed roots
+  // plus the working directory are a superset of every root the real grep can walk under any arity reading.
+  if (walked.length === 0 || parsed.unprovenLong) walked.push(cwd);
 
   const staging = trimSlashes(policy.stagingPath);
   const denied = policy.denyRead.filter((root) => !policy.allowRead.some((allowed) => under(root, allowed)));
