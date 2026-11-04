@@ -10,7 +10,7 @@ created: "2026-11-04"
 
 # Phase 1 — Security
 
-> Per-phase security contract: threat register, accepted risks, and audit trail. Register authored at plan time (the `<threat_model>` blocks of plans 01-01 to 01-20) plus the SUMMARY Threat Flags; verified at ASVS level 1 (grep-depth evidence) by gsd-security-auditor on 2026-11-04.
+> Per-phase security contract: threat register, accepted risks, and audit trail. Register authored at plan time (the `<threat_model>` blocks of plans 01-01 to 01-24) plus the SUMMARY Threat Flags; verified at ASVS level 1 (grep-depth evidence) by gsd-security-auditor on 2026-11-04.
 
 ---
 
@@ -122,6 +122,23 @@ created: "2026-11-04"
 | T-01-70 | 01-20 | Tampering (supply chain) | probe toolchain | medium | mitigate | 01-MUTATION.md:5,10 owner authorization, `--locked`, $TMPDIR (documentary) | closed |
 | T-01-71 | 01-20 | Information disclosure | findings | low | accept | see Accepted Risks AR-05 | closed |
 | T-01-SC | 01-20 | Spoofing | scope creep | low | accept | see Accepted Risks AR-06 | closed |
+| T-01-72 | 01-21 | Tampering | orphaned intel and knowledge hosts (app/resume.ts) | high | mitigate | resume.ts:51 `reapStartedLaunches`, called at :156 before reconciliation and any stage; killpoints.test.ts:222 mid-invocation:intel and :knowledge cases | closed |
+| T-01-73 | 01-21 | Elevation | session-ID reaper (`reapBySessionId`) | medium | mitigate | claude-host.ts:363 UUID-validated pattern (body moved verbatim); killpoints.test.ts:216-227 decoy with another session ID survives | closed |
+| T-01-74 | 01-21 | Repudiation | launch rows left `started` | low | mitigate | resume.ts:73 marks `interrupted`; killpoints.test.ts:277-279 no `launch:%` row left `started` | closed |
+| T-01-SC | 01-21 | Tampering | npm/pip/cargo installs | high | mitigate | no installs: package.json and package-lock.json unchanged since 97f32ad | closed |
+| T-01-75 | 01-22 | Tampering | hostile `.gitignore` hiding staging writes (git/staging-base.ts) | high | mitigate | staging-base.ts:115 `--untracked-files=all --ignored=traditional`; repo-facts.ts:31-33 `!` read as untracked; ignored-writes.test.ts validate and activate cases | closed |
+| T-01-76 | 01-22 | Denial of service | hostile `.gitignore` blocking own onboarding | low | accept | see Accepted Risks AR-07 | closed |
+| T-01-77 | 01-22 | Information disclosure | ignored checkout file names in preflight facts | low | mitigate | repo-facts.ts:129 status without an ignored mode; ignored-writes.test.ts preflight facts case | closed |
+| T-01-SC | 01-22 | Tampering | npm/pip/cargo installs | high | mitigate | no installs: package files unchanged | closed |
+| T-01-78 | 01-23 | Information disclosure | reads outside the deny list (domain/hook-decision.ts readRule) | high | mitigate | hook-decision.ts:188-196 allow-list (staging, readRoots, allowRead) → `outside-read-set`; hook-policy.ts:51 canonical readRoots; hook-decision.test.ts and hook.test.ts P-3 cases | closed |
+| T-01-79 | 01-23 | Information disclosure | recursive grep reaching secret globs or following links | high | mitigate | hook-decision.ts:387,403,406 `shell-recursive-read` (link-following flags incl. BSD -S/-O, denied root below, secret glob below) | closed |
+| T-01-80 | 01-23 | Information disclosure | paths in attached option values or after `--` | high | mitigate | hook-decision.ts:430 `shell-option-value` fail closed; hook-decision.test.ts "shell option values, operands after --" suite | closed |
+| T-01-81 | 01-23 | Information disclosure | residual reads via git objects and host Grep recursion | medium | accept | see Accepted Risks AR-08; named as known bypasses in docs/containment.md:107 | closed |
+| T-01-SC | 01-23 | Tampering | npm/pip/cargo installs | high | mitigate | no installs: package files unchanged | closed |
+| T-01-82 | 01-24 | Information disclosure | another onboarding's staging (domain/invocation-scope.ts denyRead) | high | mitigate | invocation-scope.ts:237-242 work root in denyRead, own staging in allowRead; invocation.ts:90 passes profile workRoot; claude-host.test.ts production-path case | closed |
+| T-01-83 | 01-24 | Denial of service | work-root deny blocking own staging | medium | mitigate | settings.ts:50-52,100-104 `containsStaging` filter keeps the work root out of `Read(...)` denies; claude-settings.test.ts work-root case; live re-check is manual-only (01-VALIDATION.md) | closed |
+| T-01-84 | 01-24 | Repudiation | docs/containment.md overclaiming CON-1 | medium | mitigate | docs/containment.md:107 CON-1 row names enforcement points, tests and known bypasses | closed |
+| T-01-SC | 01-24 | Tampering | npm/pip/cargo installs | high | mitigate | no installs: package files unchanged | closed |
 | TF-01-15-A | 01-15 | Elevation (process spawn) | host-claude/claude-host.ts | medium | mitigate | SUMMARY flag; claude-host.ts:40,357 UUID regex before `pgrep -f --`; argv-only spawn | closed |
 | TF-01-15-B | 01-15 | Tampering (scratch fs) | host-claude/launch-preflight.ts | low | mitigate | SUMMARY flag; launch-preflight.ts:177-227 mkdtemp 0700, copy 0600, rm in finally | closed |
 | TF-01-16-A | 01-16 | Elevation (process spawn) | test/helpers/live-harness.ts | medium | mitigate | SUMMARY flag; test-only, AVARICE_LIVE gate and cap; live-admission-override.test.ts:75 | closed |
@@ -151,6 +168,8 @@ created: "2026-11-04"
 | AR-04 | T-01-55 | Knowledge pass bounded by its wall-clock share and invocation and subagent budgets; a failure keeps the code-only graph and activation proceeds | plan 01-18 threat model | 2026-11-04 |
 | AR-05 | T-01-71 | Mutation findings stay in the repository; nothing is published | plan 01-20 threat model | 2026-11-04 |
 | AR-06 | T-01-SC (01-20) | The Target Units table bounds the mutation scope; other units are recorded as unprobed | plan 01-20 threat model | 2026-11-04 |
+| AR-07 | T-01-76 | Unchanged write sets admit every AVARICE output under a `*` ignore (positive controls in ignored-writes.test.ts); a repository can only block its own onboarding | plan 01-22 threat model | 2026-11-04 |
+| AR-08 | T-01-81 | Committed secret-glob files read through git objects (`git show`, `git log -p`) and host Grep recursion inside staging are outside the CR-02 cases (D-GAP-02); documented as known bypasses in docs/containment.md; transcripts redacted before storage | plan 01-23 threat model | 2026-11-04 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -161,6 +180,7 @@ created: "2026-11-04"
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-11-04 | 94 | 94 | 0 | gsd-security-auditor (ASVS 1, block_on high) via execute-phase verify:post |
+| 2026-11-04 | 111 | 111 | 0 | secure-phase re-audit for gap-closure plans 01-21..01-24 (17 new rows, ASVS 1 grep-depth short-circuit, no auditor spawn) |
 
 ---
 
@@ -172,3 +192,11 @@ created: "2026-11-04"
 - [x] `status: verified` set in frontmatter
 
 **Approval:** verified 2026-11-04
+
+## Security Audit 2026-11-04
+
+| Metric | Count |
+|---|---|
+| Threats found | 17 |
+| Closed | 17 |
+| Open | 0 |
