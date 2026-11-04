@@ -8,6 +8,9 @@ import { existsSync, rmSync } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
 
 import { reserveInvocation, settleInvocation } from '../../src/app/budget.ts';
+import { completeInvocation, prepareInvocation } from '../../src/app/invocation.ts';
+import { err, ok } from '../../src/domain/result.ts';
+import type { InvocationOutcome } from '../../src/ports/agent-host.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
@@ -355,5 +358,146 @@ describe('S-35 adapted: mapping budgets persist across kills and resumes', () =>
     assert.match(result.stdout, /blocked \(budget_exhausted\)/);
     assert.equal(row(roots, 'subagentsTotal').used, 4);
     assert.equal(row(roots, 'toolCalls').used, 0);
+  });
+});
+
+
+// Item C (owner decision 2026-11-03): a killed or interrupted invocation is charged its full cost reservation instead of 0. The
+// charge is conservative, the safe direction for a cap; a cost the host did report is recorded beside it and the larger counts.
+describe('a killed or interrupted invocation is charged its cost reservation', () => {
+  const costUsed = (deps: AppDeps, runId: string): number => {
+    const found = deps.ledger.getBudgets(runId);
+    assert.ok(found.ok);
+    return (found.value.find((b: BudgetRow) => b.name === 'costUsd') as BudgetRow).used;
+  };
+  const outcomeOf = (over: Partial<InvocationOutcome> & { details?: Partial<NonNullable<InvocationOutcome['details']>> }): InvocationOutcome => ({
+    sessionId: 'sess',
+    kind: 'inconclusive',
+    permissionDenials: [],
+    costUsd: 0,
+    durationMs: 10,
+    headBefore: 'a'.repeat(40),
+    headAfter: 'a'.repeat(40),
+    ...over,
+    details: { exitCode: null, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, ...over.details },
+  });
+
+  // Prepares one more map invocation on a finished onboarding and returns it with the run's id.
+  function prepare(deps: AppDeps, onboardingId: string): { prepared: NonNullable<ReturnType<typeof prepareInvocation> extends infer R ? (R extends { ok: true; value: infer V } ? (V extends { granted: true; prepared: infer P } ? P : never) : never) : never>; runId: string } {
+    const row = deps.ledger.getOnboarding(onboardingId);
+    assert.ok(row.ok);
+    const prepared = prepareInvocation(deps, row.value, 'map', 'map the repository', { expectedFiles: [] });
+    assert.ok(prepared.ok && prepared.value.granted, 'a granted invocation');
+    return { prepared: prepared.value.prepared, runId: prepared.value.prepared.request.runId } as never;
+  }
+
+  it('charges the reservation (the per-invocation cap) when the host ended by a signal or the wall clock and reported no cost', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      for (const details of [{ timedOut: true }, { signal: 'SIGKILL' }]) {
+        const { prepared, runId } = prepare(deps, onboardingId);
+        const before = costUsed(deps, runId);
+        const done = completeInvocation(deps, prepared, ok(outcomeOf({ costUsd: 0, details })));
+        assert.ok(done.ok);
+        assert.ok(Math.abs(costUsed(deps, runId) - (before + 3)) < 1e-9, `charged ${costUsed(deps, runId) - before} for ${JSON.stringify(details)}`);
+      }
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 2").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    for (const data of finished) {
+      assert.equal(data['costUsd'], 0, 'the reported cost stays visible');
+      assert.equal(data['costChargedUsd'], 3);
+      assert.equal(data['costBasis'], 'reservation');
+    }
+  });
+
+  it('charges the larger of the reported cost and the reservation, and records both', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const { prepared, runId } = prepare(deps, onboardingId);
+      const before = costUsed(deps, runId);
+      const done = completeInvocation(deps, prepared, ok(outcomeOf({ costUsd: 3.4, details: { timedOut: true } })));
+      assert.ok(done.ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 3.4)) < 1e-9, 'the cap logic never charges below what it reserved, and never below what was reported');
+      const second = prepare(deps, onboardingId);
+      const mid = costUsed(deps, runId);
+      assert.ok(completeInvocation(deps, second.prepared, ok(outcomeOf({ costUsd: 0.2, details: { signal: 'SIGTERM' } }))).ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (mid + 3)) < 1e-9, 'a small reported cost does not lower the charge below the reservation');
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 2").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    assert.deepEqual(finished.map((d) => [d['costUsd'], d['costChargedUsd'], d['costBasis']]), [[0.2, 3, 'reservation'], [3.4, 3.4, 'reported']]);
+  });
+
+  it('still charges exactly the reported cost for a run that finished on its own', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const { prepared, runId } = prepare(deps, onboardingId);
+      const before = costUsed(deps, runId);
+      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.12 }))).ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 0.12)) < 1e-9);
+    });
+  });
+
+  it('charges the reservation when the host error says the process may have run (a timeout or an unknown cancel), and nothing when it never started', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const cases: Array<[Parameters<typeof err>[0], number]> = [
+        [{ kind: 'timeout', afterMs: 5, sideEffect: 'unknown' }, 3],
+        [{ kind: 'cancelled', sideEffect: 'unknown' }, 3],
+        [{ kind: 'cancelled', sideEffect: 'none' }, 0],
+        [{ kind: 'unavailable', cause: 'cannot start the host: ENOENT' }, 0],
+      ];
+      for (const [error, charged] of cases) {
+        const { prepared, runId } = prepare(deps, onboardingId);
+        const before = costUsed(deps, runId);
+        const done = completeInvocation(deps, prepared, err(error));
+        assert.equal(done.ok, false);
+        assert.ok(Math.abs(costUsed(deps, runId) - (before + charged)) < 1e-9, `${JSON.stringify(error)} charged ${costUsed(deps, runId) - before}`);
+      }
+    });
+  });
+
+  it('charges a reservation the supervisor died holding (a kill -9) at the next reservation, and says so', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      assert.ok(row.ok);
+      const first = reserveInvocation(deps, row.value, 'map');
+      assert.ok(first.ok && first.value.granted);
+      const runId = first.value.reservation.runId;
+      const before = costUsed(deps, runId);
+      // The first holder never settles. The next reservation spends its invocation and its cost reservation.
+      const second = reserveInvocation(deps, row.value, 'map');
+      assert.ok(second.ok && second.value.granted);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 3)) < 1e-9, `charged ${costUsed(deps, runId) - before}`);
+      assert.ok(Math.abs(second.value.reservation.costCapUsd - 3) < 1e-9);
+    });
+    const orphan = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.orphan-charged'").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    assert.equal(orphan.length, 1);
+    assert.equal(orphan[0]?.['invocations'], 1);
+    assert.equal(orphan[0]?.['costChargedUsd'], 3);
+  });
+
+  it('charges the cost that was left when less than the per-invocation cap was reserved (the cap the host really ran under)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(row.ok && contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      // Leave 1.5 USD of the run's cost budget: the reservation the cap logic makes is 1.5, not 3.
+      const found = deps.ledger.getBudgets(runId);
+      assert.ok(found.ok);
+      const cost = found.value.find((b: BudgetRow) => b.name === 'costUsd') as BudgetRow;
+      assert.ok(deps.ledger.chargeBudget(runId, 'costUsd', cost.limit - cost.used - 1.5, { fromReserved: false }).ok);
+      const first = reserveInvocation(deps, row.value, 'map');
+      assert.ok(first.ok && first.value.granted);
+      assert.ok(Math.abs(first.value.reservation.costCapUsd - 1.5) < 1e-9);
+      const before = costUsed(deps, runId);
+      // The orphan is settled by the next reservation, which then finds no cost budget left.
+      const second = reserveInvocation(deps, row.value, 'map');
+      assert.ok(second.ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 1.5)) < 1e-9);
+      assert.deepEqual(second.value, { granted: false, budget: 'costUsd' });
+    });
   });
 });
