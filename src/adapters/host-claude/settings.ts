@@ -46,6 +46,12 @@ export function canonicalPath(path: string): string {
 
 const marked = (path: string): string => `/${canonicalPath(path)}`;
 
+// True when `staging` equals `root` or lies under it (both canonical-compared, so a sibling that only shares a name prefix is not under it).
+const containsStaging = (root: string, staging: string): boolean => {
+  const canonicalRoot = canonicalPath(root).replace(/\/+$/, '');
+  return staging === canonicalRoot || staging.startsWith(`${canonicalRoot}/`);
+};
+
 function hookEntry(hook: HookCommand, policyFile: string, event: 'pre' | 'post' | 'config-change', block: boolean) {
   return {
     type: 'command',
@@ -91,7 +97,12 @@ export function renderClaudeSettings(scope: InvocationScope, options: RenderOpti
     `Read(${marked(scope.repoPath)}/**)`,
     `Read(${marked(scope.dataRoot)}/**)`,
     `Edit(${marked(scope.dataRoot)}/**)`,
-    ...scope.denyRead.filter((path) => path !== scope.repoPath && path !== scope.dataRoot).map((path) => `Read(${marked(path)}/**)`),
+    // A root that equals or contains the staging (the work root) stays out of the permission denies: a permission deny has no re-allow
+    // and would deny every Read of staging (research "Reads"). The Read tool is confined by the allow rules, and the shell by the
+    // sandbox denyRead and allowRead pair plus the hook.
+    ...scope.denyRead
+      .filter((path) => path !== scope.repoPath && path !== scope.dataRoot && !containsStaging(path, staging))
+      .map((path) => `Read(${marked(path)}/**)`),
     ...scope.denyReadGlobs.map((glob) => `Read(/${staging}/${glob})`),
     'WebFetch',
     'WebSearch',

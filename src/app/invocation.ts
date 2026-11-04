@@ -87,6 +87,7 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
     stagingPath: staging.value,
     repoPath: project.value.repoPath,
     dataRoot: deps.profile.dataRoot,
+    workRoot: deps.profile.workRoot,
     home: deps.home ?? homedir(),
     workspace: workspace.value,
     // The scope drops them for the knowledge pass, which loads no skill and runs no GSD verb (decision B).

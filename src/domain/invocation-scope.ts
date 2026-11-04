@@ -181,6 +181,9 @@ export interface ScopeInput {
   repoPath: string;
   dataRoot: string;
   home: string;
+  // The profile work root that holds every onboarding's staging (`{workRoot}/{onboardingId}/staging`); denied to the invocation so it
+  // cannot read another onboarding (docs/containment.md:78), with its own staging re-allowed; prepareInvocation always passes it.
+  workRoot?: string;
   workspace: WorkspaceShape;
   // Directories outside staging the invocation may read: the gsd-core directory, the agents directory and the
   // realpath of each allowed skill.
@@ -231,7 +234,12 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const home = trimTrailingSlashes(input.home);
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
-  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh')])];
+  const workRoot = input.workRoot !== undefined ? trimTrailingSlashes(input.workRoot) : undefined;
+  // The work root goes last so the existing entries keep their order. Without one (unit callers that model no profile) the list is as before.
+  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), ...(workRoot !== undefined ? [workRoot] : [])])];
+  // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
+  // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
+  const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), ...(workRoot !== undefined ? [staging] : [])];
 
   const subagents =
     purpose === 'intel' || purpose === 'knowledge'
@@ -251,7 +259,7 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
     denyWrite: uniqueSorted(deny),
     denyRead,
     denyReadGlobs: [...contract.files.secretGlobs],
-    allowRead: workspace.repoReadAllow.map(trimTrailingSlashes),
+    allowRead,
     // The knowledge pass reads its corpus and nothing else: no GSD directory, no skill directory, no other staging path.
     ...(readDir !== undefined ? { readConfine: [join(staging, readDir)] } : {}),
     readRoots: purpose === 'knowledge' ? [] : input.readRoots.map(trimTrailingSlashes),
