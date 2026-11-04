@@ -47,6 +47,9 @@ export interface HookPolicy {
   };
   // When present, every read and search must stay under one of these roots (the knowledge purpose reads only its corpus).
   readConfine?: string[];
+  // Canonical directories outside staging the invocation may read: the gsd-core and agents directories and each allowed skill's
+  // realpath (InvocationScope.readRoots). Absent means none, so reads stay confined to staging and allowRead, never wider.
+  readRoots?: string[];
   // Agent types the invocation may start (the names in its --agents file).
   subagentTypes: string[];
   // The most subagents the invocation may have in flight at once (the contract's subagentsConcurrent, as the scope computes it).
@@ -160,6 +163,7 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
     if (!isStrings(commands[key])) return bad(`needs a list of strings commands.${key}`);
   }
   if (raw['readConfine'] !== undefined && !isStrings(raw['readConfine'])) return bad('needs a list of strings readConfine');
+  if (raw['readRoots'] !== undefined && !isStrings(raw['readRoots'])) return bad('needs a list of strings readRoots');
   if (!(typeof raw['subagentsConcurrent'] === 'number' && Number.isInteger(raw['subagentsConcurrent']) && raw['subagentsConcurrent'] >= 0)) {
     return bad('needs a non-negative integer subagentsConcurrent');
   }
@@ -180,11 +184,16 @@ const under = (path: string, root: string): boolean => {
   return path === r || path.startsWith(r === '/' ? '/' : `${r}/`);
 };
 
-// Why a canonical path may not be read, or null.
+// Why a canonical path may not be read, or null. The rules apply in a fixed order: the knowledge purpose's readConfine, then
+// deny-read (a denied root, unless re-allowed), then the allow-list (staging, readRoots, allowRead: anything else is
+// outside-read-set), then the secret globs below staging (deny-secret-read). File-read, search and shell words all reach this
+// function through checkRead, so one rule confines every read kind.
 function readRule(canonical: string, policy: HookPolicy): string | null {
   // A purpose that reads only its corpus (the knowledge pass): anything else, even inside staging, is outside its read set.
   if (policy.readConfine !== undefined && !policy.readConfine.some((root) => under(canonical, root))) return 'outside-read-set';
   if (policy.denyRead.some((root) => under(canonical, root)) && !policy.allowRead.some((root) => under(canonical, root))) return 'deny-read';
+  const allowed = [policy.stagingPath, ...(policy.readRoots ?? []), ...policy.allowRead];
+  if (!allowed.some((root) => under(canonical, root))) return 'outside-read-set';
   const staging = trimSlashes(policy.stagingPath);
   if (under(canonical, staging) && canonical !== staging && matchesAny(canonical.slice(staging.length + 1), policy.denyReadGlobs)) return 'deny-secret-read';
   return null;
