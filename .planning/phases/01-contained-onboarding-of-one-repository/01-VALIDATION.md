@@ -4,7 +4,7 @@ slug: "contained-onboarding-of-one-repository"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
 status: validated
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-01"
 ---
@@ -67,6 +67,10 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | NFR-9 | Fixture DBs migrate forward; interrupted migration leaves the old schema | T2 | `node --test "test/fault/migrations.test.ts"` | ✅ | ✅ green (plan 01-19) |
 | AC-1 | Clone to first `status` under 10 min, no admin | T4 | `scripts/ac1-timing.sh` (scratch `HOME`) | ✅ | ✅ green (1 s, plan 01-19) |
 | Mutation (plan 01-20) | FC-1..FC-12 pinned: every fail-closed behavior in the Target Units table has a mutant that the suite kills (133 by tests that existed, 49 by tests this plan added or strengthened, 62 by the suite after Task 3; 4 equivalent with an argument; 1 non-FC survivor, B-87). Open findings MF-02, MF-03, MF-04 are todo tests | T1+T2 | `node --test "test/unit/**/*.test.ts" "test/integration/**/*.test.ts" "test/containment/executor.test.ts" "test/containment/failclosed.test.ts" "test/fault/**/*.test.ts" "test/mutation/**/*.test.ts"` | ✅ | ✅ green (980 pass, 0 fail, 3 todo on Node 22.22.3 and 26.9.0); validate-phase 2026-11-04 on Node 26.9.0: 1146 tests, 1146 pass on the rerun (first run 12 fail, all in killpoints, see ONB-1 / NFR-6 row) |
+| ONB-1 (plan 01-21) | Resume reaps every started `launch:*` row (map, intel, knowledge) by exact session ID before reconciliation or any stage; a failed reap stops the resume before any row is marked; a decoy with another session ID survives | T2 | `node --test "test/fault/killpoints.test.ts" "test/integration/resume-reap.test.ts" "test/integration/claude-host.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0) |
+| ONB-3 (plan 01-22) | Staging diff lists every ignored untracked file one per record under a hostile `.gitignore` of `*`; validation and activation block an ignored out-of-set write; preflight facts exclude ignored checkout files | T1+T2 | `node --test "test/integration/staging-adapters.test.ts" "test/integration/ignored-writes.test.ts" "test/unit/repo-facts.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0) |
+| CON-1 / ONB-3 (plan 01-23) | Hook read allow-list: Shell, Read, Grep and Glob confined to staging, `readRoots` and `allowRead` (`outside-read-set`); option values, words after `--` and recursive greps judged; every VERIFICATION.md P-3 case denied with its rule | T1+T2 | `node --test "test/unit/hook-decision.test.ts" "test/integration/hook.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0) |
+| CON-1 / ONB-3 (plan 01-24) | Work root appended to sandbox and hook `denyRead`, own staging re-allowed via `allowRead`; no `Read(...)` deny names a root containing staging; production-path policy denies every P-3 case; `docs/containment.md` CON-1 row present | T1+T2 | `node --test "test/integration/claude-host.test.ts" "test/unit/invocation-scope.test.ts" "test/unit/claude-settings.test.ts"` and `grep -c shell-recursive-read docs/containment.md` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0; docs grep 1) |
 | Exit 1 | Active record on the target; code and document nodes; intel and graph build commit = onboarded revision; checkout unchanged | T4 | `scripts/exit-run.sh` | ✅ | ✅ green: target run `onb_01M6J4ATTTXW68YGE2P9V2QMH5` active, 1010 code and 24 document nodes, graph and intel at 9f1cd8d, checkout digests identical (plan 01-19; evidence `01-19-evidence-target.json`) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -87,6 +91,8 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Exit run on the real target repository | Exit criterion 1, 2 | Spends model budget on a real repository the owner is developing | Run `scripts/exit-run.sh` attended; confirm `status` shows the active record and the checkout byte-compares unchanged. Plan 01-19 result: met. Target evidence `01-19-evidence-target.json` (`~/.local/share/avarice/personal-local/exit-run/target-20261104T015614Z.json`), rehearsal evidence `01-19-evidence-rehearsal-6.json` (1 to 6 kept); kill -9 63 s into the map, interrupted seen after 177 s, resumed to active in 257 s, same ID and pin; reported cost 0.217 USD (charged 3.217 USD with the killed invocation at its full reservation) for the target, 0.493 USD (charged 3.493) for rehearsal 6 |
+| Mapper still writes its documents when shell `grep -r` is denied and it falls back to the host Grep tool | CON-1 / ONB-3 (plan 01-23 D5) | Needs a live Claude Code mapping invocation (model budget) | Run a T3 live mapping case (`AVARICE_LIVE=1`) or the exit run; confirm `.planning/codebase/` documents are written and the hook log shows `shell-recursive-read` denials followed by Grep tool calls |
+| Live sandbox honours `allowRead` of the own staging beneath the denied work root | CON-1 (plan 01-24 D5) | Seatbelt behaviour on the real host is only observable in a live invocation | Run a T3 live mapping case; confirm mapping reads inside staging succeed and a read of a sibling staging under the work root is denied |
 | AC-1 install timing | AC-1 | Wall-clock on a fresh scratch `HOME` | Run `scripts/ac1-timing.sh`; record the elapsed time. Plan 01-19 result: AC-1 elapsed 1s (target 600s) |
 
 ---
@@ -100,7 +106,7 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 - [x] Feedback latency < 60s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** validated 2026-11-04 (validate-phase audit; one load-sensitive flake recorded on the kill-point suite)
+**Approval:** validated 2026-11-04 (validate-phase audit; one load-sensitive flake recorded on the kill-point suite; re-audited after gap-closure plans 01-21..01-24, all automated rows green, two live-host behaviors manual-only)
 
 ## Validation Audit 2026-11-04
 
@@ -110,3 +116,13 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | Resolved | 0 |
 | Escalated | 0 |
 | Flaky | 1 |
+
+## Validation Audit 2026-11-04
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Rows added | 4 |
+| Manual-only added | 2 |
