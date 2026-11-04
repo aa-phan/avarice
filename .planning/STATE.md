@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
 stopped_at: Completed 01-24-PLAN.md
-last_updated: "2026-11-04T10:25:48.507Z"
+last_updated: "2026-11-04T20:27:00.604Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 01 execution started
-state_head: 6c7b94aee6854202fb5e3a9db528fd1bf5c50d61
+state_head: 974d8b13b3ed7ccf29b1c68f29b82ac68e32c866
 progress:
   total_phases: 8
   completed_phases: 0
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
 Plan: 5 of 24
 Status: Ready to execute
-Last activity: 2026-11-04 — Phase 01 execution started
+Last activity: 2026-11-04 - Completed quick task 261104-jnc: Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -188,6 +188,12 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261104-jnc | Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04 | 2026-11-04 | 974d8b1 | [261104-jnc-close-p-3-grep-d-directories-recursion-b](./quick/261104-jnc-close-p-3-grep-d-directories-recursion-b/) |
 
 ## Deferred Items
 
