@@ -139,7 +139,7 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
 // ---------------------------------------------------------------------------------------------------------
 
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
-const STRATEGIES: readonly string[] = ['blanket-bash-hook-identity', 'narrow-rules', 'hook-allow'];
+const STRATEGIES: readonly string[] = ['blanket-bash-hook-identity', 'narrow-rules', 'hook-allow', 'none'];
 const PURPOSES: readonly string[] = ['map', 'intel', 'knowledge'];
 
 export function parseHookPolicy(raw: unknown): PolicyResult {
@@ -159,6 +159,7 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   for (const key of ['readOnly', 'gsdReadVerbs', 'deniedPrefixes']) {
     if (!isStrings(commands[key])) return bad(`needs a list of strings commands.${key}`);
   }
+  if (raw['readConfine'] !== undefined && !isStrings(raw['readConfine'])) return bad('needs a list of strings readConfine');
   if (!(typeof raw['subagentsConcurrent'] === 'number' && Number.isInteger(raw['subagentsConcurrent']) && raw['subagentsConcurrent'] >= 0)) {
     return bad('needs a non-negative integer subagentsConcurrent');
   }
@@ -181,6 +182,8 @@ const under = (path: string, root: string): boolean => {
 
 // Why a canonical path may not be read, or null.
 function readRule(canonical: string, policy: HookPolicy): string | null {
+  // A purpose that reads only its corpus (the knowledge pass): anything else, even inside staging, is outside its read set.
+  if (policy.readConfine !== undefined && !policy.readConfine.some((root) => under(canonical, root))) return 'outside-read-set';
   if (policy.denyRead.some((root) => under(canonical, root)) && !policy.allowRead.some((root) => under(canonical, root))) return 'deny-read';
   const staging = trimSlashes(policy.stagingPath);
   if (under(canonical, staging) && canonical !== staging && matchesAny(canonical.slice(staging.length + 1), policy.denyReadGlobs)) return 'deny-secret-read';
@@ -313,6 +316,8 @@ function checkLine(line: string, preamble: boolean, call: Extract<NormalizedTool
 }
 
 function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): HookDecision {
+  // No shell at all (the knowledge pass): nothing is read-only enough, and a GSD verb is not admitted either.
+  if (policy.commands.strategy === 'none') return deny('shell-disabled');
   const command = call.command.trim();
   if (command === '' || command.length > MAX_COMMAND_CHARS) return deny('shell-syntax');
 

@@ -13,6 +13,8 @@
 //                    launch that names an agent (`--agent`), which is the intel purpose
 //   intel            boolean   on a launch of `--agent gsd-intel-updater`, write the five intel documents and the refresh snapshot
 //                    (test/fixtures/index-fixtures.ts) under .planning/intel
+//   knowledge        boolean   on the knowledge launch (a working directory that holds `.chunks.json`), write one extraction JSON per
+//                    chunk of that plan (a document node for each file) to the chunk's `output`; map files are never written there
 //   stamp            string | false   last_mapped_commit for the documents (default: git HEAD of the working directory)
 //   writes           { relPath: content }   other files to write, relative to the working directory
 //   extraLines       string[]  raw lines printed before the transcript's result (for example text a secret scan must catch)
@@ -74,7 +76,15 @@ const writeFile = (rel, content) => {
   writeFileSync(target, content);
 };
 
-if (flag('--agent') === undefined && script.mapFiles !== undefined) {
+// The knowledge launch (plan 01-19 decision B) runs in the corpus directory, where AVARICE wrote the chunk plan.
+const knowledgePlan = existsSync(join(process.cwd(), '.chunks.json')) ? JSON.parse(readFileSync(join(process.cwd(), '.chunks.json'), 'utf8')) : undefined;
+if (knowledgePlan !== undefined && script.knowledge === true) {
+  for (const chunk of knowledgePlan.chunks) {
+    const nodes = chunk.files.map((f) => ({ id: f.stem, label: f.path, file_type: 'document', source_file: f.path, source_location: null }));
+    writeFile(chunk.output, JSON.stringify({ nodes, edges: [] }));
+  }
+}
+if (knowledgePlan === undefined && flag('--agent') === undefined && script.mapFiles !== undefined) {
   const names =
     script.mapFiles === 'all'
       ? ['STACK.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'INTEGRATIONS.md', 'CONCERNS.md']

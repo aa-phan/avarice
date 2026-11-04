@@ -8,11 +8,11 @@ import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import { MAPPING_MODES } from './mapping.ts';
 import type { MappingMode } from './mapping.ts';
-import { CORPUS_LIMITS } from './knowledge-corpus.ts';
 
 // How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, times
 // the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
-// so the number is explained by the contract that carries it.
+// so the number is explained by the contract that carries it. The knowledge pass runs no subagent since plan 01-19 decision B (the
+// model reads the chunks itself, no graphify skill), so its allowance is 0.
 export interface SubagentDerivation {
   mode: MappingMode;
   mapAgents: number;
@@ -168,8 +168,8 @@ export const ONBOARDING_PRESET = {
     // What one map round spawns: GSD's full map spawns 4 mappers, its fast map (scan, tech+arch) one; `paths` needs the full
     // file set, `skip` and `adopt` run no mapper.
     mapAgents: { full: 4, fast: 1, paths: 4, skip: 0, adopt: 0 },
-    // The knowledge pass spawns one subagent per `documentsPerSubagent` documents, up to the corpus cap.
-    knowledgeAllowance: Math.ceil(CORPUS_LIMITS.maxFiles / CORPUS_LIMITS.documentsPerSubagent),
+    // The knowledge pass starts no subagent (decision B, 2026-11-03): one model session reads the chunked documents itself.
+    knowledgeAllowance: 0,
     intelAgents: 0,
   },
   indexes: { codeGraph: true, intel: true, knowledge: true },
@@ -246,7 +246,7 @@ export function deriveSubagents(mode: MappingMode, retry: number): SubagentDeriv
     knowledgeAllowance,
     intelAgents,
     total,
-    formula: `${perRound} map agents (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (ceil(${CORPUS_LIMITS.maxFiles} documents / ${CORPUS_LIMITS.documentsPerSubagent} per subagent)) + ${intelAgents} intel = ${total}`,
+    formula: `${perRound} map agents (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (no subagent: the model reads the chunks itself) + ${intelAgents} intel = ${total}`,
   };
 }
 

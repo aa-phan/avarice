@@ -15,6 +15,8 @@ export interface FakeClaudeScript {
   mapFiles?: 'all' | 'fast' | readonly string[];
   // Write the intel documents on a launch of `--agent gsd-intel-updater`.
   intel?: boolean;
+  // On the knowledge launch (its working directory holds `.chunks.json`), write one extraction JSON per chunk.
+  knowledge?: boolean;
   stamp?: string | false;
   writes?: Readonly<Record<string, string>>;
   extraLines?: readonly string[];
@@ -47,7 +49,7 @@ export interface FakeClaude {
   started(): boolean;
   launches(): Launch[];
   // The launches by purpose: the intel purpose runs with `--agent`, the map purpose without.
-  launchesOf(purpose: 'map' | 'intel'): Launch[];
+  launchesOf(purpose: 'map' | 'intel' | 'knowledge'): Launch[];
   argvs(): LoggedArgv[];
   // The environment of each launch.
   envs(): Array<Record<string, string>>;
@@ -74,8 +76,12 @@ export function makeFakeClaude(script: FakeClaudeScript = {}, parent?: string): 
     started: () => existsSync(join(logs, 'started')),
     launches: () => lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch),
     launchesOf: (purpose) => {
-      const intel = new Set(lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv).filter((a) => a.argv.includes('--agent')).map((a) => a.pid));
-      return lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch).filter((l) => intel.has(l.pid) === (purpose === 'intel'));
+      const argvs = lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv);
+      const intel = new Set(argvs.filter((a) => a.argv.includes('--agent')).map((a) => a.pid));
+      // The knowledge launch runs in the corpus directory.
+      const knowledge = new Set(argvs.filter((a) => a.cwd.endsWith('.avarice-knowledge')).map((a) => a.pid));
+      const purposeOf = (l: Launch): string => (knowledge.has(l.pid) ? 'knowledge' : intel.has(l.pid) ? 'intel' : 'map');
+      return lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch).filter((l) => purposeOf(l) === purpose);
     },
     argvs: () => lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv),
     envs: () => lines(join(logs, 'env.jsonl')).map((l) => JSON.parse(l) as Record<string, string>),

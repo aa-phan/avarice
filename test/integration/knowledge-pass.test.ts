@@ -240,6 +240,8 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     // Three or more chunks are needed to lose one and keep a majority: a bigger corpus than the default fixture.
     const files: Record<string, string> = { ...KNOWLEDGE_REPO_FILES };
     for (let i = 0; i < 12; i += 1) files[`docs/extra-${String(i).padStart(2, '0')}.md`] = `# Extra ${i}\n`;
+    // Sorts last, so it is in the last chunk, the one this test loses: the record's corpus must not name its directory.
+    files['docs/zz-last/note.md'] = '# Last\n';
     const run = await onboard({
       files,
       knowledge: { chunks: (plan) => Object.fromEntries(plan.chunks.map((c) => [c.n, c.n === 1 ? { nodes: [{ id: 'docs_guide', label: 'Guide', file_type: 'document', source_file: 'docs/guide.md' }], edges: [] } : c.n === plan.chunks.length ? null : { nodes: [], edges: [] }])) },
@@ -251,11 +253,10 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     assert.ok(knowledge, 'the index is present with the chunks that were written');
     assert.equal(knowledge.documentNodes, 1);
     const last = plan.chunks[plan.chunks.length - 1];
-    const lastDirs = corpusSummary((last?.files ?? []).map((f) => f.path));
-    const allDirs = corpusSummary(plan.chunks.flatMap((c) => c.files.map((f) => f.path)));
+    assert.ok((last?.files ?? []).some((f) => f.path === 'docs/zz-last/note.md'), 'the lost chunk holds the last document');
     const usedDirs = corpusSummary(plan.chunks.slice(0, -1).flatMap((c) => c.files.map((f) => f.path)));
     assert.deepEqual(knowledge.corpus, usedDirs, 'the corpus says only what the used chunks covered');
-    assert.ok(lastDirs.length > 0 && allDirs.length >= usedDirs.length);
+    assert.equal(knowledge.corpus.includes('docs/zz-last/'), false, 'the directory of the lost chunk is not claimed');
   });
 
   it('records the knowledge index absent when no chunk file was written (no-output), when none is usable or fewer than half are (validation-failed)', async () => {
@@ -433,7 +434,6 @@ describe('the knowledge step: merge, validation and the record (ONB-14, S-45)', 
           install: (s, f) => deps.graph.install(s, f),
           fileSizes: (s, p) => deps.graph.fileSizes(s, p),
           materializeCorpus: (s, p, m, pin, d) => deps.graph.materializeCorpus(s, p, m, pin, d),
-          readSkillGraph: (s) => deps.graph.readSkillGraph(s),
           writeExtractionPlan: (s, p) => deps.graph.writeExtractionPlan(s, p),
           readExtractionFiles: (s, p) => deps.graph.readExtractionFiles(s, p),
           clusterMerged: (g, d) => {
@@ -554,7 +554,6 @@ describe('the knowledge step: merge, validation and the record (ONB-14, S-45)', 
               observed.push(`copy after ${latest()}`);
               return deps.graph.materializeCorpus(s, p, m, pin, d);
             },
-            readSkillGraph: (s) => deps.graph.readSkillGraph(s),
           writeExtractionPlan: (s, p) => deps.graph.writeExtractionPlan(s, p),
           readExtractionFiles: (s, p) => deps.graph.readExtractionFiles(s, p),
             clusterMerged: (g, d) => deps.graph.clusterMerged(g, d),

@@ -1,13 +1,17 @@
-// The `knowledge` index step (ONB-14, S-39 knowledge part, S-45). AVARICE selects the stable documents, copies them into
-// `{staging}/.avarice-knowledge/` with a manifest (source path, revision, SHA-256), and runs exactly one contained
-// invocation of `/graphify .` with that directory as its working directory and only write root. Document nodes then join
-// the code graph through AVARICE's own merge (one ID space), are validated, clustered and installed (see the second half of
-// this file). Every failure is an absent index with a reason, never an error, and leaves `graph.json` the code-only graph:
-// an index that fails never blocks activation.
+// The `knowledge` index step (ONB-14, S-39 knowledge part, S-45), split in two by owner decision B of plan 01-19 (2026-11-03).
+// AVARICE does every deterministic step itself: it selects the stable documents, copies them into `{staging}/.avarice-knowledge/`
+// with a manifest (source path, revision, SHA-256), splits them into chunks (src/domain/knowledge-extraction.ts) and writes the
+// chunk plan. Exactly one contained invocation then runs the model with NO shell, NO skill and NO subagent: it reads the chunked
+// documents (Read, Glob, Grep, only under the corpus) and writes one extraction JSON per chunk (Write, only under
+// `.avarice-knowledge/.extraction`). The prompt is fixed text and carries no repository text. Afterwards AVARICE assembles the
+// chunk files, merges them into the code graph (one ID space, graph-merge.ts), validates (knowledge-validation.ts), has graphify
+// cluster the merge and installs it (second half of this file). Every failure is an absent index with a reason, never an error,
+// and leaves `graph.json` the code-only graph: an index that fails never blocks activation.
 import { join } from 'node:path';
 import { sha256Hex } from '../../domain/digest.ts';
 import { mergeKnowledgeGraph } from '../../domain/graph-merge.ts';
-import { CORPUS_LIMITS, KNOWLEDGE_DIR, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
+import { corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
+import { assembleExtraction, knowledgePrompt, outputPathOf, planExtractionChunks } from '../../domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
 import { validateKnowledgeGraph } from '../../domain/knowledge-validation.ts';
 import { summarizeGraph } from '../../domain/graph-validation.ts';
@@ -20,9 +24,6 @@ import { completeInvocation, prepareInvocation } from '../invocation.ts';
 import type { IndexStepContext } from './index-steps.ts';
 import { effectiveMappingMode, mapFileNamesFor } from './shared.ts';
 
-const PROMPT = '/graphify .';
-// The skill writes `graphify-out/` in its working directory; the host judges `progressed` by this staging-relative file.
-const EXPECTED_GRAPH = `${KNOWLEDGE_DIR}/graphify-out/graph.json`;
 const GRAPH_PATH = '.planning/graphs/graph.json';
 const CODE_GRAPH_PATH = '.planning/graphs/code-graph.json';
 // Matches the size the graph tool refuses to read.
@@ -133,9 +134,14 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   if (!recorded.ok) return recorded;
   if (manifest.entries.length === 0) return absent('no-output', 'the corpus holds no document');
 
-  // 3. One contained invocation. One subagent per 20 documents, at least one.
-  const subagentsTotal = Math.max(1, Math.ceil(manifest.entries.length / CORPUS_LIMITS.documentsPerSubagent));
-  const prepared = prepareInvocation(deps, row, 'knowledge', PROMPT, { expectedFiles: [EXPECTED_GRAPH], subagentsTotal });
+  // 3. The chunk plan: deterministic, from the manifest and the sizes. It is written beside the corpus for the model to read as
+  // data; the prompt itself holds no repository text.
+  const plan = planExtractionChunks(manifest, sizes.value);
+  const planned = deps.graph.writeExtractionPlan(staging, plan);
+  if (!planned.ok) return absent('invocation-failed', `cannot write the extraction plan: ${describeError(planned.error)}`);
+
+  // 4. One contained invocation: no shell, no skill, no subagent. The host judges `progressed` by the chunk files.
+  const prepared = prepareInvocation(deps, row, 'knowledge', knowledgePrompt(plan), { expectedFiles: plan.chunks.map((chunk) => outputPathOf(chunk)) });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) return absent('budget_exhausted', `the ${prepared.value.budget} budget is exhausted, so no knowledge invocation was started`);
   const { request } = prepared.value.prepared;
@@ -165,23 +171,32 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   // Only these two endings are judged by what is in staging; a denied or failed run is not trusted.
   if (o.kind !== 'progressed' && o.kind !== 'inconclusive') return absent('invocation-failed', `the knowledge invocation ended ${o.kind}`);
 
-  const skill = deps.graph.readSkillGraph(staging);
-  if (!skill.ok) {
-    return skill.error.kind === 'not_found' ? absent('no-output', 'the pass left no graphify-out/graph.json') : absent('validation-failed', describeError(skill.error));
+  // 5. AVARICE reads back what the model wrote and assembles it. No chunk file at all is `no-output`; files that are not usable, or
+  // fewer usable chunks than half the plan, are `validation-failed`; otherwise the usable chunks go on and the record's corpus
+  // names only the documents they cover.
+  const files = deps.graph.readExtractionFiles(staging, plan);
+  if (!files.ok) return absent('validation-failed', describeError(files.error));
+  const assembled = assembleExtraction(plan, files.value);
+  if (assembled.present === 0) return absent('no-output', 'the pass wrote no chunk file');
+  const half = Math.ceil(plan.chunks.length / 2);
+  if (assembled.used.length < half) {
+    const reasons = assembled.skipped.map((s) => `chunk ${s.n}: ${s.reason}`).slice(0, 5).join('; ');
+    return absent('validation-failed', `${assembled.used.length} of ${plan.chunks.length} chunks were usable (at least ${half} are needed): ${reasons}`);
   }
+  const usedEntries = manifest.entries.filter((e) => assembled.usedFiles.includes(e.sourcePath));
 
-  return mergeAndInstall(deps, ctx, manifest, skill.value.raw);
+  return mergeAndInstall(deps, ctx, manifest, assembled.graph, usedEntries.map((e) => e.sourcePath));
 }
 
-// The second half: AVARICE merges the skill graph into the code graph (one ID space), validates the merge, has graphify
+// The second half: AVARICE merges the assembled extraction into the code graph (one ID space), validates the merge, has graphify
 // cluster it, validates what came back, and only then replaces graph.json. Every refusal leaves graph.json the code-only
-// graph byte for byte.
-async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: KnowledgeManifest, skillGraph: Record<string, unknown>): Promise<Result<IndexStepResult>> {
+// graph byte for byte. `coveredPaths` are the documents of the chunks that were usable: the record's corpus names those.
+async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: KnowledgeManifest, extraction: Record<string, unknown>, coveredPaths: readonly string[]): Promise<Result<IndexStepResult>> {
   const { staging, head, row } = ctx;
 
   const code = deps.graph.readGraph(join(staging, CODE_GRAPH_PATH));
   if (!code.ok) return absent('validation-failed', `the code graph cannot be read for the merge: ${describeError(code.error)}`);
-  const { graph, stats } = mergeKnowledgeGraph({ code: code.value.raw, docs: skillGraph, manifest, onboardedRevision: head });
+  const { graph, stats } = mergeKnowledgeGraph({ code: code.value.raw, docs: extraction, manifest, onboardedRevision: head });
   const checked = validateKnowledgeGraph(graph, manifest, stats);
   if (!checked.valid) return absent('validation-failed', checked.problems.join('; '));
 
@@ -222,7 +237,7 @@ async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: K
       nodes: { document: 0, ...summary.nodesByFileType },
       edges: summary.edgesByConfidence,
       knowledge: {
-        corpus: corpusSummary(manifest.entries.map((e) => e.sourcePath)),
+        corpus: corpusSummary(coveredPaths),
         documentsCommit: `git:${head}`,
         documentNodes: stats.documentNodes,
         dropped: { dangling: stats.dropped.dangling, astDocument: stats.dropped.astDocument },

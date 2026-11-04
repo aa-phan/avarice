@@ -75,8 +75,6 @@ export interface GraphTool {
   // larger one; `missing` for none, for a symlink or any non-regular file, and for every chunk when `.extraction` is itself a
   // symlink or not a directory.
   readExtractionFiles(stagingPath: string, plan: ExtractionPlan): Result<Record<number, ChunkText>>;
-  // The graph the graphify skill left in `{staging}/.avarice-knowledge/graphify-out/graph.json`; `not_found` when there is none.
-  readSkillGraph(stagingPath: string): Result<GraphData>;
   // Writes AVARICE's merged graph to `{workDir}/graphify-out/graph.json` (workDir outside staging), runs
   // `graphify cluster-only --no-label --no-viz` on it, reads it back and fails when `built_at_commit` did not survive.
   clusterMerged(graph: Record<string, unknown>, workDir: string): Promise<Result<MergedGraphBuild>>;

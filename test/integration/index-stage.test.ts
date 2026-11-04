@@ -329,7 +329,6 @@ describe('the final scope check covers writes by an index step (T-01-67)', () =>
           },
           fileSizes: (s, p) => deps.graph.fileSizes(s, p),
           materializeCorpus: (s, p, m, pin, d) => deps.graph.materializeCorpus(s, p, m, pin, d),
-          readSkillGraph: (s) => deps.graph.readSkillGraph(s),
           writeExtractionPlan: (s, p) => deps.graph.writeExtractionPlan(s, p),
           readExtractionFiles: (s, p) => deps.graph.readExtractionFiles(s, p),
           clusterMerged: (g, d) => deps.graph.clusterMerged(g, d),

@@ -7,9 +7,9 @@
 // indexes Markdown (research Pitfall 3). `--max-workers 1` keeps AST extraction single-process, which sandboxes
 // require (spike). No command here calls a model. The graph is read back as plain JSON, and `install` copies
 // three files into the staging `.planning/graphs/`.
-// The knowledge pass (plan 01-18) adds no graphify command of its own: the skill runs in the host. `clusterMerged`
-// writes AVARICE's merged graph outside staging and runs the same `cluster-only` on it; graphify's cross-repository
-// merge command is never used (it prefixes node IDs and drops `built_at_commit`).
+// The knowledge pass (plan 01-18, split by 01-19 decision B) adds no graphify command of its own: the model only writes extraction
+// JSON and no graphify skill runs. `clusterMerged` writes AVARICE's merged graph outside staging and runs the same `cluster-only`
+// on it; graphify's cross-repository merge command is never used (it prefixes node IDs and drops `built_at_commit`).
 import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, sep } from 'node:path';
@@ -21,7 +21,7 @@ import type { CorpusDrop, KnowledgeManifest } from '../../domain/knowledge-corpu
 import type { GraphBuild, GraphData, GraphInstallFiles, GraphTool, LocatedGraphTool, MergedGraphBuild } from '../../ports/graph-tool.ts';
 import { realpathNearest } from '../fs/profile-paths.ts';
 import { safeGitEnv } from '../git/safe-git.ts';
-import { fileSizes, materializeCorpus, readExtractionFiles, readSkillGraph, writeExtractionPlan } from './knowledge-corpus.ts';
+import { fileSizes, materializeCorpus, readExtractionFiles, writeExtractionPlan } from './knowledge-corpus.ts';
 import type { ChunkText, ExtractionPlan } from '../../domain/knowledge-extraction.ts';
 
 // Operation budgets: a code extraction may take five minutes, the other graphify commands far less.
@@ -261,10 +261,6 @@ export class GraphifyTool implements GraphTool {
 
   readExtractionFiles(stagingPath: string, plan: ExtractionPlan): Result<Record<number, ChunkText>> {
     return readExtractionFiles(stagingPath, plan);
-  }
-
-  readSkillGraph(stagingPath: string): Result<GraphData> {
-    return readSkillGraph(stagingPath, (file) => this.readGraph(file));
   }
 
   async clusterMerged(graph: Record<string, unknown>, workDir: string): Promise<Result<MergedGraphBuild>> {

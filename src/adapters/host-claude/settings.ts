@@ -74,8 +74,10 @@ function bashAllowRules(scope: InvocationScope): string[] {
 export function renderClaudeSettings(scope: InvocationScope, options: RenderOptions): Record<string, unknown> {
   const staging = canonicalPath(scope.stagingPath);
 
+  // A purpose that reads only its corpus (the knowledge pass) is granted that directory, not the staging tree.
+  const readRoots = scope.readConfine ?? [scope.stagingPath];
   const allow: string[] = [
-    `Read(${marked(scope.stagingPath)}/**)`,
+    ...readRoots.map((root) => `Read(${marked(root)}/**)`),
     ...scope.readRoots.map((root) => `Read(${marked(root)}/**)`),
     'Glob',
     'Grep',
@@ -95,6 +97,8 @@ export function renderClaudeSettings(scope: InvocationScope, options: RenderOpti
     'WebSearch',
     'NotebookEdit',
     `Edit(${marked(join(scope.stagingPath, '.planning/config.json'))})`,
+    // No shell at all (the knowledge pass): Bash is denied outright, not only left without an allow rule.
+    ...(scope.commands.strategy === 'none' ? ['Bash'] : []),
     ...scope.commands.deniedPrefixes.map((prefix) => `Bash(${prefix}:*)`),
   ];
 

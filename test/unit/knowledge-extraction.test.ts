@@ -80,6 +80,16 @@ describe('planExtractionChunks: deterministic chunks of the corpus', () => {
     assert.equal(CHUNK_LIMITS.maxBytes, 64 * 1024);
   });
 
+  it('fills a chunk up to exactly maxBytes and splits only past it (the boundary)', () => {
+    const half = CHUNK_LIMITS.maxBytes / 2;
+    const exact = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half });
+    assert.deepEqual(exact.chunks.map((c) => c.files.length), [2], 'two documents that add up to exactly maxBytes share a chunk');
+    const over = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half + 1 });
+    assert.deepEqual(over.chunks.map((c) => c.files.length), [1, 1], 'one byte more starts a new chunk');
+    const full = planExtractionChunks(manifestOf(Array.from({ length: 9 }, (_, i) => `${i}.md`)), sizesOf(Array.from({ length: 9 }, (_, i) => `${i}.md`), 1));
+    assert.deepEqual(full.chunks.map((c) => c.files.length), [8, 1], 'the ninth document starts a new chunk, the eighth does not');
+  });
+
   it('counts a document with no known size as a full chunk, so it is never packed with others', () => {
     const plan = planExtractionChunks(manifestOf(['a.md', 'b.md']), {});
     assert.deepEqual(plan.chunks.map((c) => c.files.length), [1, 1]);

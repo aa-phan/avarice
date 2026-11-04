@@ -29,32 +29,37 @@ export interface PurposeSpec {
   // Repository-relative directory the agent may write; AVARICE pre-creates it.
   writeDir: string;
   // `staging`: the invocation runs in the staging root (GSD hard-codes <cwd>/.planning).
-  // `write-dir`: it runs in the write directory itself, so its own tree is the only cwd-writable area.
-  cwd: 'staging' | 'write-dir';
+  // `read-dir`: it runs in `readDir`, the one directory it may read (the knowledge pass: its corpus).
+  cwd: 'staging' | 'read-dir';
+  // The repository-relative directory a `read-dir` purpose may read, and nothing else; the write directory lies inside it.
+  readDir?: string;
 }
 
+// The knowledge purpose (plan 01-19 decision B) reads the corpus `.avarice-knowledge` with Read, Glob and Grep and writes one
+// extraction JSON per chunk into `.avarice-knowledge/.extraction` with Write: no shell, no skill, no subagent.
 export const INVOCATION_PURPOSES = {
   map: { writeDir: '.planning/codebase', cwd: 'staging' },
   intel: { writeDir: '.planning/intel', cwd: 'staging' },
-  knowledge: { writeDir: '.avarice-knowledge', cwd: 'write-dir' },
+  knowledge: { writeDir: '.avarice-knowledge/.extraction', cwd: 'read-dir', readDir: '.avarice-knowledge' },
 } as const satisfies Record<InvocationPurpose, PurposeSpec>;
 
 // What each contained invocation may load: the skills the generated plugin directory links and the agents the
 // generated --agents file carries. map: the fast and full map skill and its mapper agent. intel: no skill, because
-// `claude -p --agent gsd-intel-updater` runs the agent directly (S0-D). knowledge: the graphify skill.
+// `claude -p --agent gsd-intel-updater` runs the agent directly (S0-D). knowledge: nothing (decision B: no graphify skill; the
+// model reads the chunked documents and writes extraction JSON itself).
 export const PURPOSE_EXTENSIONS: Readonly<Record<InvocationPurpose, { skills: readonly string[]; agents: readonly string[] }>> = {
   map: { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] },
   intel: { skills: [], agents: ['gsd-intel-updater'] },
-  knowledge: { skills: ['graphify'], agents: [] },
+  knowledge: { skills: [], agents: [] },
 };
 
 // Subagent types a purpose may start besides the agents it loads (PURPOSE_EXTENSIONS.agents are always allowed). Built-in
-// types need no agent file. The graphify skill spawns one `general-purpose` subagent per chunk of documents (spike S0-G,
-// by_type general-purpose: 1), so the knowledge pass admits exactly that type; map and intel admit none beyond their agents.
+// types need no agent file. The graphify skill spawned one `general-purpose` subagent per chunk of documents (spike S0-G); the
+// knowledge pass no longer loads it (decision B), so no purpose admits a type beyond its agents.
 export const PURPOSE_SUBAGENT_TYPES: Readonly<Record<InvocationPurpose, readonly string[]>> = {
   map: [],
   intel: [],
-  knowledge: ['general-purpose'],
+  knowledge: [],
 };
 
 // Commands the hook admits without a GSD verb. `find` is admitted only without the actions in
@@ -110,7 +115,8 @@ const GSD_INTEL_VERBS: readonly string[] = ['intel patch-meta', 'intel validate'
 export const GSD_READ_VERBS: Readonly<Record<InvocationPurpose, readonly string[]>> = {
   map: GSD_BASE_VERBS,
   intel: [...GSD_BASE_VERBS, ...GSD_INTEL_VERBS],
-  knowledge: GSD_BASE_VERBS,
+  // The knowledge pass has no shell, so no GSD verb.
+  knowledge: [],
 };
 
 // Never allowed, whatever else matches (deny rules beat allow rules).
@@ -187,6 +193,7 @@ export interface ScopeInput {
   subagentsTotal?: number;
 }
 
+const writeDirOf = (purpose: InvocationPurpose): string => INVOCATION_PURPOSES[purpose].writeDir;
 const trimTrailingSlashes = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, '') : path);
 const join = (base: string, rel: string): string => `${base}/${rel}`;
 const uniqueSorted = (items: Iterable<string>): string[] => [...new Set(items)].sort();
@@ -194,11 +201,13 @@ const uniqueSorted = (items: Iterable<string>): string[] => [...new Set(items)].
 export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const { purpose, contract, workspace } = input;
   const spec: PurposeSpec = INVOCATION_PURPOSES[purpose];
+  const readDir = spec.cwd === 'read-dir' ? (spec.readDir ?? writeDirOf(purpose)) : undefined;
   const staging = trimTrailingSlashes(input.stagingPath);
   const writeDir = spec.writeDir;
 
-  // The contract is the authority: a purpose directory it does not authorize is not writable at all.
-  const authorized = contract.files.write[purpose].includes(`${writeDir}/**`);
+  // The contract is the authority: a purpose directory it does not authorize is not writable at all. A glob `dir/**` authorizes
+  // the directory itself and everything under it, so the knowledge pass's nested output directory is covered by `.avarice-knowledge/**`.
+  const authorized = contract.files.write[purpose].some((glob) => glob.endsWith('/**') && (writeDir === glob.slice(0, -3) || writeDir.startsWith(glob.slice(0, -2))));
   const writeRoots = authorized ? [join(staging, writeDir)] : [];
 
   const deny = new Set<string>();
@@ -208,11 +217,12 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
     for (const entry of workspace.topLevelEntries) if (entry !== writeDir) deny.add(join(staging, entry));
   } else {
     // Nested write directory (.planning/<leaf>): the parent stays writable to the shell as the cwd chain, so
-    // its other entries are denied one by one, as is every other top-level entry.
+    // its other entries are denied one by one, as is every other top-level entry. Only `.planning` has entries the workspace
+    // lists (`.avarice-knowledge/.extraction` has no shell at all, so nothing below its parent is writable to one).
     const parent = writeDir.slice(0, slash);
     const leaf = writeDir.slice(slash + 1);
     for (const entry of workspace.topLevelEntries) if (entry !== parent) deny.add(join(staging, entry));
-    for (const entry of workspace.planningEntries) if (entry !== leaf) deny.add(join(join(staging, parent), entry));
+    if (parent === '.planning') for (const entry of workspace.planningEntries) if (entry !== leaf) deny.add(join(join(staging, parent), entry));
   }
   deny.add(join(staging, '.git'));
   deny.add(join(staging, '.planning/config.json'));
@@ -224,7 +234,7 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh')])];
 
   const subagents =
-    purpose === 'intel'
+    purpose === 'intel' || purpose === 'knowledge'
       ? { total: 0, concurrent: 0 }
       : {
           total: Math.min(contract.budgets.subagentsTotal, input.subagentsTotal ?? contract.budgets.subagentsTotal),
@@ -233,7 +243,7 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
 
   return {
     purpose,
-    cwd: spec.cwd === 'write-dir' ? join(staging, writeDir) : staging,
+    cwd: readDir !== undefined ? join(staging, readDir) : staging,
     stagingPath: staging,
     repoPath: repo,
     dataRoot,
@@ -242,10 +252,13 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
     denyRead,
     denyReadGlobs: [...contract.files.secretGlobs],
     allowRead: workspace.repoReadAllow.map(trimTrailingSlashes),
-    readRoots: input.readRoots.map(trimTrailingSlashes),
+    // The knowledge pass reads its corpus and nothing else: no GSD directory, no skill directory, no other staging path.
+    ...(readDir !== undefined ? { readConfine: [join(staging, readDir)] } : {}),
+    readRoots: purpose === 'knowledge' ? [] : input.readRoots.map(trimTrailingSlashes),
     commands: {
-      strategy: input.strategy ?? ONBOARDING_BASH_STRATEGY,
-      readOnly: [...READ_ONLY_COMMANDS],
+      // No shell for the knowledge pass, whatever strategy is asked for.
+      strategy: purpose === 'knowledge' ? 'none' : (input.strategy ?? ONBOARDING_BASH_STRATEGY),
+      readOnly: purpose === 'knowledge' ? [] : [...READ_ONLY_COMMANDS],
       gsdReadVerbs: [...GSD_READ_VERBS[purpose]],
       deniedPrefixes: [...DENIED_COMMAND_PREFIXES],
       ...(input.preambleSha256 !== undefined ? { preambleSha256: input.preambleSha256 } : {}),

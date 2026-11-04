@@ -456,8 +456,8 @@ function captureHost(slot: { request?: InvocationRequest }): AgentHost {
   };
 }
 
-function writeScratchRepo(): ScratchRepo {
-  return makeScratchRepo({ files: SCRATCH_FILES, commits: [SCRATCH_SECOND_COMMIT], untracked: { '.env': `API_TOKEN=${ENV_CANARY}\n` } });
+function writeScratchRepo(extraFiles: Readonly<Record<string, string>> = {}): ScratchRepo {
+  return makeScratchRepo({ files: { ...SCRATCH_FILES, ...extraFiles }, commits: [SCRATCH_SECOND_COMMIT], untracked: { '.env': `API_TOKEN=${ENV_CANARY}\n` } });
 }
 
 interface Prepared {
@@ -766,16 +766,25 @@ export interface LiveOnboardingResult {
   dispose(): void;
 }
 
-export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP_USD): Promise<{ skipped: string } | LiveOnboardingResult> {
+export interface LiveOnboardingOptions {
+  // Invocations the run may use (default 2: the map and the intel launch). The knowledge case passes 3.
+  invocations?: number;
+  // Per-invocation cap when it differs from the run cap (the knowledge case: a map or an intel run is far cheaper than the run cap).
+  perInvocationCapUsd?: number;
+  // Tracked files added to the scratch repository (the knowledge case adds Markdown documents).
+  extraFiles?: Readonly<Record<string, string>>;
+}
+
+export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP_USD, options: LiveOnboardingOptions = {}): Promise<{ skipped: string } | LiveOnboardingResult> {
   if (!fitsCap(costCap)) return { skipped: `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${costCap.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}` };
   const roots = makeRoots();
-  const repo = writeScratchRepo();
+  const repo = writeScratchRepo(options.extraFiles);
   const realClaude = liveClaudeBin();
   const version = claudeVersion(realClaude);
   const wrapper = makeLaunchMarkerWrapper(roots.base, realClaude, version);
   const before = { refs: refsDigest(repo.path), tree: treeDigest(repo.path) };
   const started = Date.now();
-  const budgets = [`costUsdPerInvocation=${costCap}`, `costUsdPerRun=${costCap}`, 'retry=1', 'invocations=2', 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
+  const budgets = [`costUsdPerInvocation=${options.perInvocationCapUsd ?? costCap}`, `costUsdPerRun=${costCap}`, 'retry=1', `invocations=${options.invocations ?? 2}`, 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
   const cli = runCli(['onboard', '--policy', 'onboarding', '--mode', 'fast', ...budgets, repo.path], {
     roots,
     env: { AVARICE_CLAUDE_BIN: wrapper.bin },
@@ -810,7 +819,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   }
   writeFileSync(join(roots.base, 'transcript.jsonl'), transcript);
   assertHostIsRealVersion(parseTranscript(transcript), version);
-  const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map', 'launch:intel') ORDER BY started_at");
+  const steps = ledgerRows<{ step: string; attempt: number; status: string; result_json: string }>(dataRoot, "SELECT step, attempt, status, result_json FROM onboarding_steps WHERE step IN ('validate', 'launch:map', 'launch:intel', 'launch:knowledge') ORDER BY started_at");
   const validation = steps
     .filter((r) => r.step === 'validate')
     .map((r) => {

@@ -11,8 +11,8 @@ import type { CorpusDrop, KnowledgeManifest, KnowledgeManifestEntry } from '../.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { findSecrets } from '../../domain/secret-patterns.ts';
+import { CHUNK_LIMITS, CHUNK_PLAN_NAME, EXTRACTION_DIR_NAME } from '../../domain/knowledge-extraction.ts';
 import type { ChunkText, ExtractionPlan } from '../../domain/knowledge-extraction.ts';
-import type { GraphData } from '../../ports/graph-tool.ts';
 
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
 const GRAPHIFY_OUT = 'graphify-out';
@@ -144,30 +144,63 @@ export function materializeCorpus(
   return ok({ manifest });
 }
 
-// The skill's graph: `{staging}/.avarice-knowledge/graphify-out/graph.json`, read only when every directory on the way is a
-// real directory (the agent wrote there, so a symlink may sit in the way) and the file is a regular file.
-export function readSkillGraph(stagingPath: string, read: (file: string) => Result<GraphData>): Result<GraphData> {
+// The chunk plan and the output directory beside the corpus files (decision B). The plan is a corpus file the model reads (paths and
+// stems only: no digest, no text); `.extraction` is the one directory it writes. Both are recreated for every attempt.
+export function writeExtractionPlan(stagingPath: string, plan: ExtractionPlan): Result<void> {
   const root = stagingRoot(stagingPath);
   if (!root.ok) return root;
-  const file = join(root.value, KNOWLEDGE_DIR, GRAPHIFY_OUT, 'graph.json');
+  const corpus = join(root.value, KNOWLEDGE_DIR);
   try {
-    for (const dir of [join(root.value, KNOWLEDGE_DIR), join(root.value, KNOWLEDGE_DIR, GRAPHIFY_OUT)]) {
-      const stat = lstatSync(dir);
-      if (stat.isSymbolicLink() || !stat.isDirectory()) return err({ kind: 'invalid', field: 'graph', reason: `${dir.slice(root.value.length + 1)} is a symlink or not a directory` });
-    }
-    if (!lstatSync(file).isFile()) return err({ kind: 'invalid', field: 'graph', reason: 'graphify-out/graph.json is not a regular file' });
+    // The corpus directory is AVARICE's own (materializeCorpus just made it); never write through a link in its place.
+    const stat = lstatSync(corpus);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return err({ kind: 'invalid', field: 'corpus', reason: `${KNOWLEDGE_DIR} is a symlink or not a directory` });
+    const out = join(corpus, EXTRACTION_DIR_NAME);
+    rmSync(out, { recursive: true, force: true });
+    mkdirSync(out);
+    const file = join(corpus, CHUNK_PLAN_NAME);
+    const temp = `${file}.tmp-${process.pid}`;
+    writeFileSync(temp, `${JSON.stringify(plan, null, 2)}\n`, { mode: 0o644 });
+    renameSync(temp, file);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return err({ kind: 'not_found', ref: `${KNOWLEDGE_DIR}/${GRAPHIFY_OUT}/graph.json` });
-    return err({ kind: 'internal', cause: `cannot read the skill graph: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
+    return err({ kind: 'internal', cause: `cannot write the extraction plan: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
   }
-  return read(file);
+  return ok(undefined);
 }
 
-// RED stubs: the plan and the chunk files are not handled yet.
-export function writeExtractionPlan(_stagingPath: string, _plan: ExtractionPlan): Result<void> {
-  return err({ kind: 'internal', cause: 'the extraction plan is not written yet' });
-}
-
-export function readExtractionFiles(_stagingPath: string, _plan: ExtractionPlan): Result<Record<number, ChunkText>> {
-  return err({ kind: 'internal', cause: 'the extraction files are not read yet' });
+// The chunk files the model wrote, read only when every directory on the way is a real directory (the model wrote there, so a
+// symlink may sit in the way) and the file is a regular one. A file larger than the cap is reported and not read.
+export function readExtractionFiles(stagingPath: string, plan: ExtractionPlan): Result<Record<number, ChunkText>> {
+  const root = stagingRoot(stagingPath);
+  if (!root.ok) return root;
+  const result: Record<number, ChunkText> = {};
+  const missingAll = (): Result<Record<number, ChunkText>> => {
+    for (const chunk of plan.chunks) result[chunk.n] = { problem: 'missing' };
+    return ok(result);
+  };
+  const corpus = join(root.value, KNOWLEDGE_DIR);
+  const out = join(corpus, EXTRACTION_DIR_NAME);
+  try {
+    for (const dir of [corpus, out]) {
+      const stat = lstatSync(dir);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) return missingAll();
+    }
+  } catch {
+    return missingAll();
+  }
+  for (const chunk of plan.chunks) {
+    const file = join(corpus, chunk.output);
+    try {
+      const stat = lstatSync(file);
+      if (!stat.isFile()) {
+        result[chunk.n] = { problem: 'missing' };
+      } else if (stat.size > CHUNK_LIMITS.maxOutputBytes) {
+        result[chunk.n] = { problem: 'too-large' };
+      } else {
+        result[chunk.n] = { text: readFileSync(file, 'utf8') };
+      }
+    } catch (e) {
+      result[chunk.n] = { problem: (e as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'unreadable' };
+    }
+  }
+  return ok(result);
 }

@@ -89,6 +89,7 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
     dataRoot: deps.profile.dataRoot,
     home: deps.home ?? homedir(),
     workspace: workspace.value,
+    // The scope drops them for the knowledge pass, which loads no skill and runs no GSD verb (decision B).
     readRoots: [gsdCoreDir, agentsDir],
     ...(options.subagentsTotal !== undefined ? { subagentsTotal: options.subagentsTotal } : {}),
   });

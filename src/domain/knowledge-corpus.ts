@@ -1,5 +1,5 @@
 // The knowledge corpus (plan 01-18, ONB-14, S-45 corpus rule): which stable repository documents the one contained
-// `/graphify` pass may read. Pure: paths, sizes and globs arrive as arguments, nothing here touches a file.
+// knowledge pass may read (the model reads it with Read, Glob and Grep; plan 01-19 decision B). Pure: paths, sizes and globs arrive as arguments, nothing here touches a file.
 //
 // The corpus holds the staging codebase map, `.planning/PROJECT.md`, `REQUIREMENTS.md` and `ROADMAP.md` when the
 // repository tracks them, every Markdown file under the ADR directories preflight found, and the files the
@@ -13,8 +13,6 @@ export const CORPUS_LIMITS = {
   // The validation cap for a map document (src/domain/validation.ts) applied to every corpus file.
   maxFileBytes: 256 * 1024,
   maxFiles: 200,
-  // The graphify skill spawns one subagent per 20 to 25 uncached documents.
-  documentsPerSubagent: 20,
 } as const;
 
 // Tracked planning documents added when the repository has them. Order is priority order for the cap.

@@ -61,8 +61,6 @@ export interface ClaudeHostOptions {
   countHookDenies(invocationId: string): Result<{ total: number; budget: number }>;
   // The environment the invocation environment is built from (default: this process's).
   env?: NodeJS.ProcessEnv;
-  // The directory of the graphify binary, appended to PATH for the knowledge invocation only (S0-G).
-  knowledgePath?: readonly string[];
   // Tests only: runs after the launch files are written and before the launch checks.
   onBeforeSpawn?: (info: BeforeSpawn) => void;
   // Tests only: the sandbox probe command.
@@ -185,7 +183,6 @@ export class ClaudeHostAdapter implements AgentHost {
     const env = buildInvocationEnv(o.env ?? process.env, {
       gsdCoreBin: join(o.gsd.gsdCoreDir, 'bin'),
       onboardingId: req.onboardingId,
-      ...(req.purpose === 'knowledge' && o.knowledgePath !== undefined ? { extraPath: o.knowledgePath } : {}),
     });
 
     const headBefore = o.staging.head(stagingPath);

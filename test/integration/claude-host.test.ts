@@ -7,7 +7,8 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -27,6 +28,7 @@ import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
+import { writeFakeGraphify } from '../helpers/fake-graphify.ts';
 import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
 
 const REPO_FILES = {
@@ -116,6 +118,58 @@ function invocationDirs(roots: CliRoots): string[] {
   const base = join(roots.AVARICE_DATA_ROOT, 'onboard', onboardingId(roots));
   return existsSync(base) ? readdirSync(base).filter((n) => n.startsWith('map-')).map((n) => join(base, n)) : [];
 }
+
+// Plan 01-19 decision B through the real adapter: the generated settings, hook policy and launch line of the knowledge purpose, with
+// a fake claude that writes the extraction files. No model is called.
+describe('the knowledge purpose through the real ClaudeHostAdapter and a fake claude (decision B)', () => {
+  it('launches with no shell, no skill, no agent, reads and writes confined, and the extraction becomes document nodes in the graph', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', intel: true, knowledge: true });
+    const tools = mkdtempSync(join(tmpdir(), 'avarice-live-fakegraphify-'));
+    cleanup.push(tools);
+    const r = onboard(s, { AVARICE_GRAPHIFY_BIN: writeFakeGraphify(tools) });
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    assert.equal(stateOf(s.roots), 'active');
+    assert.equal(s.fake.launchesOf('knowledge').length, 1, 'one knowledge launch');
+    const base = join(s.roots.AVARICE_DATA_ROOT, 'onboard', onboardingId(s.roots));
+    const [dirName, ...more] = readdirSync(base).filter((n) => n.startsWith('knowledge-'));
+    assert.ok(dirName && more.length === 0, 'one knowledge invocation directory');
+    const dir = join(base, dirName);
+
+    const settings = JSON.parse(readFileSync(join(dir, 'host-settings.json'), 'utf8')) as { permissions: { allow: string[]; deny: string[] } };
+    const { allow, deny } = settings.permissions;
+    assert.equal(allow.some((rule) => rule === 'Bash' || rule.startsWith('Bash(')), false, 'no Bash allow rule');
+    assert.ok(deny.includes('Bash'), 'Bash is denied outright');
+    for (const tool of ['Skill', 'Agent']) assert.equal(allow.includes(tool), false, tool);
+    const reads = allow.filter((rule) => rule.startsWith('Read('));
+    assert.equal(reads.length, 1, 'one Read rule: the corpus');
+    assert.match(reads[0] ?? '', /\/\.avarice-knowledge\/\*\*\)$/);
+    assert.equal(allow.filter((rule) => rule.startsWith('Edit(')).length, 1);
+    assert.match(allow.find((rule) => rule.startsWith('Edit(')) ?? '', /\.avarice-knowledge\/\.extraction\/\*\*\)$/);
+
+    const policy = JSON.parse(readFileSync(join(dir, 'hook-policy.json'), 'utf8')) as { commands: { strategy: string; readOnly: string[]; gsdReadVerbs: string[] }; subagentTypes: string[]; readConfine: string[]; writeRoots: string[]; purpose: string };
+    assert.equal(policy.purpose, 'knowledge');
+    assert.equal(policy.commands.strategy, 'none');
+    assert.deepEqual([policy.commands.readOnly, policy.commands.gsdReadVerbs, policy.subagentTypes], [[], [], []]);
+    assert.equal(policy.readConfine.length, 1);
+    assert.match(policy.readConfine[0] ?? '', /\.avarice-knowledge$/);
+    assert.match(policy.writeRoots[0] ?? '', /\.avarice-knowledge\/\.extraction$/);
+    assert.deepEqual(readdirSync(join(dir, 'plugin', 'skills')), [], 'no skill is linked');
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(dir, 'agents.json'), 'utf8')) as object), []);
+
+    const argv = s.fake.argvs().find((a) => a.cwd.endsWith('.avarice-knowledge'));
+    assert.ok(argv, 'the knowledge launch ran in the corpus directory');
+    assert.equal(argv.argv.includes('--agent'), false);
+    const prompt = argv.argv[argv.argv.indexOf('-p') + 1] ?? '';
+    assert.match(prompt, /no shell, no skill, no subagent and no network/);
+    assert.equal(prompt.includes('/graphify'), false);
+    // No PATH directory for graphify and no secret-bearing variable (the knowledge pass runs no program).
+    assert.equal(s.fake.envs().some((e) => (e['PATH'] ?? '').includes(tools)), false, 'the graphify directory is not on the host PATH');
+
+    const record = rows<{ body_json: string }>(s.roots, 'SELECT body_json FROM project_records ORDER BY version DESC LIMIT 1')[0];
+    const body = JSON.parse(record?.body_json ?? '{}') as { indexes: { graph?: { nodes: Record<string, number>; knowledge?: { documentNodes: number } } } };
+    assert.ok((body.indexes.graph?.knowledge?.documentNodes ?? 0) > 0, 'document nodes joined the graph');
+  });
+});
 
 describe('onboarding through the real ClaudeHostAdapter and a fake claude', () => {
   it('reaches active, and the invocation directory holds the five generated inputs with modes 0600 and 0700', () => {

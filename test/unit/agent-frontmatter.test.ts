@@ -270,9 +270,9 @@ describe('buildPluginDir', () => {
     }
   });
 
-  it('names the per-purpose allowances (S0-D: intel loads no skill, S0-G: knowledge loads graphify)', () => {
+  it('names the per-purpose allowances (S0-D: intel loads no skill; plan 01-19 decision B: knowledge loads none either)', () => {
     assert.deepEqual(PURPOSE_EXTENSIONS.map, { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] });
     assert.deepEqual(PURPOSE_EXTENSIONS.intel, { skills: [], agents: ['gsd-intel-updater'] });
-    assert.deepEqual(PURPOSE_EXTENSIONS.knowledge, { skills: ['graphify'], agents: [] });
+    assert.deepEqual(PURPOSE_EXTENSIONS.knowledge, { skills: [], agents: [] });
   });
 });

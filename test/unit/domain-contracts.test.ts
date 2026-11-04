@@ -424,7 +424,7 @@ describe('compileOnboardingContract', () => {
       invocationsDerivation: FULL_INVOCATIONS,
       toolCalls: 600,
       subagentsConcurrent: 4,
-      subagentsTotal: 18,
+      subagentsTotal: 8,
       subagentsDerivation: FULL_DERIVATION,
       costUsd: { perInvocation: 3.0, perRun: 12.0, exactness: 'estimated' },
       retry: 1,
@@ -475,7 +475,7 @@ describe('compileOnboardingContract', () => {
       { toolCalls: 601 },
       { invocations: 7 },
       { wallClockMinutes: 46 },
-      { subagentsTotal: 19 },
+      { subagentsTotal: 9 },
       { costUsdPerInvocation: 3.01 },
       { costUsdPerRun: 12.5 },
     ]) {

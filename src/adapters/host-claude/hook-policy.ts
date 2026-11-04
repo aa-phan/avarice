@@ -28,7 +28,7 @@ export interface PreambleFingerprint {
 
 export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity, ledgerPath: string, preamble?: PreambleFingerprint): Result<HookPolicy> {
   const canonical = (path: string): string | null => canonicalAbsolute(path);
-  const all = [scope.stagingPath, ledgerPath, ...scope.writeRoots, ...scope.denyRead, ...scope.allowRead];
+  const all = [scope.stagingPath, ledgerPath, ...scope.writeRoots, ...scope.denyRead, ...scope.allowRead, ...(scope.readConfine ?? [])];
   const resolved = new Map<string, string>();
   for (const path of all) {
     const c = canonical(path);
@@ -49,6 +49,7 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
     denyRead: scope.denyRead.map(at),
     allowRead: scope.allowRead.map(at),
     denyReadGlobs: [...scope.denyReadGlobs],
+    ...(scope.readConfine !== undefined ? { readConfine: scope.readConfine.map(at) } : {}),
     commands: {
       strategy: scope.commands.strategy,
       readOnly: [...scope.commands.readOnly],
