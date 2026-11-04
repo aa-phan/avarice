@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
 stopped_at: Completed 01-24-PLAN.md
-last_updated: "2026-11-04T20:27:00.604Z"
+last_updated: "2026-11-04T21:39:38.963Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 01 execution started
-state_head: 974d8b13b3ed7ccf29b1c68f29b82ac68e32c866
+state_head: 07e6a34644938e4e51d9f7382c01e6967365bb9f
 progress:
   total_phases: 8
   completed_phases: 0
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
 Plan: 5 of 24
 Status: Ready to execute
-Last activity: 2026-11-04 - Completed quick task 261104-jnc: Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04
+Last activity: 2026-11-04 - Completed quick task 261104-l3t: Resolve WR-02: drop grep from the shell read-only commands and deny bfs find -rm
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -194,6 +194,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261104-jnc | Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04 | 2026-11-04 | 974d8b1 | [261104-jnc-close-p-3-grep-d-directories-recursion-b](./quick/261104-jnc-close-p-3-grep-d-directories-recursion-b/) |
+| 261104-l3t | Resolve WR-02: drop grep from the shell read-only commands (shell grep denied by name; search via Grep tool) and deny bfs find -rm | 2026-11-04 | 07e6a34 | [261104-l3t-resolve-wr-02-establish-which-grep-the-c](./quick/261104-l3t-resolve-wr-02-establish-which-grep-the-c/) |
 
 ## Deferred Items
 
