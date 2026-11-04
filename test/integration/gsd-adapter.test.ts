@@ -300,3 +300,35 @@ describe('GsdOnboardingAdapter.intelSnapshot against the installed GSD (decision
     assert.deepEqual(listing().filter((f) => !before.includes(f)), ['.planning/intel/.last-refresh.json']);
   });
 });
+
+describe('GsdOnboardingAdapter.intelSnapshot reads GSD\'s answer strictly (a fake gsd-core)', () => {
+  function adapterFor(answer: string, exit = 0): GsdOnboardingAdapter {
+    const dir = writeFakeGsdCore(temp('intel-fake'), {
+      version: '1.17.0',
+      script: `if (args[0] === 'intel' && args[1] === 'snapshot') { process.stdout.write(${JSON.stringify(answer)}); process.exit(${exit}); }`,
+    });
+    return new GsdOnboardingAdapter({ gsdCoreDir: dir, version: '1.17.0', packageName: GSD_ADMITTED_PACKAGE }, { executor, dataRoot: temp('data'), home: REAL_HOME });
+  }
+
+  it('reports saved only when GSD says saved: true, and the file count it gives', async () => {
+    const saved = await adapterFor('{"saved":true,"timestamp":"2026-11-03T00:00:00.000Z","files":5}').intelSnapshot(temp('s1'));
+    assert.ok(saved.ok);
+    assert.deepEqual(saved.value, { disabled: false, saved: true, files: 5 });
+    const notSaved = await adapterFor('{"saved":false,"files":5}').intelSnapshot(temp('s2'));
+    assert.ok(notSaved.ok);
+    assert.equal(notSaved.value.saved, false, 'a snapshot GSD does not call saved is not saved');
+    const absentField = await adapterFor('{"files":5}').intelSnapshot(temp('s3'));
+    assert.ok(absentField.ok);
+    assert.equal(absentField.value.saved, false);
+  });
+
+  it('reports a disabled capability as a result, and an error field or a failing exit as an error', async () => {
+    const disabled = await adapterFor('{"disabled":true,"message":"off"}').intelSnapshot(temp('s4'));
+    assert.ok(disabled.ok);
+    assert.deepEqual(disabled.value, { disabled: true, saved: false, files: 0 });
+    const errored = await adapterFor('{"error":"cannot write"}').intelSnapshot(temp('s5'));
+    assert.equal(errored.ok, false);
+    const failed = await adapterFor('{}', 1).intelSnapshot(temp('s6'));
+    assert.equal(failed.ok, false);
+  });
+});

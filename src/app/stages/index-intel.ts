@@ -1,11 +1,16 @@
 // The `intel` index step (ONB-13, S-39 intel part): one contained invocation of the intel purpose, which runs GSD's own
 // `gsd-intel-updater` agent in the form spike S0-D proved (`claude -p --agent gsd-intel-updater "focus: full; project
 // root: ."` with the agent in the generated --agents file; GSD 1.17.0 ships no intel workflow file to call instead).
-// The agent writes the five intel documents and its snapshot under `.planning/intel`, and nothing else is allowed to.
-// AVARICE writes none of it. It accepts the result only when GSD's own verbs agree: `intel validate` passes and
-// `intel diff` reports no file changed since the refresh. Every failure is an absent index with a reason, never an
-// error: an index that fails never blocks activation. The index is stamped with `git:` and the staging HEAD, the
-// onboarded revision.
+// The agent writes the five intel documents under `.planning/intel`, and nothing else is allowed to; AVARICE writes none of
+// them. The agent's own closing calls (`gsd_run intel validate`, `intel snapshot`) are denied by the hook (rehearsal 4: a bare
+// `gsd_run` has no preamble and a retyped one is a syntax the hook refuses), so AVARICE finishes the step itself, the way it
+// stamps a map (owner decision A, 2026-11-03): after the invocation ended it runs GSD's `intel validate`, then `intel snapshot`
+// (the one write, to `.planning/intel/.last-refresh.json`, with that directory the one writable path of the sandboxed runner),
+// then `intel diff`. What `diff-changed` proves now: after AVARICE's own snapshot, every intel file is byte for byte what the
+// snapshot hashed, so the digest in the record is of the files that were validated and snapshotted, and nothing (a host
+// process still running, a late write) changed them in between. It no longer compares with a snapshot the model took.
+// Every failure is an absent index with a reason, never an error: an index that fails never blocks activation. The index
+// is stamped with `git:` and the staging HEAD, the onboarded revision.
 import { sha256Hex } from '../../domain/digest.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
 import { ok } from '../../domain/result.ts';
@@ -92,12 +97,27 @@ export async function runIntelStep(deps: AppDeps, ctx: IndexStepContext): Promis
   if (validation.value.disabled) return absent('validate-failed', 'intel is disabled in the staging GSD config');
   if (!validation.value.valid) return absent('validate-failed', validation.value.errors.join('; '));
 
+  // AVARICE's snapshot: only of files that validated. It replaces any `.last-refresh.json` the invocation left.
+  const snapshotStartedMs = deps.clock.nowMs();
+  const snapshot = await gsd.intelSnapshot(staging);
+  const snapshotProblem = !snapshot.ok ? describeError(snapshot.error) : snapshot.value.disabled ? 'intel is disabled in the staging GSD config' : !snapshot.value.saved ? 'intel snapshot did not report saved' : undefined;
+  const recorded = deps.ledger.recordStepResult(row.onboardingId, {
+    step: 'gsd:intel-snapshot',
+    status: snapshotProblem === undefined ? 'completed' : 'failed',
+    result: snapshotProblem === undefined && snapshot.ok ? { saved: true, files: snapshot.value.files } : { error: clip(snapshotProblem ?? 'unknown') },
+    nowMs: snapshotStartedMs,
+    completedAtMs: deps.clock.nowMs(),
+  });
+  if (!recorded.ok) return recorded;
+  if (snapshotProblem !== undefined) return absent('snapshot-failed', `intel snapshot: ${snapshotProblem}`);
+
   const diff = await gsd.intelDiff(staging);
   if (!diff.ok) return absent('validate-failed', `intel diff did not run: ${describeError(diff.error)}`);
   if (diff.value.disabled) return absent('validate-failed', 'intel is disabled in the staging GSD config');
-  if (diff.value.noBaseline) return absent('diff-changed', 'the refresh left no snapshot to compare the files with');
+  // After AVARICE's own snapshot there must be a baseline; none means the snapshot did not leave a readable one.
+  if (diff.value.noBaseline) return absent('snapshot-failed', 'intel snapshot left no baseline to compare the files with');
   const moved = [...diff.value.changed, ...diff.value.added, ...diff.value.removed];
-  if (moved.length > 0) return absent('diff-changed', `changed since the refresh: ${moved.join(', ')}`);
+  if (moved.length > 0) return absent('diff-changed', `changed since AVARICE's snapshot: ${moved.join(', ')}`);
 
   // What the record digests is what GSD and later runs read: the files as they are in staging, sorted by name.
   const names = [...INTEL_DOCUMENTS, SNAPSHOT].sort();

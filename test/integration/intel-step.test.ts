@@ -245,20 +245,28 @@ describe('the intel step with a contained intel invocation (ONB-13, S-39 intel p
   });
 
   it('records the index absent when AVARICE\'s own snapshot fails (snapshot-failed), whether GSD errors, refuses, or leaves no baseline', async () => {
+    let realSnapshot: GsdOnboarding['intelSnapshot'] = async () => ({ ok: false, error: { kind: 'internal', cause: 'unset' } });
     const cases: Array<[string, Partial<GsdOnboarding>]> = [
-      ['GSD errors', { intelSnapshot: async () => ({ ok: false, error: { kind: 'internal', cause: 'intel snapshot exited 1' } }) }],
-      ['GSD does not report saved', { intelSnapshot: async () => ({ ok: true, value: { disabled: false, saved: false, files: 0 } }) }],
+      // The real snapshot runs first, so a baseline exists: only the reported failure can stop the step.
+      ['GSD errors', { intelSnapshot: async (s) => { await realSnapshot(s); return { ok: false, error: { kind: 'internal', cause: 'intel snapshot exited 1' } }; } }],
+      ['GSD does not report saved', { intelSnapshot: async (s) => { await realSnapshot(s); return { ok: true, value: { disabled: false, saved: false, files: 0 } }; } }],
+      ['GSD says intel is disabled', { intelSnapshot: async (s) => { await realSnapshot(s); return { ok: true, value: { disabled: true, saved: false, files: 0 } }; } }],
       ['no baseline after the snapshot', { intelDiff: async () => ({ ok: true, value: { disabled: false, noBaseline: true, changed: [], added: [], removed: [] } }) }],
     ];
     for (const [label, over] of cases) {
       const run = await onboard({}, (deps) => {
         const gsd = deps.gsd;
         assert.ok(gsd);
+        realSnapshot = (s) => gsd.intelSnapshot(s);
         return { ...deps, gsd: wrapGsd(gsd, over) };
       });
       assert.equal(stateOf(run), 'active', label);
       assert.equal(run.record.indexes.intel, undefined, label);
       assert.deepEqual(absentReasons(run).filter((a) => a.index === 'intel'), [{ index: 'intel', reason: 'snapshot-failed' }], label);
+      const [stored] = rows<{ result_json: string }>(run.roots, "SELECT result_json FROM onboarding_steps WHERE step = 'index:intel' AND status = 'completed'");
+      const detail = (JSON.parse(stored?.result_json ?? '{}') as { detail?: string }).detail ?? '';
+      if (label.includes('disabled')) assert.match(detail, /disabled/, 'the detail names the cause');
+      if (label.includes('saved')) assert.match(detail, /did not report saved/, 'the detail names the cause');
     }
   });
 

@@ -277,9 +277,15 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
     });
   }
 
-  // RED stub: `intel snapshot` is not run yet.
-  async intelSnapshot(_staging: string): Promise<Result<GsdIntelSnapshot>> {
-    return err({ kind: 'internal', cause: 'intel snapshot is not run yet' });
+  // `intel snapshot` hashes the intel files into `.planning/intel/.last-refresh.json`, the baseline `intel diff` compares against.
+  // It writes that one file, so the verb may write that one directory.
+  async intelSnapshot(staging: string): Promise<Result<GsdIntelSnapshot>> {
+    const ran = await this.#run(staging, ['intel', 'snapshot'], [join(staging, '.planning', 'intel')]);
+    if (!ran.ok) return ran;
+    const d = record(ran.value);
+    if (d['disabled'] === true) return ok({ disabled: true, saved: false, files: 0 });
+    if (typeof d['error'] === 'string') return err({ kind: 'internal', cause: `intel snapshot: ${d['error'].slice(0, 200)}` });
+    return ok({ disabled: false, saved: d['saved'] === true, files: count(d['files']) });
   }
 
   async intelStatus(staging: string): Promise<Result<GsdIntelStatus>> {
