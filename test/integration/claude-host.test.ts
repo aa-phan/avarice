@@ -228,8 +228,13 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.ok(settings.sandbox.filesystem.denyRead.includes(`/${workRoot}`), 'the sandbox denies the work root');
     assert.deepEqual(settings.sandbox.filesystem.allowRead, [`/${staging}`], 'and re-allows only the invocation staging');
     assert.ok(settings.permissions.allow.includes(`Read(/${staging}/**)`), 'the Read tool is granted the staging');
+    // WR-04: parse `Read(//abs/root/**)` into its absolute root, so the predicate can be true (the earlier slice dropped the leading slash).
+    const namesRootContainingStaging = (rule: string): boolean => {
+      const m = /^Read\(\/(\/.*)\/\*\*\)$/.exec(rule);
+      return m !== null && (staging === m[1] || staging.startsWith(`${m[1]}/`));
+    };
     assert.equal(
-      settings.permissions.deny.some((rule) => rule.startsWith('Read(') && rule.includes(workRoot) && staging.startsWith(rule.slice('Read(//'.length, -3))),
+      settings.permissions.deny.some(namesRootContainingStaging),
       false,
       'no Read permission deny names a root that contains the staging (a permission deny has no re-allow)',
     );
