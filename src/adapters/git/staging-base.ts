@@ -108,7 +108,11 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');
     const diff = runGit(['diff', '--name-status', '-z', '--no-renames', '--no-ext-diff', pin, '--'], { cwd: path, neutralizeFilters: true });
     if (!diff.ok) return failure(diff.error);
-    const status = runGit(['status', '--porcelain=v2', '-z', '--untracked-files=all'], { cwd: path, neutralizeFilters: true });
+    // The repository is the hostile input and its committed `.gitignore` is part of the staging checkout, so
+    // ignored untracked files must be judged too. With `--untracked-files=all` the traditional mode prints each
+    // ignored file as its own `!` record; the matching mode prints one record for an ignored directory and hides
+    // its files (observed on git 2.39.5).
+    const status = runGit(['status', '--porcelain=v2', '-z', '--untracked-files=all', '--ignored=traditional'], { cwd: path, neutralizeFilters: true });
     if (!status.ok) return failure(status.error);
 
     const modified: string[] = [];

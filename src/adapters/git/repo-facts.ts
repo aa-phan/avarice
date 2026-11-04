@@ -28,7 +28,9 @@ export interface StatusEntries {
 }
 
 // `git status --porcelain=v2 -z`: records are NUL separated; a rename or copy record (`2`) is followed by
-// one extra NUL-separated field, its original path.
+// one extra NUL-separated field, its original path. `!` records (ignored files) appear only when the caller asked
+// for them, which only the staging diff does; `collectRepoFacts` keeps its status call on the user's checkout
+// without an ignored mode, so ignored files of the checkout never become facts. They are read as untracked.
 export function parseStatus(stdout: string): StatusEntries {
   const modified: string[] = [];
   const untracked: string[] = [];
@@ -53,6 +55,7 @@ export function parseStatus(stdout: string): StatusEntries {
         modified.push(pathAfter(record, 10));
         break;
       case '?':
+      case '!':
         untracked.push(record.slice(2));
         break;
       default:
