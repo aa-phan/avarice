@@ -2,155 +2,91 @@
 phase: 01-contained-onboarding-of-one-repository
 reviewed: 2026-11-04T00:00:00Z
 depth: standard
-files_reviewed: 23
+files_reviewed: 11
 files_reviewed_list:
   - docs/containment.md
-  - src/adapters/git/repo-facts.ts
-  - src/adapters/git/staging-base.ts
-  - src/adapters/host-claude/claude-host.ts
-  - src/adapters/host-claude/hook-policy.ts
-  - src/adapters/host-claude/settings.ts
-  - src/app/invocation.ts
-  - src/app/resume.ts
   - src/domain/hook-decision.ts
   - src/domain/invocation-scope.ts
-  - test/fault/killpoints.test.ts
-  - test/helpers/fake-agent-host.ts
-  - test/helpers/fault-run.ts
+  - test/containment/failclosed.test.ts
   - test/integration/claude-host.test.ts
   - test/integration/hook.test.ts
-  - test/integration/ignored-writes.test.ts
-  - test/integration/resume-reap.test.ts
-  - test/integration/staging-adapters.test.ts
   - test/mutation/fail-closed.test.ts
+  - test/mutation/scope-and-validation.test.ts
   - test/unit/claude-settings.test.ts
   - test/unit/hook-decision.test.ts
   - test/unit/invocation-scope.test.ts
-  - test/unit/repo-facts.test.ts
 findings:
-  critical: 1
-  warning: 4
-  info: 3
-  total: 8
+  critical: 0
+  warning: 2
+  info: 4
+  total: 6
 status: issues_found
 ---
 
 # Phase 1: Code Review Report
 
 **Reviewed:** 2026-11-04
-**Depth:** standard (incremental: gap-closure plans 01-21..01-24 since b4b112c)
-**Files Reviewed:** 23
+**Depth:** standard
+**Files Reviewed:** 11
 **Status:** issues_found
 
 ## Summary
 
-Prior findings:
+This is an incremental review of the changes since d8a6f0c: quick tasks 261104-jnc and 261104-l3t, which close gap P-3. They drop `grep` from `READ_ONLY_COMMANDS`, delete the grep option model (`recursiveRule`, `globMayMatchBelow`, the `flags`, `shortValues` and `longs` fields of `ReadArgs`), deny bfs's `find -rm`, and make `ScopeInput.workRoot` required.
 
-- **CR-01 (intel and knowledge hosts not reaped on resume): resolved.** `reapStartedLaunches` (`src/app/resume.ts:51-81`) reaps every `launch:*` row left `started` before any stage runs, completes all reaps before marking any row, fails closed on a reap error, and leaves a `launch:map` row of a `mapping` or `paused` onboarding for `reconcileInvocation`. `reapBySessionId` is shared with the fake host, and the kill-point tests exercise it with a real surviving process and a decoy.
-- **CR-03 (staging diff blind to gitignored files): resolved.** `--ignored=traditional` with `--untracked-files=all` (`staging-base.ts:115`) lists each ignored file as a `!` record. I confirmed this on git 2.39.5. `parseStatus` reads `!` as untracked, and `collectRepoFacts` still runs status without an ignored mode, so the user's checkout is unaffected.
-- **CR-02 (read confinement was deny-list only): partly resolved.** The allow-list in `readRule`, the work-root `denyRead` and own-staging `allowRead` pair, and option-value and `--` operand parsing all work as designed for the cases they model. I probed `hook-decision.ts` directly, and recursive `grep` can still escape the new `shell-recursive-read` control. This is CR-01 below. WR-01 and WR-02 are related gaps in the same parser.
+I traced every shell path through `checkSegment` after the change.
 
-Residual risks already stated in `docs/containment.md` (`git show <rev>:<path>`, `git log -p`, host Grep-tool recursion) are not re-listed.
+- **Grep denial.** Every spelling reaches `entry === undefined` and returns `shell-not-allowed` before any option is parsed. That covers `grep`, a quoted `"grep"` (the lexer strips quotes), `/usr/bin/grep`, `egrep`, `fgrep`, `rg`, `ugrep`, `git grep`, and grep after a pipe. A backslash-prefixed `\grep` is refused earlier by the lexer as `shell-syntax`. Nothing admitted afterwards recurses and reads file content. `ls`, `find`, `wc`, `head`, `tail` and `cat` do not, and `git log -p` and `git show` stay documented bypasses. Removing the recursion rules therefore does not open a new read path.
+- **bfs find.** I ran the host `find` (bfs) here. It rejects `--print`, so the `--` spelling of an action is not a bypass. The `-files0-from` form is refused because the `-` is not alphanumeric (`shell-option-value`), and `find -f PATH` is judged as a positional. `-rm` is the only bfs action missing from the old list.
+- **Verification.** `npm run typecheck` passes and the unit, integration, mutation and containment suites pass (1171 pass, 0 fail, 22 skipped).
 
-## Critical Issues
-
-### CR-01: `grep -d RECURSE` and `--directories=Recurse` bypass the recursive-grep secret-glob check
-
-**File:** `src/domain/hook-decision.ts:380-385`
-**Issue:** `directoriesRecurse` compares the `-d` and `--directories` value with `=== 'recurse'`, which is case-sensitive and exact. Two real greps recurse on other spellings:
-
-- macOS `/usr/bin/grep` (BSD 2.6.0-FreeBSD) matches the action case-insensitively. I ran `/usr/bin/grep -d RECURSE SECRETVAL .` and `--directories=Recurse`, and both recursed and printed `./sec.env`.
-- GNU grep resolves `--directories` with `XARGMATCH`, which accepts an unambiguous abbreviation such as `rec`.
-
-`recursive` then comes out false, `recursiveRule` returns `null`, and the only check left is the named-operand check. That check judges `.` or `src` as a directory root and never applies the secret globs below it. I ran the decision against a policy with the production secret globs (`**/.env`, `**/*.pem`, ...):
-
-```
-grep -d recurse PASSWORD .          -> deny  shell-recursive-read
-grep -d RECURSE PASSWORD .          -> allow shell-identity
-grep --directories=Recurse PASSWORD -> allow shell-identity
-grep -dRECURSE PASSWORD src         -> allow shell-identity
-```
-
-The last three read every secret-bearing file under staging. The shell-side secret-glob guard is therefore defeated by changing the case of one word, on the platform's default grep. Operand confinement is unaffected, because `grep -d RECURSE x /home/u` is still denied as `outside-read-set`.
-**Fix:** Fail closed. Treat any `-d` or `--directories` value that is not exactly `read` or `skip` (compared case-insensitively) as recursive:
-```ts
-const NON_RECURSIVE_ACTIONS = new Set(['read', 'skip']);
-const isRecursiveAction = (value: string): boolean => !NON_RECURSIVE_ACTIONS.has(value.toLowerCase());
-const directoriesRecurse =
-  shortValues.some((v) => v.flag === 'd' && isRecursiveAction(v.value)) ||
-  longNamed('--directories', 5).some((l) => isRecursiveAction(l.value ?? positional[0] ?? ''));
-```
-Add unit cases for `-d RECURSE`, `-dRecurse`, `--directories=Recurse`, `--dir=RECURSE`, `-d rec` and `--directories rec x .`.
+No blocker was found. The findings below are one correctness-adjacent gap in the work-root change, one test-guard weakness, and maintainability items left behind by the deletion.
 
 ## Warnings
 
-### WR-01: A long option with a separate value shifts the grep pattern and hides the real walk root
+### WR-01: `workRoot` is required by type only; an empty or relative value silently produces a policy that denies everything
 
-**File:** `src/domain/hook-decision.ts:326-331, 390-394`
-**Issue:** `parseReadArgs` treats `--name value` as a flag plus a positional word. `recursiveRule` then takes `positional.slice(1)` as the walked roots, assuming the first positional is the pattern. For `grep -r --exclude-dir x PATTERN` the positionals are `[x, PATTERN]`, so the walked list becomes `[PATTERN]`. `PATTERN` is not a directory, and the real walk root, the working directory (staging), is never judged. This applies to every grep long option that takes a separate value: `--include`, `--exclude`, `--exclude-dir`, `--max-count`, `--context`, `--after-context`, `--before-context`, `--label`, `--binary-files` and `--devices`. I confirmed it with a policy whose secret globs have no `**` (for example `.env`, `config/*.key`):
-```
-grep -r PASSWORD                      -> deny  shell-recursive-read
-grep -r --exclude-dir x PASSWORD      -> allow shell-identity   (walks staging, reads .env)
-grep -r --max-count 1 PASSWORD        -> allow shell-identity
-grep -r --include "*.ts" PASSWORD     -> allow shell-identity
-```
-The current contract preset (`onboarding-contract.ts:124`) starts every glob with `**/`, and `globMayMatchBelow` returns true for any `**` segment. That masks the defect today. It becomes live when a non-`**` glob is added, and it is independent of CR-01.
-**Fix:** In `recursiveRule`, always judge the working directory as a root when the operand list cannot be proven complete, instead of only when no operands remain. Better, give grep a table of long options that take a separate value and consume the next word for them:
+**File:** `src/domain/invocation-scope.ts:188-190, 241-243`
+**Issue:** Making `workRoot` a required `string` closes the "caller forgot it" hole. It does not close "caller passed a useless value". `trimTrailingSlashes('')` returns `''`, which goes into `denyRead`. In the hook, `under(path, '')` evaluates `path.startsWith('/')`, so every absolute path is under the root `''`. `readRule` then returns `deny-read` for anything not under `allowRead`. That includes `readRoots` (the gsd-core and agents directories), which do not appear in `allowRead`. The sandbox `denyRead` gets an empty-string entry as well.
+
+The failure direction is closed, so this is not a leak. But the effect is an invocation that cannot read its own skills or GSD directory, and the cause (an empty work root) is nowhere in the denial output. Before this change the optional field made the same mistake a no-op. The only guard is upstream, in `root-rules.ts` at `avarice init`. `computeInvocationScope` is a pure domain function that also takes `repoPath`, `dataRoot` and `home` unvalidated, but those did not become new silent-outage vectors in this change.
+**Fix:** Assert the invariant where the type now promises it:
 ```ts
-const GREP_LONG_VALUE_OPTIONS = ['--include', '--exclude', '--exclude-dir', '--include-dir', '--max-count', '--context', '--after-context', '--before-context', '--label', '--binary-files', '--devices', '--directories', '--regexp', '--file', '--exclude-from'];
+if (!input.workRoot.startsWith('/')) throw new Error('computeInvocationScope: workRoot must be an absolute path');
 ```
-At minimum, push `cwd` onto `walked` whenever any long option appeared without an `=` value.
+Alternatively, return a `Result`, as the other domain validators do. Add a unit test for `''` and for a relative path.
 
-### WR-02: The recursive-grep detector models BSD and GNU grep, but Claude Code's Bash tool may run `grep` as embedded `ugrep`
+### WR-02: The WR-03 type guard is not exercised by `npm test`
 
-**File:** `src/domain/hook-decision.ts:321-332, 380-385`
-**Issue:** The Bash tool in this environment defines a shell function `grep` that execs the host binary as `ugrep` with `-G --ignore-files --hidden -I`. If the contained invocation's shell has the same shim, the parser's model of grep is wrong in ways that matter. Behavior I observed by running the host binary as ugrep in a scratch directory:
-
-- `-5 PATTERN .` recurses to depth 5. The hook skips `-[0-9]+` arguments (line 332) and does not treat them as recursion.
-- `-d dereference-recurse` is a valid ugrep action that follows links. It is not recognized, and neither is `-d recurse` once case folding is dropped.
-- A bare `grep PATTERN .` with no `-r` searched the files directly inside `.`, and printed `sec.env`. The hook treats `.` as a plain operand and applies no secret glob to it.
-
-I could not confirm that the contained invocation's shell snapshot carries this function. The integration tests use a fake `claude`, and `docs/containment.md` does not mention it. If it is active, the recursion and secret-glob control for `grep` is weaker than the tests assume.
-**Fix:** Establish which `grep` the contained shell runs, for example by calling `grep --version` through the real host in the launch self-test, and record the result in `docs/containment.md`. The safer option is to remove `grep` from `READ_ONLY_COMMANDS` and rely on the Grep tool, whose root path the hook judges. If `grep` stays, treat any digit-only option, any `-d` or `--directories` value other than `read` or `skip`, and any directory operand as recursive, and judge directory operands against the secret globs.
-
-### WR-03: `ScopeInput.workRoot` is optional, so omitting it silently drops the work-root deny
-
-**File:** `src/domain/invocation-scope.ts:186, 237-242`
-**Issue:** The new CON-1 control exists only when the caller passes `workRoot`. The comment says `prepareInvocation` "always passes it", but nothing enforces that. A future caller, or a refactor of `prepareInvocation`, that omits the field gets a scope with no work-root deny and no own-staging `allowRead`. The fallback shape is also fail-open for settings: `allowRead` is then omitted from the sandbox filesystem. The only consumer today is `src/app/invocation.ts:84`, so no current path is exposed. The optionality exists only so that unit tests can model "no profile".
-**Fix:** Make `workRoot: string` required in `ScopeInput`, and have the unit helpers pass a dummy root where they want the old shape. If it stays optional, `computeInvocationScope` should return an error or throw rather than produce a weaker scope.
-
-### WR-04: Integration assertion that the settings carry no containing Read deny is vacuous
-
-**File:** `test/integration/claude-host.test.ts:231-235`
-**Issue:** The predicate `staging.startsWith(rule.slice('Read(//'.length, -3))` can never be true. `rule.slice(7, -3)` of `Read(//Users/x/work/**)` is `Users/x/work/`, with no leading `/`, while `staging` is absolute (`/Users/x/work/onb/staging`). I confirmed that `startsWith` returns false. The `some(...)` is therefore always false, so `assert.equal(..., false)` passes even if the production code re-adds `Read(//<work root>/**)`. The unit test in `claude-settings.test.ts` pins the same property on a fixed fixture, so coverage is not zero. But the integration test claims to verify the production path and does not.
-**Fix:** Compare with the leading slash restored, or parse the rule properly:
-```ts
-const containsStaging = (rule: string): boolean => {
-  const m = /^Read\(\/(\/.*)\/\*\*\)$/.exec(rule);
-  return m !== null && (staging === m[1] || staging.startsWith(`${m[1]}/`));
-};
-assert.equal(settings.permissions.deny.some(containsStaging), false, '...');
-```
+**File:** `test/unit/invocation-scope.test.ts:309-313`
+**Issue:** The test "cannot be called without a work root" is an `@ts-expect-error` over a literal that is never run. `npm test` is `node --test`, which strips types and never invokes `tsc`. Under `node --test` the test body is a no-op that always passes. Its protection exists only if `npm run typecheck` runs in CI or a pre-commit hook. Nothing in `package.json` chains the two. If `workRoot` became optional again, the suite would stay green and only `typecheck` would notice. The test's name and its docs claim ("WR-03", "the type rejects") overstate what `node --test` verifies.
+**Fix:** Either chain the check (`"test": "tsc -p . && node --test"`) or add a runtime assertion next to the type one, for example `assert.throws(() => computeInvocationScope({ ...input, workRoot: undefined as never }))`. That second option only works together with the fix in WR-01. State in the test comment that it is checked by `npm run typecheck`.
 
 ## Info
 
-### IN-01: Every recursive grep is denied under the production secret globs, and the test rewrite hides it
+### IN-01: Stale comment cites an option form that no longer has a value-taking owner
 
-**File:** `src/domain/hook-decision.ts:363-372`, `test/mutation/fail-closed.test.ts:221`
-**Issue:** `globMayMatchBelow` returns true as soon as any glob segment contains `**`. All six preset secret globs start with `**/`, so `grep -r` is denied for every operand under staging, including a single file or `src`. `hook-decision.test.ts:270` asserts this for `grep -rn "a|b" src`. The MF-04 test was edited from `grep -rn ... src` to `grep -n ... src/a.ts` to keep it passing. The behavior is fail-closed and probably intended, but it is not stated in `docs/containment.md`. A mapper that tries `grep -r` burns tool calls on denials before it falls back to the Grep tool.
-**Fix:** Document in the containment table that recursive shell `grep` over staging is always denied with the preset globs and the Grep tool is the supported route. Alternatively, refine the check: a `**/x` glob can match below a directory only if the directory actually contains a matching file, which the hook cannot list, so keep the deny but say so.
+**File:** `src/domain/hook-decision.ts:361-362`
+**Issue:** The comment says "A word like `-f/home/u/.netrc` ... is judged as a path". That was grep's `-f`. No remaining `SHORT_VALUE_OPTIONS` entry has `f` (`git ls-files` has `xX`). Today `-f/home/u/.netrc` is refused earlier as `shell-option-value` because `/` is not alphanumeric. It is never judged as a path. The comment also cites a case the tests no longer exercise.
+**Fix:** Use a live example, such as `-O/home/u/.netrc` for `git log` or `-n/path` for `head`. This is the same example the updated test at `test/unit/hook-decision.test.ts:374` uses.
 
-### IN-02: Resume marks a launch `interrupted` even when no reap happened
+### IN-02: Redundant local and an unused export left behind by the deletion
 
-**File:** `src/app/resume.ts:29, 63-79`
-**Issue:** `reapInterrupted` returns `ok` without reaping when `deps.host.reap` is undefined or the row has no `sessionId`. `reapStartedLaunches` then marks the row `interrupted` as though the host had been ended, and the stage relaunches. The comment says a host that cannot be ended stops the resume, but the capability-absent case is silently treated as success. The production `ClaudeHostAdapter` always implements `reap`, so this only affects other hosts and malformed rows.
-**Fix:** Return an error for a `started` launch whose host cannot reap, or leave such a row `started` and record an `invocation.reap_skipped` warning event.
+**File:** `src/domain/hook-decision.ts:288, 366-367`
+**Issue:** `const named = checkRead(...); return named;` is a pointless temporary now that the `recursiveRule` branch is gone. `SHORT_VALUE_OPTIONS` is `export`ed but is referenced only inside `hook-decision.ts`. No test or other module imports it, and the grep shows no other consumer.
+**Fix:** `return checkRead(...)`. Drop `export` unless a test is meant to pin the table.
 
-### IN-03: `SHORT_VALUE_OPTIONS` is exported but unused outside its module
+### IN-03: Misindented line, and the doc cites a test that does not cover the claim
 
-**File:** `src/domain/hook-decision.ts:288`
-**Issue:** The table is exported but only `parseReadArgs` in the same file reads it, and no test references it. `find` and `git rev-parse` have no entries, so they are parsed as taking no short values. That is safe, because every such word is still judged as a path, but the table's coverage claim is not tested.
-**Fix:** Drop the `export`, or add a unit test that pins each entry's value letters.
+**File:** `test/integration/hook.test.ts:442`, `docs/containment.md` (CON-1 row, last column)
+**Issue:** `workRoot: join(fx.dir, 'work'),` is indented two spaces short of its sibling properties in the `writeHookPolicy carries the concurrency limit` block. The CON-1 "Bypass and failure tests" cell lists `test/unit/claude-settings.test.ts` together with `test/unit/invocation-scope.test.ts` for "no grep-family entry in the read-only commands". `claude-settings.test.ts` contains no mention of grep. The assertion lives in `invocation-scope.test.ts` and `claude-host.test.ts` (`!policy.commands.readOnly.includes('grep')`).
+**Fix:** Re-indent the line. In the doc, attribute the "no grep-family entry" assertion to `invocation-scope.test.ts` and `claude-host.test.ts` only.
+
+### IN-04: The agent gets no hint that shell grep is gone
+
+**File:** `src/domain/invocation-scope.ts:67-69`
+**Issue:** Shell `grep` is now denied by name with the generic rule `shell-not-allowed`. The comment says "Searches go through the Grep tool", but nothing the agent sees says so. A mapper or intel agent trained to run `grep` through Bash will retry and spend tool calls before it switches tools. Denials are not charged to a budget, but the agent still pays context and turns for each one. This is a usability and robustness concern, not a containment one.
+**Fix:** If the invocation prompt or the hook's deny reason can carry text, add one line, for example "shell grep is not available; use the Grep tool". If not, record it in the containment doc as a known operational consequence.
 
 ---
 
