@@ -281,6 +281,12 @@ describe('Bash command identity', () => {
     ]) {
       assert.equal(decide(shell(command)).decision, 'deny', command);
     }
+    // CON-2: the Bash tool may run `find` as the embedded bfs, where -rm is an alias of -delete.
+    for (const command of ['find . -rm', 'find .planning/codebase -name x -rm']) {
+      assert.deepEqual(((d) => [d.decision, d.rule])(decide(shell(command))), ['deny', 'shell-find-action'], command);
+    }
+    // bfs reads a file list with -files0-from; that stays refused as an option value.
+    assert.deepEqual(((d) => [d.decision, d.rule])(decide(shell('find . -files0-from /home/u/.netrc'))), ['deny', 'shell-option-value']);
   });
 
   it('denies commands outside the read-only set, repository scripts and denied prefixes', () => {

@@ -221,7 +221,7 @@ describe('computeInvocationScope: commands and budgets', () => {
     for (const prefix of ['git push', 'git commit', 'git -c', 'git config', 'gh', 'claude', 'avarice', 'npm', 'npx', 'pnpm', 'yarn', 'curl', 'wget', 'pip', 'uv pip', 'make']) {
       assert.ok(DENIED_COMMAND_PREFIXES.includes(prefix), `DENIED_COMMAND_PREFIXES must list ${prefix}`);
     }
-    for (const action of ['-exec', '-execdir', '-delete', '-fprint']) {
+    for (const action of ['-exec', '-execdir', '-delete', '-rm', '-fprint']) {
       assert.ok(FIND_DENIED_ACTIONS.includes(action), `FIND_DENIED_ACTIONS must list ${action}`);
     }
     const scope = scopeFor('map');
