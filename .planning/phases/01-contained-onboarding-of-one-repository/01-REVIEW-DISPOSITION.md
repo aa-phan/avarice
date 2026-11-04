@@ -6,7 +6,35 @@ findings:
   - id: CR-01
     severity: critical
     disposition: open
-    title: "A host started by the intel or knowledge index step is never reaped on resume, so a resume can relaunch beside a surviving host"
+    title: "`grep -d RECURSE` and `--directories=Recurse` bypass the recursive-grep secret-glob check"
+  - id: WR-01
+    severity: warning
+    disposition: open
+    title: "A long option with a separate value shifts the grep pattern and hides the real walk root"
+  - id: WR-02
+    severity: warning
+    disposition: open
+    title: "The recursive-grep detector models BSD and GNU grep, but Claude Code's Bash tool may run `grep` as embedded `ugrep`"
+  - id: WR-03
+    severity: warning
+    disposition: open
+    title: "`ScopeInput.workRoot` is optional, so omitting it silently drops the work-root deny"
+  - id: WR-04
+    severity: warning
+    disposition: open
+    title: "Integration assertion that the settings carry no containing Read deny is vacuous"
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "Every recursive grep is denied under the production secret globs, and the test rewrite hides it"
+  - id: IN-02
+    severity: info
+    disposition: open
+    title: "Resume marks a launch `interrupted` even when no reap happened"
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "`SHORT_VALUE_OPTIONS` is exported but unused outside its module"
   - id: CR-02
     severity: critical
     disposition: open
@@ -15,22 +43,6 @@ findings:
     severity: critical
     disposition: open
     title: "The staging diff gate cannot see gitignored files, so a hostile `.gitignore` blinds validation scope and the pre-activation scope check"
-  - id: WR-01
-    severity: warning
-    disposition: open
-    title: "Kill-point flake lead: no volatile field enters the record body, but the nested `indexes.absent` array carries timeout-bounded outcomes (not reproduced)"
-  - id: WR-02
-    severity: warning
-    disposition: open
-    title: "A transient index failure is stored as a `completed` step and never retried, so the record permanently says \"absent\""
-  - id: WR-03
-    severity: warning
-    disposition: open
-    title: "The kill-point test cannot tell a healthy reference from a degraded one and swallows a missing graph snapshot"
-  - id: WR-04
-    severity: warning
-    disposition: open
-    title: "Ledger writers other than transition, checkpoint, contract and activation carry no lease fence, so a fenced-out holder can still write"
   - id: WR-05
     severity: warning
     disposition: open
@@ -47,18 +59,6 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-  - id: IN-01
-    severity: info
-    disposition: open
-    title: "`bin/avarice` and `bin/avarice.ts` are identical copies"
-  - id: IN-02
-    severity: info
-    disposition: open
-    title: "Test fault and lease overrides are honored by the production entry point"
-  - id: IN-03
-    severity: info
-    disposition: open
-    title: "Digests of text read through a UTF-8 decode are not digests of the file bytes"
   - id: IN-04
     severity: info
     disposition: open
@@ -69,7 +69,7 @@ findings:
     title: "The profile `config.json` is written but never read"
 open: 16
 total: 16
-recorded: 2026-11-04T06:32:47.102Z
+recorded: 2026-11-04T10:39:26.563Z
 ---
 
 # Phase 01: Code Review Disposition
@@ -77,21 +77,21 @@ recorded: 2026-11-04T06:32:47.102Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | CR-01 | critical | open | - |
-| CR-02 | critical | open | - |
-| CR-03 | critical | open | - |
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
 | WR-04 | warning | open | - |
-| WR-05 | warning | open | - |
-| WR-06 | warning | open | - |
-| WR-07 | warning | open | - |
-| WR-08 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
+| CR-02 | critical | open | - (not in the current review) |
+| CR-03 | critical | open | - (not in the current review) |
+| WR-05 | warning | open | - (not in the current review) |
+| WR-06 | warning | open | - (not in the current review) |
+| WR-07 | warning | open | - (not in the current review) |
+| WR-08 | warning | open | - (not in the current review) |
+| IN-04 | info | open | - (not in the current review) |
+| IN-05 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
