@@ -81,12 +81,14 @@ export const READ_ONLY_COMMANDS: readonly string[] = [
   'git show',
 ];
 
+// The Bash tool may run `find` as the embedded bfs, where `-rm` is an alias of `-delete`.
 export const FIND_DENIED_ACTIONS: readonly string[] = [
   '-exec',
   '-execdir',
   '-ok',
   '-okdir',
   '-delete',
+  '-rm',
   '-fprint',
   '-fprint0',
   '-fprintf',
