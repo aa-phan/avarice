@@ -255,6 +255,22 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     assert.match(problemsOf(validateKnowledgeGraph(g, manifest, stats)).join('\n'), /phase_plan.*\.planning\/phases/);
   });
 
+  // Found by the live exit rehearsal (plan 01-19): the real target tracks code under .planning/phases/ (contrast-check.mjs), so its
+  // code graph holds 27 code nodes sourced from there. The rule is about what the knowledge pass may cite, not about the code graph.
+  it('accepts a code-graph node sourced from .planning/phases/ (a tracked script), and still refuses a knowledge-pass node from there', () => {
+    const { graph, stats } = mergedFixture();
+    const g = clone(graph);
+    nodesOf(g).push({ id: 'planning_phases_01_x_contrast_check_checkdoc', label: 'checkDoc', file_type: 'code', source_file: '.planning/phases/01-x/contrast-check.mjs' });
+    assert.deepEqual(problemsOf(validate(g, stats)), [], 'a code node from a tracked file under .planning/phases/ is not a corpus node');
+    const state = clone(graph);
+    nodesOf(state).push({ id: 'state_script', label: 'run', file_type: 'code', source_file: '.planning/STATE.md' });
+    assert.deepEqual(problemsOf(validate(state, stats)), [], 'the origin decides, not the file name');
+    const fromPass = clone(graph);
+    nodesOf(fromPass).push({ id: 'phase_note', label: 'note', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
+    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
+    assert.match(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)).join('\n'), /phase_note.*\.planning\/phases/);
+  });
+
   it('refuses a dangling share above 10 percent, accepts exactly 10, and counts against the edges the pass produced', () => {
     const { graph } = mergedFixture();
     const base = mergedFixture().stats;
