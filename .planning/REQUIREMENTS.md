@@ -59,7 +59,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Containment (CON-1 to CON-16)
 
-- [ ] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
+- [x] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
 - [x] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
 - [x] **CON-3** [MVP]: Required enforcement fails closed: missing configuration, invalid policy, enforcement timeout or crash blocks the protected operation.
 - [ ] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
@@ -100,7 +100,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 - [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
 - [ ] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
-- [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
+- [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
@@ -247,7 +247,7 @@ Each v1 requirement maps to exactly one phase.
 | RC-6 | Phase 3 | Pending |
 | RC-7 | Phase 3 | Pending |
 | RC-8 | Phase 3 | Pending |
-| CON-1 | Phase 2 | Pending |
+| CON-1 | Phase 2 | Complete |
 | CON-2 | Phase 2 | Complete |
 | CON-3 | Phase 2 | Complete |
 | CON-4 | Phase 4 | Pending |
@@ -282,7 +282,7 @@ Each v1 requirement maps to exactly one phase.
 | AUT-17 | Phase 5 | Pending |
 | ONB-1 | Phase 1 | Complete |
 | ONB-2 | Phase 1 | Gaps Found |
-| ONB-3 | Phase 1 | Gaps Found |
+| ONB-3 | Phase 1 | Complete |
 | ONB-4 | Phase 1 | Gaps Found |
 | ONB-5 | Phase 1 | Gaps Found |
 | ONB-6 | Phase 4 | Pending |

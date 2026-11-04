@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 23/24 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
+**Plans:** 24/24 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
 
 Plans:
 **Wave 1**
@@ -98,7 +98,7 @@ Plans:
 - [x] 01-23-PLAN.md — Hook read allow-list, attached option values and operands after `--`, recursive-grep rule; every P-3 case as a unit test (CR-02)
 
 **Gap closure, Wave 2** *(blocked on 01-23)*
-- [ ] 01-24-PLAN.md — Work root in hook and sandbox denyRead with the own staging re-allowed, production-path proof, CON-1 row in docs/containment.md (CR-02)
+- [x] 01-24-PLAN.md — Work root in hook and sandbox denyRead with the own staging re-allowed, production-path proof, CON-1 row in docs/containment.md (CR-02)
 
 **Notes**: Technical goal: `avarice onboard --policy onboarding` takes one existing local Git repository (`~/aa-phan-portfolio-v2`) to an active project record, with GSD as the semantic mapper, GSD intel and graph indexes recorded, source read-only and writes confined to the staging worktree. Suits `/gsd-mvp-phase`. Kernel built here: package skeleton with import-boundary lint, ledger on `node:sqlite`, contract compiler with the `onboarding` preset, staging worktree, generated host settings and hook set, contained Claude Code host adapter, `GsdOnboarding` adapter for GSD 1.17.x, index stage and knowledge pass, `gsd-intel` and `gsd-graph` adapters. The target already has committed GSD planning but no codebase map, so this phase exercises detection and non-overwrite of existing planning state, not adoption of a stamped map (Phase 4). Excluded: remote workers, dashboard, `ingest-docs`, path-scoped and incremental refresh, promotion `copy` and `commit`, active command validation.
 
@@ -221,7 +221,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 0. Contained onboarding of one repository | v1.0 | 20/20 | In Progress | - |
-| 1. Contained unattended run of one work item | v1.0 | 23/24 | In Progress | - |
+| 1. Contained unattended run of one work item | v1.0 | 24/24 | In Progress | - |
 | 2. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 3. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 4. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
