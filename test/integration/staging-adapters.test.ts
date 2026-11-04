@@ -167,6 +167,29 @@ describe('describe, listTracked and changes', () => {
       deleted: [],
     });
   });
+
+  // Plan 01-22 (gap P-2): the repository controls its own `.gitignore`; a committed `*` must not hide a write.
+  it('lists every untracked file of staging, one record per file, when the committed .gitignore ignores everything', () => {
+    const repo = scratch({ files: BASE_FILES });
+    writeFileSync(join(repo.path, '.gitignore'), '*\n');
+    git(repo.path, ['add', '-f', '.gitignore']);
+    git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'hostile ignore']);
+    const pin = git(repo.path, ['rev-parse', 'HEAD']).trim();
+    const workRoot = tempDir('avarice-work-');
+    const ws = createStagingWorkspace(STAGING_STRATEGY);
+    const info = must(ws.prepare({ repoPath: repo.path, workRoot, onboardingId: ONB, pin }));
+
+    must(ws.ensureDir(info.path, 'evil'));
+    must(ws.ensureDir(info.path, '.planning/codebase'));
+    writeFileSync(join(info.path, 'evil.txt'), 'x\n');
+    writeFileSync(join(info.path, 'evil/x.sh'), 'x\n');
+    writeFileSync(join(info.path, 'src/c.ts'), 'x\n');
+    writeFileSync(join(info.path, '.planning/codebase/STACK.md'), '# Stack\n');
+
+    const changes = must(ws.changes(info.path, pin));
+    assert.deepEqual(changes, { modified: [], added: ['.planning/codebase/STACK.md', 'evil.txt', 'evil/x.sh', 'src/c.ts'], deleted: [] });
+    assert.ok(changes.added.every((path) => !path.endsWith('/')), 'no collapsed directory record');
+  });
 });
 
 describe('read and ensureDir confinement', () => {
