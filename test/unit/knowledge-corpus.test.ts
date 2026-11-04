@@ -8,7 +8,8 @@ import { dirname, join, relative } from 'node:path';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import { CORPUS_LIMITS, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../src/domain/knowledge-corpus.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
-import { fileSizes, materializeCorpus } from '../../src/adapters/graph/knowledge-corpus.ts';
+import { fileSizes, materializeCorpus, readExtractionFiles, writeExtractionPlan } from '../../src/adapters/graph/knowledge-corpus.ts';
+import { CHUNK_LIMITS, planExtractionChunks } from '../../src/domain/knowledge-extraction.ts';
 
 const PIN = 'a'.repeat(40);
 const MAP = ['STACK', 'ARCHITECTURE', 'STRUCTURE', 'CONVENTIONS', 'TESTING', 'INTEGRATIONS', 'CONCERNS'].map((n) => `.planning/codebase/${n}.md`);
@@ -219,5 +220,81 @@ describe('materializeCorpus: the copy, the .graphifyignore and the manifest', ()
     const sizes = fileSizes(staging, ['docs/a.md', 'docs/é.md', 'docs/l.md', 'docs/none.md']);
     assert.ok(sizes.ok);
     assert.deepEqual(sizes.value, { 'docs/a.md': 4, 'docs/é.md': 4 });
+  });
+});
+
+describe('the extraction plan and output (decision B, adapter side)', () => {
+  const plan = (paths: readonly string[]) =>
+    planExtractionChunks(
+      { schema: 1, revision: `git:${PIN}`, entries: paths.map((p) => ({ copyPath: `.avarice-knowledge/${p}`, sourcePath: p, revision: `git:${PIN}`, sha256: 'f'.repeat(64) })), excluded: [] },
+      Object.fromEntries(paths.map((p) => [p, 10])),
+      { maxFiles: 1 },
+    );
+
+  function corpusWithPlan(paths: readonly string[]): { staging: string; plan: ReturnType<typeof plan> } {
+    const staging = scratch();
+    put(staging, Object.fromEntries(paths.map((p) => [p, `# ${p}\n`])));
+    const data = scratch();
+    const done = materializeCorpus(staging, [...paths], join(data, 'm.json'), PIN);
+    assert.ok(done.ok);
+    const made = plan(paths);
+    const written = writeExtractionPlan(staging, made);
+    assert.ok(written.ok, JSON.stringify(written));
+    return { staging, plan: made };
+  }
+
+  it('writes the plan as `.avarice-knowledge/.chunks.json` (readable JSON, no manifest data) and an empty `.extraction` directory', () => {
+    const { staging, plan: made } = corpusWithPlan(['docs/a.md', 'docs/b.md']);
+    const file = join(staging, '.avarice-knowledge', '.chunks.json');
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), JSON.parse(JSON.stringify(made)));
+    assert.equal(lstatSync(file).mode & 0o777, 0o644);
+    assert.equal(readFileSync(file, 'utf8').includes('sha256'), false);
+    assert.equal(lstatSync(join(staging, '.avarice-knowledge', '.extraction')).isDirectory(), true);
+    assert.deepEqual(readdirSync(join(staging, '.avarice-knowledge', '.extraction')), []);
+  });
+
+  it('replaces an extraction directory an earlier attempt left, and refuses a corpus directory that is a symlink', () => {
+    const { staging, plan: made } = corpusWithPlan(['docs/a.md']);
+    writeFileSync(join(staging, '.avarice-knowledge', '.extraction', 'chunk-01.json'), '{"stale":true}');
+    assert.ok(writeExtractionPlan(staging, made).ok);
+    assert.deepEqual(readdirSync(join(staging, '.avarice-knowledge', '.extraction')), [], 'a stale chunk file is not kept');
+    const other = scratch();
+    const elsewhere = scratch();
+    symlinkSync(elsewhere, join(other, '.avarice-knowledge'));
+    assert.equal(writeExtractionPlan(other, made).ok, false);
+    assert.deepEqual(readdirSync(elsewhere), [], 'nothing was written through the link');
+  });
+
+  it('reads each chunk file that is a regular file; a missing one is missing, a symlink is missing, one above the cap is too-large', () => {
+    const { staging, plan: made } = corpusWithPlan(['docs/a.md', 'docs/b.md', 'docs/c.md', 'docs/d.md']);
+    const dir = join(staging, '.avarice-knowledge', '.extraction');
+    const outside = scratch();
+    writeFileSync(join(dir, 'chunk-01.json'), '{"nodes":[],"edges":[]}');
+    writeFileSync(join(outside, 'x.json'), '{"nodes":[],"edges":[]}');
+    symlinkSync(join(outside, 'x.json'), join(dir, 'chunk-02.json'));
+    writeFileSync(join(dir, 'chunk-03.json'), 'x'.repeat(CHUNK_LIMITS.maxOutputBytes + 1));
+    const read = readExtractionFiles(staging, made);
+    assert.ok(read.ok);
+    assert.deepEqual(read.value[1], { text: '{"nodes":[],"edges":[]}' });
+    assert.deepEqual(read.value[2], { problem: 'missing' });
+    assert.deepEqual(read.value[3], { problem: 'too-large' });
+    assert.deepEqual(read.value[4], { problem: 'missing' });
+  });
+
+  it('reads nothing when the extraction directory is a symlink or a regular file', () => {
+    const { staging, plan: made } = corpusWithPlan(['docs/a.md']);
+    const dir = join(staging, '.avarice-knowledge', '.extraction');
+    const outside = scratch();
+    writeFileSync(join(outside, 'chunk-01.json'), '{"nodes":[],"edges":[]}');
+    rmSync(dir, { recursive: true });
+    symlinkSync(outside, dir);
+    const viaLink = readExtractionFiles(staging, made);
+    assert.ok(viaLink.ok);
+    assert.deepEqual(viaLink.value, { 1: { problem: 'missing' } });
+    rmSync(dir);
+    writeFileSync(dir, 'not a directory');
+    const viaFile = readExtractionFiles(staging, made);
+    assert.ok(viaFile.ok);
+    assert.deepEqual(viaFile.value, { 1: { problem: 'missing' } });
   });
 });

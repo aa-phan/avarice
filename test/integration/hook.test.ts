@@ -419,9 +419,9 @@ describe('subagent concurrency (O-1)', () => {
 });
 
 describe('writeHookPolicy carries the concurrency limit (O-1)', () => {
-  it('writes the scope limit as subagentsConcurrent, and 0 for the intel invocation', () => {
+  it('writes the scope limit as subagentsConcurrent, and 0 for the intel and knowledge invocations', () => {
     const fx = fixture();
-    for (const [purpose, expected] of [['map', 4], ['intel', 0]] as const) {
+    for (const [purpose, expected] of [['map', 4], ['intel', 0], ['knowledge', 0]] as const) {
       const scope = computeInvocationScope({
         purpose,
         contract: contractFor(),
@@ -522,5 +522,78 @@ describe('writeHookPolicy', () => {
     assert.equal(onDisk.commands.preambleLength, 99);
     assert.equal(onDisk.commands.strategy, 'blanket-bash-hook-identity');
     assert.deepEqual(readdirSync(invDir), ['hook-policy.json']);
+  });
+});
+
+// Decision B: the real hook entry, run as a child process with the policy the knowledge scope writes (no shell, reads confined to
+// the corpus, one output directory, no subagent).
+describe('the knowledge purpose policy through the real hook entry (decision B)', () => {
+  function knowledgeFixture() {
+    const probe = fixture();
+    const corpus = join(probe.staging, '.avarice-knowledge');
+    const out = join(corpus, '.extraction');
+    mkdirSync(out, { recursive: true });
+    mkdirSync(join(corpus, 'docs'), { recursive: true });
+    const scope = computeInvocationScope({
+      purpose: 'knowledge',
+      contract: contractFor(),
+      stagingPath: probe.staging,
+      repoPath: probe.repo,
+      dataRoot: join(probe.dir, 'data'),
+      home: join(probe.dir, 'home'),
+      workspace: { topLevelEntries: ['src', '.planning', '.avarice-knowledge'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
+      readRoots: [],
+    });
+    const written = writeHookPolicy(join(probe.dir, 'inv-knowledge'), scope, { onboardingId: 'onb_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: [] }, probe.ledgerPath);
+    assert.ok(written.ok, JSON.stringify(written));
+    return { fx: probe, corpus, out, policyPath: written.value.file, policy: written.value.policy };
+  }
+
+  it('writes readConfine (canonical), the strategy none, no read-only command, no GSD verb and no subagent type', () => {
+    const { policy, corpus } = knowledgeFixture();
+    assert.deepEqual(policy.readConfine, [corpus]);
+    assert.equal(policy.commands.strategy, 'none');
+    assert.deepEqual(policy.commands.readOnly, []);
+    assert.deepEqual(policy.commands.gsdReadVerbs, []);
+    assert.deepEqual(policy.subagentTypes, []);
+    assert.equal(policy.purpose, 'knowledge');
+    assert.ok(parseHookPolicy(JSON.parse(JSON.stringify(policy))).ok);
+  });
+
+  it('denies Bash (shell-disabled) however harmless, charging nothing', () => {
+    const { fx, policyPath, corpus } = knowledgeFixture();
+    for (const command of ['ls', 'cat docs/a.md', `${PREAMBLE}\ngsd_run graphify status`]) {
+      const result = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Bash', tool_input: { command } }, policyPath);
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(parsed(result.stdout).hookSpecificOutput.permissionDecisionReason, /shell-disabled/, command);
+    }
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+  });
+
+  it('allows a Read inside the corpus and a Write inside the extraction directory; denies a Read in staging outside the corpus and a Write in the corpus', () => {
+    const { fx, policyPath, corpus, out } = knowledgeFixture();
+    writeFileSync(join(corpus, 'docs', 'a.md'), '# a\n');
+    const read = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Read', tool_input: { file_path: join(corpus, 'docs', 'a.md') } }, policyPath);
+    assert.equal(read.stdout, '');
+    const write = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Write', tool_input: { file_path: join(out, 'chunk-01.json'), content: '{}' } }, policyPath);
+    assert.equal(write.stdout, '');
+    assert.equal(budgetUsed(fx, 'toolCalls'), 2);
+    const outside = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Read', tool_input: { file_path: join(fx.staging, 'src', 'a.ts') } }, policyPath);
+    assert.match(parsed(outside.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+    const inCorpus = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Write', tool_input: { file_path: join(corpus, 'docs', 'a.md'), content: 'x' } }, policyPath);
+    assert.match(parsed(inCorpus.stdout).hookSpecificOutput.permissionDecisionReason, /outside-write-set/);
+    const glob = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Glob', tool_input: { pattern: '**/*.md' } }, policyPath);
+    assert.equal(glob.stdout, '', 'a Glob with no path searches the working directory, which is the corpus');
+    const staging = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Grep', tool_input: { pattern: 'x', path: fx.staging } }, policyPath);
+    assert.match(parsed(staging.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+  });
+
+  it('denies every subagent type, including general-purpose, which the graphify skill used to start', () => {
+    const { fx, policyPath, corpus } = knowledgeFixture();
+    for (const subagent_type of ['general-purpose', 'gsd-codebase-mapper']) {
+      const result = runHook(fx, 'pre', { cwd: corpus, tool_name: 'Agent', tool_input: { subagent_type, prompt: 'x' } }, policyPath);
+      assert.match(parsed(result.stdout).hookSpecificOutput.permissionDecisionReason, /subagent-type/, subagent_type);
+    }
+    assert.equal(budgetUsed(fx, 'subagentsTotal'), 0);
   });
 });

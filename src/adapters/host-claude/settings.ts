@@ -66,6 +66,7 @@ function bashAllowRules(scope: InvocationScope): string[] {
         ...scope.commands.gsdReadVerbs.map((verb) => `Bash(gsd_run ${verb}:*)`),
       ];
     case 'hook-allow':
+    case 'none':
       return [];
   }
 }

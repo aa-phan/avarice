@@ -323,3 +323,81 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     assert.equal(parseHookPolicy({ ...good, subagentsConcurrent: 0 }).ok, true);
   });
 });
+
+// Decision B (2026-11-03): the knowledge purpose has no shell at all, reads only the corpus, writes only the extraction directory
+// and starts no subagent. Every rule below is the policy the generated knowledge scope produces.
+describe('the knowledge purpose policy: no shell, confined reads, one output directory', () => {
+  const CORPUS = `${STAGING}/.avarice-knowledge`;
+  const OUT = `${CORPUS}/.extraction`;
+  const knowledge = (overrides: Partial<HookPolicy> = {}): HookPolicy =>
+    policy(
+      { purpose: 'knowledge', writeRoots: [OUT], readConfine: [CORPUS], subagentTypes: [], subagentsConcurrent: 0, ...overrides },
+      { strategy: 'none', readOnly: [], gsdReadVerbs: [], preambleSha256: undefined, preambleLength: undefined },
+    );
+
+  it('denies every Bash call (shell-disabled), however read-only, and a bare gsd_run among them', () => {
+    for (const command of ['ls', 'cat docs/a.md', 'git status', 'gsd_run query init.map-codebase', 'echo hi > x', 'python3 -c "print(1)"', 'graphify extract .']) {
+      const d = decide(shell(command, CORPUS), knowledge());
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-disabled'], command);
+    }
+    // A background shell is a shell.
+    assert.equal(decide({ kind: 'shell', command: 'ls', background: true, cwd: CORPUS }, knowledge()).decision, 'deny');
+  });
+
+  it('reads inside the corpus (Read, Glob, Grep) and nothing outside it, not even inside staging', () => {
+    const p = knowledge();
+    assert.equal(decide(read(`${CORPUS}/docs/a.md`), p).decision, 'allow');
+    assert.equal(decide(read(`${CORPUS}/.chunks.json`), p).decision, 'allow');
+    assert.equal(decide({ kind: 'search', tool: 'Glob', path: CORPUS }, p).decision, 'allow');
+    assert.equal(decide({ kind: 'search', tool: 'Grep', path: `${CORPUS}/docs` }, p).decision, 'allow');
+    for (const path of [`${STAGING}/src/a.ts`, `${STAGING}/.planning/PROJECT.md`, `${STAGING}/.avarice-knowledge-other/x.md`, STAGING, '/etc/passwd', '/gsd/core/bin/gsd-tools.cjs']) {
+      const d = decide(read(path), p);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'outside-read-set'], path);
+    }
+    assert.deepEqual(((d) => [d.decision, d.rule])(decide({ kind: 'search', tool: 'Grep', path: STAGING }, p)), ['deny', 'outside-read-set']);
+    assert.equal(decide({ kind: 'search', tool: 'Glob', path: CORPUS, patternRoot: '/etc/' }, p).decision, 'deny', 'an absolute glob names its own root');
+  });
+
+  it('still applies the secret and denied-root rules inside the corpus, and follows a symlink out of it', () => {
+    const p = knowledge();
+    assert.deepEqual(((d) => [d.decision, d.rule])(decide(read(`${CORPUS}/config/.env`), p)), ['deny', 'deny-secret-read']);
+    const c = makeCanon({ [`${CORPUS}/escape`]: `${STAGING}/src` });
+    assert.deepEqual(((d) => [d.decision, d.rule])(decide(read(`${CORPUS}/escape/a.ts`), p, c)), ['deny', 'outside-read-set']);
+    const toData = makeCanon({ [`${CORPUS}/escape`]: DATA });
+    assert.equal(decide(read(`${CORPUS}/escape/state.db`), p, toData).decision, 'deny');
+  });
+
+  it('writes only under the extraction directory: not the corpus itself, not the plan, not a document, not staging', () => {
+    const p = knowledge();
+    assert.equal(decide(write(`${OUT}/chunk-01.json`), p).decision, 'allow');
+    for (const path of [`${CORPUS}/docs/a.md`, `${CORPUS}/.chunks.json`, `${CORPUS}/chunk-01.json`, `${STAGING}/src/a.ts`, `${STAGING}/.planning/codebase/STACK.md`, `${OUT}-x/chunk.json`]) {
+      const d = decide(write(path), p);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'outside-write-set'], path);
+    }
+    const c = makeCanon({ [`${OUT}/link`]: `${STAGING}/src` });
+    assert.equal(decide(write(`${OUT}/link/a.ts`), p, c).decision, 'deny', 'a symlink out of the output directory does not widen it');
+  });
+
+  it('starts no subagent and fetches nothing: Agent and Task are denied, so are the web tools and an unknown tool', () => {
+    const p = knowledge();
+    for (const type of [null, 'general-purpose', 'gsd-codebase-mapper', 'Explore']) {
+      assert.deepEqual(((d) => [d.decision, d.rule])(decide({ kind: 'subagent', subagentType: type }, p)), ['deny', 'subagent-type'], String(type));
+    }
+    assert.equal(decide({ kind: 'web', tool: 'WebFetch' }, p).decision, 'deny');
+    assert.equal(decide({ kind: 'other', tool: 'Mystery' }, p).decision, 'deny');
+  });
+
+  it('is only this policy: a policy without readConfine confines nothing, and the other strategies keep their shell rules', () => {
+    assert.equal(decide(read(`${STAGING}/src/a.ts`), policy()).decision, 'allow');
+    assert.equal(decide(shell('ls'), policy()).decision, 'allow');
+  });
+
+  it('parses a policy with readConfine and the strategy none, and refuses a malformed readConfine', () => {
+    const good = knowledge();
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+    for (const bad of [{ ...good, readConfine: 'x' }, { ...good, readConfine: [4] }, { ...good, commands: { ...good.commands, strategy: 'bogus' } }]) {
+      assert.equal(parseHookPolicy(bad).ok, false);
+    }
+    assert.equal(parseHookPolicy({ ...good, readConfine: [] }).ok, true);
+  });
+});

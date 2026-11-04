@@ -104,7 +104,7 @@ describe('budget rows come from the contract', () => {
     assert.deepEqual(Object.keys(budgets).sort(), ['costUsd', 'invocations', 'subagentsTotal', 'toolCalls', 'wallClockMs']);
     assert.equal(budgets['invocations']?.limit_value, 6, 'a full map with its retry and interruption relaunches (4), intel (1) and knowledge (1)');
     assert.equal(budgets['toolCalls']?.limit_value, 600);
-    assert.equal(budgets['subagentsTotal']?.limit_value, 18, 'a full map (4) and its retry (4), plus the knowledge pass (10)');
+    assert.equal(budgets['subagentsTotal']?.limit_value, 8, 'a full map (4) and its retry (4); the knowledge pass runs no subagent');
     assert.equal(budgets['wallClockMs']?.limit_value, 45 * 60_000);
     assert.equal(budgets['costUsd']?.limit_value, 12);
     assert.equal(budgets['costUsd']?.exactness, 'estimated');
@@ -117,11 +117,11 @@ describe('budget rows come from the contract', () => {
     assert.equal(stateOf(roots).state, 'contract_proposed');
   });
 
-  it('derive the subagent limit from the mapping mode: a fast map has 12', () => {
+  it('derive the subagent limit from the mapping mode: a fast map has 2 (the knowledge pass runs no subagent)', () => {
     const { roots, repo } = fixture();
     const fast = onboard(roots, repo, { files: ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md'], stamp: false }, '--mode', 'fast');
     assert.equal(fast.code, 0, fast.stdout + fast.stderr);
-    assert.equal(row(roots, 'subagentsTotal').limit_value, 12);
+    assert.equal(row(roots, 'subagentsTotal').limit_value, 2);
   });
 
   it('take a lower limit from --budget and refuse a higher one (RC-5)', () => {
@@ -132,9 +132,9 @@ describe('budget rows come from the contract', () => {
     assert.equal(row(roots, 'subagentsTotal').limit_value, 2);
 
     const aboveDerived = fixture();
-    const tooMany = onboard(aboveDerived.roots, aboveDerived.repo, {}, '--budget', 'subagentsTotal=19');
+    const tooMany = onboard(aboveDerived.roots, aboveDerived.repo, {}, '--budget', 'subagentsTotal=9');
     assert.notEqual(tooMany.code, 0);
-    assert.match(tooMany.stdout + tooMany.stderr, /budgets can only be lowered: 19 is above the 18 derived for mapping mode full/);
+    assert.match(tooMany.stdout + tooMany.stderr, /budgets can only be lowered: 9 is above the 8 derived for mapping mode full/);
     assert.equal(rows<{ n: number }>(aboveDerived.roots, 'SELECT count(*) AS n FROM budgets')[0]?.n, 0);
 
     const second = fixture();
@@ -290,13 +290,13 @@ describe('reservation and settlement', () => {
       assert.equal(toolCalls.limit, 600);
       assert.equal(toolCalls.used, 5);
 
-      // The subagent limit of a full map: 4 x 2 + 10 (deferred item 11).
-      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 18);
+      // The subagent limit of a full map: 4 x 2 (deferred item 11; the knowledge pass runs no subagent).
+      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 8);
       assert.ok(fits.ok && fits.value.granted);
       const over = deps.ledger.reserveBudget(runId, 'subagentsTotal', 1);
       assert.ok(over.ok);
       assert.equal(over.value.granted, false);
-      assert.equal(over.value.budget.reserved, 18);
+      assert.equal(over.value.budget.reserved, 8);
       assert.equal(deps.ledger.reserveBudget(runId, 'nope', 1).ok, false);
     });
   });

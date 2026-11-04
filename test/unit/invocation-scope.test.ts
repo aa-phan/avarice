@@ -9,6 +9,8 @@ import {
   GSD_READ_VERBS,
   INVOCATION_PURPOSES,
   ONBOARDING_BASH_STRATEGY,
+  PURPOSE_EXTENSIONS,
+  PURPOSE_SUBAGENT_TYPES,
   READ_ONLY_COMMANDS,
   computeInvocationScope,
 } from '../../src/domain/invocation-scope.ts';
@@ -103,24 +105,53 @@ describe('computeInvocationScope: intel and knowledge', () => {
     assert.ok(!scope.denyWrite.includes(`${STAGING}/.planning/intel`));
   });
 
-  it('knowledge writes only .avarice-knowledge, which is also its working directory', () => {
+  it('knowledge writes only the extraction directory inside the corpus, whose root is its working directory and the only place it may read', () => {
     const scope = scopeFor('knowledge', {
       workspace: workspace({ topLevelEntries: ['src', '.planning', '.avarice-knowledge', 'package.json', '.git'] }),
     });
-    assert.deepEqual(scope.writeRoots, [`${STAGING}/.avarice-knowledge`]);
+    assert.deepEqual(scope.writeRoots, [`${STAGING}/.avarice-knowledge/.extraction`]);
     assert.equal(scope.cwd, `${STAGING}/.avarice-knowledge`);
+    assert.deepEqual(scope.readConfine, [`${STAGING}/.avarice-knowledge`], 'reads are confined to the corpus (decision B)');
     for (const rel of ['src', '.planning', 'package.json', '.git']) {
       assert.ok(scope.denyWrite.includes(`${STAGING}/${rel}`), `denyWrite must list ${rel}`);
     }
     assert.ok(!scope.denyWrite.includes(`${STAGING}/.avarice-knowledge`));
+    // No GSD directory is readable: the pass loads no skill and runs no GSD verb.
+    assert.deepEqual(scope.readRoots, []);
   });
 
-  it('the purpose table names the write directory and the working-directory rule', () => {
+  it('the other purposes confine no read and keep their read roots', () => {
+    for (const purpose of ['map', 'intel'] as const) {
+      assert.equal(scopeFor(purpose).readConfine, undefined, purpose);
+      assert.deepEqual(scopeFor(purpose).readRoots, ['/gsd/core', '/gsd/agents'], purpose);
+    }
+  });
+
+  it('knowledge has no shell at all: strategy none, no read-only command, no GSD verb, whatever strategy is asked for', () => {
+    for (const over of [{}, { strategy: 'narrow-rules' as const }, { strategy: 'hook-allow' as const }]) {
+      const { commands } = scopeFor('knowledge', over);
+      assert.equal(commands.strategy, 'none');
+      assert.deepEqual(commands.readOnly, []);
+      assert.deepEqual(commands.gsdReadVerbs, []);
+    }
+    assert.equal(scopeFor('map').commands.strategy, ONBOARDING_BASH_STRATEGY);
+    assert.equal(scopeFor('intel').commands.strategy, ONBOARDING_BASH_STRATEGY);
+  });
+
+  it('the purpose table names the write directory, the working-directory rule and the read confinement', () => {
     assert.equal(INVOCATION_PURPOSES.map.writeDir, '.planning/codebase');
     assert.equal(INVOCATION_PURPOSES.intel.writeDir, '.planning/intel');
-    assert.equal(INVOCATION_PURPOSES.knowledge.writeDir, '.avarice-knowledge');
+    assert.equal(INVOCATION_PURPOSES.knowledge.writeDir, '.avarice-knowledge/.extraction');
     assert.equal(INVOCATION_PURPOSES.map.cwd, 'staging');
-    assert.equal(INVOCATION_PURPOSES.knowledge.cwd, 'write-dir');
+    assert.equal(INVOCATION_PURPOSES.knowledge.cwd, 'read-dir');
+    assert.equal((INVOCATION_PURPOSES.knowledge as { readDir?: string }).readDir, '.avarice-knowledge');
+  });
+
+  it('loads no skill and starts no agent or subagent for the knowledge purpose (no graphify skill, no general-purpose type)', () => {
+    assert.deepEqual(PURPOSE_EXTENSIONS.knowledge, { skills: [], agents: [] });
+    assert.deepEqual(PURPOSE_SUBAGENT_TYPES.knowledge, []);
+    assert.deepEqual(PURPOSE_EXTENSIONS.map, { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] });
+    assert.deepEqual(PURPOSE_EXTENSIONS.intel, { skills: [], agents: ['gsd-intel-updater'] });
   });
 
   it('writes nothing when the contract does not authorize the purpose directory (fail closed)', () => {
@@ -128,6 +159,17 @@ describe('computeInvocationScope: intel and knowledge', () => {
     const narrowed = { ...c, files: { ...c.files, write: { ...c.files.write, map: ['docs/**'] } } };
     const scope = scopeFor('map', { contract: narrowed });
     assert.deepEqual(scope.writeRoots, []);
+    const knowledge = scopeFor('knowledge', { contract: { ...c, files: { ...c.files, write: { ...c.files.write, knowledge: ['docs/**'] } } } });
+    assert.deepEqual(knowledge.writeRoots, [], 'the nested extraction directory is authorized only by a glob that covers it');
+  });
+
+  it('authorizes the nested extraction directory through the contract glob `.avarice-knowledge/**` and through the exact glob, not through a sibling', () => {
+    const c = contract();
+    const withGlob = (globs: string[]) => scopeFor('knowledge', { contract: { ...c, files: { ...c.files, write: { ...c.files.write, knowledge: globs } } } }).writeRoots;
+    assert.deepEqual(withGlob(['.avarice-knowledge/**']), [`${STAGING}/.avarice-knowledge/.extraction`]);
+    assert.deepEqual(withGlob(['.avarice-knowledge/.extraction/**']), [`${STAGING}/.avarice-knowledge/.extraction`]);
+    assert.deepEqual(withGlob(['.avarice-knowledge-other/**']), []);
+    assert.deepEqual(withGlob(['.avarice-knowledge/other/**']), []);
   });
 });
 
@@ -212,11 +254,12 @@ describe('computeInvocationScope: commands and budgets', () => {
     for (const purpose of ['map', 'intel', 'knowledge'] as const) assert.deepEqual(scopeFor(purpose).allowedDomains, []);
   });
 
-  it('gives the intel invocation no subagents (S0-D: --agent, no Agent tool) and the others the contract limits', () => {
+  it('gives the intel and knowledge invocations no subagents (S0-D: --agent, no Agent tool; decision B) and the map the contract limits', () => {
     const c = contract();
     assert.deepEqual(scopeFor('intel').subagents, { total: 0, concurrent: 0 });
     assert.deepEqual(scopeFor('map').subagents, { total: c.budgets.subagentsTotal, concurrent: c.budgets.subagentsConcurrent });
-    assert.deepEqual(scopeFor('knowledge').subagents, { total: c.budgets.subagentsTotal, concurrent: c.budgets.subagentsConcurrent });
+    // The knowledge pass runs no subagent either (decision B: the model reads the chunks itself).
+    assert.deepEqual(scopeFor('knowledge').subagents, { total: 0, concurrent: 0 });
   });
 });
 

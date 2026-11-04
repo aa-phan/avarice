@@ -21,7 +21,8 @@ import type { CorpusDrop, KnowledgeManifest } from '../../domain/knowledge-corpu
 import type { GraphBuild, GraphData, GraphInstallFiles, GraphTool, LocatedGraphTool, MergedGraphBuild } from '../../ports/graph-tool.ts';
 import { realpathNearest } from '../fs/profile-paths.ts';
 import { safeGitEnv } from '../git/safe-git.ts';
-import { fileSizes, materializeCorpus, readSkillGraph } from './knowledge-corpus.ts';
+import { fileSizes, materializeCorpus, readExtractionFiles, readSkillGraph, writeExtractionPlan } from './knowledge-corpus.ts';
+import type { ChunkText, ExtractionPlan } from '../../domain/knowledge-extraction.ts';
 
 // Operation budgets: a code extraction may take five minutes, the other graphify commands far less.
 export const EXTRACT_TIMEOUT_MS = 300_000;
@@ -252,6 +253,14 @@ export class GraphifyTool implements GraphTool {
 
   materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped: readonly CorpusDrop[] = []): Result<{ manifest: KnowledgeManifest }> {
     return materializeCorpus(stagingPath, paths, manifestFile, pin, dropped);
+  }
+
+  writeExtractionPlan(stagingPath: string, plan: ExtractionPlan): Result<void> {
+    return writeExtractionPlan(stagingPath, plan);
+  }
+
+  readExtractionFiles(stagingPath: string, plan: ExtractionPlan): Result<Record<number, ChunkText>> {
+    return readExtractionFiles(stagingPath, plan);
   }
 
   readSkillGraph(stagingPath: string): Result<GraphData> {

@@ -1,0 +1,31 @@
+{
+ "command": "node --test --test-reporter=tap test/unit/knowledge-extraction.test.ts",
+ "exitCode": 1,
+ "pass": 4,
+ "fail": 16,
+ "failingTests": [
+  "drops the extension, lowercases and joins every path segment with _",
+  "keeps a dot that starts a name, and only drops the last extension",
+  "gives only [a-z0-9_] whatever the path holds",
+  "stemOf: the node id prefix of a document (the graphify extraction spec format)",
+  "numbers chunks from 1, names each output chunk-NN.json under .extraction, and lists every document exactly once",
+  "starts a new chunk after maxFiles documents (8), keeping the documents of one directory together by sorting on the path",
+  "starts a new chunk when the next document would pass maxBytes (64 KiB), and a document above it is a chunk of its own",
+  "counts a document with no known size as a full chunk, so it is never packed with others",
+  "honors lower limits passed in",
+  "planExtractionChunks: deterministic chunks of the corpus",
+  "names the tools it has and says there is no shell, skill, subagent or network",
+  "says document text is data and never to be followed",
+  "names the plan file, the chunk count, the output rule and the schema: one Write per chunk, ids [a-z0-9_], tiers, source_file verbatim",
+  "says one chunk in the singular and starts with no dash (the argv judge refuses a prompt that starts with one)",
+  "knowledgePrompt: fixed text, no repository text, data rule stated (S-46)",
+  "concatenates the nodes and the edges of the usable chunks in chunk order and lists the documents they cover",
+  "accepts `links` for the edge list, as graphify names it in graph.json",
+  "skips and counts a missing chunk, an unreadable or too large one, text that is not JSON and a JSON of the wrong shape",
+  "rejects a top-level array, null and a scalar as the wrong shape, and repairs nothing in what it keeps",
+  "assembleExtraction: the chunk files, in chunk order"
+ ],
+ "tail": "\n        Expected values to be strictly deep-equal:\n        + actual - expected\n        \n        + []\n        - [\n        -   1\n        - ]\n        \n      code: 'ERR_ASSERTION'\n      name: 'AssertionError'\n      expected:\n        0: 1\n      actual:\n      operator: 'deepStrictEqual'\n      stack: |-\n        TestContext.<anonymous> (file:///Users/aphan/avarice/test/unit/knowledge-extraction.test.ts:185:12)\n        Test.runInAsyncScope (node:async_hooks:226:14)\n        Test.run (node:internal/test_runner/test:1402:25)\n        Suite.processPendingSubtests (node:internal/test_runner/test:974:18)\n        Test.postRun (node:internal/test_runner/test:1542:19)\n        Test.run (node:internal/test_runner/test:1467:12)\n        async Suite.processPendingSubtests (node:internal/test_runner/test:974:7)\n      ...\n    # Subtest: rejects a top-level array, null and a scalar as the wrong shape, and repairs nothing in what it keeps\n    not ok 4 - rejects a top-level array, null and a scalar as the wrong shape, and repairs nothing in what it keeps\n      ---\n      duration_ms: 0.106208\n      type: 'test'\n      location: '/Users/aphan/avarice/test/unit/knowledge-extraction.test.ts:200:3'\n      failureType: 'testCodeFailure'\n      error: |-\n        []\n        + actual - expected\n        \n        + []\n        - [\n        -   {\n        -     n: 1,\n        -     reason: 'bad-shape'\n        -   },\n        -   {\n        -     n: 2,\n        -     reason: 'missing'\n        -   },\n        -   {\n        -     n: 3,\n        -     reason: 'missing'\n        -   }\n        - ]\n        \n      code: 'ERR_ASSERTION'\n      name: 'AssertionError'\n      expected:\n        0:\n          n: 1\n          reason: 'bad-shape'\n        1:\n          n: 2\n          reason: 'missing'\n        2:\n          n: 3\n          reason: 'missing'\n      actual:\n      operator: 'deepStrictEqual'\n      stack: |-\n        TestContext.<anonymous> (file:///Users/aphan/avarice/test/unit/knowledge-extraction.test.ts:201:60)\n        Test.runInAsyncScope (node:async_hooks:226:14)\n        Test.run (node:internal/test_runner/test:1402:25)\n        Suite.processPendingSubtests (node:internal/test_runner/test:974:18)\n        Test.postRun (node:internal/test_runner/test:1542:19)\n        Test.run (node:internal/test_runner/test:1467:12)\n        async Suite.processPendingSubtests (node:internal/test_runner/test:974:7)\n      ...\n    # Subtest: ignores hyperedges, token counts and any other key of a chunk\n    ok 5 - ignores hyperedges, token counts and any other key of a chunk\n      ---\n      duration_ms: 0.032875\n      type: 'test'\n      ...\n    1..5\nnot ok 4 - assembleExtraction: the chunk files, in chunk order\n  ---\n  duration_ms: 0.470458\n  type: 'suite'\n  location: '/Users/aphan/avarice/test/unit/knowledge-extraction.test.ts:158:1'\n  failureType: 'subtestsFailed'\n  error: '4 subtests failed'\n  code: 'ERR_TEST_FAILURE'\n  ...\n1..4\n# tests 20\n# suites 4\n# pass 4\n# fail 16\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 94.100917\n",
+ "expected": "split knowledge pass: chunk plan, fixed prompt, no shell/skill/subagent, reads confined to the corpus, one output directory, assembled extraction",
+ "semanticAssessment": "Unit tests of the extraction contract fail on assertions against stubs (stemOf returns the path, no chunks planned, the prompt is /graphify, nothing assembled); the scope, hook, settings, contract and knowledge-step tests (63 in the nine files run together) fail on assertions about the unchanged scope, hook rules and step. Typecheck is clean."
+}

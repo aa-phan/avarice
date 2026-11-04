@@ -11,6 +11,7 @@ import type { CorpusDrop, KnowledgeManifest, KnowledgeManifestEntry } from '../.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { findSecrets } from '../../domain/secret-patterns.ts';
+import type { ChunkText, ExtractionPlan } from '../../domain/knowledge-extraction.ts';
 import type { GraphData } from '../../ports/graph-tool.ts';
 
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
@@ -160,4 +161,13 @@ export function readSkillGraph(stagingPath: string, read: (file: string) => Resu
     return err({ kind: 'internal', cause: `cannot read the skill graph: ${(e as NodeJS.ErrnoException).code ?? 'error'}` });
   }
   return read(file);
+}
+
+// RED stubs: the plan and the chunk files are not handled yet.
+export function writeExtractionPlan(_stagingPath: string, _plan: ExtractionPlan): Result<void> {
+  return err({ kind: 'internal', cause: 'the extraction plan is not written yet' });
+}
+
+export function readExtractionFiles(_stagingPath: string, _plan: ExtractionPlan): Result<Record<number, ChunkText>> {
+  return err({ kind: 'internal', cause: 'the extraction files are not read yet' });
 }

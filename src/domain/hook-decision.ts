@@ -45,6 +45,8 @@ export interface HookPolicy {
     preambleSha256?: string;
     preambleLength?: number;
   };
+  // When present, every read and search must stay under one of these roots (the knowledge purpose reads only its corpus).
+  readConfine?: string[];
   // Agent types the invocation may start (the names in its --agents file).
   subagentTypes: string[];
   // The most subagents the invocation may have in flight at once (the contract's subagentsConcurrent, as the scope computes it).

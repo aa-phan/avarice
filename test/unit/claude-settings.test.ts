@@ -195,20 +195,29 @@ describe('renderClaudeSettings snapshots', () => {
     assert.deepEqual(render(scope('intel')), expected);
   });
 
-  it('knowledge', () => {
-    const expected = expectedSettings({
-      writeRoot: join(staging, '.avarice-knowledge'),
-      denyWrite: [
-        join(staging, '.git'),
-        join(staging, '.planning'),
-        join(staging, '.planning', 'config.json'),
-        join(staging, 'docs'),
-        join(staging, 'package.json'),
-        join(staging, 'src'),
-      ],
-      allowExtra: ['Skill', 'Agent'],
-    });
-    assert.deepEqual(render(scope('knowledge'), ['graphify']), expected);
+  it('knowledge (decision B): reads only the corpus, writes only the extraction directory; no Bash, no Skill, no Agent', () => {
+    const corpus = join(staging, '.avarice-knowledge');
+    const out = join(corpus, '.extraction');
+    const settings = render(scope('knowledge')) as Record<string, any>;
+    assert.deepEqual(settings.permissions.allow, [`Read(${slash(corpus)}/**)`, 'Glob', 'Grep', `Edit(${slash(out)}/**)`]);
+    assert.equal(settings.permissions.allow.some((rule: string) => rule === 'Bash' || rule.startsWith('Bash(')), false, 'no Bash allow rule of any kind');
+    assert.ok(settings.permissions.deny.includes('Bash'), 'and Bash is denied outright');
+    for (const tool of ['Skill', 'Agent']) assert.equal(settings.permissions.allow.includes(tool), false, tool);
+    for (const rule of ['WebFetch', 'WebSearch', 'NotebookEdit']) assert.ok(settings.permissions.deny.includes(rule), rule);
+    // The staging tree outside the corpus and the GSD directories are not granted a read.
+    assert.equal(settings.permissions.allow.some((rule: string) => rule.includes(slash(core)) || rule.includes(slash(agents)) || rule === `Read(${slash(staging)}/**)`), false);
+    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [slash(out)]);
+    for (const rel of ['.git', '.planning', 'docs', 'package.json', 'src']) assert.ok(settings.sandbox.filesystem.denyWrite.includes(slash(join(staging, rel))), rel);
+    assert.equal(settings.sandbox.filesystem.denyWrite.includes(slash(corpus)), false);
+  });
+
+  it('map and intel keep Bash and their reads (the snapshots above), so only the knowledge purpose changed', () => {
+    for (const purpose of ['map', 'intel'] as const) {
+      const settings = render(scope(purpose)) as Record<string, any>;
+      assert.ok(settings.permissions.allow.includes('Bash'), purpose);
+      assert.equal(settings.permissions.deny.includes('Bash'), false, purpose);
+      assert.ok(settings.permissions.allow.includes(`Read(${slash(staging)}/**)`), purpose);
+    }
   });
 });
 

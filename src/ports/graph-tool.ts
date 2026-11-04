@@ -3,6 +3,7 @@
 // directory outside the staging tree. The knowledge-pass methods (plan 01-18) materialize the document corpus, read the
 // skill's graph and, after AVARICE's own merge, cluster and install the merged graph.
 import type { CorpusDrop, KnowledgeManifest } from '../domain/knowledge-corpus.ts';
+import type { ChunkText, ExtractionPlan } from '../domain/knowledge-extraction.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
 
@@ -66,6 +67,14 @@ export interface GraphTool {
   // (mode 0600) to `manifestFile` outside the corpus. A file that is a symlink, too large or secret-bearing is left out
   // and listed in `manifest.excluded` next to `dropped`. Replaces any corpus an earlier attempt left.
   materializeCorpus(stagingPath: string, paths: readonly string[], manifestFile: string, pin: string, dropped?: readonly CorpusDrop[]): Result<{ manifest: KnowledgeManifest }>;
+  // Writes the chunk plan to `{staging}/.avarice-knowledge/.chunks.json` (mode 0644) and creates an empty
+  // `{staging}/.avarice-knowledge/.extraction/` beside the corpus files, replacing any output an earlier attempt left. Refuses a
+  // corpus directory that is a symlink. Decision B: the model reads the plan and writes only under `.extraction`.
+  writeExtractionPlan(stagingPath: string, plan: ExtractionPlan): Result<void>;
+  // The chunk files the model wrote, by chunk number: the text of a regular file of at most `maxOutputBytes`; `too-large` for a
+  // larger one; `missing` for none, for a symlink or any non-regular file, and for every chunk when `.extraction` is itself a
+  // symlink or not a directory.
+  readExtractionFiles(stagingPath: string, plan: ExtractionPlan): Result<Record<number, ChunkText>>;
   // The graph the graphify skill left in `{staging}/.avarice-knowledge/graphify-out/graph.json`; `not_found` when there is none.
   readSkillGraph(stagingPath: string): Result<GraphData>;
   // Writes AVARICE's merged graph to `{workDir}/graphify-out/graph.json` (workDir outside staging), runs

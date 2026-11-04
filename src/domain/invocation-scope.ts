@@ -16,7 +16,9 @@ export type InvocationPurpose = 'map' | 'intel' | 'knowledge';
 //                               set), and the sandbox confines the effects of anything that slips through
 //   narrow-rules                `Bash(cmd:*)` allow rules only
 //   hook-allow                  no Bash allow rule; the hook returns allow for identity-matching commands
-export type BashStrategy = 'blanket-bash-hook-identity' | 'narrow-rules' | 'hook-allow';
+//   none                        no shell at all: no Bash allow rule, Bash denied, and the hook denies every shell call
+//                               (the knowledge purpose, decision B of 2026-11-03)
+export type BashStrategy = 'blanket-bash-hook-identity' | 'narrow-rules' | 'hook-allow' | 'none';
 
 // Owner decision of plan 01-11 Task 1 (checkpoint:decision, resolved 2026-11-02): blanket Bash with the hook as
 // the command-identity control. S0-A showed that skills pre-approve Bash, that the GSD preamble is a 2.5 KB
@@ -152,6 +154,8 @@ export interface InvocationScope {
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
   denyReadGlobs: string[];
   allowRead: string[];
+  // When present, reads are confined to these roots (the knowledge purpose: its corpus only).
+  readConfine?: string[];
   readRoots: string[];
   commands: {
     strategy: BashStrategy;
