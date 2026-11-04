@@ -597,3 +597,76 @@ describe('the knowledge purpose policy through the real hook entry (decision B)'
     assert.equal(budgetUsed(fx, 'subagentsTotal'), 0);
   });
 });
+
+// CR-02 / gap P-3 (D-GAP-01): the policy writer carries the scope's read roots and the real hook entry judges every read against
+// staging, those roots and the re-allowed roots, so a credential file and a path nobody listed are outside the read set.
+describe('the read allow-list through the real hook entry (CR-02, D-GAP-01)', () => {
+  function allowListFixture() {
+    const fx = fixture();
+    const gsd = join(fx.dir, 'gsd');
+    mkdirSync(gsd, { recursive: true });
+    mkdirSync(join(fx.dir, 'home'), { recursive: true });
+    mkdirSync(join(fx.dir, 'elsewhere'), { recursive: true });
+    writeFileSync(join(gsd, 'x.md'), '# x\n');
+    writeFileSync(join(fx.dir, 'home', '.netrc'), 'machine example password PRIVATE-MARKER\n');
+    writeFileSync(join(fx.dir, 'elsewhere', 'x'), 'x\n');
+    writeFileSync(join(fx.staging, 'src', 'a.ts'), 'export {};\n');
+    const scope = computeInvocationScope({
+      purpose: 'map',
+      contract: contractFor(),
+      stagingPath: fx.staging,
+      repoPath: fx.repo,
+      dataRoot: join(fx.dir, 'data'),
+      home: join(fx.dir, 'home'),
+      workspace: { topLevelEntries: ['src', '.planning'], planningEntries: ['codebase'], gitPaths: [], repoReadAllow: [] },
+      readRoots: [gsd],
+    });
+    const written = writeHookPolicy(join(fx.dir, 'inv-allow'), scope, { onboardingId: 'onb_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: [] }, fx.ledgerPath);
+    assert.ok(written.ok, JSON.stringify(written));
+    return { fx, gsd, policyPath: written.value.file, policy: written.value.policy };
+  }
+
+  it('writes the scope read roots as canonical readRoots', () => {
+    const { gsd, policyPath, policy } = allowListFixture();
+    assert.deepEqual(policy.readRoots, [gsd]);
+    const onDisk = JSON.parse(readFileSync(policyPath, 'utf8')) as HookPolicy;
+    assert.deepEqual(onDisk.readRoots, [gsd]);
+    assert.ok(parseHookPolicy(onDisk).ok);
+  });
+
+  it('denies a shell read of a credential file and a Read of an unlisted path, naming outside-read-set', () => {
+    const { fx, policyPath } = allowListFixture();
+    const netrc = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: `cat ${join(fx.dir, 'home', '.netrc')}` } }, policyPath);
+    assert.equal(netrc.code, 0, netrc.stderr);
+    assert.match(parsed(netrc.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+    const elsewhere = runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.dir, 'elsewhere', 'x') } }, policyPath);
+    assert.match(parsed(elsewhere.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+    const grep = runHook(fx, 'pre', { tool_name: 'Grep', tool_input: { pattern: 'x', path: fx.dir } }, policyPath);
+    assert.match(parsed(grep.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+  });
+
+  it('allows a staging read and a read under a read root, and charges them', () => {
+    const { fx, gsd, policyPath } = allowListFixture();
+    for (const command of [`cat ${join(gsd, 'x.md')}`, 'cat src/a.ts', `ls ${gsd}`]) {
+      const result = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command } }, policyPath);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stdout, '', command);
+    }
+    const read = runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(gsd, 'x.md') } }, policyPath);
+    assert.equal(read.stdout, '');
+    assert.equal(budgetUsed(fx, 'toolCalls'), 4);
+  });
+
+  it('keeps every path outside staging and every file content out of the hook.decision events', () => {
+    const { fx, policyPath } = allowListFixture();
+    runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: `cat ${join(fx.dir, 'home', '.netrc')}` } }, policyPath);
+    runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.dir, 'elsewhere', 'x') } }, policyPath);
+    const rows = eventRows(fx, 'hook.decision');
+    assert.equal(rows.length, 2);
+    const all = rows.map((r) => r.data_json).join('\n');
+    assert.equal(all.includes('.netrc'), false);
+    assert.equal(all.includes('elsewhere'), false);
+    assert.equal(all.includes('PRIVATE-MARKER'), false);
+    assert.deepEqual(rows.map((r) => (JSON.parse(r.data_json) as { rule: string }).rule), ['outside-read-set', 'outside-read-set']);
+  });
+});

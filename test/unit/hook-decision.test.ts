@@ -148,6 +148,80 @@ describe('reads', () => {
   });
 });
 
+// CR-02 / gap P-3 (D-GAP-01): a read is judged against an allow-list (staging, the policy's readRoots, allowRead) after the deny
+// rules, so a path nobody listed (a sibling onboarding, a credential store) is outside it. The rules apply in a fixed order:
+// readConfine, deny-read, the allow-list (outside-read-set), then the secret globs (deny-secret-read).
+describe('reads are confined to an allow-list (CR-02, D-GAP-01)', () => {
+  const rule = (d: ReturnType<typeof decide>): string => `${d.decision}:${d.rule}`;
+  const withRoots = (readRoots: string[]): HookPolicy => policy({ readRoots });
+
+  it('denies a sibling onboarding staging file and a credential store outside every root', () => {
+    assert.equal(rule(decide(shell('cat /work/onb-2/staging/secret.txt'))), 'deny:outside-read-set');
+    assert.equal(rule(decide(shell('cat /home/u/.netrc'))), 'deny:outside-read-set');
+    assert.equal(rule(decide(read('/home/u/.netrc'))), 'deny:outside-read-set');
+    assert.equal(rule(decide({ kind: 'search', tool: 'Grep', path: '/home/u' })), 'deny:outside-read-set');
+    assert.equal(rule(decide({ kind: 'search', tool: 'Glob', path: STAGING, patternRoot: '/home/u/' })), 'deny:outside-read-set');
+  });
+
+  it('names deny-read for the same sibling file once the work root is a denied root and staging is re-allowed', () => {
+    const p = policy({ denyRead: [REPO, DATA, '/home/u/.ssh', '/work'], allowRead: [`${REPO}/.git`, STAGING] });
+    assert.equal(rule(decide(shell('cat /work/onb-2/staging/secret.txt'), p)), 'deny:deny-read');
+    assert.equal(rule(decide(shell('cat src/a.ts'), p)), 'allow:shell-identity');
+  });
+
+  it('applies the rules in a fixed order', () => {
+    assert.equal(rule(decide(shell('cat /home/u/.ssh/id_rsa'))), 'deny:deny-read');
+    assert.equal(rule(decide(shell('cat config/.env'))), 'deny:deny-secret-read');
+    assert.equal(rule(decide(read(`${REPO}/.git/config`))), 'allow:read-set');
+    assert.equal(rule(decide(read(`${STAGING}/src/a.ts`))), 'allow:read-set');
+  });
+
+  it('allows a read root only when the policy lists it, for shell and Read alike', () => {
+    const doc = '/gsd/core/workflows/map-codebase.md';
+    assert.equal(rule(decide(shell(`cat ${doc}`))), 'deny:outside-read-set');
+    assert.equal(rule(decide(read(doc))), 'deny:outside-read-set');
+    const p = withRoots(['/gsd/core']);
+    assert.equal(rule(decide(shell(`cat ${doc}`), p)), 'allow:shell-identity');
+    assert.equal(rule(decide(read(doc), p)), 'allow:read-set');
+    assert.equal(rule(decide({ kind: 'search', tool: 'Glob', path: '/gsd/core/workflows' }, p)), 'allow:read-set');
+    assert.equal(rule(decide(shell('ls /gsd/core'), p)), 'allow:shell-identity');
+    assert.equal(rule(decide(shell(`ls ${STAGING}`), p)), 'allow:shell-identity');
+  });
+
+  it('treats a path that only shares a prefix with an allowed root as outside it, and the root itself as inside', () => {
+    const p = withRoots(['/gsd/core']);
+    assert.equal(rule(decide(shell('cat /gsd/core-x/y'), p)), 'deny:outside-read-set');
+    assert.equal(rule(decide(read('/gsd/core-x/y'), p)), 'deny:outside-read-set');
+    assert.equal(rule(decide(shell('cat /work/onb-1/staging-other/x'), p)), 'deny:outside-read-set');
+    assert.equal(rule(decide(read('/gsd/core'), p)), 'allow:read-set');
+    assert.equal(rule(decide(read(STAGING), p)), 'allow:read-set');
+  });
+
+  it('judges a symlink by its canonical target, so a link out of staging does not widen the allow-list', () => {
+    const c = makeCanon({ [`${STAGING}/escape`]: '/home/u' });
+    assert.equal(rule(decide(read(`${STAGING}/escape/.netrc`), policy(), c)), 'deny:outside-read-set');
+    const inward = makeCanon({ '/tmp/alias': `${STAGING}/src` });
+    assert.equal(rule(decide(read('/tmp/alias/a.ts'), policy(), inward)), 'allow:read-set');
+  });
+
+  it('treats an empty readRoots list like an absent one', () => {
+    assert.equal(rule(decide(read('/gsd/core/x.md'), withRoots([]))), 'deny:outside-read-set');
+    assert.equal(rule(decide(read(`${STAGING}/src/a.ts`), withRoots([]))), 'allow:read-set');
+  });
+
+  it('parses readRoots, refuses a malformed one, and parses a policy without it', () => {
+    const good = withRoots(['/gsd/core']);
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+    for (const bad of [{ ...good, readRoots: 'x' }, { ...good, readRoots: [4] }, { ...good, readRoots: null }]) {
+      const parsed = parseHookPolicy(bad);
+      assert.equal(parsed.ok, false);
+      if (!parsed.ok) assert.match(parsed.reason, /needs a list of strings readRoots/);
+    }
+    assert.equal(parseHookPolicy(policy()).ok, true);
+    assert.equal(parseHookPolicy({ ...good, readRoots: [] }).ok, true);
+  });
+});
+
 describe('Bash command identity', () => {
   it('allows the GSD preamble followed by a read verb, and the preamble alone', () => {
     assert.equal(decide(shell(`${PREAMBLE}\ngsd_run graphify status`)).decision, 'allow');
