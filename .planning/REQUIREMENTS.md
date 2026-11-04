@@ -38,7 +38,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-17** [Contract]: Provider-specific features are reachable through namespaced extensions and do not widen the core port.
 - [ ] **FR-18** [Contract]: External references keep the provider's original identifiers; AVARICE mints no global identity that loses provenance.
 - [ ] **FR-19** [MVP]: Every external integration has a manual equivalent: paste a ticket, paste CI output, record an approval by hand.
-- [ ] **FR-20** [MVP]: Context assembly queries a fresh structured index (GSD intel and the GSD-managed graph, including document nodes) before reading whole files or sections, and ranks model-inferred graph edges below edges extracted from code.
+- [x] **FR-20** [MVP]: Context assembly queries a fresh structured index (GSD intel and the GSD-managed graph, including document nodes) before reading whole files or sections, and ranks model-inferred graph edges below edges extracted from code.
 - [ ] **FR-21** [Later]: Project records may belong to a project group that shares references to standards and scaffolds; membership never widens any member's authority.
 - [ ] **FR-22** [MVP]: Retrieval is handle-first (handles with token estimates before content; the assembler chooses within budget), and graph reads follow a rule per edge type: containment loads descendants, dependency one hop, reference only the target's ID.
 - [ ] **FR-24** [Later]: Each machine that runs work for a profile has a host record (identity, capability descriptor, status); a host is not deactivated while an active project or run depends on it.
@@ -98,26 +98,26 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Codebase onboarding (ONB-1 to ONB-15)
 
-- [ ] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
-- [ ] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
-- [ ] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
-- [ ] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
-- [ ] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
+- [x] **ONB-1** [MVP]: Onboarding follows the persisted, resumable lifecycle; every transition is recorded before the side effect that depends on it begins.
+- [x] **ONB-2** [MVP]: GSD owns semantic and planning onboarding (mapping, architecture and convention discovery, requirements, roadmap); AVARICE creates no competing index, conventions store, requirements store or roadmap and stores only operational metadata and references; its deterministic architecture-model draft stays a proposal in staging until approved, after which AVARICE stores only the model's path, digest and check results (ADR-012).
+- [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
+- [x] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
+- [x] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
 - [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
-- [ ] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
-- [ ] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
-- [ ] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
+- [x] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
+- [x] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
+- [x] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [ ] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
 - [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
-- [ ] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
-- [ ] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
-- [ ] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
+- [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
+- [x] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
+- [x] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
 - [ ] **ONB-15** [MVP]: Refresh re-extracts only changed documents for the knowledge pass and adds GSD phase files (`.planning/phases/**`, `STATE.md`) once incremental refresh exists.
 
 ### Portability and reliability (NFR-1 to NFR-9)
 
 - [x] **NFR-1** [MVP]: Baseline operation on one Mac needs no NAS, cloud account, container runtime, Kubernetes, Redis or always-on database server.
-- [ ] **NFR-2** [MVP]: Local orchestration (status, resume planning, verification, checkpoints, evidence) works without network access.
+- [x] **NFR-2** [MVP]: Local orchestration (status, resume planning, verification, checkpoints, evidence) works without network access.
 - [x] **NFR-3** [MVP]: Domain workflow code contains no provider identifiers, URLs, absolute paths, SQL dialect or agent-vendor APIs; a lint check enforces the import boundary.
 - [ ] **NFR-4** [Contract proved with a fake remote adapter, Later real]: Moving artifact storage or execution to another host needs only configuration, explicit data migration and possibly a new adapter; domain workflow code does not change.
 - [x] **NFR-5** [MVP]: SQLite databases live on local storage and are never placed on a network filesystem.
@@ -132,7 +132,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **SEC-2** [MVP]: Credentials are resolved by reference at the moment of use from an approved provider (ADR-009); an environment variable is not a provider; tokens are never written to prompts, state, evidence, artifacts or logs.
 - [ ] **SEC-3** [MVP]: Events and logs pass through a redactor before persistence; full tool payloads are not retained by default.
 - [ ] **SEC-4** [MVP model, Onboarding sources]: Enterprise policy outranks repository and user settings; a repository file cannot loosen an organization rule.
-- [ ] **SEC-5** [MVP]: AVARICE never disables TLS verification, weakens authentication, creates an alternate egress path or substitutes an unapproved service to make an adapter work.
+- [x] **SEC-5** [MVP]: AVARICE never disables TLS verification, weakens authentication, creates an alternate egress path or substitutes an unapproved service to make an adapter work.
 - [ ] **SEC-6** [MVP]: Every control is documented with its enforcer (host, external platform or AVARICE) and its bypass limitations.
 - [ ] **SEC-7** [MVP]: Employer-specific configuration and data stay outside the personal framework distribution and repository.
 - [ ] **SEC-8** [MVP]: Every credential resolution attempt is recorded as an event with reference, purpose, calling module, profile, run and invocation IDs, outcome and duration, and never the value, its length or a digest of it.
@@ -232,7 +232,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-17 | Phase 4 | Pending |
 | FR-18 | Phase 4 | Pending |
 | FR-19 | Phase 4 | Pending |
-| FR-20 | Phase 1 | Gaps Found |
+| FR-20 | Phase 1 | Complete |
 | FR-21 | Phase 8 | Pending |
 | FR-22 | Phase 4 | Pending |
 | FR-24 | Phase 7 | Pending |
@@ -280,23 +280,23 @@ Each v1 requirement maps to exactly one phase.
 | AUT-15 | Phase 8 | Pending |
 | AUT-16 | Phase 3 | Pending |
 | AUT-17 | Phase 5 | Pending |
-| ONB-1 | Phase 1 | Gaps Found |
-| ONB-2 | Phase 1 | Gaps Found |
-| ONB-3 | Phase 1 | Gaps Found |
-| ONB-4 | Phase 1 | Gaps Found |
-| ONB-5 | Phase 1 | Gaps Found |
+| ONB-1 | Phase 1 | Complete |
+| ONB-2 | Phase 1 | Complete |
+| ONB-3 | Phase 1 | Complete |
+| ONB-4 | Phase 1 | Complete |
+| ONB-5 | Phase 1 | Complete |
 | ONB-6 | Phase 4 | Pending |
-| ONB-7 | Phase 1 | Gaps Found |
-| ONB-8 | Phase 1 | Gaps Found |
-| ONB-9 | Phase 1 | Gaps Found |
+| ONB-7 | Phase 1 | Complete |
+| ONB-8 | Phase 1 | Complete |
+| ONB-9 | Phase 1 | Complete |
 | ONB-10 | Phase 2 | Pending |
 | ONB-11 | Phase 4 | Pending |
-| ONB-12 | Phase 1 | Gaps Found |
-| ONB-13 | Phase 1 | Gaps Found |
-| ONB-14 | Phase 1 | Gaps Found |
+| ONB-12 | Phase 1 | Complete |
+| ONB-13 | Phase 1 | Complete |
+| ONB-14 | Phase 1 | Complete |
 | ONB-15 | Phase 4 | Pending |
 | NFR-1 | Phase 2 | Complete |
-| NFR-2 | Phase 1 | Gaps Found |
+| NFR-2 | Phase 1 | Complete |
 | NFR-3 | Phase 2 | Complete |
 | NFR-4 | Phase 4 | Pending |
 | NFR-5 | Phase 2 | Complete |
@@ -308,7 +308,7 @@ Each v1 requirement maps to exactly one phase.
 | SEC-2 | Phase 4 | Pending |
 | SEC-3 | Phase 4 | Pending |
 | SEC-4 | Phase 4 | Pending |
-| SEC-5 | Phase 1 | Gaps Found |
+| SEC-5 | Phase 1 | Complete |
 | SEC-6 | Phase 4 | Pending |
 | SEC-7 | Phase 4 | Pending |
 | SEC-8 | Phase 5 | Pending |
