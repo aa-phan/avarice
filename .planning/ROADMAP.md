@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 20/20 plans executed
+**Plans:** 20/24 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
 
 Plans:
 **Wave 1**
@@ -91,6 +91,14 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 - [x] 01-19-PLAN.md — Rehearsal and exit run on ~/aa-phan-portfolio-v2 with kill and resume, AC-1 recorded
+
+**Gap closure, Wave 1** *(from 01-VERIFICATION.md gaps P-1 to P-3)*
+- [ ] 01-21-PLAN.md — Resume reaps every interrupted launch (map, intel, knowledge) by session ID; kill cases inside the intel and knowledge invocations (CR-01)
+- [ ] 01-22-PLAN.md — Staging diff lists files a hostile `.gitignore` hides; hostile-repository tests for validate and activate (CR-03)
+- [ ] 01-23-PLAN.md — Hook read allow-list, attached option values and operands after `--`, recursive-grep rule; every P-3 case as a unit test (CR-02)
+
+**Gap closure, Wave 2** *(blocked on 01-23)*
+- [ ] 01-24-PLAN.md — Work root in hook and sandbox denyRead with the own staging re-allowed, production-path proof, CON-1 row in docs/containment.md (CR-02)
 
 **Notes**: Technical goal: `avarice onboard --policy onboarding` takes one existing local Git repository (`~/aa-phan-portfolio-v2`) to an active project record, with GSD as the semantic mapper, GSD intel and graph indexes recorded, source read-only and writes confined to the staging worktree. Suits `/gsd-mvp-phase`. Kernel built here: package skeleton with import-boundary lint, ledger on `node:sqlite`, contract compiler with the `onboarding` preset, staging worktree, generated host settings and hook set, contained Claude Code host adapter, `GsdOnboarding` adapter for GSD 1.17.x, index stage and knowledge pass, `gsd-intel` and `gsd-graph` adapters. The target already has committed GSD planning but no codebase map, so this phase exercises detection and non-overwrite of existing planning state, not adoption of a stamped map (Phase 4). Excluded: remote workers, dashboard, `ingest-docs`, path-scoped and incremental refresh, promotion `copy` and `commit`, active command validation.
 
