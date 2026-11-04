@@ -9,8 +9,9 @@ import { delimiter, isAbsolute, join } from 'node:path';
 
 import { reserveInvocation, settleInvocation } from '../../src/app/budget.ts';
 import { completeInvocation, prepareInvocation } from '../../src/app/invocation.ts';
+import type { PreparedInvocation } from '../../src/app/invocation.ts';
 import { err, ok } from '../../src/domain/result.ts';
-import type { InvocationOutcome } from '../../src/ports/agent-host.ts';
+import type { InvocationDetails, InvocationOutcome } from '../../src/ports/agent-host.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
@@ -370,7 +371,7 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     assert.ok(found.ok);
     return (found.value.find((b: BudgetRow) => b.name === 'costUsd') as BudgetRow).used;
   };
-  const outcomeOf = (over: Partial<InvocationOutcome> & { details?: Partial<NonNullable<InvocationOutcome['details']>> }): InvocationOutcome => ({
+  const outcomeOf = (over: Omit<Partial<InvocationOutcome>, 'details'> & { details?: Partial<InvocationDetails> }): InvocationOutcome => ({
     sessionId: 'sess',
     kind: 'inconclusive',
     permissionDenials: [],
@@ -383,12 +384,12 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
   });
 
   // Prepares one more map invocation on a finished onboarding and returns it with the run's id.
-  function prepare(deps: AppDeps, onboardingId: string): { prepared: NonNullable<ReturnType<typeof prepareInvocation> extends infer R ? (R extends { ok: true; value: infer V } ? (V extends { granted: true; prepared: infer P } ? P : never) : never) : never>; runId: string } {
+  function prepare(deps: AppDeps, onboardingId: string): { prepared: PreparedInvocation; runId: string } {
     const row = deps.ledger.getOnboarding(onboardingId);
     assert.ok(row.ok);
     const prepared = prepareInvocation(deps, row.value, 'map', 'map the repository', { expectedFiles: [] });
     assert.ok(prepared.ok && prepared.value.granted, 'a granted invocation');
-    return { prepared: prepared.value.prepared, runId: prepared.value.prepared.request.runId } as never;
+    return { prepared: prepared.value.prepared, runId: prepared.value.prepared.request.runId };
   }
 
   it('charges the reservation (the per-invocation cap) when the host ended by a signal or the wall clock and reported no cost', async () => {

@@ -126,6 +126,18 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
 
 const clip = (text: string): string => (text.length <= MAX_RULE_CHARS ? text : text.slice(0, MAX_RULE_CHARS));
 
+// Whether the invocation was killed or interrupted, so what it cost is not known: the host's process ended by a signal or by our
+// wall clock, or the host adapter reports a timeout or a cancel that may have left the process running. An error that says
+// nothing ran (it never started) is not a kill.
+function wasKilled(outcome: Result<InvocationOutcome>): boolean {
+  if (!outcome.ok) {
+    const e = outcome.error;
+    return (e.kind === 'timeout' || e.kind === 'cancelled') && e.sideEffect === 'unknown';
+  }
+  const d = outcome.value.details;
+  return d !== undefined && (d.timedOut || d.signal !== null);
+}
+
 // Settles the budget and records the invocation whatever happened: the invocation ran, so its unit, its time and its
 // cost are spent. The host's own error is returned unchanged for the stage to decide on.
 export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, outcome: Result<InvocationOutcome>): Result<InvocationOutcome> {
@@ -133,8 +145,10 @@ export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, 
   const settled = settleInvocation(deps, reservation, {
     durationMs: outcome.ok ? outcome.value.durationMs : deps.clock.nowMs() - startedMs,
     costUsd: outcome.ok ? outcome.value.costUsd : 0,
+    killed: wasKilled(outcome),
   });
   if (!settled.ok) return settled;
+  const charge = settled.value;
 
   if (!outcome.ok) {
     const failed = deps.ledger.recordStepResult(request.onboardingId, {
@@ -145,6 +159,7 @@ export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, 
         invocationId: request.invocationId,
         sessionId: request.sessionId,
         error: outcome.error.kind,
+        costChargedUsd: charge.chargedUsd,
         ...(outcome.error.kind === 'denied' ? { rule: clip(outcome.error.rule) } : {}),
       },
       nowMs: startedMs,
@@ -163,6 +178,7 @@ export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, 
       sessionId: o.sessionId,
       kind: o.kind,
       costUsd: o.costUsd,
+      costChargedUsd: charge.chargedUsd,
       durationMs: o.durationMs,
       headBefore: o.headBefore,
       headAfter: o.headAfter,
@@ -197,7 +213,10 @@ export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, 
       invocationId: request.invocationId,
       purpose: request.purpose,
       outcome: o.kind,
+      // What the host reported, and what the budget was charged (the larger, for a killed run): both stay visible.
       costUsd: o.costUsd,
+      costChargedUsd: charge.chargedUsd,
+      costBasis: charge.basis,
       durationMs: o.durationMs,
       permissionDenials: o.permissionDenials.length,
       ...(d !== undefined

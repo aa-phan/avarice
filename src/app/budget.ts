@@ -7,6 +7,11 @@
 //
 // Nothing here refunds. A reservation whose holder died (a killed run never settled) is turned into spent
 // `invocations` by the next reserveInvocation, because the invocation did start.
+//
+// A killed or interrupted invocation is charged its full cost reservation, not 0 (owner decision 2026-11-03, 01-19 finding C): a
+// host that is killed prints no result, yet it ran, and an orphaned host keeps working after its supervisor died. The reservation
+// is what the cap logic let the host spend (the smaller of the per-invocation cap and what was left of the run's cost budget), so
+// charging it is the safe direction for a cap. A cost the host did report is recorded beside it, and the larger of the two counts.
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
@@ -31,7 +36,16 @@ export type ReserveOutcome = { granted: true; reservation: InvocationReservation
 
 export interface InvocationSettlement {
   durationMs: number;
+  // The cost the host reported; 0 when it reported none.
   costUsd: number;
+  // The invocation was killed (a signal, the wall clock) or interrupted, so its true cost is not known.
+  killed?: boolean;
+}
+
+// What a settlement charged to `costUsd`: `reported` is the host's own figure, `reservation` the cap reserved for a killed run.
+export interface SettlementCharge {
+  chargedUsd: number;
+  basis: 'reported' | 'reservation';
 }
 
 export function budgetRowsOf(contract: OnboardingContract): BudgetRowInput[] {
@@ -59,8 +73,27 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
 
   const orphaned = rows.find((r) => r.name === 'invocations')?.reserved ?? 0;
   if (orphaned > 0) {
+    // Each orphan is charged the cost reservation it was granted: at its start, the smaller of the per-invocation cap and what the
+    // run's cost budget had left (the orphan never settled, so nothing has changed that budget since).
+    let costLeft = remaining(rows.find((r) => r.name === 'costUsd'));
+    let costCharged = 0;
+    for (let i = 0; i < orphaned; i += 1) {
+      const reservedUsd = Math.max(0, Math.min(body.budgets.costUsd.perInvocation, costLeft));
+      costLeft -= reservedUsd;
+      costCharged += reservedUsd;
+    }
     const spent = deps.ledger.chargeBudget(runId, 'invocations', orphaned, { fromReserved: true });
     if (!spent.ok) return spent;
+    const cost = deps.ledger.chargeBudget(runId, 'costUsd', costCharged, { fromReserved: false });
+    if (!cost.ok) return cost;
+    const event = deps.ledger.appendEvent({
+      type: 'invocation.orphan-charged',
+      level: 'warn',
+      runId,
+      data: { onboardingId: onboarding.onboardingId, invocations: orphaned, costChargedUsd: costCharged },
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!event.ok) return event;
     const refreshed = deps.ledger.getBudgets(runId);
     if (!refreshed.ok) return refreshed;
     rows = refreshed.value;
@@ -78,8 +111,9 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   return ok({ granted: true, reservation: { runId, purpose, wallClockMs, costCapUsd } });
 }
 
-// Moves the invocation's reservation to used and charges what it measurably cost.
-export function settleInvocation(deps: AppDeps, reservation: InvocationReservation, settlement: InvocationSettlement): Result<void> {
+// Moves the invocation's reservation to used and charges what it cost: the reported cost, or for a killed invocation the larger of
+// the reported cost and the reservation.
+export function settleInvocation(deps: AppDeps, reservation: InvocationReservation, settlement: InvocationSettlement): Result<SettlementCharge> {
   if (!Number.isFinite(settlement.durationMs) || !Number.isFinite(settlement.costUsd)) {
     return err({ kind: 'invalid', field: 'settlement', reason: 'duration and cost must be finite numbers' });
   }
@@ -87,6 +121,10 @@ export function settleInvocation(deps: AppDeps, reservation: InvocationReservati
   if (!spent.ok) return spent;
   const clock = deps.ledger.chargeBudget(reservation.runId, 'wallClockMs', Math.max(0, Math.round(settlement.durationMs)), { fromReserved: false });
   if (!clock.ok) return clock;
-  const cost = deps.ledger.chargeBudget(reservation.runId, 'costUsd', Math.max(0, settlement.costUsd), { fromReserved: false });
-  return cost.ok ? ok(undefined) : cost;
+  const reported = Math.max(0, settlement.costUsd);
+  const killed = settlement.killed === true;
+  const chargedUsd = killed ? Math.max(reported, reservation.costCapUsd) : reported;
+  const cost = deps.ledger.chargeBudget(reservation.runId, 'costUsd', chargedUsd, { fromReserved: false });
+  if (!cost.ok) return cost;
+  return ok({ chargedUsd, basis: killed && chargedUsd > reported ? 'reservation' : 'reported' });
 }
