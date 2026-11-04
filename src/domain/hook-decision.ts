@@ -283,6 +283,132 @@ function lex(line: string): Segment[] | null {
 const startsWithWords = (words: readonly string[], prefix: readonly string[]): boolean => prefix.length > 0 && prefix.every((word, i) => words[i] === word);
 const splitWords = (text: string): string[] => text.split(' ').filter((w) => w !== '');
 
+// Short options that take a value, per read-only command entry (the matched READ_ONLY_COMMANDS entry joined with a space).
+// An entry that is not listed takes none. `-fPATH` and `-f PATH` both name PATH as a value.
+export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
+  grep: 'ABCDdefm',
+  head: 'nc',
+  tail: 'bnc',
+  'git log': 'nSGOLUMCBl',
+  'git show': 'nSGOLUMCBl',
+  'git ls-files': 'xX',
+  'git status': 'uM',
+};
+
+// What the words after a read command's name say. The parser treats every operand and every attached or separate option
+// value as a path candidate (fail closed: a non-path value such as a search pattern starting with `/` is judged as a path).
+interface ReadArgs {
+  // Words that are not options (and every word after a bare `--`): the paths, or for grep the pattern and the paths.
+  positional: string[];
+  // Option values: the rest of a short cluster after a value letter, the next word when the letter ends the cluster, and `--name=value`.
+  values: string[];
+  flags: Set<string>;
+  shortValues: Array<{ flag: string; value: string }>;
+  longs: Array<{ name: string; value: string | null }>;
+  // A character in a short cluster that is not an ASCII letter or digit and that no value-taking letter consumed.
+  malformed: boolean;
+}
+
+const isAsciiAlphanumeric = (char: string): boolean => /^[A-Za-z0-9]$/.test(char);
+
+function parseReadArgs(entryKey: string, args: readonly string[]): ReadArgs {
+  const valueLetters = SHORT_VALUE_OPTIONS[entryKey] ?? '';
+  const parsed: ReadArgs = { positional: [], values: [], flags: new Set(), shortValues: [], longs: [], malformed: false };
+  let operandsOnly = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    // `-` alone is standard input: no path.
+    if (arg === '-') continue;
+    if (operandsOnly || !arg.startsWith('-')) {
+      parsed.positional.push(arg);
+    } else if (arg === '--') {
+      operandsOnly = true;
+    } else if (arg.startsWith('--')) {
+      const equals = arg.indexOf('=');
+      const name = equals === -1 ? arg : arg.slice(0, equals);
+      const value = equals === -1 ? null : arg.slice(equals + 1);
+      parsed.longs.push({ name, value });
+      if (value !== null && value !== '') parsed.values.push(value);
+    } else if (!/^-[0-9]+$/.test(arg)) {
+      // A cluster, read per character (`-rnf/path` is r, n and the value of f).
+      for (let k = 1; k < arg.length; k += 1) {
+        const char = arg[k] as string;
+        if (!isAsciiAlphanumeric(char)) {
+          parsed.malformed = true;
+          break;
+        }
+        if (!valueLetters.includes(char)) {
+          parsed.flags.add(char);
+          continue;
+        }
+        const attached = arg.slice(k + 1);
+        const value = attached !== '' ? attached : args[i + 1];
+        if (attached === '' && value !== undefined) i += 1;
+        if (value !== undefined) {
+          parsed.values.push(value);
+          parsed.shortValues.push({ flag: char, value });
+        }
+        break;
+      }
+    }
+  }
+  return parsed;
+}
+
+// GNU getopt accepts an unambiguous prefix of a long option, so `--recurs` is `--recursive`.
+const isLongOption = (name: string, full: string, minLength: number): boolean => name.length >= minLength && full.startsWith(name);
+
+// True when a secret glob (repository-relative, matched below staging) can match some path below the directory whose
+// staging-relative segments are `root` ([] is staging itself). Fail closed: a `**` or any wildcard segment agrees with anything.
+function globMayMatchBelow(glob: string, root: readonly string[]): boolean {
+  const segments = glob.split('/');
+  for (let i = 0; i < Math.min(segments.length, root.length); i += 1) {
+    const segment = segments[i] as string;
+    if (segment.includes('**')) return true;
+    if (!/[*?[{]/.test(segment) && segment !== root[i]) return false;
+  }
+  // Agreeing so far, the glob can match below the root only if it names something deeper than the root itself.
+  return segments.length > root.length;
+}
+
+// Why a recursive grep may not run, or null. The hook cannot list what the walk reaches, so it judges the directories the
+// walk starts from: following links can leave every root, a root that contains a denied root reaches it, and below staging a
+// secret glob may match a file the walk reads.
+function recursiveRule(parsed: ReadArgs, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+  const { flags, longs, shortValues, positional } = parsed;
+  const longNamed = (full: string, minLength: number): Array<{ name: string; value: string | null }> => longs.filter((l) => isLongOption(l.name, full, minLength));
+  const directoriesRecurse =
+    shortValues.some((v) => v.flag === 'd' && v.value === 'recurse') ||
+    longNamed('--directories', 5).some((l) => (l.value ?? (positional.includes('recurse') ? 'recurse' : '')) === 'recurse');
+  const dereferences = flags.has('R') || longNamed('--dereference-recursive', 5).length > 0;
+  const recursive = flags.has('r') || dereferences || longNamed('--recursive', 5).length > 0 || directoriesRecurse;
+  if (!recursive) return null;
+  // `-S` and `-O` make BSD grep follow links while walking.
+  if (dereferences || flags.has('S') || flags.has('O')) return 'shell-recursive-read';
+
+  // The pattern is the first operand unless an option supplied it; the remaining operands are the walked roots.
+  const patternFromOption =
+    shortValues.some((v) => v.flag === 'e' || v.flag === 'f') || longs.some((l) => isLongOption(l.name, '--regexp', 4) || isLongOption(l.name, '--file', 4));
+  const cwd = call.cwd.startsWith('/') ? call.cwd : policy.stagingPath;
+  const walked = (patternFromOption ? positional : positional.slice(1)).map((path) => absolutize(cwd, path));
+  if (walked.length === 0) walked.push(cwd);
+
+  const staging = trimSlashes(policy.stagingPath);
+  const denied = policy.denyRead.filter((root) => !policy.allowRead.some((allowed) => under(root, allowed)));
+  for (const path of walked) {
+    const root = canon(path);
+    if (root === null) return 'unresolvable-path';
+    const outside = readRule(root, policy);
+    if (outside !== null) return outside;
+    if (denied.some((deniedRoot) => under(deniedRoot, root))) return 'shell-recursive-read';
+    if (under(root, staging)) {
+      const relative = root === staging ? [] : root.slice(staging.length + 1).split('/');
+      if (policy.denyReadGlobs.some((glob) => globMayMatchBelow(glob, relative))) return 'shell-recursive-read';
+    }
+  }
+  return null;
+}
+
 function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
@@ -298,9 +424,14 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   const args = words.slice(entry.length);
   if (words[0] === 'find' && args.some((arg) => FIND_DENIED_ACTIONS.includes(arg))) return 'shell-find-action';
   if (words[0] === 'git' && args.some((arg) => GIT_DENIED_OPTIONS.some((option) => arg === option || arg.startsWith(`${option}=`)))) return 'shell-git-option';
-  // Every word that is not an option may name a file; it gets the same read check as the Read tool.
+  // Every operand and every option value (attached, or the next word) may name a file; each gets the same read check as the
+  // Read tool. A word like `-f/home/u/.netrc` or one after a bare `--` is judged as a path, never skipped as an option.
+  const parsed = parseReadArgs(entry.join(' '), args);
+  if (parsed.malformed) return 'shell-option-value';
   const cwd = call.cwd.startsWith('/') ? call.cwd : policy.stagingPath;
-  return checkRead(args.filter((arg) => !arg.startsWith('-')).map((arg) => absolutize(cwd, arg)), policy, canon);
+  const named = checkRead([...parsed.positional, ...parsed.values].map((arg) => absolutize(cwd, arg)), policy, canon);
+  if (named !== null) return named;
+  return words[0] === 'grep' ? recursiveRule(parsed, call, policy, canon) : null;
 }
 
 function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
