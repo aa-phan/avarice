@@ -526,6 +526,46 @@ describe('grep -d/--directories actions are classified fail closed (CR-01, P-3)'
   });
 });
 
+// WR-01: a long option given its value as a separate word shifts the grep operands, so the hook must consume that word (for
+// the options whose arity is known) and judge the working directory when it cannot prove the parse.
+describe('grep long options with a separate value (WR-01)', () => {
+  const rule = (command: string, p: HookPolicy = policy(), cwd = STAGING): string => ((d) => `${d.decision}:${d.rule}`)(decide(shell(command, cwd), p));
+  const narrowEnv = policy({ denyReadGlobs: ['.env', 'config/*.key'] });
+  const narrow = policy({ denyReadGlobs: ['config/secrets.json'] });
+
+  it('judges the working directory when a value-taking long option consumed the pattern word', () => {
+    assert.equal(rule('grep -r PASSWORD', narrowEnv), 'deny:shell-recursive-read', 'control');
+    assert.equal(rule('grep -r --exclude-dir x PASSWORD', narrowEnv), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --max-count 1 PASSWORD', narrowEnv), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --include "*.ts" PASSWORD', narrowEnv), 'deny:shell-recursive-read');
+  });
+
+  it('consumes a separate value and keeps the walked root precise', () => {
+    assert.equal(rule('grep -r --exclude-dir x PASSWORD src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep -r --exclude-dir x PASSWORD config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep --directories RECURSE x src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep --directories RECURSE x config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --regexp foo config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --regexp foo src', narrow), 'allow:shell-identity');
+  });
+
+  it('fails closed on a long option the table does not model when another argument follows it', () => {
+    assert.equal(rule('grep -r --exclude-d x PASSWORD src', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --context 2 PASSWORD src', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --ignore-case x src', narrow), 'deny:shell-recursive-read');
+  });
+
+  it('stays precise when nothing was left unproven', () => {
+    assert.equal(rule('grep --recursive x src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep -r x src --ignore-case', narrow), 'allow:shell-identity');
+  });
+
+  it('still path-checks a consumed separate value', () => {
+    assert.equal(rule('grep --exclude /home/u/.netrc x src/a.ts'), 'deny:outside-read-set');
+    assert.equal(rule('grep --file /home/u/.ssh/id_rsa src/a.ts'), 'deny:deny-read');
+  });
+});
+
 describe('subagents, web, meta and unknown tools', () => {
   it('allows an Agent call of a permitted type and charges subagentsTotal', () => {
     const d = decide({ kind: 'subagent', subagentType: 'gsd-codebase-mapper' });
