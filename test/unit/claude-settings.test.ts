@@ -61,7 +61,7 @@ after(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function scope(purpose: InvocationPurpose, over: { strategy?: BashStrategy; stagingPath?: string } = {}): InvocationScope {
+function scope(purpose: InvocationPurpose, over: { strategy?: BashStrategy; stagingPath?: string; workRoot?: string } = {}): InvocationScope {
   const stagingPath = over.stagingPath ?? staging;
   return computeInvocationScope({
     purpose,
@@ -70,6 +70,7 @@ function scope(purpose: InvocationPurpose, over: { strategy?: BashStrategy; stag
     repoPath: repo,
     dataRoot: data,
     home,
+    ...(over.workRoot !== undefined ? { workRoot: over.workRoot } : {}),
     workspace: {
       topLevelEntries: ['.git', '.planning', 'docs', 'package.json', 'src'],
       planningEntries: ['PROJECT.md', 'config.json', 'phases'],
@@ -218,6 +219,49 @@ describe('renderClaudeSettings snapshots', () => {
       assert.equal(settings.permissions.deny.includes('Bash'), false, purpose);
       assert.ok(settings.permissions.allow.includes(`Read(${slash(staging)}/**)`), purpose);
     }
+  });
+});
+
+// CR-02 / gap P-3 (D-GAP-01): the work root (which holds every onboarding's staging) is denied to the sandbox, the invocation's own staging is
+// re-allowed beneath it, and no Read permission deny names a root that contains the staging (a permission deny has no re-allow).
+describe('renderClaudeSettings with a work root (CR-02, D-GAP-01)', () => {
+  const workRoot = (): string => join(root, 'work');
+
+  it('denies the work root to the sandbox, re-allows only the staging, and keeps the work root out of the Read permission denies', () => {
+    for (const purpose of ['map', 'intel', 'knowledge'] as const) {
+      const settings = render(scope(purpose, { workRoot: workRoot() })) as Record<string, any>;
+      const fs = settings.sandbox.filesystem;
+      assert.deepEqual(fs.denyRead, [repo, data, join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh'), workRoot()].map(slash), `${purpose}: work root last`);
+      assert.deepEqual(fs.allowRead, [slash(staging)], `${purpose}: only the staging is re-allowed`);
+      // The secret-glob denies below the staging also start with the work root's path, so the rule is matched whole.
+      assert.equal(settings.permissions.deny.includes(`Read(${slash(workRoot())}/**)`), false, `${purpose}: no Read deny names the work root`);
+      assert.equal(settings.permissions.deny.includes(`Read(${slash(join(workRoot(), 'onb-1'))}/**)`), false, purpose);
+      // The other generic denies stay.
+      for (const dir of [join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh')]) assert.ok(settings.permissions.deny.includes(`Read(${slash(dir)}/**)`), `${purpose}: ${dir}`);
+    }
+  });
+
+  it('keeps the Read allow rule for the staging (map, intel) and for the corpus only (knowledge)', () => {
+    for (const purpose of ['map', 'intel'] as const) {
+      const settings = render(scope(purpose, { workRoot: workRoot() })) as Record<string, any>;
+      assert.ok(settings.permissions.allow.includes(`Read(${slash(staging)}/**)`), purpose);
+    }
+    const knowledge = render(scope('knowledge', { workRoot: workRoot() })) as Record<string, any>;
+    const reads = knowledge.permissions.allow.filter((rule: string) => rule.startsWith('Read('));
+    assert.deepEqual(reads, [`Read(${slash(join(staging, '.avarice-knowledge'))}/**)`]);
+  });
+
+  it('leaves a sibling root that only shares a name prefix with the staging path in the Read permission denies', () => {
+    // `{root}/work/onb-1/staging-x` is not a parent of `{root}/work/onb-1/staging`: only a real parent is filtered out.
+    const siblingScope = { ...scope('map', { workRoot: workRoot() }), denyRead: [`${staging}-x`] };
+    const settings = render(siblingScope) as Record<string, any>;
+    assert.ok(settings.permissions.deny.includes(`Read(${slash(staging)}-x/**)`));
+  });
+
+  it('is unchanged when the scope carries no work root', () => {
+    const settings = render(scope('map')) as Record<string, any>;
+    assert.equal(settings.sandbox.filesystem.allowRead, undefined);
+    assert.equal(settings.sandbox.filesystem.denyRead.length, 5);
   });
 });
 

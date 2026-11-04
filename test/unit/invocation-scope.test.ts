@@ -263,6 +263,45 @@ describe('computeInvocationScope: commands and budgets', () => {
   });
 });
 
+describe('the work root (CR-02, D-GAP-01)', () => {
+  const FIVE = [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`];
+
+  it('denies the work root after the five existing entries and re-allows only the staging path', () => {
+    for (const purpose of ['map', 'intel', 'knowledge'] as const) {
+      const scope = scopeFor(purpose, { workRoot: '/work' });
+      assert.deepEqual(scope.denyRead, [...FIVE, '/work'], `${purpose}: work root last`);
+      assert.deepEqual(scope.allowRead, [STAGING], `${purpose}: staging only`);
+    }
+  });
+
+  it('lists the strategy re-allowed roots first and the staging path last', () => {
+    const scope = scopeFor('map', { workRoot: '/work', workspace: workspace({ repoReadAllow: [`${REPO}/.git`] }) });
+    assert.deepEqual(scope.allowRead, [`${REPO}/.git`, STAGING]);
+  });
+
+  it('trims a trailing slash on the work root', () => {
+    assert.deepEqual(scopeFor('map', { workRoot: '/work/' }).denyRead.at(-1), '/work');
+  });
+
+  it('never re-allows the onboarding directory above staging, nor a sibling whose ID shares a prefix', () => {
+    const { allowRead } = scopeFor('map', { workRoot: '/work' });
+    assert.equal(allowRead.includes('/work/onb-1'), false);
+    assert.equal(allowRead.includes('/work/onb-11/staging'), false);
+    assert.equal(allowRead.includes('/work'), false);
+  });
+
+  it('does not duplicate the work root when it is already denied', () => {
+    const { denyRead } = scopeFor('map', { workRoot: DATA });
+    assert.equal(denyRead.filter((path) => path === DATA).length, 1);
+  });
+
+  it('keeps the previous denyRead and allowRead when no work root is given', () => {
+    const scope = scopeFor('map');
+    assert.deepEqual(scope.denyRead, FIVE);
+    assert.deepEqual(scope.allowRead, []);
+  });
+});
+
 describe('computeInvocationScope: purity', () => {
   it('is deterministic and does not mutate its inputs', () => {
     const ws = workspace();
