@@ -353,45 +353,51 @@ export class ClaudeHostAdapter implements AgentHost {
   // Ends any process that carries the invocation's `--session-id`: a supervisor killed mid-invocation leaves its host
   // running in its own process group, and a resume must end it before anything else touches staging.
   async reap(request: ReapRequest): Promise<Result<{ terminated: number }>> {
-    if (!UUID.test(request.sessionId)) return err({ kind: 'invalid', field: 'sessionId', reason: 'a session ID must be a UUID' });
-    const grace = this.#o.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
-    // The pattern is matched as a regular expression against the whole command line; a UUID has no metacharacter.
-    const found = spawnSync('/usr/bin/pgrep', ['-f', '--', `--session-id ${request.sessionId}`], { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] });
-    if (found.error !== undefined) return err({ kind: 'unavailable', cause: `cannot search for the host process: ${(found.error as NodeJS.ErrnoException).code ?? 'pgrep failed'}` });
-    // pgrep: 0 matched, 1 none matched, anything else is an error.
-    if (found.status === 1) return ok({ terminated: 0 });
-    if (found.status !== 0) return err({ kind: 'unavailable', cause: `cannot search for the host process: pgrep exited ${String(found.status)}` });
-    const pids = found.stdout
-      .split('\n')
-      .map((line) => Number(line.trim()))
-      .filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid);
-
-    // A host we started leads its own group (pgid === pid): end the whole group. Anything else is ended alone.
-    const end = (pid: number, sig: NodeJS.Signals): void => {
-      const group = spawnSync('/bin/ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] });
-      const leads = Number(group.stdout.trim()) === pid;
-      try {
-        process.kill(leads ? -pid : pid, sig);
-      } catch {
-        // already gone
-      }
-    };
-    for (const pid of pids) end(pid, 'SIGTERM');
-    const waitGone = async (limitMs: number): Promise<number[]> => {
-      const until = Date.now() + limitMs;
-      let alive = pids.filter(isAlive);
-      while (alive.length > 0 && Date.now() < until) {
-        await sleep(25);
-        alive = alive.filter(isAlive);
-      }
-      return alive;
-    };
-    let alive = await waitGone(grace);
-    for (const pid of alive) end(pid, 'SIGKILL');
-    alive = await waitGone(5_000);
-    if (alive.length > 0) return err({ kind: 'unavailable', cause: `a host process (${alive.join(', ')}) survived SIGKILL` });
-    return ok({ terminated: pids.length });
+    return reapBySessionId(request.sessionId, this.#o.killGraceMs ?? DEFAULT_KILL_GRACE_MS);
   }
+}
+
+// Ends any process that carries the session ID in its command line (`--session-id {uuid}`): a supervisor killed mid-invocation
+// leaves its host running in its own process group, and a resume must end it before anything else touches staging. Shared by
+// the adapter and the test fake host, so a test exercises the production search and kill rules.
+export async function reapBySessionId(sessionId: string, killGraceMs: number = DEFAULT_KILL_GRACE_MS): Promise<Result<{ terminated: number }>> {
+  if (!UUID.test(sessionId)) return err({ kind: 'invalid', field: 'sessionId', reason: 'a session ID must be a UUID' });
+  // The pattern is matched as a regular expression against the whole command line; a UUID has no metacharacter.
+  const found = spawnSync('/usr/bin/pgrep', ['-f', '--', `--session-id ${sessionId}`], { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] });
+  if (found.error !== undefined) return err({ kind: 'unavailable', cause: `cannot search for the host process: ${(found.error as NodeJS.ErrnoException).code ?? 'pgrep failed'}` });
+  // pgrep: 0 matched, 1 none matched, anything else is an error.
+  if (found.status === 1) return ok({ terminated: 0 });
+  if (found.status !== 0) return err({ kind: 'unavailable', cause: `cannot search for the host process: pgrep exited ${String(found.status)}` });
+  const pids = found.stdout
+    .split('\n')
+    .map((line) => Number(line.trim()))
+    .filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid);
+
+  // A host we started leads its own group (pgid === pid): end the whole group. Anything else is ended alone.
+  const end = (pid: number, sig: NodeJS.Signals): void => {
+    const group = spawnSync('/bin/ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const leads = Number(group.stdout.trim()) === pid;
+    try {
+      process.kill(leads ? -pid : pid, sig);
+    } catch {
+      // already gone
+    }
+  };
+  for (const pid of pids) end(pid, 'SIGTERM');
+  const waitGone = async (limitMs: number): Promise<number[]> => {
+    const until = Date.now() + limitMs;
+    let alive = pids.filter(isAlive);
+    while (alive.length > 0 && Date.now() < until) {
+      await sleep(25);
+      alive = alive.filter(isAlive);
+    }
+    return alive;
+  };
+  let alive = await waitGone(killGraceMs);
+  for (const pid of alive) end(pid, 'SIGKILL');
+  alive = await waitGone(5_000);
+  if (alive.length > 0) return err({ kind: 'unavailable', cause: `a host process (${alive.join(', ')}) survived SIGKILL` });
+  return ok({ terminated: pids.length });
 }
 
 // One entry per denied call: the larger of the two sources' counts for each tool, because the host reports the same
