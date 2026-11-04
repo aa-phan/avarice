@@ -306,11 +306,52 @@ describe('the work root (CR-02, D-GAP-01)', () => {
     assert.equal(denyRead.filter((path) => path === DATA).length, 1);
   });
 
-  it('cannot be called without a work root (WR-03): the type rejects a ScopeInput that omits it', () => {
-    // tsc reports an unused directive here if workRoot ever becomes optional again. The literal is never passed on.
+  const REFUSED = /^computeInvocationScope: workRoot must be a normalized absolute path/;
+  const refusal = { name: 'TypeError', message: REFUSED };
+
+  it('refuses an empty work root for every purpose (WR-01)', () => {
+    for (const purpose of ['map', 'intel', 'knowledge'] as const) {
+      assert.throws(() => scopeFor(purpose, { workRoot: '' }), refusal, purpose);
+    }
+  });
+
+  it('refuses a relative work root (WR-01)', () => {
+    for (const workRoot of ['work', './work', 'work/', '../work']) {
+      assert.throws(() => scopeFor('map', { workRoot }), refusal, JSON.stringify(workRoot));
+    }
+  });
+
+  it('refuses the filesystem root and the forms that trim to nothing or to it (WR-01)', () => {
+    for (const workRoot of ['/', '//', '///']) {
+      assert.throws(() => scopeFor('map', { workRoot }), refusal, JSON.stringify(workRoot));
+    }
+  });
+
+  it('refuses a work root that is not normalized (WR-01)', () => {
+    for (const workRoot of ['/work//onb-1', '/work/./x', '/work/../x', '/work/.', '/work/..']) {
+      assert.throws(() => scopeFor('map', { workRoot }), refusal, JSON.stringify(workRoot));
+    }
+  });
+
+  it('refuses a work root that is not a string at run time, by message and not only by TypeError (WR-01)', () => {
+    for (const workRoot of [undefined, null, 42]) {
+      assert.throws(() => scopeFor('map', { workRoot: workRoot as never }), refusal, String(workRoot));
+    }
+  });
+
+  it('accepts a normalized work root and trims trailing slashes (WR-01)', () => {
+    for (const workRoot of ['/work', '/work/', '/work///']) {
+      assert.equal(scopeFor('map', { workRoot }).denyRead.at(-1), '/work', JSON.stringify(workRoot));
+    }
+    assert.equal(scopeFor('map', { workRoot: '/srv/a.b/..c' }).denyRead.at(-1), '/srv/a.b/..c');
+  });
+
+  it('cannot be called without a work root (WR-03, WR-02): the type rejects a ScopeInput that omits it, and the call throws at run time', () => {
+    // The directive below is checked only by `npm run typecheck`, where tsc reports an unused directive if workRoot ever becomes optional again.
+    // `npm test` strips types, so the assert.throws is what node --test checks.
     // @ts-expect-error WR-03: ScopeInput.workRoot is required
     const withoutWorkRoot: ScopeInput = { purpose: 'map', contract: contract(), stagingPath: STAGING, repoPath: REPO, dataRoot: DATA, home: HOME, workspace: workspace(), readRoots: [] };
-    void withoutWorkRoot;
+    assert.throws(() => computeInvocationScope(withoutWorkRoot), refusal);
   });
 });
 
