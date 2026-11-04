@@ -262,13 +262,20 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     const g = clone(graph);
     nodesOf(g).push({ id: 'planning_phases_01_x_contrast_check_checkdoc', label: 'checkDoc', file_type: 'code', source_file: '.planning/phases/01-x/contrast-check.mjs' });
     assert.deepEqual(problemsOf(validate(g, stats)), [], 'a code node from a tracked file under .planning/phases/ is not a corpus node');
-    const state = clone(graph);
-    nodesOf(state).push({ id: 'state_script', label: 'run', file_type: 'code', source_file: '.planning/STATE.md' });
-    assert.deepEqual(problemsOf(validate(state, stats)), [], 'the origin decides, not the file name');
+    const data = clone(graph);
+    nodesOf(data).push({ id: 'planning_phases_01_x_data', label: 'data', file_type: 'code', source_file: '.planning/phases/01-x/fixtures.json' });
+    assert.deepEqual(problemsOf(validate(data, stats)), [], 'a data or script file is not a planning document');
+    const doc = clone(graph);
+    nodesOf(doc).push({ id: 'planning_phases_01_x_plan', label: 'plan', file_type: 'code', source_file: '.planning/phases/01-x/01-01-PLAN.md' });
+    assert.match(problemsOf(validate(doc, stats)).join('\n'), /planning_phases_01_x_plan.*\.planning\/phases/, 'a planning document is refused whatever the origin');
     const fromPass = clone(graph);
     nodesOf(fromPass).push({ id: 'phase_note', label: 'note', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
     const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
     assert.match(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)).join('\n'), /phase_note.*\.planning\/phases/);
+    const passData = clone(graph);
+    nodesOf(passData).push({ id: 'phase_data', label: 'data', file_type: 'document', source_file: '.planning/phases/01-x/fixtures.json', _avarice_origin: 'knowledge-pass', source_revision: REV });
+    const dataManifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/fixtures.json')] };
+    assert.match(problemsOf(validateKnowledgeGraph(passData, dataManifest, stats)).join('\n'), /phase_data.*\.planning\/phases/, 'anything under .planning/phases/ stays refused for a node the pass added');
   });
 
   it('refuses a dangling share above 10 percent, accepts exactly 10, and counts against the edges the pass produced', () => {

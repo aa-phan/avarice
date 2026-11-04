@@ -46,6 +46,12 @@ function textBytes(node: Record<string, unknown>): number {
 // Paths the corpus never holds in Phase 1 (S-45): a node cannot come from them whatever the manifest says.
 const forbiddenSource = (path: string): boolean => path.startsWith('.planning/phases/') || path === '.planning/STATE.md';
 
+// What no node may cite, whatever its origin: STATE.md and the planning documents under .planning/phases/. A tracked script or data file
+// there is code the code graph may legitimately name (the real target keeps contrast-check.mjs in a phase directory, found by the live
+// exit rehearsal, plan 01-19), so for a node the pass did not add only a document is refused.
+const PHASE_DOCUMENT = /\.(?:md|mdx|markdown|txt|rst|adoc)$/i;
+const forbiddenForAnyNode = (path: string): boolean => path === '.planning/STATE.md' || (path.startsWith('.planning/phases/') && PHASE_DOCUMENT.test(path));
+
 export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManifest, stats: MergeStats): KnowledgeValidation {
   if (!isObject(merged)) return { valid: false, problems: ['the merged graph is not a JSON object'] };
   const nodes = merged['nodes'];
@@ -67,7 +73,10 @@ export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManif
     }
     const id = typeof node['id'] === 'string' ? node['id'] : `#${index}`;
     const source = node['source_file'];
-    if (typeof source === 'string' && forbiddenSource(source)) problems.push(`node ${id}: sourced from ${source}, which the corpus never holds (.planning/phases and STATE.md are excluded)`);
+    const fromPass = node['_avarice_origin'] === KNOWLEDGE_ORIGIN;
+    if (typeof source === 'string' && (fromPass ? forbiddenSource(source) : forbiddenForAnyNode(source))) {
+      problems.push(`node ${id}: sourced from ${source}, which the corpus never holds (.planning/phases and STATE.md are excluded)`);
+    }
     if (node['_avarice_origin'] !== KNOWLEDGE_ORIGIN) return;
     if (node['file_type'] === 'document') documentIds.add(id);
     const entry = typeof source === 'string' ? bySource.get(source) : undefined;
