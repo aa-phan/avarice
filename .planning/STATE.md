@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-22-PLAN.md
-last_updated: "2026-11-04T09:57:33.724Z"
+stopped_at: Completed 01-23-PLAN.md
+last_updated: "2026-11-04T10:09:30.537Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 01 execution started
-state_head: 1046027a39adffb14ceeec3c4a9da1c7f10ff668
+state_head: 7aebf14e132b089bad3277534481dca44d6d2808
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 3 of 24
+Plan: 4 of 24
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 01 execution started
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P19 | about 6 hours across three resumes | 3 tasks | 22 files |
 | Phase 01 P21 | 14 min | 2 tasks | 8 files |
 | Phase 01 P22 | 7 min | 2 tasks | 6 files |
+| Phase 01 P23 | 11 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-19: exit run complete: ~/aa-phan-portfolio-v2 active (1010 code, 24 document nodes, graph and intel at 9f1cd8d), kill -9 and resume to the same ID and pin, checkout unchanged, AC-1 1 s; default store tightened to 0600
 - [Phase 01]: 01-21: resume reaps every started launch:* row (map, intel, knowledge) by session ID in a prelude step before reconcileInvocation; a failing reap stops the resume with all rows still started — T-01-44/T-01-72: relaunching or reading staging beside a surviving detached host is unsafe
 - [Phase 01]: 01-22: staging diff uses --ignored=traditional (not --ignored=matching) with --untracked-files=all so a hostile committed .gitignore cannot hide an out-of-set write; parseStatus reads ! records as untracked; write sets unchanged; preflight status stays without an ignored mode
+- [Phase 01]: 01-23: reads are allow-list confined (staging, readRoots, allowRead) in the shared readRule; recursive grep inside staging is denied under the default secret globs
+- [Phase 01]: 01-23: every attached option value and word after -- of a read command is a path candidate; stray cluster characters are shell-option-value
 
 ### Pending Todos
 
@@ -194,6 +197,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T09:57:33.699Z
-Stopped at: Completed 01-22-PLAN.md
+Last session: 2026-11-04T10:09:30.513Z
+Stopped at: Completed 01-23-PLAN.md
 Resume file: None
