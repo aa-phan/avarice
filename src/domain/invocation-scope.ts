@@ -186,7 +186,9 @@ export interface ScopeInput {
   home: string;
   // The profile work root that holds every onboarding's staging (`{workRoot}/{onboardingId}/staging`); denied to the invocation so it
   // cannot read another onboarding (docs/containment.md:78), with its own staging re-allowed. Required, so the type makes every
-  // caller pass it and no caller can drop the work-root deny without notice (WR-03).
+  // caller pass it and no caller can drop the work-root deny without notice (WR-03). Also checked at run time (WR-01): an empty
+  // root or '/' would deny every read, including the read roots, and a relative or non-normalized root would match no canonical
+  // path, so the deny would not apply. Either one throws a TypeError that names the field. Trailing slashes are trimmed.
   workRoot: string;
   workspace: WorkspaceShape;
   // Directories outside staging the invocation may read: the gsd-core directory, the agents directory and the
@@ -205,7 +207,22 @@ const trimTrailingSlashes = (path: string): string => (path.length > 1 ? path.re
 const join = (base: string, rel: string): string => `${base}/${rel}`;
 const uniqueSorted = (items: Iterable<string>): string[] => [...new Set(items)].sort();
 
+// WR-01: judges the trimmed value (`//` trims to ''), returns it, and throws before any part of the scope is built. String operations
+// only: the domain may import nothing but relative paths and node:crypto.
+function checkedWorkRoot(value: unknown): string {
+  const refuse = (): never => {
+    const got = typeof value === 'string' ? JSON.stringify(value) : `a value of type ${typeof value}`;
+    throw new TypeError(`computeInvocationScope: workRoot must be a normalized absolute path below '/', got ${got}`);
+  };
+  if (typeof value !== 'string') return refuse();
+  const trimmed = trimTrailingSlashes(value);
+  if (!trimmed.startsWith('/') || trimmed === '/') return refuse();
+  if (trimmed.slice(1).split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return refuse();
+  return trimmed;
+}
+
 export function computeInvocationScope(input: ScopeInput): InvocationScope {
+  const workRoot = checkedWorkRoot(input.workRoot);
   const { purpose, contract, workspace } = input;
   const spec: PurposeSpec = INVOCATION_PURPOSES[purpose];
   const readDir = spec.cwd === 'read-dir' ? (spec.readDir ?? writeDirOf(purpose)) : undefined;
@@ -238,7 +255,6 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const home = trimTrailingSlashes(input.home);
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
-  const workRoot = trimTrailingSlashes(input.workRoot);
   // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
   const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), workRoot])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
