@@ -14,13 +14,12 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 
 ### Validated
 
-(None yet. Nothing is built; ship to validate.)
+- ✓ Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (ONB-1/2/3/4/5/7/8/9/12/13/14, FR-20, SEC-5, NFR-2) — Phase 1 (verified 2026-11-04: `~/aa-phan-portfolio-v2` active with 1010 code and 24 document nodes)
 
 ### Active
 
 Milestone v1.0 Contained Kernel (Phases 1-3, first milestone, slices 0-2):
 
-- [ ] Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (Phase 1: ONB, FR-20, SEC-5, NFR-2)
 - [ ] A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (Phase 2: RC-1..5, CON, AUT-7..9, FR-1/2/4/5/6/7/11, NFR, OPS-2, ONB-10)
 - [ ] Decision records, independent work around an open decision, validated answers, contract amendments, local notification (Phase 3: AUT-1..6/10/12/16, RC-6..8, CON-15)
 
@@ -95,9 +94,11 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Phase N mirrors slice N−1 of the implementation plan (Phases 1-8 = slices 0-7; GSD 1.17.0 does not support a phase 0) | Owner's slice structure and exit criteria are the phase input | Decided 2026-11-01 |
 | A requirement ID shared across phases maps to the phase that completes its MVP scope; earlier phases record partial coverage | Keeps one owner per requirement; post-MVP phases extend, never take over | Roadmapper, 2026-11-01 (confirm) |
 | Ingest warning: the document cross-reference cycle is treated as hyperlinks, not circular definitions | Documents were read independently; no synthesis loop | Accepted by user |
+| Onboarding stages in a local clone, not a linked worktree (S0-B) | A contained run moved a source ref through a linked worktree without generated `denyWrite` on the source `.git` | Phase 1, 2026-11 |
+| Shell `grep` is not an admitted read command; contained agents search through the host Grep tool, whose path the hook judges | Modelling grep options failed twice (P-3); the verdict must not depend on which grep binary the Bash tool runs | Phase 1 quick task 261104-l3t, 2026-11-04 |
 
 ---
-*Last updated: 2026-11-01 after initialization*
+*Last updated: 2026-11-04 after Phase 1*
 
 ## Evolution
 

@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-01)
+See: .planning/PROJECT.md (updated 2026-11-04)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 01 — Contained onboarding of one repository
+**Current focus:** Phase 2 — Contained unattended run of one work item
 
 ## Current Position
 
@@ -160,6 +160,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-23: reads are allow-list confined (staging, readRoots, allowRead) in the shared readRule; recursive grep inside staging is denied under the default secret globs
 - [Phase 01]: 01-23: every attached option value and word after -- of a read command is a path candidate; stray cluster characters are shell-option-value
 - [Phase 01]: 01-24: workRoot is optional in ScopeInput; denyRead gets it last and allowRead the own staging last; the staging-containing root filter lives in the settings renderer only
+- [Phase 01]: 261104-jnc: ScopeInput.workRoot is now required (supersedes 01-24's optional workRoot)
+- [Phase 01]: 261104-l3t: shell grep dropped from READ_ONLY_COMMANDS (denied shell-not-allowed in every spelling); searches go through the Grep tool; bfs `find -rm` denied
 
 ### Pending Todos
 
@@ -178,17 +180,16 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 
 ### Blockers/Concerns
 
-- [Phase 1]: Target `~/aa-phan-portfolio-v2` has committed GSD planning (its Phase 5 is executing, so HEAD moves) but no `.planning/codebase/`, intel or graph; adoption of a stamped map is Phase 3. Untracked `.env` sits outside the staging worktree. Pin the onboarded revision.
+- [Phase 1, carried to Phase 2]: Target `~/aa-phan-portfolio-v2` has committed GSD planning (its Phase 5 is executing, so HEAD moves) but no `.planning/codebase/`, intel or graph; adoption of a stamped map is Phase 3. Untracked `.env` sits outside the staging worktree. Pin the onboarded revision.
 - [Phase 1]: ADR-001 accepts Node 22.x and 24.x; the developer machine runs Node 26.x. Decide the support statement.
 - [Init]: GSD skills and agents live under `~/.claude-edu` while `gsd-core` workflows and templates live under `~/.claude`. Validate "whatever `CLAUDE_CONFIG_DIR` names" against this split (host limitation 7, `doctor --extensions`).
 - [Init]: Phase numbering starts at 1; GSD 1.17.0 does not support a phase 0 (verified 2026-11-01).
 - [Phase 6]: Owns no requirement IDs; it extends FR-4, AUT-6 and OPS-6 (owned by Phases 2, 3, 4). Flip ownership if preferred.
 - [Phase 4]: Largest phase (28 requirements); consider splitting at planning time.
 - [Intel]: SYNTHESIS.md says 111 normative requirements; the correct count is 105 (149 entries in total).
-- [Init]: No `.planning/config.json` yet (granularity, phase ID convention, workflow toggles).
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
-- T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
+- [Phase 1]: T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
 
 ### Quick Tasks Completed
 
@@ -207,6 +208,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T10:25:48.482Z
-Stopped at: Phase 01 complete, ready to plan Phase 2
+Last session: 2026-11-04T22:11:42Z
+Stopped at: Phase 1 complete, ready to plan Phase 2
 Resume file: None
