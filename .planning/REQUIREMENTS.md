@@ -110,8 +110,8 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
 - [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
 - [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
-- [ ] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
-- [ ] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
+- [x] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
+- [x] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
 - [ ] **ONB-15** [MVP]: Refresh re-extracts only changed documents for the knowledge pass and adds GSD phase files (`.planning/phases/**`, `STATE.md`) once incremental refresh exists.
 
 ### Portability and reliability (NFR-1 to NFR-9)
@@ -121,7 +121,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **NFR-3** [MVP]: Domain workflow code contains no provider identifiers, URLs, absolute paths, SQL dialect or agent-vendor APIs; a lint check enforces the import boundary.
 - [ ] **NFR-4** [Contract proved with a fake remote adapter, Later real]: Moving artifact storage or execution to another host needs only configuration, explicit data migration and possibly a new adapter; domain workflow code does not change.
 - [x] **NFR-5** [MVP]: SQLite databases live on local storage and are never placed on a network filesystem.
-- [ ] **NFR-6** [MVP]: After a process crash, sleep or kill at any point, the next command detects interrupted work and presents a consistent state ("paused, needs reconciliation" is allowed); it never silently shows "done".
+- [x] **NFR-6** [MVP]: After a process crash, sleep or kill at any point, the next command detects interrupted work and presents a consistent state ("paused, needs reconciliation" is allowed); it never silently shows "done".
 - [ ] **NFR-7** [Contract]: Every external side effect carries an idempotency or correlation key; an ambiguous timeout triggers reconciliation (lookup by key) before any retry.
 - [ ] **NFR-8** [MVP]: Every critical operation has a defined timeout, cancellation behavior and retry eligibility.
 - [x] **NFR-9** [MVP]: Schema changes are versioned, forward-only and tested against fixtures; an interrupted migration leaves the old or the new schema, never a mix.
@@ -292,15 +292,15 @@ Each v1 requirement maps to exactly one phase.
 | ONB-10 | Phase 2 | Pending |
 | ONB-11 | Phase 4 | Pending |
 | ONB-12 | Phase 1 | Complete |
-| ONB-13 | Phase 1 | Pending |
-| ONB-14 | Phase 1 | Pending |
+| ONB-13 | Phase 1 | Complete |
+| ONB-14 | Phase 1 | Complete |
 | ONB-15 | Phase 4 | Pending |
 | NFR-1 | Phase 2 | Complete |
 | NFR-2 | Phase 1 | Complete |
 | NFR-3 | Phase 2 | Complete |
 | NFR-4 | Phase 4 | Pending |
 | NFR-5 | Phase 2 | Complete |
-| NFR-6 | Phase 2 | Pending |
+| NFR-6 | Phase 2 | Complete |
 | NFR-7 | Phase 5 | Pending |
 | NFR-8 | Phase 5 | Pending |
 | NFR-9 | Phase 2 | Complete |

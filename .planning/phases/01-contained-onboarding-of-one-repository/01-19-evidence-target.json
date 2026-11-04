@@ -1,0 +1,543 @@
+{
+  "schema": 1,
+  "mode": "target",
+  "repo": "/Users/aphan/aa-phan-portfolio-v2",
+  "source": null,
+  "runDir": "/Users/aphan/.local/share/avarice/personal-local/exit-run/target-20261104T015614Z",
+  "startedAtEpoch": 1793757374,
+  "finishedAtEpoch": 1793757874,
+  "wallSeconds": 500,
+  "authorization": {
+    "selection": "rehearsal-then-target",
+    "capUsd": 24,
+    "perRunCapUsd": 12,
+    "spentUsdSoFar": 3.96,
+    "decidedBy": "user (aphan)",
+    "decidedOn": "2026-11-03",
+    "decidedThrough": "execute-phase orchestrator, resolving the Task 2 checkpoint:decision (gate blocking-human) of plan 01-19",
+    "noCommitConfirmed": true,
+    "noCommitConfirmation": "The user confirmed they will not commit to ~/aa-phan-portfolio-v2 while the run is in progress",
+    "contextGiven": "measured cost so far well under 1 USD per onboarding; caps are ceilings; clone staging writes nothing to the target"
+  },
+  "tooling": {
+    "node": "v22.22.3",
+    "claude": {
+      "path": "/Users/aphan/.local/bin/claude",
+      "version": "2.1.317"
+    },
+    "stagingStrategy": "clone"
+  },
+  "onboardingId": "onb_01M6J4ATTTXW68YGE2P9V2QMH5",
+  "outcome": {
+    "killedProcessExit": 137,
+    "resumeExit": 0,
+    "finalState": "active"
+  },
+  "record": {
+    "ok": true,
+    "onboardingId": "onb_01M6J4ATTTXW68YGE2P9V2QMH5",
+    "projectId": "proj_01M6J4ATTQV9SQX67ATV0SB9EW",
+    "repoPath": "/Users/aphan/aa-phan-portfolio-v2",
+    "state": "active",
+    "recordVersion": 1,
+    "promotion": "none",
+    "onboardedRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "2026-11-04T02:04:34.599Z",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "nodes": {
+      "code": 1010,
+      "concept": 114,
+      "document": 24,
+      "rationale": 25
+    },
+    "edges": {
+      "AMBIGUOUS": 6,
+      "EXTRACTED": 1254,
+      "INFERRED": 151
+    },
+    "documentNodes": 24,
+    "graphBuiltAtCommit": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "intelRefreshedAtCommit": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "intelFiles": 5,
+    "absentIndexes": null,
+    "problems": []
+  },
+  "checkoutBefore": {
+    "head": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+    "filesDigest": "833ee38adfe5f7f7dc5be361d24f0b28e0492373aa047a93cdb9b2dc96503c48",
+    "refsDigest": "f1b676afe8b73fef26af4938353b942bcbabf94347cc149611239f73fe5f281c",
+    "worktreesDigest": "691518fc5c72e26de3acfa0ce012930dc751acd2651e52756cb2d1384d99e550",
+    "counts": {
+      "tracked": 363,
+      "untracked": 1,
+      "statusEntries": 1,
+      "refs": 3,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutAfter": {
+    "head": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+    "filesDigest": "833ee38adfe5f7f7dc5be361d24f0b28e0492373aa047a93cdb9b2dc96503c48",
+    "refsDigest": "f1b676afe8b73fef26af4938353b942bcbabf94347cc149611239f73fe5f281c",
+    "worktreesDigest": "691518fc5c72e26de3acfa0ce012930dc751acd2651e52756cb2d1384d99e550",
+    "counts": {
+      "tracked": 363,
+      "untracked": 1,
+      "statusEntries": 1,
+      "refs": 3,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutUnchanged": {
+    "head": true,
+    "branch": true,
+    "statusDigest": true,
+    "filesDigest": true,
+    "refsDigest": true,
+    "worktreesDigest": true
+  },
+  "killAndResume": {
+    "killAfterSecondsRequested": 60,
+    "mapLaunchStartedObservedAtEpoch": 1793757377,
+    "killedAtEpoch": 1793757440,
+    "secondsFromMapStartToKill": 63,
+    "avaricePid": 90565,
+    "signal": "KILL",
+    "killedSessionId": "b7b37906-766e-4783-a332-db9198ec394d",
+    "stateWhenKilled": "mapping",
+    "survivingHostProcessesAfterKill": 1,
+    "interruptedSeenAtEpoch": 1793757617,
+    "secondsFromKillToInterrupted": 177,
+    "interruptedStatus": {
+      "projectId": "proj_01M6J4ATTQV9SQX67ATV0SB9EW",
+      "repoPath": "/Users/aphan/aa-phan-portfolio-v2",
+      "onboardingId": "onb_01M6J4ATTTXW68YGE2P9V2QMH5",
+      "state": "mapping",
+      "reason": null,
+      "interrupted": {
+        "state": "mapping",
+        "nextAction": "launch:map",
+        "resumeCommand": "avarice resume onb_01M6J4ATTTXW68YGE2P9V2QMH5"
+      },
+      "recordVersion": null,
+      "onboardedRevision": null,
+      "mapping": null,
+      "indexes": {}
+    },
+    "resumeCommand": "avarice resume onb_01M6J4ATTTXW68YGE2P9V2QMH5",
+    "resumeSeconds": 257,
+    "resumeExit": 0,
+    "sameOnboardingId": true,
+    "sameOnboardedRevision": true,
+    "pinBefore": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "pinAfter": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "processesWithKilledSessionAfterResume": 0,
+    "processesWithAnySessionAfterResume": 0
+  },
+  "costs": {
+    "totalUsd": 0.217183,
+    "budgetCostUsedUsd": 3.21718274,
+    "perStep": [
+      {
+        "step": "launch:intel",
+        "attempt": 1,
+        "costUsd": 0.03413746,
+        "durationMs": 120553,
+        "invocationId": "inv_01M6J4JABKZE4A22ZXBX6X93NH"
+      },
+      {
+        "step": "launch:knowledge",
+        "attempt": 1,
+        "costUsd": 0.18304528000000003,
+        "durationMs": 132120,
+        "invocationId": "inv_01M6J4P0J648GDXT2XXC8VHQFX"
+      }
+    ],
+    "budgets": [
+      {
+        "name": "costUsd",
+        "limit_value": 12,
+        "used": 3.21718274,
+        "reserved": 0,
+        "exactness": "estimated"
+      },
+      {
+        "name": "invocations",
+        "limit_value": 6,
+        "used": 3,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "subagentsTotal",
+        "limit_value": 8,
+        "used": 4,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "toolCalls",
+        "limit_value": 600,
+        "used": 174,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "wallClockMs",
+        "limit_value": 2700000,
+        "used": 252673,
+        "reserved": 0,
+        "exactness": "exact"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "gsd:inspect",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:56:15.325Z",
+      "completedAt": "2026-11-04T01:56:15.325Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:probe",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:56:15.891Z",
+      "completedAt": "2026-11-04T01:56:15.999Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "mapping:plan",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:56:15.999Z",
+      "completedAt": "2026-11-04T01:56:15.999Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:configure",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:56:15.999Z",
+      "completedAt": "2026-11-04T01:56:16.280Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 1,
+      "status": "reconciled",
+      "startedAt": "2026-11-04T01:56:16.302Z",
+      "completedAt": "2026-11-04T02:00:18.056Z",
+      "invocationId": "inv_01M6J4AVSEJHBPEM2ZMHXAQ7MC",
+      "sessionId": "b7b37906-766e-4783-a332-db9198ec394d",
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:stamp",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:00:18.057Z",
+      "completedAt": "2026-11-04T02:00:18.139Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "validate",
+      "attempt": 1,
+      "status": "accepted",
+      "startedAt": "2026-11-04T02:00:18.342Z",
+      "completedAt": "2026-11-04T02:00:18.342Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:code-graph",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:00:18.351Z",
+      "completedAt": "2026-11-04T02:00:20.575Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:00:20.595Z",
+      "completedAt": "2026-11-04T02:02:21.268Z",
+      "invocationId": "inv_01M6J4JABKZE4A22ZXBX6X93NH",
+      "sessionId": "4d1ec91d-fdd8-438a-b8fb-1a81917f0304",
+      "kind": "progressed",
+      "costUsd": 0.03413746,
+      "durationMs": 120553,
+      "permissionDenials": 13
+    },
+    {
+      "step": "gsd:intel-snapshot",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:02:21.430Z",
+      "completedAt": "2026-11-04T02:02:21.501Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:00:20.575Z",
+      "completedAt": "2026-11-04T02:02:21.571Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:02:21.638Z",
+      "completedAt": "2026-11-04T02:04:33.890Z",
+      "invocationId": "inv_01M6J4P0J648GDXT2XXC8VHQFX",
+      "sessionId": "41d3b12d-a2ad-4497-81dd-4d2e9b76c67e",
+      "kind": "progressed",
+      "costUsd": 0.18304528000000003,
+      "durationMs": 132120,
+      "permissionDenials": 0
+    },
+    {
+      "step": "index:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T02:02:21.572Z",
+      "completedAt": "2026-11-04T02:04:34.472Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    }
+  ],
+  "hookDecisions": {
+    "deny:shell-syntax": 38,
+    "allow:read-set": 116,
+    "allow:shell-identity": 33,
+    "deny:shell-not-allowed": 6,
+    "allow:subagent-type": 4,
+    "allow:write-set": 25
+  },
+  "eventTypes": {
+    "contract.stored": 1,
+    "hook.decision": 222,
+    "invocation.finished": 2,
+    "invocation.orphan-charged": 1,
+    "invocation.reconciled": 1,
+    "onboarding.checkpoint": 7,
+    "onboarding.transition": 8,
+    "tool.completed": 178
+  },
+  "reaped": [],
+  "containment": {
+    "contractVersions": [
+      {
+        "version": 1,
+        "digest": "sha256:6cdf5aca1e55fab9a1ed72741ff643705d0f03f31167719feacfb29e21f150dd",
+        "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+        "created_at": "2026-11-04T01:56:15.326Z"
+      }
+    ],
+    "contractsAtMapStart": {
+      "contracts": [
+        {
+          "version": 1,
+          "digest": "sha256:6cdf5aca1e55fab9a1ed72741ff643705d0f03f31167719feacfb29e21f150dd",
+          "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+          "created_at": "2026-11-04T01:56:15.326Z"
+        }
+      ]
+    },
+    "contractUnchanged": true,
+    "generatedFilesAtMapStart": {
+      "map-inv_01M6J4AVSEJHBPEM2ZMHXAQ7MC/hook-policy.json": "1b35b2cf84fd53480fdb523b83f5e4dba4f1c616e34ec4ccefb1c5131c22c578",
+      "map-inv_01M6J4AVSEJHBPEM2ZMHXAQ7MC/host-settings.json": "4535515cb749b6893662605a86654f74102bc7ffd8421fc741c80b7ace15a721"
+    },
+    "generatedFilesAtEnd": {
+      "intel-inv_01M6J4JABKZE4A22ZXBX6X93NH/hook-policy.json": "63434a58ed7918ea07d837f660544cf0b2c9769411740baee3626e5ca270c3e2",
+      "intel-inv_01M6J4JABKZE4A22ZXBX6X93NH/host-settings.json": "f0c34d7eadd2c1daca43584a2ae93e925622ce447257b91646263abf60a22ff5",
+      "knowledge-inv_01M6J4P0J648GDXT2XXC8VHQFX/hook-policy.json": "58c6920d5034de5354b49dfbdcfe4bcbc3e99491008c4e4e4b428e8dba64efef",
+      "knowledge-inv_01M6J4P0J648GDXT2XXC8VHQFX/host-settings.json": "feb650f78d554356f0be08cc90b909100056e3df7901b1633da15b37ac204f39",
+      "map-inv_01M6J4AVSEJHBPEM2ZMHXAQ7MC/hook-policy.json": "1b35b2cf84fd53480fdb523b83f5e4dba4f1c616e34ec4ccefb1c5131c22c578",
+      "map-inv_01M6J4AVSEJHBPEM2ZMHXAQ7MC/host-settings.json": "4535515cb749b6893662605a86654f74102bc7ffd8421fc741c80b7ace15a721"
+    },
+    "settingsAndPolicyUnchanged": true,
+    "pushOrCommitInTarget": null
+  },
+  "context": [
+    {
+      "term": "Testing patterns (TESTING.md)",
+      "exit": 0,
+      "items": 8,
+      "untrustedItems": 7,
+      "fenced": true,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [
+        {
+          "source": "gsd-graph",
+          "title": "setMediaQuery test helper for reduced motion",
+          "untrusted": false,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Vitest unit and component tests in jsdom",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Testing patterns (TESTING.md)",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Gate scripts tested as child processes on fixture trees",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Never mock content or design tokens in tests",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Playwright end-to-end specs with desktop and mobile projects",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "TextEffect copied byte for byte into src/components",
+          "untrusted": true,
+          "scope": "docs/adr/0007-vendored-motion-primitives.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "ADR-0006: Project overlay dialog accessibility",
+          "untrusted": true,
+          "scope": "docs/adr/0006-project-overlay-dialog-accessibility.md"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "term": "setMediaQuery test helper for reduced motion",
+      "exit": 0,
+      "items": 6,
+      "untrustedItems": 5,
+      "fenced": true,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [
+        {
+          "source": "gsd-graph",
+          "title": "setMediaQuery test helper for reduced motion",
+          "untrusted": false,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Vitest unit and component tests in jsdom",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Testing patterns (TESTING.md)",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Gate scripts tested as child processes on fixture trees",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Never mock content or design tokens in tests",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Playwright end-to-end specs with desktop and mobile projects",
+          "untrusted": true,
+          "scope": ".planning/codebase/TESTING.md"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "problems": []
+}

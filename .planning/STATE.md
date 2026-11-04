@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
-status: executing
-stopped_at: "01-19 blocked after rehearsal 4: intel snapshot and knowledge pass denied by the hook; target run not started"
-last_updated: "2026-11-03T23:49:38.961Z"
+status: verifying
+stopped_at: Completed 01-19-PLAN.md
+last_updated: "2026-11-04T02:10:18.217Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 01 execution started
-state_head: 6477c32c46eb69de3196a32cea002ea6bd5724b4
+state_head: 0d930f34961c35f87598ab8e621db688eb7d407c
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 20
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-01)
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
 Plan: 20 of 20
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-02 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P17 | 60 min | 2 tasks | 28 files |
 | Phase 01 P18 | 33 min | 2 tasks | 25 files |
 | Phase 01 P20 | 314 min | 4 tasks | 13 files |
+| Phase 01 P19 | about 6 hours across three resumes | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-19: the empty .planning/codebase AVARICE creates made GSD ask Refresh/Update/Skip; the contract's existing-map answer is now always passed to the mapper (8cc18b6)
 - [Phase 01]: 01-19: exit run stopped after the rehearsals (0.1656 of 24 USD spent); target run withheld until the owner decides the full-map stamp, path-references tolerance and retry budget
 - [Phase 01]: 01-19: invocations budget derived per mode (full/fast/paths 6, skip/adopt 3) with invocationsDerivation; killed invocations stay charged; overrides only lower (6477c32)
+- [Phase 01]: 01-19: knowledge validation's forbidden-source rule applies to planning documents for any node and to anything under .planning/phases for pass-added nodes, so a code node from a tracked script there no longer rejects the index (0d930f3)
+- [Phase 01]: 01-19: exit run complete: ~/aa-phan-portfolio-v2 active (1010 code, 24 document nodes, graph and intel at 9f1cd8d), kill -9 and resume to the same ID and pin, checkout unchanged, AC-1 1 s; default store tightened to 0600
 
 ### Pending Todos
 
@@ -176,8 +179,6 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
-- [Phase 1, plan 01-19] Exit run blocked: three live rehearsals did not reach active. Full map is never stamped (stamp check), real full map has 10.5% dangling paths (limit 5%), a map retry exceeds subagentsTotal 7; see 01-19-SUMMARY.md and deferred-items 9 to 11. Target run not started.
-- [Phase 1, plan 01-19] Rehearsal 4 reached active via kill+resume but intel snapshot (hook denies gsd_run preamble) and knowledge pass (hook denies graphify shell steps) fail; target run not started; deferred items 13, 14
 
 ## Deferred Items
 
@@ -189,6 +190,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T23:49:38.934Z
-Stopped at: 01-19 blocked after rehearsal 4: intel snapshot and knowledge pass denied by the hook; target run not started
-Resume file: .planning/phases/01-contained-onboarding-of-one-repository/01-19-SUMMARY.md
+Last session: 2026-11-04T02:10:18.190Z
+Stopped at: Completed 01-19-PLAN.md
+Resume file: None

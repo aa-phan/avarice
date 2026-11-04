@@ -1,0 +1,479 @@
+{
+  "schema": 1,
+  "mode": "rehearsal",
+  "repo": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-VLzqwQ/clone",
+  "source": "/Users/aphan/aa-phan-portfolio-v2",
+  "runDir": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-VLzqwQ/data/exit-run/rehearsal-20261104T012143Z",
+  "startedAtEpoch": 1793755303,
+  "finishedAtEpoch": 1793755825,
+  "wallSeconds": 522,
+  "authorization": {
+    "selection": "rehearsal-then-target",
+    "capUsd": 24,
+    "perRunCapUsd": 12,
+    "spentUsdSoFar": 0.47,
+    "decidedBy": "user (aphan)",
+    "decidedOn": "2026-11-03",
+    "decidedThrough": "execute-phase orchestrator, resolving the Task 2 checkpoint:decision (gate blocking-human) of plan 01-19",
+    "noCommitConfirmed": true,
+    "noCommitConfirmation": "The user confirmed they will not commit to ~/aa-phan-portfolio-v2 while the run is in progress",
+    "contextGiven": "measured cost so far well under 1 USD per onboarding; caps are ceilings; clone staging writes nothing to the target"
+  },
+  "tooling": {
+    "node": "v22.22.3",
+    "claude": {
+      "path": "/Users/aphan/.local/bin/claude",
+      "version": "2.1.317"
+    },
+    "stagingStrategy": "clone"
+  },
+  "onboardingId": "onb_01M6J2BNBGS5FAV50DG6EBYFVJ",
+  "outcome": {
+    "killedProcessExit": 137,
+    "resumeExit": 0,
+    "finalState": "active"
+  },
+  "record": {
+    "ok": false,
+    "onboardingId": "onb_01M6J2BNBGS5FAV50DG6EBYFVJ",
+    "projectId": "proj_01M6J2BNBFB5SXHM4HR1DGS82B",
+    "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-VLzqwQ/clone",
+    "state": "active",
+    "recordVersion": 1,
+    "promotion": "none",
+    "onboardedRevision": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "2026-11-04T01:30:25.651Z",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "nodes": {
+      "code": 996,
+      "concept": 55,
+      "document": 0
+    },
+    "edges": {
+      "EXTRACTED": 1232,
+      "INFERRED": 25
+    },
+    "documentNodes": null,
+    "graphBuiltAtCommit": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "intelRefreshedAtCommit": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "intelFiles": 5,
+    "absentIndexes": [
+      {
+        "index": "knowledge",
+        "reason": "validation-failed"
+      }
+    ],
+    "problems": [
+      "the graph lists no document nodes (nodes.document 0, knowledge.documentNodes absent)"
+    ]
+  },
+  "checkoutBefore": {
+    "head": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "16278938b0ec2b8bacdf1b79cea05bc09f2f7c4f687bb9dcc74c7cf6ff82baa5",
+    "worktreesDigest": "b71293c0b5e157ea9a2a676ab60dcdd02a7a2fa00daf5480d097443409f278f3",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutAfter": {
+    "head": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "16278938b0ec2b8bacdf1b79cea05bc09f2f7c4f687bb9dcc74c7cf6ff82baa5",
+    "worktreesDigest": "b71293c0b5e157ea9a2a676ab60dcdd02a7a2fa00daf5480d097443409f278f3",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutUnchanged": {
+    "head": true,
+    "branch": true,
+    "statusDigest": true,
+    "filesDigest": true,
+    "refsDigest": true,
+    "worktreesDigest": true
+  },
+  "killAndResume": {
+    "killAfterSecondsRequested": 60,
+    "mapLaunchStartedObservedAtEpoch": 1793755307,
+    "killedAtEpoch": 1793755370,
+    "secondsFromMapStartToKill": 63,
+    "avaricePid": 53021,
+    "signal": "KILL",
+    "killedSessionId": "4a54e3b3-0163-47a0-9520-af5511158bde",
+    "stateWhenKilled": "mapping",
+    "survivingHostProcessesAfterKill": 1,
+    "interruptedSeenAtEpoch": 1793755549,
+    "secondsFromKillToInterrupted": 179,
+    "interruptedStatus": {
+      "projectId": "proj_01M6J2BNBFB5SXHM4HR1DGS82B",
+      "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-VLzqwQ/clone",
+      "onboardingId": "onb_01M6J2BNBGS5FAV50DG6EBYFVJ",
+      "state": "mapping",
+      "reason": null,
+      "interrupted": {
+        "state": "mapping",
+        "nextAction": "launch:map",
+        "resumeCommand": "avarice resume onb_01M6J2BNBGS5FAV50DG6EBYFVJ"
+      },
+      "recordVersion": null,
+      "onboardedRevision": null,
+      "mapping": null,
+      "indexes": {}
+    },
+    "resumeCommand": "avarice resume onb_01M6J2BNBGS5FAV50DG6EBYFVJ",
+    "resumeSeconds": 276,
+    "resumeExit": 0,
+    "sameOnboardingId": true,
+    "sameOnboardedRevision": true,
+    "pinBefore": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "pinAfter": "cbccb625f9c5f1aee473a5f2496c9ca7f38b1214",
+    "processesWithKilledSessionAfterResume": 0,
+    "processesWithAnySessionAfterResume": 0
+  },
+  "costs": {
+    "totalUsd": 0.127336,
+    "budgetCostUsedUsd": 3.1273356800000003,
+    "perStep": [
+      {
+        "step": "launch:intel",
+        "attempt": 1,
+        "costUsd": 0.04957701000000001,
+        "durationMs": 165035,
+        "invocationId": "inv_01M6J2K6XYCMPP97ZM3QFWTBV1"
+      },
+      {
+        "step": "launch:knowledge",
+        "attempt": 1,
+        "costUsd": 0.07775867,
+        "durationMs": 107064,
+        "invocationId": "inv_01M6J2R8KEZSKZF1EPHESS0RM6"
+      }
+    ],
+    "budgets": [
+      {
+        "name": "costUsd",
+        "limit_value": 12,
+        "used": 3.1273356800000003,
+        "reserved": 0,
+        "exactness": "estimated"
+      },
+      {
+        "name": "invocations",
+        "limit_value": 6,
+        "used": 3,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "subagentsTotal",
+        "limit_value": 8,
+        "used": 4,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "toolCalls",
+        "limit_value": 600,
+        "used": 168,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "wallClockMs",
+        "limit_value": 2700000,
+        "used": 272099,
+        "reserved": 0,
+        "exactness": "exact"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "gsd:inspect",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:21:45.329Z",
+      "completedAt": "2026-11-04T01:21:45.329Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:probe",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:21:45.739Z",
+      "completedAt": "2026-11-04T01:21:45.844Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "mapping:plan",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:21:45.845Z",
+      "completedAt": "2026-11-04T01:21:45.845Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:configure",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:21:45.845Z",
+      "completedAt": "2026-11-04T01:21:46.135Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 1,
+      "status": "reconciled",
+      "startedAt": "2026-11-04T01:21:46.161Z",
+      "completedAt": "2026-11-04T01:25:49.877Z",
+      "invocationId": "inv_01M6J2BP5H90A09VEZJR1QM21B",
+      "sessionId": "4a54e3b3-0163-47a0-9520-af5511158bde",
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:stamp",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:25:49.878Z",
+      "completedAt": "2026-11-04T01:25:49.960Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "validate",
+      "attempt": 1,
+      "status": "accepted",
+      "startedAt": "2026-11-04T01:25:50.232Z",
+      "completedAt": "2026-11-04T01:25:50.232Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:code-graph",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:25:50.240Z",
+      "completedAt": "2026-11-04T01:25:52.679Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:25:52.703Z",
+      "completedAt": "2026-11-04T01:28:37.865Z",
+      "invocationId": "inv_01M6J2K6XYCMPP97ZM3QFWTBV1",
+      "sessionId": "209cf2ea-22d1-4f04-a871-4319902d847b",
+      "kind": "progressed",
+      "costUsd": 0.04957701000000001,
+      "durationMs": 165035,
+      "permissionDenials": 14
+    },
+    {
+      "step": "gsd:intel-snapshot",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:28:38.043Z",
+      "completedAt": "2026-11-04T01:28:38.115Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:25:52.679Z",
+      "completedAt": "2026-11-04T01:28:38.189Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:28:38.254Z",
+      "completedAt": "2026-11-04T01:30:25.471Z",
+      "invocationId": "inv_01M6J2R8KEZSKZF1EPHESS0RM6",
+      "sessionId": "a9193b1d-ec8c-414c-8b11-274dd6d8d6fb",
+      "kind": "progressed",
+      "costUsd": 0.07775867,
+      "durationMs": 107064,
+      "permissionDenials": 15
+    },
+    {
+      "step": "index:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T01:28:38.190Z",
+      "completedAt": "2026-11-04T01:30:25.486Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    }
+  ],
+  "hookDecisions": {
+    "deny:shell-syntax": 32,
+    "allow:read-set": 109,
+    "deny:shell-not-allowed": 15,
+    "allow:subagent-type": 4,
+    "allow:shell-identity": 38,
+    "allow:write-set": 21,
+    "deny:outside-read-set": 15
+  },
+  "eventTypes": {
+    "contract.stored": 1,
+    "hook.decision": 234,
+    "index.absent": 1,
+    "invocation.finished": 2,
+    "invocation.orphan-charged": 1,
+    "invocation.reconciled": 1,
+    "onboarding.checkpoint": 7,
+    "onboarding.transition": 8,
+    "tool.completed": 172
+  },
+  "reaped": [],
+  "containment": {
+    "contractVersions": [
+      {
+        "version": 1,
+        "digest": "sha256:d08980954ecefa0ed74c1509b083467a8220bf0a12ed290ba34a7cdfcccde7f1",
+        "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+        "created_at": "2026-11-04T01:21:45.329Z"
+      }
+    ],
+    "contractsAtMapStart": {
+      "contracts": [
+        {
+          "version": 1,
+          "digest": "sha256:d08980954ecefa0ed74c1509b083467a8220bf0a12ed290ba34a7cdfcccde7f1",
+          "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+          "created_at": "2026-11-04T01:21:45.329Z"
+        }
+      ]
+    },
+    "contractUnchanged": true,
+    "generatedFilesAtMapStart": {
+      "map-inv_01M6J2BP5H90A09VEZJR1QM21B/hook-policy.json": "4005ecfdf8bfec430d2b450bcca9bdd4788985bae5913bf712d791872d6579df",
+      "map-inv_01M6J2BP5H90A09VEZJR1QM21B/host-settings.json": "8cdca7d19d5995e224e4a4dc311ce0846bf8281926533507435d93258b2dd6f9"
+    },
+    "generatedFilesAtEnd": {
+      "intel-inv_01M6J2K6XYCMPP97ZM3QFWTBV1/hook-policy.json": "ce33f7132845bd2302154ecb6dfaf6a5883035277943b94ecc109b9bd7a80741",
+      "intel-inv_01M6J2K6XYCMPP97ZM3QFWTBV1/host-settings.json": "0313a6395a1e76e432da99b46fdd91b800c2ed63aeb962340f47fe30e2cbd662",
+      "knowledge-inv_01M6J2R8KEZSKZF1EPHESS0RM6/hook-policy.json": "3e3edf3e35619734f577a7921c80366d799af03f037ec91221e7b176c3cde24e",
+      "knowledge-inv_01M6J2R8KEZSKZF1EPHESS0RM6/host-settings.json": "5593d4e645544d9fc550666f4f3284ef87b5facda841d6928419b6d5b8ee5723",
+      "map-inv_01M6J2BP5H90A09VEZJR1QM21B/hook-policy.json": "4005ecfdf8bfec430d2b450bcca9bdd4788985bae5913bf712d791872d6579df",
+      "map-inv_01M6J2BP5H90A09VEZJR1QM21B/host-settings.json": "8cdca7d19d5995e224e4a4dc311ce0846bf8281926533507435d93258b2dd6f9"
+    },
+    "settingsAndPolicyUnchanged": true,
+    "pushOrCommitInTarget": null
+  },
+  "context": [
+    {
+      "term": "ADR-999",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    },
+    {
+      "term": "injected decision",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    },
+    {
+      "term": "push to main",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": false,
+      "sources": [],
+      "notes": []
+    }
+  ],
+  "problems": [
+    "assert-exit: the graph lists no document nodes (nodes.document 0, knowledge.documentNodes absent)",
+    "avarice context did not print the injected node inside the untrusted-data fence"
+  ]
+}
