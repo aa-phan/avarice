@@ -377,10 +377,23 @@ function globMayMatchBelow(glob: string, root: readonly string[]): boolean {
 function recursiveRule(parsed: ReadArgs, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
   const { flags, longs, shortValues, positional } = parsed;
   const longNamed = (full: string, minLength: number): Array<{ name: string; value: string | null }> => longs.filter((l) => isLongOption(l.name, full, minLength));
-  const directoriesRecurse =
-    shortValues.some((v) => v.flag === 'd' && v.value === 'recurse') ||
-    longNamed('--directories', 5).some((l) => (l.value ?? (positional.includes('recurse') ? 'recurse' : '')) === 'recurse');
-  const dereferences = flags.has('R') || longNamed('--dereference-recursive', 5).length > 0;
+  // CR-01 / P-3: classify every -d/--directories action fail closed. macOS BSD grep folds case (`RECURSE` recurses) and the
+  // ugrep embedded in Claude Code accepts `dereference-recurse`, so only `read` and `skip` (any case) are non-recursive.
+  // `recurse` walks; any other value, an abbreviation, or a long option that consumed no value follows links. Judge the
+  // command as if any one action applies (a real grep uses the last one; refusing more is the fail-closed side).
+  const directoriesActions: Array<string | null> = [
+    ...shortValues.filter((v) => v.flag === 'd').map((v) => v.value),
+    ...longNamed('--directories', 3).map((l) => l.value),
+  ];
+  let directoriesRecurse = false;
+  let directoriesFollowLinks = false;
+  for (const action of directoriesActions) {
+    const value = action === null ? null : action.toLowerCase();
+    if (value === 'read' || value === 'skip') continue;
+    if (value === 'recurse') directoriesRecurse = true;
+    else directoriesFollowLinks = true;
+  }
+  const dereferences = flags.has('R') || longNamed('--dereference-recursive', 5).length > 0 || directoriesFollowLinks;
   const recursive = flags.has('r') || dereferences || longNamed('--recursive', 5).length > 0 || directoriesRecurse;
   if (!recursive) return null;
   // `-S` and `-O` make BSD grep follow links while walking.
