@@ -218,7 +218,7 @@ describe('MF-04: shell expansion characters and the hook read check', () => {
 
   it('keeps the quoted forms: the shell does not expand inside quotes', () => {
     const fx = fixture();
-    for (const command of ["find . -name '*.ts' -print", 'find . -name "*.ts" -print', 'grep -rn "a[b]c" src', "grep -rn 'x{1,2}' src", 'grep -rn "who?" src', "ls 'my dir'"]) {
+    for (const command of ["find . -name '*.ts' -print", 'find . -name "*.ts" -print', 'grep -n "a[b]c" src/a.ts', "grep -n 'x{1,2}' src/a.ts", 'grep -n "who?" src/a.ts', "ls 'my dir'"]) {
       assert.equal(denied(fx, command), 'allow:shell-identity', command);
     }
   });

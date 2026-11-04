@@ -265,7 +265,9 @@ describe('Bash command identity', () => {
     assert.equal(decide(shell('cat src/a.ts | head -20')).decision, 'allow');
     assert.equal(decide(shell('git ls-files | wc -l')).decision, 'allow');
     assert.equal(decide(shell('find . -name "*.ts" -print')).decision, 'allow');
-    assert.equal(decide(shell('grep -rn "a|b" src')).decision, 'allow');
+    assert.equal(decide(shell('grep -n "a|b" src/a.ts')).decision, 'allow');
+    // D-GAP-01: a recursive grep walks directories the hook cannot list, so inside staging it is refused.
+    assert.deepEqual(((d) => [d.decision, d.rule])(decide(shell('grep -rn "a|b" src'))), ['deny', 'shell-recursive-read']);
     assert.equal(decide(shell("ls -la 'my dir'")).decision, 'allow');
   });
 
@@ -328,6 +330,147 @@ describe('Bash command identity', () => {
     assert.equal(explicit.explicit, true);
     assert.notEqual(decide(shell('ls')).explicit, true);
     assert.notEqual(decide(shell('ls'), policy({}, { strategy: 'narrow-rules' })).explicit, true);
+  });
+});
+
+// CR-02 / gap P-3 (D-GAP-01): every word a read command names is a path candidate, whether it is an operand, an attached option
+// value (`-fPATH`, `--file=PATH`) or a word after a bare `--`; a recursive grep is judged on the directories it walks.
+describe('shell option values, operands after --, and recursive reads (CR-02, D-GAP-01)', () => {
+  const rule = (command: string, p: HookPolicy = policy(), cwd = STAGING): string => ((d) => `${d.decision}:${d.rule}`)(decide(shell(command, cwd), p));
+  const roots = (...readRoots: string[]): HookPolicy => policy({ readRoots });
+
+  it('denies each case VERIFICATION.md P-3 reproduced, with its rule', () => {
+    assert.equal(rule('cat /work/onb-2/staging/secret.txt'), 'deny:outside-read-set');
+    assert.equal(rule('cat /home/u/.netrc'), 'deny:outside-read-set');
+    assert.equal(rule('grep -r token /home/u'), 'deny:outside-read-set');
+    assert.equal(rule('grep -r PASSWORD .'), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -f/home/u/.ssh/id_rsa README.md'), 'deny:deny-read');
+    assert.equal(rule('grep --file=/home/u/.ssh/id_rsa README.md'), 'deny:deny-read');
+    // The two that were already denied stay denied.
+    assert.equal(rule('cat /home/u/.ssh/id_rsa'), 'deny:deny-read');
+    assert.equal(rule(`cat ${STAGING}/.env`), 'deny:deny-secret-read');
+  });
+
+  it('checks an attached short option value, alone or inside a cluster', () => {
+    assert.equal(rule('grep -rnf/home/u/.ssh/id_rsa .'), 'deny:deny-read');
+    assert.equal(rule('git log -O/home/u/.netrc'), 'deny:outside-read-set');
+    assert.equal(rule('grep -e foo -f /home/u/.netrc src/a.ts'), 'deny:outside-read-set');
+    assert.equal(rule('head -n/home/u/.netrc src/a.ts'), 'deny:outside-read-set');
+  });
+
+  it('treats the word after a bare -- as an operand, even when it looks like an option', () => {
+    assert.equal(rule('cat -- -/../../../../home/u/.netrc'), 'deny:outside-read-set');
+    assert.equal(rule('cat -- /home/u/.netrc'), 'deny:outside-read-set');
+    assert.equal(rule('cat -- -f /home/u/.netrc'), 'deny:outside-read-set');
+    assert.equal(rule('cat -- src/a.ts'), 'allow:shell-identity');
+  });
+
+  it('reads an option cluster per character: only ASCII letters and digits are flags', () => {
+    assert.equal(rule('ls -l/etc'), 'deny:shell-option-value');
+    assert.equal(rule('ls -lé'), 'deny:shell-option-value');
+    assert.equal(rule('ls -l-a'), 'deny:shell-option-value');
+    assert.equal(rule('ls -1A'), 'allow:shell-identity');
+    assert.equal(rule('grep -nH x src/a.ts'), 'allow:shell-identity');
+  });
+
+  it('refuses every recursive grep spelling inside staging, where a secret glob can match below', () => {
+    for (const command of [
+      'grep -rn "a|b" src',
+      'grep -R x src',
+      'grep --recursive x src',
+      'grep --dereference-recursive x src',
+      'grep -d recurse x src',
+      'grep -drecurse x src',
+      'grep --directories=recurse x src',
+      'grep --directories recurse x src',
+      'grep --recurs x src',
+      'grep -r x',
+      'grep -r x .',
+    ]) {
+      assert.equal(rule(command), 'deny:shell-recursive-read', command);
+    }
+  });
+
+  it('judges a recursive grep on the directories it walks, not on the command', () => {
+    const narrow = policy({ denyReadGlobs: ['config/secrets.json'] });
+    assert.equal(rule('grep -r x src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep -r x config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x .', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x', narrow), 'deny:shell-recursive-read', 'no operand: the working directory');
+    assert.equal(rule('grep -r x', narrow, `${STAGING}/src`), 'allow:shell-identity');
+    assert.equal(rule('grep -r x config/sub', narrow), 'allow:shell-identity', 'the glob names a file directly in config');
+    const nested = policy({ denyReadGlobs: ['a/**/key.txt', 'docs/*.pem'] });
+    assert.equal(rule('grep -r x a/b/c', nested), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x docs', nested), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x docs/sub', nested), 'allow:shell-identity');
+    assert.equal(rule('grep -r x src', nested), 'allow:shell-identity');
+  });
+
+  it('takes the pattern from -e, -f or --regexp, so every operand is a walked root', () => {
+    const narrow = policy({ denyReadGlobs: ['config/secrets.json'] });
+    assert.equal(rule('grep -r -e foo config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r -e foo src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep -r --regexp=foo config', narrow), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r --regexp=foo src', narrow), 'allow:shell-identity');
+    assert.equal(rule('grep -r -f pats src', narrow), 'allow:shell-identity');
+    // Without an option the first operand is the pattern and is not a root.
+    assert.equal(rule('grep -r config src', narrow), 'allow:shell-identity');
+  });
+
+  it('refuses a recursive grep that follows links, and allows one inside a read root', () => {
+    const p = roots('/gsd/core');
+    assert.equal(rule('grep -r x /gsd/core', p), 'allow:shell-identity');
+    assert.equal(rule('grep -R x /gsd/core', p), 'deny:shell-recursive-read');
+    assert.equal(rule('grep --dereference-recursive x /gsd/core', p), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -rS x /gsd/core', p), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x', p, '/gsd/core'), 'allow:shell-identity');
+    assert.equal(rule('grep -r x', policy(), '/gsd/core'), 'deny:outside-read-set', 'the working directory is judged like an operand');
+  });
+
+  it('refuses a recursive grep whose root contains a denied root', () => {
+    const p = policy({ denyRead: [REPO, DATA, '/home/u/.ssh', `${STAGING}/vault`], denyReadGlobs: ['config/secrets.json'] });
+    assert.equal(rule('grep -r x .', p), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x src', p), 'allow:shell-identity');
+    assert.equal(rule('grep -r x vault', p), 'deny:deny-read');
+    const wide = policy({ denyRead: [REPO, DATA, '/home/u/.ssh', '/gsd/core/secrets'], readRoots: ['/gsd/core'] });
+    assert.equal(rule('grep -r x /gsd/core', wide), 'deny:shell-recursive-read');
+    assert.equal(rule('grep -r x /gsd/core/workflows', wide), 'allow:shell-identity');
+  });
+
+  it('keeps allowing the read commands the mapper and the intel agent need', () => {
+    for (const command of [
+      'grep -n "a|b" src/a.ts',
+      'grep -c x README.md',
+      'grep -e foo -e bar src/a.ts',
+      'grep -A3 x src/a.ts',
+      'head -n5 src/a.ts',
+      'head -n 5 src/a.ts',
+      'tail -20 src/a.ts',
+      'wc -l src/a.ts',
+      'ls -1A',
+      "ls -la 'my dir'",
+      'find . -name "*.ts" -print',
+      'find . -maxdepth 2 -type f',
+      'git log -5 --oneline',
+      'git log --format=%H -1',
+      'git status -uall',
+      'git ls-files',
+      'git rev-parse HEAD',
+      'cat -- src/a.ts',
+      'cat src/a.ts | head -20',
+      'cat src/a.ts | grep -n x',
+    ]) {
+      assert.equal(rule(command), 'allow:shell-identity', command);
+    }
+    assert.equal(decide(shell(`${PREAMBLE}\nINIT=$(gsd_run query init.map-codebase)\ngsd_run graphify status`)).decision, 'allow');
+  });
+
+  it('keeps the existing denials under their rules', () => {
+    assert.equal(rule('git log --output=out.txt'), 'deny:shell-git-option');
+    assert.equal(rule('find . -fprint out.txt'), 'deny:shell-find-action');
+    assert.equal(rule('grep -rn foo --include=*.ts src'), 'deny:shell-syntax');
+    assert.equal(rule('cat src/*.ts'), 'deny:shell-syntax');
+    assert.equal(rule('npm test'), 'deny:shell-denied-prefix');
   });
 });
 
