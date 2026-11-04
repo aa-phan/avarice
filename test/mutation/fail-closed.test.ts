@@ -211,14 +211,14 @@ describe('MF-04: shell expansion characters and the hook read check', () => {
 
   it('refuses each of the four characters in any read command, in any position and in any segment of a pipeline', () => {
     const fx = fixture();
-    for (const command of ['ls *', 'ls src/?.ts', 'cat src/[ab].ts', 'cat {a,b}', 'head -n 3 src/*.ts', 'grep -rn foo --include=*.ts src', 'git log -- *.ts', 'cat src/a.ts | grep x*', 'wc -l src/a*', 'ls "src"/*']) {
+    for (const command of ['ls *', 'ls src/?.ts', 'cat src/[ab].ts', 'cat {a,b}', 'head -n 3 src/*.ts', 'find src -name *.ts', 'git log -- *.ts', 'cat src/a.ts | head x*', 'wc -l src/a*', 'ls "src"/*']) {
       assert.equal(denied(fx, command), 'deny:shell-syntax', command);
     }
   });
 
   it('keeps the quoted forms: the shell does not expand inside quotes', () => {
     const fx = fixture();
-    for (const command of ["find . -name '*.ts' -print", 'find . -name "*.ts" -print', 'grep -n "a[b]c" src/a.ts', "grep -n 'x{1,2}' src/a.ts", 'grep -n "who?" src/a.ts', "ls 'my dir'"]) {
+    for (const command of ["find . -name '*.ts' -print", 'find . -name "*.ts" -print', 'cat "src/a[b]c.ts"', "cat 'src/x{1,2}.ts'", 'cat "src/who?.ts"', "ls 'my dir'"]) {
       assert.equal(denied(fx, command), 'allow:shell-identity', command);
     }
   });

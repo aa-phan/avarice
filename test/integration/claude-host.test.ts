@@ -260,9 +260,13 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     };
     assert.equal(call(`cat ${workRoot}/onb_OTHER/staging/secret.txt`), 'deny:deny-read', 'a sibling onboarding staging file');
     assert.equal(call(`cat ${home}/.netrc`), 'deny:outside-read-set');
-    assert.equal(call(`grep -r token ${home}`), 'deny:outside-read-set');
-    assert.equal(call('grep -r PASSWORD .'), 'deny:shell-recursive-read');
-    assert.equal(call(`grep -f${home}/.ssh/id_rsa README.md`), 'deny:deny-read');
+    // WR-02: shell grep is not an admitted command on the policy the real adapter wrote, whichever binary the shell runs.
+    assert.ok(!policy.commands.readOnly.includes('grep'), 'grep is not in the read-only commands');
+    assert.equal(call(`grep -r token ${home}`), 'deny:shell-not-allowed');
+    assert.equal(call('grep -r PASSWORD .'), 'deny:shell-not-allowed');
+    assert.equal(call(`grep -f${home}/.ssh/id_rsa README.md`), 'deny:shell-not-allowed');
+    assert.equal(call('grep -5 PASSWORD .'), 'deny:shell-not-allowed');
+    assert.equal(call('grep PASSWORD .'), 'deny:shell-not-allowed');
     assert.equal(call(`cat ${home}/.ssh/id_rsa`), 'deny:deny-read');
     assert.equal(call('cat .env'), 'deny:deny-secret-read');
     // Adjacency: an ID that shares a prefix with this one, and this onboarding directory above staging, are not this staging.

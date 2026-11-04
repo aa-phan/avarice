@@ -215,7 +215,7 @@ describe('computeInvocationScope: commands and budgets', () => {
   });
 
   it('lists the read-only commands, the denied prefixes and the find actions the hook refuses', () => {
-    for (const command of ['ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'git ls-files', 'git log', 'git rev-parse', 'git status', 'git show']) {
+    for (const command of ['ls', 'cat', 'head', 'tail', 'wc', 'find', 'git ls-files', 'git log', 'git rev-parse', 'git status', 'git show']) {
       assert.ok(READ_ONLY_COMMANDS.includes(command), `READ_ONLY_COMMANDS must list ${command}`);
     }
     for (const prefix of ['git push', 'git commit', 'git -c', 'git config', 'gh', 'claude', 'avarice', 'npm', 'npx', 'pnpm', 'yarn', 'curl', 'wget', 'pip', 'uv pip', 'make']) {
@@ -227,6 +227,16 @@ describe('computeInvocationScope: commands and budgets', () => {
     const scope = scopeFor('map');
     assert.deepEqual(scope.commands.readOnly, [...READ_ONLY_COMMANDS]);
     assert.deepEqual(scope.commands.deniedPrefixes, [...DENIED_COMMAND_PREFIXES]);
+  });
+
+  // WR-02: the Bash tool may run `grep` as the embedded ugrep or /usr/bin/grep, chosen per call, so the hook cannot model it.
+  it('admits no grep-family command as read-only (WR-02)', () => {
+    const family = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ugrep', 'ug']);
+    for (const entry of READ_ONLY_COMMANDS) {
+      assert.ok(!family.has(entry.split(' ')[0] ?? ''), `READ_ONLY_COMMANDS must not list ${entry}`);
+      assert.notEqual(entry, 'git grep');
+    }
+    assert.ok(!scopeFor('map').commands.readOnly.includes('grep'));
   });
 
   it('allows the intel mutators only for the intel purpose', () => {

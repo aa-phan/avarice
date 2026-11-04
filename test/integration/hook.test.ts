@@ -129,12 +129,14 @@ describe('commands, subagents and other tools', () => {
     assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'allow');
   });
 
-  it('denies a recursive grep spelled with an upper-case -d action through the real hook entry (CR-01, P-3)', () => {
+  it('denies shell grep by name through the real hook entry, whichever binary the shell would run (WR-02)', () => {
     const fx = fixture();
-    const out = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: 'grep -d RECURSE PASSWORD .' } });
-    assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'deny');
-    const rows = decisions(fx);
-    assert.equal(rows[rows.length - 1]?.rule, 'shell-recursive-read');
+    for (const command of ['grep -d RECURSE PASSWORD .', 'grep -5 PASSWORD .']) {
+      const out = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command } });
+      assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'deny', command);
+      const rows = decisions(fx);
+      assert.equal(rows[rows.length - 1]?.rule, 'shell-not-allowed', command);
+    }
   });
 
   it('denies a subagent type outside the purpose set and charges subagentsTotal for an allowed one', () => {
