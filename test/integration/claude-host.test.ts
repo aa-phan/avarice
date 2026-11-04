@@ -9,10 +9,12 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
+import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../../src/adapters/git/staging-strategy.ts';
 import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
 import type { ClaudeHostOptions } from '../../src/adapters/host-claude/claude-host.ts';
@@ -202,6 +204,69 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.deepEqual(policy.subagentTypes, ['gsd-codebase-mapper']);
     assert.equal(policy.commands.preambleSha256, GSD_PREAMBLE_SHA256, "the policy carries the fingerprint of the located GSD's own shim preamble");
     assert.equal(policy.commands.preambleLength, 2573);
+  });
+
+  // CR-02 / gap P-3 (D-GAP-01): the work root holds every onboarding's staging, so it is denied to the invocation at the OS layer and in
+  // the hook, with only the invocation's own staging re-allowed. Everything below goes through the production path: the real adapter
+  // writes the settings and the policy, and the real decision runs on the policy file it wrote.
+  it('denies the work root and re-allows only this staging, in the generated settings and hook policy, and the policy denies every reproduced read (CR-02, D-GAP-01)', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', intel: true });
+    const r = onboard(s);
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    assert.equal(stateOf(s.roots), 'active');
+    const [dir] = invocationDirs(s.roots);
+    assert.ok(dir, 'one map invocation directory');
+    const workRoot = canonicalAbsolute(s.roots.AVARICE_WORK_ROOT) as string;
+    const [row] = rows<{ staging_worktree: string }>(s.roots, 'SELECT staging_worktree FROM onboardings');
+    const staging = realpathSync(row?.staging_worktree ?? '');
+    assert.equal(staging, `${workRoot}/${onboardingId(s.roots)}/staging`, 'staging is {workRoot}/{onboardingId}/staging');
+
+    const settings = JSON.parse(readFileSync(join(dir, 'host-settings.json'), 'utf8')) as {
+      permissions: { allow: string[]; deny: string[] };
+      sandbox: { filesystem: { denyRead: string[]; allowRead: string[] } };
+    };
+    assert.ok(settings.sandbox.filesystem.denyRead.includes(`/${workRoot}`), 'the sandbox denies the work root');
+    assert.deepEqual(settings.sandbox.filesystem.allowRead, [`/${staging}`], 'and re-allows only the invocation staging');
+    assert.ok(settings.permissions.allow.includes(`Read(/${staging}/**)`), 'the Read tool is granted the staging');
+    assert.equal(
+      settings.permissions.deny.some((rule) => rule.startsWith('Read(') && rule.includes(workRoot) && staging.startsWith(rule.slice('Read(//'.length, -3))),
+      false,
+      'no Read permission deny names a root that contains the staging (a permission deny has no re-allow)',
+    );
+
+    const raw = JSON.parse(readFileSync(join(dir, 'hook-policy.json'), 'utf8')) as unknown;
+    const parsed = parseHookPolicy(raw);
+    assert.ok(parsed.ok, 'the policy file parses');
+    const policy = parsed.policy;
+    assert.ok(policy.denyRead.includes(workRoot), 'the hook policy denies the work root');
+    assert.ok(policy.allowRead.includes(staging), 'and re-allows the staging');
+    const gsdCore = (policy.readRoots ?? []).find((root) => root.endsWith('/gsd-core'));
+    assert.ok(gsdCore, 'readRoots holds the located gsd-core directory');
+    assert.ok((policy.readRoots ?? []).some((root) => root.endsWith('/agents')), 'and the agents directory');
+
+    const ssh = policy.denyRead.find((root) => root.endsWith('/.ssh'));
+    assert.ok(ssh, 'the policy denies ~/.ssh');
+    const home = dirname(ssh);
+    const call = (command: string) => {
+      const n = normalizeToolCall('Bash', { command }, staging);
+      assert.ok(n.ok, command);
+      const d = decideToolCall(n.call, policy, canonicalAbsolute);
+      return `${d.decision}:${d.rule}`;
+    };
+    assert.equal(call(`cat ${workRoot}/onb_OTHER/staging/secret.txt`), 'deny:deny-read', 'a sibling onboarding staging file');
+    assert.equal(call(`cat ${home}/.netrc`), 'deny:outside-read-set');
+    assert.equal(call(`grep -r token ${home}`), 'deny:outside-read-set');
+    assert.equal(call('grep -r PASSWORD .'), 'deny:shell-recursive-read');
+    assert.equal(call(`grep -f${home}/.ssh/id_rsa README.md`), 'deny:deny-read');
+    assert.equal(call(`cat ${home}/.ssh/id_rsa`), 'deny:deny-read');
+    assert.equal(call('cat .env'), 'deny:deny-secret-read');
+    // Adjacency: an ID that shares a prefix with this one, and this onboarding directory above staging, are not this staging.
+    assert.equal(call(`cat ${workRoot}/${onboardingId(s.roots)}1/staging/x`), 'deny:deny-read', 'a sibling whose ID shares a prefix');
+    assert.equal(call(`cat ${workRoot}/${onboardingId(s.roots)}/x`), 'deny:deny-read', 'this onboarding directory above staging');
+    // What the mapper needs still reads.
+    assert.equal(call('cat README.md'), 'allow:shell-identity');
+    assert.equal(call(`cat ${gsdCore}/workflows/map-codebase.md`), 'allow:shell-identity');
+    assert.equal(call('git log --oneline -5'), 'allow:shell-identity');
   });
 
   it('runs the intel purpose through the real adapter: --agent, an agents file with the intel updater only, no skill, and an intel index in the record', () => {
