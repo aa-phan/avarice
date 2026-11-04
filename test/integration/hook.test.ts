@@ -129,6 +129,14 @@ describe('commands, subagents and other tools', () => {
     assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'allow');
   });
 
+  it('denies a recursive grep spelled with an upper-case -d action through the real hook entry (CR-01, P-3)', () => {
+    const fx = fixture();
+    const out = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: 'grep -d RECURSE PASSWORD .' } });
+    assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    const rows = decisions(fx);
+    assert.equal(rows[rows.length - 1]?.rule, 'shell-recursive-read');
+  });
+
   it('denies a subagent type outside the purpose set and charges subagentsTotal for an allowed one', () => {
     const fx = fixture();
     const bad = runHook(fx, 'pre', { tool_name: 'Agent', tool_input: { subagent_type: 'gsd-executor', prompt: 'x' } });

@@ -474,6 +474,58 @@ describe('shell option values, operands after --, and recursive reads (CR-02, D-
   });
 });
 
+// CR-01 / gap P-3: the `-d`/`--directories` action is compared case-insensitively, and every action other than `read` and
+// `skip` is refused: `recurse` walks, and `dereference-recurse`, an abbreviation or an unrecognised value follows links.
+describe('grep -d/--directories actions are classified fail closed (CR-01, P-3)', () => {
+  const rule = (command: string, p: HookPolicy = policy(), cwd = STAGING): string => ((d) => `${d.decision}:${d.rule}`)(decide(shell(command, cwd), p));
+  const roots = (...readRoots: string[]): HookPolicy => policy({ readRoots });
+
+  const reproduced = [
+    'grep -dRECURSE PASSWORD .',
+    'grep -d RECURSE PASSWORD .',
+    'grep --directories=RECURSE PASSWORD .',
+    'grep --directories=Recurse PASSWORD .',
+    'grep --dir=RECURSE PASSWORD .',
+    'grep -d rec PASSWORD .',
+    'grep -d dereference-recurse PASSWORD .',
+    'grep --directories=dereference-recurse PASSWORD .',
+    'grep -ddereference-recurse PASSWORD .',
+  ];
+  for (const command of reproduced) {
+    it(`denies shell-recursive-read: ${command}`, () => {
+      assert.equal(rule(command), 'deny:shell-recursive-read');
+    });
+  }
+
+  const extra = ['grep -dRecurse x src', 'grep --di=recurse x .', 'grep --dir RECURSE x .', 'grep --directories rec x .', 'grep -d DEREFERENCE-RECURSE x src'];
+  for (const command of extra) {
+    it(`denies shell-recursive-read: ${command}`, () => {
+      assert.equal(rule(command), 'deny:shell-recursive-read');
+    });
+  }
+
+  it('walks a read root for recurse in any case, but refuses every link-following action there', () => {
+    const p = roots('/gsd/core');
+    assert.equal(rule('grep -d recurse x /gsd/core', p), 'allow:shell-identity');
+    assert.equal(rule('grep -d RECURSE x /gsd/core', p), 'allow:shell-identity');
+    for (const command of [
+      'grep -d dereference-recurse x /gsd/core',
+      'grep --directories=Dereference-Recurse x /gsd/core',
+      'grep -d rec x /gsd/core',
+      'grep -d deref x /gsd/core',
+      'grep --dir RECURSE x /gsd/core',
+    ]) {
+      assert.equal(rule(command, p), 'deny:shell-recursive-read', command);
+    }
+  });
+
+  it('keeps read and skip non-recursive, in any case', () => {
+    for (const command of ['grep -d read x src/a.ts', 'grep -d READ x src/a.ts', 'grep -dskip x src/a.ts', 'grep --directories=Skip x src/a.ts']) {
+      assert.equal(rule(command), 'allow:shell-identity', command);
+    }
+  });
+});
+
 describe('subagents, web, meta and unknown tools', () => {
   it('allows an Agent call of a permitted type and charges subagentsTotal', () => {
     const d = decide({ kind: 'subagent', subagentType: 'gsd-codebase-mapper' });
