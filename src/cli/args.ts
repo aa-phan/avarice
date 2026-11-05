@@ -19,8 +19,10 @@ export interface ParseOptions {
 export function parseArgs(argv: readonly string[], options: ParseOptions = {}): ParsedArgs {
   const booleans = new Set(options.boolean ?? []);
   const positionals: string[] = [];
-  const flags: Record<string, string | true> = {};
-  const repeated: Record<string, string[]> = {};
+  // Null-prototype maps, so a flag named `__proto__`, `constructor` or `toString` is an ordinary key and never
+  // reaches Object.prototype (review WR-05).
+  const flags: Record<string, string | true> = Object.create(null);
+  const repeated: Record<string, string[]> = Object.create(null);
   const note = (name: string, value: string): void => {
     (repeated[name] ??= []).push(value);
   };
