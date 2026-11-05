@@ -26,6 +26,8 @@ import type {
   CheckpointInput,
   CheckpointRow,
   ContractRow,
+  CreatedRun,
+  CreateRunWithContractInput,
   DecisionInput,
   DecisionRow,
   DecisionState,
@@ -725,19 +727,36 @@ export class SqliteLedger implements Ledger {
   // to them: lockRun reports it as not found, so no run method can read, lease or move an onboarding's carrier.
 
   createRun(input: NewRun): Result<RunRow> {
+    return tx(this.db, () => this.insertRun(input));
+  }
+
+  // The caller's transaction must be open.
+  private insertRun(input: NewRun): RunRow {
+    if (input.runId === '') abort({ kind: 'invalid', field: 'runId', reason: 'a run needs an ID' });
+    if (input.title === '') abort({ kind: 'invalid', field: 'title', reason: 'a run needs a title' });
+    if (!this.db.prepare('SELECT 1 AS found FROM projects WHERE project_id = ?').get(input.projectId)) throw notFound(`project ${input.projectId}`);
+    if (this.db.prepare('SELECT 1 AS found FROM runs WHERE run_id = ?').get(input.runId)) {
+      abort({ kind: 'conflict', expected: `no run ${input.runId}`, actual: `a run row ${input.runId} already exists` });
+    }
+    const now = iso(input.nowMs);
+    this.db
+      .prepare("INSERT INTO runs (run_id, project_id, state, version, title, branch, base_revision, created_at, updated_at) VALUES (?, ?, 'contract_ready', 1, ?, ?, ?, ?, ?)")
+      .run(input.runId, input.projectId, input.title, input.branch ?? null, input.baseRevision ?? null, now, now);
+    this.insertEvent({ type: 'run.created', runId: input.runId, data: { runId: input.runId, projectId: input.projectId, state: 'contract_ready', version: 1 }, nowMs: input.nowMs });
+    return this.readRun(input.runId);
+  }
+
+  // A run with its first contract, the contract's budget rows and its work items in one transaction (RC-1): a start killed at
+  // any point leaves either nothing or the whole run.
+  createRunWithContract(input: CreateRunWithContractInput): Result<CreatedRun> {
     return tx(this.db, () => {
-      if (input.runId === '') abort({ kind: 'invalid', field: 'runId', reason: 'a run needs an ID' });
-      if (input.title === '') abort({ kind: 'invalid', field: 'title', reason: 'a run needs a title' });
-      if (!this.db.prepare('SELECT 1 AS found FROM projects WHERE project_id = ?').get(input.projectId)) throw notFound(`project ${input.projectId}`);
-      if (this.db.prepare('SELECT 1 AS found FROM runs WHERE run_id = ?').get(input.runId)) {
-        abort({ kind: 'conflict', expected: `no run ${input.runId}`, actual: `a run row ${input.runId} already exists` });
-      }
-      const now = iso(input.nowMs);
-      this.db
-        .prepare("INSERT INTO runs (run_id, project_id, state, version, title, created_at, updated_at) VALUES (?, ?, 'contract_ready', 1, ?, ?, ?)")
-        .run(input.runId, input.projectId, input.title, now, now);
-      this.insertEvent({ type: 'run.created', runId: input.runId, data: { runId: input.runId, projectId: input.projectId, state: 'contract_ready', version: 1 }, nowMs: input.nowMs });
-      return this.readRun(input.runId);
+      const run = this.insertRun(input.run);
+      const contract = this.insertContract(run.runId, input.contract);
+      const workItems = input.workItems.map((item) => {
+        if (item.runId !== run.runId) abort({ kind: 'invalid', field: 'workItems', reason: `work item ${item.itemId} names run ${item.runId}, not ${run.runId}` });
+        return this.insertWorkItem(item);
+      });
+      return { run: this.readRun(run.runId), contract, workItems };
     });
   }
 
@@ -868,20 +887,25 @@ export class SqliteLedger implements Ledger {
     return tx(this.db, () => {
       const row = this.lockRun(runId);
       this.checkFence(row, guard.fence);
-      const version = input.version ?? 1;
-      if (!Number.isInteger(version) || version < 1) abort({ kind: 'invalid', field: 'version', reason: 'a contract version is a positive integer' });
-      if (this.db.prepare('SELECT 1 AS found FROM contracts WHERE run_id = ? AND version = ?').get(runId, version)) {
-        abort({ kind: 'conflict', expected: `no contract version ${version} for run ${runId}`, actual: `contract version ${version} is already stored` });
-      }
-      const bodyJson = boundedBodyJson(input.body, 'contract');
-      const now = iso(input.nowMs);
-      this.db
-        .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, now);
-      if (input.budgets !== undefined) this.insertBudgets(runId, version, input.budgets);
-      this.insertEvent({ type: 'contract.stored', runId, data: { runId, version, digest: input.digest }, nowMs: input.nowMs });
-      return toContract(this.db.prepare('SELECT * FROM contracts WHERE run_id = ? AND version = ?').get(runId, version) as Row);
+      return this.insertContract(runId, input);
     });
+  }
+
+  // The caller's transaction must be open and the run vetted.
+  private insertContract(runId: string, input: StoreRunContractInput): ContractRow {
+    const version = input.version ?? 1;
+    if (!Number.isInteger(version) || version < 1) abort({ kind: 'invalid', field: 'version', reason: 'a contract version is a positive integer' });
+    if (this.db.prepare('SELECT 1 AS found FROM contracts WHERE run_id = ? AND version = ?').get(runId, version)) {
+      abort({ kind: 'conflict', expected: `no contract version ${version} for run ${runId}`, actual: `contract version ${version} is already stored` });
+    }
+    const bodyJson = boundedBodyJson(input.body, 'contract');
+    const now = iso(input.nowMs);
+    this.db
+      .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, now);
+    if (input.budgets !== undefined) this.insertBudgets(runId, version, input.budgets);
+    this.insertEvent({ type: 'contract.stored', runId, data: { runId, version, digest: input.digest }, nowMs: input.nowMs });
+    return toContract(this.db.prepare('SELECT * FROM contracts WHERE run_id = ? AND version = ?').get(runId, version) as Row);
   }
 
   getRunContract(runId: string): Result<ContractRow | null> {
@@ -1063,24 +1087,29 @@ export class SqliteLedger implements Ledger {
   upsertWorkItem(input: WorkItemInput): Result<WorkItemRow> {
     return tx(this.db, () => {
       this.lockRun(input.runId);
-      if (input.itemId === '') abort({ kind: 'invalid', field: 'itemId', reason: 'a work item needs an ID' });
-      const type = input.type ?? 'implement';
-      if (type !== 'implement' && type !== 'harden') abort({ kind: 'invalid', field: 'type', reason: `${String(type)} is not a work item type (implement, harden)` });
-      if (input.size === '' || input.model === '') abort({ kind: 'invalid', field: 'size', reason: 'a work item has a size and a model' });
-      const dependsOn = input.dependsOn ?? [];
-      if (!Array.isArray(dependsOn) || dependsOn.some((d) => typeof d !== 'string')) abort({ kind: 'invalid', field: 'dependsOn', reason: 'dependsOn is a list of item IDs' });
-      const existed = this.db.prepare('SELECT 1 AS found FROM work_items WHERE run_id = ? AND item_id = ?').get(input.runId, input.itemId) !== undefined;
-      // The state and the attempt count are never touched by an upsert: only transitionWorkItem moves them.
-      this.db
-        .prepare(
-          `INSERT INTO work_items (run_id, item_id, type, depends_on_json, size, model, spec_json, state, gsd_session, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, 0)
-           ON CONFLICT (run_id, item_id) DO UPDATE SET type = excluded.type, depends_on_json = excluded.depends_on_json, size = excluded.size, model = excluded.model,
-             spec_json = excluded.spec_json, gsd_session = COALESCE(excluded.gsd_session, work_items.gsd_session)`,
-        )
-        .run(input.runId, input.itemId, type, canonicalJson(dependsOn), input.size, input.model, boundedBodyJson(input.spec, 'work item spec'), input.gsdSession ?? null);
-      this.insertEvent({ type: 'work_item.upserted', runId: input.runId, data: { runId: input.runId, itemId: input.itemId, type, created: !existed }, nowMs: input.nowMs });
-      return this.readWorkItem(input.runId, input.itemId);
+      return this.insertWorkItem(input);
     });
+  }
+
+  // The caller's transaction must be open and the run vetted.
+  private insertWorkItem(input: WorkItemInput): WorkItemRow {
+    if (input.itemId === '') abort({ kind: 'invalid', field: 'itemId', reason: 'a work item needs an ID' });
+    const type = input.type ?? 'implement';
+    if (type !== 'implement' && type !== 'harden') abort({ kind: 'invalid', field: 'type', reason: `${String(type)} is not a work item type (implement, harden)` });
+    if (input.size === '' || input.model === '') abort({ kind: 'invalid', field: 'size', reason: 'a work item has a size and a model' });
+    const dependsOn = input.dependsOn ?? [];
+    if (!Array.isArray(dependsOn) || dependsOn.some((d) => typeof d !== 'string')) abort({ kind: 'invalid', field: 'dependsOn', reason: 'dependsOn is a list of item IDs' });
+    const existed = this.db.prepare('SELECT 1 AS found FROM work_items WHERE run_id = ? AND item_id = ?').get(input.runId, input.itemId) !== undefined;
+    // The state and the attempt count are never touched by an upsert: only transitionWorkItem moves them.
+    this.db
+      .prepare(
+        `INSERT INTO work_items (run_id, item_id, type, depends_on_json, size, model, spec_json, state, gsd_session, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, 0)
+         ON CONFLICT (run_id, item_id) DO UPDATE SET type = excluded.type, depends_on_json = excluded.depends_on_json, size = excluded.size, model = excluded.model,
+           spec_json = excluded.spec_json, gsd_session = COALESCE(excluded.gsd_session, work_items.gsd_session)`,
+      )
+      .run(input.runId, input.itemId, type, canonicalJson(dependsOn), input.size, input.model, boundedBodyJson(input.spec, 'work item spec'), input.gsdSession ?? null);
+    this.insertEvent({ type: 'work_item.upserted', runId: input.runId, data: { runId: input.runId, itemId: input.itemId, type, created: !existed }, nowMs: input.nowMs });
+    return this.readWorkItem(input.runId, input.itemId);
   }
 
   transitionWorkItem(runId: string, itemId: string, guard: { fence: number }, t: WorkItemTransitionInput): Result<WorkItemRow> {

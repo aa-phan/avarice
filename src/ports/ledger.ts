@@ -268,6 +268,9 @@ export interface NewRun {
   projectId: string;
   title: string;
   nowMs: number;
+  // Recorded on the run row when the run is created (the active record's pin and `avarice/<runId>`); a later transition keeps them.
+  baseRevision?: string;
+  branch?: string;
 }
 
 export interface RunTransitionInput {
@@ -311,6 +314,19 @@ export interface RunCheckpointInput {
 
 // A run contract is stored under the run's own ID (the `contracts` table is keyed by run_id).
 export type StoreRunContractInput = Omit<StoreContractInput, 'runId'>;
+
+// A run created together with its first contract, the contract's budget rows and its work items (plan 02-10).
+export interface CreateRunWithContractInput {
+  run: NewRun;
+  contract: StoreRunContractInput;
+  workItems: readonly WorkItemInput[];
+}
+
+export interface CreatedRun {
+  run: RunRow;
+  contract: ContractRow;
+  workItems: WorkItemRow[];
+}
 
 export interface RunStepRow {
   runId: string;
@@ -562,6 +578,9 @@ export interface Ledger {
 
   // Runs. A new run is `contract_ready` at version 1 with no checkpoint and no lease (fence 0).
   createRun(input: NewRun): Result<RunRow>;
+  // One transaction (RC-1): the run row, contract version 1 with its budget rows, the work items and the `run.created`,
+  // `contract.stored` and `work_item.upserted` events commit together or not at all.
+  createRunWithContract(input: CreateRunWithContractInput): Result<CreatedRun>;
   getRun(runId: string): Result<RunRow>;
   // One transaction: the edge is checked against RUN_TRANSITIONS, the version and the lease fence are checked, the run row,
   // a checkpoint (seq = max + 1 for the run) and a `run.transition` event with the run ID are written together or not at all.

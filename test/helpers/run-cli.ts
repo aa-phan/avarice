@@ -27,6 +27,8 @@ export interface RunCliOptions {
   // Command prefix, for example the macOS sandbox wrapper.
   wrap?: readonly string[];
   timeoutMs?: number;
+  // Working directory of the child (a command that resolves the project from the current directory).
+  cwd?: string;
 }
 
 export function makeRoots(): CliRoots {
@@ -58,6 +60,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions & { roots
     encoding: 'utf8',
     env: env as NodeJS.ProcessEnv,
     timeout: options.timeoutMs ?? 60_000,
+    ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr, signal: result.signal };
 }

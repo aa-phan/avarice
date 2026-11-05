@@ -18,6 +18,9 @@ import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
 import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
+import { GitRunSource } from '../adapters/git/run-source.ts';
+import { CloneRunWorkspace } from '../adapters/git/run-workspace.ts';
+import { AllowlistEgressProxy } from '../adapters/exec/allowlist-proxy.ts';
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
 import { GsdGraphContext } from '../adapters/context/gsd-graph.ts';
 import { GsdIntelContext } from '../adapters/context/gsd-intel.ts';
@@ -239,6 +242,10 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
   }
   const staging = createStagingWorkspace(STAGING_STRATEGY);
+  // The run ports. Building them executes nothing and records nothing.
+  const runSource = new GitRunSource();
+  const runWorkspace = new CloneRunWorkspace();
+  const egress = new AllowlistEgressProxy();
   const artifacts = new LocalArtifactStore(profile.dataRoot);
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =
@@ -263,7 +270,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
       close: () => {
         try {
           store.close();

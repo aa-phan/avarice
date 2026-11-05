@@ -15,6 +15,7 @@
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
+import type { RunContract } from '../domain/run-contract.ts';
 import type { BudgetRow, BudgetRowInput, OnboardingRow } from '../ports/ledger.ts';
 import type { OnboardingPurpose } from '../ports/agent-host.ts';
 import type { AppDeps } from './deps.ts';
@@ -49,6 +50,18 @@ export interface SettlementCharge {
 }
 
 export function budgetRowsOf(contract: OnboardingContract): BudgetRowInput[] {
+  const b = contract.budgets;
+  return [
+    { name: 'invocations', limit: b.invocations, exactness: 'exact' },
+    { name: 'toolCalls', limit: b.toolCalls, exactness: 'exact' },
+    { name: 'subagentsTotal', limit: b.subagentsTotal, exactness: 'exact' },
+    { name: 'wallClockMs', limit: b.wallClockMinutes * 60_000, exactness: 'exact' },
+    { name: 'costUsd', limit: b.costUsd.perRun, exactness: b.costUsd.exactness },
+  ];
+}
+
+// The same five budgets for a run contract (RC-1): wall clock in milliseconds, the cost row's limit is the per-run cap.
+export function budgetRowsOfRun(contract: RunContract): BudgetRowInput[] {
   const b = contract.budgets;
   return [
     { name: 'invocations', limit: b.invocations, exactness: 'exact' },

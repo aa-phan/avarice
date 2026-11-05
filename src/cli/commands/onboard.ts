@@ -6,6 +6,7 @@
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { ONBOARDING_POLICY, runOnboarding, startOnboarding } from '../../app/onboarding-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
+import { parseBudgetFlags } from '../args.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 
 export const EXIT_NOT_ACTIVE = 3;
@@ -15,22 +16,6 @@ const EXIT_INTERNAL = 70;
 function usage(io: Io, message: string): number {
   io.err(`avarice onboard: ${message}\nusage: avarice onboard --policy ${ONBOARDING_POLICY} [--mode full|fast] [--promote none] [--budget name=value]... <repo>\n`);
   return EXIT_USAGE;
-}
-
-const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9]*)=(.+)$/;
-
-// Repeatable `--budget name=value`. The names and the lower-only rule belong to the contract compiler (RC-5); this
-// only checks the shape, so a typo never registers anything.
-function budgetOverrides(args: ParsedArgs): Record<string, number> | string {
-  if (args.flags['budget'] === true) return '--budget needs name=value';
-  const out: Record<string, number> = {};
-  for (const entry of args.repeated?.['budget'] ?? []) {
-    const match = BUDGET_FLAG.exec(entry);
-    const value = match === null ? Number.NaN : Number(match[2]);
-    if (match === null || !Number.isFinite(value)) return `--budget ${JSON.stringify(entry)} is not name=value with a number`;
-    out[match[1] as string] = value;
-  }
-  return out;
 }
 
 export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<number> {
@@ -44,7 +29,7 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   const repoPath = args.positionals[0];
   if (repoPath === undefined || args.positionals.length !== 1) return usage(io, 'exactly one repository path is required');
 
-  const overrides = budgetOverrides(args);
+  const overrides = parseBudgetFlags(args);
   if (typeof overrides === 'string') return usage(io, overrides);
 
   const started = startOnboarding(deps, {
