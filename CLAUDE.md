@@ -4,6 +4,8 @@
 
 Two kinds of documentation live in this repository, and they are edited differently.
 
+These rules apply only where `docs/system/` exists in your checkout. If your branch or worktree has no `docs/system/`, do not create it or any file in it: list the documentation updates your change needs in your plan summary instead, and they are applied after the branch is rebased onto `main`.
+
 - `docs/system/` is the living documentation of the built system and the source of truth for built behavior. Any change that alters behavior, adds a command, flag, config key, table, event or external integration, or changes an exit code updates the matching `docs/system/` document in the same change. Update `docs/system/coverage.md` when a count it records changes.
 - `docs/` outside `docs/system/` (requirements, architecture, design documents, `docs/decisions/` ADRs) is the proposal that unbuilt work is planned from. Do not edit it to match the code. Change it only when a design decision changes, and record the decision. An accepted ADR is never rewritten; supersede it with a new one.
 - When code and a proposal disagree, the code and `docs/system/` describe what is; add one line with `file:line` to `docs/system/findings.md` for the owner to decide which side moves.
