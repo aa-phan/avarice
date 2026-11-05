@@ -2,8 +2,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { G4_RULES, evaluateG4 } from '../../src/domain/gates.ts';
-import type { G4Facts } from '../../src/domain/gates.ts';
+import { G2_RULES, G4_RULES, evaluateG2, evaluateG4 } from '../../src/domain/gates.ts';
+import type { G2Facts, G4Facts } from '../../src/domain/gates.ts';
 
 const HEAD = `git:${'a'.repeat(40)}`;
 
@@ -88,5 +88,138 @@ describe('evaluateG4', () => {
     };
     assert.deepEqual(evaluateG4(facts), evaluateG4(facts));
     assert.deepEqual(evaluateG4(facts), evaluateG4(reversed));
+  });
+});
+
+const PROTECTED = ['package.json', 'package-lock.json', '.github/**', 'tsconfig.json'];
+
+function g2(over: Partial<G2Facts> = {}): G2Facts {
+  return {
+    outcome: 'progressed',
+    changes: [{ path: 'src/a.ts', status: 'modified' }],
+    globs: { write: ['src/**'], create: ['src/**'], artifacts: ['.planning/quick/**'], delete: [], protected: PROTECTED },
+    inventory: [],
+    verification: 'passed',
+    newOverrides: 0,
+    pruneEntries: 0,
+    delta: [],
+    ...over,
+  };
+}
+
+describe('evaluateG2', () => {
+  it('passes a progressed unit that changed one path inside the write set', () => {
+    assert.deepEqual(evaluateG2(g2()), { passed: true, failures: [] });
+  });
+
+  it('lists the rules in their fixed order', () => {
+    assert.deepEqual([...G2_RULES], ['outcome-progressed', 'scope-conformance', 'deletion-scope', 'test-inventory', 'gsd-verification', 'no-new-overrides', 'prune-is-decision', 'checks-delta']);
+  });
+
+  const cases: Array<[string, Partial<G2Facts>]> = [
+    ['outcome-progressed', { outcome: 'no_progress' }],
+    ['scope-conformance', { changes: [{ path: 'docs/x.md', status: 'modified' }] }],
+    ['deletion-scope', { changes: [{ path: 'src/a.ts', status: 'deleted' }] }],
+    ['test-inventory', { inventory: [{ rule: 'removed-test', detail: 'b works' }] }],
+    ['gsd-verification', { verification: 'gaps_found' }],
+    ['no-new-overrides', { newOverrides: 1 }],
+    ['prune-is-decision', { pruneEntries: 1 }],
+    ['checks-delta', { delta: [{ name: 'test', reason: 'regressed' }] }],
+  ];
+  for (const [rule, over] of cases) {
+    it(`fails alone on ${rule}`, () => {
+      const verdict = evaluateG2(g2(over));
+      assert.equal(verdict.passed, false);
+      assert.deepEqual(verdict.failures.map((f) => f.rule), [rule]);
+      assert.ok((verdict.failures[0]?.detail ?? '').length > 0);
+    });
+  }
+
+  it('fails every outcome that is not progressed, paused and failed included', () => {
+    for (const outcome of ['paused', 'failed', 'denied', 'budget_exhausted', 'inconclusive', 'no_progress']) {
+      assert.deepEqual(evaluateG2(g2({ outcome: outcome as G2Facts['outcome'] })).failures.map((f) => f.rule), ['outcome-progressed'], outcome);
+    }
+  });
+
+  it('does not match a sibling that shares the prefix of a write glob', () => {
+    const verdict = evaluateG2(g2({ changes: [{ path: 'src-evil/a.ts', status: 'modified' }] }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['scope-conformance']);
+    assert.match(verdict.failures[0]?.detail ?? '', /src-evil\/a\.ts/);
+  });
+
+  it('fails a protected path even when the write glob is **', () => {
+    const verdict = evaluateG2(g2({
+      changes: [{ path: 'package.json', status: 'modified' }],
+      globs: { write: ['**'], create: ['**'], artifacts: [], delete: [], protected: PROTECTED },
+    }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['scope-conformance']);
+    assert.match(verdict.failures[0]?.detail ?? '', /protected/);
+  });
+
+  it('fails a protected path that is also an artifact glob', () => {
+    const verdict = evaluateG2(g2({
+      changes: [{ path: '.github/workflows/ci.yml', status: 'added' }],
+      globs: { write: ['src/**'], create: ['src/**'], artifacts: ['.github/**'], delete: [], protected: PROTECTED },
+    }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['scope-conformance']);
+  });
+
+  it('passes an added artifact under .planning/quick', () => {
+    assert.equal(evaluateG2(g2({ changes: [{ path: '.planning/quick/x/PLAN.md', status: 'added' }] })).passed, true);
+  });
+
+  it('passes an added path inside the create glob and fails one that only the write glob covers when create is narrower', () => {
+    const globs = { write: ['src/**'], create: ['src/new/**'], artifacts: [], delete: [], protected: PROTECTED };
+    assert.equal(evaluateG2(g2({ changes: [{ path: 'src/new/a.ts', status: 'added' }], globs })).passed, true);
+    assert.deepEqual(evaluateG2(g2({ changes: [{ path: 'src/old/a.ts', status: 'added' }], globs })).failures.map((f) => f.rule), ['scope-conformance']);
+  });
+
+  it('fails a deletion with an empty delete list, and passes one inside a delete glob', () => {
+    assert.deepEqual(evaluateG2(g2({ changes: [{ path: 'src/a.ts', status: 'deleted' }] })).failures.map((f) => f.rule), ['deletion-scope']);
+    const globs = { write: ['src/**'], create: ['src/**'], artifacts: [], delete: ['src/old/**'], protected: PROTECTED };
+    assert.equal(evaluateG2(g2({ changes: [{ path: 'src/old/a.ts', status: 'deleted' }], globs })).passed, true);
+  });
+
+  it('fails the deletion of a protected path on both scope rules', () => {
+    const verdict = evaluateG2(g2({ changes: [{ path: 'package.json', status: 'deleted' }] }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['scope-conformance', 'deletion-scope']);
+  });
+
+  it('fails a change status it does not know rather than passing it', () => {
+    const verdict = evaluateG2(g2({ changes: [{ path: 'src/a.ts', status: 'mystery' as never }] }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['scope-conformance']);
+  });
+
+  it('fails every GSD verification status other than passed, a missing one included (AUT-7)', () => {
+    for (const verification of ['gaps_found', 'human_needed', 'missing'] as const) {
+      assert.deepEqual(evaluateG2(g2({ verification })).failures.map((f) => f.rule), ['gsd-verification'], verification);
+    }
+  });
+
+  it('reports several failures in rule order', () => {
+    const verdict = evaluateG2(g2({ outcome: 'failed', pruneEntries: 2, verification: 'missing', delta: [{ name: 'lint', reason: 'missing' }] }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['outcome-progressed', 'gsd-verification', 'prune-is-decision', 'checks-delta']);
+  });
+
+  it('is idempotent and independent of the order of the path lists (AUT-9)', () => {
+    const facts = g2({
+      changes: [
+        { path: 'src/b.ts', status: 'deleted' },
+        { path: 'docs/z.md', status: 'modified' },
+        { path: 'package.json', status: 'modified' },
+        { path: 'src/a.ts', status: 'modified' },
+      ],
+      inventory: [{ rule: 'new-skip-marker', detail: 'b' }, { rule: 'removed-test', detail: 'a' }],
+      delta: [{ name: 'b', reason: 'regressed' }, { name: 'a', reason: 'missing' }],
+    });
+    const reversed: G2Facts = {
+      ...facts,
+      changes: [...facts.changes].reverse(),
+      inventory: [...facts.inventory].reverse(),
+      delta: [...facts.delta].reverse(),
+      globs: { ...facts.globs, write: [...facts.globs.write].reverse(), protected: [...facts.globs.protected].reverse() },
+    };
+    assert.deepEqual(evaluateG2(facts), evaluateG2(facts));
+    assert.deepEqual(evaluateG2(facts), evaluateG2(reversed));
   });
 });

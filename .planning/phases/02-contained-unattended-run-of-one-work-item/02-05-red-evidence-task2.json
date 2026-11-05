@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/test-inventory.test.ts\" \"test/unit/gates.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/test-inventory.ts does not exist and src/domain/gates.ts exports no G2_RULES or evaluateG2 yet",
+  "failingFiles": ["test/unit/test-inventory.test.ts", "test/unit/gates.test.ts"],
+  "failingTests": [],
+  "summary": "gates.test.ts fails with SyntaxError (no export named G2_RULES); test-inventory.test.ts fails with ERR_MODULE_NOT_FOUND (not ok 1, not ok 2, pass 0).",
+  "outputHead": "# SyntaxError: The requested module '../../src/domain/gates.ts' does not provide an export named 'G2_RULES'\nnot ok 1 - test/unit/gates.test.ts\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/domain/test-inventory.ts' imported from .../test/unit/test-inventory.test.ts\nnot ok 2 - test/unit/test-inventory.test.ts\n# tests 2\n# pass 0"
+}
