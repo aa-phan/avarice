@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-11-05T10:26:49.714Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-11-05T10:46:22.148Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 94fe84709f7dff562e3e238a887bf3d496e2d652
+state_head: a939746996bcf089ae9ea46187e71f01fd21f437
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 2 of 22
+Plan: 3 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -84,6 +84,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P25 | 45 min | 2 tasks | 11 files |
 | Phase 01 P26 | 10 min | 2 tasks | 5 files |
 | Phase 02 P01 | 55 min | 2 tasks | 13 files |
+| Phase 02 P02 | 18 min | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: Plan 01-26: the live gate checks zero unread documents (stricter than the stage's at-least-half admission share), and an absent documentsExpected or dropped.unread stays null so a pre-01-25 record fails
 - [Phase 02]: 02-01: Phase 2 live spend is one ledger (test/containment/live-spend-phase2.jsonl) with a 25 USD ceiling that AVARICE_PHASE2_CEILING_USD can only lower; fitsCap also requires fitsPhase2Ceiling and a corrupt ledger throws — D-15 as a mechanical guard; 0.2122 USD spent after plan 02-01
 - [Phase 02]: 02-01: Claude Code 2.1.318 admitted on 22 live T3 tests with 0 containment failures (0.1596 USD); the case 19 knowledge-pass denial is a /var vs /private/var path-form refusal by the host, deferred, and Phase 2 run purposes must give the model symlink-resolved paths — CON-3: admit only on a recorded live run on that exact version
+- [Phase 02]: 02-02: the status table is PROJECT, REPOSITORY, ACTIVITY, STATE, NEXT with the onboarding ID, resume line and record line below it; an interrupted onboarding shows ACTIVITY interrupted and a plain ledger word in STATE; NEXT is cut last, subject columns never
+- [Phase 02]: 02-02: Phase 1 --json shapes are frozen by normalized snapshots committed before the renderer change (AVARICE_SNAPSHOT_WRITE=1 regenerates); every renderer string passes stripControl; composition failures are prefixed by the dispatcher, not hand-built
 
 ### Pending Todos
 
@@ -218,6 +221,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T10:26:49.577Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-11-05T10:46:22.007Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

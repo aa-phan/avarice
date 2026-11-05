@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Contained unattended run of one work item",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -49,5 +49,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 2 of 8 · executing"
   },
-  "updated_at": "2026-11-05T10:26:43.022Z"
+  "updated_at": "2026-11-05T10:46:13.563Z"
 }
