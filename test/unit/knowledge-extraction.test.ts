@@ -18,6 +18,8 @@ import type { ChunkText, ExtractionPlan } from '../../src/domain/knowledge-extra
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 
 const PIN = 'a'.repeat(40);
+// The corpus root of a plan: the knowledge invocation's working directory (staging, then .avarice-knowledge).
+const ROOT = '/w/onb_X/staging/.avarice-knowledge';
 
 function manifestOf(paths: readonly string[]): KnowledgeManifest {
   return {
@@ -51,7 +53,7 @@ describe('stemOf: the node id prefix of a document (the graphify extraction spec
 describe('planExtractionChunks: deterministic chunks of the corpus', () => {
   it('numbers chunks from 1, names each output chunk-NN.json under .extraction, and lists every document exactly once', () => {
     const paths = ['docs/a.md', 'docs/b.md', 'docs/c.md'];
-    const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, 100));
+    const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, 100), ROOT);
     assert.equal(plan.schema, 1);
     assert.equal(plan.revision, `git:${PIN}`);
     assert.deepEqual(plan.chunks.map((c) => c.n), [1]);
@@ -66,7 +68,7 @@ describe('planExtractionChunks: deterministic chunks of the corpus', () => {
   it('starts a new chunk after maxFiles documents (8), keeping the documents of one directory together by sorting on the path', () => {
     const paths = Array.from({ length: 19 }, (_, i) => `docs/d${String(i).padStart(2, '0')}.md`);
     const shuffled = [...paths].reverse();
-    const plan = planExtractionChunks(manifestOf(shuffled), sizesOf(paths, 10));
+    const plan = planExtractionChunks(manifestOf(shuffled), sizesOf(paths, 10), ROOT);
     assert.deepEqual(plan.chunks.map((c) => c.files.length), [8, 8, 3]);
     assert.deepEqual(plan.chunks.flatMap((c) => c.files.map((f) => f.path)), paths, 'sorted by path, whatever the manifest order');
     assert.equal(CHUNK_LIMITS.maxFiles, 8);
@@ -75,23 +77,23 @@ describe('planExtractionChunks: deterministic chunks of the corpus', () => {
   it('starts a new chunk when the next document would pass maxBytes (64 KiB), and a document above it is a chunk of its own', () => {
     const paths = ['a.md', 'b.md', 'big.md', 'c.md'];
     const sizes = { 'a.md': 30 * 1024, 'b.md': 30 * 1024, 'big.md': 200 * 1024, 'c.md': 1024 };
-    const plan = planExtractionChunks(manifestOf(paths), sizes);
+    const plan = planExtractionChunks(manifestOf(paths), sizes, ROOT);
     assert.deepEqual(plan.chunks.map((c) => c.files.map((f) => f.path)), [['a.md', 'b.md'], ['big.md'], ['c.md']]);
     assert.equal(CHUNK_LIMITS.maxBytes, 64 * 1024);
   });
 
   it('fills a chunk up to exactly maxBytes and splits only past it (the boundary)', () => {
     const half = CHUNK_LIMITS.maxBytes / 2;
-    const exact = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half });
+    const exact = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half }, ROOT);
     assert.deepEqual(exact.chunks.map((c) => c.files.length), [2], 'two documents that add up to exactly maxBytes share a chunk');
-    const over = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half + 1 });
+    const over = planExtractionChunks(manifestOf(['a.md', 'b.md']), { 'a.md': half, 'b.md': half + 1 }, ROOT);
     assert.deepEqual(over.chunks.map((c) => c.files.length), [1, 1], 'one byte more starts a new chunk');
-    const full = planExtractionChunks(manifestOf(Array.from({ length: 9 }, (_, i) => `${i}.md`)), sizesOf(Array.from({ length: 9 }, (_, i) => `${i}.md`), 1));
+    const full = planExtractionChunks(manifestOf(Array.from({ length: 9 }, (_, i) => `${i}.md`)), sizesOf(Array.from({ length: 9 }, (_, i) => `${i}.md`), 1), ROOT);
     assert.deepEqual(full.chunks.map((c) => c.files.length), [8, 1], 'the ninth document starts a new chunk, the eighth does not');
   });
 
   it('counts a document with no known size as a full chunk, so it is never packed with others', () => {
-    const plan = planExtractionChunks(manifestOf(['a.md', 'b.md']), {});
+    const plan = planExtractionChunks(manifestOf(['a.md', 'b.md']), {}, ROOT);
     assert.deepEqual(plan.chunks.map((c) => c.files.length), [1, 1]);
   });
 
@@ -99,19 +101,40 @@ describe('planExtractionChunks: deterministic chunks of the corpus', () => {
     const paths = ['docs/x.md', 'docs/y.md'];
     const manifest = manifestOf(paths);
     const before = JSON.stringify(manifest);
-    assert.deepEqual(planExtractionChunks(manifest, sizesOf(paths, 5)), planExtractionChunks(manifest, sizesOf(paths, 5)));
+    assert.deepEqual(planExtractionChunks(manifest, sizesOf(paths, 5), ROOT), planExtractionChunks(manifest, sizesOf(paths, 5), ROOT));
     assert.equal(JSON.stringify(manifest), before);
-    assert.deepEqual(planExtractionChunks(manifestOf([]), {}).chunks, []);
+    assert.deepEqual(planExtractionChunks(manifestOf([]), {}, ROOT).chunks, []);
   });
 
   it('honors lower limits passed in', () => {
     const paths = ['a.md', 'b.md', 'c.md'];
-    assert.deepEqual(planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), { maxFiles: 1 }).chunks.map((c) => c.files.length), [1, 1, 1]);
+    assert.deepEqual(planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), ROOT, { maxFiles: 1 }).chunks.map((c) => c.files.length), [1, 1, 1]);
+  });
+
+  it('gives each file an absolute readPath and each chunk an absolute writePath under the corpus root, and keeps path, stem and output as they were (G-01-154, plan 01-25)', () => {
+    const paths = ['docs/a.md', 'docs/b.md', 'docs/c.md'];
+    const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, 10), ROOT, { maxFiles: 2 });
+    assert.deepEqual(plan.chunks.map((c) => c.writePath), [`${ROOT}/.extraction/chunk-01.json`, `${ROOT}/.extraction/chunk-02.json`]);
+    assert.deepEqual(plan.chunks.flatMap((c) => c.files.map((f) => f.readPath)), paths.map((p) => `${ROOT}/${p}`));
+    assert.deepEqual(plan.chunks.map((c) => c.output), ['.extraction/chunk-01.json', '.extraction/chunk-02.json']);
+    assert.deepEqual(plan.chunks.flatMap((c) => c.files.map((f) => f.path)), paths, 'path stays the repository path, the source_file citation');
+    assert.deepEqual(plan.chunks[0]?.files.map((f) => f.stem), ['docs_a', 'docs_b']);
+  });
+
+  it('trims a trailing slash of the corpus root, and refuses a root that is relative, `/`, or holds an empty, `.` or `..` segment, naming planExtractionChunks', () => {
+    const paths = ['docs/a.md'];
+    const trimmed = planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), `${ROOT}//`);
+    assert.equal(trimmed.chunks[0]?.files[0]?.readPath, `${ROOT}/docs/a.md`);
+    assert.equal(trimmed.chunks[0]?.writePath, `${ROOT}/.extraction/chunk-01.json`);
+    for (const bad of ['', 'staging/.avarice-knowledge', '/', '//', '/a//b', '/a/./b', '/a/../b', '/a/..']) {
+      assert.throws(() => planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), bad), { name: 'TypeError', message: /planExtractionChunks/ }, JSON.stringify(bad));
+    }
+    assert.throws(() => planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), undefined as unknown as string), TypeError);
   });
 });
 
 describe('knowledgePrompt: fixed text, no repository text, data rule stated (S-46)', () => {
-  const plan = (paths: readonly string[]): ExtractionPlan => planExtractionChunks(manifestOf(paths), sizesOf(paths, 10));
+  const plan = (paths: readonly string[]): ExtractionPlan => planExtractionChunks(manifestOf(paths), sizesOf(paths, 10), ROOT);
 
   it('names the tools it has and says there is no shell, skill, subagent or network', () => {
     const prompt = knowledgePrompt(plan(['docs/a.md']));
@@ -159,6 +182,37 @@ describe('knowledgePrompt: fixed text, no repository text, data rule stated (S-4
     assert.equal(prompt.startsWith('-'), false);
   });
 
+  it('names readPath and writePath, says they are absolute and are passed to Read and Write exactly as the plan gives them, and says never to build a path (G-01-154)', () => {
+    const prompt = knowledgePrompt(plan(['docs/a.md']));
+    assert.match(prompt, /Each chunk has "n", "output", "writePath" and "files"; each file has "path", "stem" and "readPath"/);
+    assert.match(prompt, /"readPath" and "writePath" are absolute paths/);
+    assert.match(prompt, /pass them to Read and Write exactly as the plan gives them, character for character/);
+    assert.match(prompt, /never build a path yourself/);
+    assert.match(prompt, /Read every file of the chunk with Read at the file's "readPath"/);
+    assert.match(prompt, /with Write to the chunk's "writePath"/);
+    assert.match(prompt, /The cited path is the file's "path", not its "readPath"/);
+    assert.ok(prompt.includes('.chunks.json'));
+    assert.match(prompt, /One Write per chunk/);
+  });
+
+  it('has the model try once more with the readPath after a denied or failed read and then leave the file out, and no longer tells it to join a path or to skip quietly', () => {
+    const prompt = knowledgePrompt(plan(['docs/a.md']));
+    assert.match(prompt, /If a Read is denied or fails, check that the file's "readPath" was passed exactly as the plan gives it and try once more with it/);
+    assert.match(prompt, /leave that file out and go on with the next file: do not stop, and do not try any other path/);
+    assert.equal(prompt.includes('If a file cannot be read, skip it'), false, 'the old skip sentence is gone');
+    assert.equal(prompt.includes('then / and the file\'s "path"'), false, 'no instruction to join the working directory with a path');
+    assert.equal(prompt.includes('your working directory, then / and the chunk\'s "output"'), false, 'nor with an output');
+  });
+
+  it('is the same text for plans with the same chunk count whatever the corpus root, and includes no root (T-01-88)', () => {
+    const paths = ['docs/a.md', 'docs/b.md'];
+    const a = planExtractionChunks(manifestOf(paths), sizesOf(paths, 10), '/a/.avarice-knowledge');
+    const b = planExtractionChunks(manifestOf(paths), sizesOf(paths, 10), '/b/c/.avarice-knowledge');
+    assert.notDeepEqual(a, b, 'the plans differ in their paths');
+    assert.equal(knowledgePrompt(a), knowledgePrompt(b));
+    for (const root of ['/a/', '/b/c/', '/a/.avarice-knowledge', '/b/c/.avarice-knowledge']) assert.equal(knowledgePrompt(a).includes(root), false, root);
+  });
+
   it('refers to the corpus-relative plan and the output directory by their names', () => {
     assert.equal(CHUNK_PLAN_FILE, '.avarice-knowledge/.chunks.json');
     assert.equal(EXTRACTION_DIR, '.avarice-knowledge/.extraction');
@@ -167,15 +221,15 @@ describe('knowledgePrompt: fixed text, no repository text, data rule stated (S-4
 
 describe('assembleExtraction: the chunk files, in chunk order', () => {
   const paths = ['docs/a.md', 'docs/b.md', 'docs/c.md'];
-  const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), { maxFiles: 1 });
+  const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, 1), ROOT, { maxFiles: 1 });
   const chunk = (id: string): ChunkText => ({ text: JSON.stringify({ nodes: [{ id, label: id }], edges: [{ source: id, target: id, relation: 'references' }] }) });
 
-  it('concatenates the nodes and the edges of the usable chunks in chunk order and lists the documents they cover', () => {
+  it('concatenates the nodes and the edges of the usable chunks in chunk order and lists which chunks were usable', () => {
     const out = assembleExtraction(plan, { 1: chunk('n1'), 2: chunk('n2'), 3: chunk('n3') });
     assert.deepEqual((out.graph.nodes as Array<{ id: string }>).map((n) => n.id), ['n1', 'n2', 'n3']);
     assert.equal(out.graph.edges.length, 3);
     assert.deepEqual(out.used, [1, 2, 3]);
-    assert.deepEqual(out.usedFiles, paths);
+    assert.deepEqual(Object.keys(out).sort(), ['graph', 'present', 'skipped', 'used'], 'what a document covers is judged on the merged graph, not derived here');
     assert.deepEqual(out.skipped, []);
     assert.equal(out.present, 3);
   });
@@ -200,7 +254,7 @@ describe('assembleExtraction: the chunk files, in chunk order', () => {
     assert.deepEqual(absent.skipped, [{ n: 1, reason: 'missing' }, { n: 2, reason: 'too-large' }, { n: 3, reason: 'unreadable' }]);
     assert.equal(absent.present, 2, 'a missing file is not present; a file that is too large or unreadable is');
     assert.deepEqual(absent.used, []);
-    assert.deepEqual(absent.usedFiles, []);
+    assert.deepEqual(Object.keys(absent).sort(), ['graph', 'present', 'skipped', 'used']);
 
     const none = assembleExtraction(plan, {});
     assert.deepEqual(none.skipped.map((s) => s.reason), ['missing', 'missing', 'missing']);

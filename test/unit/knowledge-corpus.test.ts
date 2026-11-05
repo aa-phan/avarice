@@ -224,10 +224,11 @@ describe('materializeCorpus: the copy, the .graphifyignore and the manifest', ()
 });
 
 describe('the extraction plan and output (decision B, adapter side)', () => {
-  const plan = (paths: readonly string[]) =>
+  const plan = (paths: readonly string[], corpusRoot: string) =>
     planExtractionChunks(
       { schema: 1, revision: `git:${PIN}`, entries: paths.map((p) => ({ copyPath: `.avarice-knowledge/${p}`, sourcePath: p, revision: `git:${PIN}`, sha256: 'f'.repeat(64) })), excluded: [] },
       Object.fromEntries(paths.map((p) => [p, 10])),
+      corpusRoot,
       { maxFiles: 1 },
     );
 
@@ -237,7 +238,7 @@ describe('the extraction plan and output (decision B, adapter side)', () => {
     const data = scratch();
     const done = materializeCorpus(staging, [...paths], join(data, 'm.json'), PIN);
     assert.ok(done.ok);
-    const made = plan(paths);
+    const made = plan(paths, join(staging, '.avarice-knowledge'));
     const written = writeExtractionPlan(staging, made);
     assert.ok(written.ok, JSON.stringify(written));
     return { staging, plan: made };
@@ -247,6 +248,11 @@ describe('the extraction plan and output (decision B, adapter side)', () => {
     const { staging, plan: made } = corpusWithPlan(['docs/a.md', 'docs/b.md']);
     const file = join(staging, '.avarice-knowledge', '.chunks.json');
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), JSON.parse(JSON.stringify(made)));
+    // The written plan carries the absolute readPath of each corpus copy and the writePath of each chunk (G-01-154, plan 01-25).
+    const corpus = join(staging, '.avarice-knowledge');
+    assert.deepEqual(made.chunks.flatMap((c) => c.files.map((f) => f.readPath)), [join(corpus, 'docs/a.md'), join(corpus, 'docs/b.md')]);
+    assert.deepEqual(made.chunks.map((c) => c.writePath), [join(corpus, '.extraction/chunk-01.json'), join(corpus, '.extraction/chunk-02.json')]);
+    for (const chunk of made.chunks) for (const f of chunk.files) assert.equal(readFileSync(f.readPath, 'utf8'), `# ${f.path}\n`, 'a readPath names the corpus copy');
     assert.equal(lstatSync(file).mode & 0o777, 0o644);
     assert.equal(readFileSync(file, 'utf8').includes('sha256'), false);
     assert.equal(lstatSync(join(staging, '.avarice-knowledge', '.extraction')).isDirectory(), true);
