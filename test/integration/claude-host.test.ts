@@ -171,6 +171,59 @@ describe('the knowledge purpose through the real ClaudeHostAdapter and a fake cl
     const body = JSON.parse(record?.body_json ?? '{}') as { indexes: { graph?: { nodes: Record<string, number>; knowledge?: { documentNodes: number } } } };
     assert.ok((body.indexes.graph?.knowledge?.documentNodes ?? 0) > 0, 'document nodes joined the graph');
   });
+
+  // G-01-154, plan 01-25 (production path): the paths AVARICE hands the model are the ones the generated hook policy admits, and the
+  // staging original of each document, which the live model read when it dropped the `.avarice-knowledge/` segment, is denied.
+  it('hands the model verbatim read and write paths that the generated hook policy admits, while the staging original of each document is denied (G-01-154, plan 01-25)', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', intel: true, knowledge: true });
+    const tools = mkdtempSync(join(tmpdir(), 'avarice-live-fakegraphify-'));
+    cleanup.push(tools);
+    const r = onboard(s, { AVARICE_GRAPHIFY_BIN: writeFakeGraphify(tools) });
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    assert.equal(stateOf(s.roots), 'active');
+    const base = join(s.roots.AVARICE_DATA_ROOT, 'onboard', onboardingId(s.roots));
+    const [dirName, ...more] = readdirSync(base).filter((n) => n.startsWith('knowledge-'));
+    assert.ok(dirName && more.length === 0, 'one knowledge invocation directory');
+    const parsed = parseHookPolicy(JSON.parse(readFileSync(join(base, dirName, 'hook-policy.json'), 'utf8')) as unknown);
+    assert.ok(parsed.ok, 'the knowledge hook policy parses');
+    const policy = parsed.policy;
+    assert.equal(policy.purpose, 'knowledge');
+
+    const [row] = rows<{ staging_worktree: string }>(s.roots, 'SELECT staging_worktree FROM onboardings');
+    const configuredStaging = row?.staging_worktree ?? '';
+    const staging = realpathSync(configuredStaging);
+    const argv = s.fake.argvs().find((a) => a.cwd.endsWith('.avarice-knowledge'));
+    assert.ok(argv, 'the knowledge launch ran in the corpus directory');
+    const corpusRoot = realpathSync(argv.cwd);
+    assert.equal(corpusRoot, join(staging, '.avarice-knowledge'), 'the invocation works in the corpus directory of the staging');
+
+    const plan = JSON.parse(readFileSync(join(staging, '.avarice-knowledge', '.chunks.json'), 'utf8')) as {
+      chunks: Array<{ output: string; writePath: string; files: Array<{ path: string; readPath: string }> }>;
+    };
+    const files = plan.chunks.flatMap((chunk) => chunk.files);
+    assert.ok(plan.chunks.length > 0 && files.length > 0, 'the plan lists chunks and documents');
+    const decide = (tool: 'Read' | 'Write', path: string): string => {
+      const n = normalizeToolCall(tool, { file_path: path }, corpusRoot);
+      assert.ok(n.ok, `${tool} ${path}`);
+      const d = decideToolCall(n.call, policy, canonicalAbsolute);
+      return `${d.decision}:${d.rule}`;
+    };
+    for (const file of files) {
+      assert.equal(canonicalAbsolute(file.readPath), join(corpusRoot, file.path), `readPath of ${file.path} is the corpus copy`);
+      assert.equal(decide('Read', file.readPath), 'allow:read-set', `readPath of ${file.path}`);
+      assert.equal(decide('Read', join(staging, file.path)), 'deny:outside-read-set', `the staging original of ${file.path}`);
+    }
+    const writeRoot = policy.writeRoots[0] ?? '';
+    for (const chunk of plan.chunks) {
+      const canonical = canonicalAbsolute(chunk.writePath) ?? '';
+      assert.ok(canonical.startsWith(`${writeRoot}/`), `writePath of chunk ${chunk.output} lies under the policy write root`);
+      assert.equal(decide('Write', chunk.writePath), 'allow:write-set', `writePath of ${chunk.output}`);
+    }
+
+    // The prompt is fixed text: it names field names, never the working directory or the staging path.
+    const prompt = argv.argv[argv.argv.indexOf('-p') + 1] ?? '';
+    for (const path of new Set([argv.cwd, corpusRoot, configuredStaging, staging])) assert.equal(prompt.includes(path), false, `the prompt does not name ${path}`);
+  });
 });
 
 describe('onboarding through the real ClaudeHostAdapter and a fake claude', () => {
