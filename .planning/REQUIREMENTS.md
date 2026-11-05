@@ -48,7 +48,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Run contract (RC-1 to RC-8)
 
-- [ ] **RC-1** [MVP]: Every run executes under a durable, versioned run contract stating intended behavior, acceptance criteria, exclusions, requirement references, workspace, readable, writable and protected paths, creation and deletion rules, permitted commands, tools and endpoints, delegated decision classes, budgets, required evidence, escalation rules and notification preferences.
+- [x] **RC-1** [MVP]: Every run executes under a durable, versioned run contract stating intended behavior, acceptance criteria, exclusions, requirement references, workspace, readable, writable and protected paths, creation and deletion rules, permitted commands, tools and endpoints, delegated decision classes, budgets, required evidence, escalation rules and notification preferences.
 - [ ] **RC-2** [MVP]: A contract is assembled from a reusable policy preset, repository conventions and the brief; `avarice start --brief <file> --policy <preset>` is sufficient for a routine task.
 - [ ] **RC-3** [MVP]: The user's authorization comes from the brief, the selected preset or an explicit instruction; AVARICE adds no confirmation step for authority already granted.
 - [ ] **RC-4** [MVP]: Within the contract, routine actions and phase transitions proceed without human prompts.
@@ -239,7 +239,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-25 | Phase 5 | Pending |
 | FR-26 | Phase 5 | Pending |
 | FR-27 | Phase 2 | Pending |
-| RC-1 | Phase 2 | Pending |
+| RC-1 | Phase 2 | Complete |
 | RC-2 | Phase 2 | Pending |
 | RC-3 | Phase 2 | Pending |
 | RC-4 | Phase 2 | Pending |

@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-11-05T19:43:58.847Z"
+stopped_at: Completed 02-10-PLAN.md
+last_updated: "2026-11-05T20:04:56.719Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: e3a6374c57db181ed6d198c00c4958d2cb8a41c0
+state_head: ab0773ffe00dbb8cd14968af864a0905dbeb5281
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 9 of 22
+Plan: 10 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -91,6 +91,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P06 | 8 min | 3 tasks | 12 files |
 | Phase 02 P07 | 45 min | 3 tasks | 14 files |
 | Phase 02 P08 | 25 min | 3 tasks | 21 files |
+| Phase 02 P10 | 17 min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-07: fetchIntoSource is create-only and fsck-checked with gc.auto and maintenance.auto off, commit uses literal pathspecs and add-then-commit-only-paths, and discard restores from a snapshot tree (user pre-run edits kept) unlinking added paths without following symlinks, so the source checkout is byte-identical and a crashed attempt is undone exactly to its checkpoint — D-02, D-03 and CON-16: the only write to the user's repository is one new refs/heads/avarice/run_* ref; discard names only paths from a tree difference and never uses reset, clean or checkout; conventions (D-16) and staleness (D-04) are read from git objects and no working-tree file
 - [Phase 02]: 02-08: the run purpose's scratch directory is a scope field beside writeRoots, a missing ancestor listing is refused, and a contract command is matched before the denied prefixes only after the scope dropped every prefix that must stay denied — CON-2 and RC-5: writeRoots holds exactly the clone roots (empty for an empty write set), computeRunScope throws rather than leave a directory above a write root unlisted, protected globs (plus .git and GSD config) win over write globs, npm and npx leave the denied prefixes only for a contract-listed form, and git, avarice, claude and curl stay denied for every purpose
 - [Phase 02]: 02-08: everything handed to the model for a run is in realpath form and runUnitPrompt cuts only the context pack to fit 32 KiB, refusing a brief that does not fit — 02-01 carried finding: the host refuses writes addressed through /var when the rules name /private/var, so TMPDIR, the npm cache, the host cwd and every rule path are canonical; cutting an acceptance criterion would let a run pass against a shorter brief than the owner wrote
+- [Phase 02]: 02-10: start exits 3 for a preflight refusal and 64 for an invalid brief, budget override, G0 failure or missing flag; every rule is judged from repository objects before any write, in the order revision, descent, commits, age, conventions, planning (25 commits and 14 days outside .avarice/ and .planning/) — D-04, D-16 and RC-1: a refusal or an invalid request creates no row and no file, and an uncommitted edit of .avarice/config.json cannot change a contract
+- [Phase 02]: 02-10: createRunWithContract stores the run with its base revision and branch, contract version 1 with five budget rows, the work items and their events in one transaction; the 0600 contract file in the data root is written after it by temp, fsync and rename — RC-1 and T-02-33: a killed start leaves nothing or a whole run, and a run without its file is rewritten from the ledger by the supervisor (plan 02-12)
 
 ### Pending Todos
 
@@ -235,6 +238,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T19:43:58.696Z
-Stopped at: Completed 02-08-PLAN.md
+Last session: 2026-11-05T20:04:56.541Z
+Stopped at: Completed 02-10-PLAN.md
 Resume file: None
