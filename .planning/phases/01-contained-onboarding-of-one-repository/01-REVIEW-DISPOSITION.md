@@ -3,22 +3,10 @@ phase: 01
 review: 01-REVIEW.md
 titles: json
 findings:
-  - id: WR-01
-    severity: warning
-    disposition: open
-    title: "`computeInvocationScope` can now throw after the invocation has been reserved, leaving an unsettled reservation"
-  - id: WR-02
-    severity: warning
-    disposition: fixed
-    title: "The `assert-exit` unread gate trusts self-reported counters with no consistency check"
-  - id: WR-03
-    severity: warning
-    disposition: fixed
-    title: "`chunkPlanNormalized` swallows every error, so the plan-equality assertions can pass vacuously"
   - id: IN-01
     severity: info
     disposition: open
-    title: "Pre-clustering chunk-usable gate is now redundant with the per-document gate and gives a less accurate message"
+    title: "Pre-clustering chunk-usable gate is redundant with the per-document gate and gives a less accurate message"
   - id: IN-02
     severity: info
     disposition: open
@@ -30,7 +18,27 @@ findings:
   - id: IN-04
     severity: info
     disposition: open
-    title: "The agent gets no hint that shell grep is gone"
+    title: "The new catch blocks are broader than the condition they name, and one of them is unreachable and untested"
+  - id: IN-05
+    severity: info
+    disposition: open
+    title: "The exit gate does not tie `documentNodes` to the document accounting"
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "The header comment of `invocation.ts` describes the old ordering"
+  - id: WR-01
+    severity: warning
+    disposition: fixed
+    title: "`computeInvocationScope` can now throw after the invocation has been reserved"
+  - id: WR-02
+    severity: warning
+    disposition: fixed
+    title: "The `assert-exit` unread gate trusts self-reported counters with no consistency check"
+  - id: WR-03
+    severity: warning
+    disposition: fixed
+    title: "`chunkPlanNormalized` swallows every error, so the plan-equality assertions can pass vacuously"
   - id: CR-01
     severity: critical
     disposition: fixed
@@ -63,26 +71,24 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-  - id: IN-05
-    severity: info
-    disposition: open
-    title: "The profile `config.json` is written but never read"
 open: 12
-total: 16
-recorded: 2026-11-05T04:07:31.166Z
+total: 17
+recorded: 2026-11-05T05:33:41.507Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | fixed | 01-REVIEW-FIX.md |
-| WR-03 | warning | fixed | 01-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
-| IN-04 | info | open | - (not in the current review) |
+| IN-04 | info | open | - |
+| IN-05 | info | open | - |
+| IN-06 | info | open | - |
+| WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-03 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | CR-01 | critical | fixed | quick 261104-jnc (5e67793), superseded by 261104-l3t (99dd4fb): shell grep denied by name (not in the current review) |
 | WR-04 | warning | fixed | quick 261104-jnc (89f4a39): vacuous Read-deny assertion fixed (not in the current review) |
 | CR-02 | critical | open | - (not in the current review) |
@@ -91,7 +97,6 @@ recorded: 2026-11-05T04:07:31.166Z
 | WR-06 | warning | open | - (not in the current review) |
 | WR-07 | warning | open | - (not in the current review) |
 | WR-08 | warning | open | - (not in the current review) |
-| IN-05 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
