@@ -51,9 +51,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing mapping part-way and running `avarice resume` reaches the same active record
   5. On a fresh Mac with Node present, install to first successful `avarice status` takes under 10 minutes with no admin rights (AC-1)
 
-**Plans:** 24/24 plans complete (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
+**Plans:** 25/26 plans executed (01-21 to 01-24 close the 01-VERIFICATION.md gaps)
 
 Plans:
+- [x] 01-25-PLAN.md
+- [ ] 01-26-PLAN.md
+
 **Wave 1**
 - [x] 01-01-PLAN.md — Toolchain gates (pinned dev deps, tsc, boundary lint) and pure domain contracts
 - [x] 01-02-PLAN.md — Wave 0 live spikes S0-A..S0-G under an authorized spend cap
@@ -221,7 +224,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 0. Contained onboarding of one repository | v1.0 | 20/20 | In Progress | - |
-| 1. Contained unattended run of one work item | v1.0 | 24/24 | Complete    | 2026-11-04 |
+| 1. Contained unattended run of one work item | v1.0 | 25/26 | In Progress |  |
 | 2. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 3. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 4. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |

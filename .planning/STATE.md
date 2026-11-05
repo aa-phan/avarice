@@ -2,20 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 2
-current_phase_name: Contained unattended run of one work item
-status: planning
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-11-04T23:28:06.735Z"
+current_phase: 01
+current_phase_name: Contained onboarding of one repository
+status: executing
+stopped_at: Completed 01-25-PLAN.md
+last_updated: "2026-11-05T01:38:41.643Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: e50de6f660af94ec31e33a4cf579c48b094bed9d
+last_activity_desc: Phase 01 execution started
+state_head: 72036a02250d9eb8430e53636248cd6c3e12dffd
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 24
-  completed_plans: 24
-  percent: 14
+  total_plans: 26
+  completed_plans: 25
 ---
 
 # Project State
@@ -25,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-04)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 2 — Contained unattended run of one work item
+**Current focus:** Phase 01 — Contained onboarding of one repository
 
 ## Current Position
 
-Phase: 2 — Contained unattended run of one work item
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-11-04 - Completed quick task 261104-nxh: Fix Phase 1 code review warnings WR-01 and WR-02
+Phase: 01 (Contained onboarding of one repository) — EXECUTING
+Plan: 2 of 26
+Status: Ready to execute
+Last activity: 2026-11-04 — Phase 01 execution started
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -82,6 +81,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P22 | 7 min | 2 tasks | 6 files |
 | Phase 01 P23 | 11 min | 2 tasks | 5 files |
 | Phase 01 P24 | 15 min | 2 tasks | 8 files |
+| Phase 01 P25 | 45 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -162,6 +162,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-24: workRoot is optional in ScopeInput; denyRead gets it last and allowRead the own staging last; the staging-containing root filter lives in the settings renderer only
 - [Phase 01]: 261104-jnc: ScopeInput.workRoot is now required (supersedes 01-24's optional workRoot)
 - [Phase 01]: 261104-l3t: shell grep dropped from READ_ONLY_COMMANDS (denied shell-not-allowed in every spelling); searches go through the Grep tool; bfs `find -rm` denied
+- [Phase 01]: 01-25: knowledge coverage is judged per manifest document on the merged graph; below half (KNOWLEDGE_LIMITS.documentShare 0.5) is validation-failed, otherwise the record states documentsExpected and dropped.unread
+- [Phase 01]: 01-25: .chunks.json carries absolute readPath and writePath (corpus root = knowledge invocation cwd); AssembledExtraction.usedFiles removed so coverage is never derived from chunk shape
 
 ### Pending Todos
 
@@ -209,6 +211,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T22:11:42Z
-Stopped at: Phase 1 complete, ready to plan Phase 2
+Last session: 2026-11-05T01:38:41.531Z
+Stopped at: Completed 01-25-PLAN.md
 Resume file: None
