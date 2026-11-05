@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-11-05T10:46:22.148Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-11-05T11:07:02.777Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: a939746996bcf089ae9ea46187e71f01fd21f437
+state_head: 12a1da594ca94a3a3b74c30448a93f916916982c
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 3 of 22
+Plan: 4 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -85,6 +85,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P26 | 10 min | 2 tasks | 5 files |
 | Phase 02 P01 | 55 min | 2 tasks | 13 files |
 | Phase 02 P02 | 18 min | 2 tasks | 21 files |
+| Phase 02 P03 | 19 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-01: Claude Code 2.1.318 admitted on 22 live T3 tests with 0 containment failures (0.1596 USD); the case 19 knowledge-pass denial is a /var vs /private/var path-form refusal by the host, deferred, and Phase 2 run purposes must give the model symlink-resolved paths — CON-3: admit only on a recorded live run on that exact version
 - [Phase 02]: 02-02: the status table is PROJECT, REPOSITORY, ACTIVITY, STATE, NEXT with the onboarding ID, resume line and record line below it; an interrupted onboarding shows ACTIVITY interrupted and a plain ledger word in STATE; NEXT is cut last, subject columns never
 - [Phase 02]: 02-02: Phase 1 --json shapes are frozen by normalized snapshots committed before the renderer change (AVARICE_SNAPSHOT_WRITE=1 regenerates); every renderer string passes stripControl; composition failures are prefixed by the dispatcher, not hand-built
+- [Phase 02]: 02-03: migration 0002 also carries insert-only triggers for evidence and gate_results (T-02-06); the run lifecycle and work item tables are pure tables in src/domain/run-lifecycle.ts and a Phase 1 carrier row (state onboarding) is invisible to every run method — The plan marks T-02-06 mitigate, and a schema trigger keeps the property for every later writer, as events already have
+- [Phase 02]: 02-03: transitionRun writes state, checkpoint (seq max+1 per run) and a run.transition event in one transaction under the version and fence guard; work item blocked_on_decision may return to ready; entering delegated counts one attempt — Phase 3 decide needs a way to release a blocked item, and the discard-and-retry shows as two attempts
 
 ### Pending Todos
 
@@ -221,6 +224,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T10:46:22.007Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-11-05T11:07:02.633Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
