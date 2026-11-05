@@ -459,6 +459,34 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     });
   });
 
+  // IN-04: only the work-root refusal is an `invalid` workRoot. A throw from anywhere else in the scope is a defect: it propagates with its
+  // stack instead of being reported as a problem with the work root, and nothing was reserved by then either.
+  it('lets a throw that is not the work-root refusal propagate, with nothing reserved or recorded (IN-04)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      assert.ok(row.ok);
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const budgetsBefore = JSON.stringify(deps.ledger.getBudgets(runId));
+      const launches = (): number => {
+        const steps = deps.ledger.getStepResults(onboardingId);
+        assert.ok(steps.ok);
+        return steps.value.filter((step) => step.step === 'launch:map').length;
+      };
+      const launchesBefore = launches();
+      // A profile with no data root: the scope's own string handling throws a TypeError that is not a RootRefusedError.
+      const broken = { ...deps, profile: { ...deps.profile, dataRoot: undefined as never } };
+      assert.throws(
+        () => prepareInvocation(broken, row.value, 'map', 'map the repository', { expectedFiles: [] }),
+        (error: unknown) => error instanceof TypeError && !/workRoot/.test(error.message),
+      );
+      assert.equal(JSON.stringify(deps.ledger.getBudgets(runId)), budgetsBefore, 'no invocation, wall clock or cost was reserved');
+      assert.equal(launches(), launchesBefore, 'no launch step was recorded');
+    });
+  });
+
   it('still charges exactly the reported cost for a run that finished on its own', async () => {
     const { roots, repo } = fixture();
     await inProcess(roots, repo, {}, (deps, onboardingId) => {

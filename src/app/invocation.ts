@@ -12,6 +12,7 @@ import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { INVOCATION_PURPOSES, PURPOSE_EXTENSIONS, computeInvocationScope } from '../domain/invocation-scope.ts';
 import type { InvocationScope } from '../domain/invocation-scope.ts';
+import { RootRefusedError } from '../domain/normalized-root.ts';
 import type { InvocationOutcome, InvocationPurpose, InvocationRequest } from '../ports/agent-host.ts';
 import type { OnboardingRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
@@ -76,8 +77,9 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   if (!workspace.ok) return workspace;
 
   // The scope is computed before the budget is reserved: computeInvocationScope refuses a work root that is not a normalized absolute
-  // path (WR-01) by throwing, and a throw after the reservation would leave it unsettled. A refusal is a typed `invalid` error here,
-  // so nothing was reserved, started or recorded.
+  // path (WR-01) by throwing a RootRefusedError, and a throw after the reservation would leave it unsettled. That refusal is a typed
+  // `invalid` error here, so nothing was reserved, started or recorded. Any other throw is a defect, not a work-root problem: it
+  // propagates with its stack (IN-04).
   let scope: InvocationScope;
   try {
     scope = computeInvocationScope({
@@ -94,7 +96,8 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
       ...(options.subagentsTotal !== undefined ? { subagentsTotal: options.subagentsTotal } : {}),
     });
   } catch (cause) {
-    return err({ kind: 'invalid', field: 'workRoot', reason: cause instanceof Error ? cause.message : String(cause) });
+    if (!(cause instanceof RootRefusedError)) throw cause;
+    return err({ kind: 'invalid', field: 'workRoot', reason: cause.message });
   }
 
   // Reserve the invocation before anything is launched: with no invocation, wall clock or cost left the onboarding

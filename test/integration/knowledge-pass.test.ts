@@ -13,6 +13,7 @@ import type { AppDeps } from '../../src/app/deps.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { OnboardingOutcome } from '../../src/app/onboarding-service.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
+import { ok } from '../../src/domain/result.ts';
 import { corpusSummary } from '../../src/domain/knowledge-corpus.ts';
 import { CHUNK_PLAN_FILE, EXTRACTION_DIR, knowledgePrompt, outputPathOf } from '../../src/domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
@@ -348,6 +349,40 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     assert.equal(stray.outcome.state, 'blocked', 'a write outside the knowledge write set blocks activation (T-01-52)');
     const findings = rows<{ data_json: string }>(stray.roots, "SELECT data_json FROM events WHERE type = 'containment.finding'");
     assert.ok(findings.some((f) => (JSON.parse(f.data_json) as { check?: string }).check === 'activation-scope'));
+  });
+
+  // IN-04: only the refusal of a bad corpus root is an absent index. The guard itself is defence in depth (staging is a realpath), so the test
+  // pins the other half: a throw that is not that refusal is not hidden behind an `invocation-failed` that names the corpus root. It
+  // surfaces as the step failing (`step-error`, which the stage records and never lets block activation) and no host is started.
+  it('does not turn a defect in the planner into a quiet invocation-failed: any throw but the root refusal fails the step (IN-04)', async () => {
+    const run = await onboard({
+      wrap: (deps) => ({
+        ...deps,
+        // Entries that are not objects make the planner's sort throw a TypeError.
+        graph: {
+          descriptor: deps.graph.descriptor,
+          locate: () => deps.graph.locate(),
+          extractCode: (s, o) => deps.graph.extractCode(s, o),
+          cluster: (o) => deps.graph.cluster(o),
+          readGraph: (f) => deps.graph.readGraph(f),
+          install: (s, f) => deps.graph.install(s, f),
+          fileSizes: (s, p) => deps.graph.fileSizes(s, p),
+          materializeCorpus: (s, p, m, pin, d) => {
+            const materialized = deps.graph.materializeCorpus(s, p, m, pin, d);
+            return materialized.ok ? ok({ ...materialized.value, manifest: { ...materialized.value.manifest, entries: [null, null] as never } }) : materialized;
+          },
+          writeExtractionPlan: (s, p) => deps.graph.writeExtractionPlan(s, p),
+          readExtractionFiles: (s, p) => deps.graph.readExtractionFiles(s, p),
+          clusterMerged: (g, d) => deps.graph.clusterMerged(g, d),
+          installMergedGraph: (s, f) => deps.graph.installMergedGraph(s, f),
+        },
+      }),
+    });
+    assert.equal(run.outcome.state, 'active');
+    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'step-error' }]);
+    const events = rows<{ data_json: string }>(run.roots, "SELECT data_json FROM events WHERE type = 'index.absent'").map((r) => JSON.parse(r.data_json) as { index?: string; detail?: string });
+    assert.doesNotMatch(events.find((e) => e.index === 'knowledge')?.detail ?? '', /cannot plan the extraction/);
+    assert.deepEqual(rows(run.roots, "SELECT step FROM onboarding_steps WHERE step = 'launch:knowledge'"), [], 'no knowledge invocation was started');
   });
 
   it('runs no invocation without a code graph (graph-absent), because document nodes need a graph to join', async () => {

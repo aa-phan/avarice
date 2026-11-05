@@ -14,6 +14,7 @@ import { KNOWLEDGE_DIR, corpusSummary, knowledgeCandidates, selectKnowledgeCorpu
 import { assembleExtraction, knowledgePrompt, outputPathOf, planExtractionChunks } from '../../domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
 import type { ExtractionPlan } from '../../domain/knowledge-extraction.ts';
+import { RootRefusedError } from '../../domain/normalized-root.ts';
 import { validateKnowledgeGraph } from '../../domain/knowledge-validation.ts';
 import { summarizeGraph } from '../../domain/graph-validation.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
@@ -139,12 +140,16 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   // data; the prompt itself holds no repository text.
   // The corpus root is the knowledge invocation's cwd: the read-dir `.avarice-knowledge` of the same staging path (computeInvocationScope),
   // so every readPath lies under the read confine; the production-path test of plan 01-26 pins it.
-  // planExtractionChunks refuses a corpus root that is not a normalized absolute path by throwing (WR-01); that is an absent index, never a crash.
+  // planExtractionChunks refuses a corpus root that is not a normalized absolute path by throwing a RootRefusedError (WR-01); that is an
+  // absent index, never a crash. It is defence in depth: staging is a realpath, so the guard cannot fire on the production path. Only
+  // that refusal is caught: any other throw is a defect in the planner and propagates (the stage records it as a `step-error`) rather
+  // than hiding behind a quiet `invocation-failed` (IN-04).
   let plan: ExtractionPlan;
   try {
     plan = planExtractionChunks(manifest, sizes.value, join(staging, KNOWLEDGE_DIR));
   } catch (cause) {
-    return absent('invocation-failed', `cannot plan the extraction: ${cause instanceof Error ? cause.message : String(cause)}`);
+    if (!(cause instanceof RootRefusedError)) throw cause;
+    return absent('invocation-failed', `cannot plan the extraction: ${cause.message}`);
   }
   const planned = deps.graph.writeExtractionPlan(staging, plan);
   if (!planned.ok) return absent('invocation-failed', `cannot write the extraction plan: ${describeError(planned.error)}`);
