@@ -758,7 +758,10 @@ describe('the run purpose through the real hook entry (CON-2, CON-8)', () => {
 
   it('allows an Edit on a file in the write set with rule write-set, and charges one toolCalls unit', () => {
     const r = runFixture();
-    const result = call(r, 'Edit', { file_path: join(r.clone, 'src', 'hooks', 'useSwipeStep.ts'), old_string: 'a', new_string: 'b' });
+    const target = join(r.clone, 'src', 'hooks', 'useSwipeStep.ts');
+    // The run purpose requires a recorded read before an edit (plan 02-11); the file is read first, as a model would.
+    assert.equal(runHook(r.fx, 'post', { tool_name: 'Read', tool_input: { file_path: target }, cwd: r.clone }, r.policyPath).code, 0);
+    const result = call(r, 'Edit', { file_path: target, old_string: 'a', new_string: 'b' });
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.stdout, '');
     assert.equal(budgetUsed(r.fx, 'toolCalls'), 1);

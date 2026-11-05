@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { sha256Hex } from '../../src/domain/digest.ts';
-import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
+import { decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
 import type { HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
 import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 
@@ -967,5 +967,97 @@ describe('parseHookPolicy for the run purpose', () => {
     ]) {
       assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad).slice(0, 80));
     }
+  });
+});
+
+describe('decideReadBeforeEdit (CON-7)', () => {
+  it('denies an Edit with no recorded read, naming the corrective step', () => {
+    const d = decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: undefined, current: 'a' });
+    assert.equal(d?.decision, 'deny');
+    assert.equal(d?.rule, 'edit-without-read');
+    assert.match(d?.reason ?? '', /read the file again|Read the file/i);
+  });
+
+  it('has no objection when the recorded digest equals the current one', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: 'a', current: 'a' }), null);
+  });
+
+  it('denies a changed file with file-changed-since-read', () => {
+    const d = decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: 'a', current: 'b' });
+    assert.deepEqual([d?.decision, d?.rule], ['deny', 'file-changed-since-read']);
+  });
+
+  it('lets a Write of a new file through, and denies a Write of an existing file that was never read', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: false, recorded: undefined, current: undefined }), null);
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: true, recorded: undefined, current: 'a' })?.rule, 'edit-without-read');
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: true, recorded: 'a', current: 'b' })?.rule, 'file-changed-since-read');
+  });
+
+  it('treats MultiEdit and NotebookEdit like Edit, and an Edit of a file deleted since the read as changed', () => {
+    for (const tool of ['MultiEdit', 'NotebookEdit']) {
+      assert.equal(decideReadBeforeEdit({ tool, exists: true, recorded: undefined, current: 'a' })?.rule, 'edit-without-read', tool);
+    }
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: false, recorded: 'a', current: undefined })?.rule, 'file-changed-since-read');
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: false, recorded: undefined, current: undefined })?.rule, 'edit-without-read');
+  });
+
+  it('has no opinion on a tool that is not an edit', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Read', exists: true, recorded: undefined, current: 'a' }), null);
+  });
+});
+
+describe('loopLimitOf (CON-14)', () => {
+  const limits = { consecutiveDenials: 3, consecutiveSearches: 25 };
+
+  it('stops at the third consecutive denial and not at the second (boundary edge)', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 2 }, limits), null);
+    assert.deepEqual(loopLimitOf({ consecutiveDenials: 3 }, limits), { stop: true, reason: 'consecutive-denials', count: 3 });
+  });
+
+  it('never stops an invocation with zero denials (empty edge)', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 0 }, limits), null);
+    assert.equal(loopLimitOf({}, limits), null);
+  });
+
+  it('denies the next search after 25 searches in a row and not after 24', () => {
+    assert.equal(loopLimitOf({ consecutiveSearches: 24 }, limits), null);
+    assert.deepEqual(loopLimitOf({ consecutiveSearches: 25 }, limits), { stop: true, reason: 'ineffective-search', count: 25 });
+  });
+
+  it('reads the counts as integers: a non-integer count is no count', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 2.9999999 }, limits), null);
+    assert.equal(loopLimitOf({ consecutiveDenials: Number.NaN }, limits), null);
+  });
+
+  it('a limit of zero leaves that control off', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 50, consecutiveSearches: 50 }, { consecutiveDenials: 0, consecutiveSearches: 0 }), null);
+  });
+});
+
+describe('parseHookPolicy for readBeforeEdit and loopLimits', () => {
+  const base = (): HookPolicy => policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['package.json'], readBeforeEdit: true, loopLimits: { consecutiveDenials: 3, consecutiveSearches: 25 } });
+
+  it('accepts both fields and round-trips them', () => {
+    const good = base();
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+  });
+
+  it('refuses a malformed readBeforeEdit or loopLimits', () => {
+    const good = base();
+    for (const bad of [
+      { ...good, readBeforeEdit: 'yes' },
+      { ...good, loopLimits: 3 },
+      { ...good, loopLimits: { consecutiveDenials: -1, consecutiveSearches: 25 } },
+      { ...good, loopLimits: { consecutiveDenials: 3 } },
+      { ...good, loopLimits: { consecutiveDenials: 3.5, consecutiveSearches: 25 } },
+    ]) {
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad));
+    }
+  });
+
+  it('leaves the decision of an onboarding policy unchanged: no read-before-edit field, no objection', () => {
+    const p = policy();
+    assert.equal(p.readBeforeEdit, undefined);
+    assert.equal(parseHookPolicy(JSON.parse(JSON.stringify(p))).ok, true);
   });
 });

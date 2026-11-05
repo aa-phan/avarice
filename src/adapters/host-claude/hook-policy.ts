@@ -67,6 +67,7 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
     ...(scope.commands.agentCommands !== undefined ? { agentCommands: scope.commands.agentCommands.map((c) => ({ words: [...c.words], paths: c.paths })) } : {}),
     ...(scope.deniedTools !== undefined ? { deniedTools: [...scope.deniedTools] } : {}),
     ...(scope.denyBackgroundShell !== undefined ? { denyBackgroundShell: scope.denyBackgroundShell } : {}),
+    ...(scope.readBeforeEdit !== undefined ? { readBeforeEdit: scope.readBeforeEdit } : {}),
   });
 }
 

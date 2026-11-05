@@ -66,6 +66,15 @@ export interface HookPolicy {
   // Tools refused by name with rule `no-human-prompts` (AskUserQuestion), and whether a shell call with run_in_background is refused.
   deniedTools?: string[];
   denyBackgroundShell?: boolean;
+  // The run purpose (plan 02-11): a file edit needs a recorded read of the same file by the same agent in this invocation, and the
+  // file must not have changed since (CON-7); `loopLimits` stop the invocation on repeated denials or ineffective searches (CON-14).
+  readBeforeEdit?: boolean;
+  loopLimits?: LoopLimits;
+}
+
+export interface LoopLimits {
+  consecutiveDenials: number;
+  consecutiveSearches: number;
 }
 
 export interface HookDecision {
@@ -75,6 +84,8 @@ export interface HookDecision {
   budget?: 'toolCalls' | 'subagentsTotal';
   // The hook prints an allow (hook-allow strategy); otherwise an allow is silent.
   explicit?: boolean;
+  // What the model is told besides the rule (a deny only): the corrective step.
+  reason?: string;
 }
 
 export type Canon = (path: string) => string | null;
@@ -181,6 +192,12 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   // A policy with write globs and no protected list would leave the protected check off; refuse it rather than assume an empty list.
   if (raw['writeGlobs'] !== undefined && raw['protectedGlobs'] === undefined) return bad('has writeGlobs without protectedGlobs');
   if (raw['denyBackgroundShell'] !== undefined && typeof raw['denyBackgroundShell'] !== 'boolean') return bad('has a malformed denyBackgroundShell');
+  if (raw['readBeforeEdit'] !== undefined && typeof raw['readBeforeEdit'] !== 'boolean') return bad('has a malformed readBeforeEdit');
+  const loopLimits = raw['loopLimits'];
+  if (loopLimits !== undefined) {
+    const count = (value: unknown): boolean => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+    if (!isObject(loopLimits) || !count(loopLimits['consecutiveDenials']) || !count(loopLimits['consecutiveSearches'])) return bad('has malformed loopLimits');
+  }
   const agentCommands = raw['agentCommands'];
   if (agentCommands !== undefined) {
     const wellFormed = Array.isArray(agentCommands) && agentCommands.every((c) => isObject(c) && isStrings(c['words']) && c['words'].length > 0 && typeof c['paths'] === 'boolean');
@@ -600,4 +617,61 @@ export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, can
     case 'other':
       return deny('unknown-tool');
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Read before edit and loop limits (plan 02-11)
+// ---------------------------------------------------------------------------------------------------------
+
+export const EDIT_WITHOUT_READ_RULE = 'edit-without-read';
+export const FILE_CHANGED_SINCE_READ_RULE = 'file-changed-since-read';
+export const INEFFECTIVE_SEARCH_RULE = 'ineffective-search';
+
+export interface ReadBeforeEditInput {
+  tool: string;
+  // Whether the target is an existing regular file now.
+  exists: boolean;
+  // The digest this agent recorded for the path in this invocation, if any, and the digest the hook computed from the file now.
+  recorded: string | undefined;
+  current: string | undefined;
+  // The clone-relative path, for the corrective message; the caller supplies it because this module reads no file and knows no root.
+  displayPath?: string;
+}
+
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'MultiEdit', 'NotebookEdit']);
+
+// CON-7: an edit of a file needs a read of it by the same agent in this invocation, and the file must be as it was when read. A Write of
+// a path that does not exist yet creates a file and needs no read; a Write over an existing file is an edit. The digests come in as
+// arguments: this function reads no file. Null is no objection.
+export function decideReadBeforeEdit(input: ReadBeforeEditInput): HookDecision | null {
+  if (!EDIT_TOOLS.has(input.tool) && !(input.tool === 'Write' && input.exists)) return null;
+  const again = `read ${input.displayPath ?? 'the file'} again before editing it`;
+  if (input.recorded === undefined) return { decision: 'deny', rule: EDIT_WITHOUT_READ_RULE, reason: again };
+  if (!input.exists || input.current !== input.recorded) return { decision: 'deny', rule: FILE_CHANGED_SINCE_READ_RULE, reason: again };
+  return null;
+}
+
+export interface LoopCounts {
+  // Consecutive hook denials in the invocation, the call being decided included when it is denied.
+  consecutiveDenials?: number;
+  // Consecutive Grep or Glob decisions before the call being decided (a search); absent for any other call.
+  consecutiveSearches?: number;
+}
+
+export interface LoopStop {
+  stop: true;
+  reason: 'consecutive-denials' | 'ineffective-search';
+  count: number;
+}
+
+const isCount = (n: number | undefined): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
+
+// CON-14: whether the counts reach a limit. A limit of zero leaves that control off. Searches are judged first: the call is itself
+// refused `ineffective-search`, and the caller then counts that refusal as a denial.
+export function loopLimitOf(counts: LoopCounts, limits: LoopLimits): LoopStop | null {
+  const searches = counts.consecutiveSearches;
+  if (limits.consecutiveSearches > 0 && isCount(searches) && searches >= limits.consecutiveSearches) return { stop: true, reason: 'ineffective-search', count: searches };
+  const denials = counts.consecutiveDenials;
+  if (limits.consecutiveDenials > 0 && isCount(denials) && denials >= limits.consecutiveDenials) return { stop: true, reason: 'consecutive-denials', count: denials };
+  return null;
 }

@@ -13,7 +13,7 @@ import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs
 import { DatabaseSync } from 'node:sqlite';
 import { relative } from 'node:path';
 import { sha256Hex } from '../domain/digest.ts';
-import { SUBAGENT_CONCURRENT_RULE, decideToolCall, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import { SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { HookDecision, HookPolicy, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
@@ -22,6 +22,8 @@ const MAX_STDIN_BYTES = 1024 * 1024;
 const MAX_TARGET_CHARS = 256;
 const MAX_NAME_CHARS = 128;
 const BUSY_TIMEOUT_MS = 4000;
+// A file above this size is identified by its size and modification time instead of its content (plan 02-11).
+const MAX_DIGEST_BYTES = 8 * 1024 * 1024;
 
 function fail(reason: string): never {
   try {
@@ -162,6 +164,38 @@ function subagentIdentity(call: NormalizedToolCall, toolInput: unknown, input: R
   return { ...(id !== undefined ? { toolUseId: id } : {}), ...(background ? { background: true } : {}) };
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Read before edit (CON-7) and loop limits (CON-14), plan 02-11
+// ---------------------------------------------------------------------------------------------------------
+
+interface FileState {
+  exists: boolean;
+  digest?: string;
+}
+
+// The state of one canonical path as the hook sees it now: a regular file with its digest, or not there. ENOENT and ENOTDIR mean not
+// there; any other error propagates and the caller exits 2, so a file that cannot be read never lets an edit through.
+function fileState(path: string): FileState {
+  let stat;
+  try {
+    stat = statSync(path);
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { exists: false };
+    throw e;
+  }
+  if (!stat.isFile()) return { exists: false };
+  if (stat.size > MAX_DIGEST_BYTES) return { exists: true, digest: `size:${stat.size}:mtime:${Math.trunc(stat.mtimeMs)}` };
+  return { exists: true, digest: 'sha256:' + sha256Hex(readFileSync(path)) };
+}
+
+const isUnder = (path: string, root: string): boolean => path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`);
+
+const agentOf = (input: Record<string, unknown>): string => {
+  const id = input['agent_id'];
+  return typeof id === 'string' ? id : '';
+};
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -175,26 +209,42 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   if (!normalized.ok) fail(normalized.reason);
   const decided = decideToolCall(normalized.call, policy, canonicalAbsolute);
 
+  // CON-7: for an edit the path rules allowed, the file's state is read before the ledger is opened (any error exits 2), and judged by the
+  // pure decision with the digest recorded for this agent inside the transaction below.
+  let edit: { canonical: string; state: FileState; display: string } | undefined;
+  if (policy.readBeforeEdit === true && decided.decision === 'allow' && normalized.call.kind === 'file-write') {
+    const canonical = canonicalAbsolute(normalized.call.paths[0] as string);
+    if (canonical === null) fail('cannot resolve the edit target');
+    const staging = canonicalAbsolute(policy.stagingPath);
+    const rel = staging !== null && isUnder(canonical, staging) ? relative(staging, canonical) : canonical;
+    edit = { canonical, state: fileState(canonical), display: rel.length > MAX_TARGET_CHARS ? rel.slice(0, MAX_TARGET_CHARS) : rel };
+  }
+
   const db = openLedger(policy.ledgerPath);
   let final: HookDecision;
   try {
     final = inTransaction(db, () => {
       let result = decided;
+      if (edit !== undefined) {
+        const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), edit.canonical) as { digest: string } | undefined;
+        const objection = decideReadBeforeEdit({ tool, exists: edit.state.exists, recorded: recorded?.digest, current: edit.state.digest, displayPath: edit.display });
+        if (objection !== null) result = objection;
+      }
       // O-1: at the concurrency limit, a subagent call is refused before it is charged. When the total is also spent the charge below
       // reports that (budget_exhausted), so the more fundamental limit is the one named.
       const totalHasRoom = (): boolean => db.prepare("SELECT 1 AS room FROM budgets WHERE run_id = ? AND name = 'subagentsTotal' AND used + reserved + 1 <= limit_value").get(policy.runId) !== undefined;
-      if (decided.decision === 'allow' && decided.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
+      if (result.decision === 'allow' && result.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
         result = { decision: 'deny', rule: SUBAGENT_CONCURRENT_RULE };
-      } else if (decided.decision === 'allow' && decided.budget !== undefined) {
+      } else if (result.decision === 'allow' && result.budget !== undefined) {
         const charged = db
           .prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value')
-          .run(policy.runId, decided.budget);
+          .run(policy.runId, result.budget);
         if (Number(charged.changes) === 0) {
           // No row at all is a broken ledger (fail closed); a row at its limit is the budget doing its job.
-          if (db.prepare('SELECT 1 AS found FROM budgets WHERE run_id = ? AND name = ?').get(policy.runId, decided.budget) === undefined) {
-            throw new Error(`the ledger has no ${decided.budget} budget for run ${policy.runId}`);
+          if (db.prepare('SELECT 1 AS found FROM budgets WHERE run_id = ? AND name = ?').get(policy.runId, result.budget) === undefined) {
+            throw new Error(`the ledger has no ${result.budget} budget for run ${policy.runId}`);
           }
-          result = { decision: 'deny', rule: 'budget_exhausted', budget: decided.budget };
+          result = { decision: 'deny', rule: 'budget_exhausted', budget: result.budget };
         }
       }
       appendEventRow(db, {
@@ -212,7 +262,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   }
 
   if (final.decision === 'deny') {
-    emit({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `avarice: ${final.rule}` } });
+    emit({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `avarice: ${final.rule}${final.reason !== undefined ? `: ${final.reason}` : ''}` } });
   } else if (final.explicit === true) {
     emit({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: `avarice: ${final.rule}` } });
   }
@@ -245,6 +295,19 @@ function postToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
     }
   }
   if (input['hook_event_name'] === 'PostToolUseFailure') data['failed'] = true;
+
+  // CON-7: a completed read or write records the digest of the file as it is on disk now, for the agent that made the call. The digest is
+  // computed before the transaction (any error but a missing file exits 2). A failed call, a path outside the clone and the scratch
+  // directory, and a file that is not there record nothing: a later edit then finds no read and is refused.
+  let record: { path: string; digest: string } | undefined;
+  if (policy.readBeforeEdit === true && data['failed'] !== true && (normalized.call.kind === 'file-read' || normalized.call.kind === 'file-write')) {
+    const canonical = canonicalAbsolute(normalized.call.paths[0] as string);
+    const roots = [policy.stagingPath, ...policy.writeRoots].map((root) => canonicalAbsolute(root)).filter((root): root is string => root !== null);
+    if (canonical !== null && roots.some((root) => isUnder(canonical, root))) {
+      const state = fileState(canonical);
+      if (state.exists && state.digest !== undefined) record = { path: canonical, digest: state.digest };
+    }
+  }
   const db = openLedger(policy.ledgerPath);
   try {
     inTransaction(db, () => {
@@ -255,7 +318,13 @@ function postToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         if (id !== undefined) data['toolUseId'] = id;
         data['subagentReleased'] = releasesSubagent(db, policy.invocationId, id, background);
       }
-      appendEventRow(db, { type: 'tool.completed', runId: policy.runId, invocationId: policy.invocationId, data, nowMs: Date.now() });
+      const now = Date.now();
+      const receipt = appendEventRow(db, { type: 'tool.completed', runId: policy.runId, invocationId: policy.invocationId, data, nowMs: now });
+      if (record !== undefined) {
+        db.prepare(
+          'INSERT INTO hook_reads (invocation_id, agent_id, path, digest, seq, recorded_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (invocation_id, agent_id, path) DO UPDATE SET digest = excluded.digest, seq = excluded.seq, recorded_at = excluded.recorded_at',
+        ).run(policy.invocationId, agentOf(input), record.path, record.digest, receipt.seq, new Date(now).toISOString());
+      }
     });
   } finally {
     db.close();

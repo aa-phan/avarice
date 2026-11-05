@@ -193,6 +193,9 @@ export interface InvocationScope {
   scratchDir?: string;
   deniedTools?: string[];
   denyBackgroundShell?: boolean;
+  // Run purpose only (plan 02-11): the hook requires a recorded read of a file, by the same agent in this invocation, before an edit of it
+  // (CON-7).
+  readBeforeEdit?: boolean;
   denyWrite: string[];
   denyRead: string[];
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
@@ -488,6 +491,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
     scratchDir: scratch,
     deniedTools: ['AskUserQuestion'],
     denyBackgroundShell: true,
+    readBeforeEdit: true,
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.
