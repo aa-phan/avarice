@@ -33,16 +33,23 @@ export interface SandboxedExecutorOptions {
   probeTimeoutsMs?: readonly [number, number];
 }
 
-// One probe per launcher path per process.
+// A clean exit is cached per launcher path per process (status 0 usable, any other status not). A timeout, a signal or a
+// spawn error is not a verdict, so it is retried once with the longer timeout; if the retry is not clean either, the probe
+// answers false for this call only and the next use probes again (review WR-07).
 const probes = new Map<string, boolean>();
 
 function probe(sandboxExecPath: string, timeouts: readonly [number, number]): boolean {
   const known = probes.get(sandboxExecPath);
   if (known !== undefined) return known;
-  const ran = spawnSync(sandboxExecPath, ['-p', PROBE_PROFILE, '/usr/bin/true'], { stdio: 'ignore', timeout: timeouts[0] });
-  const works = ran.error === undefined && ran.status === 0;
-  probes.set(sandboxExecPath, works);
-  return works;
+  for (const timeout of timeouts) {
+    const ran = spawnSync(sandboxExecPath, ['-p', PROBE_PROFILE, '/usr/bin/true'], { stdio: 'ignore', timeout });
+    if (ran.error === undefined && ran.signal === null && typeof ran.status === 'number') {
+      const works = ran.status === 0;
+      probes.set(sandboxExecPath, works);
+      return works;
+    }
+  }
+  return false;
 }
 
 interface Capture {
