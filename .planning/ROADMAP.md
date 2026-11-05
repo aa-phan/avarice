@@ -241,3 +241,11 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 **Deferred at:** 2026-11-04 during /gsd-verify-work 1 session completion
 **Follow-ups:**
 - [ ] Test 13: defer: re-check live on next onboarding (deferred 2026-11-04)
+
+### Phase 999.2: Follow-up — Phase 01 deferred UAT follow-up: Test 10 (BACKLOG)
+
+**Goal:** Resolve the UAT checkpoint deferred during Phase 01 verification
+**Source phase:** 01
+**Deferred at:** 2026-11-05 during /gsd-verify-work 01 session completion
+**Follow-ups:**
+- [ ] Test 10: defer test 10 and add it to the backlog (live check of the local-mount refusal against a real smbfs/nfs network mount; none was set up) (deferred 2026-11-05)

@@ -3,7 +3,7 @@ status: complete
 phase: 01-contained-onboarding-of-one-repository
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-05-SUMMARY.md, 01-06-SUMMARY.md, 01-07-SUMMARY.md, 01-08-SUMMARY.md, 01-09-SUMMARY.md, 01-10-SUMMARY.md, 01-11-SUMMARY.md, 01-12-SUMMARY.md, 01-13-SUMMARY.md, 01-14-SUMMARY.md, 01-15-SUMMARY.md, 01-16-SUMMARY.md, 01-17-SUMMARY.md, 01-18-SUMMARY.md, 01-19-SUMMARY.md, 01-20-SUMMARY.md, 01-21-SUMMARY.md, 01-22-SUMMARY.md, 01-23-SUMMARY.md, 01-24-SUMMARY.md, 01-25-SUMMARY.md, 01-26-SUMMARY.md]
 started: 2026-11-04T23:29:32Z
-updated: 2026-11-05T08:40:46.742Z
+updated: 2026-11-05T08:44:29Z
 ---
 
 ## Current Test
@@ -67,7 +67,7 @@ note: same migrations.test.ts run (committed v1 fixture opens, no-op migrate, st
 expected: The home-directory heuristic for network mounts (the `local` flag) is only as good as `mount` output; a FUSE or synced-folder mount that reports local passes. No real network volume was available to try. Why a person checks it: Research assumption A6: the check cannot be proven against a real smbfs or nfs mount on this machine, only against fixture text of those lines
 source: 01-07-SUMMARY.md D7 (human_judgment)
 result: skipped
-reason: "Skipped by user after the localhost SMB mount recipe was offered; no real network mount was tested (earlier: blocked, no network volume available)"
+reason: "Deferred follow-up: defer test 10 and add it to the backlog (live check of the local-mount refusal against a real smbfs/nfs network mount; none was set up)"
 
 ### 11. 01-12 D7: Hook decision latency stays under 150 ms p95 over 30 runs
 expected: Hook decision latency stays under 150 ms p95 over 30 runs Why a person checks it: The plan states the target on Node 22.22.3, which is not installed on this machine; it was measured on the dev Node 26.9.0. Re-run with AVARICE_NODE22 set to a 22.22.3 binary before relying on T-4.
@@ -1036,3 +1036,6 @@ blocked: 0
 - test: 13
   idea: "defer: re-check live on next onboarding"
   deferred_at: 2026-11-04
+- test: 10
+  idea: "defer test 10 and add it to the backlog (live check of the local-mount refusal against a real smbfs/nfs network mount; none was set up)"
+  deferred_at: 2026-11-05
