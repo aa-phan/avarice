@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-11-05T19:15:14.622Z"
+stopped_at: Completed 02-08-PLAN.md
+last_updated: "2026-11-05T19:43:58.847Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: b0e44a6fc6d786ab75f7329b4d0fd808bc835f68
+state_head: e3a6374c57db181ed6d198c00c4958d2cb8a41c0
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 8 of 22
+Plan: 9 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -90,6 +90,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P05 | 25 min | 3 tasks | 11 files |
 | Phase 02 P06 | 8 min | 3 tasks | 12 files |
 | Phase 02 P07 | 45 min | 3 tasks | 14 files |
+| Phase 02 P08 | 25 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-05: G2 judges protected globs before write, create and artifact globs; a head failure is pre-existing only when the base failure was measured; pauseSignal is a structural fact and detectPause reads the numbered-choice text shape only as a last resort — AUT-9 and AUT-7: gates fail closed, model text can block but never pass or satisfy acceptance
 - [Phase 02]: 02-06: S2-C confirmed A1 (npm 11.19.1 honours npm_config_https_proxy for CONNECT): a supervisor step gets one loopback port via CommandSpec.allowLoopbackPorts and an in-repo node:http/node:net allowlist proxy admits only registry.npmjs.org:443; the footprint test exempts exactly that one file and holds it to loopback-only, built-ins-only rules — D-11 needs no *:443 widening and no offline-cache fallback; plan 02-14 builds the install step on this
 - [Phase 02]: 02-07: fetchIntoSource is create-only and fsck-checked with gc.auto and maintenance.auto off, commit uses literal pathspecs and add-then-commit-only-paths, and discard restores from a snapshot tree (user pre-run edits kept) unlinking added paths without following symlinks, so the source checkout is byte-identical and a crashed attempt is undone exactly to its checkpoint — D-02, D-03 and CON-16: the only write to the user's repository is one new refs/heads/avarice/run_* ref; discard names only paths from a tree difference and never uses reset, clean or checkout; conventions (D-16) and staleness (D-04) are read from git objects and no working-tree file
+- [Phase 02]: 02-08: the run purpose's scratch directory is a scope field beside writeRoots, a missing ancestor listing is refused, and a contract command is matched before the denied prefixes only after the scope dropped every prefix that must stay denied — CON-2 and RC-5: writeRoots holds exactly the clone roots (empty for an empty write set), computeRunScope throws rather than leave a directory above a write root unlisted, protected globs (plus .git and GSD config) win over write globs, npm and npx leave the denied prefixes only for a contract-listed form, and git, avarice, claude and curl stay denied for every purpose
+- [Phase 02]: 02-08: everything handed to the model for a run is in realpath form and runUnitPrompt cuts only the context pack to fit 32 KiB, refusing a brief that does not fit — 02-01 carried finding: the host refuses writes addressed through /var when the rules name /private/var, so TMPDIR, the npm cache, the host cwd and every rule path are canonical; cutting an acceptance criterion would let a run pass against a shorter brief than the owner wrote
 
 ### Pending Todos
 
@@ -232,6 +235,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T19:15:14.477Z
-Stopped at: Completed 02-07-PLAN.md
+Last session: 2026-11-05T19:43:58.696Z
+Stopped at: Completed 02-08-PLAN.md
 Resume file: None
