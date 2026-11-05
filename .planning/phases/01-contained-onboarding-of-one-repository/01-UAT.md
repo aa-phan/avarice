@@ -1,5 +1,5 @@
 ---
-status: partial
+status: diagnosed
 phase: 01-contained-onboarding-of-one-repository
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-05-SUMMARY.md, 01-06-SUMMARY.md, 01-07-SUMMARY.md, 01-08-SUMMARY.md, 01-09-SUMMARY.md, 01-10-SUMMARY.md, 01-11-SUMMARY.md, 01-12-SUMMARY.md, 01-13-SUMMARY.md, 01-14-SUMMARY.md, 01-15-SUMMARY.md, 01-16-SUMMARY.md, 01-17-SUMMARY.md, 01-18-SUMMARY.md, 01-19-SUMMARY.md, 01-20-SUMMARY.md, 01-21-SUMMARY.md, 01-22-SUMMARY.md, 01-23-SUMMARY.md, 01-24-SUMMARY.md]
 started: 2026-11-04T23:29:32Z
@@ -952,8 +952,32 @@ blocked: 1
   reason: "User reported: in the live rehearsal the knowledge agent read 16 original staging/docs files instead of the .avarice-knowledge copies; all 16 denied outside-read-set; record has 9 document nodes (24 in the target run) with dropped 0; injected ADR-999 never read, so the exit-run fence check failed"
   severity: major
   test: 154
-  artifacts: []
-  missing: []
+  root_cause: "Nondeterministic haiku slip plus two deterministic holes: the knowledge prompt makes the model compose each absolute read path from a repository-relative .chunks.json path, and it sometimes drops the .avarice-knowledge/ segment (2 of 4 live runs: 01-19 rehearsal 5 and the UAT rehearsal; not a regression, no knowledge code changed since 0d930f3); the bare 'avarice: outside-read-set' denial and the prompt's 'skip it and go on' give it no way to recover; and nothing accounts per document, so shape-valid empty chunks count as usable, corpus is derived from chunk shape, validation only needs one document node, outcome is progressed despite 16 denies, and dropped only counts edges"
+  artifacts:
+    - path: "src/domain/knowledge-extraction.ts"
+      issue: "plan lists repository-relative paths and the prompt makes the model compose the absolute path; 'skip it and go on' (line ~134); assembleExtraction treats shape-valid empty chunks as usable and adds their files to usedFiles"
+    - path: "src/app/stages/index-knowledge.ts"
+      issue: "corpus taken from coveredPaths (chunk shape); dropped records only dangling and astDocument; non-budget hook denies ignored; usable >= ceil(chunks/2) threshold"
+    - path: "src/domain/knowledge-validation.ts"
+      issue: "only requires documentIds.size > 0 (line ~88)"
+    - path: "src/domain/outcome.ts"
+      issue: "progressed is decided before denials are counted (lines ~61-62)"
+    - path: "src/hook/pre-tool-use.ts"
+      issue: "deny reason is the bare 'avarice: ${rule}' with no allowed root (line ~215)"
+    - path: "scripts/exit-run-tools.ts"
+      issue: "rehearsal asserts the injection fence only; no corpus-coverage assert (lines ~455-467)"
+    - path: "test/integration/knowledge-pass.test.ts"
+      issue: "line ~239 pins the current behaviour (empty usable chunk counts as covered, active)"
+    - path: "docs/repository-onboarding.md"
+      issue: "line ~111 specifies the current empty-chunk behaviour; plan 01-18 defined dropped as {dangling, astDocument} only"
+  missing:
+    - "Give the knowledge agent the exact absolute read path per file as data in .chunks.json and have it read that string verbatim (no path composition)"
+    - "Give an outside-read-set denial for the knowledge purpose a recovery path (name the allowed corpus root; retry once under the working directory, then skip)"
+    - "Account per document after the merge: compare document nodes with manifest entries, record unread documents (e.g. knowledge.dropped.unread, documentsExpected) and derive knowledge.corpus from covered documents"
+    - "Make a chunk usable only when its files yield document nodes, or add a coverage threshold that records the knowledge index validation-failed"
+    - "Count the knowledge invocation's hook denies in the step result"
+    - "Tests: a fake-host case that reads originals and writes empty chunks; update knowledge-pass.test.ts:239 and docs/repository-onboarding.md:111 to the new contract; a rehearsal assert that document nodes cover the manifest within the allowed share"
+  debug_session: ".planning/debug/knowledge-pass-reads-originals.md"
 
 ## Deferred Follow-Ups
 
