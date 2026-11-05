@@ -9,8 +9,13 @@ import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
+import { runSupervisor } from '../../src/app/run-service.ts';
+import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import type { DepsOverrides } from '../../src/cli/composition.ts';
 import { FakeAgentHost } from './fake-agent-host.ts';
+import { FakeRunHost } from './fake-run-host.ts';
+import type { FakeRunOptions } from './fake-run-host.ts';
 import { FakeIntelHost } from './fake-intel-host.ts';
 import { writeFakeGraphify } from './fake-graphify.ts';
 import { git, makeScratchRepo } from './scratch-repo.ts';
@@ -209,6 +214,90 @@ export const RUN_CONVENTIONS_WITH_FORMAT = {
   checks: [...RUN_CONVENTIONS.checks, FORMAT_CHECK],
   agentCommands: ['npm test'],
 };
+
+// Scripts a scratch repository commits so a declared check, or the dependency install, can be made to misbehave in one known way.
+export const CHECK_SCRIPTS: Readonly<Record<string, string>> = {
+  // node scripts/write-file.mjs <path>: writes one file, creating its directory.
+  'scripts/write-file.mjs': "import { mkdirSync, writeFileSync } from 'node:fs';\nimport { dirname } from 'node:path';\nconst target = process.argv[2];\nmkdirSync(dirname(target), { recursive: true });\nwriteFileSync(target, 'written\\n');\n",
+  // node scripts/net-proxy.mjs <host:443>: asks the proxy in HTTPS_PROXY to CONNECT there, and exits 0 whatever it answers.
+  'scripts/net-proxy.mjs':
+    "import http from 'node:http';\nconst proxy = new URL(process.env.HTTPS_PROXY ?? '');\nconst request = http.request({ host: proxy.hostname, port: Number(proxy.port), method: 'CONNECT', path: process.argv[2] });\nrequest.on('connect', (response, socket) => {\n  socket.destroy();\n  process.exit(0);\n});\nrequest.on('error', () => process.exit(0));\nrequest.end();\n",
+  // node scripts/net-direct.mjs <host>: connects straight to <host>:443 ignoring every proxy variable, prints the error, exits 0.
+  'scripts/net-direct.mjs':
+    "import net from 'node:net';\nconst socket = net.connect({ host: process.argv[2], port: 443 });\nsocket.on('error', (error) => {\n  console.error(String(error));\n  process.exit(0);\n});\nsocket.on('connect', () => {\n  socket.destroy();\n  process.exit(0);\n});\n",
+  // Writes out/x.txt only in a directory named `clone` (the run clone), so it passes validation, which runs in `validate`, and then breaks the rule.
+  'scripts/cwd-write.mjs':
+    "import { mkdirSync, writeFileSync } from 'node:fs';\nimport { basename } from 'node:path';\nif (basename(process.cwd()) !== 'clone') process.exit(0);\ntry {\n  mkdirSync('out', { recursive: true });\n  writeFileSync('out/x.txt', 'x');\n  console.log('wrote out/x.txt');\n} catch (error) {\n  console.error(String(error));\n  process.exit(1);\n}\n",
+  // node scripts/fake-install.mjs <host:port> [fail]: the offline installer. It tunnels through the proxy of npm_config_https_proxy to <host:port>, waits for the
+  // far end to answer, and writes node_modules/x/index.js. A refused CONNECT or `fail` is a failing install.
+  'scripts/fake-install.mjs': [
+    "import net from 'node:net';",
+    "import { mkdirSync, writeFileSync } from 'node:fs';",
+    "if (process.argv[3] === 'fail') {",
+    "  console.error('install failed on purpose');",
+    '  process.exit(3);',
+    '}',
+    "const [host, port] = String(process.argv[2]).split(':');",
+    "const proxy = new URL(process.env.npm_config_https_proxy ?? '');",
+    'const socket = net.connect(Number(proxy.port), proxy.hostname);',
+    "let seen = '';",
+    "socket.on('connect', () => socket.write(`CONNECT ${host}:${port} HTTP/1.1\\r\\nHost: ${host}:${port}\\r\\n\\r\\n`));",
+    "socket.on('data', (chunk) => {",
+    '  seen += chunk.toString();',
+    "  if (/^HTTP\\/1.1 (403|400|502)/.test(seen)) {",
+    "    console.error(`the proxy refused ${host}:${port}`);",
+    '    process.exit(1);',
+    '  }',
+    "  if (seen.includes('200 Connection Established') && !seen.includes('pong')) socket.write('ping');",
+    "  if (seen.includes('pong')) {",
+    "    mkdirSync('node_modules/x', { recursive: true });",
+    "    writeFileSync('node_modules/x/index.js', 'module.exports = 1;\\n');",
+    '    process.exit(0);',
+    '  }',
+    '});',
+    "socket.on('error', (error) => {",
+    '  console.error(String(error));',
+    '  process.exit(1);',
+    '});',
+    '',
+  ].join('\n'),
+};
+
+// ---- a run driven in this process, so a test can replace the executor, the egress proxy or read what the host was given -----------------------------
+
+export interface InProcessRun {
+  runId: string;
+  state: string;
+  reason: string | null;
+  host: FakeRunHost;
+}
+
+// The environment of a profile in this process: the three roots and a claude that does not exist, so no live model can run.
+export function profileEnv(roots: CliRoots): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
+  };
+}
+
+// `start` and the supervisor in this process with the fake run host. `overrides` replaces the executor or the egress proxy (test entries only).
+export async function runInProcess(roots: CliRoots, repo: ScratchRepo, briefPath: string, run: FakeRunOptions, overrides: DepsOverrides = {}): Promise<InProcessRun> {
+  const host = new FakeRunHost(run);
+  const composed = createDeps(profileEnv(roots), { host, ...overrides });
+  assert.ok(composed.ok, 'composition');
+  try {
+    const started = startRun(composed.value.deps, { cwd: repo.path, briefPath, policy: 'routine', budgetOverrides: {} });
+    assert.ok(started.ok, JSON.stringify(started));
+    const outcome = await runSupervisor(composed.value.deps, started.value.runId);
+    assert.ok(outcome.ok, JSON.stringify(outcome));
+    return { runId: started.value.runId, state: outcome.value.state, reason: outcome.value.reason, host };
+  } finally {
+    composed.value.close();
+  }
+}
 
 // The standard brief with its target checks replaced.
 export function briefTargeting(...targets: readonly string[]): string {

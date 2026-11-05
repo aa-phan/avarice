@@ -13,7 +13,8 @@ import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
 import { blockingOf, validateChecks } from '../check-validation.ts';
-import { runRequiredChecks } from '../checks.ts';
+import { installDependencies, runRequiredChecks } from '../checks.ts';
+import type { InstallResult } from '../checks.ts';
 import type { AppDeps } from '../deps.ts';
 import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
 import { blockRun } from './blocked.ts';
@@ -55,7 +56,8 @@ export const contractReadyStage: RunStage = async (ctx: RunStageContext, row: Ru
   if (!loaded.ok) return loaded;
   const steps = ctx.deps.ledger.getRunSteps(ctx.runId);
   if (!steps.ok) return steps;
-  const done = new Set(steps.value.filter((s) => s.status === 'completed').map((s) => s.step));
+  // A step the action decided to skip (no dependencies declared) is as done as a completed one: a resume repeats nothing.
+  const done = new Set(steps.value.filter((s) => s.status === 'completed' || s.status === 'skipped').map((s) => s.step));
 
   for (const action of RUN_NEXT_ACTIONS.contract_ready ?? []) {
     const registered = handlers.get(action);
@@ -152,8 +154,56 @@ registerContractReadyAction(
   { step: GSD_CONFIGURE_STEP },
 );
 
+const INSTALL_STEP = 'deps:install';
 const VALIDATE_STEP = 'checks:validate';
 const BASELINE_STEP = 'baseline';
+
+// What a step keeps of an install: the lockfile digest, the exit, the duration and every proxy attempt by host (D-11, T-02-47).
+function installSummary(result: InstallResult): Record<string, unknown> {
+  return {
+    outcome: result.outcome,
+    ...(result.reason !== undefined ? { reason: result.reason } : {}),
+    ...(result.lockfile !== undefined ? { lockfile: result.lockfile } : {}),
+    ...(result.lockfileDigest !== undefined ? { lockfileDigest: result.lockfileDigest } : {}),
+    ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+    ...(result.durationMs !== undefined ? { durationMs: result.durationMs } : {}),
+    attempts: result.attempts,
+  };
+}
+
+// `install-deps` (D-11): the conventions' dependency install in the run clone, before the first invocation, the only network any run step has
+// and only to the registry. The step records the lockfile digest, the exit, the duration and every attempt the proxy saw by host. A missing
+// sandbox or proxy is an enforcement failure; a host that is not an allowed registry, or a failing install, is a decision.
+registerContractReadyAction(
+  'install-deps',
+  async (ctx, row, contract) => {
+    const { deps } = ctx;
+    const workspace = preparedWorkspace(deps, ctx.runId);
+    if (!workspace.ok) return workspace;
+    const startedMs = deps.clock.nowMs();
+    const result = await installDependencies(deps, row, contract, workspace.value.path);
+    if (!result.ok) return result;
+    const recorded = deps.ledger.recordRunStep(ctx.runId, {
+      step: INSTALL_STEP,
+      status: result.value.outcome === 'installed' ? 'completed' : result.value.outcome === 'skipped' ? 'skipped' : 'failed',
+      result: installSummary(result.value),
+      nowMs: startedMs,
+      completedAtMs: deps.clock.nowMs(),
+    });
+    if (!recorded.ok) return recorded;
+    const failure = result.value.failure;
+    if (failure === undefined) return ok('next');
+    const blocked = blockRun(ctx, {
+      reason: failure.reason,
+      decisionClass: failure.decisionClass,
+      issue: failure.issue,
+      data: { gate: 'deps:install' },
+      place: { workspacePath: workspace.value.path, branch: workspace.value.branch },
+    });
+    return blocked.ok ? ok('moved') : blocked;
+  },
+  { step: INSTALL_STEP },
+);
 
 // `validate-checks` (ONB-10): every declared check is validated in a scratch clone before it can become evidence. No repository command runs
 // before this except the dependency install. A required (or targeted) check that is not `active` blocks the run with a decision before any
@@ -167,8 +217,24 @@ registerContractReadyAction(
     const place = { workspacePath: workspace.value.path, branch: workspace.value.branch };
 
     const startedMs = deps.clock.nowMs();
-    const report = await validateChecks(deps, row, contract);
-    if (!report.ok) return report;
+    // The checks are validated with their dependencies installed (a check usually runs a tool the install provides), in the validation clone,
+    // by the same install as the run clone's. It runs only when some check still needs validating.
+    const install: { result?: InstallResult } = {};
+    const report = await validateChecks(deps, row, contract, {
+      prepared: async (clone) => {
+        const installed = await installDependencies(deps, row, contract, clone);
+        if (!installed.ok) return installed;
+        install.result = installed.value;
+        return installed.value.outcome === 'failed' ? err({ kind: 'conflict', expected: 'the dependencies installed in the validation clone', actual: installed.value.failure?.issue ?? 'the install failed' }) : ok(undefined);
+      },
+    });
+    if (!report.ok) {
+      const failure = install.result?.failure;
+      if (failure === undefined) return report;
+      deps.ledger.recordRunStep(ctx.runId, { step: VALIDATE_STEP, status: 'failed', result: { install: installSummary(install.result as InstallResult) }, nowMs: startedMs, completedAtMs: deps.clock.nowMs() });
+      const blocked = blockRun(ctx, { reason: failure.reason, decisionClass: failure.decisionClass, issue: `in the validation clone: ${failure.issue}`, data: { gate: 'checks:validate', step: 'deps:install' }, place });
+      return blocked.ok ? ok('moved') : blocked;
+    }
     const blocking = report.value.outcomes.filter((o) => o.verdict !== 'active' && (o.required || o.target));
     const recorded = deps.ledger.recordRunStep(ctx.runId, {
       step: VALIDATE_STEP,
@@ -177,6 +243,7 @@ registerContractReadyAction(
       result: {
         checks: report.value.outcomes.map((o) => ({ name: o.name, verdict: o.verdict, reused: o.reused, ...o.detail })),
         reused: report.value.reused,
+        ...(install.result !== undefined ? { install: installSummary(install.result) } : {}),
       },
       nowMs: startedMs,
       completedAtMs: deps.clock.nowMs(),

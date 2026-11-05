@@ -122,6 +122,7 @@ describe('start --wait reaches ready_for_review with the fake run host (tracer; 
     assert.deepEqual(checkpointsOf(f, runId), [
       'prepare-workspace',
       'configure-gsd',
+      'install-deps',
       'validate-checks',
       'baseline',
       'verify-enforcement',

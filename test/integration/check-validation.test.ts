@@ -2,12 +2,21 @@
 // plays the unit; everything else is real: git, the validation clone, the sandboxed checks, the ledger, G2 and G4. No test calls a real model.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { validateChecks } from '../../src/app/check-validation.ts';
+import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import { err } from '../../src/domain/result.ts';
+import type { RunContract } from '../../src/domain/run-contract.ts';
+import type { CommandExecutor } from '../../src/ports/command-executor.ts';
+import { startRun } from '../../src/app/run-start.ts';
+import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import {
+  CHECK_SCRIPTS,
   FIXED_SLUG,
   RUN_BRIEF,
   RUN_CONVENTIONS_WITH_FORMAT,
@@ -16,6 +25,8 @@ import {
   ledgerRows,
   makeRunRepoWithFormat,
   onboardRunRepo,
+  profileEnv,
+  runInProcess,
   startWithFakeRunHost,
   writeBrief,
 } from '../helpers/run-fixtures.ts';
@@ -147,5 +158,187 @@ describe('a brief that targets the check that fails at the pin blocks the run (D
     assert.match(gate?.failures_json as string, /checks-delta/);
     assert.match(gate?.failures_json as string, /format \(target-not-passed\)/);
     assert.equal(ledgerRows(f.roots, 'SELECT 1 FROM run_steps WHERE run_id = ? AND step = ?', runId, 'commit').length, 0, 'nothing was committed');
+  });
+});
+
+// ---- Task 2: rejections, caching, declared output locations (ONB-10, CON-8) -------------------------------------------------------------------
+
+const TEST_CHECK = { name: 'test', argv: ['npm', 'test'], timeoutSec: 120, required: true };
+const conventionsOf = (...checks: unknown[]): Record<string, unknown> => ({
+  schema: 1,
+  checks: [TEST_CHECK, ...checks],
+  paths: { write: ['src/**', 'test/**'], protected: [], artifacts: [] },
+  agentCommands: ['npm test'],
+});
+const node = (name: string, script: string, args: readonly string[], extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  name,
+  argv: ['node', `scripts/${script}`, ...args],
+  timeoutSec: 60,
+  required: false,
+  ...extra,
+});
+
+const validationOf = (f: Fixture, name: string): { verdict: string; detail: Record<string, unknown> } | undefined => {
+  const row = validationsOf(f).find((v) => v.name === name);
+  return row === undefined ? undefined : { verdict: row.verdict, detail: JSON.parse(row.detail_json) as Record<string, unknown> };
+};
+
+describe('a required check that writes where it did not declare is rejected, and the run stops before any invocation (ONB-10, T-02-45)', () => {
+  const f = fixture(conventionsOf(node('writer', 'write-file.mjs', ['out/x.txt'], { required: true })), CHECK_SCRIPTS);
+  const result = start(f, RUN_BRIEF);
+  const runId = runIdOf(result.stdout);
+
+  it('records `rejected` with reason unexpected-write and the path, and activates nothing', () => {
+    assert.deepEqual(validationOf(f, 'writer'), { verdict: 'rejected', detail: { reason: 'unexpected-write', paths: ['out/x.txt'] } });
+    assert.equal(validationOf(f, 'test')?.verdict, 'active', 'the other check was still judged on its own');
+  });
+
+  it('blocks in blocked_on_decision (decision) with a permission decision naming the check, before any launch or baseline', () => {
+    assert.equal(result.code, 3, result.stderr + result.stdout);
+    const run = ledgerRows<{ state: string; reason: string }>(f.roots, 'SELECT state, reason FROM runs WHERE run_id = ?', runId)[0];
+    assert.deepEqual([run?.state, run?.reason], ['blocked_on_decision', 'decision']);
+    const decision = ledgerRows<{ class: string; issue: string }>(f.roots, 'SELECT class, issue FROM decisions WHERE run_id = ?', runId);
+    assert.equal(decision.length, 1);
+    assert.equal(decision[0]?.class, 'permission');
+    assert.match(decision[0]?.issue as string, /required check writer .*outside its declared paths \(out\/x\.txt\)/);
+    const steps = ledgerRows<{ step: string }>(f.roots, 'SELECT step FROM run_steps WHERE run_id = ?', runId).map((s) => s.step);
+    assert.ok(!steps.includes('launch:run') && !steps.includes('baseline'), `no launch or baseline step, got ${steps.join(',')}`);
+    assert.equal(stepOf(f, runId, 'checks:validate')?.status, 'failed');
+    assert.equal(evidenceOf(f, runId, 'base').length, 0, 'no repository check ran for evidence');
+  });
+
+  it('the run row names its clone although it never reached running', () => {
+    const run = ledgerRows<{ workspace_path: string | null; branch: string | null }>(f.roots, 'SELECT workspace_path, branch FROM runs WHERE run_id = ?', runId)[0];
+    assert.match(run?.workspace_path as string, /\/clone$/);
+    assert.equal(run?.branch, `avarice/${runId}`);
+  });
+});
+
+describe('verdicts of every kind of declared check, in declared order, and an optional rejection leaves the run going', () => {
+  const f = fixture(
+    conventionsOf(
+      node('dist-ok', 'write-file.mjs', ['dist/a.js'], { writes: ['dist/**'] }),
+      node('dist-evil', 'write-file.mjs', ['dist-evil/x'], { writes: ['dist/**'] }),
+      node('quiet', 'net-proxy.mjs', ['registry.invalid:443'], { writes: [] }),
+      node('direct', 'net-direct.mjs', ['direct.invalid']),
+      node('noop', 'write-file.mjs', ['node_modules/.cache/z'], { writes: ['node_modules/.cache/**'] }),
+    ),
+    { ...CHECK_SCRIPTS, '.gitignore': 'node_modules/\n' },
+  );
+  const result = start(f, RUN_BRIEF);
+  const runId = runIdOf(result.stdout);
+
+  it('active: declared writes under dist/** (also into an ignored directory), and a check that writes nothing', () => {
+    assert.equal(validationOf(f, 'dist-ok')?.verdict, 'active');
+    assert.equal(validationOf(f, 'noop')?.verdict, 'active', 'a write into an ignored declared path is declared');
+    assert.equal(validationOf(f, 'test')?.verdict, 'active', 'a check with no declared writes that writes nothing is active, although it fails at the pin');
+  });
+
+  it('adjacency: dist-evil/x is not under dist/** and is rejected naming it', () => {
+    assert.deepEqual(validationOf(f, 'dist-evil'), { verdict: 'rejected', detail: { reason: 'unexpected-write', paths: ['dist-evil/x'] } });
+  });
+
+  it('network by proxy: a CONNECT to a remote host is seen by the empty-allowlist proxy and names the host', () => {
+    assert.deepEqual(validationOf(f, 'quiet'), { verdict: 'rejected', detail: { reason: 'network', hosts: ['registry.invalid'] } });
+  });
+
+  it('network by error text: a direct connect that fails in the sandbox is rejected network', () => {
+    const verdict = validationOf(f, 'direct');
+    assert.equal(verdict?.verdict, 'rejected');
+    assert.equal(verdict?.detail['reason'], 'network');
+    assert.deepEqual(verdict?.detail['hosts'], ['direct.invalid']);
+  });
+
+  it('ordering: verdicts and `check.validated` events follow the declared order', () => {
+    const declared = ['test', 'dist-ok', 'dist-evil', 'quiet', 'direct', 'noop'];
+    assert.deepEqual(validationsOf(f).map((v) => v.name), declared);
+    const events = ledgerRows<{ data_json: string }>(f.roots, "SELECT data_json FROM events WHERE run_id = ? AND type = 'check.validated' ORDER BY seq", runId);
+    assert.deepEqual(events.map((e) => (JSON.parse(e.data_json) as { name: string }).name), declared);
+    const validated = stepOf(f, runId, 'checks:validate');
+    assert.deepEqual((validated?.result['checks'] as Array<{ name: string }>).map((c) => c.name), declared);
+  });
+
+  it('an optional check that is rejected does not stop the run, and is absent from every run of the checks', () => {
+    assert.equal(result.code, 0, result.stderr + result.stdout);
+    const names = new Set(ledgerRows<{ name: string }>(f.roots, "SELECT name FROM evidence WHERE kind = 'check'").map((e) => e.name));
+    assert.deepEqual([...names], ['test']);
+  });
+});
+
+describe('a check whose argv changed re-validates, and the unchanged one is reused (ONB-10)', () => {
+  const f = fixture();
+  const first = start(f, RUN_BRIEF);
+  const [test, format] = RUN_CONVENTIONS_WITH_FORMAT.checks;
+  commitConventions(f.repo, { ...RUN_CONVENTIONS_WITH_FORMAT, checks: [test, { ...format, argv: ['node', 'scripts/format-check.mjs', '--again'] }] });
+  const second = start(f, RUN_BRIEF, FIX, 'second.md');
+
+  it('adds exactly one verdict row, for the edited check, and reuses the other', () => {
+    assert.equal(first.code, 0, first.stderr + first.stdout);
+    assert.equal(second.code, 0, second.stderr + second.stdout);
+    assert.deepEqual(validationsOf(f).map((v) => [v.name, v.verdict]), [['test', 'active'], ['format', 'active'], ['format', 'active']]);
+    const result = stepOf(f, runIdOf(second.stdout), 'checks:validate')?.result;
+    assert.equal(result?.['reused'], 1);
+    assert.deepEqual((result?.['checks'] as Array<{ name: string; reused: boolean }>).map((c) => [c.name, c.reused]), [['test', true], ['format', false]]);
+  });
+});
+
+describe('unavailable: nothing is known, so nothing is cached, and a required check blocks as an enforcement failure', () => {
+  it('a sandbox that cannot run (sandbox-exec forced to /usr/bin/false) gives `unavailable` for every check and records no verdict', async () => {
+    const f = fixture();
+    const brief = writeBrief(join(f.roots.base, 'briefs'), RUN_BRIEF);
+    const composed = createDeps(profileEnv(f.roots), { host: new FakeRunHost({}), executor: new SandboxedExecutor({ sandboxExecPath: '/usr/bin/false' }) });
+    assert.ok(composed.ok);
+    try {
+      const started = startRun(composed.value.deps, { cwd: f.repo.path, briefPath: brief, policy: 'routine', budgetOverrides: {} });
+      assert.ok(started.ok, JSON.stringify(started));
+      const run = composed.value.deps.ledger.getRun(started.value.runId);
+      const contract = composed.value.deps.ledger.getRunContract(started.value.runId);
+      assert.ok(run.ok && contract.ok && contract.value !== null);
+      const report = await validateChecks(composed.value.deps, run.value, contract.value.body as RunContract);
+      assert.ok(report.ok, JSON.stringify(report));
+      assert.deepEqual(report.value.outcomes.map((o) => [o.name, o.verdict, o.detail.reason]), [['test', 'unavailable', 'sandbox-unavailable'], ['format', 'unavailable', 'sandbox-unavailable']]);
+    } finally {
+      composed.value.close();
+    }
+    assert.equal(validationsOf(f).length, 0, 'an unavailable verdict is not cached');
+  });
+
+  it('a whole run whose validation cannot run ends blocked (enforcement_failure), with no verdict cached and no unit launched', async () => {
+    const f = fixture();
+    const brief = writeBrief(join(f.roots.base, 'briefs'), RUN_BRIEF);
+    const real = new SandboxedExecutor();
+    // Everything but the validation clone runs for real (configuring GSD needs the sandbox too).
+    const selective: CommandExecutor = { descriptor: real.descriptor, run: (cmd, signal) => (cmd.cwd.endsWith('/validate') ? Promise.resolve(err({ kind: 'unavailable', cause: 'forced' })) : real.run(cmd, signal)) };
+    const ran = await runInProcess(f.roots, f.repo, brief, FIX, { executor: selective });
+    assert.deepEqual([ran.state, ran.reason], ['blocked_on_decision', 'enforcement_failure']);
+    assert.equal(validationsOf(f).length, 0);
+    assert.equal(ran.host.calls.length, 0, 'no invocation');
+  });
+});
+
+describe('a run-time check may write only its declared paths and the scratch directory (CON-8)', () => {
+  const f = fixture(conventionsOf(node('cwdwriter', 'cwd-write.mjs', [], { required: true })), CHECK_SCRIPTS);
+  const result = start(f, RUN_BRIEF);
+  const runId = runIdOf(result.stdout);
+
+  it('passes validation (it writes nothing in the validation clone) and then fails in the run clone under the sandbox', () => {
+    assert.equal(validationOf(f, 'cwdwriter')?.verdict, 'active');
+    const base = evidenceOf(f, runId, 'base').find((e) => e.name === 'cwdwriter');
+    assert.equal(base?.status, 'failed');
+  });
+
+  it('records the refusal in the check output artifact, and leaves no out/x.txt in the clone', () => {
+    const digest = ledgerRows<{ artifact_digest: string }>(f.roots, "SELECT e.artifact_digest FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.name = 'cwdwriter' ORDER BY e.rowid", runId)[0]?.artifact_digest as string;
+    const composed = createDeps(profileEnv(f.roots), {}, { readOnly: true });
+    assert.ok(composed.ok);
+    try {
+      const bytes = composed.value.deps.artifacts.get(digest);
+      assert.ok(bytes.ok);
+      assert.match(new TextDecoder().decode(bytes.value), /EPERM|operation not permitted/i);
+    } finally {
+      composed.value.close();
+    }
+    const clone = ledgerRows<{ workspace_path: string }>(f.roots, 'SELECT workspace_path FROM runs WHERE run_id = ?', runId)[0]?.workspace_path as string;
+    assert.equal(existsSync(join(clone, 'out', 'x.txt')), false);
   });
 });

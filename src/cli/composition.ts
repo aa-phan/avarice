@@ -37,6 +37,7 @@ import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
+import type { EgressProxy } from '../ports/egress-proxy.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { AppDeps, Clock, GsdProblem, IdSource } from '../app/deps.ts';
@@ -53,6 +54,9 @@ export interface DepsOverrides {
   // Replaces the sandboxed executor. Only test entries pass this (a test that already runs inside a sandbox,
   // where `sandbox-exec` cannot nest); bin/avarice.ts never does, so production always runs SandboxedExecutor.
   executor?: CommandExecutor;
+  // Replaces the allowlisting egress proxy. Only test entries pass this (a test whose registry is a local server on a port the conventions
+  // cannot name); bin/avarice.ts never does, so production always runs the in-repo allowlist proxy.
+  egress?: EgressProxy;
 }
 
 export interface CreateDepsOptions {
@@ -245,7 +249,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   // The run ports. Building them executes nothing and records nothing.
   const runSource = new GitRunSource();
   const runWorkspace = new CloneRunWorkspace();
-  const egress = new AllowlistEgressProxy();
+  const egress = overrides.egress ?? new AllowlistEgressProxy();
   const artifacts = new LocalArtifactStore(profile.dataRoot);
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =

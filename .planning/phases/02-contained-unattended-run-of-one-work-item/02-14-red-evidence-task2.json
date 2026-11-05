@@ -1,0 +1,21 @@
+{
+  "command": "node --test test/integration/check-validation.test.ts test/integration/run-deps.test.ts",
+  "ranAgainst": "the Task 1 commit ec499c0 (git archive extracted to /tmp/avarice-14/base2) plus the new test files and the run-fixtures helper",
+  "exitCode": 1,
+  "reason": "at the Task 1 commit there is no install-deps action and no installDependencies: a declared dependency install never runs, no `deps:install` step is recorded (not even `skipped`), the validation clone is not given its dependencies, and createDeps takes no egress override; so every run-deps test that looks at the install fails",
+  "failingFiles": ["test/integration/run-deps.test.ts"],
+  "failingTests": [
+    "completes the step with the lockfile digest, the exit, the duration and the proxy attempt by host",
+    "leaves node_modules in the run clone, and the step comes before validation, the baseline and the unit",
+    "installs again in the validation clone for the checks, and records that install in the validation step",
+    "records `skipped` with reason no-dependencies, and the run goes on",
+    "a host that is not an allowed registry is refused by the proxy: blocked (decision) with a permission decision naming it",
+    "a failing install (exit 3) is blocked (decision) with a repeated_failure decision",
+    "no sandbox for the install is an enforcement failure, and so is a proxy that cannot start"
+  ],
+  "passingAtBase": [
+    "all 22 tests of check-validation.test.ts: the plan's Task 1 action already includes validateChecks in full (verdicts, network detection by proxy and by error text, caching per check spec, optional handling in the validate-checks action) and the Task 1 tracer tests cover the first 9; the 13 added here (rejections, adjacency, network, ordering, optional rejection, re-validation, unavailable, run-time declared writes) pin that behaviour and are recorded as passing at base, not as RED",
+    "the unit-invocation test of run-deps.test.ts (no proxy variable, no network scope): true before the install exists, and kept to hold the property once it does"
+  ],
+  "summary": "30 tests, 23 pass, 7 fail at the base"
+}

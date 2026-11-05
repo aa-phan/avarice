@@ -168,7 +168,7 @@ describe('start --wait: a detached supervisor clones the workspace and blocks wi
     const failures = JSON.parse(g0.failures_json) as Array<{ rule: string }>;
     assert.deepEqual(failures.map((x) => x.rule), ['host-enforcement']);
 
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'validate-checks', 'baseline', 'verify-enforcement', 'none'], 'a checkpoint before each side effect, then the blocked transition');
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'none'], 'a checkpoint before each side effect, then the blocked transition');
     const steps = rows<{ step: string; status: string; result_json: string }>(f.roots, "SELECT step, status, result_json FROM run_steps WHERE run_id = ? AND step IN ('workspace:prepare', 'supervisor:spawn') ORDER BY rowid", runId);
     assert.deepEqual(steps.map((s) => s.step), ['supervisor:spawn', 'workspace:prepare']);
     assert.ok(steps.every((s) => s.status === 'completed'));
@@ -274,7 +274,7 @@ describe('supervise: the stage loop under the run lease', () => {
     assert.equal(run.lease_fence, 1);
     assert.equal(run.workspace_path, join(f.roots.AVARICE_WORK_ROOT, runId, 'clone'));
     assert.equal(run.branch, `avarice/${runId}`);
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none']);
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none']);
     const g0 = only(rows<{ passed: number }>(f.roots, "SELECT passed FROM gate_results WHERE run_id = ? AND gate = 'G0'", runId), 'one G0 row');
     assert.equal(g0.passed, 1);
   });
@@ -444,7 +444,7 @@ describe('one supervisor per run', () => {
     assert.equal(run.state, 'blocked_on_decision');
     assert.deepEqual(
       checkpointsOf(f.roots, runId),
-      ['prepare-workspace', 'prepare-workspace', 'configure-gsd', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none'],
+      ['prepare-workspace', 'prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none'],
       'the killed side effect was repeated once, nothing else',
     );
     assert.ok(existsSync(join(f.roots.AVARICE_WORK_ROOT, runId, 'clone', '.git')));
@@ -488,7 +488,7 @@ describe('the run outlives the command that started it, and a dead supervisor is
     assert.equal(lines.at(-1), `continue with: avarice resume ${runId}`);
     const run = runOf(g.roots, runId);
     assert.equal(run.state, 'contract_ready');
-    assert.deepEqual(checkpointsOf(g.roots, runId), ['prepare-workspace', 'configure-gsd', 'validate-checks', 'baseline', 'verify-enforcement']);
+    assert.deepEqual(checkpointsOf(g.roots, runId), ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement']);
     const pid = spawnedPid(g.roots, runId);
     assert.ok(pid !== undefined && !alive(pid), 'the supervisor is gone');
   });

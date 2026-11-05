@@ -8,6 +8,8 @@
 //    write its declared paths and the run's scratch directory and nothing else (CON-8), cannot read the credential directories or the
 //    data root, and has no network. One insert-only evidence row per check; a check that failed at base and at head is flagged
 //    `preExisting` in its environment, never turned into another status (D-12).
+//  - installDependencies: the conventions' install command, in the clone, with network only to an allowlisting proxy on loopback whose
+//    allowlist is the registry hosts on 443 (D-11). Agent invocations never get the proxy.
 import { mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -19,6 +21,7 @@ import type { CheckOutcome, CommandResultStatus, EvidenceStatus } from '../domai
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
+import type { RunBlockedReason } from '../domain/run-lifecycle.ts';
 import type { RunRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 
@@ -268,5 +271,111 @@ export function preExistingAt(deps: AppDeps, runId: string, revision: string): R
   const evidence = deps.ledger.listEvidence(runId);
   if (!evidence.ok) return evidence;
   return ok([...new Set(evidence.value.filter((row) => row.kind === 'check' && row.revision === revision && row.environment['preExisting'] === true).map((row) => row.name))].sort());
+}
+
+
+// ---- the dependency install (D-11, T-02-47) ------------------------------------------------------------------------------------
+
+export interface InstallAttempt {
+  host: string;
+  port: number;
+  allowed: boolean;
+  count: number;
+}
+
+export interface InstallFailure {
+  reason: RunBlockedReason;
+  decisionClass: 'permission' | 'repeated_failure';
+  issue: string;
+}
+
+export interface InstallResult {
+  // `skipped`: the conventions declare no dependency install.
+  outcome: 'installed' | 'skipped' | 'failed';
+  reason?: string;
+  lockfile?: string;
+  lockfileDigest?: string;
+  exitCode?: number | null;
+  durationMs?: number;
+  attempts: InstallAttempt[];
+  failure?: InstallFailure;
+}
+
+const INSTALL_TIMEOUT_MS = 15 * 60_000;
+const LOCKFILE_MAX_BYTES = 32 * 1024 * 1024;
+const MAX_ATTEMPT_ROWS = 20;
+
+function groupAttempts(raw: ReadonlyArray<{ host: string; port: number; allowed: boolean }>): InstallAttempt[] {
+  const groups = new Map<string, InstallAttempt>();
+  for (const a of raw) {
+    const key = `${a.host}:${a.port}:${a.allowed}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, { host: a.host, port: a.port, allowed: a.allowed, count: 1 });
+    else group.count += 1;
+  }
+  return [...groups.values()].slice(0, MAX_ATTEMPT_ROWS);
+}
+
+// Runs the conventions' install command in `clonePath`. The only network is one loopback port, in front of which an allowlisting proxy
+// admits `<registry host>:443` for each registry host of the conventions and nothing else; the proxy lives for this command only. The
+// writes allowed are the clone's node_modules and the scratch directory, and install scripts are switched off (`npm_config_ignore_scripts`)
+// whatever the declared command says.
+export async function installDependencies(deps: AppDeps, run: RunRow, contract: RunContract, clonePath: string): Promise<Result<InstallResult>> {
+  const spec = contract.execution.dependencies;
+  if (spec === null) return ok({ outcome: 'skipped', reason: 'no-dependencies', attempts: [] });
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const cwd = canonical(clonePath);
+
+  const sandbox = sandboxSetup(deps, run);
+  if (!sandbox.ok) return sandbox;
+  const lock = workspace.readText(cwd, spec.lockfile, LOCKFILE_MAX_BYTES);
+  if (!lock.ok) return lock;
+  if (lock.value === null) {
+    return ok({ outcome: 'failed', lockfile: spec.lockfile, attempts: [], failure: { reason: 'decision', decisionClass: 'repeated_failure', issue: `the lockfile ${spec.lockfile} is not in the repository at the pin, so the dependencies were not installed` } });
+  }
+  const lockfileDigest = `sha256:${sha256Hex(lock.value)}`;
+
+  if (deps.egress === undefined) {
+    return ok({ outcome: 'failed', lockfile: spec.lockfile, lockfileDigest, attempts: [], failure: { reason: 'enforcement_failure', decisionClass: 'permission', issue: 'the egress proxy is not composed, so the dependency install cannot run with registry-only network' } });
+  }
+  const proxy = await deps.egress.start({ allow: contract.execution.supervisorEndpoints.map((host) => `${host}:443`) });
+  if (!proxy.ok) {
+    return ok({ outcome: 'failed', lockfile: spec.lockfile, lockfileDigest, attempts: [], failure: { reason: 'enforcement_failure', decisionClass: 'permission', issue: `the egress proxy could not start (${proxy.error.kind}), so the dependency install did not run` } });
+  }
+  try {
+    const url = `http://127.0.0.1:${proxy.value.port}`;
+    const ran = await deps.executor.run({
+      argv: spec.install,
+      cwd,
+      env: { ...sandbox.value.env, npm_config_https_proxy: url, npm_config_proxy: url, HTTPS_PROXY: url, npm_config_update_notifier: 'false', npm_config_ignore_scripts: 'true' },
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      invocationId: deps.ids.next('inv_'),
+      writePaths: [join(cwd, 'node_modules'), sandbox.value.scratch],
+      denyReadPaths: sandbox.value.denyReadPaths,
+      allowLoopbackPorts: [proxy.value.port],
+    });
+    const attempts = groupAttempts(proxy.value.attempts());
+    const refused = attempts.filter((a) => !a.allowed);
+    const base = { lockfile: spec.lockfile, lockfileDigest, attempts };
+    if (!ran.ok) {
+      if (ran.error.kind === 'unavailable') {
+        return ok({ outcome: 'failed', ...base, failure: { reason: 'enforcement_failure', decisionClass: 'permission', issue: `no sandbox is available, so the dependency install did not run: ${ran.error.cause}`.slice(0, 300) } });
+      }
+      return ran;
+    }
+    const result = { ...base, exitCode: ran.value.exitCode, durationMs: ran.value.durationMs };
+    if (refused.length > 0) {
+      const hosts = [...new Set(refused.map((a) => `${a.host}:${a.port}`))].join(', ');
+      return ok({ outcome: 'failed', ...result, failure: { reason: 'decision', decisionClass: 'permission', issue: `the dependency install tried to reach a host that is not an allowed registry: ${hosts}` } });
+    }
+    if (ran.value.status !== 'passed') {
+      const tail = ran.value.stderr.trim().split('\n').slice(-3).join(' ').slice(0, 300);
+      return ok({ outcome: 'failed', ...result, failure: { reason: 'decision', decisionClass: 'repeated_failure', issue: `the dependency install ${ran.value.status === 'timed_out' ? 'timed out' : `exited ${String(ran.value.exitCode)}`}${tail === '' ? '' : `: ${tail}`}` } });
+    }
+    return ok({ outcome: 'installed', ...result });
+  } finally {
+    await proxy.value.close();
+  }
 }
 
