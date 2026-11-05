@@ -17,7 +17,7 @@ const COLUMNS: readonly Column[] = [
   { key: 'repository', header: 'REPOSITORY', cut: 'start' },
   { key: 'activity', header: 'ACTIVITY', subject: true },
   { key: 'state', header: 'STATE', subject: true },
-  { key: 'next', header: 'NEXT' },
+  { key: 'next', header: 'NEXT', keep: true },
 ];
 
 function asObject(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -39,16 +39,17 @@ function describeIndexes(indexes: Readonly<Record<string, unknown>>): string {
   return parts.length > 0 ? parts.join(', ') : 'none';
 }
 
-// An interrupted onboarding shows its ledger state with `interrupted` as the reason; the checkpoint's next action is in NEXT.
+// The ledger's own word and reason; an interrupted onboarding shows the state it stopped in, and the checkpoint's next
+// action is in NEXT. ACTIVITY says it is interrupted, so STATE stays a ledger word.
 function stateOf(e: ProjectStatus): string {
-  return e.interrupted !== undefined ? stateWord(e.interrupted.state, 'interrupted') : stateWord(e.state, e.reason);
+  return e.interrupted !== undefined ? stateWord(e.interrupted.state) : stateWord(e.state, e.reason);
 }
 
 function rowOf(e: ProjectStatus): Record<string, string> {
   return {
     project: e.projectId,
     repository: e.repoPath,
-    activity: e.onboardingId === null ? 'not onboarded' : 'onboarding',
+    activity: e.onboardingId === null ? 'not onboarded' : e.interrupted !== undefined ? 'interrupted' : 'onboarding',
     state: stateOf(e),
     next: e.interrupted !== undefined ? e.interrupted.nextAction : '-',
   };
@@ -68,7 +69,7 @@ export function renderStatus(entries: readonly ProjectStatus[], options: RenderO
   // Below the table, per project in table order: the onboarding with its ID, what continues it when interrupted, the record.
   const lines: string[] = [];
   for (const e of entries) {
-    if (e.onboardingId !== null) lines.push(resultLine(`onboarding ${e.onboardingId}`, stateOf(e)));
+    if (e.onboardingId !== null) lines.push(resultLine(`onboarding ${e.onboardingId}`, e.interrupted !== undefined ? stateWord(e.interrupted.state, 'interrupted') : stateOf(e)));
     if (e.interrupted !== undefined) lines.push(`continue with: ${stripControl(e.interrupted.resumeCommand)}`);
     const record = recordLine(e);
     if (record !== null) lines.push(record);

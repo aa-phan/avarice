@@ -67,7 +67,7 @@ export interface Composition {
 export type CompositionResult = { ok: true; value: Composition } | { ok: false; code: number; message: string };
 
 function failure(what: string, message: string): CompositionResult {
-  return { ok: false, code: EXIT_INTERNAL, message: `avarice: ${what}: ${message}` };
+  return { ok: false, code: EXIT_INTERNAL, message: `${what}: ${message}` };
 }
 
 export function systemClock(): Clock {

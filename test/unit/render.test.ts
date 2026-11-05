@@ -155,6 +155,21 @@ describe('tables (OPS-7 row 2)', () => {
     assert.ok(row.includes('…') && row.endsWith('the-repository'), row);
   });
 
+  it('cuts a column marked keep only after the other cuttable columns are at their minimum', () => {
+    const cols = [
+      { key: 'id', header: 'ID', subject: true },
+      { key: 'path', header: 'PATH', cut: 'start' as const },
+      { key: 'next', header: 'NEXT', keep: true },
+    ];
+    const row = { id: 'p1', path: '/a/very/long/path/to/some/repository', next: 'compile-contract' };
+    const roomy = (renderTable(cols, [row], 36).split('\n')[1] ?? '').split(/\s{2,}/);
+    assert.equal(roomy[2], 'compile-contract', 'the kept column is whole while the path can still shrink');
+    assert.ok((roomy[1] ?? '').startsWith('…'));
+    const tight = renderTable(cols, [row], 20).split('\n')[1] ?? '';
+    assert.ok(tight.includes('…'), tight);
+    assert.ok(!tight.endsWith('compile-contract'), 'the kept column is cut once the path is at its minimum');
+  });
+
   it('prints the header alone for no rows', () => {
     assert.equal(renderTable(columns, [], 40), 'ID  NOTE\n');
   });
@@ -230,7 +245,8 @@ describe('status through the shared functions', () => {
       { width: 200 },
     );
     const row = text.split('\n')[2] ?? '';
-    assert.ok(/\bmapping\b/.test(row) && row.includes('launch:map'), row);
+    assert.match(row, /\binterrupted\s+mapping\s+launch:map$/);
+    assert.ok(text.includes('\nonboarding onb_01JABCDEFGHJKMNPQRSTVWXYZ0: mapping (interrupted)\n'), text);
     assert.ok(text.includes('continue with: avarice resume onb_01JABCDEFGHJKMNPQRSTVWXYZ0\n'));
     assert.ok(text.indexOf('continue with:') > text.indexOf('launch:map'), 'the line follows the table');
   });

@@ -10,6 +10,8 @@ export interface Column {
   header: string;
   // Never cut.
   subject?: boolean;
+  // Cut only after every other cuttable column is down to its minimum width (the text the reader acts on).
+  keep?: boolean;
   // Which end of an over-long cell is replaced by `…`. A path is more useful with its tail kept: `start`.
   cut?: 'end' | 'start';
 }
@@ -44,15 +46,19 @@ export function renderTable(columns: readonly Column[], rows: readonly Readonly<
   const widths = columns.map((c, i) => Math.max(chars(c.header).length, ...body.map((cells) => chars(cells[i] as string).length)));
   const minimums = columns.map((c, i) => (c.subject === true ? (widths[i] as number) : Math.min(widths[i] as number, MIN_CUT_WIDTH)));
   let excess = widths.reduce((sum, w) => sum + w, 0) + GAP.length * Math.max(0, columns.length - 1) - width;
-  while (excess > 0) {
-    // Shrink the widest cuttable column first, one character at a time, so the cut is spread over the long columns.
-    let pick = -1;
-    for (let i = 0; i < columns.length; i += 1) {
-      if ((widths[i] as number) > (minimums[i] as number) && (pick < 0 || (widths[i] as number) > (widths[pick] as number))) pick = i;
+  // Shrink the widest cuttable column first, one character at a time, so the cut is spread over the long columns.
+  // The columns marked `keep` are only touched once every other column is down to its minimum.
+  for (const pass of ['spare', 'keep'] as const) {
+    while (excess > 0) {
+      let pick = -1;
+      for (let i = 0; i < columns.length; i += 1) {
+        if ((columns[i]?.keep === true) !== (pass === 'keep')) continue;
+        if ((widths[i] as number) > (minimums[i] as number) && (pick < 0 || (widths[i] as number) > (widths[pick] as number))) pick = i;
+      }
+      if (pick < 0) break;
+      widths[pick] = (widths[pick] as number) - 1;
+      excess -= 1;
     }
-    if (pick < 0) break;
-    widths[pick] = (widths[pick] as number) - 1;
-    excess -= 1;
   }
   const line = (cells: readonly string[]): string =>
     cells

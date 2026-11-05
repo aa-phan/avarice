@@ -107,6 +107,17 @@ describe('avarice init', () => {
     }
   });
 
+  it('prints a result line first: initialized on the first run, already initialized on the next (OPS-7)', () => {
+    const roots = freshRoots();
+    const first = runCli(['init'], { roots });
+    assert.equal(first.code, 0, first.stderr);
+    assert.equal(first.stdout.split('\n')[0], 'profile personal-local: initialized');
+    const second = runCli(['init'], { roots });
+    assert.equal(second.code, 0, second.stderr);
+    assert.equal(second.stdout.split('\n')[0], 'profile personal-local: already initialized');
+    assert.ok(second.stdout.includes(roots.AVARICE_WORK_ROOT), 'the roots follow the result line');
+  });
+
   it('accepts --profile personal-local and refuses any other profile name', () => {
     const roots = freshRoots();
     assert.equal(runCli(['init', '--profile', 'personal-local'], { roots }).code, 0);

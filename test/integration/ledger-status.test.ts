@@ -99,7 +99,21 @@ describe('CLI dispatch', () => {
     const r = runCli(['bogus'], { roots });
     assert.equal(r.code, 64);
     assert.match(r.stderr, /unknown command 'bogus'/);
+    assert.match(r.stderr, /^avarice: unknown command 'bogus'\nusage: avarice <command> \[options\]\n/, 'before a command is chosen the prefix is `avarice: `, then the usage text');
     assert.equal(existsSync(roots.AVARICE_DATA_ROOT), false);
+  });
+
+  it('exits 64 with `avarice: no command given` and the usage text when no command is named', () => {
+    const r = runCli([], { roots: freshRoots() });
+    assert.equal(r.code, 64);
+    assert.match(r.stderr, /^avarice: no command given\nusage: avarice <command> \[options\]\n/);
+  });
+
+  it('prefixes a usage error with the command and follows it with the usage text', () => {
+    const r = runCli(['context'], { roots: freshRoots() });
+    assert.equal(r.code, 64);
+    assert.match(r.stderr, /^avarice context: a term is required\n/);
+    assert.match(r.stderr, /usage: avarice <command> \[options\]/);
   });
 
   it('exits 64 for an allowlisted command whose module is not built', () => {

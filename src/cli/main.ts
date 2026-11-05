@@ -7,6 +7,7 @@ import type { CommandModule, Io } from './args.ts';
 import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
+import { errorLine } from './render/style.ts';
 
 export const COMMANDS = ['init', 'repo', 'onboard', 'status', 'resume', 'context'] as const;
 export const EXIT_USAGE = 64;
@@ -42,7 +43,7 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return 0;
   }
   if (name === undefined || !isCommand(name)) {
-    io.err(`${name === undefined ? 'avarice: no command given' : `avarice: unknown command '${name}'`}\n${USAGE}`);
+    io.err(`${errorLine(undefined, name === undefined ? 'no command given' : `unknown command '${name}'`)}\n${USAGE}`);
     return EXIT_USAGE;
   }
 
@@ -54,33 +55,33 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     const code = (e as { code?: unknown }).code;
     const message = e instanceof Error ? e.message : String(e);
     if (code === 'ERR_MODULE_NOT_FOUND' && message.includes(`Cannot find module '${fileURLToPath(url)}'`)) {
-      io.err(`avarice: '${name}' is not available in this build\n${USAGE}`);
+      io.err(`${errorLine(name, 'not available in this build')}\n${USAGE}`);
       return EXIT_USAGE;
     }
-    io.err(`avarice: cannot load '${name}': ${message}\n`);
+    io.err(`${errorLine(name, `cannot load: ${message}`)}\n`);
     return EXIT_INTERNAL;
   }
   if (typeof mod.run !== 'function') {
-    io.err(`avarice: command module '${name}' does not export run()\n`);
+    io.err(`${errorLine(name, 'the command module does not export run()')}\n`);
     return EXIT_INTERNAL;
   }
 
   const args = parseArgs(argv.slice(1), { boolean: mod.booleanFlags ?? [] });
   const usageError = mod.usage?.(args);
   if (usageError !== undefined) {
-    io.err(`avarice ${name}: ${usageError}\n${USAGE}`);
+    io.err(`${errorLine(name, usageError)}\n${USAGE}`);
     return EXIT_USAGE;
   }
 
   const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true });
   if (!composed.ok) {
-    io.err(composed.message + '\n');
+    io.err(`${errorLine(name, composed.message)}\n`);
     return composed.code;
   }
   try {
     return await mod.run(args, composed.value.deps, io);
   } catch (e) {
-    io.err(`avarice: ${name} failed: ${e instanceof Error ? e.message : String(e)}\n`);
+    io.err(`${errorLine(name, `failed: ${e instanceof Error ? e.message : String(e)}`)}\n`);
     return EXIT_INTERNAL;
   } finally {
     composed.value.close();
