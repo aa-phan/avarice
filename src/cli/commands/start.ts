@@ -3,7 +3,13 @@
 // budgets and work item, and prints a one-screen summary. Running the command is the authorization; it asks nothing and
 // reads no input (RC-3). Exit 0 when the run is stored in contract_ready, 3 when a start rule refused it (nothing is created),
 // 64 for a usage error, an invalid brief, an invalid budget override or a G0 static failure, 70 for an internal failure.
+//
+// Then (D-18) it spawns a detached `avarice supervise <runId>` and returns: the run is recorded and the supervisor owns it, so closing
+// the shell leaves it running. With `--wait` it polls the ledger and exits 0 at `ready_for_review` and 3 at any other stop state or when
+// the supervisor died with the run unfinished, printing the final result line and, when interrupted, how to continue.
 import { startRun } from '../../app/run-start.ts';
+import { spawnSupervisor, waitForRun } from '../spawn-supervisor.ts';
+import type { WaitResult } from '../spawn-supervisor.ts';
 import type { RunStartOutcome } from '../../app/run-start.ts';
 import { ROUTINE_POLICY } from '../../domain/run-contract.ts';
 import type { AppDeps } from '../../app/deps.ts';
@@ -15,9 +21,9 @@ export const EXIT_REFUSED = 3;
 const EXIT_USAGE = 64;
 const EXIT_INTERNAL = 70;
 
-export const booleanFlags: readonly string[] = [];
+export const booleanFlags: readonly string[] = ['wait'];
 
-const USAGE = `usage: avarice start --brief <file> --policy ${ROUTINE_POLICY} [--project <id>] [--budget name=value]...`;
+const USAGE = `usage: avarice start --brief <file> --policy ${ROUTINE_POLICY} [--project <id>] [--budget name=value]... [--wait]`;
 
 // Checked before the profile is resolved, so a usage error leaves nothing on disk.
 export function usage(args: ParsedArgs): string | undefined {
@@ -59,7 +65,39 @@ export function renderStart(outcome: RunStartOutcome): string {
   ].join('\n');
 }
 
-export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
+// What a finished wait prints after the summary: the final result line, and for an interrupted run the way to continue.
+export function renderWait(runId: string, result: WaitResult | { kind: 'error'; message: string }): string[] {
+  switch (result.kind) {
+    case 'final':
+      return [resultLine(`run ${runId}`, result.run.state, result.run.reason)];
+    case 'interrupted':
+      return [
+        resultLine(`run ${runId}`, `interrupted in ${result.run.state}`, result.nextAction === null ? null : `next: ${result.nextAction}`),
+        `continue with: avarice resume ${stripControl(runId)}`,
+      ];
+    case 'timeout':
+      return [resultLine(`run ${runId}`, result.run.state, result.run.reason), `still running: avarice status shows it; the supervisor keeps working`];
+    default:
+      return [errorLine('start', result.message)];
+  }
+}
+
+// The supervisor reads the same three profile roots this command resolved, whatever else its environment says.
+function supervisorEnv(deps: AppDeps): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: deps.profile.configHome,
+    AVARICE_DATA_ROOT: deps.profile.dataRoot,
+    AVARICE_WORK_ROOT: deps.profile.workRoot,
+  };
+  // Under `node --test` this variable would make a spawned test entry do nothing.
+  delete env['NODE_TEST_CONTEXT'];
+  return env;
+}
+
+const WAIT_MARGIN_MIN = 15;
+
+export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<number> {
   // usage() has vetted the flags; these narrow the types for the compiler.
   const briefPath = args.flags['brief'];
   const policy = args.flags['policy'];
@@ -79,7 +117,7 @@ export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
   });
   if (started.ok) {
     io.out(renderStart(started.value));
-    return 0;
+    return supervise(deps, io, started.value, args.flags['wait'] === true);
   }
   const failure = started.failure;
   switch (failure.kind) {
@@ -93,4 +131,27 @@ export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
       io.err(`${errorLine('start', `failed: ${failure.message}`)}\n`);
       return EXIT_INTERNAL;
   }
+}
+
+// Spawns the detached supervisor, records its PID as step `supervisor:spawn`, and with --wait follows the run to where it stops.
+async function supervise(deps: AppDeps, io: Io, started: RunStartOutcome, wait: boolean): Promise<number> {
+  const { runId } = started;
+  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps), cwd: deps.profile.dataRoot });
+  if (!spawned.ok) {
+    io.err(`${errorLine('start', `run ${runId} is stored but its supervisor was not started: ${spawned.message}`)}\n`);
+    return EXIT_INTERNAL;
+  }
+  const nowMs = deps.clock.nowMs();
+  const recorded = deps.ledger.recordRunStep(runId, { step: 'supervisor:spawn', status: 'completed', result: { pid: spawned.pid }, nowMs, completedAtMs: nowMs });
+  if (!recorded.ok) {
+    io.err(`${errorLine('start', `run ${runId} is running under supervisor ${spawned.pid} but the spawn step could not be recorded`)}\n`);
+    return EXIT_INTERNAL;
+  }
+  if (!wait) return 0;
+
+  const maxMs = (started.contract.budgets.wallClockMinutes + WAIT_MARGIN_MIN) * 60_000;
+  const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs });
+  io.out(`${renderWait(runId, result).join('\n')}\n`);
+  if (result.kind === 'error') return EXIT_INTERNAL;
+  return result.kind === 'final' && result.run.state === 'ready_for_review' ? 0 : EXIT_REFUSED;
 }

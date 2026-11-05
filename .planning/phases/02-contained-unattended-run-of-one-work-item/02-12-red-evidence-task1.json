@@ -1,0 +1,11 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/run-supervisor.test.ts",
+  "exitCode": 1,
+  "reason": "src/cli/spawn-supervisor.ts does not exist, so the run-supervisor test file fails to load (ERR_MODULE_NOT_FOUND); the supervise command, runSupervisor, the run stage context and the contract_ready actions are not written either, so none of the tracer behaviours (detached supervisor, G0 result, clone at the pin, blocked with enforcement_failure, `start --wait`) can pass",
+  "failingFiles": ["test/integration/run-supervisor.test.ts"],
+  "failingTests": [
+    "test/integration/run-supervisor.test.ts (ERR_MODULE_NOT_FOUND: src/cli/spawn-supervisor.ts)"
+  ],
+  "summary": "1 file, 0 tests run, 1 fail: the file cannot load",
+  "outputHead": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/cli/spawn-supervisor.ts' imported from .../test/integration/run-supervisor.test.ts\nnot ok 1 - test/integration/run-supervisor.test.ts"
+}

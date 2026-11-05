@@ -260,8 +260,11 @@ describe('start refuses before anything is created (D-04, D-16)', () => {
   it('26 commits outside .avarice/ and .planning/ refuse; 25 start', () => {
     const f = fixture();
     for (let i = 1; i <= 25; i += 1) commitFiles(f.repo, { [`src/gen${i}.ts`]: `export const n${i} = ${i};\n` }, `change ${i}`);
-    const ok = start(f);
-    assert.equal(ok.code, 0, ok.stderr);
+    // `--wait` lets the detached supervisor (plan 02-12) finish before the counts are taken: with no admitted host it blocks the run
+    // (exit 3), and nothing then changes the ledger while the refused second start is compared with it.
+    const ok = start(f, ['--wait']);
+    assert.equal(ok.code, 3, ok.stderr);
+    assert.match(ok.stdout, /^run run_[0-9A-Z]{26}: contract_ready\n/);
     const [step] = rows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE step = 'start:preflight'");
     assert.equal((JSON.parse(step?.result_json as string) as { commitsOutside: number }).commitsOutside, 25);
 

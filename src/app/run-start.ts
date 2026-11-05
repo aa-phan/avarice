@@ -140,11 +140,12 @@ function findProject(deps: AppDeps, request: RunStartRequest): { project: Projec
 
 // Temp file, fsync, rename: a reader sees the whole contract or none, never half of it, and the file is 0600 in a 0700 directory
 // of the data root (CON-6: the data root is outside every write root and inside every denyRead).
-function writeContractFile(dataRoot: string, runId: string, text: string): string {
+export function writeContractFile(dataRoot: string, runId: string, text: string, version = 1): string {
   const dir = join(dataRoot, 'runs', runId);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const target = join(dir, 'contract-v1.json');
-  const temp = join(dir, `.contract-v1.json.${process.pid}.tmp`);
+  const name = `contract-v${version}.json`;
+  const target = join(dir, name);
+  const temp = join(dir, `.${name}.${process.pid}.tmp`);
   const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
   try {
     writeSync(fd, text);

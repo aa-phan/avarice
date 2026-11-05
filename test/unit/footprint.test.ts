@@ -49,6 +49,9 @@ function sourceFiles(dir: string): string[] {
 // The one source file allowed to import node:http and node:net and to listen (plan 02-06, D-11): the allowlisting proxy
 // that gives a supervisor step a registry-only path. Every other file is still scanned; the proxy is held to its own rules below.
 const ALLOWLIST_PROXY = join(REPO_ROOT, 'src', 'adapters', 'exec', 'allowlist-proxy.ts');
+// The one source file allowed to detach a child on purpose (plan 02-12, D-18): `start` spawns the run's supervisor so that closing the
+// shell leaves it running. It is held to its own rules below: one detached spawn, streams ignored, unref'd, started only by `start`.
+const SUPERVISOR_SPAWN = join(REPO_ROOT, 'src', 'cli', 'spawn-supervisor.ts');
 
 describe('no source file reaches the network or starts a background process', () => {
   const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== ALLOWLIST_PROXY);
@@ -66,7 +69,7 @@ describe('no source file reaches the network or starts a background process', ()
     // sandboxed executor and the contained Claude Code host. Each must kill that group when its process ends; the
     // executor and claude-host tests prove nothing is left behind.
     const groupLeaders = [join(REPO_ROOT, 'src', 'adapters', 'exec', 'sandboxed-executor.ts'), join(REPO_ROOT, 'src', 'adapters', 'host-claude', 'claude-host.ts')];
-    const offenders = files.filter((f) => !groupLeaders.includes(f) && banned.test(readFileSync(f, 'utf8')));
+    const offenders = files.filter((f) => !groupLeaders.includes(f) && f !== SUPERVISOR_SPAWN && banned.test(readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, []);
     const executor = readFileSync(groupLeaders[0] as string, 'utf8');
     assert.match(executor, /process\.kill\(-pid, signal\)/, 'the executor kills the process group it creates');
@@ -76,6 +79,27 @@ describe('no source file reaches the network or starts a background process', ()
     assert.match(host, /process\.kill\(-pid, sig\)/, 'the host adapter kills the process group it creates');
     assert.match(host, /killGroup\('SIGKILL'\);\n\s*if \(killTimer/, 'and sweeps what is left when the host process ends');
     assert.equal(/\.unref\s*\(/.test(host), false, 'and never detaches a child from its own lifetime');
+  });
+});
+
+describe('the supervisor spawn is the one deliberate detached process and it is held to its rules', () => {
+  const source = readFileSync(SUPERVISOR_SPAWN, 'utf8');
+
+  it('detaches exactly one child, ignores its streams, unrefs it and opens no listener or network call', () => {
+    assert.equal((source.match(/detached\s*:\s*true/g) ?? []).length, 1);
+    assert.equal((source.match(/\bspawn\(/g) ?? []).length, 1, 'one spawn call');
+    assert.match(source, /stdio:\s*'ignore'/);
+    assert.match(source, /child\.unref\(\)/);
+    assert.equal(/\bfetch\s*\(|\.listen\s*\(|\bnew\s+WebSocket\b/.test(source), false);
+  });
+
+  it('runs only the `supervise` command of this program: the arguments are fixed and the run ID is the only variable', () => {
+    assert.match(source, /\[\.\.\.process\.execArgv, request\.entry, 'supervise', request\.runId\]/);
+  });
+
+  it('is imported by the start command and nothing else', () => {
+    const importers = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => f !== SUPERVISOR_SPAWN && /spawn-supervisor\.ts['"]/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(importers.map((f) => basename(f)), ['start.ts']);
   });
 });
 
