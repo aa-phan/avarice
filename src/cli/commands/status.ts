@@ -11,11 +11,12 @@ export const readOnly = true;
 export const booleanFlags = ['json'] as const;
 
 export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
-  const status = getStatus(deps.ledger, deps.clock.nowMs());
+  const nowMs = deps.clock.nowMs();
+  const status = getStatus(deps.ledger, nowMs);
   if (!status.ok) {
     io.err(`${errorLine('status', `failed: ${describeError(status.error)}`)}\n`);
     return 70;
   }
-  io.out(args.flags['json'] === true ? JSON.stringify(status.value, null, 2) + '\n' : renderStatus(status.value, { width: terminalWidth(process.stdout.columns) }));
+  io.out(args.flags['json'] === true ? JSON.stringify(status.value, null, 2) + '\n' : renderStatus(status.value, { width: terminalWidth(process.stdout.columns), nowMs }));
   return 0;
 }

@@ -25,6 +25,7 @@ import { offlineAvailable } from '../helpers/offline.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import { mixedTiersGraph } from '../fixtures/index-fixtures.ts';
+import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, makeRunRepo, onboardRunRepo, startWithFakeRunHost, writeBrief } from '../helpers/run-fixtures.ts';
 
 const FIXTURES = join(import.meta.dirname, '..', 'fixtures', 'json-shapes');
 const WRITE = process.env['AVARICE_SNAPSHOT_WRITE'] === '1';
@@ -192,5 +193,28 @@ describe('Phase 1 --json shapes are frozen (D-19, success criterion 7)', () => {
       assert.equal(ran.code, 0, ran.err);
       compareWithFixture('context-active.json', ran.out, [o.roots.base, o.repo.base, o.graphifyDir]);
     });
+  });
+});
+
+// Plan 02-15 (D-19): one project with one finished run. The four fixtures above are untouched; this one is the only snapshot with a `runs` key.
+// The wall clock a run used is a measured duration and differs from one execution to the next, so it is set to 0 before comparing; the
+// value stays a number, so the keys, their order and the types are still compared exactly.
+describe('status --json with a run adds one `runs` key and nothing else (D-19, plan 02-15)', { skip: !offlineAvailable() }, () => {
+  it('status --json after start --wait reached ready_for_review', () => {
+    const roots = makeRoots();
+    const repo = makeRunRepo();
+    cleanup.push(roots.base, repo.base);
+    onboardRunRepo(roots, repo);
+    commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
+    const brief = writeBrief(join(roots.base, 'briefs'));
+    const started = startWithFakeRunHost(roots, repo, brief, { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' });
+    assert.equal(started.code, 0, started.stderr + started.stdout);
+    const ran = runCli(['status', '--json'], { roots });
+    assert.equal(ran.code, 0, ran.stderr);
+    assert.equal(ran.stderr, '');
+    const parsed = JSON.parse(ran.stdout) as Array<{ runs?: Array<{ state: string; budgets: Array<{ name: string; used: number }> }> }>;
+    assert.equal(parsed[0]?.runs?.[0]?.state, 'ready_for_review');
+    for (const run of parsed[0]?.runs ?? []) for (const budget of run.budgets) if (budget.name === 'wallClockMs') budget.used = 0;
+    compareWithFixture('status-runs.json', JSON.stringify(parsed, null, 2) + '\n', [roots.base, repo.base]);
   });
 });

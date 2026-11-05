@@ -1,0 +1,130 @@
+[
+  {
+    "projectId": "<id>",
+    "repoPath": "<tmp>/repo",
+    "onboardingId": "<id>",
+    "state": "active",
+    "reason": null,
+    "recordVersion": 1,
+    "onboardedRevision": "git:<sha1>",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "<iso>",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "indexes": {
+      "absent": [
+        {
+          "index": "intel",
+          "reason": "invocation-failed"
+        },
+        {
+          "index": "knowledge",
+          "reason": "invocation-failed"
+        }
+      ],
+      "graph": {
+        "builtAtCommit": "git:<sha1>",
+        "codeGraphPath": ".planning/graphs/code-graph.json",
+        "digest": "sha256:<sha256>",
+        "edges": {
+          "EXTRACTED": 9
+        },
+        "freshness": "fresh",
+        "nodes": {
+          "code": 10,
+          "document": 0
+        },
+        "path": ".planning/graphs/graph.json",
+        "tool": "graphify@0.9.53"
+      }
+    },
+    "runs": [
+      {
+        "runId": "<id>",
+        "title": "Collapse repeated dashes in slugs",
+        "state": "ready_for_review",
+        "reason": null,
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "handoff:fetch",
+          "revision": "git:<sha1>",
+          "at": "<iso>"
+        },
+        "branch": "avarice/<id>",
+        "commit": "<sha1>",
+        "clean": true,
+        "evidence": [
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:<sha1>",
+            "clean": true
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "<sha1>"
+          },
+          {
+            "gate": "G2",
+            "passed": true,
+            "revision": "tree:sha256:<sha256>"
+          },
+          {
+            "gate": "G4",
+            "passed": true,
+            "revision": "git:<sha1>"
+          }
+        ],
+        "openDecisions": 0,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0,
+            "limit": 5
+          },
+          {
+            "name": "invocations",
+            "used": 1,
+            "limit": 3
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 0,
+            "limit": 10
+          },
+          {
+            "name": "toolCalls",
+            "used": 5,
+            "limit": 400
+          },
+          {
+            "name": "wallClockMs",
+            "used": 0,
+            "limit": 3600000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "brief.md",
+            "revision": "sha256:<sha256>"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "<sha1>"
+          }
+        ]
+      }
+    ]
+  }
+]

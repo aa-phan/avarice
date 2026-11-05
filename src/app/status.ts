@@ -6,6 +6,8 @@ import type { Result } from '../domain/result.ts';
 import { isResumable } from '../domain/onboarding-lifecycle.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
 import type { Ledger } from '../ports/ledger.ts';
+import { getRunStatuses } from './run-status.ts';
+import type { RunStatus } from './run-status.ts';
 
 // An onboarding that stopped short of a stop state with nobody holding a live lease.
 export interface Interrupted {
@@ -26,6 +28,9 @@ export interface ProjectStatus {
   onboardedRevision: string | null;
   mapping: Readonly<Record<string, unknown>> | null;
   indexes: Readonly<Record<string, unknown>>;
+  // Plan 02-15 (D-19): the project's runs, present only when the project has any, and always the last key. Every key above is the
+  // Phase 1 shape and is unchanged.
+  runs?: RunStatus[];
 }
 
 function asObject(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -59,6 +64,8 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
         resumeCommand: `avarice resume ${latest.onboardingId}`,
       };
     }
+    const runs = getRunStatuses(ledger, project.projectId, nowMs);
+    if (!runs.ok) return runs;
     entries.push({
       projectId: project.projectId,
       repoPath: project.repoPath,
@@ -70,6 +77,7 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
       onboardedRevision: record ? record.onboardedRevision : null,
       mapping: record ? asObject(record.body['mapping']) : null,
       indexes: record ? (asObject(record.body['indexes']) ?? {}) : {},
+      ...(runs.value.length > 0 ? { runs: runs.value } : {}),
     });
   }
   return ok(entries);

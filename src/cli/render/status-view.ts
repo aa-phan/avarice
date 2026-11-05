@@ -3,6 +3,7 @@
 // unchanged and so is the `--json` path; only this text depends on the style. Every recorded string passes through
 // stripControl before it is printed (T-02-03).
 import type { ProjectStatus } from '../../app/status.ts';
+import { renderRuns } from './run-view.ts';
 import { resultLine, stateWord, stripControl } from './style.ts';
 import { renderTable, terminalWidth } from './table.ts';
 import type { Column } from './table.ts';
@@ -10,6 +11,8 @@ import type { Column } from './table.ts';
 export interface RenderOptions {
   // Terminal width in columns; 100 when absent.
   width?: number;
+  // The current time, for the local time and its relative form on a run's last checkpoint; the run lines say `unknown time` without it.
+  nowMs?: number;
 }
 
 const COLUMNS: readonly Column[] = [
@@ -74,5 +77,7 @@ export function renderStatus(entries: readonly ProjectStatus[], options: RenderO
     const record = recordLine(e);
     if (record !== null) lines.push(record);
   }
-  return `${head}\n${renderTable(COLUMNS, entries.map(rowOf), width)}${lines.map((l) => `${l}\n`).join('')}`;
+  // Then the runs of every project (plan 02-15): interrupted and blocked ones first, each with its detail lines.
+  const runs = renderRuns(entries.flatMap((e) => e.runs ?? []), options.nowMs ?? Number.NaN, width);
+  return `${head}\n${renderTable(COLUMNS, entries.map(rowOf), width)}${lines.map((l) => `${l}\n`).join('')}${runs}`;
 }
