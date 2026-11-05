@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
@@ -410,5 +410,171 @@ describe('runGit option allowlists and fixed options (plan 02-07)', () => {
     assert.equal(fsck.stdout.trim(), 'true');
     const literal = must(runGit(['ls-files', '--', 'src/*.ts'], { cwd: info.path, literalPathspecs: true }));
     assert.equal(literal.stdout, '', 'a glob is a literal name');
+  });
+});
+
+describe('snapshot, changedSince and discard (CON-16, CON-9)', () => {
+  // The clone as the owner would leave it: a tracked file edited and files that are not tracked, all before the run starts.
+  const USER_README = '# scratch, edited by the user before the run\n';
+
+  function userDirtyClone(repo: ScratchRepo): RunWorkspaceInfo {
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    write(info.path, 'README.md', USER_README);
+    write(info.path, 'notes.txt', 'user notes\n');
+    write(info.path, 'ignored.log', 'user noise\n');
+    return info;
+  }
+
+  const read = (root: string, rel: string): string => readFileSync(join(root, rel), 'utf8');
+
+  it('snapshot records HEAD and a tree holding the user versions, and leaves the clone index and HEAD alone', () => {
+    const repo = scratch();
+    const info = userDirtyClone(repo);
+    const indexBefore = readFileSync(join(info.path, '.git', 'index'));
+
+    const snap = must(ws.snapshot(info.path));
+    assert.equal(snap.head, repo.head);
+    assert.match(snap.tree, /^[0-9a-f]{40}$/);
+    assert.equal(git(info.path, ['cat-file', 'blob', `${snap.tree}:README.md`]), USER_README);
+    assert.equal(git(info.path, ['cat-file', 'blob', `${snap.tree}:notes.txt`]), 'user notes\n');
+    assert.throws(() => git(info.path, ['cat-file', 'blob', `${snap.tree}:ignored.log`]), 'an ignored file is not in the tree');
+    assert.deepEqual(snap.ignored, ['ignored.log']);
+    assert.deepEqual(readFileSync(join(info.path, '.git', 'index')), indexBefore);
+    assert.deepEqual(readdirNames(join(info.path, '..', 'tmp')), [], 'the temporary index is gone');
+    assert.equal(must(ws.head(info.path)), repo.head);
+  });
+
+  it('discard restores what the run changed to the snapshot content, deletes what it added, keeps user content and ignored files', () => {
+    const repo = scratch();
+    const info = userDirtyClone(repo);
+    const snap = must(ws.snapshot(info.path));
+    const indexBefore = readFileSync(join(info.path, '.git', 'index'));
+
+    write(info.path, 'src/new.ts', 'export const added = 1;\n'); // run: new
+    write(info.path, 'src/b.ts', 'export const b = 99;\n'); // run: modified a tracked file
+    write(info.path, 'README.md', '# the run rewrote the user edit\n'); // run: modified what the user already modified
+    rmSync(join(info.path, 'src', 'a.ts')); // run: deleted
+    write(info.path, '.cache/x', 'cache\n'); // run: ignored, new
+    write(info.path, 'ignored.log', 'run noise\n'); // run: ignored, existing
+
+    assert.deepEqual(must(ws.changedSince(info.path, snap)), [
+      { path: 'README.md', status: 'modified' },
+      { path: 'src/a.ts', status: 'deleted' },
+      { path: 'src/b.ts', status: 'modified' },
+      { path: 'src/new.ts', status: 'added' },
+    ]);
+
+    const result = must(ws.discard(info.path, snap));
+    assert.deepEqual(result.restored, ['README.md', 'src/a.ts', 'src/b.ts']);
+    assert.deepEqual(result.removed, ['src/new.ts']);
+    assert.deepEqual(result.ignoredLeft, ['.cache/']);
+
+    assert.equal(read(info.path, 'README.md'), USER_README, 'the user edit survives, not HEAD content');
+    assert.equal(read(info.path, 'src/b.ts'), BASE_FILES['src/b.ts']);
+    assert.equal(read(info.path, 'src/a.ts'), BASE_FILES['src/a.ts']);
+    assert.equal(existsSync(join(info.path, 'src', 'new.ts')), false);
+    assert.equal(read(info.path, 'notes.txt'), 'user notes\n', 'a user untracked file is kept');
+    assert.equal(read(info.path, '.cache/x'), 'cache\n', 'an ignored file the run made is left');
+    assert.equal(read(info.path, 'ignored.log'), 'run noise\n', 'an ignored file is never rewritten');
+    assert.equal(must(ws.snapshot(info.path)).tree, snap.tree, 'the tree after discard is the snapshot tree');
+    assert.deepEqual(must(ws.changedSince(info.path, snap)), []);
+    assert.deepEqual(readFileSync(join(info.path, '.git', 'index')), indexBefore, 'discard never touched the clone index');
+    assert.equal(must(ws.head(info.path)), repo.head);
+  });
+
+  it('discard with nothing changed is a no-op success, and a second discard after a first lists no paths and leaves the same tree', () => {
+    const repo = scratch();
+    const info = userDirtyClone(repo);
+    const snap = must(ws.snapshot(info.path));
+    const before = treeDigest(info.path);
+
+    assert.deepEqual(must(ws.discard(info.path, snap)), { restored: [], removed: [], ignoredLeft: [] });
+    assert.equal(treeDigest(info.path), before);
+
+    write(info.path, 'src/b.ts', 'export const b = 7;\n');
+    write(info.path, 'src/new.ts', 'x\n');
+    const first = must(ws.discard(info.path, snap));
+    assert.deepEqual(first.restored, ['src/b.ts']);
+    assert.deepEqual(first.removed, ['src/new.ts']);
+    const afterFirst = treeDigest(info.path);
+    assert.equal(afterFirst, before);
+    assert.deepEqual(must(ws.discard(info.path, snap)), { restored: [], removed: [], ignoredLeft: [] });
+    assert.equal(treeDigest(info.path), afterFirst);
+  });
+
+  it('discard when HEAD moved is a head-moved conflict and changes nothing', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    const snap = must(ws.snapshot(info.path));
+    write(info.path, 'src/b.ts', 'export const b = 8;\n');
+    must(ws.commit(info.path, { paths: ['src/b.ts'], message: 'avarice: moved' }));
+    write(info.path, 'src/a.ts', 'export const a = 8;\n');
+    write(info.path, 'src/extra.ts', 'extra\n');
+    const before = treeDigest(info.path);
+
+    const conflict = mustFail(ws.discard(info.path, snap));
+    assert.equal(conflict.kind, 'conflict');
+    assert.match(String(conflict['expected']), /head-moved/);
+    assert.equal(treeDigest(info.path), before, 'nothing was touched');
+  });
+
+  it('a directory replaced by a file and a file replaced by a directory are both put back', () => {
+    const repo = scratch({ files: { ...BASE_FILES, 'docs/guide.md': '# guide\n', 'docs/more/deep.md': 'deep\n', slot: 'a file\n' } });
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    const snap = must(ws.snapshot(info.path));
+
+    rmSync(join(info.path, 'docs'), { recursive: true });
+    write(info.path, 'docs', 'now a file\n');
+    rmSync(join(info.path, 'slot'));
+    write(info.path, 'slot/inner.txt', 'inner\n');
+
+    const result = must(ws.discard(info.path, snap));
+    assert.deepEqual(result.removed, ['docs', 'slot/inner.txt']);
+    assert.deepEqual(result.restored, ['docs/guide.md', 'docs/more/deep.md', 'slot']);
+    assert.equal(read(info.path, 'docs/guide.md'), '# guide\n');
+    assert.equal(read(info.path, 'docs/more/deep.md'), 'deep\n');
+    assert.equal(read(info.path, 'slot'), 'a file\n');
+    assert.equal(must(ws.snapshot(info.path)).tree, snap.tree);
+  });
+
+  it('a symlink the run planted is removed as a link and never followed: the target outside the clone is untouched', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    const outside = tempDir('avarice-runws-outside-');
+    writeFileSync(join(outside, 'a.ts'), 'outside a\n');
+    writeFileSync(join(outside, 'b.ts'), 'outside b\n');
+    writeFileSync(join(outside, 'precious.txt'), 'precious\n');
+    const snap = must(ws.snapshot(info.path));
+
+    rmSync(join(info.path, 'src'), { recursive: true });
+    symlinkSync(outside, join(info.path, 'src')); // src is now a link to a directory outside the clone
+    symlinkSync(join(outside, 'precious.txt'), join(info.path, 'link-out'));
+
+    const result = must(ws.discard(info.path, snap));
+    assert.deepEqual(result.removed, ['link-out', 'src']);
+    assert.deepEqual(result.restored, ['src/a.ts', 'src/b.ts']);
+    assert.equal(lstatSync(join(info.path, 'src')).isSymbolicLink(), false);
+    assert.equal(read(info.path, 'src/a.ts'), BASE_FILES['src/a.ts']);
+    assert.equal(readFileSync(join(outside, 'a.ts'), 'utf8'), 'outside a\n', 'nothing was written through the link');
+    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'precious\n');
+    assert.deepEqual(readdirNames(outside), ['a.ts', 'b.ts', 'precious.txt']);
+    assert.equal(must(ws.snapshot(info.path)).tree, snap.tree);
+  });
+
+  it('a filter and hooks of the clone do not run during snapshot or discard', () => {
+    const repo = scratch();
+    const info = userDirtyClone(repo);
+    const marks = tempDir('avarice-runws-marks-');
+    git(info.path, ['config', 'filter.spy.clean', `touch "${join(marks, 'clean')}"; cat`]);
+    git(info.path, ['config', 'filter.spy.smudge', `touch "${join(marks, 'smudge')}"; cat`]);
+    writeFileSync(join(info.path, '.git', 'info', 'attributes'), '*.ts filter=spy\n');
+    for (const hook of ['post-checkout', 'post-merge', 'reference-transaction']) {
+      writeExecutable(join(info.path, '.git', 'hooks', hook), `#!/bin/sh\ntouch "${join(marks, hook)}"\n`);
+    }
+    const snap = must(ws.snapshot(info.path));
+    write(info.path, 'src/b.ts', 'export const b = 5;\n');
+    must(ws.discard(info.path, snap));
+    assert.deepEqual(readdirNames(marks), []);
+    assert.equal(read(info.path, 'src/b.ts'), BASE_FILES['src/b.ts']);
   });
 });

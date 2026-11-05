@@ -69,6 +69,15 @@ export interface WorkspaceSnapshot {
   ignored: string[];
 }
 
+export interface DiscardResult {
+  // Paths put back to their snapshot content (a path the run changed or deleted).
+  restored: string[];
+  // Paths the snapshot did not have, deleted.
+  removed: string[];
+  // Ignored entries that exist now and were not in the snapshot; left in place.
+  ignoredLeft: string[];
+}
+
 export interface RunWorkspace {
   // Clone at the pin, on `avarice/<runId>`, built in clone.partial and renamed when complete.
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo>;
@@ -80,6 +89,10 @@ export interface RunWorkspace {
   snapshot(path: string): Result<WorkspaceSnapshot>;
   // What changed since the snapshot, by path.
   changedSince(path: string, snapshot: WorkspaceSnapshot): Result<PathChange[]>;
+  // Puts every path changed since the snapshot back to its snapshot content and deletes the paths the snapshot did not have (CON-16).
+  // `conflict` (head-moved) when HEAD is not the snapshot's HEAD, and nothing is changed. Ignored paths and paths the run did not
+  // change are never touched, and nothing is deleted recursively. A second call after a first changes nothing.
+  discard(path: string, snapshot: WorkspaceSnapshot): Result<DiscardResult>;
   // The supervisor's commit (D-03): fixed identity, no hooks, no signing, exactly `paths`. Returns the commit SHA.
   commit(path: string, input: CommitInput): Result<string>;
   // D-02: fetch `refs/heads/<branch>` of the clone into the source as a new local branch. Create-only.

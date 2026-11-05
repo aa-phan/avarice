@@ -11,13 +11,14 @@
 //    never checks anything out, and runs with fsck on because the objects come from a tree an agent wrote into.
 //  - snapshot, changedSince, status: a tree of the clone's tracked and untracked non-ignored content is computed through a
 //    temporary index file under {workRoot}/{runId}/tmp, so the clone's own index is never touched.
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmdirSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type {
   CommitInput,
+  DiscardResult,
   FetchIntoSourceInput,
   HandoffResult,
   PathChange,
@@ -40,6 +41,7 @@ const TRAILER = /^[A-Za-z][A-Za-z0-9-]*: [^\r\n\0]+$/;
 const TREE_TIMEOUT_MS = 120_000;
 const FETCH_TIMEOUT_MS = 120_000;
 const MAX_IGNORED = 10_000;
+const RESTORE_CHUNK = 200;
 
 interface RunTarget {
   runDir: string;
@@ -79,6 +81,60 @@ function parseNameStatus(stdout: string): PathChange[] {
     changes.push({ path, status: letter === 'A' ? 'added' : letter === 'D' ? 'deleted' : 'modified' });
   }
   return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+// Delete one path the run added. The leaf is unlinked as it is (a symlink is removed as a link, never followed); a directory is never
+// removed; a parent that resolves outside the clone, because the run planted a symlink there, is refused before anything is touched.
+// Returns false when the path was already gone.
+function removeAddedPath(root: string, rel: string): Result<boolean> {
+  const segments = checkRelative(rel);
+  if (!segments.ok) return segments;
+  const parts = segments.value;
+  let parent: string;
+  try {
+    parent = realpathSync(join(root, ...parts.slice(0, -1)));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ok(false);
+    return err({ kind: 'internal', cause: `discard ${rel}: ${code ?? String(error)}` });
+  }
+  if (!inside(root, parent)) return err({ kind: 'denied', rule: 'discard-stays-inside-the-clone', enforcer: 'avarice' });
+  const target = join(parent, parts[parts.length - 1] as string);
+  let stat;
+  try {
+    stat = lstatSync(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok(false);
+    return err({ kind: 'internal', cause: `discard ${rel}: ${(error as NodeJS.ErrnoException).code ?? String(error)}` });
+  }
+  if (stat.isDirectory()) return err({ kind: 'conflict', expected: `${rel} to be a file or a link`, actual: 'a directory, which discard never removes' });
+  try {
+    unlinkSync(target);
+  } catch (error) {
+    return err({ kind: 'internal', cause: `discard ${rel}: ${(error as NodeJS.ErrnoException).code ?? String(error)}` });
+  }
+  return ok(true);
+}
+
+// Before a snapshot file is written back, a directory standing where it belongs is removed when it is empty (the run's added files
+// in it are already gone). A directory with anything left in it, such as ignored files, is not touched and the discard stops.
+function clearDirectoryInTheWay(root: string, rel: string): Result<void> {
+  const segments = checkRelative(rel);
+  if (!segments.ok) return segments;
+  const target = join(root, ...segments.value);
+  let stat;
+  try {
+    stat = lstatSync(target);
+  } catch {
+    return ok(undefined); // absent, or a parent is absent: restore creates it
+  }
+  if (!stat.isDirectory()) return ok(undefined);
+  try {
+    rmdirSync(target);
+  } catch {
+    return err({ kind: 'conflict', expected: `${rel} to be restorable as a file`, actual: 'a directory that is not empty (ignored or unlisted content), left untouched' });
+  }
+  return ok(undefined);
 }
 
 export class CloneRunWorkspace implements RunWorkspace {
@@ -134,6 +190,61 @@ export class CloneRunWorkspace implements RunWorkspace {
     const tree = this.treeOfWorkingContent(path);
     if (!tree.ok) return tree;
     return this.diffTrees(path, snapshot.tree, tree.value);
+  }
+
+  // CON-16: put the clone back to its snapshot, and nothing else. The paths come only from the tree difference snapshot -> now, so a
+  // path the run did not change is never named; a user's pre-run edit is in the snapshot tree and is restored to the user's version,
+  // not HEAD's; ignored paths are in neither tree and are never touched. There is no reset, no clean and no checkout of the
+  // clone: files are rewritten one path at a time by `restore --source=<snapshot tree> --worktree`, and an added path is
+  // unlinked (a file or a symlink, never a directory, never through a symlink).
+  discard(path: string, snapshot: WorkspaceSnapshot): Result<DiscardResult> {
+    const head = this.head(path);
+    if (!head.ok) return head;
+    if (head.value !== snapshot.head) {
+      return err({ kind: 'conflict', expected: `head-moved: HEAD at ${snapshot.head}`, actual: `HEAD at ${head.value}` });
+    }
+    const changes = this.changedSince(path, snapshot);
+    if (!changes.ok) return changes;
+    let root: string;
+    try {
+      root = realpathSync(path);
+    } catch {
+      return err({ kind: 'not_found', ref: path });
+    }
+
+    // Additions first: a file the run put where the snapshot had a directory, or a symlink where it had one, must be gone before
+    // the snapshot's files can be written back.
+    const removed: string[] = [];
+    for (const change of changes.value.filter((c) => c.status === 'added')) {
+      const gone = removeAddedPath(root, change.path);
+      if (!gone.ok) return gone;
+      if (gone.value) removed.push(change.path);
+    }
+
+    const restored = changes.value.filter((c) => c.status !== 'added').map((c) => c.path);
+    for (const rel of restored) {
+      // The snapshot had a file here and the run left a directory: it is empty once its added files are gone, or it is not ours.
+      const cleared = clearDirectoryInTheWay(root, rel);
+      if (!cleared.ok) return cleared;
+    }
+    for (let start = 0; start < restored.length; start += RESTORE_CHUNK) {
+      const batch = restored.slice(start, start + RESTORE_CHUNK);
+      const done = runGit(['restore', `--source=${snapshot.tree}`, '--worktree', '--', ...batch], { cwd: path, neutralizeFilters: true, literalPathspecs: true, timeoutMs: TREE_TIMEOUT_MS });
+      if (!done.ok) return failure(done.error);
+    }
+
+    const after = this.treeOfWorkingContent(path);
+    if (!after.ok) return after;
+    if (after.value !== snapshot.tree) {
+      const left = this.diffTrees(path, snapshot.tree, after.value);
+      const names = left.ok ? left.value.slice(0, 5).map((c) => c.path).join(', ') : 'unknown';
+      return err({ kind: 'internal', cause: `discard did not reach the snapshot tree; still different: ${names}` });
+    }
+
+    const ignored = this.ignoredEntries(path);
+    if (!ignored.ok) return ignored;
+    const known = new Set(snapshot.ignored);
+    return ok({ restored: sortedUnique(restored), removed: sortedUnique(removed), ignoredLeft: ignored.value.filter((entry) => !known.has(entry)) });
   }
 
   commit(path: string, input: CommitInput): Result<string> {
@@ -217,10 +328,11 @@ export class CloneRunWorkspace implements RunWorkspace {
     }
     try {
       const indexFile = join(dir, 'index');
-      const base = { cwd: path, indexFile, timeoutMs: TREE_TIMEOUT_MS } as const;
+      // Every call here neutralizes filters, `write-tree` included: it re-hashes a racily clean entry, which runs a clean filter.
+      const base = { cwd: path, indexFile, neutralizeFilters: true, timeoutMs: TREE_TIMEOUT_MS } as const;
       const read = runGit(['read-tree', 'HEAD'], base);
       if (!read.ok) return failure(read.error);
-      const added = runGit(['add', '-A'], { ...base, neutralizeFilters: true, noUserExcludes: true });
+      const added = runGit(['add', '-A'], { ...base, noUserExcludes: true });
       if (!added.ok) return failure(added.error);
       const written = runGit(['write-tree'], base);
       if (!written.ok) return failure(written.error);
