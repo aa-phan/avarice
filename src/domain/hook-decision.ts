@@ -294,6 +294,19 @@ export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
   'git status': 'uM',
 };
 
+// Options of a `gsd_run` read verb. GSD consumes `--cwd`, `--project-dir`, `--ws`, `--pick` and its other global options from any
+// position, and `--cwd`/`--project-dir` redirect the whole command to another tree, so every option not listed here is refused
+// `shell-gsd-option` (review WR-06). `--raw` is admitted for every verb. GSD_VALUE_OPTIONS lists, per GSD_READ_VERBS entry, the
+// options that take one value. The lists come from GSD 1.17.0's agents and docs (agents/gsd-phase-researcher.md and
+// docs/contracts-and-state.md show `graphify query <term> --budget <n>`); a verb that needs more must be added here with the GSD
+// source line that shows it.
+const GSD_FLAG_OPTIONS: readonly string[] = ['--raw'];
+export const GSD_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  'graphify query': ['--budget'],
+};
+// Verbs whose operands GSD writes (`intel patch-meta <file>` rewrites `_meta.updated_at` in the named file).
+const GSD_WRITE_OPERAND_VERBS: readonly string[] = ['intel patch-meta'];
+
 // What the words after a read command's name say. The parser treats every operand and every attached or separate option
 // value as a path candidate (fail closed: a non-path value such as a search pattern starting with `/` is judged as a path).
 interface ReadArgs {
@@ -343,12 +356,51 @@ function parseReadArgs(entryKey: string, args: readonly string[]): ReadArgs {
   return parsed;
 }
 
+const shellCwd = (call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy): string => (call.cwd.startsWith('/') ? call.cwd : policy.stagingPath);
+
+// The words after a `gsd_run` read verb: an allow-list of options, then the read check on every operand and option value, then the
+// write check on the operands of a verb that writes them (review WR-06). A term is not a path to GSD, but it is judged as one,
+// the same fail-closed choice parseReadArgs makes.
+function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy: HookPolicy, canon: Canon): string | null {
+  const valued = GSD_VALUE_OPTIONS[verb] ?? [];
+  const operands: string[] = [];
+  const optionValues: string[] = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    const word = rest[i] as string;
+    if (!word.startsWith('-')) {
+      operands.push(word);
+    } else if (GSD_FLAG_OPTIONS.includes(word)) {
+      continue;
+    } else {
+      const equals = word.indexOf('=');
+      const name = equals === -1 ? word : word.slice(0, equals);
+      if (!valued.includes(name)) return 'shell-gsd-option';
+      const value = equals === -1 ? rest[i + 1] : word.slice(equals + 1);
+      // A missing value, or a value that is itself an option (`--budget --cwd`), would let GSD read an option the list refuses.
+      if (value === undefined || value.startsWith('-')) return 'shell-gsd-option';
+      if (equals === -1) i += 1;
+      optionValues.push(value);
+    }
+  }
+  const named = [...operands, ...optionValues].map((word) => absolutize(cwd, word));
+  const readRule = checkRead(named, policy, canon);
+  if (readRule !== null) return readRule;
+  if (GSD_WRITE_OPERAND_VERBS.includes(verb)) return checkWrite(operands.map((word) => absolutize(cwd, word)), policy, canon);
+  return null;
+}
+
 function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
     if (!preamble) return 'shell-gsd-no-preamble';
     const args = words.slice(1);
-    return commands.gsdReadVerbs.some((verb) => startsWithWords(args, splitWords(verb))) ? null : 'shell-gsd-verb';
+    const verb = commands.gsdReadVerbs
+      .filter((entry) => startsWithWords(args, splitWords(entry)))
+      .sort((a, b) => splitWords(b).length - splitWords(a).length)[0];
+    if (verb === undefined) return 'shell-gsd-verb';
+    // Fail closed as for the read-only commands (MF-04): an expanding word is a path set the checks below cannot name.
+    if (expands) return 'shell-syntax';
+    return checkGsdArgs(verb, args.slice(splitWords(verb).length), shellCwd(call, policy), policy, canon);
   }
   if (commands.deniedPrefixes.some((prefix) => startsWithWords(words, splitWords(prefix)))) return 'shell-denied-prefix';
   const entry = commands.readOnly.map(splitWords).find((tokens) => startsWithWords(words, tokens));
@@ -362,7 +414,7 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   // Read tool. A word like `-f/home/u/.netrc` or one after a bare `--` is judged as a path, never skipped as an option.
   const parsed = parseReadArgs(entry.join(' '), args);
   if (parsed.malformed) return 'shell-option-value';
-  const cwd = call.cwd.startsWith('/') ? call.cwd : policy.stagingPath;
+  const cwd = shellCwd(call, policy);
   const named = checkRead([...parsed.positional, ...parsed.values].map((arg) => absolutize(cwd, arg)), policy, canon);
   return named;
 }
