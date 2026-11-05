@@ -9,11 +9,11 @@ findings:
     title: "Pre-clustering chunk-usable gate is redundant with the per-document gate and gives a less accurate message"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Work-root and corpus-root validators are duplicated"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: skipped
     title: "The model still builds the path of the plan file itself"
   - id: IN-04
     severity: info
@@ -21,11 +21,11 @@ findings:
     title: "The new catch blocks are broader than the condition they name, and one of them is unreachable and untested"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The exit gate does not tie `documentNodes` to the document accounting"
   - id: IN-06
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The header comment of `invocation.ts` describes the old ordering"
   - id: WR-01
     severity: warning
@@ -71,9 +71,9 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-open: 12
+open: 8
 total: 17
-recorded: 2026-11-05T05:33:41.507Z
+recorded: 2026-11-05T07:41:53.761Z
 ---
 
 # Phase 01: Code Review Disposition
@@ -81,11 +81,11 @@ recorded: 2026-11-05T05:33:41.507Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
+| IN-02 | info | fixed | 01-REVIEW-FIX.md |
+| IN-03 | info | skipped | 01-REVIEW-FIX.md |
 | IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
+| IN-05 | info | fixed | 01-REVIEW-FIX.md |
+| IN-06 | info | fixed | 01-REVIEW-FIX.md |
 | WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
