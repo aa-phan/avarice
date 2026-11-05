@@ -22,6 +22,14 @@ export interface FakeKnowledgeOptions {
   // Full control of the chunk files: chunk number -> an object (written as JSON), a string (written as it is) or null (not written).
   // Replaces `graph` and `rawGraph`.
   chunks?: (plan: ExtractionPlan, request: InvocationRequest) => Record<number, unknown>;
+  // The mode that reproduces the live slip of UAT 154 (plan 01-25, G-01-154): the pass extracts one document node per file it could
+  // read. For chunks numbered below `originalsFromChunk` (default: none) it reads each file at the corpus copy; from that chunk on
+  // it reads the ORIGINAL at `{staging}/{path}`, the dropped `.avarice-knowledge/` segment. Each read is judged with the hook's
+  // first read rule (hook-decision.ts readRule: the path must equal a `readConfine` root or lie under one, else `outside-read-set`):
+  // an allowed read really reads the file (a wrong path throws, it is not skipped quietly); a denied read yields no node. A chunk
+  // whose reads were all denied is written as `{"nodes":[],"edges":[]}`, the shape the live run wrote. Every read is in `reads`.
+  // Precedence: `chunks`, then `perDocument`, then the `rawGraph`/`graph` default.
+  perDocument?: { originalsFromChunk?: number };
   // Outcome kind to report; default progressed.
   outcomeKind?: InvocationOutcomeKind;
   // Return this error instead of an outcome (the host could not run).
@@ -50,6 +58,8 @@ export class FakeKnowledgeHost implements AgentHost {
   readonly seen: CorpusSeen[] = [];
   // The chunk plan the pass read, one per call.
   readonly plans: ExtractionPlan[] = [];
+  // The reads of the `perDocument` mode, in order, with the hook's judgment of each.
+  readonly reads: Array<{ chunk: number; path: string; decision: 'allow' | 'deny'; rule?: string }> = [];
 
   constructor(inner: AgentHost, options: FakeKnowledgeOptions = {}) {
     this.inner = inner;
@@ -76,7 +86,7 @@ export class FakeKnowledgeHost implements AgentHost {
     this.plans.push(plan);
 
     if (o.writeNothing !== true) {
-      const written: Record<number, unknown> = o.chunks !== undefined ? o.chunks(plan, req) : this.#defaultChunks(plan, req);
+      const written: Record<number, unknown> = o.chunks !== undefined ? o.chunks(plan, req) : o.perDocument !== undefined ? this.#perDocumentChunks(plan, req) : this.#defaultChunks(plan, req);
       for (const chunk of plan.chunks) {
         const content = written[chunk.n];
         if (content === null || content === undefined) continue;
@@ -102,6 +112,27 @@ export class FakeKnowledgeHost implements AgentHost {
       headBefore: head,
       headAfter: head,
     });
+  }
+
+  #perDocumentChunks(plan: ExtractionPlan, req: InvocationRequest): Record<number, unknown> {
+    const from = this.options.perDocument?.originalsFromChunk ?? Number.POSITIVE_INFINITY;
+    const roots = req.scope.readConfine ?? [];
+    const out: Record<number, unknown> = {};
+    for (const chunk of plan.chunks) {
+      const nodes: unknown[] = [];
+      for (const file of chunk.files) {
+        const path = chunk.n >= from ? join(req.scope.stagingPath, file.path) : join(req.cwd, file.path);
+        if (!roots.some((root) => path === root || path.startsWith(`${root}/`))) {
+          this.reads.push({ chunk: chunk.n, path, decision: 'deny', rule: 'outside-read-set' });
+          continue;
+        }
+        this.reads.push({ chunk: chunk.n, path, decision: 'allow' });
+        readFileSync(path);
+        nodes.push({ id: file.stem, label: file.path, file_type: 'document', source_file: file.path, source_location: null });
+      }
+      out[chunk.n] = { nodes, edges: [] };
+    }
+    return out;
   }
 
   #defaultChunks(plan: ExtractionPlan, req: InvocationRequest): Record<number, unknown> {

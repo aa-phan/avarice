@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeKnowledgeGraph } from '../../src/domain/graph-merge.ts';
-import { KNOWLEDGE_LIMITS, validateKnowledgeGraph } from '../../src/domain/knowledge-validation.ts';
+import { KNOWLEDGE_LIMITS, documentCoverage, validateKnowledgeGraph } from '../../src/domain/knowledge-validation.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 
 type Json = Record<string, unknown>;
@@ -341,5 +341,67 @@ describe('MF-03: nested node text and the 2 KiB cap', () => {
 
   it('does not count object keys, numbers or nested text under the cap', () => {
     assert.equal(problemFor((node) => (node['notes'] = { ['k'.repeat(cap + 1)]: 1, count: 12345, flag: true, none: null, tags: ['a', 'b'] })), '');
+  });
+});
+
+describe('documentCoverage and the coverage rule (G-01-154, plan 01-25)', () => {
+  const ALL = ['.planning/PROJECT.md', 'docs/decisions/ADR-001-storage.md', 'docs/guide.md'];
+  const manifestOf = (paths: string[]): KnowledgeManifest => ({ ...MANIFEST, entries: paths.map(entry) });
+  // A merge of document nodes for `covered` (and nothing else) against a manifest of `all`.
+  function coverageMerge(all: string[], covered: string[]): { graph: Json; stats: ReturnType<typeof merge>['stats']; manifest: KnowledgeManifest } {
+    const manifest = manifestOf(all);
+    const docs = skill(covered.map((path) => docNode(`doc_${path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`, path)), []);
+    const { graph, stats } = mergeKnowledgeGraph({ code: codeGraph(), docs, manifest, onboardedRevision: PIN });
+    return { graph, stats, manifest };
+  }
+
+  it('covers every manifest document that a document node of the pass cites, sorted, with none unread', () => {
+    const { graph } = mergedFixture();
+    assert.deepEqual(documentCoverage(graph, MANIFEST), { expected: 3, covered: [...ALL], unread: [] });
+  });
+
+  it('lists a document no node cites as unread, and counts a merged value without a nodes array as covering nothing', () => {
+    const { graph, manifest } = coverageMerge(ALL, ['docs/guide.md']);
+    assert.deepEqual(documentCoverage(graph, manifest), { expected: 3, covered: ['docs/guide.md'], unread: ['.planning/PROJECT.md', 'docs/decisions/ADR-001-storage.md'] });
+    assert.deepEqual(documentCoverage({}, MANIFEST), { expected: 3, covered: [], unread: [...ALL] });
+  });
+
+  it('does not count a concept node, a code-graph node, a node citing a file outside the corpus, or a node that lost an ID collision', () => {
+    const concept = merge(skill([{ id: 'concept_guide', label: 'Guide', file_type: 'concept', source_file: 'docs/guide.md' }], []));
+    assert.deepEqual(documentCoverage(concept.graph, MANIFEST).covered, [], 'a concept node covers no document');
+
+    const withCodeDocument = codeGraph();
+    nodesOf(withCodeDocument).push(docNode('code_side_guide', 'docs/guide.md'));
+    const fromCode = merge(skill([], []), withCodeDocument);
+    assert.equal(byId(fromCode.graph, 'code_side_guide')?.['file_type'], 'document');
+    assert.deepEqual(documentCoverage(fromCode.graph, MANIFEST).covered, [], 'a document node without the pass origin is the code graph, not the pass');
+
+    const outside = merge(skill([docNode('docs_elsewhere', 'docs/elsewhere.md')], []));
+    assert.deepEqual(documentCoverage(outside.graph, MANIFEST).covered, [], 'a node citing a file outside the manifest covers no manifest document');
+
+    const collided = merge(skill([docNode('src_store_db', 'docs/guide.md')], []));
+    assert.equal(collided.stats.collided, 1);
+    assert.deepEqual(documentCoverage(collided.graph, MANIFEST).covered, [], 'a node that lost an ID collision was never added');
+  });
+
+  it('refuses fewer than half the documents, accepts exactly half, and says so in counts (4 documents)', () => {
+    const four = [...ALL, 'docs/other.md'];
+    const two = coverageMerge(four, ['docs/guide.md', 'docs/other.md']);
+    assert.deepEqual(problemsOf(validateKnowledgeGraph(two.graph, two.manifest, two.stats)), [], '2 of 4 is exactly half and is accepted');
+    const one = coverageMerge(four, ['docs/guide.md']);
+    const problems = problemsOf(validateKnowledgeGraph(one.graph, one.manifest, one.stats)).join('\n');
+    assert.match(problems, /1 of 4 corpus documents have a document node/);
+    assert.match(problems, /3 unread/);
+    assert.equal(problems.includes('docs/guide.md'), false, 'a problem names counts, never a path');
+  });
+
+  it('refuses 1 of 3 and accepts 2 of 3, and a valid result carries the coverage', () => {
+    const one = coverageMerge(ALL, ['docs/guide.md']);
+    assert.match(problemsOf(validateKnowledgeGraph(one.graph, one.manifest, one.stats)).join('\n'), /1 of 3 corpus documents have a document node/);
+    const two = coverageMerge(ALL, ['docs/guide.md', '.planning/PROJECT.md']);
+    const result = validateKnowledgeGraph(two.graph, two.manifest, two.stats);
+    assert.ok(result.valid, problemsOf(result).join('; '));
+    assert.deepEqual(result.coverage, { expected: 3, covered: ['.planning/PROJECT.md', 'docs/guide.md'], unread: ['docs/decisions/ADR-001-storage.md'] });
+    assert.equal(KNOWLEDGE_LIMITS.documentShare, 0.5);
   });
 });

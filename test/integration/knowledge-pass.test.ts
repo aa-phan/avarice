@@ -57,7 +57,7 @@ export interface RecordBody {
       builtAtCommit: string;
       nodes: Record<string, number>;
       edges: Record<string, number>;
-      knowledge?: { corpus: string[]; documentsCommit: string; documentNodes: number; dropped: { dangling: number; astDocument: number } };
+      knowledge?: { corpus: string[]; documentsCommit: string; documentsExpected: number; documentNodes: number; dropped: { dangling: number; astDocument: number; unread: number } };
     };
     absent?: Array<{ index: string; reason: string }>;
   };
@@ -122,6 +122,20 @@ export async function onboard(options: OnboardOptions = {}): Promise<Run> {
   } finally {
     composed.value.close();
   }
+}
+
+// `files` plus `count` extra documents `docs/extra-NN.md`.
+function withExtras(files: Readonly<Record<string, string>>, count: number): Record<string, string> {
+  const out: Record<string, string> = { ...files };
+  for (let i = 0; i < count; i += 1) out[`docs/extra-${String(i).padStart(2, '0')}.md`] = `# Extra ${i}\n`;
+  return out;
+}
+
+// `files` plus `count` ADRs `docs/adr/NNNN-decision-NN.md`.
+function withAdrs(files: Readonly<Record<string, string>>, count: number): Record<string, string> {
+  const out: Record<string, string> = { ...files };
+  for (let i = 1; i <= count; i += 1) out[`docs/adr/${String(i).padStart(4, '0')}-decision-${String(i).padStart(2, '0')}.md`] = `# Decision ${i}\n`;
+  return out;
 }
 
 export const absentReasons = (run: Run): Array<{ index: string; reason: string }> => run.record.indexes.absent ?? [];
@@ -236,27 +250,54 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     assert.deepEqual(absentReasons(nothing).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'no-output' }]);
   });
 
-  it('uses the chunks that produced output when at least half did, and states only their documents as the corpus', async () => {
+  it('counts a document as covered only when a document node cites it, and states the unread ones (contract change, plan 01-25)', async () => {
     // Three or more chunks are needed to lose one and keep a majority: a bigger corpus than the default fixture.
-    const files: Record<string, string> = { ...KNOWLEDGE_REPO_FILES };
-    for (let i = 0; i < 12; i += 1) files[`docs/extra-${String(i).padStart(2, '0')}.md`] = `# Extra ${i}\n`;
+    const files = withExtras(KNOWLEDGE_REPO_FILES, 12);
     // Sorts last, so it is in the last chunk, the one this test loses: the record's corpus must not name its directory.
     files['docs/zz-last/note.md'] = '# Last\n';
-    const run = await onboard({
-      files,
-      knowledge: { chunks: (plan) => Object.fromEntries(plan.chunks.map((c) => [c.n, c.n === 1 ? { nodes: [{ id: 'docs_guide', label: 'Guide', file_type: 'document', source_file: 'docs/guide.md' }], edges: [] } : c.n === plan.chunks.length ? null : { nodes: [], edges: [] }])) },
-    });
+    // The pass reads the corpus copies for every chunk but the last, and the staging originals (denied) for the last.
+    const run = await onboard({ files, knowledge: { perDocument: { originalsFromChunk: 3 } } });
     const plan = run.host.plans[0];
-    assert.ok(plan && plan.chunks.length >= 3, `${plan?.chunks.length ?? 0} chunks`);
+    assert.ok(plan && plan.chunks.length === 3, `${plan?.chunks.length ?? 0} chunks`);
     assert.equal(run.outcome.state, 'active', run.outcome.message ?? '');
     const knowledge = run.record.indexes.graph?.knowledge;
-    assert.ok(knowledge, 'the index is present with the chunks that were written');
-    assert.equal(knowledge.documentNodes, 1);
+    assert.ok(knowledge, 'the index is present: 16 of 24 documents have a node');
+    assert.equal(knowledge.documentsExpected, 24);
+    assert.equal(knowledge.documentNodes, 16);
+    assert.deepEqual(knowledge.dropped, { dangling: 0, astDocument: 0, unread: 8 });
     const last = plan.chunks[plan.chunks.length - 1];
     assert.ok((last?.files ?? []).some((f) => f.path === 'docs/zz-last/note.md'), 'the lost chunk holds the last document');
     const usedDirs = corpusSummary(plan.chunks.slice(0, -1).flatMap((c) => c.files.map((f) => f.path)));
-    assert.deepEqual(knowledge.corpus, usedDirs, 'the corpus says only what the used chunks covered');
-    assert.equal(knowledge.corpus.includes('docs/zz-last/'), false, 'the directory of the lost chunk is not claimed');
+    assert.deepEqual(knowledge.corpus, usedDirs, 'the corpus says only what the documents with a node cover');
+    assert.equal(knowledge.corpus.includes('docs/zz-last/'), false, 'the directory the agent never read is not claimed');
+    assert.equal(run.host.reads.filter((r) => r.decision === 'deny').length, 8);
+  });
+
+  it('records validation-failed when the agent reads the staging originals and fewer than half the documents get a node (UAT 154 slip)', async () => {
+    // KNOWLEDGE_REPO_FILES (11 documents) plus 14 ADRs: 25 documents, 4 chunks. Chunk 1 is read at the corpus copy, chunks 2 to 4 at the originals.
+    const files = withAdrs(KNOWLEDGE_REPO_FILES, 14);
+    const run = await onboard({ files, knowledge: { perDocument: { originalsFromChunk: 2 } } });
+    const plan = run.host.plans[0];
+    assert.ok(plan);
+    assert.equal(plan.chunks.length, 4);
+    assert.equal(plan.chunks.flatMap((c) => c.files).length, 25);
+    assert.equal(run.outcome.state, 'active', run.outcome.message ?? '');
+    assert.deepEqual(absentReasons(run).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'validation-failed' }]);
+    assert.equal(graphBytes(run, 'graph.json'), graphBytes(run, 'code-graph.json'), 'graph.json is the code graph unchanged');
+    assert.equal(run.record.indexes.graph?.knowledge, undefined, 'the record has no knowledge section');
+    const events = rows<{ data_json: string }>(run.roots, "SELECT data_json FROM events WHERE type = 'index.absent'")
+      .map((e) => JSON.parse(e.data_json) as { index: string; reason: string; detail?: string })
+      .filter((e) => e.index === 'knowledge');
+    assert.equal(events.length, 1);
+    assert.match(events[0]?.detail ?? '', /8 of 25 corpus documents have a document node/);
+    // The reproduced slip: 17 reads of originals, every one denied by the first read rule, and no allowed read outside the corpus.
+    const denies = run.host.reads.filter((r) => r.decision === 'deny');
+    assert.equal(denies.length, 17);
+    const laterFiles = plan.chunks.filter((c) => c.n >= 2).flatMap((c) => c.files.map((f) => join(run.staging, f.path)));
+    assert.deepEqual(denies.map((r) => r.path), laterFiles);
+    assert.ok(denies.every((r) => r.rule === 'outside-read-set' && r.chunk >= 2));
+    const corpus = join(run.staging, '.avarice-knowledge');
+    assert.ok(run.host.reads.filter((r) => r.decision === 'allow').every((r) => r.path.startsWith(`${corpus}/`)));
   });
 
   it('records the knowledge index absent when no chunk file was written (no-output), when none is usable or fewer than half are (validation-failed)', async () => {
@@ -266,9 +307,8 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     assert.equal(garbage.outcome.state, 'active');
     assert.deepEqual(absentReasons(garbage).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'validation-failed' }]);
     assert.equal(graphBytes(garbage, 'graph.json'), graphBytes(garbage, 'code-graph.json'));
-    // One usable chunk of two is exactly half: used. Fewer than half is refused.
-    const files: Record<string, string> = { ...KNOWLEDGE_REPO_FILES };
-    for (let i = 0; i < 12; i += 1) files[`docs/extra-${String(i).padStart(2, '0')}.md`] = `# Extra ${i}\n`;
+    // Fewer than half of the chunk files usable is refused: here one of three chunk files is written.
+    const files = withExtras(KNOWLEDGE_REPO_FILES, 12);
     const minority = await onboard({
       files,
       knowledge: { chunks: (plan) => Object.fromEntries(plan.chunks.map((c) => [c.n, c.n === 1 ? { nodes: [{ id: 'g', label: 'Guide', file_type: 'document', source_file: 'docs/guide.md' }], edges: [] } : null])) },
@@ -276,6 +316,16 @@ describe('the knowledge step: corpus and the one contained invocation (ONB-14)',
     assert.ok((minority.host.plans[0]?.chunks.length ?? 0) >= 3);
     assert.deepEqual(absentReasons(minority).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'validation-failed' }]);
     assert.equal(graphBytes(minority, 'graph.json'), graphBytes(minority, 'code-graph.json'));
+    // Contract change (G-01-154, plan 01-25): the chunk shape plans 01-18 and 01-19 recorded `active` with one document node (chunk 1
+    // holds one node, the middle chunks are shape-valid and empty, the last is not written) is now refused: 1 of 23 documents has a node.
+    const flipped = await onboard({
+      files,
+      knowledge: { chunks: (plan) => Object.fromEntries(plan.chunks.map((c) => [c.n, c.n === 1 ? { nodes: [{ id: 'docs_guide', label: 'Guide', file_type: 'document', source_file: 'docs/guide.md' }], edges: [] } : c.n === plan.chunks.length ? null : { nodes: [], edges: [] }])) },
+    });
+    assert.equal(flipped.outcome.state, 'active', flipped.outcome.message ?? '');
+    assert.deepEqual(absentReasons(flipped).filter((a) => a.index === 'knowledge'), [{ index: 'knowledge', reason: 'validation-failed' }]);
+    assert.equal(graphBytes(flipped, 'graph.json'), graphBytes(flipped, 'code-graph.json'));
+    assert.equal(flipped.record.indexes.graph?.knowledge, undefined);
   });
 
   it('never reads a chunk file that is a symlink or larger than the cap, and a write outside the output directory is a scope finding', async () => {
@@ -333,8 +383,9 @@ describe('the knowledge step: merge, validation and the record (ONB-14, S-45)', 
     assert.deepEqual(graph.knowledge, {
       corpus: corpusSummary(EXPECTED_CORPUS_PATHS),
       documentsCommit: `git:${run.repo.head}`,
+      documentsExpected: EXPECTED_CORPUS_PATHS.length,
       documentNodes: EXPECTED_CORPUS_PATHS.length,
-      dropped: { dangling: 1, astDocument: 1 },
+      dropped: { dangling: 1, astDocument: 1, unread: 0 },
     });
     assert.equal(graph.builtAtCommit, `git:${run.repo.head}`);
     assert.equal(graph.builtAtCommit, run.record.revisions.onboardedAt);
