@@ -195,7 +195,7 @@ function readCheck(index: number, raw: unknown, seen: Set<string>): Result<Check
 
 // A command word is refused by its last path segment, without regard to case, so `/usr/bin/git` and `GIT` are refused too.
 export function isRefusedAgentCommand(command: string): boolean {
-  const first = command.split(' ')[0] ?? '';
+  const first = command.trimStart().split(/\s/)[0] ?? '';
   const base = (first.split('/').pop() ?? '').toLowerCase();
   return REFUSED_AGENT_COMMAND_WORDS.includes(base);
 }
