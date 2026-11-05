@@ -17,7 +17,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-2** [MVP]: A run follows the explicit run state machine; every transition is persisted before the side effect that depends on it begins.
 - [ ] **FR-3** [MVP]: Context assembly produces a bounded, cited context pack; each item records source identity, revision, retrieval time and scope.
 - [ ] **FR-4** [MVP]: Planning, phase decomposition and implementation are delegated to GSD through supported commands; AVARICE keeps no competing plan, task list or retry loop for the same work.
-- [ ] **FR-5** [MVP]: Verification runs the repository's own check commands as deterministic subprocesses and records exit status, duration, command and the verified workspace state.
+- [x] **FR-5** [MVP]: Verification runs the repository's own check commands as deterministic subprocesses and records exit status, duration, command and the verified workspace state.
 - [ ] **FR-6** [MVP]: Completion evidence names the exact revision verified (commit SHA plus clean-tree flag, or a content digest of the dirty tree); model-written text is never completion evidence.
 - [ ] **FR-7** [MVP]: A checkpoint is written at every state transition; resume rebuilds the next action from checkpoints, GSD state files and live git state, without chat history.
 - [ ] **FR-8** [MVP]: On resume, every external reference in the context pack is refreshed or marked stale before the run continues.
@@ -66,7 +66,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
 - [x] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
 - [x] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
-- [ ] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
+- [x] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
 - [ ] **CON-9** [MVP]: Recovery never resets or deletes changes the run did not make and never claims external effects were rolled back.
 - [ ] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
 - [ ] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
@@ -85,8 +85,8 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **AUT-5** [MVP]: A decision response is validated for identity, scope, applicability to current state and duplication before it is applied; relevant tickets, code, policy and credentials are refreshed before work resumes.
 - [ ] **AUT-6** [MVP local, Later push adapters]: Notifications go only to destinations the user configured; a failed delivery leaves the decision pending and visible locally; scheduled check-ins use software scheduling, not a waiting model.
 - [ ] **AUT-7** [MVP]: Phase transitions are decided by machine-checkable entry and exit conditions with persisted evidence, never by an agent summary alone.
-- [ ] **AUT-8** [MVP]: Acceptance criteria map to verification; check results distinguish passed, failed, skipped, unavailable and inconclusive and are tied to the revision and environment tested.
-- [ ] **AUT-9** [MVP]: The run cannot weaken acceptance criteria, delete or disable failing tests, bypass checks or relabel failure as success to pass a gate; legitimate test changes need a recorded justification and proportional review.
+- [x] **AUT-8** [MVP]: Acceptance criteria map to verification; check results distinguish passed, failed, skipped, unavailable and inconclusive and are tied to the revision and environment tested.
+- [x] **AUT-9** [MVP]: The run cannot weaken acceptance criteria, delete or disable failing tests, bypass checks or relabel failure as success to pass a gate; legitimate test changes need a recorded justification and proportional review.
 - [ ] **AUT-10** [MVP]: Repair loops are bounded and escalate with the smallest useful reproducer and a diagnostic summary.
 - [ ] **AUT-11** [MVP]: The normal unattended endpoint is a reviewable change plus an evidence package; merge, publish and deploy need separate authorization in the contract and in organizational policy.
 - [ ] **AUT-12** [MVP]: Every run state is visible offline, and cancellation and resumption are safe at any point.
@@ -217,7 +217,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-2 | Phase 2 | Pending |
 | FR-3 | Phase 4 | Pending |
 | FR-4 | Phase 2 | Pending |
-| FR-5 | Phase 2 | Pending |
+| FR-5 | Phase 2 | Complete |
 | FR-6 | Phase 2 | Pending |
 | FR-7 | Phase 2 | Pending |
 | FR-8 | Phase 4 | Pending |
@@ -254,7 +254,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-5 | Phase 2 | Complete |
 | CON-6 | Phase 2 | Complete |
 | CON-7 | Phase 2 | Complete |
-| CON-8 | Phase 2 | Pending |
+| CON-8 | Phase 2 | Complete |
 | CON-9 | Phase 2 | Pending |
 | CON-10 | Phase 4 | Pending |
 | CON-11 | Phase 4 | Pending |
@@ -270,8 +270,8 @@ Each v1 requirement maps to exactly one phase.
 | AUT-5 | Phase 3 | Pending |
 | AUT-6 | Phase 3 | Pending |
 | AUT-7 | Phase 2 | Pending |
-| AUT-8 | Phase 2 | Pending |
-| AUT-9 | Phase 2 | Pending |
+| AUT-8 | Phase 2 | Complete |
+| AUT-9 | Phase 2 | Complete |
 | AUT-10 | Phase 3 | Pending |
 | AUT-11 | Phase 5 | Pending |
 | AUT-12 | Phase 3 | Pending |

@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-13-PLAN.md
-last_updated: "2026-11-05T22:13:43.286Z"
+stopped_at: Completed 02-14-PLAN.md
+last_updated: "2026-11-05T23:44:50.160Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 3fa2d2e49d544f3463ad4fedd60fc19dbef1d0a2
+state_head: 5e6a2dd4363cdb210bd18c74a47027095099535f
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 14 of 22
+Plan: 15 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -96,6 +96,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P12 | 25 min | 3 tasks | 19 files |
 | Phase 02 P11 | 23 min | 2 tasks | 17 files |
 | Phase 02 P13 | 38 min | 3 tasks | 23 files |
+| Phase 02 P14 | 85 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-11: read-before-edit (SHA-256 recorded at PostToolUse in hook_reads, rules edit-without-read and file-changed-since-read) and loop limits (3 consecutive denials, 25 searches with no read: continue false plus a loop.limit event, search limit ROUTINE_PRESET.escalation.consecutiveSearches) are policy-gated denials set only by computeRunScope, so the onboarding purposes' hook decisions are unchanged — CON-7, CON-14 and NFR-5: stale edits fail, a stuck agent stops itself, every error path exits 2; the count is read by event seq inside the deny's own transaction; hook p95 about 94 ms with read recording on
 - [Phase 02]: 02-13: a unit is judged from the clone, the quick records and measured facts, never the host outcome kind; G2 runs the required checks only when every other rule passes and stops a failing check before the commit, G4 re-proves them at the clean commit, and every other ending is one decision with a reason through blockRun - AUT-7 and FR-6: the run reaches ready_for_review only after a passed G4 row for exactly the handed-off commit, the GSD records and config.json are archived then restored or removed so the clone is clean, and a hand-off conflict leaves the user ref alone
 - [Phase 02]: 02-13: start refuses with exit 3 and creates nothing when no admitted GSD is found; gate.result and decision.opened events carry the attempt ID; an item found delegated when the running stage starts is an error left to resume (02-16, 02-17) - RC-1 and OPS-2
+- [Phase 02]: 02-14: a declared check is repository code, validated in a scratch clone (undeclared writes, network by proxy or error text) and cached per project, pin and that one check's spec before it can be evidence; the baseline is measured at the pin and the unit is judged against it, a failure at base and head is a preExisting flag on a failed row; the install is the only network step, through a registry-only proxy; the test inventory is measured by AVARICE after the invocation, and G2 holds the checks delta so a failing target stops at G2 - ONB-10, AUT-8, AUT-9, CON-8, D-11, D-12
 
 ### Pending Todos
 
@@ -247,6 +249,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T22:13:34.207Z
-Stopped at: Completed 02-13-PLAN.md
+Last session: 2026-11-05T23:44:49.968Z
+Stopped at: Completed 02-14-PLAN.md
 Resume file: None
