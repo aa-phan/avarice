@@ -74,6 +74,27 @@ export class GitRunSource implements RunSource {
     return ok({ descendant: true, commitsOutside: times.length, oldestOutsideCommittedAtMs: Math.min(...times) * 1000 });
   }
 
+  hasFile(repoPath: string, revision: string, relPath: string): Result<boolean> {
+    if (!COMMIT_SHA.test(revision)) return invalid('revision', 'a full lowercase commit SHA is required');
+    if (relPath === '' || relPath.startsWith('/') || relPath.split('/').some((part) => part === '' || part === '.' || part === '..')) {
+      return invalid('relPath', 'a relative path inside the repository is required');
+    }
+    const top = runGit(['rev-parse', '--show-toplevel'], { cwd: repoPath });
+    if (!top.ok) return failure(top.error);
+    const root = top.value.stdout.trim();
+    if (!runGit(['cat-file', '-e', `${revision}^{commit}`], { cwd: root }).ok) return err({ kind: 'not_found', ref: revision });
+    // `ls-tree` answers with an entry or with nothing, so a missing path is a plain false (`cat-file -e` would signal it by exit status
+    // only, which runGit does not expose).
+    const listed = runGit(['ls-tree', '-z', revision, '--', relPath], { cwd: root, literalPathspecs: true });
+    if (!listed.ok) return failure(listed.error);
+    for (const entry of nulSplit(listed.value.stdout)) {
+      const match = /^(\d+) (\w+) ([0-9a-f]+)\t(.*)$/s.exec(entry);
+      if (match === null || match[4] !== relPath) continue;
+      return ok(match[2] === 'blob' && (match[1] ?? '').startsWith('100'));
+    }
+    return ok(false);
+  }
+
   // Validation before any side effect, and both commits must exist: a SHA flows into git argv.
   private resolve(repoPath: string, pin: string, head: string): Result<Resolved> {
     if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');

@@ -29,4 +29,7 @@ export interface RunSource {
   conventionsAt(repoPath: string, pin: string, head: string): Result<ConventionsAt>;
   // D-04: how far `head` has moved past `pin`.
   staleness(repoPath: string, pin: string, head: string): Result<Staleness>;
+  // Whether the tree of `revision` holds a regular file at `relPath` (a link or a directory is not a file). Objects only; the path is a
+  // literal, never a pathspec. `not_found` when the revision is not in the repository.
+  hasFile(repoPath: string, revision: string, relPath: string): Result<boolean>;
 }

@@ -8,10 +8,12 @@ import { join, resolve, sep } from 'node:path';
 import { parseBrief } from '../domain/brief.ts';
 import { parseConventions } from '../domain/conventions.ts';
 import { canonicalJson } from '../domain/digest.ts';
+import { judgeRunPreflight } from '../domain/run-preflight.ts';
 import { compileRunContract, ROUTINE_POLICY } from '../domain/run-contract.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { PortError } from '../domain/result.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
+import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
 
@@ -75,6 +77,7 @@ function describeError(error: PortError): string {
   }
 }
 
+const DAY_MS = 86_400_000;
 const GIT_PREFIX = /^git:/;
 
 // A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8.
@@ -167,7 +170,7 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
 
   // The brief is untrusted data: parsed and validated, never obeyed.
   const read = readBriefFile(resolve(request.cwd, request.briefPath));
-  if (!read.ok) return usage('brief', `${request.briefPath} ${read.reason}`);
+  if (!read.ok) return usage('brief', `brief ${request.briefPath} ${read.reason}`);
   const briefName = request.briefPath.split(/[\\/]/).pop() ?? 'brief';
   const brief = parseBrief(read.text, { kind: 'file', id: briefName });
   if (!brief.ok) return usage(brief.error.kind === 'invalid' ? brief.error.field : 'brief', describeError(brief.error));
@@ -182,27 +185,50 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (record === null) return refused('no-active-record', `${project.repoPath} has no active project record; onboard it first (avarice onboard --policy onboarding ${project.repoPath})`);
   const pin = record.onboardedRevision.replace(GIT_PREFIX, '');
 
-  // D-16: conventions only from git objects at a descendant of the pin; the working tree is never read.
+  // The facts come from repository objects only (D-04, D-16): an uncommitted edit, a dirty checkout or a half-written file
+  // cannot change an answer. Every rule is judged before anything is created.
+  const nowMs = deps.clock.nowMs();
   const head = runSource.head(project.repoPath);
   if (!head.ok) return internal(describeError(head.error));
-  const conventionsAt = runSource.conventionsAt(project.repoPath, pin, head.value);
-  if (!conventionsAt.ok) {
-    if (conventionsAt.error.kind === 'not_found') return refused('no-conventions', '.avarice/config.json was not found at the onboarded revision or at a later commit that changes only .avarice/');
-    if (conventionsAt.error.kind === 'conflict') return refused('not-descendant', `the source HEAD does not descend from the onboarded revision ${pin.slice(0, 7)}; re-onboard the repository`);
-    return internal(describeError(conventionsAt.error));
-  }
-  const conventions = parseConventions(conventionsAt.value.text);
-  if (!conventions.ok) return refused('conventions-invalid', `.avarice/config.json at ${conventionsAt.value.revision.slice(0, 7)} is invalid: ${describeError(conventions.error)}`);
-  const staleness = runSource.staleness(project.repoPath, pin, head.value);
-  if (!staleness.ok) return internal(describeError(staleness.error));
+  const drift = runSource.staleness(project.repoPath, pin, head.value);
+  // A pin that is no longer in the repository cannot be a base: the same answer as a history that does not lead from it.
+  if (!drift.ok && drift.error.kind !== 'not_found') return internal(describeError(drift.error));
+  const staleness = drift.ok ? drift.value : { descendant: false, commitsOutside: 0, oldestOutsideCommittedAtMs: null };
 
-  const nowMs = deps.clock.nowMs();
+  let conventionsAt: ConventionsAt | null = null;
+  let roadmapAtPin = false;
+  if (staleness.descendant) {
+    const found = runSource.conventionsAt(project.repoPath, pin, head.value);
+    if (found.ok) conventionsAt = found.value;
+    else if (found.error.kind === 'invalid') return refused('conventions-invalid', `.avarice/config.json is invalid: ${describeError(found.error)}`);
+    else if (found.error.kind !== 'not_found') return internal(describeError(found.error));
+    const roadmap = runSource.hasFile(project.repoPath, pin, '.planning/ROADMAP.md');
+    if (!roadmap.ok) return internal(describeError(roadmap.error));
+    roadmapAtPin = roadmap.value;
+  }
+  const verdict = judgeRunPreflight({
+    pin,
+    head: head.value,
+    ...(brief.value.baseRevision !== undefined ? { briefBaseRevision: brief.value.baseRevision } : {}),
+    staleness: {
+      descendant: staleness.descendant,
+      commitsOutside: staleness.commitsOutside,
+      oldestOutsideAgeDays: staleness.oldestOutsideCommittedAtMs === null ? null : (nowMs - staleness.oldestOutsideCommittedAtMs) / DAY_MS,
+    },
+    conventions: conventionsAt === null ? 'not_found' : 'found',
+    roadmapAtPin,
+  });
+  if (!verdict.ok) return refused(verdict.refusal.code, verdict.refusal.message);
+  if (conventionsAt === null) return internal('conventions were found but are missing');
+  const conventions = parseConventions(conventionsAt.text);
+  if (!conventions.ok) return refused('conventions-invalid', `.avarice/config.json at ${conventionsAt.revision.slice(0, 7)} is invalid: ${describeError(conventions.error)}`);
+
   const runId = deps.ids.next('run_');
   const compiled = compileRunContract({
     runId,
     projectId: project.projectId,
     baseRevision: pin,
-    conventionsRevision: conventionsAt.value.revision,
+    conventionsRevision: conventionsAt.revision,
     brief: brief.value,
     conventions: conventions.value,
     nowIso: new Date(nowMs).toISOString(),
@@ -235,8 +261,8 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     result: {
       pin,
       head: head.value,
-      conventionsRevision: conventionsAt.value.revision,
-      commitsOutside: staleness.value.commitsOutside,
+      conventionsRevision: conventionsAt.revision,
+      commitsOutside: staleness.commitsOutside,
       briefDigest: brief.value.digest,
     },
     nowMs,
@@ -251,8 +277,8 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
       projectId: project.projectId,
       repoPath: project.repoPath,
       head: head.value,
-      conventionsRevision: conventionsAt.value.revision,
-      commitsOutside: staleness.value.commitsOutside,
+      conventionsRevision: conventionsAt.revision,
+      commitsOutside: staleness.commitsOutside,
       briefDigest: brief.value.digest,
       contract,
       contractDigest: digest,

@@ -184,3 +184,40 @@ describe('GitRunSource.staleness (D-04)', () => {
     assert.equal(must(source.staleness(repo.path, repo.head, repo.head)).commitsOutside, 0);
   });
 });
+
+describe('GitRunSource.hasFile (D-04: the pin tree has a roadmap)', () => {
+  it('is true for a regular file at the revision and false for an absent path', () => {
+    const repo = scratch({ ...BASE_FILES, '.planning/ROADMAP.md': '# roadmap\n' });
+    assert.equal(must(source.hasFile(repo.path, repo.head, '.planning/ROADMAP.md')), true);
+    assert.equal(must(source.hasFile(repo.path, repo.head, '.planning/STATE.md')), false);
+    assert.equal(must(source.hasFile(repo.path, repo.head, 'src/a.ts')), true);
+  });
+
+  it('reads the revision, not the working tree: a later commit or an uncommitted file changes nothing', () => {
+    const repo = scratch();
+    const pin = repo.head;
+    writeFileSync(join(repo.path, 'untracked.md'), 'u\n');
+    assert.equal(must(source.hasFile(repo.path, pin, 'untracked.md')), false);
+    const later = commitAt(repo, { '.planning/ROADMAP.md': '# roadmap\n' });
+    assert.equal(must(source.hasFile(repo.path, pin, '.planning/ROADMAP.md')), false);
+    assert.equal(must(source.hasFile(repo.path, later, '.planning/ROADMAP.md')), true);
+  });
+
+  it('a directory and a symbolic link are not files; the path is a literal, not a pathspec', () => {
+    const repo = scratch({ ...BASE_FILES, 'docs/guide.md': 'g\n' });
+    symlinkSync('README.md', join(repo.path, 'link.md'));
+    const head = commitAt(repo, {});
+    assert.equal(must(source.hasFile(repo.path, head, 'docs')), false);
+    assert.equal(must(source.hasFile(repo.path, head, 'link.md')), false);
+    assert.equal(must(source.hasFile(repo.path, head, 'docs/*.md')), false);
+  });
+
+  it('refuses a short revision, a missing revision and a path that is not a relative path', () => {
+    const repo = scratch();
+    assert.equal(mustFail(source.hasFile(repo.path, 'abc123', 'README.md')).kind, 'invalid');
+    assert.equal(mustFail(source.hasFile(repo.path, 'f'.repeat(40), 'README.md')).kind, 'not_found');
+    for (const bad of ['', '/etc/passwd', '../README.md', 'a//b', './README.md']) {
+      assert.equal(mustFail(source.hasFile(repo.path, repo.head, bad)).kind, 'invalid', bad);
+    }
+  });
+});

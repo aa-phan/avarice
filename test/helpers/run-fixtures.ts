@@ -64,9 +64,11 @@ export const RUN_BRIEF = [
   '',
 ].join('\n');
 
-// A scratch GSD project, committed, not yet onboarded.
-export function makeRunRepo(extra: Readonly<Record<string, string>> = {}): ScratchRepo {
-  return makeScratchRepo({ files: { ...RUN_REPO_FILES, ...extra } });
+// A scratch GSD project, committed, not yet onboarded. `omit` names tracked files to leave out (a repository without planning).
+export function makeRunRepo(extra: Readonly<Record<string, string>> = {}, omit: readonly string[] = []): ScratchRepo {
+  const files: Record<string, string> = { ...RUN_REPO_FILES, ...extra };
+  for (const name of omit) delete files[name];
+  return makeScratchRepo({ files });
 }
 
 // Onboards the repository to `active` through the test CLI with the fake host and returns the pinned revision.
