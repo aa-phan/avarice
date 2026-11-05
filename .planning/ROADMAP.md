@@ -228,3 +228,13 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4, then 5, 6 (6c after 
 | 5. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 6. Personal infrastructure | v2.0 | 0/TBD | Not started | - |
 | 7. Cross-repository runs and project groups | v2.0 | 0/TBD | Not started | - |
+
+## Backlog
+
+### Phase 999.1: Follow-up — Phase 01 deferred UAT follow-up: Test 13 (BACKLOG)
+
+**Goal:** Resolve the UAT checkpoint deferred during Phase 01 verification
+**Source phase:** 01
+**Deferred at:** 2026-11-04 during /gsd-verify-work 1 session completion
+**Follow-ups:**
+- [ ] Test 13: defer: re-check live on next onboarding (deferred 2026-11-04)
