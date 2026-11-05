@@ -30,13 +30,22 @@ import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-c
 import { StreamJsonParser } from '../../src/adapters/host-claude/stream-json.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
+import { RUN_GSD_SETTINGS, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
+import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import { matchesAny } from '../../src/domain/glob.ts';
+import { PURPOSE_EXTENSIONS, computeRunScope, runScopeDirs } from '../../src/domain/invocation-scope.ts';
+import type { RunContract } from '../../src/domain/run-contract.ts';
 import { redactSecrets } from '../../src/domain/secret-patterns.ts';
 import { err } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
+import type { GsdSetting } from '../../src/ports/gsd-onboarding.ts';
+import type { RunWorkspace } from '../../src/ports/run-workspace.ts';
 import { REPO_ROOT, makeRoots, runCli } from './run-cli.ts';
 import type { CliResult, CliRoots } from './run-cli.ts';
+import { RUN_CONVENTIONS, commitConventions, makeRunRepo, onboardRunRepo, writeBrief } from './run-fixtures.ts';
 import { makeScratchRepo } from './scratch-repo.ts';
 import type { ScratchRepo } from './scratch-repo.ts';
 
@@ -929,6 +938,380 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     dispose: () => {
       rmSync(roots.base, { recursive: true, force: true });
       repo.dispose();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The real quick unit under the run purpose (plan 02-09, spike S2-B, RESEARCH A2)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const SPIKE_PLAN = '02-09';
+// The most plan 02-09 may spend in total over its two rounds.
+export const SPIKE_TOTAL_CAP_USD = 4.0;
+
+// Plan 02-09's own spend in the Phase 2 ledger.
+export function phase2SpentByPlan(plan: string): number {
+  const path = phase2LedgerPath();
+  if (!existsSync(path)) return 0;
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line) as Phase2SpendEntry)
+    .filter((entry) => entry.plan === plan)
+    .reduce((sum, entry) => sum + entry.costUsd, 0);
+}
+
+// The skip text for a spike round that does not fit, or undefined: judged against the Phase 2 ceiling (D-15) and the spike's own total.
+export function spikeRefusal(capUsdForRun: number): string | undefined {
+  if (!fitsPhase2Ceiling(capUsdForRun)) {
+    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  }
+  if (phase2SpentByPlan(SPIKE_PLAN) + capUsdForRun > SPIKE_TOTAL_CAP_USD + 1e-9) {
+    return `not run: plan ${SPIKE_PLAN} spend ${phase2SpentByPlan(SPIKE_PLAN).toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE_TOTAL_CAP_USD.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
+const realOrSelf = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};
+
+export interface RunUnitFixture {
+  roots: CliRoots;
+  repo: ScratchRepo;
+  deps: AppDeps;
+  env: NodeJS.ProcessEnv;
+  runId: string;
+  contract: RunContract;
+  contractDigest: string;
+  // Realpath forms: what the model is handed (02-01 carried finding).
+  clone: string;
+  scratch: string;
+  dataRoot: string;
+  workRoot: string;
+  gsdCoreDir: string;
+  close(): void;
+}
+
+// A scratch GSD project, onboarded with the fake host, with conventions and a brief, started through the real `startRun`, and a run
+// clone prepared at the run's base revision. No model is involved.
+export function prepareRunUnit(): RunUnitFixture {
+  const roots = makeRoots();
+  const repo = makeRunRepo();
+  onboardRunRepo(roots, repo);
+  commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'));
+  const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+  const composed = createDeps(env, {});
+  if (!composed.ok) throw new Error(`composition failed: ${composed.message}`);
+  const { deps } = composed.value;
+  const started = startRun(deps, { cwd: repo.path, briefPath, policy: 'routine', budgetOverrides: {} });
+  if (!started.ok) throw new Error(`start refused: ${JSON.stringify(started.failure)}`);
+  const located = locateGsdCore(env);
+  if (!located.ok) throw new Error('gsd-core was not found');
+  if (deps.runWorkspace === undefined) throw new Error('the run workspace is not composed');
+  mkdirSync(roots.AVARICE_WORK_ROOT, { recursive: true });
+  const workRoot = realOrSelf(roots.AVARICE_WORK_ROOT);
+  const prepared = deps.runWorkspace.prepare({ repoPath: repo.path, workRoot, runId: started.value.runId, pin: started.value.contract.workspace.baseRevision });
+  if (!prepared.ok) throw new Error(`the run clone was not prepared: ${JSON.stringify(prepared.error)}`);
+  const scratch = join(workRoot, started.value.runId, 'scratch');
+  mkdirSync(join(scratch, 'tmp'), { recursive: true });
+  mkdirSync(join(scratch, 'npm-cache'), { recursive: true });
+  return {
+    roots,
+    repo,
+    deps,
+    env,
+    runId: started.value.runId,
+    contract: started.value.contract,
+    contractDigest: started.value.contractDigest,
+    clone: realOrSelf(prepared.value.path),
+    scratch: realOrSelf(scratch),
+    dataRoot: realOrSelf(roots.AVARICE_DATA_ROOT),
+    workRoot,
+    gsdCoreDir: located.value.gsdCoreDir,
+    close: () => {
+      composed.value.close();
+    },
+  };
+}
+
+export interface ConfigureKeyResult {
+  key: string;
+  value: string;
+  accepted: boolean;
+  // The refusal message, trimmed of paths, when it was refused.
+  message?: string;
+}
+
+// Applies `settings` one key at a time through the GSD adapter's configure() (cwd = the clone), recording each key's result.
+export async function applyRunSettings(fixture: RunUnitFixture, settings: readonly GsdSetting[]): Promise<ConfigureKeyResult[]> {
+  const gsd = fixture.deps.gsd;
+  if (gsd === undefined) throw new Error('the GSD adapter is not composed');
+  const out: ConfigureKeyResult[] = [];
+  for (const setting of settings) {
+    const applied = await gsd.configure(fixture.clone, [setting]);
+    if (applied.ok) out.push({ key: setting[0], value: setting[1], accepted: true });
+    else out.push({ key: setting[0], value: setting[1], accepted: false, message: JSON.stringify(applied.error).replaceAll(fixture.clone, '<clone>').slice(0, 400) });
+  }
+  return out;
+}
+
+export const configDigest = (clone: string): string => fileDigest(join(clone, '.planning', 'config.json'));
+
+export interface RunUnitDenial {
+  tool: string;
+  // `hook` when the AVARICE hook refused it (the rule is named), `host` for any other error result.
+  by: 'hook' | 'host';
+  rule: string;
+  // The command, or the file path, with the run's own paths made symbolic.
+  target: string;
+  fromSubagent: boolean;
+  resultHead: string;
+}
+
+export interface RunUnitSpec {
+  name: string;
+  round: number;
+  costCapUsd: number;
+  wallClockMs?: number;
+  // Replaces runUnitPrompt (the contract and an empty pack) when a round must change the prompt.
+  prompt?: (contract: RunPromptContract) => string;
+  // A pre-launch action AVARICE performs (b): directories created in the clone through the run workspace before the model starts.
+  ensureDirs?: readonly string[];
+  // Settings applied before launch (default RUN_GSD_SETTINGS).
+  settings?: readonly GsdSetting[];
+}
+
+export interface LiveRunUnitResult {
+  name: string;
+  round: number;
+  fixture: RunUnitFixture;
+  configure: ConfigureKeyResult[];
+  // `gsd:configure` was recorded as completed before the launch.
+  configureRecordedBeforeLaunch: boolean;
+  outcome: Result<InvocationOutcome>;
+  transcript: string;
+  parsed: ParsedTranscript;
+  hookDecisions: HookEvent[];
+  toolCompleted: CompletedTool[];
+  denials: RunUnitDenial[];
+  headBefore: string;
+  headAfter: string;
+  changedPaths: Array<{ path: string; status: string }>;
+  outsideWriteSet: string[];
+  summaryFiles: string[];
+  verificationStatus: string | undefined;
+  subagentsSpawned: number | undefined;
+  agentToolCalls: number;
+  askedUser: boolean;
+  costUsd: number;
+  costAssumed: boolean;
+  exitCode: number | null | undefined;
+  streamSubtype: string | undefined;
+  sourceUntouched: boolean;
+  hostStarted: boolean;
+  claudeVersion: string;
+  evidenceDir: string;
+  prompt: string;
+  durationMs: number;
+  dispose(): void;
+}
+
+export type LiveRunUnit = { skipped: string } | LiveRunUnitResult;
+
+function walkFiles(root: string, rel = ''): string[] {
+  const out: string[] = [];
+  let entries;
+  try {
+    entries = readdirSync(join(root, rel), { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (rel === '' && entry.name === '.git') continue;
+    const next = rel === '' ? entry.name : `${rel}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walkFiles(root, next));
+    else out.push(next);
+  }
+  return out.sort();
+}
+
+function describeDenials(parsed: ParsedTranscript, fixture: RunUnitFixture): RunUnitDenial[] {
+  const symbolic = (text: string): string =>
+    text.replaceAll(fixture.clone, '<clone>').replaceAll(fixture.scratch, '<scratch>').replaceAll(fixture.dataRoot, '<data>').replaceAll(fixture.workRoot, '<work>');
+  const out: RunUnitDenial[] = [];
+  for (const call of parsed.trace) {
+    if (call.isError !== true) continue;
+    const hookRule = /avarice: ([A-Za-z0-9_:.-]+)/.exec(call.resultText)?.[1];
+    const input = call.input;
+    const target = typeof input['command'] === 'string' ? input['command'] : typeof input['file_path'] === 'string' ? input['file_path'] : typeof input['path'] === 'string' ? input['path'] : JSON.stringify(input).slice(0, 300);
+    out.push({
+      tool: call.tool,
+      by: hookRule !== undefined ? 'hook' : 'host',
+      rule: hookRule ?? 'error-result',
+      target: symbolic(target).slice(0, 600),
+      fromSubagent: call.fromSubagent,
+      resultHead: symbolic(call.resultText).slice(0, 300),
+    });
+  }
+  return out;
+}
+
+export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
+  const refusal = spikeRefusal(spec.costCapUsd);
+  if (refusal !== undefined) return { skipped: refusal };
+
+  const fixture = prepareRunUnit();
+  const { deps, contract, clone, scratch, runId } = fixture;
+  const workspace = deps.runWorkspace as RunWorkspace;
+  const evidenceDir = fixture.roots.base;
+  const realClaude = liveClaudeBin();
+  const version = claudeVersion(realClaude);
+  const wrapper = makeLaunchMarkerWrapper(evidenceDir, realClaude, version);
+
+  // gsd:configure first, recorded before the unit is launched (ordering edge).
+  const settings = spec.settings ?? RUN_GSD_SETTINGS;
+  const configureStarted = deps.clock.nowMs();
+  const configure = await applyRunSettings(fixture, settings);
+  const configured = deps.ledger.recordRunStep(runId, { step: 'gsd:configure', status: 'completed', result: { keys: configure }, nowMs: configureStarted, completedAtMs: deps.clock.nowMs() });
+  if (!configured.ok) throw new Error(`gsd:configure could not be recorded: ${JSON.stringify(configured.error)}`);
+
+  for (const dir of spec.ensureDirs ?? []) {
+    const made = workspace.ensureDir(clone, dir);
+    if (!made.ok) throw new Error(`ensureDir ${dir}: ${JSON.stringify(made.error)}`);
+  }
+
+  const snapshot = workspace.snapshot(clone);
+  if (!snapshot.ok) throw new Error(`snapshot: ${JSON.stringify(snapshot.error)}`);
+  const sourceBefore = { refs: refsDigest(fixture.repo.path), tree: treeDigest(fixture.repo.path) };
+
+  const dirs = runScopeDirs(contract.files);
+  const described = workspace.describe(clone, dirs);
+  if (!described.ok) throw new Error(`describe: ${JSON.stringify(described.error)}`);
+  const agentsDir = join(fixture.gsdCoreDir, '..', 'agents');
+  const scope = computeRunScope({
+    contract,
+    clonePath: clone,
+    repoPath: fixture.repo.path,
+    dataRoot: fixture.dataRoot,
+    home: realOrSelf(deps.home ?? homedir()),
+    workRoot: fixture.workRoot,
+    scratchDir: scratch,
+    workspace: described.value,
+    readRoots: [fixture.gsdCoreDir, agentsDir].map(realOrSelf),
+  });
+  const prompt = spec.prompt !== undefined ? spec.prompt(contract) : runUnitPrompt(contract, '');
+  const extensions = PURPOSE_EXTENSIONS.run;
+  const request: InvocationRequest = {
+    onboardingId: 'onb_spike',
+    runId,
+    invocationId: deps.ids.next('inv_'),
+    purpose: 'run',
+    contractVersion: contract.contractVersion,
+    contractDigest: fixture.contractDigest,
+    prompt,
+    cwd: scope.cwd,
+    model: contract.intent.workItems[0]?.model ?? 'sonnet',
+    costCapUsd: spec.costCapUsd,
+    wallClockMs: spec.wallClockMs ?? 20 * 60_000,
+    scope,
+    extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
+    expectedFiles: [],
+    sessionId: randomUUID(),
+    ownerKind: 'run',
+    ownerId: runId,
+  };
+
+  const preamble = fingerprintGsdPreamble(fixture.gsdCoreDir);
+  if (!preamble.ok) throw new Error('the GSD preamble was not found');
+  const configDir = fixture.env['CLAUDE_CONFIG_DIR'] !== undefined && fixture.env['CLAUDE_CONFIG_DIR'] !== '' ? fixture.env['CLAUDE_CONFIG_DIR'] : join(deps.home ?? homedir(), '.claude');
+  const adapter = new ClaudeHostAdapter({
+    claudeBin: wrapper.bin,
+    hookEntry: HOOK_ENTRY,
+    ledgerPath: join(fixture.dataRoot, 'state.db'),
+    dataRoot: fixture.dataRoot,
+    gsd: { gsdCoreDir: fixture.gsdCoreDir, agentsDir: join(fixture.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir, preamble: preamble.value },
+    artifacts: deps.artifacts,
+    staging: deps.staging,
+    countHookDenies: (id) => deps.ledger.countHookDenials(id),
+    env: fixture.env,
+  });
+
+  const launchStarted = deps.clock.nowMs();
+  const started = Date.now();
+  const outcome = await adapter.invoke(request, new AbortController().signal);
+  const hostStarted = existsSync(wrapper.marker);
+  let costUsd = 0;
+  let transcript = '';
+  let costAssumed = false;
+  if (outcome.ok) {
+    costUsd = outcome.value.costUsd;
+    const bytes = outcome.value.transcriptArtifact === undefined ? undefined : deps.artifacts.get(outcome.value.transcriptArtifact);
+    if (bytes?.ok) transcript = new TextDecoder().decode(bytes.value);
+    costAssumed = outcome.value.details?.resultSeen !== true;
+  } else {
+    costAssumed = hostStarted;
+  }
+  const recorded = costAssumed ? spec.costCapUsd : costUsd;
+  if (hostStarted) recordPhase2Spend({ plan: SPIKE_PLAN, case: spec.name, costUsd: recorded, claudeVersion: versionNumber(version) });
+
+  const steps = deps.ledger.getRunSteps(runId);
+  const configureStep = steps.ok ? steps.value.find((s) => s.step === 'gsd:configure') : undefined;
+  const parsed = parseTranscript(transcript);
+  // The evidence directory keeps the redacted transcript beside the profile until the caller removes it.
+  writeFileSync(join(evidenceDir, 'transcript.jsonl'), transcript);
+  const hooks = hookDecisions(fixture.dataRoot, request.invocationId);
+  const changed = workspace.changedSince(clone, snapshot.value);
+  const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
+  const writeGlobs = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
+  const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobs) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
+  const files = walkFiles(clone);
+  const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
+  const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
+  const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
+  const headNow = workspace.head(clone);
+
+  return {
+    name: spec.name,
+    round: spec.round,
+    fixture,
+    configure,
+    configureRecordedBeforeLaunch: configureStep !== undefined && configureStep.status === 'completed' && configureStep.completedAt !== null && Date.parse(configureStep.completedAt) <= launchStarted,
+    outcome,
+    transcript,
+    parsed,
+    hookDecisions: hooks,
+    toolCompleted: toolCompleted(fixture.dataRoot, request.invocationId),
+    denials: describeDenials(parsed, fixture),
+    headBefore: snapshot.value.head,
+    headAfter: headNow.ok ? headNow.value : 'unreadable',
+    changedPaths,
+    outsideWriteSet,
+    summaryFiles,
+    verificationStatus,
+    subagentsSpawned: outcome.ok ? outcome.value.details?.subagentsSpawned : undefined,
+    agentToolCalls: parsed.trace.filter((t) => t.tool === 'Agent' || t.tool === 'Task').length,
+    askedUser: parsed.trace.some((t) => t.tool === 'AskUserQuestion'),
+    costUsd: hostStarted ? recorded : 0,
+    costAssumed,
+    exitCode: outcome.ok ? outcome.value.details?.exitCode : undefined,
+    streamSubtype: outcome.ok ? outcome.value.details?.subtype : undefined,
+    sourceUntouched: refsDigest(fixture.repo.path) === sourceBefore.refs && treeDigest(fixture.repo.path) === sourceBefore.tree,
+    hostStarted,
+    claudeVersion: version,
+    evidenceDir,
+    prompt,
+    durationMs: Date.now() - started,
+    dispose: () => {
+      fixture.close();
+      rmSync(fixture.roots.base, { recursive: true, force: true });
+      fixture.repo.dispose();
     },
   };
 }
