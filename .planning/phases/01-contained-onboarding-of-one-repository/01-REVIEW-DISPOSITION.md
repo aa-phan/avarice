@@ -49,11 +49,11 @@ findings:
     title: "Integration assertion that the settings carry no containing Read deny is vacuous"
   - id: CR-02
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "Shell read confinement is deny-list only and non-recursive, so secret globs, sibling staging trees and non-listed credential stores are readable"
   - id: CR-03
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "The staging diff gate cannot see gitignored files, so a hostile `.gitignore` blinds validation scope and the pre-activation scope check"
   - id: WR-05
     severity: warning
@@ -71,7 +71,7 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-open: 6
+open: 4
 total: 17
 recorded: 2026-11-05T07:41:53.761Z
 ---
@@ -91,8 +91,8 @@ recorded: 2026-11-05T07:41:53.761Z
 | WR-03 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | CR-01 | critical | fixed | quick 261104-jnc (5e67793), superseded by 261104-l3t (99dd4fb): shell grep denied by name (not in the current review) |
 | WR-04 | warning | fixed | quick 261104-jnc (89f4a39): vacuous Read-deny assertion fixed (not in the current review) |
-| CR-02 | critical | open | - (not in the current review) |
-| CR-03 | critical | open | - (not in the current review) |
+| CR-02 | critical | fixed | plans 01-23 (84910d3, f144eb4) and 01-24 (630f7f8): allow-list read confinement, work root denied (not in the current review) |
+| CR-03 | critical | fixed | plan 01-22 (c7756a1, 335c674): staging diff sees ignored untracked files (not in the current review) |
 | WR-05 | warning | open | - (not in the current review) |
 | WR-06 | warning | open | - (not in the current review) |
 | WR-07 | warning | open | - (not in the current review) |
