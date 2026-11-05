@@ -40,6 +40,8 @@ export interface FakeRunOptions {
   summaryText?: string;
   // Extra lines for the VERIFICATION frontmatter (for example `overrides_applied: 1`).
   verificationExtra?: readonly string[];
+  // The host refuses to run the unit at all and returns this error kind (no sandbox, a failed launch self-test, an internal fault).
+  refuse?: 'unavailable' | 'internal';
   // Where to write {prompt, cwd, invocationId} (the supervisor is another process).
   recordTo?: string;
   // Quick directory name; default `261105-fk1-fix`.
@@ -86,6 +88,8 @@ export class FakeRunHost implements AgentHost {
     this.calls.push(req);
     if (req.purpose !== 'run') return err({ kind: 'unsupported', capability: `fake-run-host:${req.purpose}` });
     const o = this.options;
+    if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
+    if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
     const startedMs = Date.now();
     const cwd = realpathSync(req.cwd);
     if (o.recordTo !== undefined) writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId }));

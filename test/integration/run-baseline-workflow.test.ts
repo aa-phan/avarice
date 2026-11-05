@@ -276,6 +276,66 @@ describe('every ending that is not a handed-off branch is a recorded decision (T
     assert.deepEqual([classify['kind'], classify['pauseSignal']], ['paused', 'numbered-choice']);
   });
 
+  const classifyOf = (f: Fixture, runId: string): Record<string, unknown> =>
+    JSON.parse(rows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'classify'", runId)[0]?.result_json as string) as Record<string, unknown>;
+  const checkRowsOf = (f: Fixture, runId: string): number =>
+    rows<{ n: number }>(f.roots, "SELECT COUNT(*) AS n FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check'", runId)[0]?.n ?? 0;
+
+  it('a budget spent inside the unit (the hook denies budget_exhausted) ends in blocked (budget_exhausted) naming the budget', () => {
+    const f = fixture();
+    const r = runCli([...startArgs(f), '--budget', 'toolCalls=2'], { roots: f.roots, cwd: f.repo.path, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify({ run: FIX }) }, timeoutMs: 300_000 });
+    const { runId, decision } = assertBlocked(f, r, 'budget_exhausted', 'permission');
+    assert.match(decision.issue, /toolCalls/);
+    assert.equal(classifyOf(f, runId)['kind'], 'budget_exhausted');
+  });
+
+  it('a unit that ends with no SUMMARY and no change is no_progress: decision, repeated_failure', () => {
+    const f = fixture();
+    const r = startWithHost(f, { summary: false });
+    const { runId } = assertBlocked(f, r, 'decision', 'repeated_failure');
+    assert.equal(classifyOf(f, runId)['kind'], 'no_progress');
+  });
+
+  it('a host that cannot launch (unavailable) is an enforcement failure, and any other host error is a failed unit: decision', () => {
+    const a = fixture();
+    assertBlocked(a, startWithHost(a, { refuse: 'unavailable' }), 'enforcement_failure', 'permission');
+    const b = fixture();
+    const { runId } = assertBlocked(b, startWithHost(b, { refuse: 'internal' }), 'decision', 'repeated_failure');
+    assert.equal(classifyOf(b, runId)['hostError'], 'internal');
+  });
+
+  it('a VERIFICATION status of human_needed is a pause: decision, acceptance (a structural signal, not the unit text)', () => {
+    const f = fixture();
+    const r = startWithHost(f, { ...FIX, verification: 'human_needed' });
+    const { runId } = assertBlocked(f, r, 'decision', 'acceptance');
+    assert.deepEqual([classifyOf(f, runId)['kind'], classifyOf(f, runId)['pauseSignal']], ['paused', 'verification-human-needed']);
+    assert.equal(checkRowsOf(f, runId), 0, 'no repository code was run for a paused unit');
+  });
+
+  it('G2 is the unit\'s entry condition: gaps_found, an applied override and a node-repair PRUNE each fail it before any check runs', () => {
+    for (const [name, extra, rule] of [
+      ['gaps_found', { verification: 'gaps_found' }, 'gsd-verification'],
+      ['an override', { verificationExtra: ['overrides_applied: 1'] }, 'no-new-overrides'],
+      ['a PRUNE entry', { summaryText: '[Node Repair - PRUNE] Task 1 skipped: infeasible' }, 'prune-is-decision'],
+    ] as const) {
+      const f = fixture();
+      const r = startWithHost(f, { ...FIX, ...extra } as FakeRunOptions);
+      const { runId } = assertBlocked(f, r, 'decision', 'acceptance');
+      const g2 = rows<{ passed: number; failures_json: string }>(f.roots, "SELECT passed, failures_json FROM gate_results WHERE run_id = ? AND gate = 'G2'", runId);
+      assert.equal(g2[0]?.passed, 0, name);
+      assert.match(g2[0]?.failures_json as string, new RegExp(rule), name);
+      assert.equal(checkRowsOf(f, runId), 0, `${name}: the checks were not run`);
+    }
+  });
+
+  it('a VERIFICATION or SUMMARY that says passed never stands in for evidence: a unit with the fix missing still fails on the check', () => {
+    const f = fixture();
+    const r = startWithHost(f, { ...FIX, brokenFix: true, verification: 'passed', summaryText: 'All acceptance criteria are met.' });
+    const { runId } = assertBlocked(f, r, 'decision', 'repeated_failure');
+    assert.equal(rows<{ passed: number }>(f.roots, "SELECT passed FROM gate_results WHERE run_id = ? AND gate = 'G2'", runId)[0]?.passed, 0);
+    assert.equal(rows<{ n: number }>(f.roots, "SELECT COUNT(*) AS n FROM gate_results WHERE run_id = ? AND gate = 'G4'", runId)[0]?.n, 0, 'G4 was never reached');
+  });
+
   it('only an edit outside the write set, denied by the hook, is a denied unit: decision, class permission', () => {
     const f = fixture();
     const r = startWithHost(f, { deniedEdit: 'README.md' });
