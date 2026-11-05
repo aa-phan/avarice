@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-11-05T18:55:29.104Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-11-05T19:15:14.622Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 530e6191d61525b63c96ad087484ee8a1b14911c
+state_head: b0e44a6fc6d786ab75f7329b4d0fd808bc835f68
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 7 of 22
+Plan: 8 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -89,6 +89,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P04 | 30 min | 3 tasks | 9 files |
 | Phase 02 P05 | 25 min | 3 tasks | 11 files |
 | Phase 02 P06 | 8 min | 3 tasks | 12 files |
+| Phase 02 P07 | 45 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-04: the routine contract compiler only narrows: a brief glob must sit inside a conventions write glob and off protected paths, budgets only lower (budget.<name>), check and agent commands starting with git, avarice, claude, gh, curl, wget, ssh, scp or sudo are refused, and G0 static failures are reported together under field g0 — RC-5 is enforced at the one place every later stage trusts; subagentsTotal 10 and invocations 3 carry recorded derivations (one CON-16 retry of a full quick unit fits), and policyRevision is digestOf(ROUTINE_PRESET)
 - [Phase 02]: 02-05: G2 judges protected globs before write, create and artifact globs; a head failure is pre-existing only when the base failure was measured; pauseSignal is a structural fact and detectPause reads the numbered-choice text shape only as a last resort — AUT-9 and AUT-7: gates fail closed, model text can block but never pass or satisfy acceptance
 - [Phase 02]: 02-06: S2-C confirmed A1 (npm 11.19.1 honours npm_config_https_proxy for CONNECT): a supervisor step gets one loopback port via CommandSpec.allowLoopbackPorts and an in-repo node:http/node:net allowlist proxy admits only registry.npmjs.org:443; the footprint test exempts exactly that one file and holds it to loopback-only, built-ins-only rules — D-11 needs no *:443 widening and no offline-cache fallback; plan 02-14 builds the install step on this
+- [Phase 02]: 02-07: fetchIntoSource is create-only and fsck-checked with gc.auto and maintenance.auto off, commit uses literal pathspecs and add-then-commit-only-paths, and discard restores from a snapshot tree (user pre-run edits kept) unlinking added paths without following symlinks, so the source checkout is byte-identical and a crashed attempt is undone exactly to its checkpoint — D-02, D-03 and CON-16: the only write to the user's repository is one new refs/heads/avarice/run_* ref; discard names only paths from a tree difference and never uses reset, clean or checkout; conventions (D-16) and staleness (D-04) are read from git objects and no working-tree file
 
 ### Pending Todos
 
@@ -230,6 +232,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T18:55:28.950Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-11-05T19:15:14.477Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
