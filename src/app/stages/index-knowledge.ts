@@ -13,6 +13,7 @@ import { mergeKnowledgeGraph } from '../../domain/graph-merge.ts';
 import { KNOWLEDGE_DIR, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
 import { assembleExtraction, knowledgePrompt, outputPathOf, planExtractionChunks } from '../../domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
+import type { ExtractionPlan } from '../../domain/knowledge-extraction.ts';
 import { validateKnowledgeGraph } from '../../domain/knowledge-validation.ts';
 import { summarizeGraph } from '../../domain/graph-validation.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
@@ -138,7 +139,13 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   // data; the prompt itself holds no repository text.
   // The corpus root is the knowledge invocation's cwd: the read-dir `.avarice-knowledge` of the same staging path (computeInvocationScope),
   // so every readPath lies under the read confine; the production-path test of plan 01-26 pins it.
-  const plan = planExtractionChunks(manifest, sizes.value, join(staging, KNOWLEDGE_DIR));
+  // planExtractionChunks refuses a corpus root that is not a normalized absolute path by throwing (WR-01); that is an absent index, never a crash.
+  let plan: ExtractionPlan;
+  try {
+    plan = planExtractionChunks(manifest, sizes.value, join(staging, KNOWLEDGE_DIR));
+  } catch (cause) {
+    return absent('invocation-failed', `cannot plan the extraction: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
   const planned = deps.graph.writeExtractionPlan(staging, plan);
   if (!planned.ok) return absent('invocation-failed', `cannot write the extraction plan: ${describeError(planned.error)}`);
 

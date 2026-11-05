@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { INVOCATION_PURPOSES, PURPOSE_EXTENSIONS, computeInvocationScope } from '../domain/invocation-scope.ts';
+import type { InvocationScope } from '../domain/invocation-scope.ts';
 import type { InvocationOutcome, InvocationPurpose, InvocationRequest } from '../ports/agent-host.ts';
 import type { OnboardingRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
@@ -74,6 +75,28 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   const workspace = deps.staging.describe(staging.value, contract.value.body.workspace.baseRevision);
   if (!workspace.ok) return workspace;
 
+  // The scope is computed before the budget is reserved: computeInvocationScope refuses a work root that is not a normalized absolute
+  // path (WR-01) by throwing, and a throw after the reservation would leave it unsettled. A refusal is a typed `invalid` error here,
+  // so nothing was reserved, started or recorded.
+  let scope: InvocationScope;
+  try {
+    scope = computeInvocationScope({
+      purpose,
+      contract: contract.value.body,
+      stagingPath: staging.value,
+      repoPath: project.value.repoPath,
+      dataRoot: deps.profile.dataRoot,
+      workRoot: deps.profile.workRoot,
+      home: deps.home ?? homedir(),
+      workspace: workspace.value,
+      // The scope drops them for the knowledge pass, which loads no skill and runs no GSD verb (decision B).
+      readRoots: [gsdCoreDir, agentsDir],
+      ...(options.subagentsTotal !== undefined ? { subagentsTotal: options.subagentsTotal } : {}),
+    });
+  } catch (cause) {
+    return err({ kind: 'invalid', field: 'workRoot', reason: cause instanceof Error ? cause.message : String(cause) });
+  }
+
   // Reserve the invocation before anything is launched: with no invocation, wall clock or cost left the onboarding
   // ends blocked (budget_exhausted) and the host is never called (ONB-8, CON-13).
   const reserved = reserveInvocation(deps, onboarding, purpose);
@@ -81,19 +104,6 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   if (!reserved.value.granted) return ok({ granted: false, budget: reserved.value.budget });
   const reservation = reserved.value.reservation;
 
-  const scope = computeInvocationScope({
-    purpose,
-    contract: contract.value.body,
-    stagingPath: staging.value,
-    repoPath: project.value.repoPath,
-    dataRoot: deps.profile.dataRoot,
-    workRoot: deps.profile.workRoot,
-    home: deps.home ?? homedir(),
-    workspace: workspace.value,
-    // The scope drops them for the knowledge pass, which loads no skill and runs no GSD verb (decision B).
-    readRoots: [gsdCoreDir, agentsDir],
-    ...(options.subagentsTotal !== undefined ? { subagentsTotal: options.subagentsTotal } : {}),
-  });
   const extensions = PURPOSE_EXTENSIONS[purpose];
   const request: InvocationRequest = {
     onboardingId: onboarding.onboardingId,

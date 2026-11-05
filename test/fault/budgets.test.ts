@@ -428,6 +428,37 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     assert.deepEqual(finished.map((d) => [d['costUsd'], d['costChargedUsd'], d['costBasis']]), [[0.2, 3, 'reservation'], [3.4, 3.4, 'reported']]);
   });
 
+  // WR-01: a work root the scope refuses used to throw after the invocation was reserved, leaving a reservation nothing settled.
+  it('refuses a work root the scope rejects with a typed error before anything is reserved or recorded', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      assert.ok(row.ok);
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const budgets = (): string => JSON.stringify(deps.ledger.getBudgets(runId));
+      const launches = (): number => {
+        const steps = deps.ledger.getStepResults(onboardingId);
+        assert.ok(steps.ok);
+        return steps.value.filter((step) => step.step === 'launch:map').length;
+      };
+      const budgetsBefore = budgets();
+      assert.ok(deps.ledger.getBudgets(runId).ok, 'the run has budget rows to compare');
+      const launchesBefore = launches();
+      for (const workRoot of ['relative/work', '/', '/work/../x', '']) {
+        const refused = prepareInvocation({ ...deps, profile: { ...deps.profile, workRoot } }, row.value, 'map', 'map the repository', { expectedFiles: [] });
+        assert.equal(refused.ok, false, JSON.stringify(workRoot));
+        if (!refused.ok) {
+          assert.equal(refused.error.kind, 'invalid', JSON.stringify(workRoot));
+          if (refused.error.kind === 'invalid') assert.equal(refused.error.field, 'workRoot');
+        }
+      }
+      assert.equal(budgets(), budgetsBefore, 'no invocation, wall clock or cost was reserved');
+      assert.equal(launches(), launchesBefore, 'no launch step was recorded');
+    });
+  });
+
   it('still charges exactly the reported cost for a run that finished on its own', async () => {
     const { roots, repo } = fixture();
     await inProcess(roots, repo, {}, (deps, onboardingId) => {
