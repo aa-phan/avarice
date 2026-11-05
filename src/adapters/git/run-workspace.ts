@@ -23,11 +23,13 @@ import type {
   HandoffResult,
   PathChange,
   PrepareRunInput,
+  PrepareValidationInput,
   RunWorkspace,
   RunWorkspaceDescription,
   RunWorkspaceInfo,
   WorkspaceSnapshot,
 } from '../../ports/run-workspace.ts';
+import { parseStatus } from './repo-facts.ts';
 import { runGit } from './safe-git.ts';
 import { prepareClone } from './staging-clone.ts';
 import { checkRelative, COMMIT_SHA, ensureConfinedDir, failure, inside, invalid, nulSplit, readConfinedFile, sortedUnique } from './staging-base.ts';
@@ -146,9 +148,32 @@ export class CloneRunWorkspace implements RunWorkspace {
     return prepared.ok ? ok({ path: clone, branch }) : prepared;
   }
 
+  // ONB-10: the scratch clone a declared check is validated in. Same clone rules as the run clone (prepareClone), detached at the pin.
+  prepareValidationClone(input: PrepareValidationInput): Result<string> {
+    const target = resolveRunTarget({ ...input });
+    if (!target.ok) return target;
+    const clone = join(target.value.runDir, 'validate');
+    const prepared = prepareClone(input.repoPath, { parentDir: target.value.runDir, path: clone, branch: null, pin: input.pin });
+    return prepared.ok ? ok(clone) : prepared;
+  }
+
   head(path: string): Result<string> {
     const head = runGit(['rev-parse', 'HEAD'], { cwd: path });
     return head.ok ? ok(head.value.stdout.trim()) : failure(head.error);
+  }
+
+  // `--ignored=traditional` with `--untracked-files=all` prints each ignored file as its own record (the matching mode hides the files of
+  // an ignored directory), so a check that writes into an ignored place is seen.
+  statusAll(path: string): Result<string[]> {
+    const status = runGit(['status', '--porcelain=v2', '-z', '--untracked-files=all', '--ignored=traditional'], { cwd: path, neutralizeFilters: true, timeoutMs: TREE_TIMEOUT_MS });
+    if (!status.ok) return failure(status.error);
+    const parsed = parseStatus(status.value.stdout);
+    return ok(sortedUnique([...parsed.modified, ...parsed.untracked]));
+  }
+
+  listFiles(path: string): Result<string[]> {
+    const listed = runGit(['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: path, noUserExcludes: true, timeoutMs: TREE_TIMEOUT_MS });
+    return listed.ok ? ok(sortedUnique(nulSplit(listed.value.stdout))) : failure(listed.error);
   }
 
   describe(path: string, relPaths: readonly string[]): Result<RunWorkspaceDescription> {

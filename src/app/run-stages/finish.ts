@@ -7,7 +7,8 @@
 //   handoff:fetch  the run branch is fetched into the source as one new local ref (D-02); the run moves to `ready_for_review` only after
 //                  a G4 row for exactly that commit is in the ledger (AUT-7)
 //
-// Until plan 02-14 measures a baseline every required check is taken to pass at base, the strict G4 of docs/contracts-and-state.md.
+// The delta against the baseline is the one the `baseline` action recorded at the pin (plan 02-14, D-12): a check that failed there and
+// fails again is flagged `preExisting` and named in the hand-off, a check that passed there and fails now blocks.
 import { baselineDelta, mapAcceptance, revisionOf } from '../../domain/evidence.ts';
 import type { EvidenceRow } from '../../domain/evidence.ts';
 import { evaluateG4 } from '../../domain/gates.ts';
@@ -16,7 +17,7 @@ import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import type { PathChange } from '../../ports/run-workspace.ts';
-import { checksToRun, runRequiredChecks } from '../checks.ts';
+import { preExistingAt, recordedBase, runRequiredChecks } from '../checks.ts';
 import { faultPoint } from '../onboarding-service.ts';
 import { blockRun } from './blocked.ts';
 import type { RunStage } from './stage.ts';
@@ -93,12 +94,15 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
 
   const marked = ctx.checkpoint('verify:checks', { attemptId: f.attemptId, itemId: f.itemId, revision: f.revision });
   if (!marked.ok) return marked;
+  const base = recordedBase(deps, ctx.runId);
+  if (!base.ok) return base;
   const ran = await runRequiredChecks(deps, row, f.contract, {
     cwd: f.clone,
     attemptId: f.attemptId,
-    label: 'final',
+    phase: 'final',
     contractVersion: f.contractVersion,
     itemId: f.itemId,
+    base: base.value,
     afterEach: (index) => {
       if (index === 0) faultPoint('mid-verify');
     },
@@ -150,7 +154,7 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
     ...(isObject(e.environment) && e.environment['preExisting'] === true ? { preExisting: true } : {}),
   }));
   const delta = baselineDelta({
-    base: checksToRun(f.contract).map((x) => ({ name: x.spec.name, status: 'passed' as const })),
+    base: base.value,
     head: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })),
     required: f.contract.verification.requiredChecks,
     targets: f.contract.verification.targetChecks,
@@ -188,7 +192,8 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
   if (!gate.ok) return gate;
 
   if (!verdictG4.passed) {
-    const failing = ran.value.filter((r) => r.status !== 'passed').map((r) => r.evidenceId);
+    const blockingNames = new Set(delta.blocking.map((b) => b.name));
+    const failing = ran.value.filter((r) => r.status !== 'passed' && blockingNames.has(r.name)).map((r) => r.evidenceId);
     const blocked = blockRun(ctx, {
       reason: 'decision',
       decisionClass: 'repeated_failure',
@@ -274,6 +279,14 @@ async function handoff(ctx: Parameters<RunStage>[0], row: Parameters<RunStage>[1
   if (!ended.ok && ended.error.kind !== 'conflict') return ended;
   const current = deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;
-  const moved = ctx.transition(current.value, 'ready_for_review', 'none', { attemptId: h.attemptId, itemId: h.itemId, revision: h.revision, data: { branch: h.branch } });
+  // T-02-48: a check that was already failing at the pin is named in the hand-off, never hidden behind a green result.
+  const preExisting = preExistingAt(deps, ctx.runId, h.revision);
+  if (!preExisting.ok) return preExisting;
+  const moved = ctx.transition(current.value, 'ready_for_review', 'none', {
+    attemptId: h.attemptId,
+    itemId: h.itemId,
+    revision: h.revision,
+    data: { branch: h.branch, ...(preExisting.value.length > 0 ? { preExisting: preExisting.value.join(',') } : {}) },
+  });
   return moved.ok ? ok(undefined) : moved;
 }

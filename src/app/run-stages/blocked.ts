@@ -27,6 +27,8 @@ export interface BlockOptions {
   finding?: { check: string; paths?: readonly string[] };
   // Short IDs and codes for the transition event.
   data?: Readonly<Record<string, unknown>>;
+  // The clone and branch, for a block that happens before the run row has them (the run only learns its workspace at the transition to `running`).
+  place?: { workspacePath: string; branch: string };
 }
 
 export const ISSUE_MAX_CHARS = 1000;
@@ -103,6 +105,7 @@ export function blockRun(ctx: RunStageContext, options: BlockOptions): Result<Ru
     data: { ...(options.data ?? {}), decisionId: decision.value.decisionId, class: options.decisionClass, itemId },
     ...(options.attemptId !== undefined ? { attemptId: options.attemptId } : {}),
     itemId,
+    ...(options.place !== undefined ? options.place : {}),
   });
   return blocked.ok ? ok(blocked.value) : blocked;
 }

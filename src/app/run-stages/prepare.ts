@@ -11,9 +11,12 @@ import { checkG0Static } from '../../domain/run-contract.ts';
 import type { G0Failure, RunContract } from '../../domain/run-contract.ts';
 import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
-import type { RunRow } from '../../ports/ledger.ts';
+import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
+import { blockingOf, validateChecks } from '../check-validation.ts';
+import { runRequiredChecks } from '../checks.ts';
 import type { AppDeps } from '../deps.ts';
 import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
+import { blockRun } from './blocked.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
 // `moved`: the handler committed a transition, so the stage is done and the loop reads the new state.
@@ -149,6 +152,98 @@ registerContractReadyAction(
   { step: GSD_CONFIGURE_STEP },
 );
 
+const VALIDATE_STEP = 'checks:validate';
+const BASELINE_STEP = 'baseline';
+
+// `validate-checks` (ONB-10): every declared check is validated in a scratch clone before it can become evidence. No repository command runs
+// before this except the dependency install. A required (or targeted) check that is not `active` blocks the run with a decision before any
+// invocation; a rejected optional check is left out and recorded. The step lists the checks in declared order with their verdicts.
+registerContractReadyAction(
+  'validate-checks',
+  async (ctx, row, contract) => {
+    const { deps } = ctx;
+    const workspace = preparedWorkspace(deps, ctx.runId);
+    if (!workspace.ok) return workspace;
+    const place = { workspacePath: workspace.value.path, branch: workspace.value.branch };
+
+    const startedMs = deps.clock.nowMs();
+    const report = await validateChecks(deps, row, contract);
+    if (!report.ok) return report;
+    const blocking = report.value.outcomes.filter((o) => o.verdict !== 'active' && (o.required || o.target));
+    const recorded = deps.ledger.recordRunStep(ctx.runId, {
+      step: VALIDATE_STEP,
+      // A blocked validation is not a finished one: a run that is resumed validates again.
+      status: blocking.length > 0 ? 'failed' : 'completed',
+      result: {
+        checks: report.value.outcomes.map((o) => ({ name: o.name, verdict: o.verdict, reused: o.reused, ...o.detail })),
+        reused: report.value.reused,
+      },
+      nowMs: startedMs,
+      completedAtMs: deps.clock.nowMs(),
+    });
+    if (!recorded.ok) return recorded;
+    if (blocking.length === 0) return ok('next');
+
+    const why = blocking.map(blockingOf);
+    const blocked = blockRun(ctx, {
+      reason: why.some((w) => w.reason === 'enforcement_failure') ? 'enforcement_failure' : 'decision',
+      decisionClass: 'permission',
+      issue: why.map((w) => w.issue).join('; '),
+      data: { gate: 'checks:validate', checks: blocking.map((o) => o.name).join(',') },
+      place,
+    });
+    return blocked.ok ? ok('moved') : blocked;
+  },
+  { step: VALIDATE_STEP },
+);
+
+// The first attempt of the run, opened by the baseline because the evidence of a check names an attempt. The unit's first attempt is this
+// one: the running stage adopts it instead of opening another, so a run that never retries has exactly one attempt.
+function initialAttempt(deps: AppDeps, runId: string): Result<AttemptRow> {
+  const attempts = deps.ledger.listRunAttempts(runId);
+  if (!attempts.ok) return attempts;
+  const first = attempts.value[0];
+  if (first !== undefined) return ok(first);
+  return deps.ledger.recordRunAttempt(runId, { reason: 'initial', nowMs: deps.clock.nowMs() });
+}
+
+// `baseline` (D-12): every required (and targeted) active check runs once at the pin in the run clone, before the unit touches it. The
+// outcomes are evidence rows labelled `base`; G2 and G4 judge the unit against them, never against an assumption that the pin is green.
+registerContractReadyAction(
+  'baseline',
+  async (ctx, row, contract) => {
+    const { deps } = ctx;
+    const workspace = preparedWorkspace(deps, ctx.runId);
+    if (!workspace.ok) return workspace;
+    const stored = deps.ledger.getRunContract(ctx.runId);
+    if (!stored.ok) return stored;
+    const items = deps.ledger.listWorkItems(ctx.runId);
+    if (!items.ok) return items;
+    const attempt = initialAttempt(deps, ctx.runId);
+    if (!attempt.ok) return attempt;
+
+    const startedMs = deps.clock.nowMs();
+    const itemId = items.value[0]?.itemId;
+    const ran = await runRequiredChecks(deps, row, contract, {
+      cwd: workspace.value.path,
+      attemptId: attempt.value.attemptId,
+      phase: 'base',
+      contractVersion: stored.value?.version ?? 1,
+      ...(itemId !== undefined ? { itemId } : {}),
+    });
+    if (!ran.ok) return ran;
+    const recorded = deps.ledger.recordRunStep(ctx.runId, {
+      step: BASELINE_STEP,
+      status: 'completed',
+      result: { attemptId: attempt.value.attemptId, revision: contract.workspace.baseRevision, checks: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })) },
+      nowMs: startedMs,
+      completedAtMs: deps.clock.nowMs(),
+    });
+    return recorded.ok ? ok('next') : recorded;
+  },
+  { step: BASELINE_STEP },
+);
+
 registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
   const { deps } = ctx;
   const workspace = preparedWorkspace(deps, ctx.runId);
@@ -194,6 +289,14 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
 
   const place = { workspacePath: workspace.value.path, branch: workspace.value.branch };
   if (failures.length > 0) {
+    // The baseline opened the first attempt; a run that stops here never runs a unit, so that attempt ends with the block.
+    const attempts = deps.ledger.listRunAttempts(ctx.runId);
+    if (!attempts.ok) return attempts;
+    const open = attempts.value.find((a) => a.endedAt === null);
+    if (open !== undefined) {
+      const ended = deps.ledger.endRunAttempt(open.attemptId, { outcome: `blocked:${hostFailed ? 'enforcement_failure' : 'decision'}`, nowMs: deps.clock.nowMs() });
+      if (!ended.ok && ended.error.kind !== 'conflict') return ended;
+    }
     ctx.note(
       hostFailed
         ? `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`

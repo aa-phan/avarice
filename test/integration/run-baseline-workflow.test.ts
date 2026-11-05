@@ -122,6 +122,8 @@ describe('start --wait reaches ready_for_review with the fake run host (tracer; 
     assert.deepEqual(checkpointsOf(f, runId), [
       'prepare-workspace',
       'configure-gsd',
+      'validate-checks',
+      'baseline',
       'verify-enforcement',
       'context-pack',
       'launch:run',
@@ -279,8 +281,9 @@ describe('every ending that is not a handed-off branch is a recorded decision (T
 
   const classifyOf = (f: Fixture, runId: string): Record<string, unknown> =>
     JSON.parse(rows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'classify'", runId)[0]?.result_json as string) as Record<string, unknown>;
+  // The check rows of the unit's own runs of the checks: the baseline's rows (label `base`, measured at the pin before the unit) are not the unit's.
   const checkRowsOf = (f: Fixture, runId: string): number =>
-    rows<{ n: number }>(f.roots, "SELECT COUNT(*) AS n FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check'", runId)[0]?.n ?? 0;
+    rows<{ n: number }>(f.roots, "SELECT COUNT(*) AS n FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.environment_json NOT LIKE '%\"label\":\"base\"%'", runId)[0]?.n ?? 0;
 
   it('a budget spent inside the unit (the hook denies budget_exhausted) ends in blocked (budget_exhausted) naming the budget', () => {
     const f = fixture();
@@ -363,7 +366,7 @@ describe('every ending that is not a handed-off branch is a recorded decision (T
     const f = fixture();
     const r = startWithHost(f, { ...FIX, brokenFix: true });
     const { runId, decision } = assertBlocked(f, r, 'decision', 'repeated_failure');
-    const failing = rows<{ evidence_id: string }>(f.roots, "SELECT e.evidence_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.status = 'failed'", runId).map((x) => x.evidence_id);
+    const failing = rows<{ evidence_id: string }>(f.roots, "SELECT e.evidence_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.status = 'failed' AND e.environment_json NOT LIKE '%\"label\":\"base\"%'", runId).map((x) => x.evidence_id);
     assert.ok(failing.length >= 1, 'a failed check row');
     assert.deepEqual(JSON.parse(decision.evidence_refs_json), failing);
     assert.match(rows<{ failures_json: string }>(f.roots, "SELECT failures_json FROM gate_results WHERE run_id = ? AND gate = 'G2'", runId)[0]?.failures_json as string, /checks-delta/);

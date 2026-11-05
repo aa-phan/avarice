@@ -38,7 +38,8 @@ export interface CloneTarget {
   parentDir: string;
   // `{parentDir}/staging` or `{parentDir}/clone`; its basename names it in conflict messages, and `{basename}.partial` is the build directory.
   path: string;
-  branch: string;
+  // The branch the clone is switched to; null leaves it detached at the pin (the ONB-10 validation clone, plan 02-14).
+  branch: string | null;
   // A full lowercase commit SHA, already validated: it reaches git argv.
   pin: string;
 }
@@ -66,8 +67,10 @@ export function prepareClone(repoPath: string, target: CloneTarget): Result<void
   // `pin` was validated as a full hex SHA, so git cannot read it as an option.
   const detached = runGit(['checkout', '--detach', target.pin], { cwd: partial, neutralizeFilters: true, timeoutMs: CLONE_TIMEOUT_MS });
   if (!detached.ok) return failure(detached.error);
-  const switched = runGit(['switch', '-c', target.branch], { cwd: partial });
-  if (!switched.ok) return failure(switched.error);
+  if (target.branch !== null) {
+    const switched = runGit(['switch', '-c', target.branch], { cwd: partial });
+    if (!switched.ok) return failure(switched.error);
+  }
   renameSync(partial, target.path);
   return ok(undefined);
 }
@@ -91,8 +94,8 @@ function reusableClone(target: CloneTarget, repoRoot: string): Result<void> {
   if (head.value.stdout.trim() !== target.pin) {
     return err({ kind: 'conflict', expected: `${noun} at pin ${target.pin}`, actual: `${noun} at ${head.value.stdout.trim()}` });
   }
-  if (current.value.stdout.trim() !== target.branch) {
-    return err({ kind: 'conflict', expected: `branch ${target.branch}`, actual: `branch ${current.value.stdout.trim() || '(detached)'}` });
+  if (current.value.stdout.trim() !== (target.branch ?? '')) {
+    return err({ kind: 'conflict', expected: target.branch === null ? 'a detached HEAD' : `branch ${target.branch}`, actual: `branch ${current.value.stdout.trim() || '(detached)'}` });
   }
   return ok(undefined);
 }

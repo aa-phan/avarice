@@ -26,7 +26,7 @@ import type { RunContract } from '../../domain/run-contract.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
-import { runRequiredChecks, checksToRun } from '../checks.ts';
+import { recordedBase, runRequiredChecks } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { faultPoint } from '../onboarding-service.ts';
@@ -282,14 +282,23 @@ async function attemptUnit(unit: Unit, row: RunRow): Promise<Result<void>> {
 
   const attempts = deps.ledger.listRunAttempts(ctx.runId);
   if (!attempts.ok) return attempts;
-  const ordinal = attempts.value.length + 1;
+  // The baseline opened the first attempt (the evidence of a check names an attempt); the unit adopts it while it has not started. Any
+  // other attempt (a retry) is opened here.
+  const last = attempts.value.at(-1);
+  let adopted: AttemptRow | undefined;
+  if (last !== undefined && last.endedAt === null && last.reason === 'initial') {
+    const started = stepOfAttempt(ctx, 'snapshot', last.attemptId);
+    if (!started.ok) return started;
+    if (started.value === null) adopted = last;
+  }
+  const ordinal = adopted?.ordinal ?? attempts.value.length + 1;
 
   const marked = ctx.checkpoint('context-pack', { itemId: unit.item.itemId });
   if (!marked.ok) return marked;
   const pack = await contextPack(unit, row, ordinal);
   if (!pack.ok) return pack;
 
-  const attempt = deps.ledger.recordRunAttempt(ctx.runId, { reason: ordinal === 1 ? 'initial' : 'retry', nowMs: deps.clock.nowMs() });
+  const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason: ordinal === 1 ? 'initial' : 'retry', nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
   const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId });
@@ -453,17 +462,20 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
   let verdict: GateVerdict = evaluateG2({ ...facts, delta: [] });
   let failingEvidence: string[] = [];
   if (verdict.passed) {
-    const ran = await runRequiredChecks(deps, row, contract, { cwd: unit.clone, attemptId, label: 'g2', contractVersion: unit.contractVersion, itemId: unit.item.itemId });
+    // D-12: the unit is judged against what the checks did at the pin, measured by the baseline action, not against an assumed green base.
+    const base = recordedBase(deps, ctx.runId);
+    if (!base.ok) return base;
+    const ran = await runRequiredChecks(deps, row, contract, { cwd: unit.clone, attemptId, phase: 'item', contractVersion: unit.contractVersion, itemId: unit.item.itemId, base: base.value });
     if (!ran.ok) return ran;
-    // Until plan 02-14 measures a baseline, every required check is taken to pass at base: stricter than D-12, it can only block more.
     const delta = baselineDelta({
-      base: checksToRun(contract).map((x) => ({ name: x.spec.name, status: 'passed' as const })),
+      base: base.value,
       head: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })),
       required: contract.verification.requiredChecks,
       targets: contract.verification.targetChecks,
     });
     verdict = evaluateG2({ ...facts, delta: delta.blocking });
-    failingEvidence = ran.value.filter((r) => r.status !== 'passed').map((r) => r.evidenceId);
+    const blockingNames = new Set(delta.blocking.map((b) => b.name));
+    failingEvidence = ran.value.filter((r) => r.status !== 'passed' && blockingNames.has(r.name)).map((r) => r.evidenceId);
   }
 
   const head = workspace.head(unit.clone);

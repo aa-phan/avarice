@@ -191,6 +191,30 @@ export const FIXED_SLUG = [
 // The conventions the run tests commit: the one required check and the one command the unit may run.
 export const RUN_CONVENTIONS_WITH_COMMANDS = { ...RUN_CONVENTIONS, agentCommands: ['npm test'] };
 
+// ---- checks that already fail at the pin, declared writes, dependencies and a test inventory (plan 02-14) ---------------------------------------
+
+// A `format` check that exits 1 at the pin and writes nothing: a pre-existing failure (D-12).
+export const FORMAT_CHECK_SCRIPT = "process.stderr.write('format check failed: src/slug.ts is not formatted\\n');\nprocess.exit(1);\n";
+
+// A repository that has the format script at the pin.
+export function makeRunRepoWithFormat(extra: Readonly<Record<string, string>> = {}): ScratchRepo {
+  return makeRunRepo({ 'scripts/format-check.mjs': FORMAT_CHECK_SCRIPT, ...extra });
+}
+
+export const FORMAT_CHECK = { name: 'format', argv: ['node', 'scripts/format-check.mjs'], timeoutSec: 60, required: true } as const;
+
+// The conventions of the pre-existing failure: `test` (fails at the pin too: that is the bug) and `format` (fails at the pin and stays failing).
+export const RUN_CONVENTIONS_WITH_FORMAT = {
+  ...RUN_CONVENTIONS,
+  checks: [...RUN_CONVENTIONS.checks, FORMAT_CHECK],
+  agentCommands: ['npm test'],
+};
+
+// The standard brief with its target checks replaced.
+export function briefTargeting(...targets: readonly string[]): string {
+  return RUN_BRIEF.replace('## Target checks\n- test\n', `## Target checks\n${targets.map((t) => `- ${t}`).join('\n')}\n`);
+}
+
 // Rows of the ledger of a profile, read-only.
 export function ledgerRows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
   const handle = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });

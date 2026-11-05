@@ -24,6 +24,16 @@ export interface RunWorkspaceInfo {
   branch: string;
 }
 
+export interface PrepareValidationInput {
+  // The user's repository; never written.
+  repoPath: string;
+  // The profile work root; the validation clone lives at {workRoot}/{runId}/validate.
+  workRoot: string;
+  runId: string;
+  // Full commit SHA of the pin; the clone is detached there and has no branch.
+  pin: string;
+}
+
 export interface RunWorkspaceDescription {
   topLevelEntries: string[];
   // Entry names (not paths) of each requested directory at HEAD; a directory HEAD does not have maps to [].
@@ -81,7 +91,15 @@ export interface DiscardResult {
 export interface RunWorkspace {
   // Clone at the pin, on `avarice/<runId>`, built in clone.partial and renamed when complete.
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo>;
+  // ONB-10: a scratch clone of the source at the pin, detached, with no branch, where a declared check is run to see what it writes. Returns its
+  // path. An existing validation clone of this repository at the pin is reused.
+  prepareValidationClone(input: PrepareValidationInput): Result<string>;
   head(path: string): Result<string>;
+  // Every path that differs from HEAD or is not tracked, one record per file: tracked changes, untracked files and ignored files
+  // (an ignored directory is listed file by file). The validation of a check compares two of these.
+  statusAll(path: string): Result<string[]>;
+  // Clone-relative paths of the tracked and the untracked, non-ignored files, sorted (a tracked file that was deleted is still listed).
+  listFiles(path: string): Result<string[]>;
   describe(path: string, relPaths: readonly string[]): Result<RunWorkspaceDescription>;
   // Working-tree content (tracked and untracked, not ignored) compared with HEAD.
   status(path: string): Result<PathChange[]>;
