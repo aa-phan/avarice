@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-reporter=tap \"test/integration/allowlist-proxy.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/adapters/exec/allowlist-proxy.ts and src/ports/egress-proxy.ts do not exist yet",
+  "failingFiles": ["test/integration/allowlist-proxy.test.ts"],
+  "failingTests": [],
+  "summary": "The test file fails to load with ERR_MODULE_NOT_FOUND on the missing proxy adapter.",
+  "outputHead": "TAP version 13\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/adapters/exec/allowlist-proxy.ts' imported from .../test/integration/allowlist-proxy.test.ts"
+}

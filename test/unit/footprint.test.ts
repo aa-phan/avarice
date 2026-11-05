@@ -46,8 +46,12 @@ function sourceFiles(dir: string): string[] {
     .map((e) => join(e.parentPath, e.name));
 }
 
+// The one source file allowed to import node:http and node:net and to listen (plan 02-06, D-11): the allowlisting proxy
+// that gives a supervisor step a registry-only path. Every other file is still scanned; the proxy is held to its own rules below.
+const ALLOWLIST_PROXY = join(REPO_ROOT, 'src', 'adapters', 'exec', 'allowlist-proxy.ts');
+
 describe('no source file reaches the network or starts a background process', () => {
-  const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY];
+  const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== ALLOWLIST_PROXY);
 
   it('imports no network module', () => {
     assert.ok(files.length > 20, 'the scan found the source tree');
@@ -72,6 +76,24 @@ describe('no source file reaches the network or starts a background process', ()
     assert.match(host, /process\.kill\(-pid, sig\)/, 'the host adapter kills the process group it creates');
     assert.match(host, /killGroup\('SIGKILL'\);\n\s*if \(killTimer/, 'and sweeps what is left when the host process ends');
     assert.equal(/\.unref\s*\(/.test(host), false, 'and never detaches a child from its own lifetime');
+  });
+});
+
+describe('the allowlist proxy is the only listener and it stays on the loopback', () => {
+  const source = readFileSync(ALLOWLIST_PROXY, 'utf8');
+
+  it('imports node:http and node:net and no other network module', () => {
+    const imported = [...new Set([...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1] as string))];
+    const network = imported.filter((m) => /^(?:node:)?(?:net|http|https|http2|dgram|tls|dns|dns\/promises|cluster|inspector)$/.test(m));
+    assert.deepEqual(network.sort(), ['node:http', 'node:net']);
+    assert.deepEqual(imported.filter((m) => !m.startsWith('node:') && !m.startsWith('.')), [], 'no package import');
+  });
+
+  it('listens only on 127.0.0.1, calls no fetch and detaches no child', () => {
+    const listens = [...source.matchAll(/\.listen\s*\(([^)]*)\)/g)].map((m) => m[1] as string);
+    assert.equal(listens.length, 1);
+    assert.match(listens[0] as string, /^0,\s*'127\.0\.0\.1'/);
+    assert.equal(/\bfetch\s*\(|detached\s*:\s*true|\.unref\s*\(/.test(source), false);
   });
 });
 
