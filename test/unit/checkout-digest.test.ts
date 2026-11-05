@@ -434,3 +434,70 @@ describe('scripts/exit-run.sh --dry-run', () => {
     assert.match(text, /resume/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// exit-run.sh authorization (review WR-08)
+// ---------------------------------------------------------------------------------------------------------------
+
+// The target never exists, so preflight fails before anything is created or spent even if the guard under test fails
+// open; the claude is a stub that only prints a version; AVARICE_LIVE and EXIT_RUN_EXPECTED_USD are removed from the
+// child environment. Never point this helper at a real repository.
+function authorize(auth: Record<string, unknown>, extraEnv: Record<string, string> = {}): { code: number | null; stdout: string; stderr: string } {
+  const base = mkdtempSync(join(tmpdir(), 'avarice-auth-'));
+  cleanups.push(() => rmSync(base, { recursive: true, force: true }));
+  writeFileSync(join(base, 'auth.json'), JSON.stringify(auth));
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    PATH: `${dirname(process.execPath)}:${process.env['PATH'] ?? ''}`,
+    AVARICE_CONFIG_HOME: join(base, 'config'),
+    AVARICE_DATA_ROOT: join(base, 'data'),
+    AVARICE_WORK_ROOT: join(base, 'work'),
+    AVARICE_CLAUDE_BIN: fakeClaude('2.1.316'),
+  };
+  delete env['AVARICE_LIVE'];
+  delete env['EXIT_RUN_EXPECTED_USD'];
+  const r = spawnSync('bash', [EXIT_RUN, '--target', join(base, 'no-such-repo'), '--authorization-file', join(base, 'auth.json')], {
+    encoding: 'utf8',
+    timeout: 120_000,
+    env: { ...env, ...extraEnv } as NodeJS.ProcessEnv,
+  });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+describe('scripts/exit-run.sh authorization (WR-08)', () => {
+  const BASE = { selection: 'target-only', capUsd: 20, spentUsdSoFar: 0, noCommitConfirmed: true };
+
+  const refused = (r: { code: number | null; stdout: string; stderr: string }, reason: RegExp): void => {
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, reason);
+    assert.doesNotMatch(r.stdout, /authorized:/);
+    assert.doesNotMatch(r.stdout, /^(ok|FAIL) /m);
+  };
+
+  const NOT_FINITE = /^exit-run: .*not a finite non-negative number/m;
+  it('refuses a spent amount that is not a finite non-negative number', () => {
+    refused(authorize({ ...BASE, spentUsdSoFar: 'lots' }), NOT_FINITE);
+    refused(authorize({ ...BASE, spentUsdSoFar: -5 }), NOT_FINITE);
+  });
+
+  it('refuses an expected cost that is not a finite non-negative number', () => {
+    refused(authorize(BASE, { EXIT_RUN_EXPECTED_USD: 'abc' }), NOT_FINITE);
+    refused(authorize(BASE, { EXIT_RUN_EXPECTED_USD: '-1' }), NOT_FINITE);
+    refused(authorize(BASE, { EXIT_RUN_EXPECTED_USD: 'Infinity' }), NOT_FINITE);
+  });
+
+  it('refuses an infinite cap', () => {
+    refused(authorize({ ...BASE, capUsd: 'Infinity' }), /names no finite positive cap/);
+  });
+
+  it('still refuses a spend that would pass the cap', () => {
+    refused(authorize({ ...BASE, spentUsdSoFar: 10 }), /would pass the cap/);
+  });
+
+  it('still authorizes a valid decision and then stops at preflight on the missing target', () => {
+    const r = authorize(BASE);
+    assert.match(r.stdout, /^exit-run: authorized:/m);
+    assert.match(r.stderr, /precondition failed/);
+    assert.equal(r.code, 1);
+  });
+});
