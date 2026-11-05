@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 01-contained-onboarding-of-one-repository
-source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-05-SUMMARY.md, 01-06-SUMMARY.md, 01-07-SUMMARY.md, 01-08-SUMMARY.md, 01-09-SUMMARY.md, 01-10-SUMMARY.md, 01-11-SUMMARY.md, 01-12-SUMMARY.md, 01-13-SUMMARY.md, 01-14-SUMMARY.md, 01-15-SUMMARY.md, 01-16-SUMMARY.md, 01-17-SUMMARY.md, 01-18-SUMMARY.md, 01-19-SUMMARY.md, 01-20-SUMMARY.md, 01-21-SUMMARY.md, 01-22-SUMMARY.md, 01-23-SUMMARY.md, 01-24-SUMMARY.md]
+source: [01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-05-SUMMARY.md, 01-06-SUMMARY.md, 01-07-SUMMARY.md, 01-08-SUMMARY.md, 01-09-SUMMARY.md, 01-10-SUMMARY.md, 01-11-SUMMARY.md, 01-12-SUMMARY.md, 01-13-SUMMARY.md, 01-14-SUMMARY.md, 01-15-SUMMARY.md, 01-16-SUMMARY.md, 01-17-SUMMARY.md, 01-18-SUMMARY.md, 01-19-SUMMARY.md, 01-20-SUMMARY.md, 01-21-SUMMARY.md, 01-22-SUMMARY.md, 01-23-SUMMARY.md, 01-24-SUMMARY.md, 01-25-SUMMARY.md, 01-26-SUMMARY.md]
 started: 2026-11-04T23:29:32Z
-updated: 2026-11-05T00:10:05.998Z
+updated: 2026-11-05T08:40:46.742Z
 ---
 
 ## Current Test
@@ -66,9 +66,8 @@ note: same migrations.test.ts run (committed v1 fixture opens, no-op migrate, st
 ### 10. 01-07 D7: The home-directory heuristic for network mounts (the `local` flag) is…
 expected: The home-directory heuristic for network mounts (the `local` flag) is only as good as `mount` output; a FUSE or synced-folder mount that reports local passes. No real network volume was available to try. Why a person checks it: Research assumption A6: the check cannot be proven against a real smbfs or nfs mount on this machine, only against fixture text of those lines
 source: 01-07-SUMMARY.md D7 (human_judgment)
-result: blocked
-blocked_by: other
-reason: "blocked: no network volume available"
+result: skipped
+reason: "Skipped by user after the localhost SMB mount recipe was offered; no real network mount was tested (earlier: blocked, no network volume available)"
 
 ### 11. 01-12 D7: Hook decision latency stays under 150 ms p95 over 30 runs
 expected: Hook decision latency stays under 150 ms p95 over 30 runs Why a person checks it: The plan states the target on Node 22.22.3, which is not installed on this machine; it was measured on the dev Node 26.9.0. Re-run with AVARICE_NODE22 set to a 22.22.3 binary before relying on T-4.
@@ -935,20 +934,71 @@ result: issue
 reported: "Log as issue (Recommended) — in the live rehearsal the knowledge agent read 16 original staging/docs files (and .planning/codebase/TESTING.md) instead of the copies in staging/.avarice-knowledge; the hook denied all 16 as outside-read-set, and the record ended with 9 document nodes (24 in the 01-19 target run) while reporting dropped 0; the injected ADR-999 file was never read, so assert-exit reported 'avarice context did not print the injected node inside the untrusted-data fence'"
 severity: major
 
+### 155. 01-25 D1: Knowledge pass that reads staging originals is recorded validation-failed
+expected: A knowledge pass that reads the staging originals instead of the corpus copies and covers fewer than half the documents ends with the knowledge index absent validation-failed, the record without a knowledge section, graph.json byte-identical to code-graph.json, and an index.absent detail stating the shortfall in counts (8 of 25)
+result: pass
+source: automated
+coverage_id: 01-25-D1
+
+### 156. 01-25 D2: Record states documentsExpected and dropped.unread
+expected: At least half covered: the record states documentsExpected and dropped.unread, and corpus names only directories of documents that have a node; a run whose chunks parse but hold one document node is now validation-failed (contract change)
+result: pass
+source: automated
+coverage_id: 01-25-D2
+
+### 157. 01-25 D3: documentCoverage and the at-least-half rule
+expected: documentCoverage and the coverage rule: exactly half accepted and one fewer refused (2 of 4, 1 of 3 vs 2 of 3), and concept, code-graph, outside-corpus and collided nodes cover no document
+result: pass
+source: automated
+coverage_id: 01-25-D3
+
+### 158. 01-25 D4: Chunk plan carries absolute readPath and writePath
+expected: The chunk plan carries an absolute readPath and writePath, the prompt uses them verbatim with a one-retry recovery, and the prompt is identical across corpus roots and carries no root or repository text
+result: pass
+source: automated
+coverage_id: 01-25-D4
+
+### 159. 01-26 D1: assert-exit fails on unread corpus documents
+expected: A record that leaves corpus documents unread, or whose knowledge section has no per-document accounting, makes assert-exit exit 1 with the count in the message; a fully accounted record with none unread passes and the JSON reports documentsExpected and unreadDocuments; a record with no knowledge section reports only the no-document-nodes problem
+result: pass
+source: automated
+coverage_id: 01-26-D1
+
+### 160. 01-26 D2: Production-path hook policy admits readPath and writePath
+expected: On the production path every readPath and writePath handed to the knowledge agent is allowed by the generated hook policy (read-set, write-set), the staging original of each document is denied outside-read-set, and the launch prompt names neither the working directory nor the staging path; the test fails when readPath loses the corpus root's last segment
+result: pass
+source: automated
+coverage_id: 01-26-D2
+
+### 161. 01-25 D5: Live haiku uses the verbatim absolute paths
+expected: Verbatim absolute paths reduce how often claude-haiku-5-5 drops the .avarice-knowledge/ segment in a live run. Why a person checks it: Offline tests cannot measure how often the live model still copies a path wrongly; the next live rehearsal measures it, and the assert-exit gate of plan 01-26 fails on any unread document
+source: 01-25-SUMMARY.md D5 (human_judgment)
+result: pass
+
+### 162. 01-26 D3: docs/repository-onboarding.md states the new knowledge-pass contract
+expected: docs/repository-onboarding.md states the knowledge-pass contract the code enforces (readPath, writePath, one-retry rule, per-document coverage with the at-least-half rule, documentsExpected, dropped.unread, corpus from covered documents) and the change from plans 01-18 and 01-19. Why a person checks it: Prose accuracy against the code is judged by a reader; no test reads the document text
+source: 01-26-SUMMARY.md D3 (human_judgment)
+result: pass
+
+### 163. 01-26 D4: Next live rehearsal confirms G-01-154
+expected: The next live rehearsal (scripts/exit-run.sh --rehearsal) confirms G-01-154: assert-exit reports no unread document and the injection-fence check finds ADR-999 inside the fence. Why a person checks it: Needs a live (paid) run; no live run was started in plan 01-26
+source: 01-26-SUMMARY.md D4 (human_judgment)
+result: pass
+
 ## Summary
 
-total: 154
-passed: 151
+total: 163
+passed: 160
 issues: 1
 pending: 0
-skipped: 1
-blocked: 1
+skipped: 2
+blocked: 0
 
 ## Gaps
 
 - gap_id: G-01-154
   truth: "On a live onboarding the knowledge agent reads the corpus prepared in staging/.avarice-knowledge/, every corpus document becomes a document node, and unread documents show in the dropped counts"
-  status: failed
+  status: resolved
   reason: "User reported: in the live rehearsal the knowledge agent read 16 original staging/docs files instead of the .avarice-knowledge copies; all 16 denied outside-read-set; record has 9 document nodes (24 in the target run) with dropped 0; injected ADR-999 never read, so the exit-run fence check failed"
   severity: major
   test: 154
@@ -978,6 +1028,8 @@ blocked: 1
     - "Count the knowledge invocation's hook denies in the step result"
     - "Tests: a fake-host case that reads originals and writes empty chunks; update knowledge-pass.test.ts:239 and docs/repository-onboarding.md:111 to the new contract; a rehearsal assert that document nodes cover the manifest within the allowed share"
   debug_session: ".planning/debug/knowledge-pass-reads-originals.md"
+  resolved_by: 01-26-PLAN.md
+  resolved_at: 2026-11-05
 
 ## Deferred Follow-Ups
 
