@@ -5,24 +5,28 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "`workRoot` is required by type only; an empty or relative value silently produces a policy that denies everything"
+    disposition: open
+    title: "`computeInvocationScope` can now throw after the invocation has been reserved, leaving an unsettled reservation"
   - id: WR-02
     severity: warning
-    disposition: fixed
-    title: "The WR-03 type guard is not exercised by `npm test`"
+    disposition: open
+    title: "The `assert-exit` unread gate trusts self-reported counters with no consistency check"
+  - id: WR-03
+    severity: warning
+    disposition: open
+    title: "`chunkPlanNormalized` swallows every error, so the plan-equality assertions can pass vacuously"
   - id: IN-01
     severity: info
     disposition: open
-    title: "Stale comment cites an option form that no longer has a value-taking owner"
+    title: "Pre-clustering chunk-usable gate is now redundant with the per-document gate and gives a less accurate message"
   - id: IN-02
     severity: info
     disposition: open
-    title: "Redundant local and an unused export left behind by the deletion"
+    title: "Work-root and corpus-root validators are duplicated"
   - id: IN-03
     severity: info
     disposition: open
-    title: "Misindented line, and the doc cites a test that does not cover the claim"
+    title: "The model still builds the path of the plan file itself"
   - id: IN-04
     severity: info
     disposition: open
@@ -31,10 +35,6 @@ findings:
     severity: critical
     disposition: fixed
     title: "`grep -d RECURSE` and `--directories=Recurse` bypass the recursive-grep secret-glob check"
-  - id: WR-03
-    severity: warning
-    disposition: fixed
-    title: "`ScopeInput.workRoot` is optional, so omitting it silently drops the work-root deny"
   - id: WR-04
     severity: warning
     disposition: fixed
@@ -67,23 +67,23 @@ findings:
     severity: info
     disposition: open
     title: "The profile `config.json` is written but never read"
-open: 11
+open: 14
 total: 16
-recorded: 2026-11-04T22:06:00.000Z
+recorded: 2026-11-05T02:16:28.626Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | quick 261104-nxh (0923c03) |
-| WR-02 | warning | fixed | quick 261104-nxh (a942bc7) |
+| WR-01 | warning | open | - |
+| WR-02 | warning | open | - |
+| WR-03 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
-| IN-04 | info | open | - |
+| IN-04 | info | open | - (not in the current review) |
 | CR-01 | critical | fixed | quick 261104-jnc (5e67793), superseded by 261104-l3t (99dd4fb): shell grep denied by name (not in the current review) |
-| WR-03 | warning | fixed | quick 261104-jnc (974d8b1): ScopeInput.workRoot required (not in the current review) |
 | WR-04 | warning | fixed | quick 261104-jnc (89f4a39): vacuous Read-deny assertion fixed (not in the current review) |
 | CR-02 | critical | open | - (not in the current review) |
 | CR-03 | critical | open | - (not in the current review) |
