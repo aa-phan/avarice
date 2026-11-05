@@ -10,7 +10,7 @@ created: "2026-11-04"
 
 # Phase 1 — Security
 
-> Per-phase security contract: threat register, accepted risks, and audit trail. Register authored at plan time (the `<threat_model>` blocks of plans 01-01 to 01-24) plus the SUMMARY Threat Flags; verified at ASVS level 1 (grep-depth evidence) by gsd-security-auditor on 2026-11-04.
+> Per-phase security contract: threat register, accepted risks, and audit trail. Register authored at plan time (the `<threat_model>` blocks of plans 01-01 to 01-26) plus the SUMMARY Threat Flags; verified at ASVS level 1 (grep-depth evidence) by gsd-security-auditor on 2026-11-04.
 
 ---
 
@@ -139,6 +139,16 @@ created: "2026-11-04"
 | T-01-83 | 01-24 | Denial of service | work-root deny blocking own staging | medium | mitigate | settings.ts:50-52,100-104 `containsStaging` filter keeps the work root out of `Read(...)` denies; claude-settings.test.ts work-root case; live re-check is manual-only (01-VALIDATION.md) | closed |
 | T-01-84 | 01-24 | Repudiation | docs/containment.md overclaiming CON-1 | medium | mitigate | docs/containment.md:107 CON-1 row names enforcement points, tests and known bypasses | closed |
 | T-01-SC | 01-24 | Tampering | npm/pip/cargo installs | high | mitigate | no installs: package files unchanged | closed |
+| T-01-85 | 01-25 | Repudiation | src/app/stages/index-knowledge.ts record `knowledge` | high | mitigate | knowledge-validation.ts:67-79 documentCoverage, :115-118 below half → validation-failed; index-knowledge.ts:225-226 re-validates the installed graph, :258-262 corpus, documentsExpected, dropped.unread from rechecked coverage; graph-merge.test.ts:347-406; knowledge-pass.test.ts:254-302,:320-329,:418-424 | closed |
+| T-01-86 | 01-25 | Tampering | model writing document nodes for files it never read | medium | accept | docs/repository-onboarding.md:135 "covered" means a node cites the document; :111 document text is data; knowledge-validation.ts:129-136 document edges INFERRED/AMBIGUOUS only (S-46); AR-09 | closed |
+| T-01-87 | 01-25 | Elevation | absolute `readPath`/`writePath` in .chunks.json | low | mitigate | knowledge-extraction.ts:82 normalizedAbsoluteRoot (normalized-root.ts:12-22) refuses relative, `/`, empty/`.`/`..` segment; hook-decision.ts:193 readConfine, :216 writeRoots; settings.ts:84-93; knowledge-extraction.test.ts:124-133; claude-host.test.ts:177-226 originals deny:outside-read-set | closed |
+| T-01-88 | 01-25 | Tampering | knowledgePrompt carrying repository text or corpus root | high | mitigate | knowledge-extraction.ts:122-148 fixed text, field names only; index-knowledge.ts:158; knowledge-extraction.test.ts:152-159,:207-214; claude-host.test.ts:223-225 | closed |
+| T-01-89 | 01-25 | Denial of service | retry-once instruction multiplying tool calls | low | mitigate | knowledge-extraction.ts:147 retry once then leave out; hook-decision.ts:476,480 + pre-tool-use.ts:190 per-call toolCalls charge; index-knowledge.ts:182-184 budget_exhausted; knowledge-extraction.test.ts:198-205; budgets.test.ts | closed |
+| T-01-SC | 01-25 | Tampering | npm/pip/cargo installs | high | mitigate | package.json and package-lock.json unchanged 1f82604^..HEAD | closed |
+| T-01-90 | 01-26 | Repudiation | scripts/assert-exit.ts | medium | mitigate | assert-exit.ts:97-99 finite() keeps absent null, :102 dropped.unread, :134-146 missing accounting and unread > 0 fail; exit-run-tools.ts:457-458 `assert-exit:` prefix; checkout-digest.test.ts:249-278,:326-330 | closed |
+| T-01-91 | 01-26 | Tampering | mutation check on src/domain/knowledge-extraction.ts | medium | mitigate | `git diff --exit-code` clean; no src change in 2517625^..957f071; later change is IN-02 refactor 3c7ed2c; 01-26-SUMMARY:125-132 | closed |
+| T-01-92 | 01-26 | Repudiation | docs/repository-onboarding.md | low | mitigate | :111,:135,:212 each map to knowledge-corpus.test.ts:248-255, claude-host.test.ts:177-226, graph-merge.test.ts:387-406, knowledge-pass.test.ts:254-318,:418-424, knowledge-extraction.test.ts:198-205 | closed |
+| T-01-SC | 01-26 | Tampering | npm/pip/cargo installs | high | mitigate | package.json and package-lock.json unchanged 1f82604^..HEAD | closed |
 | TF-01-15-A | 01-15 | Elevation (process spawn) | host-claude/claude-host.ts | medium | mitigate | SUMMARY flag; claude-host.ts:40,357 UUID regex before `pgrep -f --`; argv-only spawn | closed |
 | TF-01-15-B | 01-15 | Tampering (scratch fs) | host-claude/launch-preflight.ts | low | mitigate | SUMMARY flag; launch-preflight.ts:177-227 mkdtemp 0700, copy 0600, rm in finally | closed |
 | TF-01-16-A | 01-16 | Elevation (process spawn) | test/helpers/live-harness.ts | medium | mitigate | SUMMARY flag; test-only, AVARICE_LIVE gate and cap; live-admission-override.test.ts:75 | closed |
@@ -170,6 +180,7 @@ created: "2026-11-04"
 | AR-06 | T-01-SC (01-20) | The Target Units table bounds the mutation scope; other units are recorded as unprobed | plan 01-20 threat model | 2026-11-04 |
 | AR-07 | T-01-76 | Unchanged write sets admit every AVARICE output under a `*` ignore (positive controls in ignored-writes.test.ts); a repository can only block its own onboarding | plan 01-22 threat model | 2026-11-04 |
 | AR-08 | T-01-81 | Committed secret-glob files read through git objects (`git show`, `git log -p`) and host Grep recursion inside staging are outside the CR-02 cases (D-GAP-02); documented as known bypasses in docs/containment.md; transcripts redacted before storage | plan 01-23 threat model | 2026-11-04 |
+| AR-09 | T-01-86 | Coverage counts what the graph claims: a document is covered when a pass-origin document node cites it, not when the model opened the file; nodes stay data with provenance and grant no authority (S-46); checking reads against coverage needs read targets in hook events, outside G-01-154. Stated in docs/repository-onboarding.md:135 | plan 01-25 threat model | 2026-11-05 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -181,6 +192,7 @@ created: "2026-11-04"
 |------------|---------------|--------|------|--------|
 | 2026-11-04 | 94 | 94 | 0 | gsd-security-auditor (ASVS 1, block_on high) via execute-phase verify:post |
 | 2026-11-04 | 111 | 111 | 0 | secure-phase re-audit for gap-closure plans 01-21..01-24 (17 new rows, ASVS 1 grep-depth short-circuit, no auditor spawn) |
+| 2026-11-05 | 121 | 121 | 0 | gsd-security-auditor (ASVS 1, block_on high) for plans 01-25, 01-26; regression check of quick 261105-2i2 |
 
 ---
 
@@ -191,7 +203,7 @@ created: "2026-11-04"
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-11-04
+**Approval:** verified 2026-11-04; re-verified 2026-11-05 (plans 01-25, 01-26)
 
 ## Security Audit 2026-11-04
 
@@ -199,4 +211,12 @@ created: "2026-11-04"
 |---|---|
 | Threats found | 17 |
 | Closed | 17 |
+| Open | 0 |
+
+## Security Audit 2026-11-05
+
+| Metric | Count |
+|---|---|
+| Threats found | 10 |
+| Closed | 10 |
 | Open | 0 |
