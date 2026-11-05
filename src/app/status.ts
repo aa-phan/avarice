@@ -74,37 +74,3 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
   }
   return ok(entries);
 }
-
-// `graph, intel`: the indexes the record lists; `graph absent (graphify-missing)`: one it records as not built.
-function describeIndexes(indexes: Readonly<Record<string, unknown>>): string {
-  const parts = Object.keys(indexes).filter((name) => name !== 'absent');
-  const absent = indexes['absent'];
-  if (Array.isArray(absent)) {
-    for (const entry of absent) {
-      const item = asObject(entry);
-      if (item !== null) parts.push(`${String(item['index'])} absent (${String(item['reason'])})`);
-    }
-  }
-  return parts.length > 0 ? parts.join(', ') : 'none';
-}
-
-export function renderStatus(entries: readonly ProjectStatus[]): string {
-  if (entries.length === 0) return 'No projects registered.\n';
-  const lines: string[] = [];
-  for (const e of entries) {
-    lines.push(`${e.repoPath}  [${e.projectId}]`);
-    const reason = e.reason ? ` (${e.reason})` : '';
-    if (e.interrupted !== undefined) {
-      lines.push(`  onboarding ${e.onboardingId}: interrupted in ${e.interrupted.state} (next: ${e.interrupted.nextAction})`);
-      lines.push(`  continue with: ${e.interrupted.resumeCommand}`);
-    } else {
-      lines.push(e.onboardingId ? `  onboarding ${e.onboardingId}: ${e.state}${reason}` : '  not onboarded');
-    }
-    if (e.recordVersion !== null) {
-      const m = e.mapping;
-      const mapping = m ? `; mapping ${String(m['mode'])} (${String(m['completeness'])}, ${String(m['freshness'])})` : '';
-      lines.push(`  record v${e.recordVersion} at ${e.onboardedRevision}${mapping}; indexes: ${describeIndexes(e.indexes)}`);
-    }
-  }
-  return lines.join('\n') + '\n';
-}
