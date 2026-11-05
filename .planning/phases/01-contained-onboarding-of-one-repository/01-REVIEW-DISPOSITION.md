@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: skipped
     title: "Pre-clustering chunk-usable gate is redundant with the per-document gate and gives a less accurate message"
   - id: IN-02
     severity: info
@@ -17,7 +17,7 @@ findings:
     title: "The model still builds the path of the plan file itself"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The new catch blocks are broader than the condition they name, and one of them is unreachable and untested"
   - id: IN-05
     severity: info
@@ -71,7 +71,7 @@ findings:
     severity: warning
     disposition: open
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-open: 8
+open: 6
 total: 17
 recorded: 2026-11-05T07:41:53.761Z
 ---
@@ -80,10 +80,10 @@ recorded: 2026-11-05T07:41:53.761Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | open | - |
+| IN-01 | info | skipped | 01-REVIEW-FIX.md (gate kept by design, reason documented in 089d7c6) |
 | IN-02 | info | fixed | 01-REVIEW-FIX.md |
 | IN-03 | info | skipped | 01-REVIEW-FIX.md |
-| IN-04 | info | open | - |
+| IN-04 | info | fixed | 01-REVIEW-FIX.md (2f58f10) |
 | IN-05 | info | fixed | 01-REVIEW-FIX.md |
 | IN-06 | info | fixed | 01-REVIEW-FIX.md |
 | WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
