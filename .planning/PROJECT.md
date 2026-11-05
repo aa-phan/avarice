@@ -2,7 +2,7 @@
 
 ## What This Is
 
-AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: a 26-document specification package was ingested on 2026-11-01; no code exists yet.
+AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: the 26-document specification package was ingested on 2026-11-01; Phase 1 (contained onboarding of one repository) completed on 2026-11-05, and Phase 2 (contained unattended run of one work item) is next.
 
 ## Core Value
 
@@ -14,7 +14,7 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 
 ### Validated
 
-- ✓ Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (ONB-1/2/3/4/5/7/8/9/12/13/14, FR-20, SEC-5, NFR-2) — Phase 1 (verified 2026-11-04: `~/aa-phan-portfolio-v2` active with 1010 code and 24 document nodes)
+- ✓ Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (ONB-1/2/3/4/5/7/8/9/12/13/14, FR-20, SEC-5, NFR-2) — Phase 1 (verified 2026-11-04: `~/aa-phan-portfolio-v2` active with 1010 code and 24 document nodes; UAT complete 2026-11-05, 160 of 163 passed, the knowledge-pass gap G-01-154 closed by plans 01-25 and 01-26, tests 10 and 13 deferred to backlog 999.2 and 999.1)
 
 ### Active
 
@@ -96,9 +96,11 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Ingest warning: the document cross-reference cycle is treated as hyperlinks, not circular definitions | Documents were read independently; no synthesis loop | Accepted by user |
 | Onboarding stages in a local clone, not a linked worktree (S0-B) | A contained run moved a source ref through a linked worktree without generated `denyWrite` on the source `.git` | Phase 1, 2026-11 |
 | Shell `grep` is not an admitted read command; contained agents search through the host Grep tool, whose path the hook judges | Modelling grep options failed twice (P-3); the verdict must not depend on which grep binary the Bash tool runs | Phase 1 quick task 261104-l3t, 2026-11-04 |
+| Knowledge coverage is judged per manifest document on the merged graph; below half the documents covered is validation-failed, and the record states documentsExpected and dropped.unread | A live run lost most documents while reporting dropped 0 (UAT G-01-154); chunk shape is not evidence of coverage | Phase 1 plan 01-25, 2026-11-05 |
+| The knowledge agent gets absolute readPath and writePath as data and uses them verbatim; the live exit gate requires zero unread documents | The model composing paths dropped the .avarice-knowledge/ segment in 2 of 4 live runs | Phase 1 plans 01-25 and 01-26, 2026-11-05 |
 
 ---
-*Last updated: 2026-11-04 after Phase 1*
+*Last updated: 2026-11-05 after Phase 1 transition*
 
 ## Evolution
 

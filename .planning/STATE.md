@@ -2,43 +2,44 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 01
-current_phase_name: Contained onboarding of one repository
-status: executing
-stopped_at: Completed 01-26-PLAN.md
-last_updated: "2026-11-05T08:07:20.143Z"
+current_phase: 2
+current_phase_name: Contained unattended run of one work item
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
+last_updated: "2026-11-05T08:47:56.670Z"
 last_activity: 2026-11-05
-last_activity_desc: Completed 01-26-PLAN.md
-state_head: 4ac1127f2e04e4af9beb5ba1d9e90acd584f758e
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: 98897a7e4da42ceb32e935c3c446a67fefc52151
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 26
   completed_plans: 26
+  percent: 14
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-04)
+See: .planning/PROJECT.md (updated 2026-11-05)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 01 — Contained onboarding of one repository
+**Current focus:** Phase 2 — Contained unattended run of one work item
 
 ## Current Position
 
-Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 26 of 26
-Status: Phase 01 plans complete — ready for verification
-Last activity: 2026-11-05 - Completed quick task 261105-2i2: Fix phase 01 code-review findings WR-05..WR-08
+Phase: 2 — Contained unattended run of one work item
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-05 — Phase 01 complete, transitioned to Phase 2
 
 Progress: [█░░░░░░░░░] 14%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24
+- Total plans completed: 26
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -46,7 +47,7 @@ Progress: [█░░░░░░░░░] 14%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 24 | - | - |
+| 01 | 26 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -193,7 +194,8 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Intel]: SYNTHESIS.md says 111 normative requirements; the correct count is 105 (149 entries in total).
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
-- [Phase 1]: Knowledge pass can lose most documents silently when the agent reads staging originals instead of its .avarice-knowledge corpus (UAT G-01-154, 2 of 4 live runs); gap-closure plans 01-25 and 01-26 planned
+- [Phase 1, backlog 999.1]: A real `avarice onboard --mode fast` reaching `active` with completeness `partial` is unchecked live (UAT test 13, deferred)
+- [Phase 1, backlog 999.2]: The local-mount refusal (`local` flag heuristic, A6) is unverified against a real smbfs or nfs mount (UAT test 10, deferred)
 
 ### Quick Tasks Completed
 
@@ -214,6 +216,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T01:50:27.336Z
-Stopped at: Completed 01-26-PLAN.md
+Last session: 2026-11-05T08:50:00Z
+Stopped at: Phase 01 complete, ready to plan Phase 2
 Resume file: None
