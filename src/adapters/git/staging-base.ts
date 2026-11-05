@@ -83,7 +83,7 @@ export function resolveStagingTarget(input: PrepareInput): Result<StagingTarget>
 }
 
 // Lexical check shared by read and ensureDir: relative, no `..` segment, no NUL.
-function checkRelative(relPath: string): Result<string[]> {
+export function checkRelative(relPath: string): Result<string[]> {
   if (typeof relPath !== 'string' || relPath.length === 0) return invalid('relPath', 'a relative path is required');
   if (relPath.includes('\0')) return invalid('relPath', 'path contains a NUL byte');
   if (isAbsolute(relPath)) return denied('staging-paths-are-relative');
@@ -91,6 +91,96 @@ function checkRelative(relPath: string): Result<string[]> {
   if (segments.includes('..')) return denied('staging-paths-stay-inside-staging');
   if (segments.length === 0) return invalid('relPath', 'a relative path is required');
   return ok(segments);
+}
+
+// A staging file as UTF-8 text, confined to the directory at `path` (shared by the staging and run workspaces).
+export function readConfinedFile(path: string, relPath: string, maxBytes: number): Result<string | null> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return invalid('maxBytes', 'a non-negative integer is required');
+  const segments = checkRelative(relPath);
+  if (!segments.ok) return segments;
+  let root: string;
+  try {
+    root = realpathSync(path);
+  } catch {
+    return err({ kind: 'not_found', ref: path });
+  }
+  const target = join(root, ...segments.value);
+
+  // A parent that resolves outside staging is refused even when the file itself is absent.
+  let parent: string;
+  try {
+    parent = realpathSync(join(root, ...segments.value.slice(0, -1)));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ok(null);
+    return err({ kind: 'internal', cause: `read ${relPath}: ${code ?? String(error)}` });
+  }
+  if (!inside(root, parent)) return denied('staging-reads-stay-inside-staging');
+
+  try {
+    lstatSync(target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ok(null);
+    return err({ kind: 'internal', cause: `read ${relPath}: ${code ?? String(error)}` });
+  }
+  let real: string;
+  try {
+    real = realpathSync(target);
+  } catch {
+    return denied('staging-reads-stay-inside-staging');
+  }
+  if (!inside(root, real)) return denied('staging-reads-stay-inside-staging');
+
+  let fd: number;
+  try {
+    fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    return err({ kind: 'internal', cause: `read ${relPath}: ${(error as NodeJS.ErrnoException).code ?? String(error)}` });
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return invalid('relPath', 'not a regular file');
+    if (stat.size > maxBytes) return invalid('size', `${stat.size} bytes exceeds the limit of ${maxBytes}`);
+    const buffer = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const n = readSync(fd, buffer, offset, buffer.length - offset, null);
+      if (n === 0) break;
+      offset += n;
+    }
+    return ok(buffer.toString('utf8', 0, offset));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Creates the directories of `relPath` under `path`, refusing a symlink or a file in the way.
+export function ensureConfinedDir(path: string, relPath: string): Result<void> {
+  const segments = checkRelative(relPath);
+  if (!segments.ok) return segments;
+  let current: string;
+  try {
+    current = realpathSync(path);
+  } catch {
+    return err({ kind: 'not_found', ref: path });
+  }
+  for (const segment of segments.value) {
+    current = join(current, segment);
+    let stat;
+    try {
+      stat = lstatSync(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        return err({ kind: 'internal', cause: `ensureDir ${relPath}: ${String(error)}` });
+      }
+      mkdirSync(current);
+      continue;
+    }
+    if (stat.isSymbolicLink()) return denied('staging-reads-stay-inside-staging');
+    if (!stat.isDirectory()) return invalid('relPath', `${segment} exists and is not a directory`);
+  }
+  return ok(undefined);
 }
 
 export abstract class GitStagingWorkspace implements StagingWorkspace {
@@ -241,91 +331,11 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
   }
 
   read(path: string, relPath: string, maxBytes: number): Result<string | null> {
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return invalid('maxBytes', 'a non-negative integer is required');
-    const segments = checkRelative(relPath);
-    if (!segments.ok) return segments;
-    let root: string;
-    try {
-      root = realpathSync(path);
-    } catch {
-      return err({ kind: 'not_found', ref: path });
-    }
-    const target = join(root, ...segments.value);
-
-    // A parent that resolves outside staging is refused even when the file itself is absent.
-    let parent: string;
-    try {
-      parent = realpathSync(join(root, ...segments.value.slice(0, -1)));
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT' || code === 'ENOTDIR') return ok(null);
-      return err({ kind: 'internal', cause: `read ${relPath}: ${code ?? String(error)}` });
-    }
-    if (!inside(root, parent)) return denied('staging-reads-stay-inside-staging');
-
-    try {
-      lstatSync(target);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT' || code === 'ENOTDIR') return ok(null);
-      return err({ kind: 'internal', cause: `read ${relPath}: ${code ?? String(error)}` });
-    }
-    let real: string;
-    try {
-      real = realpathSync(target);
-    } catch {
-      return denied('staging-reads-stay-inside-staging');
-    }
-    if (!inside(root, real)) return denied('staging-reads-stay-inside-staging');
-
-    let fd: number;
-    try {
-      fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
-    } catch (error) {
-      return err({ kind: 'internal', cause: `read ${relPath}: ${(error as NodeJS.ErrnoException).code ?? String(error)}` });
-    }
-    try {
-      const stat = fstatSync(fd);
-      if (!stat.isFile()) return invalid('relPath', 'not a regular file');
-      if (stat.size > maxBytes) return invalid('size', `${stat.size} bytes exceeds the limit of ${maxBytes}`);
-      const buffer = Buffer.alloc(stat.size);
-      let offset = 0;
-      while (offset < buffer.length) {
-        const n = readSync(fd, buffer, offset, buffer.length - offset, null);
-        if (n === 0) break;
-        offset += n;
-      }
-      return ok(buffer.toString('utf8', 0, offset));
-    } finally {
-      closeSync(fd);
-    }
+    return readConfinedFile(path, relPath, maxBytes);
   }
 
   ensureDir(path: string, relPath: string): Result<void> {
-    const segments = checkRelative(relPath);
-    if (!segments.ok) return segments;
-    let current: string;
-    try {
-      current = realpathSync(path);
-    } catch {
-      return err({ kind: 'not_found', ref: path });
-    }
-    for (const segment of segments.value) {
-      current = join(current, segment);
-      let stat;
-      try {
-        stat = lstatSync(current);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          return err({ kind: 'internal', cause: `ensureDir ${relPath}: ${String(error)}` });
-        }
-        mkdirSync(current);
-        continue;
-      }
-      if (stat.isSymbolicLink()) return denied('staging-reads-stay-inside-staging');
-      if (!stat.isDirectory()) return invalid('relPath', `${segment} exists and is not a directory`);
-    }
-    return ok(undefined);
+    return ensureConfinedDir(path, relPath);
   }
 
   inspectRepo(repoPath: string): Result<RepoFacts> {

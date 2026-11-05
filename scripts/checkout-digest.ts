@@ -1,7 +1,9 @@
 // Checkout digest (plan 01-19; docs/repository-onboarding.md, research "Staging worktree mechanics"): what "the user's
 // checkout is unchanged" means as one JSON line, so a before and an after can be compared.
 //
-//   node scripts/checkout-digest.ts <repo> [--allow-ref glob]...
+//   node scripts/checkout-digest.ts <repo> [--allow-ref glob]... [--allow-run-refs]
+//
+// `--allow-run-refs` is `--allow-ref 'refs/heads/avarice/run_*'`: the run branch a run hands to the source (D-02).
 //
 // Prints { head, branch, statusDigest, filesDigest, refsDigest, worktreesDigest, counts }. Everything is read through
 // safe git (no hooks, no fsmonitor, no optional locks, filter drivers neutralized for the one call that compares
@@ -29,6 +31,10 @@ export interface CheckoutDigest {
   worktreesDigest: string;
   counts: { tracked: number; untracked: number; statusEntries: number; refs: number; refsAllowed: number };
 }
+
+// The one ref a run hands to the source repository (D-02, plan 02-07): `--allow-run-refs` leaves exactly these refs out of the
+// refs digest, so a before and an after compare equal when the only change is the new run branch.
+export const RUN_REF_GLOB = 'refs/heads/avarice/run_*';
 
 const GIT_TIMEOUT_MS = 120_000;
 const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
@@ -102,6 +108,8 @@ function main(argv: readonly string[]): number {
       allow.push(value);
     } else if (word.startsWith('--allow-ref=')) {
       allow.push(word.slice('--allow-ref='.length));
+    } else if (word === '--allow-run-refs') {
+      allow.push(RUN_REF_GLOB);
     } else if (word.startsWith('--')) {
       process.stderr.write(`checkout-digest: unknown option ${word}\n`);
       return 2;
@@ -111,7 +119,7 @@ function main(argv: readonly string[]): number {
   }
   const [repo] = positionals;
   if (repo === undefined || positionals.length !== 1) {
-    process.stderr.write('usage: node scripts/checkout-digest.ts <repo> [--allow-ref glob]...\n');
+    process.stderr.write('usage: node scripts/checkout-digest.ts <repo> [--allow-ref glob]... [--allow-run-refs]\n');
     return 2;
   }
   try {
