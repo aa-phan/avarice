@@ -8,6 +8,7 @@
 //
 // What `allow` means: for the blanket and narrow strategies it is "defer to the host's permission rules" (the
 // hook prints nothing); `explicit: true` (hook-allow strategy, shell only) makes the hook print an allow.
+import { isRefusedAgentCommand } from './conventions.ts';
 import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
@@ -391,6 +392,40 @@ function parseReadArgs(entryKey: string, args: readonly string[]): ReadArgs {
 
 const shellCwd = (call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy): string => (call.cwd.startsWith('/') ? call.cwd : policy.stagingPath);
 
+// What a segment that matched no agent command and one that matched one both leave for the caller: only `agent-command` is reported
+// by decideShell, as the rule of an allow that rests on a contract command.
+interface LineSeen {
+  agentCommand: boolean;
+}
+
+// The run purpose's contract commands (plan 02-08): a segment's words must equal an entry's words, or start with them when the entry
+// ended in `<paths>` and every further word is a relative path that passes the read rule (an option is not a path, an absolute path is
+// not relative, and a word the shell would expand is a path set nobody named). `undefined` is no entry matched, `null` is admitted,
+// a string is the rule that refused it. An entry that starts with a word the contract may never grant is never matched, whatever the
+// policy file says (RC-5).
+function matchAgentCommand(words: readonly string[], expands: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null | undefined {
+  let refusal: string | undefined;
+  for (const entry of policy.agentCommands ?? []) {
+    if (isRefusedAgentCommand(entry.words[0] as string)) continue;
+    const exact = entry.words.length === words.length && entry.words.every((word, i) => words[i] === word);
+    if (!exact && !(entry.paths && startsWithWords(words, entry.words))) continue;
+    if (expands) {
+      refusal ??= 'shell-syntax';
+      continue;
+    }
+    const extra = words.slice(entry.words.length);
+    if (extra.some((word) => word.startsWith('-') || word.startsWith('/'))) {
+      refusal ??= 'shell-not-allowed';
+      continue;
+    }
+    const cwd = shellCwd(call, policy);
+    const rule = checkRead(extra.map((word) => absolutize(cwd, word)), policy, canon);
+    if (rule === null) return null;
+    refusal ??= rule;
+  }
+  return refusal;
+}
+
 // The words after a `gsd_run` read verb: an allow-list of options, then the read check on every operand and option value, then the
 // write check on the operands of a verb that writes them (review WR-06). A term is not a path to GSD, but it is judged as one,
 // the same fail-closed choice parseReadArgs makes.
@@ -422,7 +457,7 @@ function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy
   return null;
 }
 
-function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
     if (!preamble) return 'shell-gsd-no-preamble';
@@ -435,6 +470,14 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
     if (expands) return 'shell-syntax';
     return checkGsdArgs(verb, args.slice(splitWords(verb).length), shellCwd(call, policy), policy, canon);
   }
+  // A contract command is judged before the denied prefixes: the scope drops `npm` and `npx` from them only for a listed form, so any
+  // other form of either still falls through to shell-not-allowed below.
+  const agent = matchAgentCommand(words, expands, call, policy, canon);
+  if (agent === null) {
+    seen.agentCommand = true;
+    return null;
+  }
+  if (agent !== undefined) return agent;
   if (commands.deniedPrefixes.some((prefix) => startsWithWords(words, splitWords(prefix)))) return 'shell-denied-prefix';
   const entry = commands.readOnly.map(splitWords).find((tokens) => startsWithWords(words, tokens));
   if (entry === undefined) return 'shell-not-allowed';
@@ -452,7 +495,7 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   return named;
 }
 
-function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
   if (preamble && line === GSD_INIT_FILE_LINE) return null;
   let text = line;
   let substituted = false;
@@ -467,7 +510,7 @@ function checkLine(line: string, preamble: boolean, call: Extract<NormalizedTool
   if (segments === null) return 'shell-syntax';
   if (substituted && (segments.length !== 1 || (segments[0] as Segment).words[0] !== 'gsd_run')) return 'shell-syntax';
   for (const segment of segments) {
-    const rule = checkSegment(segment, preamble, call, policy, canon);
+    const rule = checkSegment(segment, preamble, call, policy, canon, seen);
     if (rule !== null) return rule;
   }
   return null;
@@ -491,18 +534,24 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
       lines = rest.split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'));
     }
   }
+  const seen: LineSeen = { agentCommand: false };
   for (const line of lines) {
-    const rule = checkLine(line, preamble, call, policy, canon);
+    const rule = checkLine(line, preamble, call, policy, canon, seen);
     if (rule !== null) return deny(rule);
   }
-  return { decision: 'allow', rule: 'shell-identity', budget: 'toolCalls', ...(policy.commands.strategy === 'hook-allow' ? { explicit: true } : {}) };
+  return { decision: 'allow', rule: seen.agentCommand ? 'agent-command' : 'shell-identity', budget: 'toolCalls', ...(policy.commands.strategy === 'hook-allow' ? { explicit: true } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------------------
 // The decision
 // ---------------------------------------------------------------------------------------------------------
 
+const toolNameOf = (call: NormalizedToolCall): string | undefined => ('tool' in call ? call.tool : undefined);
+
 export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, canon: Canon): HookDecision {
+  // The run purpose names tools a human would have to answer (AskUserQuestion): refused by name, so no unattended run waits on one (RC-4).
+  const tool = toolNameOf(call);
+  if (tool !== undefined && policy.deniedTools?.includes(tool)) return deny('no-human-prompts');
   switch (call.kind) {
     case 'file-write': {
       const rule = checkWrite(call.paths, policy, canon);
@@ -517,6 +566,8 @@ export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, can
       return rule !== null ? deny(rule) : { decision: 'allow', rule: 'read-set', budget: 'toolCalls' };
     }
     case 'shell':
+      // A background shell runs unseen past the end of the call; the run purpose refuses it (CS-6).
+      if (call.background && policy.denyBackgroundShell === true) return deny('background-shell');
       return decideShell(call, policy, canon);
     case 'subagent':
       return policy.subagentTypes.includes(call.subagentType ?? GENERAL_PURPOSE)

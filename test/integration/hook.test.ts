@@ -805,4 +805,21 @@ describe('the run purpose through the real hook entry (CON-2, CON-8)', () => {
     const symlinkItself = call(r, 'Write', { file_path: join(r.clone, '.planning', 'quick', 'out'), content: 'x' });
     assert.match(rule(symlinkItself.stdout), /outside-write-set/);
   });
+
+  it('admits a contract command and refuses npm forms beyond it, git commit and a background shell, charging only the admitted one', () => {
+    const r = runFixture();
+    const typecheck = call(r, 'Bash', { command: 'npm run typecheck' });
+    assert.equal(typecheck.code, 0, typecheck.stderr);
+    assert.equal(typecheck.stdout, '');
+    assert.deepEqual(decisions(r.fx).map((d) => [d.decision, d.rule]), [['allow', 'agent-command']]);
+    assert.match(rule(call(r, 'Bash', { command: 'npm install left-pad' }).stdout), /shell-not-allowed/);
+    assert.match(rule(call(r, 'Bash', { command: 'git commit -m x' }).stdout), /shell-denied-prefix/);
+    assert.match(rule(call(r, 'Bash', { command: 'npm run typecheck', run_in_background: true }).stdout), /background-shell/);
+    assert.equal(budgetUsed(r.fx, 'toolCalls'), 1);
+  });
+
+  it('denies AskUserQuestion with no-human-prompts', () => {
+    const r = runFixture();
+    assert.match(rule(call(r, 'AskUserQuestion', { questions: [] }).stdout), /no-human-prompts/);
+  });
 });

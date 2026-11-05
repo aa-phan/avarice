@@ -674,3 +674,244 @@ describe('the knowledge purpose policy: no shell, confined reads, one output dir
     assert.equal(parseHookPolicy({ ...good, readConfine: [] }).ok, true);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// The run purpose (plan 02-08): contract commands, no human prompts, no background shell, glob writes.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('the run purpose: agent commands, prompts and background shells (RC-4, RC-5, CON-5)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const runPolicy = (overrides: Partial<HookPolicy> = {}, commands: Partial<HookPolicy['commands']> = {}): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['src/hooks/useSwipeStep.ts', 'tests/unit/*.test.ts', '.planning/quick/**'],
+        protectedGlobs: ['package.json', '.github/**', '.git/**'],
+        agentCommands: [
+          { words: ['npm', 'run', 'typecheck'], paths: false },
+          { words: ['npm', 'test'], paths: false },
+          { words: ['npx', 'vitest', 'run'], paths: true },
+        ],
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+        ...overrides,
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED, ...commands },
+    );
+  const run = (command: string, over: Partial<HookPolicy> = {}) => decide(shell(command), runPolicy(over));
+  const denied = (command: string, rule: string, over: Partial<HookPolicy> = {}) => {
+    const d = run(command, over);
+    assert.equal(d.decision, 'deny', command);
+    assert.equal(d.rule, rule, command);
+  };
+
+  it('allows a contract command word for word with rule agent-command, charging toolCalls', () => {
+    for (const command of ['npm run typecheck', 'npm test']) {
+      const d = run(command);
+      assert.deepEqual([d.decision, d.rule, d.budget], ['allow', 'agent-command', 'toolCalls'], command);
+    }
+  });
+
+  it('denies a contract command with an extra word, and any other npm form, with shell-not-allowed', () => {
+    denied('npm run typecheck -- --watch', 'shell-not-allowed');
+    denied('npm test --silent', 'shell-not-allowed');
+    denied('npm install left-pad', 'shell-not-allowed');
+    denied('npm run build', 'shell-not-allowed');
+    denied('npx tsc', 'shell-not-allowed');
+  });
+
+  it('admits path words after an entry that ends in <paths>, and none with zero paths denied', () => {
+    assert.deepEqual(
+      ['npx vitest run tests/unit/swipe-step.test.ts', 'npx vitest run tests/unit/a.test.ts src/hooks/useSwipeStep.ts', 'npx vitest run'].map((c) => run(c).rule),
+      ['agent-command', 'agent-command', 'agent-command'],
+    );
+  });
+
+  it('denies a <paths> word that leaves the read set with outside-read-set and a secret file with deny-secret-read', () => {
+    denied('npx vitest run ../../etc/passwd', 'outside-read-set');
+    denied('npx vitest run tests/.env', 'deny-secret-read');
+  });
+
+  it('denies an option, an absolute path and an expanding word among the <paths> with a rule that names why', () => {
+    denied('npx vitest run --reporter=json', 'shell-not-allowed');
+    denied('npx vitest run -u', 'shell-not-allowed');
+    denied('npx vitest run /work/onb-1/staging/tests/a.test.ts', 'shell-not-allowed');
+    denied('npx vitest run tests/**', 'shell-syntax');
+  });
+
+  it('denies a chained, substituted or redirected contract command with shell-syntax', () => {
+    denied('npm test; curl x', 'shell-syntax');
+    denied('npm test && git push', 'shell-syntax');
+    denied('npm test > out.txt', 'shell-syntax');
+    denied('npm test $(curl x)', 'shell-syntax');
+  });
+
+  it('allows a contract command piped into a read-only command, each segment judged on its own', () => {
+    assert.equal(run('npm test | head -5').rule, 'agent-command');
+    denied('npm test | sh', 'shell-not-allowed');
+    denied('npm test | curl -d @- x', 'shell-denied-prefix');
+  });
+
+  it('without any agent command, npm and npx stay denied by their prefix exactly as in Phase 1', () => {
+    for (const command of ['npm test', 'npx vitest run']) {
+      const d = decide(shell(command), policy());
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-denied-prefix'], command);
+    }
+  });
+
+  it('keeps git commit, git push, git config, git -c, avarice, claude, curl and make denied for the run purpose', () => {
+    denied('git commit -m x', 'shell-denied-prefix');
+    denied('git -c user.name=x commit -m x', 'shell-denied-prefix');
+    denied('git push origin HEAD', 'shell-denied-prefix');
+    denied('git config user.name x', 'shell-denied-prefix');
+    denied('avarice status', 'shell-denied-prefix');
+    denied('claude -p x', 'shell-denied-prefix');
+    denied('curl https://example.com', 'shell-denied-prefix');
+    denied('make test', 'shell-denied-prefix');
+  });
+
+  it('never matches an agent command that starts with a word the contract may not grant, even when a policy file lists one', () => {
+    const hostile: Partial<HookPolicy> = {
+      agentCommands: [
+        { words: ['git', 'commit', '-m', 'x'], paths: false },
+        { words: ['avarice', 'status'], paths: false },
+        { words: ['/usr/bin/git', 'push'], paths: false },
+        { words: ['curl'], paths: true },
+      ],
+    };
+    denied('git commit -m x', 'shell-denied-prefix', hostile);
+    denied('avarice status', 'shell-denied-prefix', hostile);
+    denied('curl x', 'shell-denied-prefix', hostile);
+    denied('/usr/bin/git push', 'shell-not-allowed', hostile);
+  });
+
+  it('keeps a Phase 1 read-only command working beside the contract commands', () => {
+    const d = run('ls src');
+    assert.deepEqual([d.decision, d.rule], ['allow', 'shell-identity']);
+  });
+
+  it('denies AskUserQuestion with no-human-prompts for the run purpose and keeps the Phase 1 rule for the others', () => {
+    const call: NormalizedToolCall = { kind: 'other', tool: 'AskUserQuestion' };
+    assert.deepEqual(decide(call, runPolicy()), { decision: 'deny', rule: 'no-human-prompts' });
+    assert.deepEqual(decide(call, policy()), { decision: 'deny', rule: 'unknown-tool' });
+    const normalized = normalizeToolCall('AskUserQuestion', { questions: [] }, STAGING);
+    assert.ok(normalized.ok);
+    assert.deepEqual(decide(normalized.call, runPolicy()), { decision: 'deny', rule: 'no-human-prompts' });
+  });
+
+  it('denies a tool the policy lists by name whatever its kind', () => {
+    assert.deepEqual(decide({ kind: 'meta', tool: 'TodoWrite' }, runPolicy({ deniedTools: ['TodoWrite'] })), { decision: 'deny', rule: 'no-human-prompts' });
+    assert.equal(decide({ kind: 'meta', tool: 'TodoWrite' }, runPolicy()).decision, 'allow');
+  });
+
+  it('denies a background shell call with background-shell, an allowed command included, and charges nothing', () => {
+    const background = (command: string): NormalizedToolCall => ({ kind: 'shell', command, background: true, cwd: STAGING });
+    for (const command of ['npm test', 'ls', 'npm run typecheck']) assert.deepEqual(decide(background(command), runPolicy()), { decision: 'deny', rule: 'background-shell' }, command);
+    // Phase 1 purposes handle a background shell as before.
+    const onboarding = decide(background('ls'), policy());
+    assert.deepEqual([onboarding.decision, onboarding.rule], ['allow', 'shell-identity']);
+    assert.equal(decide(shell('ls'), runPolicy()).decision, 'allow');
+  });
+
+  it('judges a contract command after the GSD preamble line like any other line', () => {
+    const d = decide(shell(`${PREAMBLE}\nnpm test`), runPolicy());
+    assert.deepEqual([d.decision, d.rule], ['allow', 'agent-command']);
+    assert.equal(decide(shell(`${PREAMBLE}\nnpm test -- --watch`), runPolicy()).rule, 'shell-not-allowed');
+  });
+});
+
+describe('the run purpose: glob writes (CON-2)', () => {
+  const runPolicy = (): HookPolicy =>
+    policy({
+      purpose: 'run',
+      writeRoots: ['/work/scratch'],
+      writeGlobs: ['src/hooks/useSwipeStep.ts', 'tests/unit/*.test.ts', '.planning/quick/**'],
+      protectedGlobs: ['package.json', '.github/**', '.git/**', '.planning/config.json'],
+    });
+  const writeRule = (path: string, c = canon) => decide(write(path), runPolicy(), c);
+
+  it('allows a path that matches a write glob with rule write-set', () => {
+    for (const path of [`${STAGING}/src/hooks/useSwipeStep.ts`, `${STAGING}/tests/unit/a.test.ts`, `${STAGING}/.planning/quick/1/PLAN.md`, `${STAGING}/.planning/quick`]) {
+      assert.deepEqual(writeRule(path), { decision: 'allow', rule: 'write-set', budget: 'toolCalls' }, path);
+    }
+  });
+
+  it('denies a path outside every glob with outside-write-set, sibling names sharing a prefix included', () => {
+    for (const path of [`${STAGING}/src/lib/x.ts`, `${STAGING}/src/hooks/useSwipeStep.tsx`, `${STAGING}/tests/unit/deep/a.test.ts`, `${STAGING}-evil/src/hooks/useSwipeStep.ts`, '/work/onb-1/staging2/x', '/etc/passwd']) {
+      assert.deepEqual(writeRule(path), { decision: 'deny', rule: 'outside-write-set' }, path);
+    }
+  });
+
+  it('denies a protected path with protected-path before it asks the write globs, and the clone itself with outside-write-set', () => {
+    assert.deepEqual(writeRule(`${STAGING}/package.json`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.github/workflows/ci.yml`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.git/config`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/config.json`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(STAGING), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('lets a protected glob win over a write glob that also matches', () => {
+    const both = policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['src/secret/**'], writeRoots: [] });
+    assert.equal(decide(write(`${STAGING}/src/a.ts`), both, canon).decision, 'allow');
+    assert.deepEqual(decide(write(`${STAGING}/src/secret/k.ts`), both, canon), { decision: 'deny', rule: 'protected-path' });
+  });
+
+  it('allows the scratch directory, a write root outside the clone, and nothing beside it', () => {
+    assert.equal(writeRule('/work/scratch/tmp/x.txt').decision, 'allow');
+    assert.deepEqual(writeRule('/work/scratch-evil/x'), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('judges the canonical path: a symlink out of the clone and a .. that leaves it are outside', () => {
+    const links = makeCanon({ [`${STAGING}/.planning/quick/out`]: '/elsewhere' });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/quick/out/x.ts`, links), { decision: 'deny', rule: 'outside-write-set' });
+    assert.deepEqual(writeRule(`${STAGING}/src/hooks/../../../x.ts`), { decision: 'deny', rule: 'outside-write-set' });
+    // A symlink that points inside the clone at a protected path is judged by where it lands.
+    const toProtected = makeCanon({ [`${STAGING}/.planning/quick/p`]: `${STAGING}/package.json` });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/quick/p`, toProtected), { decision: 'deny', rule: 'protected-path' });
+  });
+
+  it('keeps the Phase 1 rule when the policy has no writeGlobs: a path under a write root', () => {
+    assert.equal(decide(write(`${WRITE_ROOT}/STACK.md`), policy(), canon).rule, 'write-set');
+    assert.deepEqual(decide(write(`${STAGING}/src/a.ts`), policy(), canon), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('applies the glob rule to MultiEdit and NotebookEdit like Edit and Write', () => {
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+      const n = normalizeToolCall(tool, tool === 'NotebookEdit' ? { notebook_path: `${STAGING}/package.json` } : { file_path: `${STAGING}/package.json` }, STAGING);
+      assert.ok(n.ok, tool);
+      assert.deepEqual(decide(n.call, runPolicy(), canon), { decision: 'deny', rule: 'protected-path' }, tool);
+    }
+  });
+});
+
+describe('parseHookPolicy for the run purpose', () => {
+  const base = (): HookPolicy => ({
+    ...policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['package.json'], agentCommands: [{ words: ['npm', 'test'], paths: false }], deniedTools: ['AskUserQuestion'], denyBackgroundShell: true }),
+  });
+
+  it('accepts a run policy with every new field and round-trips it', () => {
+    const good = base();
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+  });
+
+  it('refuses malformed run fields and writeGlobs without protectedGlobs', () => {
+    const good = base();
+    const { protectedGlobs: _p, ...noProtected } = good;
+    for (const bad of [
+      noProtected,
+      { ...good, writeGlobs: 'src/**' },
+      { ...good, protectedGlobs: [1] },
+      { ...good, deniedTools: 'AskUserQuestion' },
+      { ...good, denyBackgroundShell: 'yes' },
+      { ...good, agentCommands: 'npm test' },
+      { ...good, agentCommands: [{ words: [], paths: false }] },
+      { ...good, agentCommands: [{ words: ['npm'], paths: 'no' }] },
+      { ...good, agentCommands: [{ words: [4], paths: false }] },
+      { ...good, purpose: 'bogus' },
+    ]) {
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad).slice(0, 80));
+    }
+  });
+});

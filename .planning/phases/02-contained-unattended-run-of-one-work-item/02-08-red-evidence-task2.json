@@ -1,0 +1,22 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/hook-decision.test.ts\" \"test/integration/hook.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/hook-decision.ts at the Task 1 commit has the glob write rule but no agent-command match, no deniedTools handling and no background-shell rule; the Task 2 hook-decision change was set aside (git checkout of that one file) while the new tests ran, then reapplied",
+  "tests": 169,
+  "pass": 158,
+  "fail": 11,
+  "failingTests": [
+    "allows a contract command word for word with rule agent-command, charging toolCalls",
+    "admits path words after an entry that ends in <paths>, and none with zero paths denied",
+    "denies a <paths> word that leaves the read set with outside-read-set and a secret file with deny-secret-read",
+    "denies an option, an absolute path and an expanding word among the <paths> with a rule that names why",
+    "allows a contract command piped into a read-only command, each segment judged on its own",
+    "denies AskUserQuestion with no-human-prompts for the run purpose and keeps the Phase 1 rule for the others",
+    "denies a tool the policy lists by name whatever its kind",
+    "denies a background shell call with background-shell, an allowed command included, and charges nothing",
+    "judges a contract command after the GSD preamble line like any other line",
+    "(integration) admits a contract command and refuses npm forms beyond it, git commit and a background shell, charging only the admitted one",
+    "(integration) denies AskUserQuestion with no-human-prompts"
+  ],
+  "summary": "RED by behaviour: the contract command is denied by the npm prefix (or shell-not-allowed) instead of allowed with rule agent-command, AskUserQuestion is unknown-tool instead of no-human-prompts, and a background shell is allowed. The tests that assert denials the Phase 1 rules already give (git commit, avarice, claude, curl, make, chaining, glob writes) pass before and after by design: they pin what must not loosen."
+}
