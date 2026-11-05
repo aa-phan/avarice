@@ -38,6 +38,12 @@ Excluded (from ROADMAP.md and slice 1): several work items, answering decisions 
 - **D-14:** Model: a Phase 2 work item defaults to **size `medium`, which maps to Sonnet** through `modelBySize`. A brief may set `model` to override. Per-item sizing rules (RC-7/RC-8) stay in Phase 3.
 - **D-15:** **The total live-model spend ceiling for Phase 2 is 25 USD**, covering development live cases, containment rehearsals and the three exit runs (about 8 USD for cases and rehearsals, about 17 USD for the exit). Execution stops and asks the owner before exceeding it, and the cumulative spend is recorded as in `test/containment/LIVE-CASES.md`.
 
+### Resolved at plan-phase (owner answers to RESEARCH.md open questions, 2026-11-05)
+- **D-16:** **Conventions come from a descendant commit of the pin.** `start` reads `.avarice/**` from git objects at a descendant commit of `baseRevision` whose diff against the pin touches only `.avarice/**`. If no such commit exists, or the diff touches anything else, `start` refuses. This resolves the D-04/D-09 conflict. The code under work is still the pin tree.
+- **D-17:** **GSD quick-task artifacts stay off the review branch.** `.planning/quick/**` and `.planning/STATE.md` changes made by the GSD unit in the clone are archived as run artifacts in the AVARICE store and excluded from the supervisor's commit pathspec. The `avarice/run_<id>` branch holds only the code change.
+- **D-18:** **`avarice start` detaches by default.** It returns once the detached supervisor is spawned and the run is recorded. `--wait` blocks until a terminal or blocked state, using `onboard`'s exit codes: 0 for `ready_for_review`, 3 for not ready. Tests and the exit script use `--wait`. Closing the shell leaves the supervisor running (SC 6).
+- **D-19:** **`status --json` may gain one optional `runs` key.** Every existing Phase 1 key stays byte-identical, and a snapshot of the Phase 1 output is taken before any renderer change. This is how SC 7's "every `--json` shape is unchanged" is read.
+
 ### Claude's Discretion
 - The staleness threshold for D-04 (commit count or age) and the exact refusal wording.
 - The fetched branch name in the source repo (the default is the same `avarice/run_<id>`) and when the clone is cleaned up after hand-off.
