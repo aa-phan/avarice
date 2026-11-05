@@ -8,8 +8,8 @@ import type { IdPrefix } from '../../domain/ids.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
-import { assertRunTransition, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
-import type { RunState } from '../../domain/run-lifecycle.ts';
+import { assertItemTransition, assertRunTransition, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
+import type { RunState, WorkItemState } from '../../domain/run-lifecycle.ts';
 import type {
   ActivateInput,
   ActivationResult,
@@ -21,11 +21,23 @@ import type {
   BudgetRowInput,
   AttemptInput,
   AttemptRow,
+  CheckValidationInput,
+  CheckValidationRow,
   CheckpointInput,
   CheckpointRow,
   ContractRow,
+  DecisionInput,
+  DecisionRow,
+  DecisionState,
   EventInput,
   EventReceipt,
+  EvidenceIndependence,
+  EvidenceInput,
+  EvidenceRow,
+  EvidenceStatus,
+  GateResultInput,
+  GateResultRow,
+  HookReadRow,
   Ledger,
   LeaseGrant,
   NewOnboarding,
@@ -34,6 +46,7 @@ import type {
   OnboardingRow,
   ProjectQuery,
   ProjectRow,
+  RunAttemptInput,
   RunCheckpointInput,
   RunCheckpointRow,
   RunRow,
@@ -45,6 +58,9 @@ import type {
   StoreRunContractInput,
   TransitionGuard,
   TransitionInput,
+  WorkItemInput,
+  WorkItemRow,
+  WorkItemTransitionInput,
 } from '../../ports/ledger.ts';
 import { abort, LedgerAbort, toPortError, tx } from './db.ts';
 import { appendEventRow, EventDataError } from './events.ts';
@@ -74,6 +90,13 @@ function parseJson(v: unknown): unknown {
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const NO_NEXT_ACTION = 'none';
+
+// The closed value sets of docs/contracts-and-state.md "Evidence schema" and "Decision records". The adapter refuses
+// any other value, so a typo cannot reach an evidence or decision row (AUT-8).
+const EVIDENCE_STATUS_SET: readonly EvidenceStatus[] = ['passed', 'failed', 'skipped', 'unavailable', 'inconclusive', 'stale'];
+const EVIDENCE_INDEPENDENCE_SET: readonly EvidenceIndependence[] = ['deterministic', 'external', 'model-review'];
+const DECISION_CLASSES: readonly string[] = ['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget'];
+const DECISION_STATES: readonly DecisionState[] = ['open', 'answered', 'stale', 'withdrawn'];
 
 function iso(ms: number): string {
   return new Date(ms).toISOString();
@@ -894,6 +917,299 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  // ---- attempts, evidence, gates -----------------------------------------------------------------------
+
+  recordRunAttempt(runId: string, input: RunAttemptInput): Result<AttemptRow> {
+    return tx(this.db, () => {
+      this.lockRun(runId);
+      if (input.reason === '') abort({ kind: 'invalid', field: 'reason', reason: 'an attempt needs a reason' });
+      const next = this.db.prepare('SELECT COALESCE(MAX(ordinal), 0) + 1 AS next FROM attempts WHERE run_id = ?').get(runId) as { next: number };
+      const attemptId = this.newId('att_');
+      this.db
+        .prepare('INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at) VALUES (?, ?, ?, ?, ?)')
+        .run(attemptId, runId, Number(next.next), input.reason, iso(input.nowMs));
+      this.insertEvent({ type: 'attempt.started', runId, attemptId, data: { runId, attemptId, ordinal: Number(next.next) }, nowMs: input.nowMs });
+      return toAttempt(this.db.prepare('SELECT * FROM attempts WHERE attempt_id = ?').get(attemptId) as Row);
+    });
+  }
+
+  endRunAttempt(attemptId: string, input: { outcome: string; nowMs: number }): Result<AttemptRow> {
+    return tx(this.db, () => {
+      const runId = this.runOfAttempt(attemptId);
+      if (input.outcome === '') abort({ kind: 'invalid', field: 'outcome', reason: 'an attempt ends with an outcome' });
+      const changed = this.db.prepare('UPDATE attempts SET ended_at = ?, outcome = ? WHERE attempt_id = ? AND ended_at IS NULL').run(iso(input.nowMs), input.outcome, attemptId).changes;
+      if (Number(changed) === 0) abort({ kind: 'conflict', expected: `attempt ${attemptId} still running`, actual: `attempt ${attemptId} already ended` });
+      this.insertEvent({ type: 'attempt.ended', runId, attemptId, data: { runId, attemptId, outcome: input.outcome }, nowMs: input.nowMs });
+      return toAttempt(this.db.prepare('SELECT * FROM attempts WHERE attempt_id = ?').get(attemptId) as Row);
+    });
+  }
+
+  listRunAttempts(runId: string): Result<AttemptRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      return (this.db.prepare('SELECT * FROM attempts WHERE run_id = ? ORDER BY ordinal').all(runId) as Row[]).map(toAttempt);
+    });
+  }
+
+  // The run an attempt belongs to; an attempt of an onboarding carrier is not a run's attempt.
+  private runOfAttempt(attemptId: string): string {
+    const row = this.db
+      .prepare("SELECT a.run_id AS run_id FROM attempts a JOIN runs r ON r.run_id = a.run_id WHERE a.attempt_id = ? AND r.state <> 'onboarding'")
+      .get(attemptId) as Row | undefined;
+    if (!row) throw notFound(`attempt ${attemptId}`);
+    return str(row['run_id']);
+  }
+
+  // Insert-only (T-02-06): there is no method that updates an evidence row, and the schema refuses an UPDATE or DELETE.
+  recordEvidence(input: EvidenceInput): Result<EvidenceRow> {
+    return tx(this.db, () => {
+      if (input.name === '') abort({ kind: 'invalid', field: 'name', reason: 'evidence needs a name' });
+      if (input.kind === '') abort({ kind: 'invalid', field: 'kind', reason: 'evidence needs a kind' });
+      if (!(EVIDENCE_STATUS_SET as readonly string[]).includes(input.status)) {
+        abort({ kind: 'invalid', field: 'status', reason: `${String(input.status)} is not an evidence status (${EVIDENCE_STATUS_SET.join(', ')})` });
+      }
+      if (!(EVIDENCE_INDEPENDENCE_SET as readonly string[]).includes(input.independence)) {
+        abort({ kind: 'invalid', field: 'independence', reason: `${String(input.independence)} is not an independence (${EVIDENCE_INDEPENDENCE_SET.join(', ')})` });
+      }
+      if (typeof input.clean !== 'boolean') abort({ kind: 'invalid', field: 'clean', reason: 'clean is true or false' });
+      if (typeof input.environment !== 'object' || input.environment === null || Array.isArray(input.environment)) {
+        abort({ kind: 'invalid', field: 'environment', reason: 'the environment is an object' });
+      }
+      if (!Number.isInteger(input.contractVersion) || input.contractVersion < 1) abort({ kind: 'invalid', field: 'contractVersion', reason: 'a contract version is a positive integer' });
+      if (!Array.isArray(input.acceptance) || input.acceptance.some((a) => typeof a !== 'string')) abort({ kind: 'invalid', field: 'acceptance', reason: 'acceptance is a list of criterion IDs' });
+      if (input.exitCode !== undefined && !Number.isInteger(input.exitCode)) abort({ kind: 'invalid', field: 'exitCode', reason: 'an exit code is an integer' });
+      if (input.durationMs !== undefined && (!Number.isFinite(input.durationMs) || input.durationMs < 0)) abort({ kind: 'invalid', field: 'durationMs', reason: 'a duration is a non-negative number' });
+      this.runOfAttempt(input.attemptId);
+      const evidenceId = this.newId('ev_');
+      this.db
+        .prepare(
+          `INSERT INTO evidence (evidence_id, attempt_id, work_item, kind, name, revision, clean, tree_digest, environment_json, contract_version, policy_revision,
+                                 status, independence, acceptance_json, tests_json, command, exit_code, duration_ms, artifact_digest, ext_ref, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+        )
+        .run(
+          evidenceId,
+          input.attemptId,
+          input.workItem ?? null,
+          input.kind,
+          input.name,
+          input.revision,
+          input.clean ? 1 : 0,
+          input.treeDigest,
+          boundedBodyJson(input.environment, 'environment'),
+          input.contractVersion,
+          input.policyRevision,
+          input.status,
+          input.independence,
+          canonicalJson(input.acceptance),
+          input.tests === undefined ? null : boundedBodyJson(input.tests, 'tests'),
+          input.command === undefined ? null : canonicalJson(input.command),
+          input.exitCode ?? null,
+          input.durationMs ?? null,
+          input.artifactDigest ?? null,
+          iso(input.nowMs),
+        );
+      const stored = toEvidence(this.db.prepare('SELECT e.*, a.run_id AS run_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE e.evidence_id = ?').get(evidenceId) as Row);
+      this.insertEvent({
+        type: 'evidence.recorded',
+        runId: stored.runId,
+        attemptId: input.attemptId,
+        data: { runId: stored.runId, evidenceId, name: input.name, kind: input.kind, status: input.status },
+        nowMs: input.nowMs,
+      });
+      return stored;
+    });
+  }
+
+  listEvidence(runId: string): Result<EvidenceRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      const rows = this.db
+        .prepare('SELECT e.*, a.run_id AS run_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? ORDER BY e.rowid')
+        .all(runId) as Row[];
+      return rows.map(toEvidence);
+    });
+  }
+
+  recordGateResult(input: GateResultInput): Result<void> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (input.gate === '') abort({ kind: 'invalid', field: 'gate', reason: 'a gate result names its gate' });
+      if (typeof input.passed !== 'boolean') abort({ kind: 'invalid', field: 'passed', reason: 'passed is true or false' });
+      if (!Number.isInteger(input.contractVersion) || input.contractVersion < 1) abort({ kind: 'invalid', field: 'contractVersion', reason: 'a contract version is a positive integer' });
+      this.db
+        .prepare(
+          'INSERT INTO gate_results (run_id, gate, work_item, contract_version, policy_revision, revision, passed, failures_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(input.runId, input.gate, input.workItem ?? null, input.contractVersion, input.policyRevision, input.revision, input.passed ? 1 : 0, boundedBodyJson(input.failures, 'failures'), iso(input.nowMs));
+      this.insertEvent({
+        type: 'gate.result',
+        runId: input.runId,
+        data: { runId: input.runId, gate: input.gate, passed: input.passed, revision: input.revision, failures: input.failures.length, ...(input.workItem !== undefined ? { itemId: input.workItem } : {}) },
+        nowMs: input.nowMs,
+      });
+    });
+  }
+
+  listGateResults(runId: string): Result<GateResultRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      return (this.db.prepare('SELECT * FROM gate_results WHERE run_id = ? ORDER BY rowid').all(runId) as Row[]).map(toGateResult);
+    });
+  }
+
+  // ---- work items --------------------------------------------------------------------------------------
+
+  upsertWorkItem(input: WorkItemInput): Result<WorkItemRow> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (input.itemId === '') abort({ kind: 'invalid', field: 'itemId', reason: 'a work item needs an ID' });
+      const type = input.type ?? 'implement';
+      if (type !== 'implement' && type !== 'harden') abort({ kind: 'invalid', field: 'type', reason: `${String(type)} is not a work item type (implement, harden)` });
+      if (input.size === '' || input.model === '') abort({ kind: 'invalid', field: 'size', reason: 'a work item has a size and a model' });
+      const dependsOn = input.dependsOn ?? [];
+      if (!Array.isArray(dependsOn) || dependsOn.some((d) => typeof d !== 'string')) abort({ kind: 'invalid', field: 'dependsOn', reason: 'dependsOn is a list of item IDs' });
+      const existed = this.db.prepare('SELECT 1 AS found FROM work_items WHERE run_id = ? AND item_id = ?').get(input.runId, input.itemId) !== undefined;
+      // The state and the attempt count are never touched by an upsert: only transitionWorkItem moves them.
+      this.db
+        .prepare(
+          `INSERT INTO work_items (run_id, item_id, type, depends_on_json, size, model, spec_json, state, gsd_session, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, 0)
+           ON CONFLICT (run_id, item_id) DO UPDATE SET type = excluded.type, depends_on_json = excluded.depends_on_json, size = excluded.size, model = excluded.model,
+             spec_json = excluded.spec_json, gsd_session = COALESCE(excluded.gsd_session, work_items.gsd_session)`,
+        )
+        .run(input.runId, input.itemId, type, canonicalJson(dependsOn), input.size, input.model, boundedBodyJson(input.spec, 'work item spec'), input.gsdSession ?? null);
+      this.insertEvent({ type: 'work_item.upserted', runId: input.runId, data: { runId: input.runId, itemId: input.itemId, type, created: !existed }, nowMs: input.nowMs });
+      return this.readWorkItem(input.runId, input.itemId);
+    });
+  }
+
+  transitionWorkItem(runId: string, itemId: string, guard: { fence: number }, t: WorkItemTransitionInput): Result<WorkItemRow> {
+    return tx(this.db, () => {
+      const run = this.lockRun(runId);
+      this.checkFence(run, guard.fence);
+      const item = this.readWorkItem(runId, itemId);
+      const edge = assertItemTransition(item.state, t.to);
+      if (!edge.ok) abort(edge.error);
+      if (t.attemptId !== undefined) this.checkRunAttempt(runId, t.attemptId);
+      this.db
+        .prepare('UPDATE work_items SET state = ?, attempts = attempts + ?, gsd_session = COALESCE(?, gsd_session) WHERE run_id = ? AND item_id = ?')
+        .run(t.to, t.to === 'delegated' ? 1 : 0, t.gsdSession ?? null, runId, itemId);
+      this.insertEvent({
+        type: 'work_item.transition',
+        runId,
+        ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
+        data: { ...(t.data ?? {}), runId, itemId, from: item.state, to: t.to },
+        nowMs: t.nowMs,
+      });
+      return this.readWorkItem(runId, itemId);
+    });
+  }
+
+  listWorkItems(runId: string): Result<WorkItemRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      return (this.db.prepare('SELECT * FROM work_items WHERE run_id = ? ORDER BY rowid').all(runId) as Row[]).map(toWorkItem);
+    });
+  }
+
+  private readWorkItem(runId: string, itemId: string): WorkItemRow {
+    const row = this.db.prepare('SELECT * FROM work_items WHERE run_id = ? AND item_id = ?').get(runId, itemId) as Row | undefined;
+    if (!row) throw notFound(`work item ${itemId} of ${runId}`);
+    return toWorkItem(row);
+  }
+
+  // ---- decisions, check validations, hook reads --------------------------------------------------------
+
+  openDecision(input: DecisionInput): Result<DecisionRow> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (!DECISION_CLASSES.includes(input.class)) abort({ kind: 'invalid', field: 'class', reason: `${input.class} is not a decision class (${DECISION_CLASSES.join(', ')})` });
+      if (input.urgency !== 'blocking' && input.urgency !== 'digest') abort({ kind: 'invalid', field: 'urgency', reason: 'urgency is blocking or digest' });
+      if (input.issue === '') abort({ kind: 'invalid', field: 'issue', reason: 'a decision states its issue' });
+      if (!Number.isInteger(input.contractVersion) || input.contractVersion < 1) abort({ kind: 'invalid', field: 'contractVersion', reason: 'a contract version is a positive integer' });
+      if (input.stateDigest === '') abort({ kind: 'invalid', field: 'stateDigest', reason: 'a decision carries the digest of the state it was opened on' });
+      const decisionId = this.newId('dec_');
+      this.db
+        .prepare(
+          `INSERT INTO decisions (decision_id, run_id, contract_version, class, issue, recommendation, options_json, consequences_json, evidence_refs_json,
+                                  affected_items_json, authorized_default, state_digest, urgency, state, opened_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
+        )
+        .run(
+          decisionId,
+          input.runId,
+          input.contractVersion,
+          input.class,
+          input.issue,
+          input.recommendation ?? null,
+          boundedBodyJson(input.options, 'options'),
+          boundedBodyJson(input.consequences, 'consequences'),
+          boundedBodyJson(input.evidenceRefs, 'evidenceRefs'),
+          boundedBodyJson(input.affectedItems, 'affectedItems'),
+          input.authorizedDefault ?? null,
+          input.stateDigest,
+          input.urgency,
+          iso(input.nowMs),
+        );
+      this.insertEvent({
+        type: 'decision.opened',
+        runId: input.runId,
+        data: { runId: input.runId, decisionId, class: input.class, urgency: input.urgency, contractVersion: input.contractVersion },
+        nowMs: input.nowMs,
+      });
+      return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(decisionId) as Row);
+    });
+  }
+
+  listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]> {
+    return guarded(() => {
+      if (filter.state !== undefined && !DECISION_STATES.includes(filter.state)) {
+        abort({ kind: 'invalid', field: 'state', reason: `${String(filter.state)} is not a decision state (${DECISION_STATES.join(', ')})` });
+      }
+      const where: string[] = [];
+      const args: string[] = [];
+      if (filter.runId !== undefined) {
+        where.push('run_id = ?');
+        args.push(filter.runId);
+      }
+      if (filter.state !== undefined) {
+        where.push('state = ?');
+        args.push(filter.state);
+      }
+      const clause = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+      return (this.db.prepare(`SELECT * FROM decisions${clause} ORDER BY opened_at, rowid`).all(...args) as Row[]).map(toDecision);
+    });
+  }
+
+  recordCheckValidation(input: CheckValidationInput): Result<void> {
+    return tx(this.db, () => {
+      for (const [field, value] of [['projectId', input.projectId], ['baseRevision', input.baseRevision], ['specDigest', input.specDigest], ['name', input.name], ['verdict', input.verdict]] as const) {
+        if (value === '') abort({ kind: 'invalid', field, reason: `a check validation needs a ${field}` });
+      }
+      const existing = this.db
+        .prepare('SELECT verdict FROM check_validations WHERE project_id = ? AND base_revision = ? AND spec_digest = ? AND name = ?')
+        .get(input.projectId, input.baseRevision, input.specDigest, input.name) as Row | undefined;
+      if (existing) abort({ kind: 'conflict', expected: `no verdict for check ${input.name} on this revision and spec`, actual: `verdict ${str(existing['verdict'])} is already recorded` });
+      this.db
+        .prepare('INSERT INTO check_validations (project_id, base_revision, spec_digest, name, verdict, detail_json, validated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(input.projectId, input.baseRevision, input.specDigest, input.name, input.verdict, boundedBodyJson(input.detail, 'detail'), iso(input.nowMs));
+    });
+  }
+
+  getCheckValidations(projectId: string, baseRevision: string, specDigest: string): Result<CheckValidationRow[]> {
+    return guarded(() =>
+      (
+        this.db
+          .prepare('SELECT * FROM check_validations WHERE project_id = ? AND base_revision = ? AND spec_digest = ? ORDER BY rowid')
+          .all(projectId, baseRevision, specDigest) as Row[]
+      ).map(toCheckValidation),
+    );
+  }
+
+  listHookReads(invocationId: string): Result<HookReadRow[]> {
+    return guarded(() => (this.db.prepare('SELECT * FROM hook_reads WHERE invocation_id = ? ORDER BY seq, rowid').all(invocationId) as Row[]).map(toHookRead));
+  }
+
   // The run row, or not_found when there is none or it is an onboarding carrier.
   private lockRun(runId: string): Row {
     const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ? AND state <> 'onboarding'").get(runId) as Row | undefined;
@@ -1036,6 +1352,108 @@ function toRunStep(r: Row): RunStepRow {
     result: parseJson(r['result_json']),
     startedAt: str(r['started_at']),
     completedAt: strOrNull(r['completed_at']),
+  };
+}
+
+function toEvidence(r: Row): EvidenceRow {
+  return {
+    evidenceId: str(r['evidence_id']),
+    attemptId: str(r['attempt_id']),
+    runId: str(r['run_id']),
+    workItem: strOrNull(r['work_item']),
+    kind: str(r['kind']),
+    name: str(r['name']),
+    status: str(r['status']) as EvidenceStatus,
+    revision: str(r['revision']),
+    clean: Number(r['clean']) === 1,
+    treeDigest: str(r['tree_digest']),
+    environment: parseJson(r['environment_json']) as Readonly<Record<string, unknown>>,
+    contractVersion: Number(r['contract_version']),
+    policyRevision: str(r['policy_revision']),
+    independence: str(r['independence']) as EvidenceIndependence,
+    acceptance: parseJson(r['acceptance_json']) as readonly string[],
+    tests: r['tests_json'] === null ? null : parseJson(r['tests_json']),
+    command: r['command'] === null ? null : (parseJson(r['command']) as readonly string[]),
+    exitCode: r['exit_code'] === null ? null : Number(r['exit_code']),
+    durationMs: r['duration_ms'] === null ? null : Number(r['duration_ms']),
+    artifactDigest: strOrNull(r['artifact_digest']),
+    createdAt: str(r['created_at']),
+  };
+}
+
+function toGateResult(r: Row): GateResultRow {
+  return {
+    runId: str(r['run_id']),
+    gate: str(r['gate']),
+    workItem: strOrNull(r['work_item']),
+    contractVersion: Number(r['contract_version']),
+    policyRevision: str(r['policy_revision']),
+    revision: str(r['revision']),
+    passed: Number(r['passed']) === 1,
+    failures: parseJson(r['failures_json']),
+    createdAt: str(r['created_at']),
+  };
+}
+
+function toWorkItem(r: Row): WorkItemRow {
+  return {
+    runId: str(r['run_id']),
+    itemId: str(r['item_id']),
+    type: str(r['type']) as WorkItemRow['type'],
+    dependsOn: parseJson(r['depends_on_json']) as readonly string[],
+    size: str(r['size']),
+    model: str(r['model']),
+    spec: parseJson(r['spec_json']),
+    state: str(r['state']) as WorkItemState,
+    gsdSession: strOrNull(r['gsd_session']),
+    attempts: Number(r['attempts']),
+  };
+}
+
+function toDecision(r: Row): DecisionRow {
+  return {
+    decisionId: str(r['decision_id']),
+    runId: str(r['run_id']),
+    contractVersion: Number(r['contract_version']),
+    class: str(r['class']),
+    issue: str(r['issue']),
+    recommendation: strOrNull(r['recommendation']),
+    options: parseJson(r['options_json']),
+    consequences: parseJson(r['consequences_json']),
+    evidenceRefs: parseJson(r['evidence_refs_json']) as readonly string[],
+    affectedItems: parseJson(r['affected_items_json']) as readonly string[],
+    authorizedDefault: strOrNull(r['authorized_default']),
+    stateDigest: str(r['state_digest']),
+    urgency: str(r['urgency']) as DecisionRow['urgency'],
+    state: str(r['state']) as DecisionState,
+    openedAt: str(r['opened_at']),
+    answeredAt: strOrNull(r['answered_at']),
+    answeredBy: strOrNull(r['answered_by']),
+    answer: strOrNull(r['answer']),
+    answerChannel: strOrNull(r['answer_channel']),
+  };
+}
+
+function toCheckValidation(r: Row): CheckValidationRow {
+  return {
+    projectId: str(r['project_id']),
+    baseRevision: str(r['base_revision']),
+    specDigest: str(r['spec_digest']),
+    name: str(r['name']),
+    verdict: str(r['verdict']),
+    detail: parseJson(r['detail_json']),
+    validatedAt: str(r['validated_at']),
+  };
+}
+
+function toHookRead(r: Row): HookReadRow {
+  return {
+    invocationId: str(r['invocation_id']),
+    agentId: str(r['agent_id']),
+    path: str(r['path']),
+    digest: str(r['digest']),
+    seq: Number(r['seq']),
+    recordedAt: str(r['recorded_at']),
   };
 }
 

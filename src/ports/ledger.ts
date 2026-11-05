@@ -5,7 +5,7 @@
 // adapter reads no clock.
 import type { Result } from '../domain/result.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
-import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
+import type { RunBlockedReason, RunState, WorkItemState } from '../domain/run-lifecycle.ts';
 
 export interface ProjectRow {
   projectId: string;
@@ -323,6 +323,196 @@ export interface RunStepRow {
   completedAt: string | null;
 }
 
+export interface RunAttemptInput {
+  reason: string;
+  nowMs: number;
+}
+
+export type EvidenceStatus = 'passed' | 'failed' | 'skipped' | 'unavailable' | 'inconclusive' | 'stale';
+export type EvidenceIndependence = 'deterministic' | 'external' | 'model-review';
+
+// One evidence item (docs/contracts-and-state.md "Evidence schema"). Rows are insert-only.
+export interface EvidenceInput {
+  attemptId: string;
+  workItem?: string;
+  kind: string;
+  name: string;
+  status: EvidenceStatus;
+  revision: string;
+  clean: boolean;
+  treeDigest: string;
+  environment: Readonly<Record<string, unknown>>;
+  contractVersion: number;
+  policyRevision: string;
+  independence: EvidenceIndependence;
+  acceptance: readonly string[];
+  tests?: unknown;
+  command?: readonly string[];
+  exitCode?: number;
+  durationMs?: number;
+  artifactDigest?: string;
+  nowMs: number;
+}
+
+export interface EvidenceRow {
+  evidenceId: string;
+  attemptId: string;
+  // Read through the attempt.
+  runId: string;
+  workItem: string | null;
+  kind: string;
+  name: string;
+  status: EvidenceStatus;
+  revision: string;
+  clean: boolean;
+  treeDigest: string;
+  environment: Readonly<Record<string, unknown>>;
+  contractVersion: number;
+  policyRevision: string;
+  independence: EvidenceIndependence;
+  acceptance: readonly string[];
+  tests: unknown;
+  command: readonly string[] | null;
+  exitCode: number | null;
+  durationMs: number | null;
+  artifactDigest: string | null;
+  createdAt: string;
+}
+
+export interface GateResultInput {
+  runId: string;
+  // G0 to G4.
+  gate: string;
+  workItem?: string;
+  contractVersion: number;
+  policyRevision: string;
+  revision: string;
+  passed: boolean;
+  failures: readonly unknown[];
+  nowMs: number;
+}
+
+export interface GateResultRow {
+  runId: string;
+  gate: string;
+  workItem: string | null;
+  contractVersion: number;
+  policyRevision: string;
+  revision: string;
+  passed: boolean;
+  failures: unknown;
+  createdAt: string;
+}
+
+export type WorkItemType = 'implement' | 'harden';
+
+export interface WorkItemInput {
+  runId: string;
+  itemId: string;
+  type?: WorkItemType;
+  dependsOn?: readonly string[];
+  size: string;
+  model: string;
+  spec: unknown;
+  gsdSession?: string;
+  nowMs: number;
+}
+
+export interface WorkItemRow {
+  runId: string;
+  itemId: string;
+  type: WorkItemType;
+  dependsOn: readonly string[];
+  size: string;
+  model: string;
+  spec: unknown;
+  state: WorkItemState;
+  gsdSession: string | null;
+  // How many times the item was delegated.
+  attempts: number;
+}
+
+export interface WorkItemTransitionInput {
+  to: WorkItemState;
+  nowMs: number;
+  gsdSession?: string;
+  attemptId?: string;
+  // Extra event data: IDs, counts, digests and exit codes only.
+  data?: Readonly<Record<string, unknown>>;
+}
+
+export type DecisionState = 'open' | 'answered' | 'stale' | 'withdrawn';
+export type DecisionUrgency = 'blocking' | 'digest';
+
+export interface DecisionInput {
+  runId: string;
+  contractVersion: number;
+  // acceptance, architecture, scope_expansion, permission, repeated_failure, equivalent_mutant, contradiction or budget.
+  class: string;
+  issue: string;
+  recommendation?: string;
+  options: unknown;
+  consequences: unknown;
+  evidenceRefs: readonly string[];
+  affectedItems: readonly string[];
+  authorizedDefault?: string;
+  stateDigest: string;
+  urgency: DecisionUrgency;
+  nowMs: number;
+}
+
+export interface DecisionRow {
+  decisionId: string;
+  runId: string;
+  contractVersion: number;
+  class: string;
+  issue: string;
+  recommendation: string | null;
+  options: unknown;
+  consequences: unknown;
+  evidenceRefs: readonly string[];
+  affectedItems: readonly string[];
+  authorizedDefault: string | null;
+  stateDigest: string;
+  urgency: DecisionUrgency;
+  state: DecisionState;
+  openedAt: string;
+  answeredAt: string | null;
+  answeredBy: string | null;
+  answer: string | null;
+  answerChannel: string | null;
+}
+
+export interface CheckValidationInput {
+  projectId: string;
+  baseRevision: string;
+  specDigest: string;
+  name: string;
+  verdict: string;
+  detail: unknown;
+  nowMs: number;
+}
+
+export interface CheckValidationRow {
+  projectId: string;
+  baseRevision: string;
+  specDigest: string;
+  name: string;
+  verdict: string;
+  detail: unknown;
+  validatedAt: string;
+}
+
+// A row the PreToolUse hook recorded with its own SQL (the read-before-edit rule).
+export interface HookReadRow {
+  invocationId: string;
+  agentId: string;
+  path: string;
+  digest: string;
+  seq: number;
+  recordedAt: string;
+}
+
 export interface Ledger {
   registerProject(input: NewProject): Result<ProjectRow>;
   findProject(query: ProjectQuery): Result<ProjectRow | null>;
@@ -398,4 +588,35 @@ export interface Ledger {
 
   recordRunStep(runId: string, input: StepResultInput): Result<RunStepRow>;
   getRunSteps(runId: string): Result<RunStepRow[]>;
+
+  // Attempts: ordinal 1, 2, ... per run. An attempt ends once, with an outcome.
+  recordRunAttempt(runId: string, input: RunAttemptInput): Result<AttemptRow>;
+  endRunAttempt(attemptId: string, input: { outcome: string; nowMs: number }): Result<AttemptRow>;
+  listRunAttempts(runId: string): Result<AttemptRow[]>;
+
+  // Evidence and gate results are insert-only (T-02-06, AUT-8): an interrupted check is marked by a new `inconclusive`
+  // row, never by an UPDATE. The adapter refuses a status or independence outside the documented sets.
+  recordEvidence(input: EvidenceInput): Result<EvidenceRow>;
+  // Through the run's attempts, oldest first.
+  listEvidence(runId: string): Result<EvidenceRow[]>;
+  recordGateResult(input: GateResultInput): Result<void>;
+  listGateResults(runId: string): Result<GateResultRow[]>;
+
+  // Work items. An upsert never moves the state; transitionWorkItem applies assertItemTransition under the run's lease fence.
+  upsertWorkItem(input: WorkItemInput): Result<WorkItemRow>;
+  transitionWorkItem(runId: string, itemId: string, guard: { fence: number }, t: WorkItemTransitionInput): Result<WorkItemRow>;
+  listWorkItems(runId: string): Result<WorkItemRow[]>;
+
+  // Decisions open in state `open`; answering them is Phase 3.
+  openDecision(input: DecisionInput): Result<DecisionRow>;
+  // Oldest first.
+  listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
+
+  // The validation verdict of one declared check (ONB-10), cached per project, base revision and spec digest.
+  // A verdict is never overwritten: a second record for the same key is a conflict.
+  recordCheckValidation(input: CheckValidationInput): Result<void>;
+  getCheckValidations(projectId: string, baseRevision: string, specDigest: string): Result<CheckValidationRow[]>;
+
+  // The rows of the hook's read-before-edit table for one invocation, by seq.
+  listHookReads(invocationId: string): Result<HookReadRow[]>;
 }

@@ -503,3 +503,415 @@ describe('listRuns', () => {
     refused(h.ledger.getRun('run_carrier'), 'not_found');
   });
 });
+
+// ---------------------------------------------------------------------------------------------------
+// Task 3: attempts, evidence, gate results, work items, decisions, check validations, hook reads
+// ---------------------------------------------------------------------------------------------------
+
+function evidenceInput(attemptId: string, over: Record<string, unknown> = {}) {
+  return {
+    attemptId,
+    workItem: 'A',
+    kind: 'check',
+    name: 'unit',
+    status: 'passed' as const,
+    revision: 'git:a1b2c3d',
+    clean: true,
+    treeDigest: 'sha256:' + '7'.repeat(64),
+    environment: { os: 'darwin', arch: 'arm64', node: '26.9.0', executor: 'local-sandbox' },
+    contractVersion: 1,
+    policyRevision: 'sha256:' + '4'.repeat(64),
+    independence: 'deterministic' as const,
+    acceptance: ['AC1', 'AC2'],
+    tests: { total: 214, passed: 214, failed: 0, skipped: 0 },
+    command: ['npm', 'test'],
+    exitCode: 0,
+    durationMs: 41_250,
+    artifactDigest: 'sha256:' + '0'.repeat(64),
+    nowMs: T0 + 100,
+    ...over,
+  };
+}
+
+describe('run attempts', () => {
+  it('gives att_ IDs with ordinals 1 and 2, records an event with run and attempt, and ends an attempt exactly once', () => {
+    const h = harness();
+    seedRun(h);
+    const first = must(h.ledger.recordRunAttempt('run_1', { reason: 'first attempt', nowMs: T0 + 10 }));
+    const second = must(h.ledger.recordRunAttempt('run_1', { reason: 'discard and retry', nowMs: T0 + 20 }));
+    assert.match(first.attemptId, /^att_/);
+    assert.deepEqual([first.ordinal, second.ordinal], [1, 2]);
+    assert.equal(first.endedAt, null);
+    assert.equal(first.outcome, null);
+    const ev = h.db.prepare("SELECT run_id, attempt_id FROM events WHERE type = 'attempt.started' ORDER BY seq").all() as Array<{ run_id: string; attempt_id: string }>;
+    assert.deepEqual(ev.map((e) => [e.run_id, e.attempt_id]), [['run_1', first.attemptId], ['run_1', second.attemptId]]);
+
+    const ended = must(h.ledger.endRunAttempt(first.attemptId, { outcome: 'progressed', nowMs: T0 + 30 }));
+    assert.equal(ended.endedAt, new Date(T0 + 30).toISOString());
+    assert.equal(ended.outcome, 'progressed');
+    refused(h.ledger.endRunAttempt(first.attemptId, { outcome: 'failed', nowMs: T0 + 40 }), 'conflict');
+    assert.equal(must(h.ledger.listRunAttempts('run_1'))[0]?.outcome, 'progressed');
+    assert.deepEqual(must(h.ledger.listRunAttempts('run_1')).map((a) => a.ordinal), [1, 2]);
+    assert.equal(h.count('events', "type = 'attempt.ended' AND run_id = 'run_1'"), 1);
+  });
+
+  it('refuses an unknown run, an unknown attempt, an empty reason or outcome, and an onboarding carrier', () => {
+    const h = harness();
+    const project = seedProject(h);
+    seedRun(h, 'run_1', project);
+    h.db.prepare("INSERT INTO runs (run_id, project_id, state, version, title, created_at, updated_at) VALUES ('run_carrier', ?, 'onboarding', 1, 'onboarding onb_1', 'a', 'a')").run(project);
+    h.db.prepare("INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at) VALUES ('att_carrier', 'run_carrier', 1, 'r', 'a')").run();
+    refused(h.ledger.recordRunAttempt('run_missing', { reason: 'r', nowMs: T0 }), 'not_found');
+    refused(h.ledger.recordRunAttempt('run_carrier', { reason: 'r', nowMs: T0 }), 'not_found');
+    refused(h.ledger.recordRunAttempt('run_1', { reason: '', nowMs: T0 }), 'invalid');
+    refused(h.ledger.endRunAttempt('att_missing', { outcome: 'x', nowMs: T0 }), 'not_found');
+    refused(h.ledger.endRunAttempt('att_carrier', { outcome: 'x', nowMs: T0 }), 'not_found');
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 }));
+    refused(h.ledger.endRunAttempt(attempt.attemptId, { outcome: '', nowMs: T0 }), 'invalid');
+    refused(h.ledger.listRunAttempts('run_missing'), 'not_found');
+  });
+});
+
+describe('evidence', () => {
+  it('records every field of the schema and reads it back through the run, oldest first, with an ev_ ID', () => {
+    const h = harness();
+    seedRun(h);
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'first attempt', nowMs: T0 + 10 }));
+    const recorded = must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId)));
+    assert.match(recorded.evidenceId, /^ev_/);
+    assert.equal(recorded.runId, 'run_1');
+    must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { name: 'lint', status: 'failed', exitCode: 1, nowMs: T0 + 101 })));
+    const rows = must(h.ledger.listEvidence('run_1'));
+    assert.deepEqual(rows.map((r) => r.name), ['unit', 'lint']);
+    const first = rows[0];
+    assert.ok(first);
+    assert.equal(first.status, 'passed');
+    assert.equal(first.attemptId, attempt.attemptId);
+    assert.equal(first.workItem, 'A');
+    assert.equal(first.kind, 'check');
+    assert.equal(first.revision, 'git:a1b2c3d');
+    assert.equal(first.clean, true);
+    assert.equal(first.treeDigest, 'sha256:' + '7'.repeat(64));
+    assert.deepEqual(first.environment, { os: 'darwin', arch: 'arm64', node: '26.9.0', executor: 'local-sandbox' });
+    assert.equal(first.contractVersion, 1);
+    assert.equal(first.policyRevision, 'sha256:' + '4'.repeat(64));
+    assert.equal(first.independence, 'deterministic');
+    assert.deepEqual(first.acceptance, ['AC1', 'AC2']);
+    assert.deepEqual(first.tests, { total: 214, passed: 214, failed: 0, skipped: 0 });
+    assert.deepEqual(first.command, ['npm', 'test']);
+    assert.equal(first.exitCode, 0);
+    assert.equal(first.durationMs, 41_250);
+    assert.equal(first.artifactDigest, 'sha256:' + '0'.repeat(64));
+    assert.equal(rows[1]?.exitCode, 1);
+    assert.equal(h.count('events', "type = 'evidence.recorded' AND run_id = 'run_1' AND attempt_id IS NOT NULL"), 2);
+  });
+
+  it('stores optional fields as null, and a dirty tree as clean false', () => {
+    const h = harness();
+    seedRun(h);
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    const { workItem: _w, tests: _t, command: _c, exitCode: _e, durationMs: _d, artifactDigest: _a, ...bare } = evidenceInput(attempt.attemptId, { clean: false });
+    const row = must(h.ledger.recordEvidence(bare));
+    assert.equal(row.clean, false);
+    assert.equal(row.workItem, null);
+    assert.equal(row.tests, null);
+    assert.equal(row.command, null);
+    assert.equal(row.exitCode, null);
+    assert.equal(row.durationMs, null);
+    assert.equal(row.artifactDigest, null);
+  });
+
+  it('accepts each of the six statuses and refuses any other as invalid', () => {
+    const h = harness();
+    seedRun(h);
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    for (const status of ['passed', 'failed', 'skipped', 'unavailable', 'inconclusive', 'stale'] as const) {
+      must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { status, name: `n-${status}` })));
+    }
+    for (const status of ['pass', 'ok', 'PASSED', 'error', '', 'timeout']) {
+      const result = h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { status }));
+      refused(result, 'invalid');
+      assert.ok(!result.ok && result.error.kind === 'invalid' && result.error.field === 'status');
+    }
+    assert.equal(h.count('evidence'), 6);
+  });
+
+  it('refuses an independence outside deterministic, external, model-review, and accepts those three', () => {
+    const h = harness();
+    seedRun(h);
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    for (const independence of ['deterministic', 'external', 'model-review'] as const) {
+      must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { independence, name: `i-${independence}` })));
+    }
+    refused(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { independence: 'self-reported' })), 'invalid');
+    assert.equal(h.count('evidence'), 3);
+  });
+
+  it('refuses an unknown attempt, an attempt of an onboarding carrier, a non-boolean clean and a non-object environment', () => {
+    const h = harness();
+    const project = seedProject(h);
+    seedRun(h, 'run_1', project);
+    h.db.prepare("INSERT INTO runs (run_id, project_id, state, version, title, created_at, updated_at) VALUES ('run_carrier', ?, 'onboarding', 1, 'onboarding onb_1', 'a', 'a')").run(project);
+    h.db.prepare("INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at) VALUES ('att_carrier', 'run_carrier', 1, 'r', 'a')").run();
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    refused(h.ledger.recordEvidence(evidenceInput('att_missing')), 'not_found');
+    refused(h.ledger.recordEvidence(evidenceInput('att_carrier')), 'not_found');
+    refused(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { clean: 'yes' })), 'invalid');
+    refused(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { environment: 'darwin' })), 'invalid');
+    refused(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { name: '' })), 'invalid');
+    refused(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { contractVersion: 0 })), 'invalid');
+    refused(h.ledger.listEvidence('run_missing'), 'not_found');
+    assert.equal(h.count('evidence'), 0);
+  });
+
+  it('is insert-only: an interrupted check is marked by a new inconclusive row, and the database refuses an UPDATE or DELETE (T-02-06)', () => {
+    const h = harness();
+    seedRun(h);
+    const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { status: 'passed' })));
+    must(h.ledger.recordEvidence(evidenceInput(attempt.attemptId, { status: 'inconclusive', nowMs: T0 + 200 })));
+    assert.deepEqual(must(h.ledger.listEvidence('run_1')).map((r) => r.status), ['passed', 'inconclusive']);
+    assert.throws(() => h.db.prepare("UPDATE evidence SET status = 'passed' WHERE status = 'inconclusive'").run(), /insert-only/);
+    assert.throws(() => h.db.prepare('DELETE FROM evidence').run(), /insert-only/);
+    assert.equal(h.count('evidence'), 2);
+  });
+
+  it('keeps evidence of different runs apart', () => {
+    const h = harness();
+    const project = seedProject(h);
+    seedRun(h, 'run_1', project);
+    seedRun(h, 'run_2', project);
+    const a1 = must(h.ledger.recordRunAttempt('run_1', { reason: 'r', nowMs: T0 + 10 }));
+    const a2 = must(h.ledger.recordRunAttempt('run_2', { reason: 'r', nowMs: T0 + 10 }));
+    must(h.ledger.recordEvidence(evidenceInput(a1.attemptId, { name: 'one' })));
+    must(h.ledger.recordEvidence(evidenceInput(a2.attemptId, { name: 'two' })));
+    assert.deepEqual(must(h.ledger.listEvidence('run_1')).map((r) => r.name), ['one']);
+    assert.deepEqual(must(h.ledger.listEvidence('run_2')).map((r) => r.name), ['two']);
+  });
+});
+
+describe('gate results', () => {
+  const gate = { runId: 'run_1', gate: 'G2', workItem: 'A', contractVersion: 1, policyRevision: 'p', revision: 'git:abc', passed: false, failures: [{ rule: 'scope', detail: 'src/x.ts outside write' }], nowMs: T0 + 50 };
+
+  it('round trips failures_json, passed and the revision, oldest first, and records an event with the run', () => {
+    const h = harness();
+    seedRun(h);
+    must(h.ledger.recordGateResult(gate));
+    must(h.ledger.recordGateResult({ ...gate, gate: 'G4', workItem: undefined, passed: true, failures: [], nowMs: T0 + 60 }));
+    const rows = must(h.ledger.listGateResults('run_1'));
+    assert.deepEqual(rows.map((r) => [r.gate, r.passed, r.workItem]), [['G2', false, 'A'], ['G4', true, null]]);
+    assert.deepEqual(rows[0]?.failures, [{ rule: 'scope', detail: 'src/x.ts outside write' }]);
+    assert.deepEqual(rows[1]?.failures, []);
+    assert.equal(rows[0]?.revision, 'git:abc');
+    assert.equal(rows[0]?.contractVersion, 1);
+    assert.equal(h.count('events', "type = 'gate.result' AND run_id = 'run_1'"), 2);
+  });
+
+  it('refuses an empty gate name, a non-boolean passed and an unknown run, and is insert-only', () => {
+    const h = harness();
+    seedRun(h);
+    refused(h.ledger.recordGateResult({ ...gate, gate: '' }), 'invalid');
+    refused(h.ledger.recordGateResult({ ...gate, passed: 1 as unknown as boolean }), 'invalid');
+    refused(h.ledger.recordGateResult({ ...gate, runId: 'run_missing' }), 'not_found');
+    refused(h.ledger.listGateResults('run_missing'), 'not_found');
+    must(h.ledger.recordGateResult(gate));
+    assert.throws(() => h.db.prepare('UPDATE gate_results SET passed = 1').run(), /insert-only/);
+    assert.throws(() => h.db.prepare('DELETE FROM gate_results').run(), /insert-only/);
+    assert.equal(h.count('gate_results'), 1);
+  });
+});
+
+describe('work items', () => {
+  const item = { runId: 'run_1', itemId: 'A', dependsOn: [] as string[], size: 'medium', model: 'sonnet', spec: { goal: 'fix slug' }, nowMs: T0 + 10 };
+
+  it('upserts an item at ready, keeps its state on a second upsert, and lists them', () => {
+    const h = harness();
+    seedRun(h);
+    const created = must(h.ledger.upsertWorkItem(item));
+    assert.equal(created.state, 'ready');
+    assert.equal(created.type, 'implement');
+    assert.equal(created.attempts, 0);
+    assert.deepEqual(created.spec, { goal: 'fix slug' });
+    must(h.ledger.upsertWorkItem({ ...item, itemId: 'B', dependsOn: ['A'], type: 'harden' }));
+    const lease = must(h.ledger.acquireRunLease('run_1', 'a', 1_000, T0 + 11));
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence: lease.fence }, { to: 'delegated', nowMs: T0 + 12 }));
+    const again = must(h.ledger.upsertWorkItem({ ...item, size: 'large', spec: { goal: 'fix slug', more: true } }));
+    assert.equal(again.state, 'delegated', 'an upsert never moves the state');
+    assert.equal(again.size, 'large');
+    assert.equal(again.attempts, 1);
+    const all = must(h.ledger.listWorkItems('run_1'));
+    assert.deepEqual(all.map((i) => [i.itemId, i.state, i.type, i.dependsOn]), [['A', 'delegated', 'implement', []], ['B', 'ready', 'harden', ['A']]]);
+  });
+
+  it('applies assertItemTransition, appends a work_item.transition event with the run, and counts delegations as attempts', () => {
+    const h = harness();
+    seedRun(h);
+    must(h.ledger.upsertWorkItem(item));
+    const fence = must(h.ledger.acquireRunLease('run_1', 'a', 1_000, T0 + 11)).fence;
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'delegated', nowMs: T0 + 12, gsdSession: 'sess-1' }));
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'ready', nowMs: T0 + 13 }));
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'delegated', nowMs: T0 + 14 }));
+    for (const to of ['implemented', 'gated', 'done'] as const) must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to, nowMs: T0 + 20 }));
+    const done = must(h.ledger.listWorkItems('run_1'))[0];
+    assert.equal(done?.state, 'done');
+    assert.equal(done?.attempts, 2);
+    assert.equal(done?.gsdSession, 'sess-1');
+    const events = h.db.prepare("SELECT run_id, data_json FROM events WHERE type = 'work_item.transition' ORDER BY seq").all() as Array<{ run_id: string; data_json: string }>;
+    assert.equal(events.length, 6);
+    assert.ok(events.every((e) => e.run_id === 'run_1'));
+    const last = JSON.parse(events[5]?.data_json ?? '{}') as Record<string, unknown>;
+    assert.equal(last['itemId'], 'A');
+    assert.equal(last['from'], 'gated');
+    assert.equal(last['to'], 'done');
+  });
+
+  it('refuses an invalid edge as invalid, a stale fence as conflict and an unknown item or run as not_found, writing nothing', () => {
+    const h = harness();
+    seedRun(h);
+    must(h.ledger.upsertWorkItem(item));
+    const fence = must(h.ledger.acquireRunLease('run_1', 'a', 1_000, T0 + 11)).fence;
+    const before = h.count('events');
+    const skip = h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'done', nowMs: T0 + 12 });
+    refused(skip, 'invalid');
+    assert.ok(!skip.ok && skip.error.kind === 'invalid' && skip.error.field === 'state');
+    refused(h.ledger.transitionWorkItem('run_1', 'A', { fence: fence + 1 }, { to: 'delegated', nowMs: T0 + 12 }), 'conflict');
+    refused(h.ledger.transitionWorkItem('run_1', 'Z', { fence }, { to: 'delegated', nowMs: T0 + 12 }), 'not_found');
+    refused(h.ledger.transitionWorkItem('run_missing', 'A', { fence }, { to: 'delegated', nowMs: T0 + 12 }), 'not_found');
+    assert.equal(h.count('events'), before);
+    assert.equal(must(h.ledger.listWorkItems('run_1'))[0]?.state, 'ready');
+  });
+
+  it('lets any non-done item move to blocked_on_decision and back to ready, and nothing leave done', () => {
+    const h = harness();
+    seedRun(h);
+    must(h.ledger.upsertWorkItem(item));
+    const fence = must(h.ledger.acquireRunLease('run_1', 'a', 1_000, T0 + 11)).fence;
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'delegated', nowMs: T0 + 12 }));
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'blocked_on_decision', nowMs: T0 + 13 }));
+    must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'ready', nowMs: T0 + 14 }));
+    for (const to of ['delegated', 'implemented', 'gated', 'done'] as const) must(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to, nowMs: T0 + 20 }));
+    refused(h.ledger.transitionWorkItem('run_1', 'A', { fence }, { to: 'blocked_on_decision', nowMs: T0 + 30 }), 'invalid');
+  });
+
+  it('refuses a malformed item: empty ID, unknown type, unknown run', () => {
+    const h = harness();
+    seedRun(h);
+    refused(h.ledger.upsertWorkItem({ ...item, itemId: '' }), 'invalid');
+    refused(h.ledger.upsertWorkItem({ ...item, type: 'refactor' as never }), 'invalid');
+    refused(h.ledger.upsertWorkItem({ ...item, runId: 'run_missing' }), 'not_found');
+    refused(h.ledger.listWorkItems('run_missing'), 'not_found');
+    assert.equal(h.count('work_items'), 0);
+  });
+});
+
+describe('decisions', () => {
+  const decision = {
+    runId: 'run_1',
+    contractVersion: 1,
+    class: 'acceptance',
+    issue: 'The brief does not say whether slugs keep digits',
+    options: [{ id: 'keep', label: 'keep digits' }, { id: 'drop', label: 'drop digits' }],
+    consequences: { keep: 'matches the tests', drop: 'breaks 3 tests' },
+    evidenceRefs: ['ev_1'],
+    affectedItems: ['A'],
+    stateDigest: 'sha256:' + '9'.repeat(64),
+    urgency: 'blocking' as const,
+    nowMs: T0 + 70,
+  };
+
+  it('opens a decision in state open with a dec_ ID, an event with the run, and filters by run and state', () => {
+    const h = harness();
+    const project = seedProject(h);
+    seedRun(h, 'run_1', project);
+    seedRun(h, 'run_2', project);
+    const opened = must(h.ledger.openDecision(decision));
+    assert.match(opened.decisionId, /^dec_/);
+    assert.equal(opened.state, 'open');
+    assert.equal(opened.class, 'acceptance');
+    assert.equal(opened.recommendation, null);
+    assert.equal(opened.authorizedDefault, null);
+    assert.equal(opened.answeredAt, null);
+    assert.deepEqual(opened.options, decision.options);
+    assert.deepEqual(opened.affectedItems, ['A']);
+    assert.deepEqual(opened.evidenceRefs, ['ev_1']);
+    const other = must(h.ledger.openDecision({ ...decision, runId: 'run_2', class: 'budget', urgency: 'digest', recommendation: 'raise the cap', authorizedDefault: 'stop', nowMs: T0 + 80 }));
+    assert.equal(other.recommendation, 'raise the cap');
+    assert.equal(other.authorizedDefault, 'stop');
+    assert.deepEqual(must(h.ledger.listDecisions({})).map((d) => d.decisionId), [opened.decisionId, other.decisionId]);
+    assert.deepEqual(must(h.ledger.listDecisions({ runId: 'run_2' })).map((d) => d.decisionId), [other.decisionId]);
+    assert.deepEqual(must(h.ledger.listDecisions({ state: 'open' })).length, 2);
+    assert.deepEqual(must(h.ledger.listDecisions({ state: 'answered' })), []);
+    assert.deepEqual(must(h.ledger.listDecisions({ runId: 'run_1', state: 'open' })).map((d) => d.decisionId), [opened.decisionId]);
+    assert.equal(h.count('events', "type = 'decision.opened' AND run_id = 'run_1'"), 1);
+  });
+
+  it('accepts exactly the eight documented classes and the two urgencies, and refuses anything else', () => {
+    const h = harness();
+    seedRun(h);
+    for (const cls of ['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget']) {
+      must(h.ledger.openDecision({ ...decision, class: cls }));
+    }
+    refused(h.ledger.openDecision({ ...decision, class: 'preference' }), 'invalid');
+    refused(h.ledger.openDecision({ ...decision, urgency: 'whenever' as never }), 'invalid');
+    refused(h.ledger.openDecision({ ...decision, issue: '' }), 'invalid');
+    refused(h.ledger.openDecision({ ...decision, contractVersion: 0 }), 'invalid');
+    refused(h.ledger.openDecision({ ...decision, runId: 'run_missing' }), 'not_found');
+    assert.equal(h.count('decisions'), 8);
+  });
+
+  it('refuses a filter state outside open, answered, stale, withdrawn', () => {
+    const h = harness();
+    seedRun(h);
+    refused(h.ledger.listDecisions({ state: 'closed' as never }), 'invalid');
+  });
+});
+
+describe('check validations', () => {
+  const validation = { projectId: 'proj_1', baseRevision: 'git:9f1cd8d', specDigest: 'sha256:' + '5'.repeat(64), name: 'test', verdict: 'active', detail: { reason: 'wrote only declared paths' }, nowMs: T0 + 90 };
+
+  it('round trips one row per check name and filters by project, revision and spec digest', () => {
+    const h = harness();
+    must(h.ledger.recordCheckValidation(validation));
+    must(h.ledger.recordCheckValidation({ ...validation, name: 'lint', verdict: 'rejected', detail: { reason: 'unexpected-write', paths: ['dist/x'] } }));
+    must(h.ledger.recordCheckValidation({ ...validation, specDigest: 'sha256:' + '6'.repeat(64), name: 'test' }));
+    const rows = must(h.ledger.getCheckValidations('proj_1', 'git:9f1cd8d', validation.specDigest));
+    assert.deepEqual(rows.map((r) => [r.name, r.verdict]), [['test', 'active'], ['lint', 'rejected']]);
+    assert.deepEqual(rows[1]?.detail, { reason: 'unexpected-write', paths: ['dist/x'] });
+    assert.equal(rows[0]?.validatedAt, new Date(T0 + 90).toISOString());
+    assert.deepEqual(must(h.ledger.getCheckValidations('proj_1', 'git:other', validation.specDigest)), []);
+    assert.deepEqual(must(h.ledger.getCheckValidations('proj_2', 'git:9f1cd8d', validation.specDigest)), []);
+    assert.equal(must(h.ledger.getCheckValidations('proj_1', 'git:9f1cd8d', 'sha256:' + '6'.repeat(64))).length, 1);
+  });
+
+  it('never overwrites a verdict: a second record for the same key is a conflict that leaves the first', () => {
+    const h = harness();
+    must(h.ledger.recordCheckValidation(validation));
+    refused(h.ledger.recordCheckValidation({ ...validation, verdict: 'rejected', detail: { reason: 'network' }, nowMs: T0 + 95 }), 'conflict');
+    const [row] = must(h.ledger.getCheckValidations('proj_1', 'git:9f1cd8d', validation.specDigest));
+    assert.equal(row?.verdict, 'active');
+    assert.equal(h.count('check_validations'), 1);
+  });
+
+  it('refuses an empty name or verdict', () => {
+    const h = harness();
+    refused(h.ledger.recordCheckValidation({ ...validation, name: '' }), 'invalid');
+    refused(h.ledger.recordCheckValidation({ ...validation, verdict: '' }), 'invalid');
+    assert.equal(h.count('check_validations'), 0);
+  });
+});
+
+describe('hook reads', () => {
+  it('lists the rows the hook wrote with its own SQL, by seq, for one invocation', () => {
+    const h = harness();
+    const insert = h.db.prepare('INSERT INTO hook_reads (invocation_id, agent_id, path, digest, seq, recorded_at) VALUES (?, ?, ?, ?, ?, ?)');
+    insert.run('inv_1', 'main', 'src/b.ts', 'sha256:bb', 2, '2026-11-05T09:00:02.000Z');
+    insert.run('inv_1', 'main', 'src/a.ts', 'sha256:aa', 1, '2026-11-05T09:00:01.000Z');
+    insert.run('inv_1', 'sub-1', 'src/a.ts', 'sha256:aa', 3, '2026-11-05T09:00:03.000Z');
+    insert.run('inv_2', 'main', 'src/c.ts', 'sha256:cc', 1, '2026-11-05T09:00:04.000Z');
+    const rows = must(h.ledger.listHookReads('inv_1'));
+    assert.deepEqual(rows.map((r) => [r.agentId, r.path, r.digest, r.seq]), [['main', 'src/a.ts', 'sha256:aa', 1], ['main', 'src/b.ts', 'sha256:bb', 2], ['sub-1', 'src/a.ts', 'sha256:aa', 3]]);
+    assert.equal(rows[0]?.invocationId, 'inv_1');
+    assert.equal(rows[0]?.recordedAt, '2026-11-05T09:00:01.000Z');
+    assert.deepEqual(must(h.ledger.listHookReads('inv_none')), []);
+  });
+});

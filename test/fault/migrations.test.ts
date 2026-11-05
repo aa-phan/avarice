@@ -166,6 +166,9 @@ describe('the committed v1 fixture database', () => {
       }
       assert.ok(names.includes('index:evidence_attempt'));
       assert.ok(names.includes('index:events_run'));
+      for (const trigger of ['evidence_no_update', 'evidence_no_delete', 'gate_results_no_update', 'gate_results_no_delete']) {
+        assert.ok(names.includes(`trigger:${trigger}`), trigger);
+      }
       const columns = (db.prepare('PRAGMA table_info(runs)').all() as Array<{ name: string }>).map((c) => c.name);
       for (const column of NEW_RUNS_COLUMNS) assert.ok(columns.includes(column), `runs.${column}`);
       assert.deepEqual({ ...(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '2' });

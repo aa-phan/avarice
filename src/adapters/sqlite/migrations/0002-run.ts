@@ -5,6 +5,8 @@
 //   hook_reads   what the run hook saw an agent read, for the read-before-edit rule (written by the hook with its own SQL)
 //   check_validations  the active validation verdict of one declared check, cached per project, base revision and spec digest (ONB-10)
 // Two indexes serve the reads the run makes every time: evidence by attempt, and events by run.
+// Evidence and gate rows are insert-only (T-02-06): triggers refuse an UPDATE or DELETE, as events already do; an
+// interrupted check is marked by inserting a new row with status `inconclusive`.
 import type { Migration } from '../migrate.ts';
 
 const sql = `
@@ -33,6 +35,18 @@ CREATE TABLE check_validations (
 
 CREATE INDEX evidence_attempt ON evidence (attempt_id);
 CREATE INDEX events_run ON events (run_id);
+
+CREATE TRIGGER evidence_no_update BEFORE UPDATE ON evidence
+BEGIN SELECT RAISE(ABORT, 'evidence is insert-only'); END;
+
+CREATE TRIGGER evidence_no_delete BEFORE DELETE ON evidence
+BEGIN SELECT RAISE(ABORT, 'evidence is insert-only'); END;
+
+CREATE TRIGGER gate_results_no_update BEFORE UPDATE ON gate_results
+BEGIN SELECT RAISE(ABORT, 'gate_results is insert-only'); END;
+
+CREATE TRIGGER gate_results_no_delete BEFORE DELETE ON gate_results
+BEGIN SELECT RAISE(ABORT, 'gate_results is insert-only'); END;
 `;
 
 export const MIGRATION_0002: Migration = { version: 2, sql };
