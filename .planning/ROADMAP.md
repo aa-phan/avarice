@@ -120,7 +120,51 @@ Plans:
   6. `avarice` with no arguments in a terminal opens the interactive shell (ADR-013): the user starts, watches and resumes the Phase 2 run from it, closing the shell leaves the supervisor running, and the same command outside a terminal or under `AVARICE_RUN` prints usage and exits 64
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
 
-**Plans**: TBD
+**Plans:** 22 plans (10 waves)
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — Spike S2-A: admit the installed Claude Code on a live containment run; Phase 2 spend ledger and 25 USD ceiling guard
+- [ ] 02-02-PLAN.md — Freeze Phase 1 `--json` shapes (D-19), shared OPS-7 renderers, restyle status, init, repo and dispatcher errors
+- [ ] 02-03-PLAN.md — Run lifecycle table, migration 0002, run ledger methods (runs, steps, leases, evidence, gates, items, decisions, check validations)
+- [ ] 02-04-PLAN.md — Routine run contract compiler: brief parser, conventions schema 1, lower-only budgets, static G0
+- [ ] 02-05-PLAN.md — Evidence statuses, D-12 baseline delta, acceptance mapping, test inventory, gates G2 and G4, structural pause
+- [ ] 02-06-PLAN.md — Loopback-only sandbox network, allowlisting egress proxy, spike S2-C (npm ci through it)
+- [ ] 02-07-PLAN.md — Run git adapters: clone, supervisor commit, snapshot and discard, fetch hand-off; conventions (D-16) and staleness (D-04) readers
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-08-PLAN.md — `run` invocation purpose: glob scope, hook rules, settings, environment, run GSD settings and unit prompt
+- [ ] 02-10-PLAN.md — `avarice start` to contract_ready: preflight refusals, atomic run creation, contract file, summary
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-09-PLAN.md — Spike S2-B: real `/gsd-quick --validate --text` under the run-purpose hook, evidence-backed configuration
+- [ ] 02-12-PLAN.md — Detached supervisor, run lease loop, `supervise`, `start --wait`, run budget and invocation bookkeeping
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 02-11-PLAN.md — Hook read-before-edit with digest precondition (CON-7) and loop limits (CON-14)
+- [ ] 02-13-PLAN.md — Vertical slice to ready_for_review with the fake host: unit, classification, G2, supervisor commit, checks, G4, hand-off
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 02-14-PLAN.md — Checks pipeline: dependency install via proxy (D-11), ONB-10 validation, baseline (D-12), test inventory, AUT-9
+- [ ] 02-15-PLAN.md — `status` run views with optional `runs` JSON key, `inbox`, `install-host` with the avarice-run skill
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 02-16-PLAN.md — CON-16 discard and retry once (S-42), loop and budget escalations, S-20 source checkout untouched
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 02-17-PLAN.md — `resume` for runs, reconcile prelude, S-3, AC-3 kill-point suite over every run checkpoint
+- [ ] 02-18-PLAN.md — Spike S2-D (limitation 8), containment matrix run rows with a matrix test, G4 and conventions doc amendments
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 02-19-PLAN.md — Interactive shell (FR-27, ADR-013): home view, actions, watch, command line, history
+- [ ] 02-20-PLAN.md — Live T3 run-purpose suite: S-12 end to end, CS-1..4, 6, 7, 10..14, S-3, S-13..15, S-20, S-41, S-42
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 02-21-PLAN.md — Exit drafts (portfolio `.avarice/config.json`, three R1 briefs), no-spend dry run, owner checkpoints D-06, D-15, D-09
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 02-22-PLAN.md — Exit: three R1 runs on ~/aa-phan-portfolio-v2, 3 of 3 ready_for_review with evidence (D-08)
+
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
 ### Phase 3: Decisions, independent work and amendments
