@@ -249,3 +249,15 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 **Deferred at:** 2026-11-05 during /gsd-verify-work 01 session completion
 **Follow-ups:**
 - [ ] Test 10: defer test 10 and add it to the backlog (live check of the local-mount refusal against a real smbfs/nfs network mount; none was set up) (deferred 2026-11-05)
+
+### Phase 999.3: Reorganize documentation around docs/system as the source of truth (BACKLOG)
+
+**Goal:** When the project is complete, make the living documentation of the built system the main documentation tree and keep the specification as a historical record of proposals
+**Trigger:** after the last planned phase is verified (milestone v2.0 complete), not before: until then the specification is the planning input for unbuilt phases
+**Decided at:** 2026-11-05, after the Phase 01 documentation campaign
+**Follow-ups:**
+- [ ] Move the specification documents (requirements, architecture, design documents, implementation plan, reference-system comparisons) from `docs/` into `docs/proposals/`, keeping `docs/decisions/` ADRs as the decision record
+- [ ] Promote `docs/system/` to be the main `docs/` tree, with its README as the documentation index
+- [ ] Settle every open line in `docs/system/findings.md` (code changed, specification superseded, or accepted as a deliberate difference) and close the tree's outstanding reviews in `coverage.md`
+- [ ] Update every cross-link, the README document map and source-of-truth section, `CLAUDE.md`'s documentation rule, and `docs/gsd-ingest-manifest.yaml` to the new paths
+- [ ] Run a final regrounding of the tree against the code at the release commit
