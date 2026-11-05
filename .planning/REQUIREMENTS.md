@@ -65,7 +65,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
 - [x] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
 - [x] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
-- [ ] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
+- [x] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
 - [ ] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
 - [ ] **CON-9** [MVP]: Recovery never resets or deletes changes the run did not make and never claims external effects were rolled back.
 - [ ] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
@@ -253,7 +253,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-4 | Phase 4 | Pending |
 | CON-5 | Phase 2 | Complete |
 | CON-6 | Phase 2 | Complete |
-| CON-7 | Phase 2 | Pending |
+| CON-7 | Phase 2 | Complete |
 | CON-8 | Phase 2 | Pending |
 | CON-9 | Phase 2 | Pending |
 | CON-10 | Phase 4 | Pending |

@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-12-PLAN.md
-last_updated: "2026-11-05T21:09:31.542Z"
+stopped_at: Completed 02-11-PLAN.md
+last_updated: "2026-11-05T21:34:00.768Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: a720352fd8919a304c6d74c64e4f504630e0ea84
+state_head: 7d78ceda32fa14728770af4803dce960071b7f10
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 12 of 22
+Plan: 13 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -94,6 +94,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P10 | 17 min | 2 tasks | 20 files |
 | Phase 02 P09 | 85 min | 2 tasks | 13 files |
 | Phase 02 P12 | 25 min | 3 tasks | 19 files |
+| Phase 02 P11 | 23 min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-10: createRunWithContract stores the run with its base revision and branch, contract version 1 with five budget rows, the work items and their events in one transaction; the 0600 contract file in the data root is written after it by temp, fsync and rename — RC-1 and T-02-33: a killed start leaves nothing or a whole run, and a run without its file is rewritten from the ledger by the supervisor (plan 02-12)
 - [Phase 02]: 02-09: A2 confirmed on round 2 of the live S2-B spike (planner, plan-checker, executor and verifier ran, verifier passed, HEAD unmoved, no write outside the write set, 0.8996 USD, 4 subagents); the model drove the unit with Read and its own agent prompts and issued no gsd_run verb, so the admitted verbs query config-get, loop render-hooks and init.quick --validate are pinned by unit tests only — a unit is judged from the quick directory, the VERIFICATION status line, the clone diff and HEAD, never the host outcome kind (both rounds ended denied on improvised shell lines); git.quick_branch_template removed from RUN_GSD_SETTINGS
 - [Phase 02]: 02-12: start spawns a detached avarice supervise <runId> (own process group, stdio ignored, cwd the data root, unref'd); the supervisor takes the run lease, rewrites a missing contract file and runs the checkpointed stage for the committed state through the one faultPoint; verify-enforcement records G0 and blocks with enforcement_failure unless the host reports enforced, before any invocation; run invocations reserve and settle through the onboarding reservation and settle code, charging killed and orphaned ones — D-18, CON-3, CON-13 and FR-2: closing the shell leaves the supervisor running, a second supervisor is refused on a live lease, a dead one is reported as interrupted only when its PID is gone and its lease has lapsed, and the footprint test allows exactly one detached spawn (src/cli/spawn-supervisor.ts)
+- [Phase 02]: 02-11: read-before-edit (SHA-256 recorded at PostToolUse in hook_reads, rules edit-without-read and file-changed-since-read) and loop limits (3 consecutive denials, 25 searches with no read: continue false plus a loop.limit event, search limit ROUTINE_PRESET.escalation.consecutiveSearches) are policy-gated denials set only by computeRunScope, so the onboarding purposes' hook decisions are unchanged — CON-7, CON-14 and NFR-5: stale edits fail, a stuck agent stops itself, every error path exits 2; the count is read by event seq inside the deny's own transaction; hook p95 about 94 ms with read recording on
 
 ### Pending Todos
 
@@ -242,6 +244,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T21:09:24.920Z
-Stopped at: Completed 02-12-PLAN.md
+Last session: 2026-11-05T21:34:00.608Z
+Stopped at: Completed 02-11-PLAN.md
 Resume file: None
