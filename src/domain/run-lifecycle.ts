@@ -127,6 +127,12 @@ export const RUN_NEXT_ACTIONS: Readonly<Partial<Record<RunState, readonly string
   paused: ['reconcile'],
 };
 
+// The status of a run step row, mirroring the onboarding steps (an interrupted step is marked by resume, a step the
+// reconcile found finished is `reconciled`).
+export const RUN_STEP_STATUSES = ['started', 'completed', 'failed', 'interrupted', 'reconciled', 'skipped'] as const;
+
+export type RunStepStatus = (typeof RUN_STEP_STATUSES)[number];
+
 // Work items move ready -> delegated -> implemented -> gated -> done, or to blocked_on_decision
 // ("Run state machine", prose after the diagram). A delegated item that is discarded goes back to ready
 // (CON-16 discard and retry).

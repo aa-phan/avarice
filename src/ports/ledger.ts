@@ -301,6 +301,28 @@ export interface RunCheckpointRow {
   createdAt: string;
 }
 
+export interface RunCheckpointInput {
+  nextAction: string;
+  nowMs: number;
+  revision?: string;
+  itemId?: string;
+  attemptId?: string;
+}
+
+// A run contract is stored under the run's own ID (the `contracts` table is keyed by run_id).
+export type StoreRunContractInput = Omit<StoreContractInput, 'runId'>;
+
+export interface RunStepRow {
+  runId: string;
+  step: string;
+  attempt: number;
+  // One of RUN_STEP_STATUSES.
+  status: string;
+  result: unknown;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export interface Ledger {
   registerProject(input: NewProject): Result<ProjectRow>;
   findProject(query: ProjectQuery): Result<ProjectRow | null>;
@@ -354,4 +376,26 @@ export interface Ledger {
   // One transaction: the edge is checked against RUN_TRANSITIONS, the version and the lease fence are checked, the run row,
   // a checkpoint (seq = max + 1 for the run) and a `run.transition` event with the run ID are written together or not at all.
   transitionRun(runId: string, guard: TransitionGuard, t: RunTransitionInput): Result<RunRow>;
+  // Oldest first, without Phase 1 onboarding carrier rows. Without a project ID, every run.
+  listRuns(projectId?: string): Result<RunRow[]>;
+
+  // Run leases mirror the onboarding leases: one UPDATE takes a free or strictly expired lease and bumps the fence;
+  // renewal and release check holder and fence.
+  acquireRunLease(runId: string, holder: string, ttlMs: number, nowMs: number): Result<LeaseGrant>;
+  renewRunLease(runId: string, holder: string, fence: number, ttlMs: number, nowMs: number): Result<LeaseGrant>;
+  releaseRunLease(runId: string, holder: string, fence: number): Result<void>;
+
+  // A checkpoint without a state change (state and version stay). seq is continuous with the transitions' checkpoints.
+  recordRunCheckpoint(runId: string, guard: { fence: number }, input: RunCheckpointInput): Result<RunCheckpointRow>;
+  latestRunCheckpoint(runId: string): Result<RunCheckpointRow | null>;
+  // Oldest first.
+  listRunCheckpoints(runId: string): Result<RunCheckpointRow[]>;
+
+  // The contract and its budget rows commit together; a version stored twice is a conflict.
+  storeRunContract(runId: string, guard: { fence: number }, input: StoreRunContractInput): Result<ContractRow>;
+  // The highest version, or null.
+  getRunContract(runId: string): Result<ContractRow | null>;
+
+  recordRunStep(runId: string, input: StepResultInput): Result<RunStepRow>;
+  getRunSteps(runId: string): Result<RunStepRow[]>;
 }

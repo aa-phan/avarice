@@ -1,0 +1,35 @@
+{
+  "command": "node --test \"test/integration/run-ledger.test.ts\"",
+  "exitCode": 1,
+  "reason": "The Ledger port and SqliteLedger have no acquireRunLease, renewRunLease, releaseRunLease, recordRunCheckpoint, latestRunCheckpoint, listRunCheckpoints, storeRunContract, getRunContract, recordRunStep, getRunSteps or listRuns yet, so each call throws TypeError (not a function). tests 28, pass 10 (the Task 1 tracer cases), fail 18.",
+  "failingSuites": {
+    "run leases": [
+      "grants a free lease with fence 1, refuses a live one with conflict, and takes over only a strictly expired one (fence 2)",
+      "renews only for the current holder and fence; a fenced-out holder is refused with conflict",
+      "release clears holder and expiry, keeps counting fences, and refuses a stale releaser",
+      "fences out a stale supervisor: after takeover its transition is a conflict and writes nothing (T-02-05)",
+      "never leases an onboarding carrier row or an unknown run",
+      "two connections racing an expired run lease: exactly one wins (NFR-5: writers serialize through BEGIN IMMEDIATE)"
+    ],
+    "run checkpoints": [
+      "appends with the next seq without moving the state or the version, and records the event",
+      "keeps seq continuous across transitions and plain checkpoints; latest is the highest, list is oldest first",
+      "refuses an attempt of another run, a stale fence and an unknown run"
+    ],
+    "run contracts and budgets": [
+      "stores the contract and its budget rows in one transaction and reads the highest version back",
+      "refuses a second store of the same version with conflict and leaves the first contract and its budgets alone",
+      "refuses a stale fence, an oversized body, an invalid budget and an unknown run, writing nothing",
+      "refuses an UPDATE of a stored contract body (the Phase 1 trigger covers run contracts)"
+    ],
+    "run steps": [
+      "records a step by (step, attempt), replaces a repeated one, and reads them oldest first",
+      "accepts exactly the six step statuses",
+      "refuses a result body over 1 MiB and an unknown run, and never writes to the onboarding step table"
+    ],
+    "listRuns": [
+      "returns runs oldest first, filtered by project, and never an onboarding carrier row",
+      "does not list the carrier row a real onboarding creates through storeContract"
+    ]
+  }
+}

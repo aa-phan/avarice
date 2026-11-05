@@ -8,7 +8,7 @@ import type { IdPrefix } from '../../domain/ids.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
-import { assertRunTransition, RUN_BLOCKED_REASONS } from '../../domain/run-lifecycle.ts';
+import { assertRunTransition, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
 import type { RunState } from '../../domain/run-lifecycle.ts';
 import type {
   ActivateInput,
@@ -34,11 +34,15 @@ import type {
   OnboardingRow,
   ProjectQuery,
   ProjectRow,
+  RunCheckpointInput,
+  RunCheckpointRow,
   RunRow,
+  RunStepRow,
   RunTransitionInput,
   StepResultInput,
   StepResultRow,
   StoreContractInput,
+  StoreRunContractInput,
   TransitionGuard,
   TransitionInput,
 } from '../../ports/ledger.ts';
@@ -112,6 +116,13 @@ interface EventRow {
   invocationId?: string;
   data: unknown;
   nowMs: number;
+}
+
+// Where a lease lives: the table, its key column, and the reader that finds (and, for runs, vets) the row.
+interface LeaseTarget {
+  readonly table: 'onboardings' | 'runs';
+  readonly key: 'onboarding_id' | 'run_id';
+  readonly lock: (id: string) => Row;
 }
 
 export class SqliteLedger implements Ledger {
@@ -240,14 +251,35 @@ export class SqliteLedger implements Ledger {
   // One UPDATE decides the race: it takes a free lease, or one whose expiry instant has passed, and
   // bumps the fence so the previous holder's next transition fails. Zero changed rows means a live holder.
   acquireLease(onboardingId: string, holder: string, ttlMs: number, nowMs: number): Result<LeaseGrant> {
+    return this.acquireLeaseOn(this.onboardingLease, onboardingId, holder, ttlMs, nowMs);
+  }
+
+  renewLease(onboardingId: string, holder: string, fence: number, ttlMs: number, nowMs: number): Result<LeaseGrant> {
+    return this.renewLeaseOn(this.onboardingLease, onboardingId, holder, fence, ttlMs, nowMs);
+  }
+
+  releaseLease(onboardingId: string, holder: string, fence: number): Result<void> {
+    return this.releaseLeaseOn(this.onboardingLease, onboardingId, holder, fence);
+  }
+
+  // The lease SQL is written once and parameterized by table and key column. Both are literals chosen below (never input),
+  // so building the statement from them cannot be steered by a caller.
+  private readonly onboardingLease: LeaseTarget = { table: 'onboardings', key: 'onboarding_id', lock: (id) => this.lockRow(id) };
+  private readonly runLease: LeaseTarget = { table: 'runs', key: 'run_id', lock: (id) => this.lockRun(id) };
+
+  // One UPDATE decides the race: it takes a free lease, or one whose expiry instant has passed, and bumps the fence
+  // so the previous holder's next transition fails. Zero changed rows means a live holder.
+  private acquireLeaseOn(t: LeaseTarget, id: string, holder: string, ttlMs: number, nowMs: number): Result<LeaseGrant> {
     return tx(this.db, () => {
       const expiresAt = iso(nowMs + ttlMs);
+      // The row must exist (and be of the right kind) before the UPDATE can say anything about it.
+      t.lock(id);
       const changed = this.db
         .prepare(
-          'UPDATE onboardings SET lease_holder = ?, lease_expires_at = ?, lease_fence = lease_fence + 1 WHERE onboarding_id = ? AND (lease_holder IS NULL OR lease_expires_at < ?)',
+          `UPDATE ${t.table} SET lease_holder = ?, lease_expires_at = ?, lease_fence = lease_fence + 1 WHERE ${t.key} = ? AND (lease_holder IS NULL OR lease_expires_at < ?)`,
         )
-        .run(holder, expiresAt, onboardingId, iso(nowMs)).changes;
-      const row = this.lockRow(onboardingId);
+        .run(holder, expiresAt, id, iso(nowMs)).changes;
+      const row = t.lock(id);
       if (Number(changed) === 0) {
         abort({ kind: 'conflict', expected: 'a free or expired lease', actual: `held by ${str(row['lease_holder'])} until ${str(row['lease_expires_at'])}` });
       }
@@ -255,28 +287,30 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  renewLease(onboardingId: string, holder: string, fence: number, ttlMs: number, nowMs: number): Result<LeaseGrant> {
+  private renewLeaseOn(t: LeaseTarget, id: string, holder: string, fence: number, ttlMs: number, nowMs: number): Result<LeaseGrant> {
     return tx(this.db, () => {
       const expiresAt = iso(nowMs + ttlMs);
+      t.lock(id);
       const changed = this.db
-        .prepare('UPDATE onboardings SET lease_expires_at = ? WHERE onboarding_id = ? AND lease_holder = ? AND lease_fence = ?')
-        .run(expiresAt, onboardingId, holder, fence).changes;
-      if (Number(changed) === 0) this.leaseConflict(onboardingId, holder, fence);
+        .prepare(`UPDATE ${t.table} SET lease_expires_at = ? WHERE ${t.key} = ? AND lease_holder = ? AND lease_fence = ?`)
+        .run(expiresAt, id, holder, fence).changes;
+      if (Number(changed) === 0) this.leaseConflict(t, id, holder, fence);
       return { fence, expiresAt };
     });
   }
 
-  releaseLease(onboardingId: string, holder: string, fence: number): Result<void> {
+  private releaseLeaseOn(t: LeaseTarget, id: string, holder: string, fence: number): Result<void> {
     return tx(this.db, () => {
+      t.lock(id);
       const changed = this.db
-        .prepare('UPDATE onboardings SET lease_holder = NULL, lease_expires_at = NULL WHERE onboarding_id = ? AND lease_holder = ? AND lease_fence = ?')
-        .run(onboardingId, holder, fence).changes;
-      if (Number(changed) === 0) this.leaseConflict(onboardingId, holder, fence);
+        .prepare(`UPDATE ${t.table} SET lease_holder = NULL, lease_expires_at = NULL WHERE ${t.key} = ? AND lease_holder = ? AND lease_fence = ?`)
+        .run(id, holder, fence).changes;
+      if (Number(changed) === 0) this.leaseConflict(t, id, holder, fence);
     });
   }
 
-  private leaseConflict(onboardingId: string, holder: string, fence: number): never {
-    const row = this.lockRow(onboardingId);
+  private leaseConflict(t: LeaseTarget, id: string, holder: string, fence: number): never {
+    const row = t.lock(id);
     return abort({
       kind: 'conflict',
       expected: `lease held by ${holder} at fence ${fence}`,
@@ -741,6 +775,125 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  listRuns(projectId?: string): Result<RunRow[]> {
+    return guarded(() => {
+      const rows = (
+        projectId === undefined
+          ? this.db.prepare("SELECT * FROM runs WHERE state <> 'onboarding' ORDER BY created_at, rowid").all()
+          : this.db.prepare("SELECT * FROM runs WHERE state <> 'onboarding' AND project_id = ? ORDER BY created_at, rowid").all(projectId)
+      ) as Row[];
+      return rows.map(toRun);
+    });
+  }
+
+  acquireRunLease(runId: string, holder: string, ttlMs: number, nowMs: number): Result<LeaseGrant> {
+    return this.acquireLeaseOn(this.runLease, runId, holder, ttlMs, nowMs);
+  }
+
+  renewRunLease(runId: string, holder: string, fence: number, ttlMs: number, nowMs: number): Result<LeaseGrant> {
+    return this.renewLeaseOn(this.runLease, runId, holder, fence, ttlMs, nowMs);
+  }
+
+  releaseRunLease(runId: string, holder: string, fence: number): Result<void> {
+    return this.releaseLeaseOn(this.runLease, runId, holder, fence);
+  }
+
+  recordRunCheckpoint(runId: string, guard: { fence: number }, input: RunCheckpointInput): Result<RunCheckpointRow> {
+    return tx(this.db, () => {
+      const row = this.lockRun(runId);
+      this.checkFence(row, guard.fence);
+      if (input.attemptId !== undefined) this.checkRunAttempt(runId, input.attemptId);
+      const state = str(row['state']);
+      const checkpoint = this.writeCheckpoint([runId], {
+        runId,
+        attemptId: input.attemptId ?? null,
+        itemId: input.itemId ?? null,
+        from: state,
+        to: state,
+        revision: input.revision ?? null,
+        nextAction: input.nextAction,
+        nowMs: input.nowMs,
+      });
+      this.db.prepare('UPDATE runs SET updated_at = ? WHERE run_id = ?').run(iso(input.nowMs), runId);
+      this.insertEvent({
+        type: 'run.checkpoint',
+        runId,
+        ...(input.attemptId !== undefined ? { attemptId: input.attemptId } : {}),
+        data: { runId, state, nextAction: input.nextAction, seq: Number(checkpoint['seq']), checkpointId: str(checkpoint['checkpoint_id']) },
+        nowMs: input.nowMs,
+      });
+      return toRunCheckpoint(checkpoint);
+    });
+  }
+
+  latestRunCheckpoint(runId: string): Result<RunCheckpointRow | null> {
+    return guarded(() => {
+      this.lockRun(runId);
+      const row = this.db.prepare('SELECT * FROM checkpoints WHERE run_id = ? ORDER BY seq DESC, rowid DESC LIMIT 1').get(runId) as Row | undefined;
+      return row ? toRunCheckpoint(row) : null;
+    });
+  }
+
+  listRunCheckpoints(runId: string): Result<RunCheckpointRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      return (this.db.prepare('SELECT * FROM checkpoints WHERE run_id = ? ORDER BY seq, rowid').all(runId) as Row[]).map(toRunCheckpoint);
+    });
+  }
+
+  storeRunContract(runId: string, guard: { fence: number }, input: StoreRunContractInput): Result<ContractRow> {
+    return tx(this.db, () => {
+      const row = this.lockRun(runId);
+      this.checkFence(row, guard.fence);
+      const version = input.version ?? 1;
+      if (!Number.isInteger(version) || version < 1) abort({ kind: 'invalid', field: 'version', reason: 'a contract version is a positive integer' });
+      if (this.db.prepare('SELECT 1 AS found FROM contracts WHERE run_id = ? AND version = ?').get(runId, version)) {
+        abort({ kind: 'conflict', expected: `no contract version ${version} for run ${runId}`, actual: `contract version ${version} is already stored` });
+      }
+      const bodyJson = boundedBodyJson(input.body, 'contract');
+      const now = iso(input.nowMs);
+      this.db
+        .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, now);
+      if (input.budgets !== undefined) this.insertBudgets(runId, version, input.budgets);
+      this.insertEvent({ type: 'contract.stored', runId, data: { runId, version, digest: input.digest }, nowMs: input.nowMs });
+      return toContract(this.db.prepare('SELECT * FROM contracts WHERE run_id = ? AND version = ?').get(runId, version) as Row);
+    });
+  }
+
+  getRunContract(runId: string): Result<ContractRow | null> {
+    return guarded(() => {
+      this.lockRun(runId);
+      const contract = this.db.prepare('SELECT * FROM contracts WHERE run_id = ? ORDER BY version DESC LIMIT 1').get(runId) as Row | undefined;
+      return contract ? toContract(contract) : null;
+    });
+  }
+
+  recordRunStep(runId: string, input: StepResultInput): Result<RunStepRow> {
+    return tx(this.db, () => {
+      this.lockRun(runId);
+      if (input.step === '') abort({ kind: 'invalid', field: 'step', reason: 'a step needs a name' });
+      if (!(RUN_STEP_STATUSES as readonly string[]).includes(input.status)) {
+        abort({ kind: 'invalid', field: 'status', reason: `${input.status} is not a run step status (${RUN_STEP_STATUSES.join(', ')})` });
+      }
+      const attempt = input.attempt ?? 1;
+      this.db
+        .prepare(
+          `INSERT INTO run_steps (run_id, step, attempt, status, result_json, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (run_id, step, attempt) DO UPDATE SET status = excluded.status, result_json = excluded.result_json, started_at = excluded.started_at, completed_at = excluded.completed_at`,
+        )
+        .run(runId, input.step, attempt, input.status, boundedBodyJson(input.result, 'step result'), iso(input.nowMs), input.completedAtMs === undefined ? null : iso(input.completedAtMs));
+      return toRunStep(this.db.prepare('SELECT * FROM run_steps WHERE run_id = ? AND step = ? AND attempt = ?').get(runId, input.step, attempt) as Row);
+    });
+  }
+
+  getRunSteps(runId: string): Result<RunStepRow[]> {
+    return guarded(() => {
+      this.lockRun(runId);
+      return (this.db.prepare('SELECT * FROM run_steps WHERE run_id = ? ORDER BY rowid').all(runId) as Row[]).map(toRunStep);
+    });
+  }
+
   // The run row, or not_found when there is none or it is an onboarding carrier.
   private lockRun(runId: string): Row {
     const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ? AND state <> 'onboarding'").get(runId) as Row | undefined;
@@ -856,6 +1009,33 @@ function toRun(r: Row): RunRow {
     leaseHolder: strOrNull(r['lease_holder']),
     leaseExpiresAt: strOrNull(r['lease_expires_at']),
     leaseFence: Number(r['lease_fence']),
+  };
+}
+
+function toRunCheckpoint(r: Row): RunCheckpointRow {
+  return {
+    checkpointId: str(r['checkpoint_id']),
+    runId: str(r['run_id']),
+    seq: Number(r['seq']),
+    attemptId: strOrNull(r['attempt_id']),
+    itemId: strOrNull(r['item_id']),
+    fromState: strOrNull(r['from_state']) as RunState | null,
+    toState: str(r['to_state']) as RunState,
+    revision: strOrNull(r['revision']),
+    nextAction: str(r['next_action']),
+    createdAt: str(r['created_at']),
+  };
+}
+
+function toRunStep(r: Row): RunStepRow {
+  return {
+    runId: str(r['run_id']),
+    step: str(r['step']),
+    attempt: Number(r['attempt']),
+    status: str(r['status']),
+    result: parseJson(r['result_json']),
+    startedAt: str(r['started_at']),
+    completedAt: strOrNull(r['completed_at']),
   };
 }
 
