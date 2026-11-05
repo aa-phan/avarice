@@ -1,6 +1,6 @@
 # Comparison with the 3dmk reference system
 
-> Status: proposal. No part of AVARICE described here is built yet; present tense describes its proposed design. Statements about 3dmk describe its documented, running system.
+> Status: proposal. Present tense describes AVARICE's proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md). Statements about 3dmk describe its documented, running system.
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) and 3dmk separate the same responsibilities: durable knowledge, work state, inventory, verification and observability. In this audit's reading, the largest difference is who decides. The 3dmk author seldom lets agents make decisions and manages the stages personally; orchestration then runs the decomposed work, up to a full initiative overnight. AVARICE aims to take a brief with acceptance criteria to a reviewable change unattended. Its decision records, evidence gates and mutation gate exist to support that wider scope.
 

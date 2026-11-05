@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which follows the code where the two differ, and the differences are listed in [docs/system/findings.md](system/findings.md).
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a Node CLI. It has eleven in-process modules, a SQLite store per profile, and thin adapters that call git, GSD, `gh`, the agent host and repository check commands as subprocesses. For an unattended run, a supervisor process lives exactly as long as the run is making progress and starts contained headless host invocations, one GSD unit each ([ADR-006](decisions/ADR-006-unattended-delegation.md)). No AVARICE process runs unless a run is active or the user has started a command. GSD keeps planning and execution inside each unit ([ADR-002](decisions/ADR-002-gsd-integration-mode.md)); AVARICE keeps the run envelope around it: the contract, containment, budgets, decisions, gates and evidence. Requirements are owned by [requirements.md](requirements.md) and cited by ID.
 

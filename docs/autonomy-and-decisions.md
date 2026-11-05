@@ -1,6 +1,6 @@
 # Autonomy and decisions
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 An unattended AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) run moves through GSD's stages without a human at stage boundaries. It stops for a human only when a decision is consequential, exceeds delegated authority, lacks permission, or follows repeated failure. While a decision is open, the run continues work that does not depend on it, then checkpoints and waits without polling. Requirements AUT-1 to AUT-17 and RC-3 to RC-8 are owned by [requirements.md](requirements.md#autonomy-and-human-involvement); the decision record, evidence and gate schemas are in [contracts-and-state.md](contracts-and-state.md#decision-records); GSD integration is decided in [ADR-006](decisions/ADR-006-unattended-delegation.md).
 

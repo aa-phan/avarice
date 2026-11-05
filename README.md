@@ -4,6 +4,12 @@ AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination E
 
 This repository holds a specification package and the first built slice: `avarice` onboards one existing repository to an active project record (commands `init`, `repo add`, `onboard`, `status`, `resume`, `context`). The specification documents remain proposals. What is built is described, against the code, in [docs/system/](docs/system/README.md); start there to use or change the code.
 
+## Source of truth
+
+- **Built behavior:** [docs/system/](docs/system/README.md) is the living documentation and the source of truth. It describes the code as it is and changes with it.
+- **Design not yet built:** the specification in `docs/` (requirements, architecture, the design documents and the ADRs) is the proposal that later phases build from.
+- **When they disagree** about something already built, `docs/system/` wins; the difference is listed in [docs/system/findings.md](docs/system/findings.md) until the owner decides whether the code or the specification changes.
+
 ## Recommendation
 
 Build AVARICE as a TypeScript CLI on Node 22.22.3 or newer, with one local SQLite database per profile through `node:sqlite` and a content-addressed artifact directory ([ADR-001](docs/decisions/ADR-001-language-and-runtime.md), [ADR-003](docs/decisions/ADR-003-local-persistence.md)). For unattended work, a per-run supervisor launches Claude Code headless (`claude -p`) with generated settings ([containment.md](docs/containment.md)). Those settings enable the Bash sandbox with `failIfUnavailable`, use `dontAsk` permissions, load no user or project settings, and add AVARICE's own PreToolUse hook with `onFailure: "block"`. The launch also scrubs the environment and caps cost per invocation. Each invocation runs one GSD unit (`/gsd-quick --validate --text`). The supervisor classifies how it ended and answers GSD pauses only with a validated human decision or a default the contract declares ([ADR-006](docs/decisions/ADR-006-unattended-delegation.md)). Attended work keeps the simpler handoff of [ADR-002](docs/decisions/ADR-002-gsd-integration-mode.md).

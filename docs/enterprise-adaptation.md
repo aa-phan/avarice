@@ -1,6 +1,6 @@
 # Enterprise adaptation
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 In an enterprise profile AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) works inside the company's identity, tracker, SCM, CI, secrets and release processes and replaces none of them. When an integration is not allowed, AVARICE drops to a manual or read-only mode and does not look for an alternative path. Nothing here claims enterprise readiness: no part of this design has been tested in an enterprise environment. Employer tooling stays unknown until onboarding (assumption A-6 in [requirements.md](requirements.md#assumptions)).
 

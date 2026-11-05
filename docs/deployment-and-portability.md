@@ -1,6 +1,6 @@
 # Deployment and portability
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 On day one AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a Node CLI, a skill, a hook and one SQLite file per profile on the Mac's internal disk. Each later move (artifact bytes to a NAS, execution to a remote worker, coordination to a shared service) replaces one adapter behind an existing port. Moves that relocate data need an explicit data migration; the remote worker relocates none. Domain workflow code does not change (NFR-4). The database never moves onto a network filesystem (NFR-5, [ADR-003](decisions/ADR-003-local-persistence.md)).
 

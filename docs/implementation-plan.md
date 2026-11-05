@@ -1,6 +1,6 @@
 # Implementation plan
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 The AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) plan has eight vertical slices, numbered 0 to 7. Slice 0 onboards one existing repository with GSD as the mapper, builds GSD's structured indexes for it, and builds the shared kernel (ledger, contract compiler, sandbox and hook generation, contained host adapter) on that use. Slice 1 is already a contained, unattended tool. It compiles a run contract from a brief and a policy preset, and runs one GSD unit headless inside the OS sandbox with fail-closed hooks and budgets. A GSD pause becomes a decision record instead of a guess. The repository's checks run through evidence gates, and the run resumes after a kill. Containment is not deferred to a hardening phase. Each later slice adds one capability and names the complexity it leaves out. Requirement IDs come from [requirements.md](requirements.md).
 

@@ -1,6 +1,6 @@
 # How AVARICE differs from 3dmk
 
-> Status: proposal. No part of AVARICE described here is built yet; present tense describes its proposed design. Statements about 3dmk describe its documented, running system.
+> Status: proposal. Present tense describes AVARICE's proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md). Statements about 3dmk describe its documented, running system.
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) and 3dmk both hold an agent to a design a person approved. They place human review differently. In 3dmk the developer approves each design document and, at the start of each session, the scope and plan; after that approval, subagents run unattended, held by structural checks after each change. AVARICE puts no approval at the start of a run. It enforces through an OS sandbox, a run contract and evidence gates, and stops for a person only on consequential decisions.
 

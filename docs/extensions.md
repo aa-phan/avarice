@@ -1,6 +1,6 @@
 # Extensions
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which is the source of truth for built behavior, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) needs these custom extensions for the MVP. The CLI and library include the supervisor and the Claude Code host adapter. A fail-closed hook set (PreToolUse, PostToolUse, ConfigChange) arrives through each run's generated settings. Run-scoped GSD configuration is set through `gsd_run config-set`. The other MVP entries are the mutation gate, `harden` work items, `avarice onboard` with its GSD adapter and the index context adapters. `avarice dashboard`, the architecture model check, one skill and a local notifier complete them; the [catalog](#extension-catalog) lists each. A thin Claude Code plugin packages the attended pieces later. A GSD capability with blocking gates follows in Stage 2. Everything else reuses GSD, the host and existing tools ([existing-tooling-assessment.md](existing-tooling-assessment.md#reuse-and-gap-matrix)). All shared logic lives in the library; hooks, skills, the plugin and the capability are thin wrappers that call the CLI.
 
