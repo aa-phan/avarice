@@ -1069,6 +1069,7 @@ export class SqliteLedger implements Ledger {
       this.insertEvent({
         type: 'gate.result',
         runId: input.runId,
+        ...(input.attemptId !== undefined ? { attemptId: input.attemptId } : {}),
         data: { runId: input.runId, gate: input.gate, passed: input.passed, revision: input.revision, failures: input.failures.length, ...(input.workItem !== undefined ? { itemId: input.workItem } : {}) },
         nowMs: input.nowMs,
       });
@@ -1183,6 +1184,7 @@ export class SqliteLedger implements Ledger {
       this.insertEvent({
         type: 'decision.opened',
         runId: input.runId,
+        ...(input.attemptId !== undefined ? { attemptId: input.attemptId } : {}),
         data: { runId: input.runId, decisionId, class: input.class, urgency: input.urgency, contractVersion: input.contractVersion },
         nowMs: input.nowMs,
       });

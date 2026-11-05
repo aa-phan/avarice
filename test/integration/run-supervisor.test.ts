@@ -10,6 +10,9 @@ import { existsSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { runSupervisor } from '../../src/app/run-service.ts';
+import { contractReadyStage } from '../../src/app/run-stages/prepare.ts';
+import type { RunStageContext } from '../../src/app/run-stages/stage.ts';
+import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
 import { startRun } from '../../src/app/run-start.ts';
 import { ok } from '../../src/domain/result.ts';
 import { spawnSupervisor } from '../../src/cli/spawn-supervisor.ts';
@@ -274,6 +277,40 @@ describe('supervise: the stage loop under the run lease', () => {
     assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none']);
     const g0 = only(rows<{ passed: number }>(f.roots, "SELECT passed FROM gate_results WHERE run_id = ? AND gate = 'G0'", runId), 'one G0 row');
     assert.equal(g0.passed, 1);
+  });
+
+  it('verify-enforcement is idempotent: evaluating G0 again for the same contract, policy and revision adds no second row (02-12 carry-over)', async () => {
+    const f = fixture();
+    const runId = createRun(f);
+    const composed = createDeps(envFor(f.roots), { host: new FakeAgentHost() });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const { deps } = composed.value;
+      const lease = deps.ledger.acquireRunLease(runId, 'test-holder', 60_000, Date.now());
+      assert.ok(lease.ok);
+      const fence = lease.value.fence;
+      const ctx: RunStageContext = {
+        deps,
+        runId,
+        fence,
+        checkpoint: (nextAction, extra) => deps.ledger.recordRunCheckpoint(runId, { fence }, { nextAction, nowMs: Date.now(), ...(extra ?? {}) }),
+        transition: (row, to, nextAction, options = {}) => deps.ledger.transitionRun(runId, { version: row.version, fence }, { to, nextAction, nowMs: Date.now(), ...options }),
+        note: () => undefined,
+      };
+      const before = deps.ledger.getRun(runId);
+      assert.ok(before.ok);
+      assert.equal((await contractReadyStage(ctx, before.value)).ok, true, 'the first pass prepares, configures, passes G0 and moves to running');
+      assert.equal(deps.ledger.getRun(runId).ok && (deps.ledger.getRun(runId) as { value: { state: string } }).value.state, 'running');
+      // A kill between the G0 insert and the transition repeats the action with the row as it was: the transition is refused (the row moved on),
+      // but the gate is evaluated again.
+      const again = await contractReadyStage(ctx, before.value);
+      assert.equal(again.ok, false, 'the stale row cannot transition a second time');
+      const g0 = deps.ledger.listGateResults(runId);
+      assert.ok(g0.ok);
+      assert.equal(g0.value.filter((g) => g.gate === 'G0').length, 1, 'one G0 row, not two');
+    } finally {
+      composed.value.close();
+    }
   });
 
   it('a kill at after-checkpoint:prepare-workspace leaves the run in contract_ready with the lease held until it expires', () => {

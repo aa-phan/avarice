@@ -177,6 +177,7 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
   const gate = deps.ledger.recordGateResult({
     runId: ctx.runId,
     gate: 'G4',
+    attemptId: f.attemptId,
     contractVersion: f.contractVersion,
     policyRevision: f.contract.policyRevision,
     revision: verdictRevision.value,

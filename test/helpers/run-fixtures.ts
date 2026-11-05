@@ -3,10 +3,16 @@
 // conventions and the brief a routine run starts from. Every repository lives under os.tmpdir() as a realpath, so the
 // model is never handed a symlinked /var path (02-01 carried finding).
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import { FakeAgentHost } from './fake-agent-host.ts';
+import { FakeIntelHost } from './fake-intel-host.ts';
+import { writeFakeGraphify } from './fake-graphify.ts';
 import { git, makeScratchRepo } from './scratch-repo.ts';
 import type { ScratchRepo } from './scratch-repo.ts';
 import { REPO_ROOT, runCli } from './run-cli.ts';
@@ -123,4 +129,85 @@ export function writeBrief(dir: string, text: string = RUN_BRIEF, name = 'brief.
   mkdirSync(dir, { recursive: true });
   writeFileSync(path, text);
   return path;
+}
+
+// A graph that has a node for `term` (a code node with a source file and a concept node), written the way graphify writes graph.json.
+export function graphAnswering(term: string, builtAtCommit: string): Record<string, unknown> {
+  return {
+    directed: false,
+    multigraph: false,
+    built_at_commit: builtAtCommit,
+    nodes: [
+      { id: 'g1', label: term, file_type: 'code', source_file: 'src/slug.ts' },
+      { id: 'g2', label: `${term} rules`, file_type: 'concept' },
+    ],
+    links: [{ source: 'g1', target: 'g2', relation: 'relates_to', confidence: 'EXTRACTED', confidence_score: 1 }],
+  };
+}
+
+// Onboards the repository like onboardRunRepo, but with an intel index (the fixture documents of test/fixtures/index-fixtures.ts, written by
+// FakeIntelHost) and a graph that answers `term`, both recorded on the active record (plan 02-13, S-41). In process, through the real onboarding
+// stages with the real sandboxed GSD verbs; the graph the fake graphify builds is replaced by one with a node for `term`.
+export async function onboardRunRepoWithIndexes(roots: CliRoots, repo: ScratchRepo, term: string): Promise<{ pin: string; staging: string }> {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_GRAPHIFY_BIN: writeFakeGraphify(mkdtempSync(join(tmpdir(), 'avarice-fake-graphify-')), 'ok'),
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
+  };
+  const composed = createDeps(env, { host: new FakeIntelHost(new FakeAgentHost(), {}) });
+  assert.ok(composed.ok, 'composition');
+  try {
+    const started = startOnboarding(composed.value.deps, { repoPath: repo.path, policy: 'onboarding' });
+    assert.ok(started.ok, JSON.stringify(started));
+    const outcome = await runOnboarding(composed.value.deps, started.value.onboardingId);
+    assert.ok(outcome.ok && outcome.value.state === 'active', 'the repository is onboarded');
+  } finally {
+    composed.value.close();
+  }
+  const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  let staging: string;
+  try {
+    staging = (db.prepare('SELECT staging_worktree FROM onboardings').get() as { staging_worktree: string }).staging_worktree;
+  } finally {
+    db.close();
+  }
+  writeFileSync(join(staging, '.planning', 'graphs', 'graph.json'), JSON.stringify(graphAnswering(term, repo.head)));
+  return { pin: repo.head, staging };
+}
+
+// ---- a whole run with the fake run host (plan 02-13) ------------------------------------------------------------------------------
+
+export const FIXED_SLUG = [
+  '// Turns a title into a URL slug.',
+  'export function slugify(title: string): string {',
+  "  return title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');",
+  '}',
+  '',
+].join('\n');
+
+// The conventions the run tests commit: the one required check and the one command the unit may run.
+export const RUN_CONVENTIONS_WITH_COMMANDS = { ...RUN_CONVENTIONS, agentCommands: ['npm test'] };
+
+// Rows of the ledger of a profile, read-only.
+export function ledgerRows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
+  const handle = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  try {
+    return (handle.prepare(sql).all(...params) as Array<Record<string, unknown>>).map((r) => ({ ...r }) as T);
+  } finally {
+    handle.close();
+  }
+}
+
+// `start --brief <brief> --policy routine --wait` through the test entry with the fake run host playing `run`; returns the CLI result.
+export function startWithFakeRunHost(roots: CliRoots, repo: ScratchRepo, brief: string, run: Record<string, unknown>, extraArgs: readonly string[] = []): ReturnType<typeof runCli> {
+  return runCli(['start', '--brief', brief, '--policy', 'routine', '--wait', ...extraArgs], {
+    roots,
+    cwd: repo.path,
+    entry: TEST_CLI,
+    env: { AVARICE_FAKE_HOST: JSON.stringify({ run }) },
+    timeoutMs: 300_000,
+  });
 }

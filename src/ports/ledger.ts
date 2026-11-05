@@ -400,6 +400,8 @@ export interface GateResultInput {
   // G0 to G4.
   gate: string;
   workItem?: string;
+  // The attempt the gate judged, carried by the gate.result event (OPS-2); absent for a gate that is not about an attempt (G0).
+  attemptId?: string;
   contractVersion: number;
   policyRevision: string;
   revision: string;
@@ -462,6 +464,8 @@ export type DecisionUrgency = 'blocking' | 'digest';
 
 export interface DecisionInput {
   runId: string;
+  // The attempt whose ending opened the decision, carried by the decision.opened event (OPS-2).
+  attemptId?: string;
   contractVersion: number;
   // acceptance, architecture, scope_expansion, permission, repeated_failure, equivalent_mutant, contradiction or budget.
   class: string;

@@ -61,6 +61,7 @@ export function blockRun(ctx: RunStageContext, options: BlockOptions): Result<Ru
   const issue = storedText(options.issue, ISSUE_MAX_CHARS);
   const decision = deps.ledger.openDecision({
     runId: ctx.runId,
+    ...(options.attemptId !== undefined ? { attemptId: options.attemptId } : {}),
     contractVersion: stored.value.version,
     class: options.decisionClass,
     issue: issue === '' ? 'the run stopped and gave no reason' : issue,

@@ -1,0 +1,18 @@
+{
+  "command": "node --test --test-reporter=tap --test-name-pattern=\"correlation|context pack|refuses when no admitted\" test/integration/run-events.test.ts test/integration/run-baseline-workflow.test.ts",
+  "ranAgainst": "the Task 2 commit 6165d16 (git archive extracted to /tmp/red13b) plus the new tests and the run-fixtures helper",
+  "exitCode": 1,
+  "reason": "at the Task 2 commit the gate.result and decision.opened ledger events carry no attempt_id (GateResultInput and DecisionInput had no attempt, so the events written for G2, G4 and a blocked ending are outside their attempt), and start does not check for an admitted GSD before it creates the run (it printed a run and spawned a supervisor that stopped at configure-gsd)",
+  "failingFiles": ["test/integration/run-events.test.ts", "test/integration/run-baseline-workflow.test.ts"],
+  "failingTests": [
+    "every invocation.finished event has attempt_id, and so do the events that happen inside the attempt",
+    "a blocked ending keeps the identifiers too: the decision, the finding and the transition name the run and the attempt",
+    "exits 3 with the refusal and leaves no run, no contract file and no clone"
+  ],
+  "passingAtBase": [
+    "the unit prompt gets an index-first context pack, recorded as references only (S-41): the pack was built with the tracer in Task 1, this test pins it",
+    "every run., work_item., ... event has run_id equal to the run ID",
+    "every invocation. and hook. event has invocation_id"
+  ],
+  "summary": "7 tests, 4 pass, 3 fail at the base"
+}

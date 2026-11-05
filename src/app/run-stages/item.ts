@@ -476,6 +476,7 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
     runId: ctx.runId,
     gate: 'G2',
     workItem: unit.item.itemId,
+    attemptId,
     contractVersion: unit.contractVersion,
     policyRevision: contract.policyRevision,
     revision: revision.value,

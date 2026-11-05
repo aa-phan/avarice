@@ -13,6 +13,7 @@ import { compileRunContract, ROUTINE_POLICY } from '../domain/run-contract.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { PortError } from '../domain/result.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
+import { GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
@@ -168,6 +169,11 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (request.policy !== ROUTINE_POLICY) return usage('policy', `runs start under the "${ROUTINE_POLICY}" policy, not ${JSON.stringify(request.policy)}`);
   const runSource = deps.runSource;
   if (runSource === undefined) return internal('the run source is not composed');
+  // A run is a GSD unit (FR-4): without an admitted gsd-core there is nothing to run, so nothing is created (RC-1).
+  if (deps.gsd === undefined) {
+    const problem = deps.gsdProblem;
+    return refused('gsd-not-admitted', `GSD ${GSD_ADMITTED_RANGE} was not found${problem !== undefined ? ` (${problem.found}; admitted: ${problem.admitted})` : ''}`);
+  }
 
   // The brief is untrusted data: parsed and validated, never obeyed.
   const read = readBriefFile(resolve(request.cwd, request.briefPath));
