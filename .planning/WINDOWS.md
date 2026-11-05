@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 0
 fixed_count: 1
-total_count: 2
-last_updated: 2026-11-03T03:15:08.594Z
+total_count: 3
+last_updated: 2026-11-05T22:11:52.151Z
 ---
 
 # Broken Windows Ledger
@@ -17,6 +17,7 @@ last_updated: 2026-11-03T03:15:08.594Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 01 | stub | src/app/stages/index-intel.ts | 12 | index-intel step reports the index absent (not-built-in-this-build) until plan 01-17 | fixed |  | 2026-11-03T01:01:33.235Z | 2026-11-03T03:15:08.594Z |
 | 2 | 01 | stub | src/app/stages/index-knowledge.ts | 12 | index-knowledge step reports the index absent (not-built-in-this-build) until plan 01-18 | open |  | 2026-11-03T01:01:33.322Z |  |
+| 3 | 02 | stub | src/app/run-stages/item.ts |  | G2 test inventory is passed as empty and the baseline is taken as passed until plan 02-14 measures both | open |  | 2026-11-05T22:11:52.151Z |  |
 
 ````json
 [
@@ -43,6 +44,19 @@ last_updated: 2026-11-03T03:15:08.594Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-03T01:01:33.322Z",
+    "resolved_at": null,
+    "milestone": "v1.0"
+  },
+  {
+    "id": 3,
+    "kind": "stub",
+    "phase": "02",
+    "file": "src/app/run-stages/item.ts",
+    "line": null,
+    "description": "G2 test inventory is passed as empty and the baseline is taken as passed until plan 02-14 measures both",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-05T22:11:52.151Z",
     "resolved_at": null,
     "milestone": "v1.0"
   }
