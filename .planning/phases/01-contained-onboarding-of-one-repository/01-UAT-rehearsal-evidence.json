@@ -1,0 +1,541 @@
+{
+  "schema": 1,
+  "mode": "rehearsal",
+  "repo": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-rr1Ez7/clone",
+  "source": "/Users/aphan/aa-phan-portfolio-v2",
+  "runDir": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-rr1Ez7/data/exit-run/rehearsal-20261104T235235Z",
+  "startedAtEpoch": 1793836356,
+  "finishedAtEpoch": 1793836831,
+  "wallSeconds": 475,
+  "authorization": {
+    "selection": "rehearsal-only",
+    "capUsd": 12,
+    "perRunCapUsd": 12,
+    "spentUsdSoFar": 0,
+    "decidedBy": "user (aphan)",
+    "decidedOn": "2026-11-04",
+    "decidedThrough": "gsd-verify-work 1, UAT tests 16 and 18 (live mapper after shell grep denial; sandbox allowRead of own staging)",
+    "noCommitConfirmed": true,
+    "noCommitConfirmation": "The user confirmed they will not commit to ~/aa-phan-portfolio-v2 while the run is in progress",
+    "contextGiven": "rehearsal clones the target into a temp profile; earlier rehearsals reported 0.13-0.49 USD; the ledger may charge a killed invocation its full 3 USD reservation; 12 USD is the contract's hard per-run cap"
+  },
+  "tooling": {
+    "node": "v26.9.0",
+    "claude": {
+      "path": "/Users/aphan/.local/share/claude/versions/2.1.317",
+      "version": "2.1.317"
+    },
+    "stagingStrategy": "clone"
+  },
+  "onboardingId": "onb_01M6MFN69E44KS993F3XMK7Q6V",
+  "outcome": {
+    "killedProcessExit": 137,
+    "resumeExit": 0,
+    "finalState": "active"
+  },
+  "record": {
+    "ok": true,
+    "onboardingId": "onb_01M6MFN69E44KS993F3XMK7Q6V",
+    "projectId": "proj_01M6MFN69EBW1AZ7FBVZ95CKGC",
+    "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-rr1Ez7/clone",
+    "state": "active",
+    "recordVersion": 1,
+    "promotion": "none",
+    "onboardedRevision": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "2026-11-05T00:00:31.085Z",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "nodes": {
+      "code": 1009,
+      "concept": 111,
+      "document": 9,
+      "rationale": 14
+    },
+    "edges": {
+      "AMBIGUOUS": 3,
+      "EXTRACTED": 1253,
+      "INFERRED": 115
+    },
+    "documentNodes": 9,
+    "graphBuiltAtCommit": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "intelRefreshedAtCommit": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "intelFiles": 5,
+    "absentIndexes": null,
+    "problems": []
+  },
+  "checkoutBefore": {
+    "head": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "731dca82976f30b122c5ba59ae22d86bd79623c55e08f10ba2c8c73986460948",
+    "worktreesDigest": "2819079bea098813200d2aaf267b8252ddb21c5f3a02ddfa7997a38e3f45dc70",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutAfter": {
+    "head": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "branch": "gsd/phase-02-deployed-themed-skeleton",
+    "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "filesDigest": "64b204d25720643c16c116349b31fba96f79722f1470eef5bd38179bd6569510",
+    "refsDigest": "731dca82976f30b122c5ba59ae22d86bd79623c55e08f10ba2c8c73986460948",
+    "worktreesDigest": "2819079bea098813200d2aaf267b8252ddb21c5f3a02ddfa7997a38e3f45dc70",
+    "counts": {
+      "tracked": 364,
+      "untracked": 0,
+      "statusEntries": 0,
+      "refs": 4,
+      "refsAllowed": 0
+    }
+  },
+  "checkoutUnchanged": {
+    "head": true,
+    "branch": true,
+    "statusDigest": true,
+    "filesDigest": true,
+    "refsDigest": true,
+    "worktreesDigest": true
+  },
+  "killAndResume": {
+    "killAfterSecondsRequested": 60,
+    "mapLaunchStartedObservedAtEpoch": 1793836360,
+    "killedAtEpoch": 1793836423,
+    "secondsFromMapStartToKill": 63,
+    "avaricePid": 24615,
+    "signal": "KILL",
+    "killedSessionId": "916fd6a0-36db-4faa-b758-cf64b43a46a7",
+    "stateWhenKilled": "mapping",
+    "survivingHostProcessesAfterKill": 1,
+    "interruptedSeenAtEpoch": 1793836598,
+    "secondsFromKillToInterrupted": 175,
+    "interruptedStatus": {
+      "projectId": "proj_01M6MFN69EBW1AZ7FBVZ95CKGC",
+      "repoPath": "/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-exit-rehearsal-rr1Ez7/clone",
+      "onboardingId": "onb_01M6MFN69E44KS993F3XMK7Q6V",
+      "state": "mapping",
+      "reason": null,
+      "interrupted": {
+        "state": "mapping",
+        "nextAction": "launch:map",
+        "resumeCommand": "avarice resume onb_01M6MFN69E44KS993F3XMK7Q6V"
+      },
+      "recordVersion": null,
+      "onboardedRevision": null,
+      "mapping": null,
+      "indexes": {}
+    },
+    "resumeCommand": "avarice resume onb_01M6MFN69E44KS993F3XMK7Q6V",
+    "resumeSeconds": 233,
+    "resumeExit": 0,
+    "sameOnboardingId": true,
+    "sameOnboardedRevision": true,
+    "pinBefore": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "pinAfter": "9e78f74c61c3b50261b34eafb86b89b95d208424",
+    "processesWithKilledSessionAfterResume": 0,
+    "processesWithAnySessionAfterResume": 0
+  },
+  "costs": {
+    "totalUsd": 0.132932,
+    "budgetCostUsedUsd": 3.1329319,
+    "perStep": [
+      {
+        "step": "launch:intel",
+        "attempt": 1,
+        "costUsd": 0.02211279,
+        "durationMs": 85047,
+        "invocationId": "inv_01M6MFWPCHWFNVRAXS0HDN31W6"
+      },
+      {
+        "step": "launch:knowledge",
+        "attempt": 1,
+        "costUsd": 0.11081911000000001,
+        "durationMs": 140584,
+        "invocationId": "inv_01M6MFZ9Z7C263G8Q7EN3AWRZ3"
+      }
+    ],
+    "budgets": [
+      {
+        "name": "costUsd",
+        "limit_value": 12,
+        "used": 3.1329319,
+        "reserved": 0,
+        "exactness": "estimated"
+      },
+      {
+        "name": "invocations",
+        "limit_value": 6,
+        "used": 3,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "subagentsTotal",
+        "limit_value": 8,
+        "used": 4,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "toolCalls",
+        "limit_value": 600,
+        "used": 194,
+        "reserved": 0,
+        "exactness": "exact"
+      },
+      {
+        "name": "wallClockMs",
+        "limit_value": 2700000,
+        "used": 225631,
+        "reserved": 0,
+        "exactness": "exact"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "gsd:inspect",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:52:37.935Z",
+      "completedAt": "2026-11-04T23:52:37.935Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:probe",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:52:38.342Z",
+      "completedAt": "2026-11-04T23:52:38.459Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "mapping:plan",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:52:38.459Z",
+      "completedAt": "2026-11-04T23:52:38.459Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:configure",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:52:38.459Z",
+      "completedAt": "2026-11-04T23:52:38.766Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:map",
+      "attempt": 1,
+      "status": "reconciled",
+      "startedAt": "2026-11-04T23:52:38.788Z",
+      "completedAt": "2026-11-04T23:56:41.076Z",
+      "invocationId": "inv_01M6MFN744Y2JJCA9NXYKKT4BX",
+      "sessionId": "916fd6a0-36db-4faa-b758-cf64b43a46a7",
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "gsd:stamp",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:56:41.076Z",
+      "completedAt": "2026-11-04T23:56:41.167Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "validate",
+      "attempt": 1,
+      "status": "accepted",
+      "startedAt": "2026-11-04T23:56:41.383Z",
+      "completedAt": "2026-11-04T23:56:41.383Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:code-graph",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:56:41.390Z",
+      "completedAt": "2026-11-04T23:56:43.771Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:56:43.793Z",
+      "completedAt": "2026-11-04T23:58:09.000Z",
+      "invocationId": "inv_01M6MFWPCHWFNVRAXS0HDN31W6",
+      "sessionId": "b80c4a1d-308f-4b69-9d75-237c815aac4e",
+      "kind": "progressed",
+      "costUsd": 0.02211279,
+      "durationMs": 85047,
+      "permissionDenials": 3
+    },
+    {
+      "step": "gsd:intel-snapshot",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:58:09.164Z",
+      "completedAt": "2026-11-04T23:58:09.244Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "index:intel",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:56:43.772Z",
+      "completedAt": "2026-11-04T23:58:09.323Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    },
+    {
+      "step": "launch:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:58:09.383Z",
+      "completedAt": "2026-11-05T00:00:30.124Z",
+      "invocationId": "inv_01M6MFZ9Z7C263G8Q7EN3AWRZ3",
+      "sessionId": "2aced495-ae60-48bb-b310-216743a98d92",
+      "kind": "progressed",
+      "costUsd": 0.11081911000000001,
+      "durationMs": 140584,
+      "permissionDenials": 16
+    },
+    {
+      "step": "index:knowledge",
+      "attempt": 1,
+      "status": "completed",
+      "startedAt": "2026-11-04T23:58:09.324Z",
+      "completedAt": "2026-11-05T00:00:30.904Z",
+      "invocationId": null,
+      "sessionId": null,
+      "kind": null,
+      "costUsd": null,
+      "durationMs": null,
+      "permissionDenials": null
+    }
+  ],
+  "hookDecisions": {
+    "deny:shell-syntax": 28,
+    "allow:read-set": 153,
+    "allow:shell-identity": 19,
+    "deny:shell-not-allowed": 18,
+    "allow:subagent-type": 4,
+    "deny:outside-read-set": 18,
+    "allow:write-set": 22,
+    "deny:subagent-type": 1
+  },
+  "eventTypes": {
+    "contract.stored": 1,
+    "hook.decision": 263,
+    "invocation.finished": 2,
+    "invocation.orphan-charged": 1,
+    "invocation.reaped": 1,
+    "invocation.reconciled": 1,
+    "onboarding.checkpoint": 7,
+    "onboarding.transition": 8,
+    "tool.completed": 198
+  },
+  "reaped": [
+    {
+      "invocationId": "inv_01M6MFN744Y2JJCA9NXYKKT4BX",
+      "onboardingId": "onb_01M6MFN69E44KS993F3XMK7Q6V",
+      "terminated": 1
+    }
+  ],
+  "containment": {
+    "contractVersions": [
+      {
+        "version": 1,
+        "digest": "sha256:fcb09d2d16a8109a8c01cc3d4bb8c5c7c92e2ad243570061bb1b3e993d83790c",
+        "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+        "created_at": "2026-11-04T23:52:37.936Z"
+      }
+    ],
+    "contractsAtMapStart": {
+      "contracts": [
+        {
+          "version": 1,
+          "digest": "sha256:fcb09d2d16a8109a8c01cc3d4bb8c5c7c92e2ad243570061bb1b3e993d83790c",
+          "policy_revision": "sha256:b3fb3fce3c3208efc2c5385a625951b31e96db6cb7f669643efc97b031fe99f5",
+          "created_at": "2026-11-04T23:52:37.936Z"
+        }
+      ]
+    },
+    "contractUnchanged": true,
+    "generatedFilesAtMapStart": {
+      "map-inv_01M6MFN744Y2JJCA9NXYKKT4BX/hook-policy.json": "496d671d694b208a007383c4e420efa2222225d3c4bb3ae52b15f5d33dc8eea4",
+      "map-inv_01M6MFN744Y2JJCA9NXYKKT4BX/host-settings.json": "fe5b7126bca90c281a104a7b175fa49f8d670e5eed9026d767b33795a929de2d"
+    },
+    "generatedFilesAtEnd": {
+      "intel-inv_01M6MFWPCHWFNVRAXS0HDN31W6/hook-policy.json": "182cf6f5ba42732f0e4495137541a2bfc18ddf87e011d1d223a6d3c59a1f6fbd",
+      "intel-inv_01M6MFWPCHWFNVRAXS0HDN31W6/host-settings.json": "84cd73aa06a8d4debd29c063e3d9ff81f2a139beab7d51eaef85df4f708e2056",
+      "knowledge-inv_01M6MFZ9Z7C263G8Q7EN3AWRZ3/hook-policy.json": "c679866450f853883eb800a646c774ce2a0d8295a404876011e58e6d98933457",
+      "knowledge-inv_01M6MFZ9Z7C263G8Q7EN3AWRZ3/host-settings.json": "e32301b51f109a1e21e359c667edadb4999c514416054bf9b1b56896508aed17",
+      "map-inv_01M6MFN744Y2JJCA9NXYKKT4BX/hook-policy.json": "496d671d694b208a007383c4e420efa2222225d3c4bb3ae52b15f5d33dc8eea4",
+      "map-inv_01M6MFN744Y2JJCA9NXYKKT4BX/host-settings.json": "fe5b7126bca90c281a104a7b175fa49f8d670e5eed9026d767b33795a929de2d"
+    },
+    "settingsAndPolicyUnchanged": true,
+    "pushOrCommitInTarget": null
+  },
+  "context": [
+    {
+      "term": "ADR-999",
+      "exit": 0,
+      "items": 10,
+      "untrustedItems": 10,
+      "fenced": true,
+      "injectedItems": 10,
+      "injectedItemsFenced": 10,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [
+        {
+          "source": "gsd-graph",
+          "title": "Non-decision fixture ADR-999 marked Accepted",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Codebase concerns audit (CONCERNS.md)",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Base path hard-coded in two workflow files",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Content URLs not scheme-checked at render",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Date-sensitive copy goes stale after December 2026",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "ProjectDialog close lifecycle has four paths",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Env files not covered by gitignore",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "VITE_SITE_ORIGIN unset in CI and deploy workflows",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Two animation runtimes declared",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        },
+        {
+          "source": "gsd-graph",
+          "title": "Stale accepted-risk record AR-03-1",
+          "untrusted": true,
+          "scope": ".planning/codebase/CONCERNS.md"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "term": "injected decision",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": null,
+      "sources": [],
+      "notes": []
+    },
+    {
+      "term": "push to main",
+      "exit": 0,
+      "items": 0,
+      "untrustedItems": 0,
+      "fenced": false,
+      "injectedItems": 0,
+      "injectedItemsFenced": 0,
+      "injectedTextInsideFenceOnly": false,
+      "sources": [],
+      "notes": []
+    }
+  ],
+  "problems": [
+    "avarice context did not print the injected node inside the untrusted-data fence"
+  ]
+}
