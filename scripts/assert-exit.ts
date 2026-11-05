@@ -9,7 +9,8 @@
 // The knowledge section must account for every manifest document and leave none unread (UAT 154, plans 01-25 and 01-26):
 // `knowledge.documentsExpected` and `knowledge.dropped.unread` must both be present, and `unread` must be 0. The gate checks
 // zero unread, not the stage's at-least-half admission share, because it checks that every corpus document became a document
-// node. The rehearsal picks the problem up through its existing `assert-exit:` problems.
+// node. Both counts must be whole numbers, `documentsExpected` at least 1 and `unread` no more than it (a record that says otherwise
+// is malformed or hand-edited, and does not pass). The rehearsal picks the problem up through its existing `assert-exit:` problems.
 //
 // Prints the JSON facts on stdout (`ok` says whether every check held). Exit 0 when every check holds, 1 when one fails
 // (each failure is a line on stderr), 2 for a usage error, an unknown onboarding or an unreadable ledger.
@@ -124,6 +125,10 @@ export function judgeExit(f: ExitFacts): string[] {
     if (f.documentNodes !== null) {
       if (f.documentsExpected === null || f.unreadDocuments === null) {
         problems.push('the knowledge section has no per-document accounting (documentsExpected, dropped.unread)');
+      } else if (![f.documentsExpected, f.unreadDocuments].every((n) => Number.isInteger(n) && n >= 0)) {
+        problems.push(`the knowledge accounting is malformed: documentsExpected and dropped.unread must be whole numbers, not ${f.documentsExpected} and ${f.unreadDocuments}`);
+      } else if (f.documentsExpected < 1 || f.unreadDocuments > f.documentsExpected) {
+        problems.push(`the knowledge accounting is inconsistent (documentsExpected ${f.documentsExpected}, dropped.unread ${f.unreadDocuments}): a corpus holds at least one document and cannot leave more unread than it held`);
       } else if (f.unreadDocuments > 0) {
         problems.push(`${f.unreadDocuments} of ${f.documentsExpected} corpus documents have no document node (knowledge.dropped.unread)`);
       }

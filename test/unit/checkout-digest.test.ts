@@ -268,6 +268,30 @@ describe('scripts/assert-exit.ts', () => {
     });
   }
 
+  // WR-02: the gate no longer trusts self-reported counters that cannot all be true.
+  for (const [name, fixture, message] of [
+    ['documentsExpected is 0 beside document nodes', { documentsExpected: 0, unread: 0 }, /accounting is inconsistent \(documentsExpected 0, dropped\.unread 0\)/],
+    ['documentsExpected is negative', { documentsExpected: -3, unread: 0 }, /accounting is malformed/],
+    ['dropped.unread is negative', { unread: -1 }, /accounting is malformed/],
+    ['dropped.unread is fractional', { unread: 0.5 }, /accounting is malformed/],
+    ['documentsExpected is fractional', { documentsExpected: 2.5, unread: 0 }, /accounting is malformed/],
+    ['dropped.unread exceeds documentsExpected', { documentNodes: 3, documentsExpected: 3, unread: 4 }, /accounting is inconsistent \(documentsExpected 3, dropped\.unread 4\)/],
+  ] as Array<[string, Fixture, RegExp]>) {
+    it(`fails an incoherent knowledge accounting when ${name} (WR-02)`, () => {
+      const r = assertExit(fixture);
+      assert.equal(r.code, 1, r.stdout + r.stderr);
+      assert.match(r.stderr, message);
+      assert.doesNotMatch(r.stderr, /corpus documents have no document node/);
+    });
+  }
+
+  it('still passes a coherent accounting of one document, and of every document read (WR-02)', () => {
+    for (const fixture of [{ documentNodes: 1, documentsExpected: 1, unread: 0, nodes: { code: 12, document: 1 } }, { documentNodes: 25, documentsExpected: 25, unread: 0, nodes: { code: 12, document: 25 } }] as Fixture[]) {
+      const r = assertExit(fixture);
+      assert.equal(r.code, 0, r.stderr);
+    }
+  });
+
   it('reports only the no-document-nodes problem for a record with no knowledge section (plan 01-26)', () => {
     const r = assertExit({ documentNodes: null, nodes: { code: 12, document: 3 } });
     assert.equal(r.code, 1, r.stdout + r.stderr);
