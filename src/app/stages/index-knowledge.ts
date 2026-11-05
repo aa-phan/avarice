@@ -10,7 +10,7 @@
 import { join } from 'node:path';
 import { sha256Hex } from '../../domain/digest.ts';
 import { mergeKnowledgeGraph } from '../../domain/graph-merge.ts';
-import { corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
+import { KNOWLEDGE_DIR, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
 import { assembleExtraction, knowledgePrompt, outputPathOf, planExtractionChunks } from '../../domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
 import { validateKnowledgeGraph } from '../../domain/knowledge-validation.ts';
@@ -136,7 +136,9 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
 
   // 3. The chunk plan: deterministic, from the manifest and the sizes. It is written beside the corpus for the model to read as
   // data; the prompt itself holds no repository text.
-  const plan = planExtractionChunks(manifest, sizes.value);
+  // The corpus root is the knowledge invocation's cwd: the read-dir `.avarice-knowledge` of the same staging path (computeInvocationScope),
+  // so every readPath lies under the read confine; the production-path test of plan 01-26 pins it.
+  const plan = planExtractionChunks(manifest, sizes.value, join(staging, KNOWLEDGE_DIR));
   const planned = deps.graph.writeExtractionPlan(staging, plan);
   if (!planned.ok) return absent('invocation-failed', `cannot write the extraction plan: ${describeError(planned.error)}`);
 

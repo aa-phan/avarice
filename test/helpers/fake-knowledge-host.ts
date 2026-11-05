@@ -23,7 +23,7 @@ export interface FakeKnowledgeOptions {
   // Replaces `graph` and `rawGraph`.
   chunks?: (plan: ExtractionPlan, request: InvocationRequest) => Record<number, unknown>;
   // The mode that reproduces the live slip of UAT 154 (plan 01-25, G-01-154): the pass extracts one document node per file it could
-  // read. For chunks numbered below `originalsFromChunk` (default: none) it reads each file at the corpus copy; from that chunk on
+  // read. For chunks numbered below `originalsFromChunk` (default: none) it reads each file at the plan's `readPath` (the corpus copy); from that chunk on
   // it reads the ORIGINAL at `{staging}/{path}`, the dropped `.avarice-knowledge/` segment. Each read is judged with the hook's
   // first read rule (hook-decision.ts readRule: the path must equal a `readConfine` root or lie under one, else `outside-read-set`):
   // an allowed read really reads the file (a wrong path throws, it is not skipped quietly); a denied read yields no node. A chunk
@@ -121,7 +121,7 @@ export class FakeKnowledgeHost implements AgentHost {
     for (const chunk of plan.chunks) {
       const nodes: unknown[] = [];
       for (const file of chunk.files) {
-        const path = chunk.n >= from ? join(req.scope.stagingPath, file.path) : join(req.cwd, file.path);
+        const path = chunk.n >= from ? join(req.scope.stagingPath, file.path) : file.readPath;
         if (!roots.some((root) => path === root || path.startsWith(`${root}/`))) {
           this.reads.push({ chunk: chunk.n, path, decision: 'deny', rule: 'outside-read-set' });
           continue;
