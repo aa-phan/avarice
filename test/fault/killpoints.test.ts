@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { CHUNK_PLAN_FILE } from '../../src/domain/knowledge-extraction.ts';
 import { findGraphifyBinary } from '../../src/adapters/graph/graphify.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { checkoutSnapshot, makeScratchRepo, treeDigest } from '../helpers/scratch-repo.ts';
@@ -102,6 +103,16 @@ interface StatusEntry {
 // is compared on its own without that field.
 const VOLATILE_STAGING_FILE = '.planning/graphs/.last-build-snapshot.json';
 
+// The knowledge chunk plan holds the absolute readPath and writePath of the run (plan 01-25), so its text differs between profiles by
+// design. The staging tree is compared without it, and the plan is compared on its own with the ULIDs and the temp root normalized.
+function chunkPlanNormalized(staging: string): unknown {
+  try {
+    return JSON.parse(normalizeText(readFileSync(join(staging, CHUNK_PLAN_FILE), 'utf8'))) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 function snapshotWithoutTimestamp(staging: string): unknown {
   try {
     const { timestamp, ...rest } = JSON.parse(readFileSync(join(staging, VOLATILE_STAGING_FILE), 'utf8')) as Record<string, unknown>;
@@ -118,6 +129,7 @@ interface Outcome {
   manifest: unknown;
   codebaseDigests: string[];
   stagingDigest: string;
+  chunkPlan: unknown;
   graphSnapshot: unknown;
   recordCount: number;
 }
@@ -135,7 +147,8 @@ function outcomeOf(roots: CliRoots): Outcome {
     rawRecord: body,
     manifest: JSON.parse(normalizeText(Buffer.from(manifestBytes.value).toString('utf8'))),
     codebaseDigests,
-    stagingDigest: treeDigest(body.artifacts.stagingPath, (rel) => rel === VOLATILE_STAGING_FILE),
+    stagingDigest: treeDigest(body.artifacts.stagingPath, (rel) => rel === VOLATILE_STAGING_FILE || rel === CHUNK_PLAN_FILE),
+    chunkPlan: chunkPlanNormalized(body.artifacts.stagingPath),
     graphSnapshot: snapshotWithoutTimestamp(body.artifacts.stagingPath),
     recordCount: records.length,
   };
@@ -167,6 +180,7 @@ describe('the uninterrupted reference run', () => {
     assert.deepEqual(second.manifest, reference.manifest);
     assert.deepEqual(second.codebaseDigests, reference.codebaseDigests);
     assert.equal(second.stagingDigest, reference.stagingDigest);
+    assert.deepEqual(second.chunkPlan, reference.chunkPlan);
     assert.deepEqual(second.graphSnapshot, reference.graphSnapshot);
     assert.notEqual(second.rawRecord.artifacts.stagingPath, reference.rawRecord.artifacts.stagingPath, 'the profiles are separate, so the raw records differ before normalization');
   });
@@ -257,6 +271,7 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
       assert.deepEqual(outcome.codebaseDigests, reference.codebaseDigests, 'map document digests');
       assert.deepEqual(outcome.manifest, reference.manifest, 'snapshot manifest');
       assert.equal(outcome.stagingDigest, reference.stagingDigest, 'staging tree');
+      assert.deepEqual(outcome.chunkPlan, reference.chunkPlan, 'the knowledge chunk plan, normalized');
       assert.deepEqual(outcome.graphSnapshot, reference.graphSnapshot, 'the GSD graph snapshot, without its timestamp');
       assert.deepEqual(checkoutSnapshot(repo.path), pristine, 'the user checkout is byte-identical');
 
