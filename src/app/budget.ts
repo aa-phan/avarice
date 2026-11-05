@@ -16,8 +16,8 @@ import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
 import type { RunContract } from '../domain/run-contract.ts';
-import type { BudgetRow, BudgetRowInput, OnboardingRow } from '../ports/ledger.ts';
-import type { OnboardingPurpose } from '../ports/agent-host.ts';
+import type { BudgetRow, BudgetRowInput, OnboardingRow, RunRow } from '../ports/ledger.ts';
+import type { InvocationPurpose, OnboardingPurpose } from '../ports/agent-host.ts';
 import type { AppDeps } from './deps.ts';
 import { loadContract } from './stages/shared.ts';
 
@@ -25,8 +25,8 @@ export const BUDGET_NAMES = ['invocations', 'toolCalls', 'subagentsTotal', 'wall
 
 export interface InvocationReservation {
   runId: string;
-  purpose: OnboardingPurpose;
-  // The smaller of the purpose's share of the wall clock and what is left of it.
+  purpose: InvocationPurpose;
+  // The smaller of the purpose's share of the wall clock (a run: the contract's wall clock) and what is left of it.
   wallClockMs: number;
   // The smaller of the contract's per-invocation cap and what is left of the run's cost budget.
   costCapUsd: number;
@@ -74,13 +74,25 @@ export function budgetRowsOfRun(contract: RunContract): BudgetRowInput[] {
 
 const remaining = (row: BudgetRow | undefined): number => (row === undefined ? 0 : row.limit - row.used - row.reserved);
 
-export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose): Result<ReserveOutcome> {
-  const contract = loadContract(deps, onboarding.onboardingId);
-  if (!contract.ok) return contract;
-  const { runId, version, body } = contract.value;
+// What differs between an onboarding's reservation and a run's: the budget rows' owner and version, the contract numbers, the most
+// wall clock one invocation may have, and what the orphan event names. Everything else (orphan charge, caps, the reserve) is one code path.
+interface ReserveSource {
+  // The run the budget rows belong to: an onboarding's carrier run, or the run itself.
+  runId: string;
+  version: number;
+  rows: readonly BudgetRowInput[];
+  purpose: InvocationPurpose;
+  perInvocationUsd: number;
+  // The most wall clock one invocation may be granted, before what is left of the run's budget caps it further.
+  wallClockCapMs: number;
+  // Extra data of the `invocation.orphan-charged` event (IDs only).
+  subject: Readonly<Record<string, unknown>>;
+}
 
+function reserveFrom(deps: AppDeps, source: ReserveSource): Result<ReserveOutcome> {
+  const { runId } = source;
   // Rows are created with the contract; this only fills in rows an older store lacks, and never touches one that exists.
-  const ensured = deps.ledger.createBudgets(runId, version, budgetRowsOf(body));
+  const ensured = deps.ledger.createBudgets(runId, source.version, source.rows);
   if (!ensured.ok) return ensured;
   let rows = ensured.value;
 
@@ -91,7 +103,7 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
     let costLeft = remaining(rows.find((r) => r.name === 'costUsd'));
     let costCharged = 0;
     for (let i = 0; i < orphaned; i += 1) {
-      const reservedUsd = Math.max(0, Math.min(body.budgets.costUsd.perInvocation, costLeft));
+      const reservedUsd = Math.max(0, Math.min(source.perInvocationUsd, costLeft));
       costLeft -= reservedUsd;
       costCharged += reservedUsd;
     }
@@ -103,7 +115,7 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
       type: 'invocation.orphan-charged',
       level: 'warn',
       runId,
-      data: { onboardingId: onboarding.onboardingId, invocations: orphaned, costChargedUsd: costCharged },
+      data: { ...source.subject, invocations: orphaned, costChargedUsd: costCharged },
       nowMs: deps.clock.nowMs(),
     });
     if (!event.ok) return event;
@@ -113,15 +125,48 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   }
   const byName = (name: string): BudgetRow | undefined => rows.find((r) => r.name === name);
 
-  const wallClockMs = Math.min(body.budgets.wallClockShares[purpose] * 60_000, remaining(byName('wallClockMs')));
+  const wallClockMs = Math.min(source.wallClockCapMs, remaining(byName('wallClockMs')));
   if (wallClockMs <= 0) return ok({ granted: false, budget: 'wallClockMs' });
-  const costCapUsd = Math.min(body.budgets.costUsd.perInvocation, remaining(byName('costUsd')));
+  const costCapUsd = Math.min(source.perInvocationUsd, remaining(byName('costUsd')));
   if (costCapUsd <= 0) return ok({ granted: false, budget: 'costUsd' });
 
   const reserved = deps.ledger.reserveBudget(runId, 'invocations', 1);
   if (!reserved.ok) return reserved;
   if (!reserved.value.granted) return ok({ granted: false, budget: 'invocations' });
-  return ok({ granted: true, reservation: { runId, purpose, wallClockMs, costCapUsd } });
+  return ok({ granted: true, reservation: { runId, purpose: source.purpose, wallClockMs, costCapUsd } });
+}
+
+export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose): Result<ReserveOutcome> {
+  const contract = loadContract(deps, onboarding.onboardingId);
+  if (!contract.ok) return contract;
+  const { runId, version, body } = contract.value;
+  return reserveFrom(deps, {
+    runId,
+    version,
+    rows: budgetRowsOf(body),
+    purpose,
+    perInvocationUsd: body.budgets.costUsd.perInvocation,
+    wallClockCapMs: body.budgets.wallClockShares[purpose] * 60_000,
+    subject: { onboardingId: onboarding.onboardingId },
+  });
+}
+
+// A run's reservation (CON-13): the run's own rows, one invocation, the whole remaining wall clock up to the contract's, and the
+// per-invocation cost cap up to what is left. The orphan rule is the onboarding's: a reservation whose holder died is spent on the next reserve.
+export function reserveRunInvocation(deps: AppDeps, run: RunRow): Result<ReserveOutcome> {
+  const stored = deps.ledger.getRunContract(run.runId);
+  if (!stored.ok) return stored;
+  if (stored.value === null) return err({ kind: 'internal', cause: `run ${run.runId} has no stored contract` });
+  const body = stored.value.body as RunContract;
+  return reserveFrom(deps, {
+    runId: run.runId,
+    version: stored.value.version,
+    rows: budgetRowsOfRun(body),
+    purpose: 'run',
+    perInvocationUsd: body.budgets.costUsd.perInvocation,
+    wallClockCapMs: body.budgets.wallClockMinutes * 60_000,
+    subject: { runId: run.runId },
+  });
 }
 
 // Moves the invocation's reservation to used and charges what it cost: the reported cost, or for a killed invocation the larger of
