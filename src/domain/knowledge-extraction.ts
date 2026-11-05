@@ -13,6 +13,7 @@
 // remains in use is `cluster-only` on the merged graph. See docs/repository-onboarding.md "Knowledge pass".
 import type { KnowledgeManifest } from './knowledge-corpus.ts';
 import { KNOWLEDGE_DIR } from './knowledge-corpus.ts';
+import { normalizedAbsoluteRoot } from './normalized-root.ts';
 
 // Where the model's output goes, relative to the corpus directory (its working directory), and relative to staging.
 export const EXTRACTION_DIR_NAME = '.extraction';
@@ -70,19 +71,6 @@ export function stemOf(sourcePath: string): string {
     .join('_');
 }
 
-// Trims trailing slashes and refuses, with a TypeError, a root that is not a normalized absolute path below `/` (an empty, `.` or `..` segment).
-function checkedCorpusRoot(value: unknown): string {
-  const refuse = (): never => {
-    const got = typeof value === 'string' ? JSON.stringify(value) : `a value of type ${typeof value}`;
-    throw new TypeError(`planExtractionChunks: corpusRoot must be a normalized absolute path below '/', got ${got}`);
-  };
-  if (typeof value !== 'string') return refuse();
-  const trimmed = value.length > 1 ? value.replace(/\/+$/, '') : value;
-  if (!trimmed.startsWith('/') || trimmed === '/') return refuse();
-  if (trimmed.slice(1).split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return refuse();
-  return trimmed;
-}
-
 // Splits the manifest's documents into chunks: sorted by path (so the documents of one directory sit together), then filled in
 // order until a chunk holds `maxFiles` documents or `maxBytes` of text. A document larger than `maxBytes` is a chunk of its own.
 // `sizes` is the byte size of each source path (a path without a size counts as `maxBytes`). Deterministic: the same manifest and
@@ -91,7 +79,7 @@ function checkedCorpusRoot(value: unknown): string {
 // invocation scope checks its work root (a normalized absolute path below `/`), and the absolute paths of the plan are built by string
 // concatenation only: the domain imports nothing but relative paths and node:crypto.
 export function planExtractionChunks(manifest: KnowledgeManifest, sizes: Readonly<Record<string, number>>, corpusRoot: string, limits: { maxFiles?: number; maxBytes?: number } = {}): ExtractionPlan {
-  const root = checkedCorpusRoot(corpusRoot);
+  const root = normalizedAbsoluteRoot(corpusRoot, 'planExtractionChunks: corpusRoot');
   const maxFiles = limits.maxFiles ?? CHUNK_LIMITS.maxFiles;
   const maxBytes = limits.maxBytes ?? CHUNK_LIMITS.maxBytes;
   const sorted = [...manifest.entries].sort((a, b) => (a.sourcePath < b.sourcePath ? -1 : a.sourcePath > b.sourcePath ? 1 : 0));

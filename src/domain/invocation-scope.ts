@@ -6,6 +6,7 @@
 // directory is always writable to a sandboxed shell, and a denyWrite on a path overrides an allowWrite beneath
 // it, so the only way to keep a shell out of `src/` is to deny each existing entry one by one. Entries created
 // later at unlisted locations are caught by the staging diff gate, not prevented.
+import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 
 export type InvocationPurpose = 'map' | 'intel' | 'knowledge';
@@ -203,26 +204,12 @@ export interface ScopeInput {
 }
 
 const writeDirOf = (purpose: InvocationPurpose): string => INVOCATION_PURPOSES[purpose].writeDir;
-const trimTrailingSlashes = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, '') : path);
 const join = (base: string, rel: string): string => `${base}/${rel}`;
 const uniqueSorted = (items: Iterable<string>): string[] => [...new Set(items)].sort();
 
-// WR-01: judges the trimmed value (`//` trims to ''), returns it, and throws before any part of the scope is built. String operations
-// only: the domain may import nothing but relative paths and node:crypto.
-function checkedWorkRoot(value: unknown): string {
-  const refuse = (): never => {
-    const got = typeof value === 'string' ? JSON.stringify(value) : `a value of type ${typeof value}`;
-    throw new TypeError(`computeInvocationScope: workRoot must be a normalized absolute path below '/', got ${got}`);
-  };
-  if (typeof value !== 'string') return refuse();
-  const trimmed = trimTrailingSlashes(value);
-  if (!trimmed.startsWith('/') || trimmed === '/') return refuse();
-  if (trimmed.slice(1).split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return refuse();
-  return trimmed;
-}
-
 export function computeInvocationScope(input: ScopeInput): InvocationScope {
-  const workRoot = checkedWorkRoot(input.workRoot);
+  // WR-01: refuses (RootRefusedError) a work root that is not a normalized absolute path, before any part of the scope is built.
+  const workRoot = normalizedAbsoluteRoot(input.workRoot, 'computeInvocationScope: workRoot');
   const { purpose, contract, workspace } = input;
   const spec: PurposeSpec = INVOCATION_PURPOSES[purpose];
   const readDir = spec.cwd === 'read-dir' ? (spec.readDir ?? writeDirOf(purpose)) : undefined;
