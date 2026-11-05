@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-11-05T10:04:43.545Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-11-05T10:26:49.714Z"
 last_activity: 2026-11-05
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 82e32ef84ce0e429c2b3139eccfd36873338e88b
+last_activity_desc: Phase 02 execution started
+state_head: 94fe84709f7dff562e3e238a887bf3d496e2d652
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-05)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 2 — Contained unattended run of one work item
+**Current focus:** Phase 02 — Contained unattended run of one work item
 
 ## Current Position
 
-Phase: 02 (Contained unattended run of one work item) — READY TO EXECUTE
-Plan: Not started
+Phase: 02 (Contained unattended run of one work item) — EXECUTING
+Plan: 2 of 22
 Status: Ready to execute
-Last activity: 2026-11-05 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-11-05 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -83,6 +83,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P24 | 15 min | 2 tasks | 8 files |
 | Phase 01 P25 | 45 min | 2 tasks | 11 files |
 | Phase 01 P26 | 10 min | 2 tasks | 5 files |
+| Phase 02 P01 | 55 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-25: knowledge coverage is judged per manifest document on the merged graph; below half (KNOWLEDGE_LIMITS.documentShare 0.5) is validation-failed, otherwise the record states documentsExpected and dropped.unread
 - [Phase 01]: 01-25: .chunks.json carries absolute readPath and writePath (corpus root = knowledge invocation cwd); AssembledExtraction.usedFiles removed so coverage is never derived from chunk shape
 - [Phase 01]: Plan 01-26: the live gate checks zero unread documents (stricter than the stage's at-least-half admission share), and an absent documentsExpected or dropped.unread stays null so a pre-01-25 record fails
+- [Phase 02]: 02-01: Phase 2 live spend is one ledger (test/containment/live-spend-phase2.jsonl) with a 25 USD ceiling that AVARICE_PHASE2_CEILING_USD can only lower; fitsCap also requires fitsPhase2Ceiling and a corrupt ledger throws — D-15 as a mechanical guard; 0.2122 USD spent after plan 02-01
+- [Phase 02]: 02-01: Claude Code 2.1.318 admitted on 22 live T3 tests with 0 containment failures (0.1596 USD); the case 19 knowledge-pass denial is a /var vs /private/var path-form refusal by the host, deferred, and Phase 2 run purposes must give the model symlink-resolved paths — CON-3: admit only on a recorded live run on that exact version
 
 ### Pending Todos
 
@@ -215,6 +218,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T08:50:00Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-contained-unattended-run-of-one-work-item/02-CONTEXT.md
+Last session: 2026-11-05T10:26:49.577Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
