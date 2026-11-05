@@ -9,8 +9,9 @@
 // The knowledge section must account for every manifest document and leave none unread (UAT 154, plans 01-25 and 01-26):
 // `knowledge.documentsExpected` and `knowledge.dropped.unread` must both be present, and `unread` must be 0. The gate checks
 // zero unread, not the stage's at-least-half admission share, because it checks that every corpus document became a document
-// node. Both counts must be whole numbers, `documentsExpected` at least 1 and `unread` no more than it (a record that says otherwise
-// is malformed or hand-edited, and does not pass). The rehearsal picks the problem up through its existing `assert-exit:` problems.
+// node. Both counts must be whole numbers, `documentsExpected` at least 1 and `unread` no more than it, and `documentNodes` at least
+// `documentsExpected - unread` (every covered document is cited by a document node; a document may yield more than one, so more nodes
+// than documents is fine). A record that says otherwise is malformed or hand-edited, and does not pass. The rehearsal picks the problem up through its existing `assert-exit:` problems.
 //
 // Prints the JSON facts on stdout (`ok` says whether every check held). Exit 0 when every check holds, 1 when one fails
 // (each failure is a line on stderr), 2 for a usage error, an unknown onboarding or an unreadable ledger.
@@ -129,8 +130,16 @@ export function judgeExit(f: ExitFacts): string[] {
         problems.push(`the knowledge accounting is malformed: documentsExpected and dropped.unread must be whole numbers, not ${f.documentsExpected} and ${f.unreadDocuments}`);
       } else if (f.documentsExpected < 1 || f.unreadDocuments > f.documentsExpected) {
         problems.push(`the knowledge accounting is inconsistent (documentsExpected ${f.documentsExpected}, dropped.unread ${f.unreadDocuments}): a corpus holds at least one document and cannot leave more unread than it held`);
-      } else if (f.unreadDocuments > 0) {
-        problems.push(`${f.unreadDocuments} of ${f.documentsExpected} corpus documents have no document node (knowledge.dropped.unread)`);
+      } else {
+        if (f.unreadDocuments > 0) {
+          problems.push(`${f.unreadDocuments} of ${f.documentsExpected} corpus documents have no document node (knowledge.dropped.unread)`);
+        }
+        // A covered document is cited by at least one document node (documentCoverage), and a node is counted once, so the node count is at
+        // least the covered count. It may be more: a document can yield several nodes, and a node can cite a document the corpus does not hold.
+        const covered = f.documentsExpected - f.unreadDocuments;
+        if (f.documentNodes < covered) {
+          problems.push(`the knowledge accounting is inconsistent (knowledge.documentNodes ${f.documentNodes}, documentsExpected ${f.documentsExpected}, dropped.unread ${f.unreadDocuments}): ${covered} documents were covered, and each is cited by a document node, so there are at least ${covered}`);
+        }
       }
     }
     if (f.graphBuiltAtCommit !== f.onboardedRevision) {

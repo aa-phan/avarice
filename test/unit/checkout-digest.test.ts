@@ -292,6 +292,34 @@ describe('scripts/assert-exit.ts', () => {
     }
   });
 
+  // IN-05: the node count is tied to the document accounting. Every covered document is cited by at least one document node, so
+  // documentNodes >= documentsExpected - unread; a document can yield several nodes, so more nodes than documents is coherent.
+  for (const [name, fixture, message] of [
+    ['one node stands for 25 covered documents', { documentNodes: 1, documentsExpected: 25, unread: 0, nodes: { code: 12, document: 1 } }, /accounting is inconsistent \(knowledge\.documentNodes 1, documentsExpected 25, dropped\.unread 0\).*at least 25/],
+    ['the nodes fall one short of the covered documents', { documentNodes: 8, documentsExpected: 25, unread: 16, nodes: { code: 12, document: 8 } }, /accounting is inconsistent \(knowledge\.documentNodes 8, documentsExpected 25, dropped\.unread 16\).*at least 9/],
+  ] as Array<[string, Fixture, RegExp]>) {
+    it(`fails a document node count below the covered documents when ${name} (IN-05)`, () => {
+      const r = assertExit(fixture);
+      assert.equal(r.code, 1, r.stdout + r.stderr);
+      assert.match(r.stderr, message);
+    });
+  }
+
+  it('passes when the document nodes equal or exceed the covered documents, and judges unread and the node count separately (IN-05)', () => {
+    for (const fixture of [
+      { documentNodes: 25, documentsExpected: 25, unread: 0, nodes: { code: 12, document: 25 } },
+      { documentNodes: 40, documentsExpected: 25, unread: 0, nodes: { code: 12, document: 40 } },
+    ] as Fixture[]) {
+      const r = assertExit(fixture);
+      assert.equal(r.code, 0, r.stderr);
+    }
+    // At the boundary with unread documents: only the unread message, not the node-count one.
+    const partial = assertExit({ documentNodes: 9, documentsExpected: 25, unread: 16, nodes: { code: 12, document: 9 } });
+    assert.equal(partial.code, 1, partial.stdout + partial.stderr);
+    assert.match(partial.stderr, /16 of 25 corpus documents have no document node/);
+    assert.doesNotMatch(partial.stderr, /knowledge\.documentNodes/);
+  });
+
   it('reports only the no-document-nodes problem for a record with no knowledge section (plan 01-26)', () => {
     const r = assertExit({ documentNodes: null, nodes: { code: 12, document: 3 } });
     assert.equal(r.code, 1, r.stdout + r.stderr);
