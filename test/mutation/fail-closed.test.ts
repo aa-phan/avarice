@@ -3,7 +3,7 @@
 // safeguards, Fail-closed behavior, Budgets) and docs/repository-onboarding.md, not from reading the code.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
@@ -290,6 +290,39 @@ describe('FC-10: a sandbox that cannot run the command reports unavailable', () 
     const result = await executor.run(spec(cwd));
     assert.ok(!result.ok, 'a command the sandbox refused must not report a result');
     assert.equal(result.error.kind, 'unavailable');
+  });
+
+  // Every run of a stub launcher counts itself in `count` next to it, so a test sees how often the probe spawned it.
+  const COUNT = 'd=$(dirname "$0"); n=$(( $(cat "$d/count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$d/count"';
+  const runs = (launcher: string): number => Number(readFileSync(join(launcher, '..', 'count'), 'utf8').trim());
+
+  it('retries a probe that timed out once, and the retry gives a usable sandbox (WR-07)', async () => {
+    const { launcher, cwd } = stubLauncher(`${COUNT}\nif [ "$n" = 1 ]; then exec /bin/sleep 30; fi\nexit 0`);
+    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [300, 10_000] });
+    assert.equal(executor.descriptor.attributes?.['enforcement'], 'enforced');
+    assert.equal(runs(launcher), 2);
+    const result = await executor.run(spec(cwd));
+    assert.ok(result.ok, 'the sandbox answered on the retry, so the command runs');
+    assert.equal(result.ok ? result.value.status : '', 'passed');
+  });
+
+  it('does not cache a probe that timed out twice: the next use probes again (WR-07)', () => {
+    const { launcher } = stubLauncher(`${COUNT}\nif [ -e "$d/slow" ]; then exec /bin/sleep 30; fi\nexit 0`);
+    writeFileSync(join(launcher, '..', 'slow'), '');
+    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [200, 400] });
+    assert.equal(executor.descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(runs(launcher), 2);
+    unlinkSync(join(launcher, '..', 'slow'));
+    assert.equal(executor.descriptor.attributes?.['enforcement'], 'enforced');
+    assert.equal(runs(launcher), 3);
+  });
+
+  it('caches a clean non-zero exit: the launcher is not probed again (WR-07)', () => {
+    const { launcher } = stubLauncher(`${COUNT}\nexit 1`);
+    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [5_000, 5_000] });
+    assert.equal(executor.descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(executor.descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(runs(launcher), 1);
   });
 
   it('refuses a relative working directory instead of resolving it against the process directory', async () => {

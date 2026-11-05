@@ -17,7 +17,8 @@ import { buildSeatbeltProfile } from './seatbelt-profile.ts';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 const PROBE_PROFILE = '(version 1)(allow default)';
-const PROBE_TIMEOUT_MS = 5_000;
+// The first probe attempt and its one retry (WR-07).
+const PROBE_TIMEOUTS_MS: readonly [number, number] = [5_000, 15_000];
 // SIGTERM at the timeout, SIGKILL this long after.
 const KILL_GRACE_MS = 5_000;
 // After the leader exits, how long to wait for its output pipes to close before settling anyway.
@@ -28,15 +29,17 @@ const SANDBOX_EXEC_FAILURES = new Set([65, 71]);
 export interface SandboxedExecutorOptions {
   // The sandbox launcher. Tests point it at /usr/bin/false to prove the refusal; production never sets it.
   sandboxExecPath?: string;
+  // The timeouts of the first probe attempt and its one retry. Tests shorten them; production never sets it.
+  probeTimeoutsMs?: readonly [number, number];
 }
 
 // One probe per launcher path per process.
 const probes = new Map<string, boolean>();
 
-function probe(sandboxExecPath: string): boolean {
+function probe(sandboxExecPath: string, timeouts: readonly [number, number]): boolean {
   const known = probes.get(sandboxExecPath);
   if (known !== undefined) return known;
-  const ran = spawnSync(sandboxExecPath, ['-p', PROBE_PROFILE, '/usr/bin/true'], { stdio: 'ignore', timeout: PROBE_TIMEOUT_MS });
+  const ran = spawnSync(sandboxExecPath, ['-p', PROBE_PROFILE, '/usr/bin/true'], { stdio: 'ignore', timeout: timeouts[0] });
   const works = ran.error === undefined && ran.status === 0;
   probes.set(sandboxExecPath, works);
   return works;
@@ -99,15 +102,17 @@ async function waitGroupGone(pid: number): Promise<void> {
 
 export class SandboxedExecutor implements CommandExecutor {
   readonly #sandboxExecPath: string;
+  readonly #probeTimeoutsMs: readonly [number, number];
 
   constructor(options: SandboxedExecutorOptions = {}) {
     this.#sandboxExecPath = options.sandboxExecPath ?? SANDBOX_EXEC;
+    this.#probeTimeoutsMs = options.probeTimeoutsMs ?? PROBE_TIMEOUTS_MS;
   }
 
   // The probe runs on first use of the descriptor or of run(), so a read-only command that never runs anything
   // does not pay for it.
   get descriptor(): CapabilityDescriptor {
-    const enforced = probe(this.#sandboxExecPath);
+    const enforced = probe(this.#sandboxExecPath, this.#probeTimeoutsMs);
     return {
       port: 'executor',
       adapter: 'local-sandbox-exec',
@@ -129,7 +134,7 @@ export class SandboxedExecutor implements CommandExecutor {
     }
     if (!Number.isFinite(cmd.timeoutMs) || cmd.timeoutMs <= 0) return invalid('timeoutMs', 'must be positive');
 
-    if (!probe(this.#sandboxExecPath)) {
+    if (!probe(this.#sandboxExecPath, this.#probeTimeoutsMs)) {
       return Promise.resolve(err({ kind: 'unavailable', cause: `the sandbox (${this.#sandboxExecPath}) cannot be used here; the command was not run` }));
     }
     let cwdReal: string;
