@@ -62,6 +62,27 @@ describe('buildSeatbeltProfile', () => {
     assert.ok(!built.value.includes(link), 'the symlink path itself is not used');
   });
 
+  it('allows outbound connections to the named loopback ports only, one line each, after (deny network*)', () => {
+    const built = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [], allowLoopbackPorts: [18081, 18082] });
+    assert.ok(built.ok, JSON.stringify(built));
+    const lines = built.value.split('\n');
+    const allowLines = lines.filter((l) => l.includes('remote ip'));
+    assert.deepEqual(allowLines, ['(allow network-outbound (remote ip "localhost:18081"))', '(allow network-outbound (remote ip "localhost:18082"))']);
+    assert.ok(lines.indexOf('(deny network*)') < lines.indexOf(allowLines[0] ?? ''), 'the allowance follows the denial');
+    const none = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [] });
+    assert.ok(none.ok);
+    assert.ok(!none.value.includes('remote ip'), 'no loopback allowance unless asked for');
+  });
+
+  it('refuses a loopback port that is not an integer from 1 to 65535', () => {
+    for (const bad of [0, 70000, 1.5, '80', -1, Number.NaN, 65536] as unknown as number[]) {
+      const built = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [], allowLoopbackPorts: [bad] });
+      assert.ok(!built.ok, `port ${String(bad)} must be refused`);
+      assert.equal(built.error.kind, 'invalid');
+      assert.equal((built.error as { field?: string }).field, 'allowLoopbackPorts');
+    }
+  });
+
   it('rejects a path with a double quote or a newline', () => {
     for (const bad of ['/tmp/a"b', '/tmp/a\nb']) {
       const built = buildSeatbeltProfile({ writePaths: [bad], denyReadPaths: [] });
@@ -136,6 +157,71 @@ describe('SandboxedExecutor', { skip: !SANDBOX_AVAILABLE }, () => {
     } finally {
       server.close();
     }
+  });
+
+  describe('allowLoopbackPorts', () => {
+    const CONNECT = (port: number): string[] => [
+      process.execPath,
+      '-e',
+      `const s=require('net').connect(${port},'127.0.0.1');s.on('connect',()=>{console.log('connected');s.destroy();process.exit(0)});s.on('error',(e)=>{console.error(e.code);process.exit(3)})`,
+    ];
+
+    async function twoServers(): Promise<{ a: number; b: number; close: () => void; hits: () => number }> {
+      const { createServer: tcp } = await import('node:net');
+      let hits = 0;
+      const mk = (): ReturnType<typeof tcp> => tcp((c) => {
+        hits += 1;
+        c.destroy();
+      });
+      const sa = mk();
+      const sb = mk();
+      await Promise.all([sa, sb].map((x) => new Promise<void>((r) => x.listen(0, '127.0.0.1', r))));
+      return { a: (sa.address() as AddressInfo).port, b: (sb.address() as AddressInfo).port, close: () => { sa.close(); sb.close(); }, hits: () => hits };
+    }
+
+    it('reaches the named port and no other loopback port', async () => {
+      const servers = await twoServers();
+      try {
+        const s = staging();
+        const ok = await run(executor, spec(s.root, CONNECT(servers.a), { allowLoopbackPorts: [servers.a] }));
+        assert.equal(ok.status, 'passed', ok.stderr);
+        assert.match(ok.stdout, /connected/);
+        const refused = await run(executor, spec(s.root, CONNECT(servers.b), { allowLoopbackPorts: [servers.a] }));
+        assert.equal(refused.status, 'failed');
+        assert.notEqual(refused.exitCode, 0);
+      } finally {
+        servers.close();
+      }
+    });
+
+    it('without the field the command reaches neither port', async () => {
+      const servers = await twoServers();
+      try {
+        const s = staging();
+        for (const port of [servers.a, servers.b]) {
+          const result = await run(executor, spec(s.root, CONNECT(port)));
+          assert.equal(result.status, 'failed');
+          assert.notEqual(result.exitCode, 0);
+        }
+        assert.equal(servers.hits(), 0, 'no connection was accepted');
+      } finally {
+        servers.close();
+      }
+    });
+
+    it('refuses a malformed port with an invalid result naming the field and spawns nothing', async () => {
+      const s = staging();
+      const marker = join(s.root, '.planning', 'ran.txt');
+      for (const bad of [0, 70000, 1.5, '80'] as unknown as number[]) {
+        const result = await executor.run(
+          spec(s.root, ['sh', '-c', `echo ran > ${marker}`], { writePaths: [join(s.root, '.planning')], allowLoopbackPorts: [bad] }),
+        );
+        assert.ok(!result.ok, `port ${String(bad)}`);
+        assert.equal(result.error.kind, 'invalid');
+        assert.equal((result.error as { field?: string }).field, 'allowLoopbackPorts');
+        assert.equal(existsSync(marker), false, 'nothing was spawned');
+      }
+    });
   });
 
   it('a read of a denyRead directory fails and the same read elsewhere works', async () => {
