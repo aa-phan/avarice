@@ -150,6 +150,8 @@ interface Fixture {
   promotion?: string;
   nodes?: Record<string, number>;
   documentNodes?: number | null;
+  documentsExpected?: number | null;
+  unread?: number | null;
   builtAtCommit?: string;
   refreshedAtCommit?: string;
   onboardedRevision?: string;
@@ -179,7 +181,15 @@ function ledgerWith(f: Fixture = {}): { db: string; onboardingId: string } {
   if (f.noRecord !== true) {
     const indexes: Record<string, unknown> = {};
     if (f.noGraph !== true) {
-      const knowledge = f.documentNodes === null ? undefined : { documentNodes: f.documentNodes ?? 3 };
+      const documentNodes = f.documentNodes ?? 3;
+      const knowledge =
+        f.documentNodes === null
+          ? undefined
+          : {
+              documentNodes,
+              ...(f.documentsExpected === null ? {} : { documentsExpected: f.documentsExpected ?? 3 }),
+              dropped: { dangling: 0, astDocument: 0, ...(f.unread === null ? {} : { unread: f.unread ?? 0 }) },
+            };
       indexes['graph'] = { builtAtCommit: f.builtAtCommit ?? `git:${REV}`, nodes: f.nodes ?? { code: 12, document: 3 }, edges: { EXTRACTED: 4 }, ...(knowledge !== undefined ? { knowledge } : {}) };
     }
     if (f.noIntel !== true) indexes['intel'] = { refreshedAtCommit: f.refreshedAtCommit ?? `git:${REV}`, files: 5 };
@@ -210,6 +220,8 @@ describe('scripts/assert-exit.ts', () => {
     assert.equal(summary['onboardedRevision'], REV);
     assert.deepEqual(summary['nodes'], { code: 12, document: 3 });
     assert.equal(summary['documentNodes'], 3);
+    assert.equal(summary['documentsExpected'], 3);
+    assert.equal(summary['unreadDocuments'], 0);
     assert.equal(summary['graphBuiltAtCommit'], REV);
     assert.equal(summary['intelRefreshedAtCommit'], REV);
   });
@@ -233,6 +245,38 @@ describe('scripts/assert-exit.ts', () => {
       assert.match(r.stderr, message);
     });
   }
+
+  it('fails a run that left corpus documents unread (UAT 154, plan 01-26)', () => {
+    const r = assertExit({ documentNodes: 9, documentsExpected: 25, unread: 16 });
+    assert.equal(r.code, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /16 of 25 corpus documents have no document node/);
+    const summary = JSON.parse(r.stdout) as Record<string, unknown>;
+    assert.equal(summary['documentsExpected'], 25);
+    assert.equal(summary['unreadDocuments'], 16);
+  });
+
+  for (const [name, fixture] of [
+    ['documentsExpected is absent', { documentsExpected: null }],
+    ['dropped.unread is absent', { unread: null }],
+    ['both are absent', { documentsExpected: null, unread: null }],
+  ] as Array<[string, Fixture]>) {
+    it(`fails a knowledge section without per-document accounting when ${name} (plan 01-26)`, () => {
+      const r = assertExit(fixture);
+      assert.equal(r.code, 1, r.stdout + r.stderr);
+      assert.match(r.stderr, /no per-document accounting/);
+      assert.doesNotMatch(r.stderr, /corpus documents have no document node/);
+    });
+  }
+
+  it('reports only the no-document-nodes problem for a record with no knowledge section (plan 01-26)', () => {
+    const r = assertExit({ documentNodes: null, nodes: { code: 12, document: 3 } });
+    assert.equal(r.code, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /no document nodes/);
+    assert.doesNotMatch(r.stderr, /per-document accounting/);
+    const summary = JSON.parse(r.stdout) as Record<string, unknown>;
+    assert.equal(summary['documentsExpected'], null);
+    assert.equal(summary['unreadDocuments'], null);
+  });
 
   it('compares revisions without the git: prefix, so either spelling of the same commit passes', () => {
     const r = assertExit({ onboardedRevision: REV, builtAtCommit: REV, refreshedAtCommit: `git:${REV}` });
