@@ -103,6 +103,13 @@ describe('run contract tracer: a brief and conventions compile into a routine co
     const changed = { ...ROUTINE_PRESET, budgets: { ...ROUTINE_PRESET.budgets, toolCalls: 401 } };
     assert.notEqual(digestOf(changed), contract.policyRevision);
   });
+
+  it('carries the loop limits: 3 consecutive denials and 25 consecutive searches (CON-14), and the revision follows the search limit', () => {
+    const { contract } = unwrap(compileRunContract(inputFor()));
+    assert.deepEqual(contract.escalation, { consecutiveDenials: 3, consecutiveSearches: 25, noProgressInvocations: 2 });
+    const changed = { ...ROUTINE_PRESET, escalation: { ...ROUTINE_PRESET.escalation, consecutiveSearches: 26 } };
+    assert.notEqual(digestOf(changed), contract.policyRevision);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------

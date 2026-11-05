@@ -265,3 +265,19 @@ describe('computeRunScope: the work root check of Phase 1 (WR-01) applies', () =
     assert.deepEqual(scope.denyRead.at(-1), WORK);
   });
 });
+
+describe('computeRunScope: read-before-edit and loop limits (CON-7, CON-14)', () => {
+  it('turns read-before-edit on for the run purpose and carries the contract loop limits', () => {
+    const base = input();
+    const scope = computeRunScope({ ...base, contract: { ...base.contract, escalation: { consecutiveDenials: 3, consecutiveSearches: 25 } } });
+    assert.equal(scope.readBeforeEdit, true);
+    assert.deepEqual(scope.escalation, { consecutiveDenials: 3, consecutiveSearches: 25 });
+  });
+
+  it('falls back to the preset limits for a contract stored before consecutiveSearches existed', () => {
+    const base = input();
+    const scope = computeRunScope({ ...base, contract: { ...base.contract, escalation: { consecutiveDenials: 2 } } });
+    assert.deepEqual(scope.escalation, { consecutiveDenials: 2, consecutiveSearches: 25 });
+    assert.deepEqual(computeRunScope(base).escalation, { consecutiveDenials: 3, consecutiveSearches: 25 });
+  });
+});

@@ -112,7 +112,7 @@ export const ROUTINE_PRESET = {
     human: ['user-visible behavior changes', 'new dependencies', 'public API changes', 'scope expansion', 'acceptance criteria changes'],
     prohibited: ['policy changes', 'budget changes', 'credential changes', 'merge', 'push'],
   },
-  escalation: { consecutiveDenials: 3, noProgressInvocations: 2 },
+  escalation: { consecutiveDenials: 3, consecutiveSearches: 25, noProgressInvocations: 2 },
   delivery: { endpoint: 'ready_for_review', handoff: 'local-branch', pushBranch: false, draftPr: false },
   notify: ['local'],
   verification: {
@@ -182,7 +182,7 @@ export interface RunContract {
     integrityGates: string[];
   };
   delivery: { endpoint: string; handoff: string; pushBranch: boolean; draftPr: boolean };
-  escalation: { consecutiveDenials: number; noProgressInvocations: number };
+  escalation: { consecutiveDenials: number; consecutiveSearches: number; noProgressInvocations: number };
   notify: { reviewReady: string[]; blocking: string[]; digest: string[] };
 }
 

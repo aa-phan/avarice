@@ -752,6 +752,8 @@ describe('the run purpose through the real hook entry (CON-2, CON-8)', () => {
     ]);
     assert.deepEqual(r.policy.deniedTools, ['AskUserQuestion']);
     assert.equal(r.policy.denyBackgroundShell, true);
+    assert.equal(r.policy.readBeforeEdit, true);
+    assert.deepEqual(r.policy.loopLimits, { consecutiveDenials: 3, consecutiveSearches: 25 });
     assert.ok(r.policy.writeRoots.includes(r.scratch), 'the scratch directory is a write root');
     assert.equal(parseHookPolicy(JSON.parse(readFileSync(r.policyPath, 'utf8'))).ok, true);
   });

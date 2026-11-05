@@ -190,7 +190,7 @@ The contract is stored in the ledger and in the data root, never in the worktree
     }
   },
   "delivery": { "endpoint": "ready_for_review", "pushBranch": true, "draftPr": true, "remote": "origin" },
-  "escalation": { "consecutiveDenials": 3, "noProgressInvocations": 2, "contradictoryEvidence": "escalate" },
+  "escalation": { "consecutiveDenials": 3, "consecutiveSearches": 25, "noProgressInvocations": 2, "contradictoryEvidence": "escalate" },
   "notify": { "reviewReady": ["local", "ntfy:me"], "blocking": ["local", "ntfy:me"], "digest": ["12:30", "17:30"] }
 }
 ```

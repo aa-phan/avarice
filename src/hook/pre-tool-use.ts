@@ -13,8 +13,8 @@ import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs
 import { DatabaseSync } from 'node:sqlite';
 import { relative } from 'node:path';
 import { sha256Hex } from '../domain/digest.ts';
-import { SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
-import type { HookDecision, HookPolicy, NormalizedToolCall } from '../domain/hook-decision.ts';
+import { INEFFECTIVE_SEARCH_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -24,6 +24,8 @@ const MAX_NAME_CHARS = 128;
 const BUSY_TIMEOUT_MS = 4000;
 // A file above this size is identified by its size and modification time instead of its content (plan 02-11).
 const MAX_DIGEST_BYTES = 8 * 1024 * 1024;
+// How many of an invocation's latest decisions the search count looks through (the tool-call budget keeps an invocation far below it).
+const MAX_SEARCH_SCAN = 2000;
 
 function fail(reason: string): never {
   try {
@@ -196,6 +198,44 @@ const agentOf = (input: Record<string, unknown>): string => {
   return typeof id === 'string' ? id : '';
 };
 
+// The decisions of one invocation, newest first by event seq (never by timestamp), as (tool, decision) pairs.
+function latestDecisions(db: DatabaseSync, invocationId: string, limit: number): Array<{ tool: string | null; decision: string | null }> {
+  return db
+    .prepare("SELECT json_extract(data_json, '$.tool') AS tool, json_extract(data_json, '$.decision') AS decision FROM events WHERE invocation_id = ? AND type = 'hook.decision' ORDER BY seq DESC LIMIT ?")
+    .all(invocationId, limit) as Array<{ tool: string | null; decision: string | null }>;
+}
+
+// The run of denials directly before the call being decided: the count stops at the first allow. At most `limit` rows are read.
+function trailingDenials(db: DatabaseSync, invocationId: string, limit: number): number {
+  let n = 0;
+  for (const row of latestDecisions(db, invocationId, limit)) {
+    if (row.decision !== 'deny') break;
+    n += 1;
+  }
+  return n;
+}
+
+const SEARCH_TOOLS: readonly string[] = ['Grep', 'Glob'];
+const PRODUCTIVE_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'];
+
+// The run of Grep and Glob decisions directly before the call being decided. Other tools (a shell call, a skill) neither add to it nor end
+// it; an allowed Read, Edit or Write ends it.
+function trailingSearches(db: DatabaseSync, invocationId: string, limit: number): number {
+  let n = 0;
+  for (const row of latestDecisions(db, invocationId, MAX_SEARCH_SCAN)) {
+    if (row.tool !== null && SEARCH_TOOLS.includes(row.tool)) n += 1;
+    else if (row.tool !== null && PRODUCTIVE_TOOLS.includes(row.tool) && row.decision === 'allow') break;
+    if (n >= limit) break;
+  }
+  return n;
+}
+
+function stopReasonOf(stop: LoopStop): string {
+  return stop.reason === 'consecutive-denials'
+    ? `AVARICE: ${stop.count} consecutive denials; the run is stopped for escalation`
+    : `AVARICE: ${stop.count} consecutive searches without a read; the run is stopped for escalation`;
+}
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -220,8 +260,11 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
     edit = { canonical, state: fileState(canonical), display: rel.length > MAX_TARGET_CHARS ? rel.slice(0, MAX_TARGET_CHARS) : rel };
   }
 
+  const limits = policy.loopLimits;
   const db = openLedger(policy.ledgerPath);
   let final: HookDecision;
+  // Set when this decision reaches a loop limit (CON-14): the output then also stops the invocation and a loop.limit event is appended.
+  const loop: { stop: LoopStop | null } = { stop: null };
   try {
     final = inTransaction(db, () => {
       let result = decided;
@@ -229,6 +272,14 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), edit.canonical) as { digest: string } | undefined;
         const objection = decideReadBeforeEdit({ tool, exists: edit.state.exists, recorded: recorded?.digest, current: edit.state.digest, displayPath: edit.display });
         if (objection !== null) result = objection;
+      }
+      // CON-14: the search that follows `consecutiveSearches` searches with no read, edit or write between is refused before it is charged.
+      if (limits !== undefined && normalized.call.kind === 'search' && result.decision === 'allow') {
+        const searches = loopLimitOf({ consecutiveSearches: trailingSearches(db, policy.invocationId, limits.consecutiveSearches) }, limits);
+        if (searches !== null) {
+          loop.stop = searches;
+          result = { decision: 'deny', rule: INEFFECTIVE_SEARCH_RULE, reason: `${searches.count} searches in a row found nothing to read; read a file or report what is missing` };
+        }
       }
       // O-1: at the concurrency limit, a subagent call is refused before it is charged. When the total is also spent the charge below
       // reports that (budget_exhausted), so the more fundamental limit is the one named.
@@ -247,6 +298,11 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
           result = { decision: 'deny', rule: 'budget_exhausted', budget: result.budget };
         }
       }
+      // CON-14: this denial is the Nth in a row when N-1 denials directly precede it in the invocation's decision events (by seq). The count
+      // is an integer read from ledger rows in this transaction, so two hook processes cannot both miss the limit.
+      if (limits !== undefined && result.decision === 'deny') {
+        loop.stop = loopLimitOf({ consecutiveDenials: trailingDenials(db, policy.invocationId, limits.consecutiveDenials) + 1 }, limits) ?? loop.stop;
+      }
       appendEventRow(db, {
         type: 'hook.decision',
         level: result.decision === 'deny' ? 'warn' : 'info',
@@ -255,6 +311,17 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}) },
         nowMs: Date.now(),
       });
+      if (limits !== undefined && loop.stop !== null) {
+        const reached = loop.stop;
+        appendEventRow(db, {
+          type: 'loop.limit',
+          level: 'warn',
+          runId: policy.runId,
+          invocationId: policy.invocationId,
+          data: { runId: policy.runId, invocationId: policy.invocationId, reason: reached.reason, count: reached.count, limit: reached.reason === 'consecutive-denials' ? limits.consecutiveDenials : limits.consecutiveSearches },
+          nowMs: Date.now(),
+        });
+      }
       return result;
     });
   } finally {
@@ -262,7 +329,10 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   }
 
   if (final.decision === 'deny') {
-    emit({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `avarice: ${final.rule}${final.reason !== undefined ? `: ${final.reason}` : ''}` } });
+    emit({
+      ...(loop.stop !== null ? { continue: false, stopReason: stopReasonOf(loop.stop) } : {}),
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `avarice: ${final.rule}${final.reason !== undefined ? `: ${final.reason}` : ''}` },
+    });
   } else if (final.explicit === true) {
     emit({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: `avarice: ${final.rule}` } });
   }

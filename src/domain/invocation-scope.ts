@@ -10,6 +10,7 @@ import { isRefusedAgentCommand } from './conventions.ts';
 import { matchesAny } from './glob.ts';
 import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
+import { ROUTINE_PRESET } from './run-contract.ts';
 import type { RunContract } from './run-contract.ts';
 
 export type InvocationPurpose = 'map' | 'intel' | 'knowledge' | 'run';
@@ -196,6 +197,8 @@ export interface InvocationScope {
   // Run purpose only (plan 02-11): the hook requires a recorded read of a file, by the same agent in this invocation, before an edit of it
   // (CON-7).
   readBeforeEdit?: boolean;
+  // Run purpose only (plan 02-11): the contract's loop limits (CON-14), which the hook turns into a stop for escalation.
+  escalation?: { consecutiveDenials: number; consecutiveSearches: number };
   denyWrite: string[];
   denyRead: string[];
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
@@ -341,6 +344,8 @@ export interface RunScopeInput {
     files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts' | 'protected' | 'secretGlobs'>;
     execution: Pick<RunContract['execution'], 'commands'>;
     budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent'>;
+    // The loop limits of the contract (CON-14); a contract stored before consecutiveSearches existed leaves the search limit at its preset value.
+    escalation?: Partial<Pick<RunContract['escalation'], 'consecutiveDenials' | 'consecutiveSearches'>>;
   };
   // The run's clone (cwd and staging root); `{workRoot}/{runId}/clone`.
   clonePath: string;
@@ -492,6 +497,10 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
     deniedTools: ['AskUserQuestion'],
     denyBackgroundShell: true,
     readBeforeEdit: true,
+    escalation: {
+      consecutiveDenials: contract.escalation?.consecutiveDenials ?? ROUTINE_PRESET.escalation.consecutiveDenials,
+      consecutiveSearches: contract.escalation?.consecutiveSearches ?? ROUTINE_PRESET.escalation.consecutiveSearches,
+    },
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.

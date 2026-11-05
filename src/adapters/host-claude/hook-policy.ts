@@ -68,6 +68,7 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
     ...(scope.deniedTools !== undefined ? { deniedTools: [...scope.deniedTools] } : {}),
     ...(scope.denyBackgroundShell !== undefined ? { denyBackgroundShell: scope.denyBackgroundShell } : {}),
     ...(scope.readBeforeEdit !== undefined ? { readBeforeEdit: scope.readBeforeEdit } : {}),
+    ...(scope.escalation !== undefined ? { loopLimits: { consecutiveDenials: scope.escalation.consecutiveDenials, consecutiveSearches: scope.escalation.consecutiveSearches } } : {}),
   });
 }
 
