@@ -135,6 +135,7 @@ Plans:
   3. A valid `avarice decide` answer resumes the paused GSD session through `claude -p --resume` and the run finishes; a stale answer (state digest or contract version no longer matches) is re-opened rather than applied
   4. `avarice contract amend` from an interactive terminal outside the run records a new contract version with authorizer, reason and diff, and invalidates evidence when acceptance criteria, writable scope, required checks or policy revision change
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
+  6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
@@ -151,6 +152,7 @@ Plans:
   3. A privileged action without a matching parameter-bound approval is denied, approving a plan does not approve its actions, and retrieved content grants no authority; a host without required enforcement runs only in explicit restricted mode; `doctor` reports enforcement level, versions and incompatibilities offline and fails with an actionable message
   4. Existing GSD artifacts are adopted, refreshed, migrated or raised as a decision and never silently overwritten; refresh chooses incremental, path-scoped or full remapping; 5 of 5 brownfield benchmark repositories reach an active profile with no source change and 0 containment failures (AC-14)
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
+  6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
@@ -166,6 +168,7 @@ Plans:
   3. A repository's architecture model is drafted deterministically from the code graph as a proposal that takes effect only after approval; the `architecture-model` check reports departures, and a new import outside declared dependencies or a public symbol outside the specification is a G2 finding that goes to repair, then to a decision
   4. `avarice dashboard` renders one self-contained, read-only, redacted HTML page with no server or listening port in under 2 seconds with 1,000 runs (AC-15)
   5. `backup`, `restore`, `export`, `import` and `uninstall` work as documented, a restore after a corrupted store completes in under 15 minutes (restore drill, T-7), and retention limits apply per profile
+  6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD
 **UI hint**: yes
@@ -183,6 +186,7 @@ Plans:
   3. A decision that needs the user sends a push notification (ntfy, Pushover or Telegram) to the configured destination, and a failed delivery leaves the decision pending and visible locally
   4. The full 40-task benchmark shows unnecessary escalations under 15% (AC-10) and 0 containment failures including the adversarial class (AC-11)
   5. The plugin installs AVARICE for attended use in one step
+  6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD
 **Notes**: Trigger-driven. Revisit trigger: if GSD changes the capability schema or adds a headless mode before this phase starts, re-run the GSD investigation and update ADR-006 first.
@@ -198,6 +202,7 @@ Plans:
   2. (6b, trigger: runs that must continue while the Mac sleeps, or checks that cannot run on macOS) A remote worker runs checks and, after its own containment suite (CS-1 to CS-16) passes on the worker OS, contained agent invocations; S-11 passes over the home network including Wi-Fi loss; a host cannot be deactivated while an active project or run depends on it (FR-24)
   3. (6c, trigger: two machines advancing runs at once) Two workers advance runs against the coordination service under injected pauses and no run is claimed twice
   4. (6d, trigger: a second machine or local service needing the same secrets) A `vault:` reference resolves against a local or homelab Vault or OpenBao, sealed and unsealed (S-55), emitting the same value-free `credential.resolve` event
+  5. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD (one plan per part, each started only when its trigger is measured)
 **Notes**: Each part may also run on `localhost` through the optional local-services deployment (ADR-010). Excluded: concurrent workers in 6b, multi-user access control, enterprise profiles, dynamic secrets, SMB and NFS mounts.
@@ -212,6 +217,7 @@ Plans:
   2. The run reaches `ready_for_review` only when every repository's gates pass, and a repository without an active project record cannot join the run
   3. Group membership never widens any member's authority, and the containment suite passes with two worktrees in one run
   4. Members share references to standards and scaffolds through the standards context adapter
+  5. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
 **Plans**: TBD
 **Notes**: Starts when two repositories regularly need changes together, measured from the user's own runs. Excluded: coordinated merging, cross-profile groups.
