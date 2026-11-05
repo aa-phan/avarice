@@ -1,0 +1,43 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/brief.test.ts\" \"test/unit/conventions.test.ts\"",
+  "exitCode": 1,
+  "reason": "The Task 1 parsers carry no untrusted-input validation. test/unit/conventions.test.ts fails to load because src/domain/conventions.ts does not export REFUSED_AGENT_COMMAND_WORDS or RESERVED_CHECK_ENV (SyntaxError on the missing named exports). In test/unit/brief.test.ts 18 tests fail (see failingTests): the Task 1 parseBrief accepts an oversized brief, long lines, more than 20 or duplicate or malformed AC IDs, unknown frontmatter keys, bad size, model, expectedDecisions and baseRevision, unknown sections, unsafe write globs, U+FFFD and control characters, and does not track code fences.",
+  "failingFiles": [
+    "parseBrief: a well-formed brief",
+    "parseBrief: limits, structure and field validation",
+    "parseBrief: empty and encoding edges (FR-1)",
+    "test/unit/conventions.test.ts"
+  ],
+  "failingTests": {
+    "parseBrief: a well-formed brief": [
+      "keeps a heading-like line inside a code fence in the behavior text instead of starting a section"
+    ],
+    "parseBrief: limits, structure and field validation": [
+      "refuses a brief over 64 KiB with field brief.text",
+      "refuses a line over 4096 characters with field brief.line",
+      "refuses more than 20 acceptance criteria with field brief.acceptance, and accepts 20",
+      "refuses duplicate acceptance IDs with field brief.acceptance.id",
+      "refuses an acceptance ID not matching AC<digits> with field brief.acceptance.id",
+      "refuses an acceptance line that is not a list item of the form `ID: text`, and a verifiedBy of an unknown kind",
+      "refuses an unknown frontmatter key with field brief.frontmatter.<key>",
+      "refuses malformed frontmatter with field brief.frontmatter",
+      "refuses a size outside small, medium and large with field brief.size",
+      "refuses a model outside haiku, sonnet and opus with field brief.model",
+      "refuses expectedDecisions that is not a non-negative integer with field brief.expectedDecisions",
+      "refuses a baseRevision that is not 7 to 40 hex digits with field brief.baseRevision",
+      "refuses an unknown or repeated section with field brief.section",
+      "refuses an unsafe write glob with field brief.write, and a bad target check name with brief.targetChecks"
+    ],
+    "parseBrief: empty and encoding edges (FR-1)": [
+      "refuses invalid UTF-8 (U+FFFD after decoding) with field brief.text",
+      "refuses control characters other than tab and newline in the title with field brief.title",
+      "refuses a control character in the body with field brief.text"
+    ]
+  },
+  "summary": {
+    "tests": 24,
+    "pass": 5,
+    "fail": 19
+  },
+  "outputHead": "TAP version 13\n# Subtest: parseBrief: a well-formed brief\n    # Subtest: parses frontmatter, the five sections and keeps the source order\n    ok 1 - parses frontmatter, the five sections and keeps the source order\n      ---\n      duration_ms: 1.484667\n      type: 'test'\n      ...\n    # Subtest: accepts inline text with no frontmatter: title from the first heading, else untitled\n    ok 2 - accepts inline text with no frontmatter: title from the first heading, else untitled\n      ---\n      duration_ms: 0.113375\n      type: 'test'\n      ...\n    # Subtest: keeps a heading-like line inside a code fence in the behavior text instead of starting a section\n    not ok 3 - keeps a heading-like line inside a code fence in the behavior text instead of starting a section\n      ---\n      duration_ms: 0.370292\n      type: 'test'\n      location: '/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/brief.test.ts:91:3'\n      failureType: 'testCodeFailure'\n      error: |-\n        The input did not match the regular expression /## Write/. Input:\n        \n        'See:\\n```'\n        \n      code: 'ERR_ASSERTION'\n      name: 'AssertionError'\n      expected:\n      actual: |-\n        See:\n        ```\n      operator: 'match'\n      stack: |-\n        TestContext.<anonymous> (file:///Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/brief.test.ts:93:12)\n        Test.runInAsyncScope (node:async_hooks:226:14)\n        Test.run (node:internal/test_runner/test:1402:25)\n        Suit"
+}
