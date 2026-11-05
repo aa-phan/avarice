@@ -189,7 +189,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Intel]: SYNTHESIS.md says 111 normative requirements; the correct count is 105 (149 entries in total).
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
-- [Phase 1]: T3 live case 14 (real fast onboarding) does not reach active: validation path-references rejects the haiku map (10 of 49 dangling, limit 5%); decision for the owner or 01-19, see phase deferred-items.md
+- [Phase 1]: Knowledge pass can lose most documents silently when the agent reads staging originals instead of its .avarice-knowledge corpus (UAT G-01-154, 2 of 4 live runs); gap-closure plans 01-25 and 01-26 planned
 
 ### Quick Tasks Completed
 
