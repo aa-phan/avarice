@@ -105,12 +105,12 @@ const VOLATILE_STAGING_FILE = '.planning/graphs/.last-build-snapshot.json';
 
 // The knowledge chunk plan holds the absolute readPath and writePath of the run (plan 01-25), so its text differs between profiles by
 // design. The staging tree is compared without it, and the plan is compared on its own with the ULIDs and the temp root normalized.
+// WR-03: a missing or unparseable plan throws, and a plan that is not an object fails here, so the equality assertions never compare
+// null with null (every outcome is read from a finished onboarding, which wrote the plan).
 function chunkPlanNormalized(staging: string): unknown {
-  try {
-    return JSON.parse(normalizeText(readFileSync(join(staging, CHUNK_PLAN_FILE), 'utf8'))) as unknown;
-  } catch {
-    return null;
-  }
+  const plan = JSON.parse(normalizeText(readFileSync(join(staging, CHUNK_PLAN_FILE), 'utf8'))) as unknown;
+  assert.ok(typeof plan === 'object' && plan !== null, 'the knowledge chunk plan is a JSON object');
+  return plan;
 }
 
 function snapshotWithoutTimestamp(staging: string): unknown {
