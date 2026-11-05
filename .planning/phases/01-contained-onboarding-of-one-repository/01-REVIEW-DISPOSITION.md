@@ -57,21 +57,21 @@ findings:
     title: "The staging diff gate cannot see gitignored files, so a hostile `.gitignore` blinds validation scope and the pre-activation scope check"
   - id: WR-05
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "`parseArgs` crashes on flag names that collide with `Object.prototype`"
   - id: WR-06
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The hook checks only the verb prefix of `gsd_run`, never its arguments"
   - id: WR-07
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The sandbox probe is a 5 s `spawnSync`, cached forever per process; one slow probe makes the executor unavailable for the whole run"
   - id: WR-08
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-open: 4
+open: 0
 total: 17
 recorded: 2026-11-05T07:41:53.761Z
 ---
@@ -93,10 +93,10 @@ recorded: 2026-11-05T07:41:53.761Z
 | WR-04 | warning | fixed | quick 261104-jnc (89f4a39): vacuous Read-deny assertion fixed (not in the current review) |
 | CR-02 | critical | fixed | plans 01-23 (84910d3, f144eb4) and 01-24 (630f7f8): allow-list read confinement, work root denied (not in the current review) |
 | CR-03 | critical | fixed | plan 01-22 (c7756a1, 335c674): staging diff sees ignored untracked files (not in the current review) |
-| WR-05 | warning | open | - (not in the current review) |
-| WR-06 | warning | open | - (not in the current review) |
-| WR-07 | warning | open | - (not in the current review) |
-| WR-08 | warning | open | - (not in the current review) |
+| WR-05 | warning | fixed | quick 261105-2i2 (0e107fc) (not in the current review) |
+| WR-06 | warning | fixed | quick 261105-2i2 (adf9b86, 6193e63) (not in the current review) |
+| WR-07 | warning | fixed | quick 261105-2i2 (cc8d98e) (not in the current review) |
+| WR-08 | warning | fixed | quick 261105-2i2 (4ac1127) (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
