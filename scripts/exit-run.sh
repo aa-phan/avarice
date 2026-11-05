@@ -13,6 +13,7 @@
 #   --authorization-file F the owner's decision (JSON: selection, capUsd, spentUsdSoFar, noCommitConfirmed ...). A run that
 #                          spends needs it; the run refuses when it names another mode or when spent plus the expected
 #                          cost (EXIT_RUN_EXPECTED_USD, default 12 = the contract's per-run cap) would pass the cap
+#                          (spent and expected must be finite non-negative numbers and the cap a finite positive one)
 #   --kill-after-seconds N seconds between the map invocation starting and `kill -9` of AVARICE (default 60)
 #
 # Environment: AVARICE_NODE (the node to run with, default `node`), AVARICE_CLAUDE_BIN (an admitted claude; otherwise one
@@ -81,9 +82,12 @@ AUTH_CHECK="$("$NODE" -e '
   if (!allowed) { console.log("selection " + a.selection + " is not one of the offered options"); process.exit(1); }
   if (!allowed.includes(mode)) { console.log("the authorization (" + a.selection + ") does not cover a " + mode + " run"); process.exit(1); }
   if (a.noCommitConfirmed !== true) { console.log("the owner has not confirmed that nothing is committed to the target during the run"); process.exit(1); }
-  if (!(Number(a.capUsd) > 0)) { console.log("the authorization names no cap"); process.exit(1); }
+  const cap = Number(a.capUsd);
+  if (!(Number.isFinite(cap) && cap > 0)) { console.log("the authorization names no finite positive cap"); process.exit(1); }
   const spent = Number(a.spentUsdSoFar || 0);
-  if (spent + expected > Number(a.capUsd)) { console.log("spent " + spent + " plus the expected " + expected + " would pass the cap " + a.capUsd + ": stop and report"); process.exit(1); }
+  if (!(Number.isFinite(expected) && expected >= 0)) { console.log("EXIT_RUN_EXPECTED_USD (" + JSON.stringify(process.env.EXIT_RUN_EXPECTED_USD) + ") is not a finite non-negative number: stop and report"); process.exit(1); }
+  if (!(Number.isFinite(spent) && spent >= 0)) { console.log("spentUsdSoFar (" + JSON.stringify(a.spentUsdSoFar) + ") is not a finite non-negative number: stop and report"); process.exit(1); }
+  if (spent + expected > cap) { console.log("spent " + spent + " plus the expected " + expected + " would pass the cap " + a.capUsd + ": stop and report"); process.exit(1); }
   console.log("authorized: " + a.selection + ", cap " + a.capUsd + " USD, spent so far " + spent + ", this run expected at most " + expected);
 ' "$AUTH" "$MODE")" || { echo "exit-run: $AUTH_CHECK" >&2; exit 2; }
 echo "exit-run: $AUTH_CHECK"
