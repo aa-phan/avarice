@@ -140,7 +140,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 ### Operability (OPS-1 to OPS-7)
 
 - [ ] **OPS-1** [MVP]: A `doctor` command reports configuration, versions, capabilities and dependency health without revealing secrets and works offline.
-- [ ] **OPS-2** [MVP]: Structured events carry the correlation IDs defined in the contracts specification.
+- [x] **OPS-2** [MVP]: Structured events carry the correlation IDs defined in the contracts specification.
 - [ ] **OPS-3** [MVP backup, export, uninstall; Later restore across hosts]: AVARICE provides backup, restore, export, import and uninstall commands with documented behavior.
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
 - [ ] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
@@ -313,7 +313,7 @@ Each v1 requirement maps to exactly one phase.
 | SEC-7 | Phase 4 | Pending |
 | SEC-8 | Phase 5 | Pending |
 | OPS-1 | Phase 4 | Pending |
-| OPS-2 | Phase 2 | Pending |
+| OPS-2 | Phase 2 | Complete |
 | OPS-3 | Phase 5 | Pending |
 | OPS-4 | Phase 5 | Pending |
 | OPS-5 | Phase 4 | Pending |
