@@ -1,0 +1,15 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/run-contract.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/brief.ts, conventions.ts and run-contract.ts do not exist yet, so test/unit/run-contract.test.ts fails to load (ERR_MODULE_NOT_FOUND on src/domain/brief.ts): tap reports not ok 1 - test/unit/run-contract.test.ts, tests 1, pass 0, fail 1. The tracer cases (compile of a brief and conventions into a routine contract with a digest; policyRevision equals the digest of the preset) cannot run.",
+  "failingFiles": [
+    "test/unit/run-contract.test.ts"
+  ],
+  "failingTests": {},
+  "summary": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1
+  },
+  "outputHead": "TAP version 13\n# node:internal/modules/esm/resolve:241\n#     throw new ERR_MODULE_NOT_FOUND(\n#           ^\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/src/domain/brief.ts' imported from /Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/run-contract.test.ts\n#     at finalizeResolution (node:internal/modules/esm/resolve:241:11)\n#     at moduleResolve (node:internal/modules/esm/resolve:846:10)\n#     at defaultResolve (node:internal/modules/esm/resolve:973:11)\n#     at \\#cachedDefaultResolve (node:internal/modules/esm/loader:708:20)\n#     at \\#resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)\n#     at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)\n#     at \\#resolve (node:internal/modules/esm/loader:690:17)\n#     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)\n#     at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33)\n#     at ModuleJob.link (node:internal/modules/esm/module_job:389:17) {\n#   code: 'ERR_MODULE_NOT_FOUND',\n#   url: 'file:///Users/aphan/avarice/.claude/worktrees/phase-02-discuss/src/domain/brief.ts'\n# }\n# Node.js v26.9.0\n# Subtest: test/unit/run-contract.test.ts\nnot ok 1 - test/unit/run-contract.test.ts\n  ---\n  duration_ms: 71.725416\n  type: 'test'\n  location: '/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/run-contract.test.ts:1:1'\n  failureType: 'testCodeFailure'\n  exitCode:"
+}
