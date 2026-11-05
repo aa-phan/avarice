@@ -4,7 +4,7 @@
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) limits a run's impact radius with four layers that fail independently. An OS sandbox surrounds every shell command, host permission rules and a fail-closed PreToolUse hook check every tool call, scoped credentials and network allowlists guard resource boundaries, and budgets live inside AVARICE's own adapters. Post-run diffs and checks detect what slipped through; they are labeled as detection. Requirements CON-1 to CON-16 and RC-5 are owned by [requirements.md](requirements.md#containment); the run contract that supplies every limit is defined in [contracts-and-state.md](contracts-and-state.md#run-contract).
 
-Host facts in this document were read from the official Claude Code documentation and from `claude --help` of Claude Code 2.1.312 on 2026-10-29, with the flags re-checked on 2.1.316 on 2026-11-01. The live T3 containment suite ran on 2.1.316 (2026-11-02) and 2.1.317 (2026-11-03) with 0 containment failures; 2.1.317 was admitted on that run, without re-reading its `claude --help`. Host behavior is perishable; `avarice doctor` re-checks the version, and the containment suite re-tests each claim on every host upgrade.
+Host facts in this document were read from the official Claude Code documentation and from `claude --help` of Claude Code 2.1.312 on 2026-10-29, with the flags re-checked on 2.1.316 on 2026-11-01. The live T3 containment suite ran on 2.1.316 (2026-11-02), 2.1.317 (2026-11-03) and 2.1.318 (2026-11-05) with 0 containment failures; 2.1.317 and 2.1.318 were admitted on those runs, without re-reading their `claude --help`. Host behavior is perishable; `avarice doctor` re-checks the version, and the containment suite re-tests each claim on every host upgrade.
 
 ## Trust assumptions
 
@@ -24,7 +24,7 @@ An administrator or the machine owner can disable every local control. The enter
 An unattended run is one or more headless host invocations started by AVARICE. AVARICE generates a per-run settings file from the contract and launches the host with flags that make every unanticipated prompt a denial. The generated file lives in the profile data root, outside every path the run can write.
 
 ```text
-# Proposal: launch line built by the avarice host adapter (Claude Code 2.1.312, 2.1.316 and 2.1.317)
+# Proposal: launch line built by the avarice host adapter (Claude Code 2.1.312, 2.1.316, 2.1.317 and 2.1.318)
 claude -p "<GSD command for this phase>" \
   --setting-sources "" --settings <data root>/runs/<run>/host-settings.json \
   --plugin-dir <data root>/runs/<run>/plugin --agents <data root>/runs/<run>/agents.json \

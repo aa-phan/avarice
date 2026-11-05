@@ -1,5 +1,5 @@
 // The T3 live harness can run a host version that is not yet admitted (AVARICE_LIVE_ADMIT_CLAUDE_VERSION, plan 01-16
-// follow-up, first used for claude 2.1.317; the tests use 2.1.318 as a version that is not admitted). Only the harness reads that variable: production code must not, and the admission list
+// follow-up, first used for claude 2.1.317; the tests use 2.1.999 as a version that is not admitted). Only the harness reads that variable: production code must not, and the admission list
 // must not move because of it.
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,11 +48,11 @@ const ready = (bin: string) => checkHostReady({ claudeBin: bin, hookEntry: hook,
 
 describe('the live harness admission override', () => {
   it('does nothing unless the environment variable names the version the real binary reports', () => {
-    assert.equal(admissionOverride('2.1.318', {}), undefined);
-    assert.equal(admissionOverride('2.1.318', { [ADMIT_ENV]: '' }), undefined);
-    assert.equal(admissionOverride('2.1.318', { [ADMIT_ENV]: '2.1.419' }), undefined);
-    assert.equal(admissionOverride('2.1.419', { [ADMIT_ENV]: '2.1.318' }), undefined);
-    assert.deepEqual(admissionOverride('2.1.318', { [ADMIT_ENV]: '2.1.318' }), { reported: '2.1.318', as: ADMITTED_CLAUDE_VERSIONS[ADMITTED_CLAUDE_VERSIONS.length - 1] });
+    assert.equal(admissionOverride('2.1.999', {}), undefined);
+    assert.equal(admissionOverride('2.1.999', { [ADMIT_ENV]: '' }), undefined);
+    assert.equal(admissionOverride('2.1.999', { [ADMIT_ENV]: '2.1.419' }), undefined);
+    assert.equal(admissionOverride('2.1.419', { [ADMIT_ENV]: '2.1.999' }), undefined);
+    assert.deepEqual(admissionOverride('2.1.999', { [ADMIT_ENV]: '2.1.999' }), { reported: '2.1.999', as: ADMITTED_CLAUDE_VERSIONS[ADMITTED_CLAUDE_VERSIONS.length - 1] });
   });
 
   it('is not needed for a version that is already admitted', () => {
@@ -60,10 +60,10 @@ describe('the live harness admission override', () => {
   });
 
   it('lets the harness wrapper pass the preflight for the named version only, and runs the real binary for everything else', () => {
-    const real = fakeReal('2.1.318');
-    const env = { [ADMIT_ENV]: '2.1.318' };
-    assert.ok(ready(wrapped(real.bin, '2.1.318', env)).ok);
-    const bin = wrapped(real.bin, '2.1.318', env);
+    const real = fakeReal('2.1.999');
+    const env = { [ADMIT_ENV]: '2.1.999' };
+    assert.ok(ready(wrapped(real.bin, '2.1.999', env)).ok);
+    const bin = wrapped(real.bin, '2.1.999', env);
     spawnSync(bin, ['-p', 'hello']);
     assert.equal(readFileSync(real.ran, 'utf8').trim(), '-p hello');
     const other = fakeReal('2.1.419');
@@ -74,12 +74,12 @@ describe('the live harness admission override', () => {
 
   it('is ignored by production: with the variable set the preflight still refuses an unadmitted version, and no source file reads it', () => {
     const saved = process.env[ADMIT_ENV];
-    process.env[ADMIT_ENV] = '2.1.318';
+    process.env[ADMIT_ENV] = '2.1.999';
     try {
-      const real = fakeReal('2.1.318');
+      const real = fakeReal('2.1.999');
       const result = ready(real.bin);
       assert.ok(!result.ok);
-      assert.equal(result.ok ? '' : result.error.kind === 'denied' ? result.error.rule : '', 'enforcement_failure:host-version-not-admitted:2.1.318');
+      assert.equal(result.ok ? '' : result.error.kind === 'denied' ? result.error.rule : '', 'enforcement_failure:host-version-not-admitted:2.1.999');
     } finally {
       if (saved === undefined) delete process.env[ADMIT_ENV];
       else process.env[ADMIT_ENV] = saved;
