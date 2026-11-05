@@ -154,13 +154,78 @@ export function recordedSpend(): number {
     .reduce((sum, line) => sum + (JSON.parse(line) as SpendEntry).costUsd, 0);
 }
 
-export function recordSpend(entry: Omit<SpendEntry, 'at'>): void {
+// Every host run is also added to the one Phase 2 ledger (plan 02-01, D-15), under the plan named in AVARICE_PHASE2_PLAN.
+export function recordSpend(entry: Omit<SpendEntry, 'at'>, claudeVersionForLedger = 'unknown'): void {
   appendFileSync(spendLedgerPath(), JSON.stringify({ ...entry, at: new Date().toISOString() }) + '\n');
+  recordPhase2Spend({ plan: process.env['AVARICE_PHASE2_PLAN'] ?? 'unknown', case: entry.case, costUsd: entry.costUsd, claudeVersion: claudeVersionForLedger });
 }
 
-// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total.
+// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total and under the Phase 2 ceiling.
 export function fitsCap(capUsdForRun: number): boolean {
-  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9;
+  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9 && fitsPhase2Ceiling(capUsdForRun);
+}
+
+// The skip text for a case that does not fit, or undefined when it fits. The Phase 2 ceiling is judged first.
+export function spendRefusal(capUsdForRun: number): string | undefined {
+  if (!fitsPhase2Ceiling(capUsdForRun)) {
+    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  }
+  if (!fitsCap(capUsdForRun)) return `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}`;
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Phase 2 spend ledger (D-15): the total live-model spend of Phase 2 may not pass 25 USD
+// ---------------------------------------------------------------------------------------------------------------
+
+export const PHASE2_CEILING_USD = 25;
+
+export const phase2LedgerPath = (): string => process.env['AVARICE_PHASE2_LEDGER'] ?? join(REPO_ROOT, 'test', 'containment', 'live-spend-phase2.jsonl');
+
+// AVARICE_PHASE2_CEILING_USD may lower the ceiling and never raise it; anything that is not a positive number is ignored.
+export function phase2Ceiling(): number {
+  const raw = Number(process.env['AVARICE_PHASE2_CEILING_USD']);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, PHASE2_CEILING_USD) : PHASE2_CEILING_USD;
+}
+
+export interface Phase2SpendEntry {
+  plan: string;
+  case: string;
+  costUsd: number;
+  claudeVersion: string;
+}
+
+// The recorded Phase 2 spend: the sum of costUsd over the ledger. No ledger is 0; a line that is not a JSON object with a
+// finite non-negative costUsd throws, so a corrupt ledger never reads as 0 and never lets a case run.
+export function phase2Spent(): number {
+  const path = phase2LedgerPath();
+  if (!existsSync(path)) return 0;
+  let total = 0;
+  readFileSync(path, 'utf8')
+    .split('\n')
+    .forEach((text, index) => {
+      if (text === '') return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} is not valid JSON`);
+      }
+      const cost = isObject(parsed) ? parsed['costUsd'] : undefined;
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} has no finite non-negative costUsd`);
+      total += cost;
+    });
+  return total;
+}
+
+// Whether a run that may cost up to `capUsdForRun` still fits under the Phase 2 ceiling.
+export function fitsPhase2Ceiling(capUsdForRun: number): boolean {
+  return phase2Spent() + capUsdForRun <= phase2Ceiling() + 1e-9;
+}
+
+export function recordPhase2Spend(entry: Phase2SpendEntry): void {
+  if (!Number.isFinite(entry.costUsd) || entry.costUsd < 0) throw new Error(`refusing to record a Phase 2 cost of ${String(entry.costUsd)}`);
+  appendFileSync(phase2LedgerPath(), JSON.stringify({ plan: entry.plan, case: entry.case, costUsd: entry.costUsd, claudeVersion: entry.claudeVersion, at: new Date().toISOString() }) + '\n');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -556,7 +621,8 @@ async function launchDirect(args: readonly string[], cwd: string, env: Record<st
 export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const costCap = spec.costCapUsd ?? SINGLE_CASE_CAP_USD;
   const spends = spec.noLaunch !== true;
-  if (spends && !fitsCap(costCap)) return { skipped: `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${costCap.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}` };
+  const refusal = spends ? spendRefusal(costCap) : undefined;
+  if (refusal !== undefined) return { skipped: refusal };
 
   const p = await prepareStaging();
   const dataRoot = p.deps.profile.dataRoot;
@@ -677,7 +743,7 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const hostStarted = existsSync(wrapper.marker);
   if (spends && hostStarted) {
     const recorded = costAssumed ? costCap : costUsd;
-    recordSpend({ case: spec.name, costUsd: recorded, assumed: costAssumed });
+    recordSpend({ case: spec.name, costUsd: recorded, assumed: costAssumed }, versionNumber(version));
   }
 
   const parsed = parseTranscript(transcript);
@@ -776,7 +842,8 @@ export interface LiveOnboardingOptions {
 }
 
 export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP_USD, options: LiveOnboardingOptions = {}): Promise<{ skipped: string } | LiveOnboardingResult> {
-  if (!fitsCap(costCap)) return { skipped: `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${costCap.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}` };
+  const refusal = spendRefusal(costCap);
+  if (refusal !== undefined) return { skipped: refusal };
   const roots = makeRoots();
   const repo = writeScratchRepo(options.extraFiles);
   const realClaude = liveClaudeBin();
@@ -801,7 +868,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const hostStarted = existsSync(wrapper.marker);
   const costAssumed = hostStarted && (reports.length === 0 || reports.some((r) => r.costUsd === undefined || (r.costUsd === 0 && (r.numTurns ?? 0) === 0)));
   const costUsd = hostStarted ? (costAssumed ? costCap : reports.reduce((sum, r) => sum + (r.costUsd ?? 0), 0)) : 0;
-  if (hostStarted) recordSpend({ case: name, costUsd, assumed: costAssumed });
+  if (hostStarted) recordSpend({ case: name, costUsd, assumed: costAssumed }, versionNumber(version));
 
   const staging = onboarding?.staging_worktree ?? undefined;
   let stagingChanges: string[] = [];
