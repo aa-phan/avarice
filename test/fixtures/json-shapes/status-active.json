@@ -1,0 +1,51 @@
+[
+  {
+    "projectId": "<id>",
+    "repoPath": "<tmp>/repo",
+    "onboardingId": "<id>",
+    "state": "active",
+    "reason": null,
+    "recordVersion": 1,
+    "onboardedRevision": "git:<sha1>",
+    "mapping": {
+      "completeness": "complete",
+      "freshness": "fresh",
+      "mappedAt": "<iso>",
+      "mode": "full",
+      "scope": [
+        "."
+      ]
+    },
+    "indexes": {
+      "absent": [
+        {
+          "index": "knowledge",
+          "reason": "invocation-failed"
+        }
+      ],
+      "graph": {
+        "builtAtCommit": "git:<sha1>",
+        "codeGraphPath": ".planning/graphs/code-graph.json",
+        "digest": "sha256:<sha256>",
+        "edges": {
+          "EXTRACTED": 1
+        },
+        "freshness": "fresh",
+        "nodes": {
+          "code": 2,
+          "concept": 1,
+          "document": 0
+        },
+        "path": ".planning/graphs/graph.json",
+        "tool": "graphify@0.9.53"
+      },
+      "intel": {
+        "digest": "sha256:<sha256>",
+        "files": 5,
+        "freshness": "fresh",
+        "path": ".planning/intel/",
+        "refreshedAtCommit": "git:<sha1>"
+      }
+    }
+  }
+]

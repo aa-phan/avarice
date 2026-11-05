@@ -1,0 +1,49 @@
+{
+  "term": "answer",
+  "budget": 4000,
+  "usedTokens": 57,
+  "project": {
+    "projectId": "<id>",
+    "repoPath": "<tmp>/repo",
+    "recordVersion": 1,
+    "onboardedRevision": "git:<sha1>"
+  },
+  "items": [
+    {
+      "source": "gsd-intel",
+      "ref": {
+        "provider": "gsd-intel",
+        "kind": "intel-entry",
+        "id": "file-roles.json#src/index.ts",
+        "revision": "git:<sha1>",
+        "retrievedAt": "<iso>",
+        "scope": ".planning/intel/file-roles.json",
+        "freshness": "fresh"
+      },
+      "title": "src/index.ts",
+      "excerpt": "{\"exports\":[\"answer\",\"helper\"],\"imports\":[\"./util/strings\"],\"type\":\"entry-point\"}",
+      "estTokens": 24,
+      "reason": "matched \"answer\" in file-roles.json",
+      "freshness": "fresh"
+    },
+    {
+      "source": "gsd-intel",
+      "ref": {
+        "provider": "gsd-intel",
+        "kind": "intel-entry",
+        "id": "arch-decisions.json#overview",
+        "revision": "git:<sha1>",
+        "retrievedAt": "<iso>",
+        "scope": ".planning/intel/arch-decisions.json",
+        "freshness": "fresh"
+      },
+      "title": "overview",
+      "excerpt": "{\"pattern\":\"flat module layout\",\"description\":\"answer in src/index.ts calls helper; strings utilities live under src/util\"}",
+      "estTokens": 33,
+      "reason": "matched \"answer\" in arch-decisions.json",
+      "freshness": "fresh"
+    }
+  ],
+  "omitted": [],
+  "notes": []
+}
