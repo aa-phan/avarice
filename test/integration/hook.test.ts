@@ -10,7 +10,7 @@ import { writeHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { parseHookPolicy } from '../../src/domain/hook-decision.ts';
 import type { HookPolicy } from '../../src/domain/hook-decision.ts';
-import { computeInvocationScope } from '../../src/domain/invocation-scope.ts';
+import { computeInvocationScope, computeRunScope } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { HOOK_ENTRY, PREAMBLE, budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook, runHookAsync } from '../helpers/hook-fixture.ts';
@@ -682,5 +682,127 @@ describe('the read allow-list through the real hook entry (CR-02, D-GAP-01)', ()
     assert.equal(all.includes('elsewhere'), false);
     assert.equal(all.includes('PRIVATE-MARKER'), false);
     assert.deepEqual(rows.map((r) => (JSON.parse(r.data_json) as { rule: string }).rule), ['outside-read-set', 'outside-read-set']);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The run purpose (plan 02-08): the same hook entry, with the write set taken from the contract's globs (CON-2, CON-8, RC-5).
+// ---------------------------------------------------------------------------------------------------------------
+
+interface RunHookFixture {
+  fx: HookFixture;
+  clone: string;
+  scratch: string;
+  sibling: string;
+  policyPath: string;
+  policy: HookPolicy;
+}
+
+function runFixture(options: { commands?: string[]; policy?: Partial<HookPolicy> } = {}): RunHookFixture {
+  const fx = fixture();
+  const run = join(fx.dir, 'work', 'run_A');
+  const clone = join(run, 'clone');
+  const scratch = join(run, 'scratch');
+  const sibling = join(fx.dir, 'work', 'run_A2', 'clone');
+  for (const dir of ['src/hooks', 'src/lib', 'tests/unit', '.planning/quick', '.git']) mkdirSync(join(clone, dir), { recursive: true });
+  for (const dir of [scratch, join(sibling, 'src', 'hooks'), join(fx.dir, 'outside')]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(clone, 'package.json'), '{}');
+  writeFileSync(join(clone, 'src', 'hooks', 'useSwipeStep.ts'), 'export {};\n');
+  symlinkSync(join(fx.dir, 'outside'), join(clone, '.planning', 'quick', 'out'));
+  const scope = computeRunScope({
+    contract: {
+      files: { write: ['src/hooks/useSwipeStep.ts', 'tests/unit/swipe-step.test.ts'], create: [], artifacts: ['.planning/quick/**'], protected: ['package.json', '.github/**'], secretGlobs: ['**/.env'] },
+      execution: { commands: options.commands ?? ['npm run typecheck', 'npx vitest run <paths>'] },
+      budgets: { subagentsTotal: 10, subagentsConcurrent: 2 },
+    },
+    clonePath: clone,
+    repoPath: fx.repo,
+    dataRoot: join(fx.dir, 'data'),
+    home: join(fx.dir, 'home'),
+    workRoot: join(fx.dir, 'work'),
+    scratchDir: scratch,
+    workspace: {
+      topLevelEntries: ['.git', '.planning', 'package.json', 'src', 'tests'],
+      entriesByDir: { src: ['hooks', 'lib'], 'src/hooks': ['useSwipeStep.ts'], tests: ['unit'], 'tests/unit': [], '.planning': ['quick'] },
+      gitPaths: [join(clone, '.git')],
+      repoReadAllow: [],
+    },
+    readRoots: [],
+  });
+  const written = writeHookPolicy(join(fx.dir, 'inv-run'), scope, { onboardingId: 'onb_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: ['gsd-executor'] }, fx.ledgerPath);
+  assert.ok(written.ok, 'the run policy is written');
+  const policy = { ...written.value.policy, ...options.policy };
+  const policyPath = options.policy === undefined ? written.value.file : join(fx.dir, 'run-policy-override.json');
+  if (options.policy !== undefined) writeFileSync(policyPath, JSON.stringify(policy));
+  return { fx, clone, scratch, sibling, policyPath, policy };
+}
+
+describe('the run purpose through the real hook entry (CON-2, CON-8)', () => {
+  const rule = (stdout: string): string => parsed(stdout).hookSpecificOutput.permissionDecisionReason;
+  const call = (r: RunHookFixture, tool: string, input: Record<string, unknown>) => runHook(r.fx, 'pre', { tool_name: tool, tool_input: input, cwd: r.clone }, r.policyPath);
+
+  it('writes the policy with the contract globs, the agent commands and the run-only denials', () => {
+    const r = runFixture();
+    assert.equal(r.policy.purpose, 'run');
+    assert.deepEqual(r.policy.writeGlobs, ['src/hooks/useSwipeStep.ts', 'tests/unit/swipe-step.test.ts', '.planning/quick/**']);
+    assert.deepEqual(r.policy.protectedGlobs, ['package.json', '.github/**', '.git/**', '.planning/config.json']);
+    assert.deepEqual(r.policy.agentCommands, [
+      { words: ['npm', 'run', 'typecheck'], paths: false },
+      { words: ['npx', 'vitest', 'run'], paths: true },
+    ]);
+    assert.deepEqual(r.policy.deniedTools, ['AskUserQuestion']);
+    assert.equal(r.policy.denyBackgroundShell, true);
+    assert.ok(r.policy.writeRoots.includes(r.scratch), 'the scratch directory is a write root');
+    assert.equal(parseHookPolicy(JSON.parse(readFileSync(r.policyPath, 'utf8'))).ok, true);
+  });
+
+  it('allows an Edit on a file in the write set with rule write-set, and charges one toolCalls unit', () => {
+    const r = runFixture();
+    const result = call(r, 'Edit', { file_path: join(r.clone, 'src', 'hooks', 'useSwipeStep.ts'), old_string: 'a', new_string: 'b' });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, '');
+    assert.equal(budgetUsed(r.fx, 'toolCalls'), 1);
+    assert.deepEqual(decisions(r.fx).map((d) => [d.decision, d.rule]), [['allow', 'write-set']]);
+  });
+
+  it('denies an Edit outside the write set with outside-write-set, and a Write to a protected path with protected-path', () => {
+    const r = runFixture();
+    const outside = call(r, 'Edit', { file_path: join(r.clone, 'src', 'lib', 'x.ts'), old_string: 'a', new_string: 'b' });
+    assert.match(rule(outside.stdout), /outside-write-set/);
+    const protectedPath = call(r, 'Write', { file_path: join(r.clone, 'package.json'), content: '{}' });
+    assert.match(rule(protectedPath.stdout), /protected-path/);
+    const git = call(r, 'Write', { file_path: join(r.clone, '.git', 'config'), content: 'x' });
+    assert.match(rule(git.stdout), /protected-path/);
+    const notebook = call(r, 'NotebookEdit', { notebook_path: join(r.clone, 'package.json'), new_source: 'x' });
+    assert.match(rule(notebook.stdout), /protected-path/);
+    assert.equal(budgetUsed(r.fx, 'toolCalls'), 0);
+  });
+
+  it('allows a Write under an artifact glob and in the scratch directory', () => {
+    const r = runFixture();
+    const artifact = call(r, 'Write', { file_path: join(r.clone, '.planning', 'quick', '1', 'PLAN.md'), content: 'x' });
+    assert.equal(artifact.code, 0, artifact.stderr);
+    assert.equal(artifact.stdout, '');
+    const scratch = call(r, 'Write', { file_path: join(r.scratch, 'tmp', 'x.txt'), content: 'x' });
+    assert.equal(scratch.stdout, '');
+    assert.equal(budgetUsed(r.fx, 'toolCalls'), 2);
+  });
+
+  it('denies a path that is a sibling run clone sharing the run ID prefix, and the repository files outside every root', () => {
+    const r = runFixture();
+    const sibling = call(r, 'Write', { file_path: join(r.sibling, 'src', 'hooks', 'useSwipeStep.ts'), content: 'x' });
+    assert.match(rule(sibling.stdout), /outside-write-set/);
+    const evil = call(r, 'Write', { file_path: join(r.clone, 'src-evil', 'x.ts'), content: 'x' });
+    assert.match(rule(evil.stdout), /outside-write-set/);
+  });
+
+  it('denies a relative path with .. that leaves the clone, and a symlink inside the clone that points outside (CON-8)', () => {
+    const r = runFixture();
+    const dotdot = call(r, 'Write', { file_path: 'src/hooks/../../../outside.ts', content: 'x' });
+    assert.match(rule(dotdot.stdout), /outside-write-set/);
+    const viaSymlink = call(r, 'Write', { file_path: join(r.clone, '.planning', 'quick', 'out', 'x.ts'), content: 'x' });
+    assert.match(rule(viaSymlink.stdout), /outside-write-set/);
+    const symlinkItself = call(r, 'Write', { file_path: join(r.clone, '.planning', 'quick', 'out'), content: 'x' });
+    assert.match(rule(symlinkItself.stdout), /outside-write-set/);
   });
 });

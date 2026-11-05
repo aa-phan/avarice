@@ -11,7 +11,7 @@
 import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
-import type { BashStrategy, InvocationPurpose } from './invocation-scope.ts';
+import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation-scope.ts';
 
 export type NormalizedToolCall =
   | { kind: 'file-write'; tool: string; paths: string[] }
@@ -55,6 +55,16 @@ export interface HookPolicy {
   // The most subagents the invocation may have in flight at once (the contract's subagentsConcurrent, as the scope computes it).
   // The hook counts them in the ledger; a policy without the limit is refused, because it would leave the control off (O-1).
   subagentsConcurrent: number;
+  // The run purpose (plan 02-08). `writeGlobs` and `protectedGlobs` are clone-relative: with `writeGlobs` present a write below
+  // stagingPath is allowed only when its clone-relative path matches a write glob and no protected glob, and a write outside
+  // stagingPath only under a writeRoot (the scratch directory). Absent means the Phase 1 rule: a path under a write root.
+  writeGlobs?: string[];
+  protectedGlobs?: string[];
+  // Shell commands admitted by exact argv match (the contract's execution.commands), ahead of the denied prefixes.
+  agentCommands?: AgentCommand[];
+  // Tools refused by name with rule `no-human-prompts` (AskUserQuestion), and whether a shell call with run_in_background is refused.
+  deniedTools?: string[];
+  denyBackgroundShell?: boolean;
 }
 
 export interface HookDecision {
@@ -143,7 +153,7 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
 
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
 const STRATEGIES: readonly string[] = ['blanket-bash-hook-identity', 'narrow-rules', 'hook-allow', 'none'];
-const PURPOSES: readonly string[] = ['map', 'intel', 'knowledge'];
+const PURPOSES: readonly string[] = ['map', 'intel', 'knowledge', 'run'];
 
 export function parseHookPolicy(raw: unknown): PolicyResult {
   const bad = (reason: string): PolicyResult => ({ ok: false, reason: `hook policy ${reason}` });
@@ -164,6 +174,17 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   }
   if (raw['readConfine'] !== undefined && !isStrings(raw['readConfine'])) return bad('needs a list of strings readConfine');
   if (raw['readRoots'] !== undefined && !isStrings(raw['readRoots'])) return bad('needs a list of strings readRoots');
+  for (const key of ['writeGlobs', 'protectedGlobs', 'deniedTools']) {
+    if (raw[key] !== undefined && !isStrings(raw[key])) return bad(`needs a list of strings ${key}`);
+  }
+  // A policy with write globs and no protected list would leave the protected check off; refuse it rather than assume an empty list.
+  if (raw['writeGlobs'] !== undefined && raw['protectedGlobs'] === undefined) return bad('has writeGlobs without protectedGlobs');
+  if (raw['denyBackgroundShell'] !== undefined && typeof raw['denyBackgroundShell'] !== 'boolean') return bad('has a malformed denyBackgroundShell');
+  const agentCommands = raw['agentCommands'];
+  if (agentCommands !== undefined) {
+    const wellFormed = Array.isArray(agentCommands) && agentCommands.every((c) => isObject(c) && isStrings(c['words']) && c['words'].length > 0 && typeof c['paths'] === 'boolean');
+    if (!wellFormed) return bad('has malformed agentCommands');
+  }
   if (!(typeof raw['subagentsConcurrent'] === 'number' && Number.isInteger(raw['subagentsConcurrent']) && raw['subagentsConcurrent'] >= 0)) {
     return bad('needs a non-negative integer subagentsConcurrent');
   }
@@ -209,11 +230,23 @@ function checkRead(paths: readonly string[], policy: HookPolicy, canon: Canon): 
   return null;
 }
 
+// The run purpose's write rule (policy.writeGlobs present): below stagingPath the clone-relative path must match a write glob, and a
+// protected glob wins over it (`protected-path`); outside stagingPath only a write root admits it (the scratch directory), so another
+// run's clone, whose ID may share a prefix with this one, is outside.
+function checkGlobWrite(canonical: string, writeGlobs: readonly string[], policy: HookPolicy): string | null {
+  const staging = trimSlashes(policy.stagingPath);
+  if (!under(canonical, staging) || canonical === staging) return policy.writeRoots.some((root) => under(canonical, root)) ? null : 'outside-write-set';
+  const relative = canonical.slice(staging.length + 1);
+  if (matchesAny(relative, policy.protectedGlobs ?? [])) return 'protected-path';
+  return matchesAny(relative, writeGlobs) ? null : 'outside-write-set';
+}
+
 function checkWrite(paths: readonly string[], policy: HookPolicy, canon: Canon): string | null {
   for (const path of paths) {
     const canonical = canon(path);
     if (canonical === null) return 'unresolvable-path';
-    if (!policy.writeRoots.some((root) => under(canonical, root))) return 'outside-write-set';
+    const rule = policy.writeGlobs !== undefined ? checkGlobWrite(canonical, policy.writeGlobs, policy) : policy.writeRoots.some((root) => under(canonical, root)) ? null : 'outside-write-set';
+    if (rule !== null) return rule;
   }
   return null;
 }

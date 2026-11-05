@@ -380,7 +380,7 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     headBefore: 'a'.repeat(40),
     headAfter: 'a'.repeat(40),
     ...over,
-    details: { exitCode: null, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, ...over.details },
+    details: { exitCode: null, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: false, ...over.details },
   });
 
   // Prepares one more map invocation on a finished onboarding and returns it with the run's id.

@@ -1,0 +1,16 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/run-scope.test.ts\" \"test/integration/hook.test.ts\"",
+  "exitCode": 1,
+  "reason": "computeRunScope and runScopeDirs do not exist in src/domain/invocation-scope.ts yet: both test files fail to load (the hook integration file imports computeRunScope) before any test runs",
+  "failingFiles": ["test/unit/run-scope.test.ts", "test/integration/hook.test.ts"],
+  "failingTests": [
+    "the run purpose spec (CON-1, CON-6)",
+    "computeRunScope: write roots and files from the contract globs (CON-2)",
+    "computeRunScope: reads, subagents and commands",
+    "computeRunScope: the three edges (CON-2)",
+    "computeRunScope: the work root check of Phase 1 (WR-01) applies",
+    "the run purpose through the real hook entry (CON-2, CON-8)"
+  ],
+  "summary": "RED by missing export (SyntaxError: the requested module '../../src/domain/invocation-scope.ts' does not provide an export named 'computeRunScope'), the same shape as a new-module RED.",
+  "outputHead": "# SyntaxError: The requested module '../../src/domain/invocation-scope.ts' does not provide an export named 'computeRunScope'\nnot ok 1 - test/unit/run-scope.test.ts"
+}

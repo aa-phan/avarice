@@ -16,7 +16,7 @@ import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
 import type { BudgetRow, BudgetRowInput, OnboardingRow } from '../ports/ledger.ts';
-import type { InvocationPurpose } from '../ports/agent-host.ts';
+import type { OnboardingPurpose } from '../ports/agent-host.ts';
 import type { AppDeps } from './deps.ts';
 import { loadContract } from './stages/shared.ts';
 
@@ -24,7 +24,7 @@ export const BUDGET_NAMES = ['invocations', 'toolCalls', 'subagentsTotal', 'wall
 
 export interface InvocationReservation {
   runId: string;
-  purpose: InvocationPurpose;
+  purpose: OnboardingPurpose;
   // The smaller of the purpose's share of the wall clock and what is left of it.
   wallClockMs: number;
   // The smaller of the contract's per-invocation cap and what is left of the run's cost budget.
@@ -61,7 +61,7 @@ export function budgetRowsOf(contract: OnboardingContract): BudgetRowInput[] {
 
 const remaining = (row: BudgetRow | undefined): number => (row === undefined ? 0 : row.limit - row.used - row.reserved);
 
-export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: InvocationPurpose): Result<ReserveOutcome> {
+export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose): Result<ReserveOutcome> {
   const contract = loadContract(deps, onboarding.onboardingId);
   if (!contract.ok) return contract;
   const { runId, version, body } = contract.value;

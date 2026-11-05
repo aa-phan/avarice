@@ -250,6 +250,8 @@ export class ClaudeHostAdapter implements AgentHost {
         hookDenies: denies.value.total,
         hookBudgetDenies: denies.value.budget,
         numTurns: result?.numTurns ?? 0,
+        resultSeen: result !== undefined,
+        ...(result?.isError !== undefined ? { isError: result.isError } : {}),
         ...(result?.subtype !== undefined ? { subtype: result.subtype } : {}),
         ...(result?.terminalReason !== undefined ? { terminalReason: result.terminalReason } : {}),
         ...(result?.subagentStats !== undefined ? { subagentsSpawned: result.subagentStats.spawned } : {}),

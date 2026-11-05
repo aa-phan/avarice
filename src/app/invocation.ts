@@ -13,7 +13,7 @@ import type { Result } from '../domain/result.ts';
 import { INVOCATION_PURPOSES, PURPOSE_EXTENSIONS, computeInvocationScope } from '../domain/invocation-scope.ts';
 import type { InvocationScope } from '../domain/invocation-scope.ts';
 import { RootRefusedError } from '../domain/normalized-root.ts';
-import type { InvocationOutcome, InvocationPurpose, InvocationRequest } from '../ports/agent-host.ts';
+import type { InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
 import type { OnboardingRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { reserveInvocation, settleInvocation } from './budget.ts';
@@ -47,7 +47,7 @@ export type PrepareOutcome = { granted: true; prepared: PreparedInvocation } | {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: InvocationPurpose, prompt: string, options: PrepareOptions): Result<PrepareOutcome> {
+export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose, prompt: string, options: PrepareOptions): Result<PrepareOutcome> {
   const contract = loadContract(deps, onboarding.onboardingId);
   if (!contract.ok) return contract;
   const staging = stagingPathOf(onboarding);

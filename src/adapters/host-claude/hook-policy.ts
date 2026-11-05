@@ -28,7 +28,9 @@ export interface PreambleFingerprint {
 
 export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity, ledgerPath: string, preamble?: PreambleFingerprint): Result<HookPolicy> {
   const canonical = (path: string): string | null => canonicalAbsolute(path);
-  const all = [scope.stagingPath, ledgerPath, ...scope.writeRoots, ...scope.denyRead, ...scope.allowRead, ...(scope.readConfine ?? []), ...scope.readRoots];
+  // The run's scratch directory is a write root beside the clone: the file tools may write there as the shell may.
+  const writeRoots = [...scope.writeRoots, ...(scope.scratchDir !== undefined ? [scope.scratchDir] : [])];
+  const all = [scope.stagingPath, ledgerPath, ...writeRoots, ...scope.denyRead, ...scope.allowRead, ...(scope.readConfine ?? []), ...scope.readRoots];
   const resolved = new Map<string, string>();
   for (const path of all) {
     const c = canonical(path);
@@ -45,7 +47,7 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
     purpose: scope.purpose,
     ledgerPath: at(ledgerPath),
     stagingPath: at(scope.stagingPath),
-    writeRoots: scope.writeRoots.map(at),
+    writeRoots: writeRoots.map(at),
     denyRead: scope.denyRead.map(at),
     allowRead: scope.allowRead.map(at),
     readRoots: scope.readRoots.map(at),
@@ -60,6 +62,11 @@ export function buildHookPolicy(scope: InvocationScope, ids: HookPolicyIdentity,
     },
     subagentTypes: [...ids.subagentTypes],
     subagentsConcurrent: scope.subagents.concurrent,
+    // The run purpose's fields, present only when the scope has them, so an onboarding policy file is byte-identical to Phase 1's.
+    ...(scope.writeGlobs !== undefined ? { writeGlobs: [...scope.writeGlobs], protectedGlobs: [...(scope.protectedGlobs ?? [])] } : {}),
+    ...(scope.commands.agentCommands !== undefined ? { agentCommands: scope.commands.agentCommands.map((c) => ({ words: [...c.words], paths: c.paths })) } : {}),
+    ...(scope.deniedTools !== undefined ? { deniedTools: [...scope.deniedTools] } : {}),
+    ...(scope.denyBackgroundShell !== undefined ? { denyBackgroundShell: scope.denyBackgroundShell } : {}),
   });
 }
 

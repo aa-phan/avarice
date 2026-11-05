@@ -5,7 +5,9 @@ import type { InvocationScope } from '../domain/invocation-scope.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
 
-export type InvocationPurpose = 'map' | 'intel' | 'knowledge';
+export type InvocationPurpose = 'map' | 'intel' | 'knowledge' | 'run';
+// The purposes of an onboarding: the budget shares and the onboarding stages know these three; a run has its own budgets (plan 02-10).
+export type OnboardingPurpose = Exclude<InvocationPurpose, 'run'>;
 
 export interface InvocationRequest {
   onboardingId: string;
@@ -32,6 +34,10 @@ export interface InvocationRequest {
   // The session the host runs under, chosen by the caller so it can be recorded before launch (a resume can then
   // find a process that outlived its supervisor). The adapter generates one when absent.
   sessionId?: string;
+  // Who the invocation belongs to. Absent means an onboarding and `onboardingId` (every Phase 1 caller); `run` names the run in
+  // `ownerId`, and the adapter keeps that invocation's files under the run instead of the onboarding (plan 02-08).
+  ownerKind?: 'onboarding' | 'run';
+  ownerId?: string;
 }
 
 export type InvocationOutcomeKind =
@@ -75,6 +81,10 @@ export interface InvocationDetails {
   hookDenies: number;
   hookBudgetDenies: number;
   numTurns: number;
+  // Whether the host printed a final result at all, and its own `is_error` when it did: the run outcome classifier reads both, so an
+  // ending with no result is never taken for success (plan 02-13).
+  resultSeen: boolean;
+  isError?: boolean;
   // The host's own result fields, when it printed one.
   subtype?: string;
   terminalReason?: string;
