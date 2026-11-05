@@ -47,7 +47,7 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | Requirement | Behavior | Tier | Automated Command | File Exists | Status |
 |-------------|----------|------|-------------------|-------------|--------|
 | ONB-1 | Every transition committed before its effect; illegal transition rejected | T1+T2 | `node --test "test/unit/transitions.test.ts"` | ✅ | ✅ green (plan 01-19) |
-| ONB-1 / NFR-6 | SIGKILL at each kill point; `resume` reaches the same active record | T2 | `node --test "test/fault/killpoints.test.ts"` | ✅ | ⚠️ flaky (validate-phase 2026-11-04: 20/20 alone, 12/12 kill-point cases failed once inside the full T1+T2 run at ~630% CPU on the normalized-record deepEqual, green on the full-suite rerun) |
+| ONB-1 / NFR-6 | SIGKILL at each kill point; `resume` reaches the same active record | T2 | `node --test "test/fault/killpoints.test.ts"` | ✅ | ⚠️ flaky (validate-phase 2026-11-04: 20/20 alone, 12/12 kill-point cases failed once inside the full T1+T2 run at ~630% CPU on the normalized-record deepEqual, green on the full-suite rerun; 2026-11-05 full T1+T2 run green, 1328 pass 0 fail) |
 | ONB-2 | Ledger and data root hold refs and digests only (S-27) | T2 | `node --test "test/integration/no-competing-index.test.ts"` | ✅ | ✅ green (plan 01-19) |
 | ONB-3 | Executor cannot write source via `sed -i`, `python3 -c`, `node -e`, repo script, symlink | T2 | `node --test "test/containment/executor.test.ts"` | ✅ | ✅ green (plan 01-19) |
 | ONB-3 | Edit/Write/Bash/Python source edits and policy-file edit blocked in a live mapping invocation (S-30) | T3 | `AVARICE_LIVE=1 node --test "test/containment/live-*.test.ts"` | ✅ | ✅ green (T3 live suite, 21 cases on claude 2.1.317 in plan 01-16; live case 19 in plan 01-19) |
@@ -71,6 +71,9 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | ONB-3 (plan 01-22) | Staging diff lists every ignored untracked file one per record under a hostile `.gitignore` of `*`; validation and activation block an ignored out-of-set write; preflight facts exclude ignored checkout files | T1+T2 | `node --test "test/integration/staging-adapters.test.ts" "test/integration/ignored-writes.test.ts" "test/unit/repo-facts.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0) |
 | CON-1 / ONB-3 (plan 01-23) | Hook read allow-list: Shell, Read, Grep and Glob confined to staging, `readRoots` and `allowRead` (`outside-read-set`); option values, words after `--` and recursive greps judged; every VERIFICATION.md P-3 case denied with its rule | T1+T2 | `node --test "test/unit/hook-decision.test.ts" "test/integration/hook.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0) |
 | CON-1 / ONB-3 (plan 01-24) | Work root appended to sandbox and hook `denyRead`, own staging re-allowed via `allowRead`; no `Read(...)` deny names a root containing staging; production-path policy denies every P-3 case; `docs/containment.md` CON-1 row present | T1+T2 | `node --test "test/integration/claude-host.test.ts" "test/unit/invocation-scope.test.ts" "test/unit/claude-settings.test.ts"` and `grep -c shell-recursive-read docs/containment.md` | ✅ | ✅ green (validate-phase 2026-11-04, Node 26.9.0; docs grep 1) |
+| ONB-14 / ONB-13 (plan 01-25) | Knowledge pass accounts per document on the merged graph (below half is validation-failed, otherwise dropped/unread recorded per document); merge keeps code and document nodes | T1+T2 | `node --test "test/unit/knowledge-extraction.test.ts" "test/unit/knowledge-corpus.test.ts" "test/unit/graph-merge.test.ts" "test/integration/knowledge-pass.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-05, Node 26.9.0, full T1+T2 run) |
+| ONB-14 (plan 01-26) | `assert-exit` fails a live record whose knowledge section leaves corpus documents unread or lacks per-document accounting | T1+T2 | `node --test "test/unit/checkout-digest.test.ts" "test/integration/claude-host.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-05, Node 26.9.0, full T1+T2 run) |
+| CON-1 / ONB-3 / ONB-8 (quick 261105-2i2) | WR-05 null-prototype flag maps; WR-06 every `gsd_run` word after the verb checked against read and write sets; WR-07 sandbox probe retries a timeout once and caches only a clean exit; WR-08 exit-run refuses a non-finite or negative spend, expected cost or cap | T1 | `node --test "test/unit/cli-args.test.ts" "test/unit/hook-decision.test.ts" "test/mutation/fail-closed.test.ts" "test/unit/checkout-digest.test.ts"` | ✅ | ✅ green (validate-phase 2026-11-05, Node 26.9.0, full T1+T2 run) |
 | Exit 1 | Active record on the target; code and document nodes; intel and graph build commit = onboarded revision; checkout unchanged | T4 | `scripts/exit-run.sh` | ✅ | ✅ green: target run `onb_01M6J4ATTTXW68YGE2P9V2QMH5` active, 1010 code and 24 document nodes, graph and intel at 9f1cd8d, checkout digests identical (plan 01-19; evidence `01-19-evidence-target.json`) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -106,7 +109,7 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 - [x] Feedback latency < 60s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** validated 2026-11-04 (validate-phase audit; one load-sensitive flake recorded on the kill-point suite; re-audited after gap-closure plans 01-21..01-24, all automated rows green, two live-host behaviors manual-only)
+**Approval:** validated 2026-11-04 (validate-phase audit; one load-sensitive flake recorded on the kill-point suite; re-audited after gap-closure plans 01-21..01-24, all automated rows green, two live-host behaviors manual-only; re-audited 2026-11-05 after plans 01-25, 01-26 and quick 261105-2i2, rows added, no gaps)
 
 ## Validation Audit 2026-11-04
 
@@ -126,3 +129,12 @@ Task IDs are assigned by the planner; this map is keyed by requirement and is fi
 | Escalated | 0 |
 | Rows added | 4 |
 | Manual-only added | 2 |
+
+## Validation Audit 2026-11-05
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Rows added | 3 |
