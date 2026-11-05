@@ -8,13 +8,15 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { runSupervisor } from '../../src/app/run-service.ts';
 import { startRun } from '../../src/app/run-start.ts';
+import { ok } from '../../src/domain/result.ts';
 import { spawnSupervisor } from '../../src/cli/spawn-supervisor.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { canonicalJson } from '../../src/domain/digest.ts';
-import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
-import { TEST_CLI } from '../helpers/fault-run.ts';
+import { EXPIRY_WAIT_MS, TEST_CLI, sleepSync, spawnCli } from '../helpers/fault-run.ts';
 import { commitConventions, makeRunRepo, onboardRunRepo, writeBrief } from '../helpers/run-fixtures.ts';
 import { git } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -322,5 +324,128 @@ describe('supervise leaves a finished run alone', () => {
     assert.equal(second.code, 3, second.stderr + second.stdout);
     assert.match(second.stdout, new RegExp(`^run ${runId}: blocked_on_decision \\(enforcement_failure\\)\\n`));
     assert.deepEqual(checkpointsOf(f.roots, runId), before);
+  });
+});
+
+// Process and lease guarantees (D-18, FR-4, T-02-38, T-02-40): one supervisor drives a run, the run outlives the command that started
+// it, and a supervisor that died is reported and replaced only after its lease has lapsed.
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function spawnedPid(roots: CliRoots, runId: string): number | undefined {
+  const found = rows<{ result_json: string }>(roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'supervisor:spawn'", runId)[0];
+  return found === undefined ? undefined : (JSON.parse(found.result_json) as { pid: number }).pid;
+}
+
+describe('one supervisor per run', () => {
+  it('a second supervise for a run whose lease is live exits 3 with `lease must expire first` and records no checkpoint', async () => {
+    const f = fixture();
+    const runId = createRun(f);
+    const composed = createDeps(envFor(f.roots));
+    assert.ok(composed.ok, 'composition');
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered: () => void = () => undefined;
+    const inStage = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    // The first supervisor holds the lease and is kept inside its prelude, as a supervisor waiting on the host would be.
+    const holder = runSupervisor(composed.value.deps, runId, {
+      prelude: async () => {
+        entered();
+        await gate;
+        return ok(undefined);
+      },
+    });
+    try {
+      await inStage;
+      const held = runOf(f.roots, runId);
+      assert.ok(held.lease_holder !== null);
+      assert.equal(held.lease_fence, 1);
+      const before = checkpointsOf(f.roots, runId);
+
+      const second = await spawnCli(['supervise', runId], f.roots, {}, { AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude', AVARICE_LEASE_TTL_MS: '180000' });
+      assert.equal(second.code, 3, second.stderr + second.stdout);
+      assert.match(second.stderr, /lease must expire first/);
+      assert.equal(second.stdout, '', 'no result line: nothing ran');
+      assert.deepEqual(checkpointsOf(f.roots, runId), before, 'no checkpoint was recorded');
+      assert.equal(runOf(f.roots, runId).lease_fence, 1, 'the lease was not taken');
+      assert.equal(runOf(f.roots, runId).state, 'contract_ready');
+    } finally {
+      release();
+      const outcome = await holder;
+      composed.value.close();
+      assert.ok(outcome.ok, JSON.stringify(outcome));
+    }
+  });
+
+  it('with AVARICE_LEASE_TTL_MS=200 a supervise started after the first one died takes the expired lease (fence 2) and continues', () => {
+    const f = fixture();
+    const runId = createRun(f);
+    const first = superviseCli(f, runId, { AVARICE_FAULT: 'after-checkpoint:prepare-workspace', AVARICE_LEASE_TTL_MS: '200' });
+    assert.equal(first.signal, 'SIGKILL');
+    assert.equal(runOf(f.roots, runId).lease_fence, 1);
+    sleepSync(EXPIRY_WAIT_MS);
+
+    const second = superviseCli(f, runId, { AVARICE_LEASE_TTL_MS: '200' });
+    assert.equal(second.code, 3, second.stderr + second.stdout);
+    assert.match(second.stdout, new RegExp(`^run ${runId}: running\\n`));
+    const run = runOf(f.roots, runId);
+    assert.equal(run.lease_fence, 2, 'the takeover bumped the fence');
+    assert.equal(run.lease_holder, null, 'and the new holder released it');
+    assert.equal(run.state, 'running');
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'prepare-workspace', 'verify-enforcement', 'context-pack'], 'the killed side effect was repeated once, nothing else');
+    assert.ok(existsSync(join(f.roots.AVARICE_WORK_ROOT, runId, 'clone', '.git')));
+  });
+});
+
+describe('the run outlives the command that started it, and a dead supervisor is reported', () => {
+  it('SIGKILL to `start --wait` leaves the supervisor alive and the run still reaches its stop state', async () => {
+    const f = fixture();
+    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', PRODUCTION_ENTRY, ...startArgs(f, '--wait')], {
+      cwd: f.repo.path,
+      env: { ...envFor(f.roots), NODE_TEST_CONTEXT: undefined } as NodeJS.ProcessEnv,
+      stdio: 'ignore',
+    });
+    const runIdAndPid = await waitFor('the supervisor:spawn step', () => {
+      const run = rows<{ run_id: string }>(f.roots, "SELECT run_id FROM runs WHERE state <> 'onboarding'")[0];
+      if (run === undefined) return undefined;
+      const pid = spawnedPid(f.roots, run.run_id);
+      return pid === undefined ? undefined : { runId: run.run_id, pid };
+    });
+    const closed = new Promise<void>((resolve) => child.on('close', () => resolve()));
+    child.kill('SIGKILL');
+    await closed;
+    assert.ok(alive(runIdAndPid.pid), 'the supervisor survived the death of the command that started it');
+
+    const blocked = await waitFor('the supervisor to finish the run', () => {
+      const run = runOf(f.roots, runIdAndPid.runId);
+      return run.state === 'blocked_on_decision' ? run : undefined;
+    });
+    assert.equal(blocked.reason, 'enforcement_failure');
+    await waitFor('the supervisor to exit', () => (alive(runIdAndPid.pid) ? undefined : true));
+  });
+
+  it('a supervisor killed at after-checkpoint:verify-enforcement is reported: start --wait exits 3 with the interrupted line and how to continue', () => {
+    const g = fixture();
+    const killed = runCli(startArgs(g, '--wait'), { roots: g.roots, cwd: g.repo.path, env: { AVARICE_FAULT: 'after-checkpoint:verify-enforcement', AVARICE_LEASE_TTL_MS: '200' }, timeoutMs: 120_000 });
+    assert.equal(killed.code, 3, killed.stderr + killed.stdout);
+    const runId = runIdOf(killed.stdout);
+    const lines = killed.stdout.split('\n').filter((l) => l !== '');
+    assert.equal(lines.at(-2), `run ${runId}: interrupted in contract_ready (next: verify-enforcement)`);
+    assert.equal(lines.at(-1), `continue with: avarice resume ${runId}`);
+    const run = runOf(g.roots, runId);
+    assert.equal(run.state, 'contract_ready');
+    assert.deepEqual(checkpointsOf(g.roots, runId), ['prepare-workspace', 'verify-enforcement']);
+    const pid = spawnedPid(g.roots, runId);
+    assert.ok(pid !== undefined && !alive(pid), 'the supervisor is gone');
   });
 });

@@ -1,0 +1,45 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/run-supervisor.test.ts",
+  "exitCode": 0,
+  "kind": "mutation-evidence",
+  "reason": "The lease and process behaviour of Task 3 (one live holder, supervisor outliving a killed `start --wait`, a dead supervisor reported as interrupted, takeover of an expired lease at fence 2) was already implemented by the Task 1 tracer: the supervisor loop, the unref'd renewal timer, the release in finally and waitForRun's liveness rule were written there because the tracer's `start --wait` needs them. The four new tests therefore passed on first run and there is no honest failing run against missing code. To show the tests discriminate, each behaviour was broken in the source in turn (the mutant was reverted with a single-file checkout) and the file run again.",
+  "newTests": [
+    "a second supervise for a run whose lease is live exits 3 with `lease must expire first` and records no checkpoint",
+    "with AVARICE_LEASE_TTL_MS=200 a supervise started after the first one died takes the expired lease (fence 2) and continues",
+    "SIGKILL to `start --wait` leaves the supervisor alive and the run still reaches its stop state",
+    "a supervisor killed at after-checkpoint:verify-enforcement is reported: start --wait exits 3 with the interrupted line and how to continue"
+  ],
+  "mutants": [
+    {
+      "id": "M1",
+      "change": "src/app/run-service.ts: the finally block no longer calls releaseRunLease",
+      "result": "4 of 14 fail: the tracer (lease_holder not null after the run), the detached-PID test, the enforced-host supervise test and the takeover test (fence 2, holder null after the new holder)",
+      "failingTests": [
+        "exits 3 with the contract_ready line first and blocked_on_decision (enforcement_failure) last; G0 failed, clone at the pin",
+        "the supervisor is not the start process: a different PID that outlives the command",
+        "with an enforced host the run reaches running and the supervisor stops with `no stage for running`",
+        "with AVARICE_LEASE_TTL_MS=200 a supervise started after the first one died takes the expired lease (fence 2) and continues"
+      ]
+    },
+    {
+      "id": "M2",
+      "change": "src/app/run-service.ts: a refused lease is ignored and the supervisor goes on with fence 0",
+      "result": "not detected (14 of 14 pass): three independent guards stop the second supervisor, the lease renewal (holder check), the checkpoint fence guard and the transition fence guard, so this mutant still exits 3 with a conflict and records no checkpoint. The property `no stage runs without the lease and fence` is the one pinned at the ledger by plan 02-03 (a stale fence is refused) and here by the second-supervise test, which holds with any one of the guards in place",
+      "failingTests": []
+    },
+    {
+      "id": "M3",
+      "change": "src/cli/spawn-supervisor.ts: detached: true replaced by detached: false",
+      "result": "1 of 14 fails: the process-group assertion of the spawnSupervisor probe test",
+      "failingTests": ["starts the entry detached: a different PID and process group, /dev/null for the three streams, cwd the given directory"]
+    },
+    {
+      "id": "M4",
+      "change": "src/cli/commands/start.ts: the `continue with: avarice resume <id>` line removed from the interrupted rendering",
+      "result": "1 of 14 fails: the exact-line assertion of the dead-supervisor test",
+      "failingTests": ["a supervisor killed at after-checkpoint:verify-enforcement is reported: start --wait exits 3 with the interrupted line and how to continue"]
+    }
+  ],
+  "summary": "14 tests, 14 pass on the unmutated tree; mutants M1, M3 and M4 each fail the tests that name the behaviour, M2 is equivalent through other guards",
+  "outputHead": "# pass 14\n# fail 0"
+}
