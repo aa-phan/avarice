@@ -23,6 +23,8 @@ import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import { computeRunScope, runScopeDirs } from '../../src/domain/invocation-scope.ts';
+import type { InvocationScope } from '../../src/domain/invocation-scope.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -814,5 +816,143 @@ describe('the GSD shim preamble fingerprint', () => {
     cleanup.push(empty);
     const fingerprint = fingerprintGsdPreamble(empty);
     assert.equal(fingerprint.ok, false);
+  });
+});
+
+describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
+  const RUN_ID = 'run_t1';
+  const INVOCATION_ID = 'inv_t1';
+
+  interface RunSetup {
+    roots: CliRoots;
+    repo: ScratchRepo;
+    fake: FakeClaude;
+    adapter: ClaudeHostAdapter;
+    scope: InvocationScope;
+    scratch: string;
+  }
+
+  function setupRun(script: FakeClaudeScript): RunSetup {
+    const roots = makeRoots();
+    const repo = makeScratchRepo({ files: REPO_FILES });
+    const fake = makeFakeClaude(script);
+    cleanup.push(roots.base, repo.base, fake.dir);
+    const configDir = join(roots.base, 'claude-config');
+    mkdirSync(join(configDir, 'skills', 'gsd-quick'), { recursive: true });
+    writeFileSync(join(configDir, 'skills', 'gsd-quick', 'SKILL.md'), '---\nname: gsd-quick\ndescription: stand-in\n---\n');
+    mkdirSync(roots.AVARICE_DATA_ROOT, { recursive: true });
+    const scratch = join(roots.AVARICE_WORK_ROOT, RUN_ID, 'scratch');
+    mkdirSync(scratch, { recursive: true });
+    const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CONFIG_DIR: configDir };
+    const located = locateGsdCore(env);
+    assert.ok(located.ok, 'gsd-core is installed');
+    const preamble = fingerprintGsdPreamble(located.value.gsdCoreDir);
+    assert.ok(preamble.ok, 'the GSD preamble is found');
+    const files = { write: ['src/index.ts'], create: [], artifacts: ['.planning/quick/**'], protected: ['package.json'], secretGlobs: ['**/.env'] };
+    const contract = { files, execution: { commands: ['npm test'] }, budgets: { subagentsTotal: 10, subagentsConcurrent: 2 } };
+    // A directory the clone does not have lists as empty, as RunWorkspace.describe reports it.
+    const entries = (dir: string): string[] => (existsSync(join(repo.path, dir)) ? readdirSync(join(repo.path, dir)).sort() : []);
+    const scope = computeRunScope({
+      contract,
+      clonePath: repo.path,
+      repoPath: join(roots.base, 'source-repo'),
+      dataRoot: roots.AVARICE_DATA_ROOT,
+      home: join(roots.base, 'home'),
+      workRoot: roots.AVARICE_WORK_ROOT,
+      scratchDir: scratch,
+      workspace: {
+        topLevelEntries: readdirSync(repo.path).filter((name) => name !== '.git'),
+        entriesByDir: Object.fromEntries(runScopeDirs(files).map((dir) => [dir, entries(dir)])),
+        gitPaths: [join(repo.path, '.git')],
+        repoReadAllow: [],
+      },
+      readRoots: [located.value.gsdCoreDir],
+    });
+    const adapter = new ClaudeHostAdapter({
+      claudeBin: fake.bin,
+      hookEntry: HOOK_ENTRY,
+      ledgerPath: join(roots.AVARICE_DATA_ROOT, 'state.db'),
+      dataRoot: roots.AVARICE_DATA_ROOT,
+      gsd: { gsdCoreDir: located.value.gsdCoreDir, agentsDir: join(located.value.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), preamble: preamble.value },
+      artifacts: new LocalArtifactStore(roots.AVARICE_DATA_ROOT),
+      staging: createStagingWorkspace(STAGING_STRATEGY),
+      countHookDenies: () => ({ ok: true, value: { total: 0, budget: 0 } }),
+      env,
+    });
+    return { roots, repo, fake, adapter, scope, scratch };
+  }
+
+  const requestFor = (s: RunSetup, over: Partial<InvocationRequest> = {}): InvocationRequest => ({
+    onboardingId: 'onb_project',
+    runId: RUN_ID,
+    invocationId: INVOCATION_ID,
+    purpose: 'run',
+    contractVersion: 1,
+    contractDigest: 'd'.repeat(64),
+    prompt: '/gsd-quick --validate --text "change src/index.ts"',
+    cwd: s.repo.path,
+    model: 'sonnet',
+    costCapUsd: 1,
+    wallClockMs: 60_000,
+    scope: s.scope,
+    extensions: { skills: ['gsd-quick'], agents: ['gsd-planner', 'gsd-plan-checker', 'gsd-executor', 'gsd-verifier'] },
+    expectedFiles: [],
+    ownerKind: 'run',
+    ownerId: RUN_ID,
+    ...over,
+  });
+
+  it('keeps the invocation files under the run, names the run in the policy and starts the host with the run marker and scratch environment', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const launched = await s.adapter.invoke(requestFor(s), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    const invDir = join(s.roots.AVARICE_DATA_ROOT, 'run', RUN_ID, `run-${INVOCATION_ID}`);
+    assert.ok(existsSync(join(invDir, 'host-settings.json')));
+    assert.equal(existsSync(join(s.roots.AVARICE_DATA_ROOT, 'onboard')), false, 'nothing goes under the onboarding directory');
+    const policy = JSON.parse(readFileSync(join(invDir, 'hook-policy.json'), 'utf8')) as Record<string, unknown>;
+    assert.equal(policy['runId'], RUN_ID);
+    assert.equal(policy['purpose'], 'run');
+    assert.deepEqual(policy['writeGlobs'], ['src/index.ts', '.planning/quick/**']);
+    assert.deepEqual(policy['subagentTypes'], ['gsd-planner', 'gsd-plan-checker', 'gsd-executor', 'gsd-verifier']);
+    // The host ran in the realpath of the clone, with the run marker and the scratch variables in the realpath form.
+    const [argv] = s.fake.argvs();
+    assert.equal(argv?.cwd, realpathSync(s.repo.path));
+    const [env] = s.fake.envs();
+    assert.equal(env?.['AVARICE_RUN'], RUN_ID);
+    assert.equal(env?.['TMPDIR'], join(realpathSync(s.scratch), 'tmp'));
+    assert.equal(env?.['npm_config_cache'], join(realpathSync(s.scratch), 'npm-cache'));
+    assert.equal(env?.['npm_config_update_notifier'], 'false');
+  });
+
+  it('reports resultSeen and isError as parsed from the stream', async () => {
+    const good = setupRun({ transcript: 'success' });
+    const ok = await good.adapter.invoke(requestFor(good), new AbortController().signal);
+    assert.ok(ok.ok);
+    assert.deepEqual([ok.value.details?.resultSeen, ok.value.details?.isError], [true, false]);
+    const failed = setupRun({ transcript: 'apiError' });
+    const apiError = await failed.adapter.invoke(requestFor(failed), new AbortController().signal);
+    assert.ok(apiError.ok);
+    assert.deepEqual([apiError.value.details?.resultSeen, apiError.value.details?.isError], [true, true]);
+    const silent = setupRun({ transcript: null });
+    const none = await silent.adapter.invoke(requestFor(silent), new AbortController().signal);
+    assert.ok(none.ok);
+    assert.equal(none.value.details?.resultSeen, false);
+    assert.equal(none.value.details?.isError, undefined);
+  });
+
+  it('refuses a run request whose owner is missing, mismatched or not a plain name, starting nothing', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const cases: Array<[string, Partial<InvocationRequest>]> = [
+      ['no ownerId', { ownerId: undefined as unknown as string }],
+      ['a path as ownerId', { ownerId: '../escape' }],
+      ['the run purpose without a run owner', { ownerKind: 'onboarding' }],
+      ['a run owner on an onboarding purpose', { purpose: 'map' }],
+    ];
+    for (const [name, over] of cases) {
+      const refused = await s.adapter.invoke(requestFor(s, over), new AbortController().signal);
+      assert.equal(refused.ok, false, name);
+      assert.equal(refused.ok ? '' : refused.error.kind, 'invalid', name);
+    }
+    assert.equal(s.fake.started(), false);
   });
 });

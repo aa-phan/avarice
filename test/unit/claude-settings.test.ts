@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { computeInvocationScope } from '../../src/domain/invocation-scope.ts';
+import { computeInvocationScope, computeRunScope } from '../../src/domain/invocation-scope.ts';
 import type { BashStrategy, InvocationPurpose, InvocationScope } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
 import type { OnboardingContract } from '../../src/domain/onboarding-contract.ts';
@@ -400,5 +400,108 @@ describe('GSD hooks and hook command helpers', () => {
     const cmd = avariceHookCommand('/avarice/src/hook/pre-tool-use.ts');
     assert.equal(cmd.command, process.execPath);
     assert.deepEqual(cmd.args, ['--disable-warning=ExperimentalWarning', '/avarice/src/hook/pre-tool-use.ts']);
+  });
+});
+
+describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () => {
+  let runRoot = '';
+  let clone = '';
+  let scratch = '';
+
+  before(() => {
+    runRoot = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-run-settings-')));
+    clone = join(runRoot, 'work', 'run_A', 'clone');
+    scratch = join(runRoot, 'work', 'run_A', 'scratch');
+    for (const dir of ['src/hooks', 'src/lib', 'tests/unit', '.planning/quick', '.git']) mkdirSync(join(clone, dir), { recursive: true });
+    mkdirSync(scratch, { recursive: true });
+    writeFileSync(join(clone, 'package.json'), '{}');
+  });
+  after(() => rmSync(runRoot, { recursive: true, force: true }));
+
+  function runScope(clonePath: string = clone) {
+    return computeRunScope({
+      contract: {
+        files: { write: ['src/hooks/useSwipeStep.ts', 'tests/unit/**'], create: [], artifacts: ['.planning/quick/**'], protected: ['package.json', '.github/**'], secretGlobs: ['**/.env'] },
+        execution: { commands: ['npm run typecheck', 'npm test'] },
+        budgets: { subagentsTotal: 10, subagentsConcurrent: 2 },
+      },
+      clonePath,
+      repoPath: repo,
+      dataRoot: data,
+      home,
+      workRoot: join(runRoot, 'work'),
+      scratchDir: scratch,
+      workspace: {
+        topLevelEntries: ['.git', '.planning', 'package.json', 'src', 'tests'],
+        entriesByDir: { src: ['hooks', 'lib'], 'src/hooks': [], tests: ['unit'], '.planning': ['quick'] },
+        gitPaths: [join(clone, '.git')],
+        repoReadAllow: [],
+      },
+      readRoots: [core, agents],
+    });
+  }
+  const settings = (s = runScope()) => render(s, ['gsd-quick']) as any;
+
+  it('allows an Edit rule for each file root and each directory root, and the scratch directory for Edit and Read', () => {
+    const allow: string[] = settings().permissions.allow;
+    assert.ok(allow.includes(`Edit(${slash(join(clone, 'src/hooks/useSwipeStep.ts'))})`));
+    assert.ok(allow.includes(`Edit(${slash(join(clone, 'tests/unit'))}/**)`));
+    assert.ok(allow.includes(`Edit(${slash(join(clone, '.planning/quick'))}/**)`));
+    assert.ok(allow.includes(`Edit(${slash(scratch)}/**)`));
+    assert.ok(allow.includes(`Read(${slash(scratch)}/**)`));
+    assert.ok(allow.includes(`Read(${slash(clone)}/**)`));
+    assert.ok(allow.includes('Skill') && allow.includes('Agent') && allow.includes('Bash'));
+    assert.equal(allow.includes(`Edit(${slash(clone)}/**)`), false, 'the clone as a whole is never an Edit root');
+  });
+
+  it('denies AskUserQuestion, WebFetch, WebSearch, NotebookEdit, commit, push, config and avarice', () => {
+    const deny: string[] = settings().permissions.deny;
+    for (const rule of ['AskUserQuestion', 'WebFetch', 'WebSearch', 'NotebookEdit', 'Bash(git commit:*)', 'Bash(git push:*)', 'Bash(git config:*)', 'Bash(avarice:*)', 'Bash(claude:*)', 'Bash(curl:*)']) {
+      assert.ok(deny.includes(rule), rule);
+    }
+    assert.ok(deny.includes(`Edit(${slash(data)}/**)`));
+    assert.ok(deny.includes(`Edit(${slash(join(clone, '.planning/config.json'))})`));
+  });
+
+  it('drops the npm deny rule only because the contract lists an npm command: npx is still denied', () => {
+    const deny: string[] = settings().permissions.deny;
+    assert.equal(deny.includes('Bash(npm:*)'), false);
+    assert.ok(deny.includes('Bash(npx:*)'));
+  });
+
+  it('lists the write roots, the file roots and the scratch directory in allowWrite, and the scope list in denyWrite', () => {
+    const s = runScope();
+    const fs = settings(s).sandbox.filesystem;
+    assert.deepEqual(fs.allowWrite, [...s.writeRoots, ...(s.writeFiles ?? []), scratch].map(slash));
+    assert.deepEqual(fs.denyWrite, s.denyWrite.map(slash));
+    assert.ok(fs.denyWrite.includes(slash(join(clone, 'package.json'))));
+    assert.ok(fs.denyWrite.includes(slash(join(clone, 'src/lib'))));
+    assert.ok(fs.denyWrite.includes(slash(join(clone, '.git'))));
+    assert.ok(fs.denyRead.includes(slash(join(runRoot, 'work'))));
+    assert.ok(fs.allowRead.includes(slash(clone)) && fs.allowRead.includes(slash(scratch)));
+  });
+
+  it('allows no network domain and keeps the sandbox required', () => {
+    const sandbox = settings().sandbox;
+    assert.deepEqual(sandbox.network, { allowedDomains: [], strictAllowlist: true });
+    assert.equal(sandbox.enabled, true);
+    assert.equal(sandbox.failIfUnavailable, true);
+    assert.equal(sandbox.allowUnsandboxedCommands, false);
+  });
+
+  it('renders every rule path in the realpath form even when the clone is given through a symlink (macOS /var)', () => {
+    const alias = join(runRoot, 'alias');
+    symlinkSync(join(runRoot, 'work', 'run_A'), alias);
+    const s = runScope(join(alias, 'clone'));
+    const json = JSON.stringify(settings(s));
+    assert.equal(json.includes(slash(join(runRoot, 'work', 'run_A', 'clone', 'src/hooks/useSwipeStep.ts'))), true);
+    assert.equal(json.includes(`${slash(alias)}/`), false, 'no rule names the alias path');
+  });
+
+  it('adds nothing run-only to an onboarding purpose: no AskUserQuestion deny, no scratch rule, no file Edit rule', () => {
+    const map = render(scope('map')) as any;
+    assert.equal(map.permissions.deny.includes('AskUserQuestion'), false);
+    assert.equal(map.permissions.allow.filter((rule: string) => rule.startsWith('Edit(')).length, 1);
+    assert.equal(map.sandbox.filesystem.allowWrite.length, 1);
   });
 });

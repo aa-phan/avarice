@@ -1,0 +1,21 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/claude-settings.test.ts\" \"test/unit/invocation-env.test.ts\" \"test/unit/run-gsd-config.test.ts\" \"test/integration/claude-host.test.ts\"",
+  "exitCode": 1,
+  "reason": "the settings renderer does not render file Edit rules, the scratch rules or the run-only denies; buildInvocationEnv has no marker or scratchDir option; ClaudeHostAdapter keeps every invocation under onboard/{onboardingId} and ignores ownerKind; src/app/run-gsd-config.ts does not exist",
+  "failingFiles": ["test/unit/run-gsd-config.test.ts (fails to load: ERR_MODULE_NOT_FOUND for src/app/run-gsd-config.ts)"],
+  "failingTests": [
+    "the run purpose settings: allows an Edit rule for each file root and each directory root, and the scratch directory for Edit and Read",
+    "the run purpose settings: denies AskUserQuestion, WebFetch, WebSearch, NotebookEdit, commit, push, config and avarice",
+    "the run purpose settings: lists the write roots, the file roots and the scratch directory in allowWrite, and the scope list in denyWrite",
+    "the run purpose settings: renders every rule path in the realpath form even when the clone is given through a symlink (macOS /var)",
+    "buildInvocationEnv for a contained run: sets AVARICE_RUN to the run, TMPDIR and the npm cache inside the scratch directory, and the update notifier off",
+    "buildInvocationEnv for a contained run: adds only npm_config_cache and npm_config_update_notifier to the Phase 1 allowlist and still blocks every hostile name",
+    "buildInvocationEnv for a contained run: keeps AVARICE_RUN equal to the onboarding ID without a marker, and sets no scratch variable without a scratch directory",
+    "buildInvocationEnv for a contained run: hands the model the realpath form of the scratch directory",
+    "buildInvocationEnv for a contained run: does not let a parent value of the npm names through",
+    "ClaudeHostAdapter with a run owner: keeps the invocation files under the run, names the run in the policy and starts the host with the run marker and scratch environment",
+    "ClaudeHostAdapter with a run owner: reports resultSeen and isError as parsed from the stream",
+    "ClaudeHostAdapter with a run owner: refuses a run request whose owner is missing, mismatched or not a plain name, starting nothing"
+  ],
+  "summary": "RED by behaviour for settings, env and host (9 + 4 tests fail on assertions) and by missing module for the run GSD configuration. The settings tests that assert denies the Phase 1 renderer already emits (WebFetch, WebSearch, NotebookEdit, Bash prefixes, no network domain) pass before and after by design: they pin what must not loosen."
+}

@@ -24,6 +24,7 @@ import type { ArtifactStore } from '../../ports/artifact-store.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
 import { buildInvocationEnv } from './env.ts';
+import { canonicalPath } from './settings.ts';
 import { assertLaunchArgsSafe, buildLaunchArgs } from './launch-args.ts';
 import { checkHostReady, checkLaunchReady } from './launch-preflight.ts';
 import { writeInvocationFiles } from './invocation-files.ts';
@@ -138,13 +139,18 @@ export class ClaudeHostAdapter implements AgentHost {
     const o = this.#o;
     const sessionId = req.sessionId ?? randomUUID();
     if (!UUID.test(sessionId)) return err({ kind: 'invalid', field: 'sessionId', reason: 'a session ID must be a UUID' });
-    if (!PATH_PART.test(req.onboardingId) || !PATH_PART.test(req.invocationId)) {
-      return err({ kind: 'invalid', field: 'invocationId', reason: 'onboarding and invocation IDs must be plain names' });
+    // Whose invocation this is: an onboarding (the default, every Phase 1 caller) or a run (plan 02-08). The owner's ID becomes a
+    // directory name, so it is a plain name; the run purpose belongs to a run and only to one.
+    const run = req.ownerKind === 'run';
+    if (run !== (req.purpose === 'run')) return err({ kind: 'invalid', field: 'ownerKind', reason: 'the run purpose needs a run owner, and a run owner needs the run purpose' });
+    const ownerId = run ? req.ownerId : req.onboardingId;
+    if (ownerId === undefined || !PATH_PART.test(ownerId) || !PATH_PART.test(req.invocationId)) {
+      return err({ kind: 'invalid', field: 'invocationId', reason: `${run ? 'run' : 'onboarding'} and invocation IDs must be plain names` });
     }
     const stagingPath = req.scope.stagingPath;
 
     // 1. The five launch inputs.
-    const invDir = join(o.dataRoot, 'onboard', req.onboardingId, `${req.purpose}-${req.invocationId}`);
+    const invDir = join(o.dataRoot, run ? 'run' : 'onboard', ownerId, `${req.purpose}-${req.invocationId}`);
     const files = writeInvocationFiles({
       invDir,
       scope: this.#scopeWithSkills(req.scope, req.extensions.skills),
@@ -183,6 +189,7 @@ export class ClaudeHostAdapter implements AgentHost {
     const env = buildInvocationEnv(o.env ?? process.env, {
       gsdCoreBin: join(o.gsd.gsdCoreDir, 'bin'),
       onboardingId: req.onboardingId,
+      ...(run ? { marker: ownerId, ...(req.scope.scratchDir !== undefined ? { scratchDir: req.scope.scratchDir } : {}) } : {}),
     });
 
     const headBefore = o.staging.head(stagingPath);
@@ -190,9 +197,11 @@ export class ClaudeHostAdapter implements AgentHost {
 
     // 4. Run it, in its own process group, under our own wall clock.
     const startedAt = Date.now();
-    const run = await this.#run(req, args, env, signal);
-    if (!run.ok) return run;
-    const ran = run.value;
+    // A run starts in the realpath of its clone (the form the allow rules name); an onboarding keeps the path it was given.
+    const cwd = req.purpose === 'run' ? canonicalPath(req.cwd) : req.cwd;
+    const launched = await this.#run(req, cwd, args, env, signal);
+    if (!launched.ok) return launched;
+    const ran = launched.value;
     const durationMs = Date.now() - startedAt;
 
     // 5. What happened, from facts.
@@ -263,6 +272,7 @@ export class ClaudeHostAdapter implements AgentHost {
   // commands and background subagents it started; after the process exits the group is swept once more.
   async #run(
     req: InvocationRequest,
+    cwd: string,
     args: readonly string[],
     env: Record<string, string>,
     signal: AbortSignal,
@@ -273,7 +283,7 @@ export class ClaudeHostAdapter implements AgentHost {
 
     let child: ChildProcess;
     try {
-      child = spawn(o.claudeBin, [...args], { cwd: req.cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(o.claudeBin, [...args], { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (e) {
       return err({ kind: 'unavailable', cause: `cannot start the host: ${(e as NodeJS.ErrnoException).code ?? 'spawn failed'}` });
     }
