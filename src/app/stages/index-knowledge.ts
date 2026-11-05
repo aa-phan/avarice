@@ -172,8 +172,8 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   if (o.kind !== 'progressed' && o.kind !== 'inconclusive') return absent('invocation-failed', `the knowledge invocation ended ${o.kind}`);
 
   // 5. AVARICE reads back what the model wrote and assembles it. No chunk file at all is `no-output`; files that are not usable, or
-  // fewer usable chunks than half the plan, are `validation-failed`; otherwise the usable chunks go on and the record's corpus
-  // names only the documents they cover.
+  // fewer usable chunks than half the plan, are `validation-failed`; otherwise the usable chunks go on. A usable chunk says nothing
+  // about coverage: that is judged on the merged graph, per document (validateKnowledgeGraph).
   const files = deps.graph.readExtractionFiles(staging, plan);
   if (!files.ok) return absent('validation-failed', describeError(files.error));
   const assembled = assembleExtraction(plan, files.value);
@@ -183,15 +183,15 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
     const reasons = assembled.skipped.map((s) => `chunk ${s.n}: ${s.reason}`).slice(0, 5).join('; ');
     return absent('validation-failed', `${assembled.used.length} of ${plan.chunks.length} chunks were usable (at least ${half} are needed): ${reasons}`);
   }
-  const usedEntries = manifest.entries.filter((e) => assembled.usedFiles.includes(e.sourcePath));
 
-  return mergeAndInstall(deps, ctx, manifest, assembled.graph, usedEntries.map((e) => e.sourcePath));
+  return mergeAndInstall(deps, ctx, manifest, assembled.graph);
 }
 
 // The second half: AVARICE merges the assembled extraction into the code graph (one ID space), validates the merge, has graphify
 // cluster it, validates what came back, and only then replaces graph.json. Every refusal leaves graph.json the code-only
-// graph byte for byte. `coveredPaths` are the documents of the chunks that were usable: the record's corpus names those.
-async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: KnowledgeManifest, extraction: Record<string, unknown>, coveredPaths: readonly string[]): Promise<Result<IndexStepResult>> {
+// graph byte for byte. The record's corpus names the documents that have a document node in the installed (clustered) graph, and states
+// how many the corpus held and how many got no node.
+async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: KnowledgeManifest, extraction: Record<string, unknown>): Promise<Result<IndexStepResult>> {
   const { staging, head, row } = ctx;
 
   const code = deps.graph.readGraph(join(staging, CODE_GRAPH_PATH));
@@ -237,10 +237,11 @@ async function mergeAndInstall(deps: AppDeps, ctx: IndexStepContext, manifest: K
       nodes: { document: 0, ...summary.nodesByFileType },
       edges: summary.edgesByConfidence,
       knowledge: {
-        corpus: corpusSummary(coveredPaths),
+        corpus: corpusSummary(rechecked.coverage.covered),
         documentsCommit: `git:${head}`,
+        documentsExpected: rechecked.coverage.expected,
         documentNodes: stats.documentNodes,
-        dropped: { dangling: stats.dropped.dangling, astDocument: stats.dropped.astDocument },
+        dropped: { dangling: stats.dropped.dangling, astDocument: stats.dropped.astDocument, unread: rechecked.coverage.unread.length },
       },
     },
   });

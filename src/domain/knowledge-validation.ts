@@ -14,9 +14,21 @@ export const KNOWLEDGE_LIMITS = {
   nodeTextBytes: 2048,
   // Dropped dangling edges over the edges the pass produced.
   danglingShare: 0.1,
+  // At least this share of the manifest's documents must have a document node of the pass (plan 01-25, G-01-154; the 'at least half' of owner decision B, measured per document).
+  documentShare: 0.5,
 } as const;
 
-export type KnowledgeValidation = { valid: true; summary: GraphSummary } | { valid: false; problems: string[] };
+// Which documents of the manifest the merged graph covers: a document is covered when some node of the pass cites it.
+export interface DocumentCoverage {
+  // The manifest's document count.
+  expected: number;
+  // Source paths with a document node of the pass, sorted.
+  covered: string[];
+  // The other source paths, sorted.
+  unread: string[];
+}
+
+export type KnowledgeValidation = { valid: true; summary: GraphSummary; coverage: DocumentCoverage } | { valid: false; problems: string[] };
 
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
 const MAX_PROBLEMS = 25;
@@ -52,6 +64,20 @@ const forbiddenSource = (path: string): boolean => path.startsWith('.planning/ph
 const PHASE_DOCUMENT = /\.(?:md|mdx|markdown|txt|rst|adoc)$/i;
 const forbiddenForAnyNode = (path: string): boolean => path === '.planning/STATE.md' || (path.startsWith('.planning/phases/') && PHASE_DOCUMENT.test(path));
 
+// Per-document coverage of the merged graph against the manifest (G-01-154). A document counts when a node with the pass's origin,
+// `file_type` document and a `source_file` equal to its source path exists: the merge has already rewritten `source_file` through the
+// manifest, and a node that lost an ID collision was never added. A concept node, a code-graph node or a node citing another file covers
+// nothing. What a chunk file looked like plays no part: only the merged graph is judged.
+export function documentCoverage(merged: unknown, manifest: KnowledgeManifest): DocumentCoverage {
+  const nodes = isObject(merged) && Array.isArray(merged['nodes']) ? (merged['nodes'] as unknown[]) : [];
+  const cited = new Set<string>();
+  for (const node of nodes) {
+    if (isObject(node) && node['_avarice_origin'] === KNOWLEDGE_ORIGIN && node['file_type'] === 'document' && typeof node['source_file'] === 'string') cited.add(node['source_file']);
+  }
+  const paths = [...new Set(manifest.entries.map((e) => e.sourcePath))].sort();
+  return { expected: manifest.entries.length, covered: paths.filter((p) => cited.has(p)), unread: paths.filter((p) => !cited.has(p)) };
+}
+
 export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManifest, stats: MergeStats): KnowledgeValidation {
   if (!isObject(merged)) return { valid: false, problems: ['the merged graph is not a JSON object'] };
   const nodes = merged['nodes'];
@@ -86,6 +112,10 @@ export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManif
     if (bytes > KNOWLEDGE_LIMITS.nodeTextBytes) problems.push(`node ${id}: text is ${bytes} bytes, above the ${KNOWLEDGE_LIMITS.nodeTextBytes} limit`);
   });
   if (documentIds.size === 0) problems.push('the pass added no document node');
+  const coverage = documentCoverage(merged, manifest);
+  if (coverage.expected > 0 && coverage.covered.length / coverage.expected < KNOWLEDGE_LIMITS.documentShare - 1e-9) {
+    problems.push(`${coverage.covered.length} of ${coverage.expected} corpus documents have a document node, below the ${Math.round(KNOWLEDGE_LIMITS.documentShare * 100)}% limit (${coverage.unread.length} unread)`);
+  }
 
   const bad: string[] = [];
   let badCount = 0;
@@ -118,5 +148,5 @@ export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManif
     if (problems.length > shown.length) shown.push(`and ${problems.length - shown.length} more`);
     return { valid: false, problems: shown };
   }
-  return { valid: true, summary: summarizeGraph(merged) };
+  return { valid: true, summary: summarizeGraph(merged), coverage };
 }
