@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
-stopped_at: Completed 01-25-PLAN.md
-last_updated: "2026-11-05T01:38:41.643Z"
-last_activity: 2026-11-04
-last_activity_desc: Phase 01 execution started
-state_head: 72036a02250d9eb8430e53636248cd6c3e12dffd
+stopped_at: Completed 01-26-PLAN.md
+last_updated: "2026-11-05T01:50:27.453Z"
+last_activity: 2026-11-05
+last_activity_desc: Completed 01-26-PLAN.md
+state_head: ceeb101936bf9e515a057e2b4bd26310b96fe07c
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-04)
 ## Current Position
 
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
-Plan: 2 of 26
-Status: Ready to execute
-Last activity: 2026-11-04 — Phase 01 execution started
+Plan: 26 of 26
+Status: Phase 01 plans complete — ready for verification
+Last activity: 2026-11-05 — Completed 01-26-PLAN.md (live unread gate, production-path proof, docs contract; G-01-154)
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -82,6 +82,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P23 | 11 min | 2 tasks | 5 files |
 | Phase 01 P24 | 15 min | 2 tasks | 8 files |
 | Phase 01 P25 | 45 min | 2 tasks | 11 files |
+| Phase 01 P26 | 10 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 261104-l3t: shell grep dropped from READ_ONLY_COMMANDS (denied shell-not-allowed in every spelling); searches go through the Grep tool; bfs `find -rm` denied
 - [Phase 01]: 01-25: knowledge coverage is judged per manifest document on the merged graph; below half (KNOWLEDGE_LIMITS.documentShare 0.5) is validation-failed, otherwise the record states documentsExpected and dropped.unread
 - [Phase 01]: 01-25: .chunks.json carries absolute readPath and writePath (corpus root = knowledge invocation cwd); AssembledExtraction.usedFiles removed so coverage is never derived from chunk shape
+- [Phase 01]: Plan 01-26: the live gate checks zero unread documents (stricter than the stage's at-least-half admission share), and an absent documentsExpected or dropped.unread stays null so a pre-01-25 record fails
 
 ### Pending Todos
 
@@ -211,6 +213,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T01:38:41.531Z
-Stopped at: Completed 01-25-PLAN.md
+Last session: 2026-11-05T01:50:27.336Z
+Stopped at: Completed 01-26-PLAN.md
 Resume file: None
