@@ -336,6 +336,67 @@ describe('Bash command identity', () => {
   });
 });
 
+describe('gsd_run arguments (WR-06)', () => {
+  const gsd = (line: string, p: HookPolicy = policy()) => {
+    const d = decide(shell(`${PREAMBLE}\n${line}`), p);
+    return [d.decision, d.rule];
+  };
+  const intel = () => policy({ purpose: 'intel', writeRoots: [`${STAGING}/.planning/intel`] }, { gsdReadVerbs: [...GSD_READ_VERBS.intel] });
+
+  it('keeps admitting the GSD read flows', () => {
+    for (const line of [
+      'gsd_run graphify status',
+      'gsd_run query init.map-codebase --raw',
+      'gsd_run runtime-identity --raw',
+      'gsd_run intel status | head -5',
+      'gsd_run query agent-skills gsd-codebase-mapper',
+      'gsd_run intel query auth',
+      'gsd_run graphify query "auth service" --budget 1500',
+      'gsd_run graphify query auth --budget=1500',
+      'INIT=$(gsd_run query init.map-codebase)\nif [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi',
+    ]) {
+      assert.deepEqual(gsd(line), ['allow', 'shell-identity'], line);
+    }
+  });
+
+  it('applies the read check to every word after the verb', () => {
+    assert.deepEqual(gsd('gsd_run intel query ../../../etc/passwd'), ['deny', 'outside-read-set']);
+    assert.deepEqual(gsd('gsd_run graphify query /etc/hosts'), ['deny', 'outside-read-set']);
+    assert.deepEqual(gsd('gsd_run graphify query auth --budget ../../x'), ['deny', 'outside-read-set']);
+    assert.deepEqual(gsd('gsd_run intel query /home/u/repo/src/a.ts'), ['deny', 'deny-read']);
+    assert.deepEqual(gsd('gsd_run graphify query .env'), ['deny', 'deny-secret-read']);
+  });
+
+  it('refuses every option off the per-verb allow-list', () => {
+    for (const line of [
+      'gsd_run graphify query auth --cwd /home/u/repo',
+      'gsd_run graphify query auth --cwd=/',
+      'gsd_run state json --project-dir /tmp/x',
+      'gsd_run roadmap analyze --ws=other',
+      'gsd_run query init.map-codebase --pick x',
+      'gsd_run intel query auth --budget 5',
+      'gsd_run graphify query auth --budget',
+      'gsd_run intel query -x',
+      'gsd_run intel query -- x',
+      'INIT=$(gsd_run query init.map-codebase --cwd /)',
+    ]) {
+      assert.deepEqual(gsd(line), ['deny', 'shell-gsd-option'], line);
+    }
+  });
+
+  it('refuses an unquoted glob in a gsd_run segment', () => {
+    assert.deepEqual(gsd('gsd_run intel query *'), ['deny', 'shell-syntax']);
+  });
+
+  it('holds the operand of intel patch-meta to the write set', () => {
+    assert.deepEqual(gsd('gsd_run intel patch-meta .planning/intel/stack.json', intel()), ['allow', 'shell-identity']);
+    assert.deepEqual(gsd('gsd_run intel validate', intel()), ['allow', 'shell-identity']);
+    assert.deepEqual(gsd('gsd_run intel snapshot', intel()), ['allow', 'shell-identity']);
+    assert.deepEqual(gsd('gsd_run intel patch-meta .planning/codebase/STACK.md', intel()), ['deny', 'outside-write-set']);
+    assert.deepEqual(gsd('gsd_run intel patch-meta /home/u/repo/x.json', intel()), ['deny', 'deny-read']);
+  });
+});
+
 // CR-02 / gap P-3: every word a read command names is a path candidate, whether it is an operand, an attached option
 // value (`-OPATH`, `--name=PATH`) or a word after a bare `--`.
 describe('shell option values and operands after -- (CR-02, D-GAP-01)', () => {
