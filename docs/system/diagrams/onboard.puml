@@ -1,0 +1,133 @@
+@startuml
+title Onboard a brownfield repository
+
+actor Operator
+participant "avarice CLI" as CLI
+database Ledger
+participant "Staging clone" as Staging
+participant "GSD tools" as GSD
+participant "Claude Code host" as Host
+participant "PreToolUse hook" as Hook
+participant graphify
+
+== Registration and preflight ==
+Operator -> CLI : onboard (policy onboarding) REPO
+CLI -> CLI : check flags, open ledger, locate GSD and graphify
+CLI -> CLI : choose host (contained only if GSD admitted, claude found,\nhook and sandbox ready, version admitted; otherwise refusing host)
+CLI -> Ledger : read project history for this repository
+alt active record, or another onboarding past its first state
+  CLI --> Operator : refused (exit 3)
+else registration allowed
+  CLI -> Ledger : register project, create onboarding (discovered), pin HEAD
+  note right of CLI : an onboarding still at its first state\nis continued, not duplicated
+end
+CLI -> Ledger : take lease (fence raised)
+
+== Contract ==
+CLI -> GSD : check admitted version
+alt GSD missing or out of range
+  CLI -> Ledger : incompatible
+  CLI --> Operator : stopped (exit 3)
+else admitted
+  CLI -> Ledger : store contract and five budget rows
+  CLI -> Ledger : contract proposed
+end
+
+== Staging and GSD configuration ==
+CLI -> Staging : clone at pin (no hardlinks, no checkout, own git directory)
+CLI -> GSD : probe repository, decide mapping mode
+CLI -> GSD : configure (commits off, text mode, intel on, graph on)
+alt host does not report enforced
+  note right of CLI : the clone and GSD settings already exist
+  CLI -> Ledger : blocked (enforcement failure)
+  CLI --> Operator : stopped (exit 3)
+else enforced
+  CLI -> Ledger : mapping
+end
+
+== Contained map invocation ==
+alt mode skip (not brownfield)
+  CLI -> Ledger : validating (no invocation)
+else full or fast
+  CLI -> Ledger : reserve one invocation, wall clock share, cost cap
+  alt any budget spent
+    CLI -> Ledger : blocked (budget exhausted)
+  else granted
+    CLI -> Ledger : launch recorded as started with session ID
+    CLI -> Staging : create the map directory
+    CLI -> Host : launch (five generated inputs, launch checks passed,\ndetached process group, wall clock enforced)
+    alt a launch check refused before spawn
+      Host --> CLI : denied (enforcement failure)
+      CLI -> Ledger : settle unit, blocked (enforcement failure)
+    else running
+      loop each tool call
+        Host -> Hook : tool call
+        Hook -> Ledger : decide, charge tool calls or subagents, record decision
+        alt allowed
+          Hook --> Host : allow (silent, host rules apply)
+          Host -> Staging : read or write map files
+        else denied (outside scope, or budget spent)
+          Hook --> Host : deny
+        end
+      end
+      Host --> CLI : final result and exit
+      CLI -> Ledger : settle unit, wall clock, cost; store redacted transcript
+      CLI -> CLI : classify ending from measured facts\n(a hook deny for a spent budget overrides the host outcome)
+      opt progressed, no progress or inconclusive
+        CLI -> GSD : stamp the map (full or fast)
+      end
+      alt progressed or inconclusive
+        CLI -> Ledger : validating
+      else budget exhausted
+        CLI -> Ledger : blocked (budget exhausted)
+      else denied, failed or no progress
+        CLI -> Ledger : blocked (decision)
+      end
+    end
+  end
+end
+
+== Validation ==
+CLI -> Staging : read map files, diff against pin
+CLI -> CLI : seven checks
+alt accepted
+  CLI -> Ledger : planning ready
+else secret found
+  CLI -> Ledger : blocked (decision)
+else other failure
+  CLI -> Ledger : validation failed
+  alt first rejection
+    CLI -> Ledger : back to mapping (one more round)
+  else second rejection
+    CLI -> Ledger : blocked (decision)
+  end
+end
+
+== Index steps (a failed step is recorded absent, never blocks) ==
+CLI -> graphify : extract code, then cluster (sandboxed, run by AVARICE)
+CLI -> GSD : snapshot and status of the graph
+CLI -> Ledger : code graph result
+CLI -> Host : intel invocation (same hook and budgets)
+Host -> Hook : tool calls
+CLI -> GSD : validate, snapshot, diff intel files
+CLI -> Ledger : intel result
+CLI -> Staging : copy knowledge corpus, write chunk plan
+CLI -> Host : knowledge invocation (read and write only, no shell)
+Host -> Hook : tool calls
+CLI -> CLI : assemble chunks, merge into code graph, validate
+CLI -> graphify : cluster merged graph (sandboxed, run by AVARICE)
+CLI -> Ledger : knowledge result
+note over graphify, Host : graphify is never started by the host
+
+== Activation ==
+CLI -> Staging : recheck whole diff against write sets
+alt writes outside every write set
+  CLI -> Ledger : blocked (enforcement failure)
+  CLI --> Operator : stopped (exit 3)
+else clean
+  CLI -> Ledger : store map documents and manifest
+  CLI -> Ledger : insert project record and move to active (one transaction)
+  CLI -> Ledger : release lease
+  CLI --> Operator : active (exit 0)
+end
+@enduml

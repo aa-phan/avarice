@@ -1,6 +1,6 @@
 # Contracts and state
 
-This document defines, for AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment), the ports, the error and capability model, the run state machine, the persisted schema and the configuration format. Everything here is a **proposal**: the TypeScript and SQL are interface sketches. Requirements are cited by ID from [requirements.md](requirements.md); module ownership comes from [architecture.md](architecture.md#modules).
+This document defines, for AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment), the ports, the error and capability model, the run state machine, the persisted schema and the configuration format. Everything here is a **proposal**: the TypeScript and SQL are interface sketches. The onboarding of one existing repository is built; the store and contracts as built are described in [docs/system/data-model.md](system/data-model.md), and the differences are listed in [docs/system/findings.md](system/findings.md). Requirements are cited by ID from [requirements.md](requirements.md); module ownership comes from [architecture.md](architecture.md#modules).
 
 ## Shared conventions
 

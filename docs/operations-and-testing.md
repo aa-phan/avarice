@@ -1,6 +1,6 @@
 # Operations and testing
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which follows the code where the two differ, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 In AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment), diagnostics, recovery and evidence all work from the local store, without a model and without a dashboard. Every critical operation has a timeout, a cancellation rule and a retry rule, and every ambiguous external effect goes through reconciliation before any retry. The targets below are proposals with a measurement method; none has been measured.
 

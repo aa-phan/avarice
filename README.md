@@ -2,7 +2,7 @@
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a proposed local-first service layer around GSD for agentic software development. You give it a brief and a policy preset, and it compiles a run contract. It runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets. Consequential questions become decision records. Evidence gates bound to the exact revision check the result, and the run ends with a reviewable change or a short list of blocking decisions. GSD keeps planning and execution inside each unit. AVARICE adds what GSD does not cover: the contract, containment, budgets, decision routing, integrity gates, evidence, profile isolation and diagnostics.
 
-This repository holds a specification package. No code exists yet; every interface, limit and configuration sample in it is a proposal.
+This repository holds a specification package and the first built slice: `avarice` onboards one existing repository to an active project record (commands `init`, `repo add`, `onboard`, `status`, `resume`, `context`). The specification documents remain proposals. What is built is described, against the code, in [docs/system/](docs/system/README.md); start there to use or change the code.
 
 ## Recommendation
 
@@ -41,6 +41,7 @@ $ avarice status run_01JC8
 
 | Document | Purpose |
 |---|---|
+| [docs/system/](docs/system/README.md) | The built system as it is: CLI and configuration reference, onboarding, containment, indexes, data model, integrations, end-to-end processes, findings for the owner |
 | [docs/requirements.md](docs/requirements.md) | Use cases, non-goals, every requirement ID, acceptance criteria, assumptions |
 | [docs/existing-tooling-assessment.md](docs/existing-tooling-assessment.md) | Verified inventory, GSD ownership, GSD autonomy and Claude Code enforcement surfaces, reuse and gap matrix |
 | [docs/architecture.md](docs/architecture.md) | Context, process view, modules, dependency direction, trust boundaries, source-of-truth ownership |

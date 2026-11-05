@@ -1,6 +1,6 @@
 # Containment
 
-> Status: proposal. Nothing described in this document is built yet; present tense describes the proposed design.
+> Status: proposal. Present tense describes the proposed design. The onboarding of one existing repository is built; its behavior as built is described in [docs/system/](system/README.md), which follows the code where the two differ, and the differences are listed in [docs/system/findings.md](system/findings.md).
 
 AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) limits a run's impact radius with four layers that fail independently. An OS sandbox surrounds every shell command, host permission rules and a fail-closed PreToolUse hook check every tool call, scoped credentials and network allowlists guard resource boundaries, and budgets live inside AVARICE's own adapters. Post-run diffs and checks detect what slipped through; they are labeled as detection. Requirements CON-1 to CON-16 and RC-5 are owned by [requirements.md](requirements.md#containment); the run contract that supplies every limit is defined in [contracts-and-state.md](contracts-and-state.md#run-contract).
 

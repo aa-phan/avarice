@@ -1,0 +1,74 @@
+@startuml
+title Resume after a kill during the map invocation
+
+actor Operator
+participant "avarice CLI" as CLI
+database Ledger
+participant "Staging clone" as Staging
+participant "GSD tools" as GSD
+participant "Claude Code host" as Host
+participant "PreToolUse hook" as Hook
+participant graphify
+
+== Before the kill ==
+CLI -> Ledger : reserve invocation, launch recorded as started with session ID
+CLI -> Host : launch (detached process group)
+Host -> Hook : tool calls
+Hook -> Ledger : charge tool calls and subagents
+Host -> Staging : write map files
+Operator ->x CLI : kill (no cleanup)
+note over Ledger : launch row stays started,\none invocation unit stays reserved,\nlease stays recorded until it expires
+note over Host, Hook : host keeps running and the hook keeps charging\nthe run's tool-call budget
+
+== Resume ==
+Operator -> CLI : resume ONBOARDING_ID
+CLI -> Ledger : read onboarding
+alt already in a stop state
+  CLI --> Operator : report state, no lease taken
+else not stopped
+  CLI -> Ledger : take lease
+  alt lease still live (up to 180 s after last renewal)
+    CLI --> Operator : refused, lease held (exit 3); nothing is reaped
+  else lease expired
+    Ledger --> CLI : takeover, fence raised
+  end
+end
+
+== Reap by session ID ==
+CLI -> Ledger : read launch rows left started
+CLI -> Host : find process by session ID, terminate its group, kill after grace
+alt process survives, or search fails
+  CLI --> Operator : failed (exit 70), rows stay started, no stage runs
+else ended or none found
+  CLI -> Ledger : warning event if a process was ended
+  note right of CLI : a host without a reap capability\nskips this step silently
+end
+
+== Reconcile the map invocation ==
+CLI -> Ledger : mapping to paused
+CLI -> Ledger : count launches and validations
+CLI -> Staging : read required map files
+alt more launches than validations and every required file present
+  CLI -> Ledger : launch row reconciled, reconciled event
+  CLI -> GSD : stamp the map (full or fast)
+  CLI -> Ledger : validating (no second launch)
+  note over CLI, Ledger : the dead reservation is charged\nat the next reservation (the intel invocation)
+else files incomplete
+  CLI -> Ledger : launch row interrupted, back to mapping
+  CLI -> Ledger : reserve again: dead reservation charged as spent\nat its cost cap (no wall clock), warning event
+  alt any budget spent
+    CLI -> Ledger : blocked (budget exhausted)
+    CLI --> Operator : stopped (exit 3)
+  else granted
+    CLI -> Ledger : new launch recorded with new session ID
+    CLI -> Host : launch again
+    Host -> Hook : tool calls
+    Hook -> Ledger : charge from the same run budget (earlier charges kept)
+    Host --> CLI : final result
+    CLI -> Ledger : settle, classify, stamp, transition as in the onboard flow
+  end
+end
+
+ref over CLI, Ledger : continue as in the onboard flow from validation to activation
+note over graphify : not involved until the index steps
+@enduml
