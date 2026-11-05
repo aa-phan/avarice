@@ -1,6 +1,6 @@
 // Shared invocation preparation and completion for every purpose that runs the contained host (map, and later intel
-// and knowledge). prepareInvocation reserves the invocation's budget, computes the vendor-neutral scope from the
-// stored contract, the staging layout and GSD's read roots, picks the session ID, and records step `launch:{purpose}`
+// and knowledge). prepareInvocation computes the vendor-neutral scope from the stored contract, the staging layout and
+// GSD's read roots, reserves the invocation's budget, picks the session ID, and records step `launch:{purpose}`
 // (status `started`, with the invocation and session IDs) before the request is returned, so a supervisor killed
 // during the run leaves the ID a resume needs to find the process. completeInvocation settles the budget and
 // records what the host reported: the step, the transcript artifact and the `invocation.finished` event.
