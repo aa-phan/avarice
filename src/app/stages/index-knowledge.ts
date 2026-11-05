@@ -187,7 +187,11 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
 
   // 5. AVARICE reads back what the model wrote and assembles it. No chunk file at all is `no-output`; files that are not usable, or
   // fewer usable chunks than half the plan, are `validation-failed`; otherwise the usable chunks go on. A usable chunk says nothing
-  // about coverage: that is judged on the merged graph, per document (validateKnowledgeGraph).
+  // about coverage: that is judged on the merged graph, per document (validateKnowledgeGraph), and that is the authority on whether the
+  // pass covered enough. The half-the-plan chunk gate below is deliberately kept as a coarser early exit, not a second coverage rule: it
+  // stops a pass whose output is mostly unusable before the merge and graphify's cluster run are paid for, and it is the only place
+  // that can say why chunks were skipped (the merged graph knows nothing of chunk files). Passing it proves nothing; the per-document
+  // check still runs on what passes. docs/repository-onboarding.md states both outcomes.
   const files = deps.graph.readExtractionFiles(staging, plan);
   if (!files.ok) return absent('validation-failed', describeError(files.error));
   const assembled = assembleExtraction(plan, files.value);
