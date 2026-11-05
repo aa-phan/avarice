@@ -42,6 +42,14 @@ export interface FakeRunOptions {
   verificationExtra?: readonly string[];
   // The host refuses to run the unit at all and returns this error kind (no sandbox, a failed launch self-test, an internal fault).
   refuse?: 'unavailable' | 'internal';
+  // Test-file options (plan 02-14, AUT-9). `deleteTest` removes `test('<name>', ...)` from the file, `addSkip` turns it into `test.skip(...)`, `addTest`
+  // appends a new test (body defaults to a slugify assertion), `editPackageJson` rewrites the `test` script of package.json directly (a protected path),
+  // `addOverride` writes `overrides_applied: 1` into the VERIFICATION.
+  deleteTest?: { file: string; name: string };
+  addSkip?: { file: string; name: string };
+  addTest?: { file: string; name: string; body?: string };
+  editPackageJson?: boolean;
+  addOverride?: boolean;
   // Where to write {prompt, cwd, invocationId} (the supervisor is another process).
   recordTo?: string;
   // Quick directory name; default `261105-fk1-fix`.
@@ -134,6 +142,25 @@ export class FakeRunHost implements AgentHost {
     };
 
     const edits: Record<string, string> = { ...(o.edits ?? {}) };
+    // The content a file will have once the edits so far are in, for the test-file options below.
+    const current = (rel: string): string => edits[rel] ?? readFileSync(join(cwd, rel), 'utf8');
+    if (o.deleteTest !== undefined) {
+      // Removes `test('<name>', ...)` through its closing `});` line.
+      const lines = current(o.deleteTest.file).split('\n');
+      const start = lines.findIndex((line) => line.includes(`test('${o.deleteTest?.name}'`));
+      const end = lines.findIndex((line, index) => index > start && line === '});');
+      if (start === -1 || end === -1) throw new Error(`the fake host found no test ${o.deleteTest.name} in ${o.deleteTest.file}`);
+      lines.splice(start, end - start + 1);
+      edits[o.deleteTest.file] = lines.join('\n');
+    }
+    if (o.addSkip !== undefined) {
+      const text = current(o.addSkip.file);
+      if (!text.includes(`test('${o.addSkip.name}'`)) throw new Error(`the fake host found no test ${o.addSkip.name} in ${o.addSkip.file}`);
+      edits[o.addSkip.file] = text.replace(`test('${o.addSkip.name}'`, `test.skip('${o.addSkip.name}'`);
+    }
+    if (o.addTest !== undefined) {
+      edits[o.addTest.file] = `${current(o.addTest.file).replace(/\n*$/, '\n')}\ntest('${o.addTest.name}', () => {\n  ${o.addTest.body ?? "assert.equal(slugify('a--b'), 'a-b');"}\n});\n`;
+    }
     if (o.brokenFix === true) {
       const original = readFileSync(join(cwd, 'src/slug.ts'), 'utf8');
       edits['src/slug.ts'] = `${original}// attempted fix\n`;
@@ -153,7 +180,8 @@ export class FakeRunHost implements AgentHost {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
       const status = o.verification ?? 'passed';
       if (status !== 'none') {
-        const text = ['---', `status: ${status}`, ...(o.verificationExtra ?? []), '---', '', '# Verification', ''].join('\n');
+        const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
+        const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
         tool('Write', { file_path: join(cwd, `${base}/${quick}-VERIFICATION.md`), content: text }, () => write(`${base}/${quick}-VERIFICATION.md`, text));
       }
     }
@@ -165,6 +193,13 @@ export class FakeRunHost implements AgentHost {
       execFileSync('git', ['-c', 'user.name=Bypass', '-c', 'user.email=bypass@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-q', '-m', 'bypass'], { cwd });
     }
     for (const [rel, text] of Object.entries(o.strayWrite ?? {})) write(rel, text);
+    // A package.json script edit made behind the hook's back (the hook denies a protected path, so the change must come as a sandbox gap would
+    // let it): G2 sees a changed protected path.
+    if (o.editPackageJson === true) {
+      const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+      manifest.scripts['test'] = 'node --test --test-name-pattern=nothing test/';
+      write('package.json', `${JSON.stringify(manifest, null, 2)}\n`);
+    }
 
     const headAfter = gitHead(cwd);
     return ok({

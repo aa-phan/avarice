@@ -10,18 +10,23 @@
 //    `preExisting` in its environment, never turned into another status (D-12).
 //  - installDependencies: the conventions' install command, in the clone, with network only to an allowlisting proxy on loopback whose
 //    allowlist is the registry hosts on 443 (D-11). Agent invocations never get the proxy.
+//  - measureInventory: the test inventory (the list command's IDs, skip and focus markers, the test file count), measured by AVARICE after
+//    an invocation has ended, never from what the model said (AUT-9).
 import { mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { checkSpecDigest } from '../domain/conventions.ts';
 import type { CheckSpec } from '../domain/conventions.ts';
-import { sha256Hex } from '../domain/digest.ts';
+import { digestOf, sha256Hex } from '../domain/digest.ts';
 import { evidenceStatusOf, revisionOf } from '../domain/evidence.ts';
 import type { CheckOutcome, CommandResultStatus, EvidenceStatus } from '../domain/evidence.ts';
+import { matchesAny } from '../domain/glob.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { RunBlockedReason } from '../domain/run-lifecycle.ts';
+import { scanMarkers } from '../domain/test-inventory.ts';
+import type { InventorySnapshot } from '../domain/test-inventory.ts';
 import type { RunRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 
@@ -379,3 +384,135 @@ export async function installDependencies(deps: AppDeps, run: RunRow, contract: 
   }
 }
 
+
+// ---- the test inventory (AUT-9) ------------------------------------------------------------------------------------------------
+
+const MAX_TEST_IDS = 50_000;
+const MAX_ID_CHARS = 500;
+const MAX_TEST_FILES = 20_000;
+const TEST_FILE_MAX_BYTES = 4 * 1024 * 1024;
+
+export interface InventoryMeasure {
+  evidenceId: string;
+  status: EvidenceStatus;
+  snapshot: InventorySnapshot;
+}
+
+// Measures the inventory of the clone `cwd` and records it: an artifact `test-inventory` with the full ID list and one evidence row of kind
+// `test-inventory` (count, idsDigest, markers per file). Null when the conventions declare no inventory. A list command that cannot run or
+// fails is recorded as `unavailable` or `failed` with an empty ID list, which can only make the comparison stricter.
+export async function measureInventory(deps: AppDeps, run: RunRow, contract: RunContract, cwd: string, options: { phase: 'base' | 'item'; attemptId: string; itemId?: string; contractVersion: number }): Promise<Result<InventoryMeasure | null>> {
+  const spec = contract.verification.testInventory;
+  if (spec === null) return ok(null);
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const root = canonical(cwd);
+  const where = cloneRevision(deps, root);
+  if (!where.ok) return where;
+  const sandbox = sandboxSetup(deps, run);
+  if (!sandbox.ok) return sandbox;
+
+  let status: EvidenceStatus = 'passed';
+  let exitCode: number | undefined;
+  let durationMs = 0;
+  let ids: string[] = [];
+  if (spec.argv !== undefined) {
+    const ran = await deps.executor.run({
+      argv: spec.argv,
+      cwd: root,
+      env: sandbox.value.env,
+      timeoutMs: 120_000,
+      invocationId: deps.ids.next('inv_'),
+      writePaths: [sandbox.value.scratch],
+      denyReadPaths: sandbox.value.denyReadPaths,
+    });
+    if (ran.ok) {
+      status = evidenceStatusOf(ran.value.status);
+      exitCode = ran.value.exitCode ?? undefined;
+      durationMs = ran.value.durationMs;
+      if (ran.value.status === 'passed') {
+        ids = ran.value.stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line !== '')
+          .slice(0, MAX_TEST_IDS)
+          .map((line) => line.slice(0, MAX_ID_CHARS));
+      }
+    } else if (ran.error.kind === 'unavailable') {
+      status = 'unavailable';
+    } else {
+      return ran;
+    }
+  }
+
+  const listed = workspace.listFiles(root);
+  if (!listed.ok) return listed;
+  const markers: Record<string, number> = {};
+  let fileCount = 0;
+  for (const path of listed.value.filter((p) => matchesAny(p, spec.globs)).slice(0, MAX_TEST_FILES)) {
+    const text = workspace.readText(root, path, TEST_FILE_MAX_BYTES);
+    // A file that is gone (a deleted tracked file) is not counted; one too large to read is counted and its markers are unknown.
+    if (text.ok && text.value === null) continue;
+    fileCount += 1;
+    if (text.ok && text.value !== null) {
+      const hits = scanMarkers(path, text.value).length;
+      if (hits > 0) markers[path] = hits;
+    }
+  }
+
+  const sortedIds = [...ids].sort();
+  const idsDigest = digestOf(sortedIds);
+  const stored = deps.artifacts.put(new TextEncoder().encode(JSON.stringify({ ids: sortedIds })), { kind: INVENTORY_KIND, runId: run.runId });
+  if (!stored.ok) return stored;
+  const recorded = deps.ledger.recordArtifact({ digest: stored.value.digest, size: stored.value.size, kind: INVENTORY_KIND, runId: run.runId, retention: RUN_RETENTION, store: STORE, nowMs: deps.clock.nowMs() });
+  if (!recorded.ok) return recorded;
+  const label = PHASE_LABEL[options.phase];
+  const evidence = deps.ledger.recordEvidence({
+    attemptId: options.attemptId,
+    ...(options.itemId !== undefined ? { workItem: options.itemId } : {}),
+    kind: 'test-inventory',
+    name: 'test-inventory',
+    status,
+    revision: where.value.revision,
+    clean: where.value.clean,
+    treeDigest: where.value.treeDigest,
+    environment: { kind: contract.execution.environment, sandbox: 'seatbelt', label, phase: options.phase },
+    contractVersion: options.contractVersion,
+    policyRevision: contract.policyRevision,
+    independence: 'deterministic',
+    acceptance: [],
+    tests: { count: sortedIds.length, idsDigest, markers, fileCount },
+    ...(spec.argv !== undefined ? { command: spec.argv } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    durationMs,
+    artifactDigest: stored.value.digest,
+    nowMs: deps.clock.nowMs(),
+  });
+  if (!evidence.ok) return evidence;
+  return ok({ evidenceId: evidence.value.evidenceId, status, snapshot: { ids: sortedIds, markers, fileCount } });
+}
+
+// The inventory recorded at a phase, rebuilt from its evidence row and artifact; null when the conventions declare none or none was recorded.
+// The latest row of the phase counts.
+export function recordedInventory(deps: AppDeps, runId: string, phase: 'base' | 'item'): Result<InventoryMeasure | null> {
+  const evidence = deps.ledger.listEvidence(runId);
+  if (!evidence.ok) return evidence;
+  const row = [...evidence.value].reverse().find((e) => e.kind === 'test-inventory' && e.environment['label'] === PHASE_LABEL[phase]);
+  if (row === undefined) return ok(null);
+  if (row.artifactDigest === null || row.artifactDigest === undefined) return err({ kind: 'internal', cause: `the ${phase} test inventory ${row.evidenceId} has no artifact` });
+  const bytes = deps.artifacts.get(row.artifactDigest);
+  if (!bytes.ok) return bytes;
+  let ids: string[] = [];
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(bytes.value)) as { ids?: unknown };
+    ids = Array.isArray(parsed.ids) ? parsed.ids.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return err({ kind: 'internal', cause: `the ${phase} test inventory artifact of ${row.evidenceId} is not readable` });
+  }
+  const tests = (typeof row.tests === 'object' && row.tests !== null ? row.tests : {}) as { markers?: unknown; fileCount?: unknown };
+  const markers: Record<string, number> = {};
+  if (typeof tests.markers === 'object' && tests.markers !== null) {
+    for (const [path, count] of Object.entries(tests.markers)) if (typeof count === 'number') markers[path] = count;
+  }
+  return ok({ evidenceId: row.evidenceId, status: row.status, snapshot: { ids, markers, fileCount: typeof tests.fileCount === 'number' ? tests.fileCount : 0 } });
+}

@@ -1,0 +1,22 @@
+{
+  "command": "node --test test/integration/run-gates.test.ts",
+  "ranAgainst": "the Task 2 commit d6c4fc3 (git archive extracted to /tmp/avarice-14/base3) plus the new test file and the run-fixtures and fake-run-host helpers",
+  "exitCode": 1,
+  "reason": "at the Task 2 commit G2 is given an empty inventory and nothing measures one: no base or after test-inventory evidence row exists, a deleted test or a new skip marker passes G2, `test:<text>` acceptance has no passed IDs to match so it never maps, and no `diff:<path> unchanged` evidence is recorded",
+  "failingFiles": ["test/integration/run-gates.test.ts"],
+  "failingTests": [
+    "records a base test-inventory evidence row: passed, with the count, the digest and an artifact of the IDs",
+    "measures the inventory after the unit only once the invocation has ended (its evidence event follows invocation.finished)",
+    "a deleted test case (its ID disappears): G2 test-inventory removed-test, blocked (decision), class acceptance",
+    "a `.skip(` added to an existing test: G2 test-inventory new-skip-marker",
+    "`test:collapses dashes` is satisfied by a new test of that name in the after-inventory, with the test check passed: ready_for_review",
+    "`diff:test/slug.test.ts unchanged` is a passed diff evidence row when the unit left the file alone: ready_for_review",
+    "the same criterion fails G4 acceptance-mapped when the unit edited that file"
+  ],
+  "passingAtBase": [
+    "an edit of package.json: G2 scope-conformance already holds from plan 02-13 (package.json is a protected glob of the routine preset); pinned here",
+    "a new VERIFICATION override: G2 no-new-overrides already holds from plan 02-13; pinned here",
+    "`test:no such test` fails G4 acceptance-mapped: at base no `test:` reference can map at all, so the negative case holds trivially; it is the twin of the positive case, which fails"
+  ],
+  "summary": "10 tests, 3 pass, 7 fail at the base"
+}

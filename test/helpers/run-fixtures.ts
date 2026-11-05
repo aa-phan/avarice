@@ -299,6 +299,63 @@ export async function runInProcess(roots: CliRoots, repo: ScratchRepo, briefPath
   }
 }
 
+// A test inventory (plan 02-14, AUT-9): a second, passing test beside the failing one, and a list command that prints one ID per `test('...')`.
+export const LIST_TESTS_SCRIPT = [
+  "import { readdirSync, readFileSync } from 'node:fs';",
+  "for (const file of readdirSync('test').filter((name) => name.endsWith('.test.ts')).sort()) {",
+  "  for (const match of readFileSync(`test/${file}`, 'utf8').matchAll(/test(?:\\.skip)?\\('([^']+)'/g)) console.log(`test/${file} > ${match[1]}`);",
+  '}',
+  '',
+].join('\n');
+
+export const TWO_TESTS = [
+  "import assert from 'node:assert/strict';",
+  "import { test } from 'node:test';",
+  "import { slugify } from '../src/slug.ts';",
+  '',
+  "test('repeated separators collapse to one dash', () => {",
+  "  assert.equal(slugify('Hello,  World!'), 'hello-world');",
+  '});',
+  '',
+  "test('lowercases the title', () => {",
+  "  assert.equal(slugify('ABC'), 'abc');",
+  '});',
+  '',
+].join('\n');
+
+// A repository whose test file has two tests, with the list script committed.
+export function makeRunRepoWithInventory(extra: Readonly<Record<string, string>> = {}): ScratchRepo {
+  return makeRunRepo({ 'test/slug.test.ts': TWO_TESTS, 'scripts/list-tests.mjs': LIST_TESTS_SCRIPT, ...extra });
+}
+
+export const RUN_CONVENTIONS_WITH_INVENTORY = {
+  ...RUN_CONVENTIONS,
+  agentCommands: ['npm test'],
+  testInventory: { argv: ['node', 'scripts/list-tests.mjs'], globs: ['test/**/*.test.ts'] },
+};
+
+// A brief with the given acceptance criteria (each `<text> | verifiedBy: <refs>`), the standard write set and the target check `test`.
+export function briefWithAcceptance(...criteria: readonly string[]): string {
+  return [
+    '---',
+    'title: Collapse repeated dashes in slugs',
+    '---',
+    '## Behavior',
+    'A slug never contains two dashes in a row.',
+    '',
+    '## Acceptance criteria',
+    ...criteria.map((c, i) => `- AC${i + 1}: ${c}`),
+    '',
+    '## Write',
+    '- src/**',
+    '- test/**',
+    '',
+    '## Target checks',
+    '- test',
+    '',
+  ].join('\n');
+}
+
 // The standard brief with its target checks replaced.
 export function briefTargeting(...targets: readonly string[]): string {
   return RUN_BRIEF.replace('## Target checks\n- test\n', `## Target checks\n${targets.map((t) => `- ${t}`).join('\n')}\n`);

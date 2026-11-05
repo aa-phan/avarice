@@ -22,11 +22,13 @@ import { countPruneEntries, parseQuickVerification, quickRecordKind, storedText 
 import type { QuickVerification } from '../../domain/quick-record.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
+import { compareInventories } from '../../domain/test-inventory.ts';
+import type { InventoryFailure } from '../../domain/test-inventory.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
-import { recordedBase, runRequiredChecks } from '../checks.ts';
+import { measureInventory, recordedBase, recordedInventory, runRequiredChecks } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { faultPoint } from '../onboarding-service.ts';
@@ -453,14 +455,27 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
     outcome: typeof c['kind'] === 'string' ? c['kind'] : 'unknown',
     changes: changes.map((x) => ({ path: x.path, status: x.status })),
     globs: { write: contract.files.write, create: contract.files.create, artifacts: contract.files.artifacts, delete: contract.files.delete, protected: contract.files.protected },
-    // Measured when plan 02-14 adds the inventory; a contract that declares none has nothing to compare.
-    inventory: [],
     verification,
     newOverrides: typeof c['overrides'] === 'number' ? c['overrides'] : 0,
     pruneEntries: typeof c['pruneEntries'] === 'number' ? c['pruneEntries'] : 0,
   };
-  let verdict: GateVerdict = evaluateG2({ ...facts, delta: [] });
+  let inventory: InventoryFailure[] = [];
+  let verdict: GateVerdict = evaluateG2({ ...facts, inventory, delta: [] });
   let failingEvidence: string[] = [];
+  if (verdict.passed) {
+    // AUT-9: the inventory after the unit, measured now that the invocation has ended and its process group is gone, against the one measured
+    // at the pin. A contract that declares no inventory has nothing to compare. Only a unit that already passes every other rule has its
+    // repository's list command run.
+    const before = recordedInventory(deps, ctx.runId, 'base');
+    if (!before.ok) return before;
+    const after = await measureInventory(deps, row, contract, unit.clone, { phase: 'item', attemptId, contractVersion: unit.contractVersion, itemId: unit.item.itemId });
+    if (!after.ok) return after;
+    if (after.value !== null) {
+      if (before.value === null) return err({ kind: 'internal', cause: `run ${ctx.runId} declares a test inventory but none was recorded at base` });
+      inventory = compareInventories(before.value.snapshot, after.value.snapshot);
+      verdict = evaluateG2({ ...facts, inventory, delta: [] });
+    }
+  }
   if (verdict.passed) {
     // D-12: the unit is judged against what the checks did at the pin, measured by the baseline action, not against an assumed green base.
     const base = recordedBase(deps, ctx.runId);
@@ -473,7 +488,7 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
       required: contract.verification.requiredChecks,
       targets: contract.verification.targetChecks,
     });
-    verdict = evaluateG2({ ...facts, delta: delta.blocking });
+    verdict = evaluateG2({ ...facts, inventory, delta: delta.blocking });
     const blockingNames = new Set(delta.blocking.map((b) => b.name));
     failingEvidence = ran.value.filter((r) => r.status !== 'passed' && blockingNames.has(r.name)).map((r) => r.evidenceId);
   }

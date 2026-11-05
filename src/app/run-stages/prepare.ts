@@ -13,7 +13,7 @@ import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
 import { blockingOf, validateChecks } from '../check-validation.ts';
-import { installDependencies, runRequiredChecks } from '../checks.ts';
+import { installDependencies, measureInventory, runRequiredChecks } from '../checks.ts';
 import type { InstallResult } from '../checks.ts';
 import type { AppDeps } from '../deps.ts';
 import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
@@ -299,10 +299,25 @@ registerContractReadyAction(
       ...(itemId !== undefined ? { itemId } : {}),
     });
     if (!ran.ok) return ran;
+    // AUT-9: the test inventory at the pin, measured here so the unit's tests are compared with what was there before it touched them.
+    const inventory = await measureInventory(deps, row, contract, workspace.value.path, {
+      phase: 'base',
+      attemptId: attempt.value.attemptId,
+      contractVersion: stored.value?.version ?? 1,
+      ...(itemId !== undefined ? { itemId } : {}),
+    });
+    if (!inventory.ok) return inventory;
     const recorded = deps.ledger.recordRunStep(ctx.runId, {
       step: BASELINE_STEP,
       status: 'completed',
-      result: { attemptId: attempt.value.attemptId, revision: contract.workspace.baseRevision, checks: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })) },
+      result: {
+        attemptId: attempt.value.attemptId,
+        revision: contract.workspace.baseRevision,
+        checks: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })),
+        ...(inventory.value !== null
+          ? { inventory: { evidenceId: inventory.value.evidenceId, status: inventory.value.status, tests: inventory.value.snapshot.ids.length, files: inventory.value.snapshot.fileCount } }
+          : {}),
+      },
       nowMs: startedMs,
       completedAtMs: deps.clock.nowMs(),
     });

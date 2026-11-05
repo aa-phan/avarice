@@ -17,7 +17,7 @@ import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import type { PathChange } from '../../ports/run-workspace.ts';
-import { preExistingAt, recordedBase, runRequiredChecks } from '../checks.ts';
+import { preExistingAt, recordedBase, recordedInventory, runRequiredChecks } from '../checks.ts';
 import { faultPoint } from '../onboarding-service.ts';
 import { blockRun } from './blocked.ts';
 import type { RunStage } from './stage.ts';
@@ -139,6 +139,39 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
   });
   if (!verdictRow.ok) return verdictRow;
 
+  // `diff:<path> unchanged` is deterministic evidence AVARICE derives from the commit it is about to hand off (`diff <pin> HEAD -- <path>`): passed
+  // when the unit left the path alone, failed when it did not. Any other `diff:` rule has no evidence and so never satisfies a criterion.
+  const diffNow = workspace.diffCommits(f.clone, f.contract.workspace.baseRevision, f.head);
+  if (!diffNow.ok) return diffNow;
+  const changedPaths = new Set(diffNow.value.map((c) => c.path));
+  const diffRules = new Map<string, string[]>();
+  for (const criterion of f.contract.intent.acceptance) {
+    for (const ref of criterion.verifiedBy) {
+      if (ref.startsWith('diff:')) diffRules.set(ref.slice('diff:'.length), [...(diffRules.get(ref.slice('diff:'.length)) ?? []), criterion.id]);
+    }
+  }
+  for (const [rule, criteria] of diffRules) {
+    const target = /^(.+) unchanged$/.exec(rule)?.[1];
+    if (target === undefined) continue;
+    const row = deps.ledger.recordEvidence({
+      attemptId: f.attemptId,
+      workItem: f.itemId,
+      kind: 'diff',
+      name: rule,
+      status: changedPaths.has(target) ? 'failed' : 'passed',
+      revision: verdictRevision.value,
+      clean: clean.value.length === 0,
+      treeDigest,
+      environment: { kind: f.contract.execution.environment, rule: 'unchanged', path: target.slice(0, 200), against: f.contract.workspace.baseRevision },
+      contractVersion: f.contractVersion,
+      policyRevision: f.contract.policyRevision,
+      independence: 'deterministic',
+      acceptance: [...new Set(criteria)],
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!row.ok) return row;
+  }
+
   const checking = ctx.checkpoint('gate:g4', { attemptId: f.attemptId, itemId: f.itemId, revision: f.revision });
   if (!checking.ok) return checking;
 
@@ -159,7 +192,20 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
     required: f.contract.verification.requiredChecks,
     targets: f.contract.verification.targetChecks,
   });
-  const acceptance = mapAcceptance(f.contract.intent.acceptance, { rows, passedTestIds: [] });
+  // `test:<text>` is satisfied by a test ID containing the text in the passed after-inventory (measured by AVARICE at G2) when the checks that run
+  // the tests passed at head: the required checks named `test` or `test...`, else every required check. The text stands for the matched IDs.
+  const inventory = recordedInventory(deps, ctx.runId, 'item');
+  if (!inventory.ok) return inventory;
+  const requiredNames = new Set(f.contract.verification.requiredChecks);
+  const testChecks = f.contract.verification.requiredChecks.filter((n) => /^test/.test(n));
+  const gatingChecks = testChecks.length > 0 ? testChecks : [...requiredNames];
+  const testChecksPassed = gatingChecks.every((n) => ran.value.some((r) => r.name === n && r.status === 'passed'));
+  const testTexts = new Set(f.contract.intent.acceptance.flatMap((a) => a.verifiedBy).filter((r) => r.startsWith('test:')).map((r) => r.slice('test:'.length)));
+  const passedTestIds =
+    inventory.value !== null && inventory.value.status === 'passed' && testChecksPassed
+      ? [...testTexts].filter((text) => text !== '' && (inventory.value as NonNullable<typeof inventory.value>).snapshot.ids.some((id) => id.includes(text)))
+      : [];
+  const acceptance = mapAcceptance(f.contract.intent.acceptance, { rows, passedTestIds, ...(inventory.value !== null ? { inventoryEvidenceId: inventory.value.evidenceId } : {}) });
 
   const diff = workspace.diffCommits(f.clone, f.contract.workspace.baseRevision, f.head);
   if (!diff.ok) return diff;
@@ -168,7 +214,6 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
   const budgets = deps.ledger.getBudgets(ctx.runId);
   if (!budgets.ok) return budgets;
 
-  const requiredNames = new Set(f.contract.verification.requiredChecks);
   const verdictG4 = evaluateG4({
     revision: verdictRevision.value,
     blocking: delta.blocking,
