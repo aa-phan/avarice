@@ -10,8 +10,10 @@ import type { Result } from '../../domain/result.ts';
 import { checkG0Static } from '../../domain/run-contract.ts';
 import type { G0Failure, RunContract } from '../../domain/run-contract.ts';
 import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
+import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import type { RunRow } from '../../ports/ledger.ts';
 import type { AppDeps } from '../deps.ts';
+import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
 // `moved`: the handler committed a transition, so the stage is done and the loop reads the new state.
@@ -104,6 +106,49 @@ function preparedWorkspace(deps: AppDeps, runId: string): Result<{ path: string;
   return ok({ path, branch });
 }
 
+const GSD_INSPECT_STEP = 'gsd:inspect';
+const GSD_CONFIGURE_STEP = 'gsd:configure';
+
+// `configure-gsd` (RC-4, CON-2): what GSD does under the run is decided here, outside any invocation (RESEARCH Pitfall 2). It records where the
+// admitted gsd-core and its agents are (step `gsd:inspect`, which the invocation scope reads), applies the seven RUN_GSD_SETTINGS with
+// `config-set` (spike S2-B) and records the result (step `gsd:configure`). `config-set` leaves an untracked `.planning/config.json` in the
+// clone, so the snapshot of the unit's attempt is taken after this step and the commit step takes the file out again (D-17). S2-B found no
+// directory that has to exist before the launch (`Write` creates the quick directory), so none is created.
+registerContractReadyAction(
+  'configure-gsd',
+  async (ctx, row) => {
+    const { deps } = ctx;
+    const gsd = deps.gsd;
+    if (gsd === undefined) return err({ kind: 'unavailable', cause: deps.gsdProblem !== undefined ? `no admitted gsd-core: ${deps.gsdProblem.found}` : 'no admitted gsd-core' });
+    const workspace = preparedWorkspace(deps, ctx.runId);
+    if (!workspace.ok) return workspace;
+
+    const startedMs = deps.clock.nowMs();
+    const inspected = gsd.inspect();
+    if (!inspected.ok) return inspected;
+    const found = deps.ledger.recordRunStep(ctx.runId, {
+      step: GSD_INSPECT_STEP,
+      status: 'completed',
+      result: { gsdCoreDir: inspected.value.gsdCoreDir, agentsDir: inspected.value.agentsDir, version: inspected.value.version, packageName: inspected.value.packageName },
+      nowMs: startedMs,
+      completedAtMs: deps.clock.nowMs(),
+    });
+    if (!found.ok) return found;
+
+    const applied = await gsd.configure(workspace.value.path, RUN_GSD_SETTINGS);
+    if (!applied.ok) return applied;
+    const recorded = deps.ledger.recordRunStep(ctx.runId, {
+      step: GSD_CONFIGURE_STEP,
+      status: 'completed',
+      result: { applied: applied.value.map((s) => ({ key: s.key, value: s.value })), settingsDigest: digestOf(RUN_GSD_SETTINGS), runId: row.runId },
+      nowMs: startedMs,
+      completedAtMs: deps.clock.nowMs(),
+    });
+    return recorded.ok ? ok('next') : recorded;
+  },
+  { step: GSD_CONFIGURE_STEP },
+);
+
 registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
   const { deps } = ctx;
   const workspace = preparedWorkspace(deps, ctx.runId);
@@ -119,17 +164,33 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
   if (hostFailed) {
     failures.push({ rule: 'host-enforcement', detail: `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}`.slice(0, MAX_DETAIL) });
   }
-  const gate = deps.ledger.recordGateResult({
-    runId: ctx.runId,
-    gate: 'G0',
-    contractVersion: loaded.value?.version ?? 1,
-    policyRevision: contract.policyRevision,
-    revision: contract.workspace.baseRevision,
-    passed: failures.length === 0,
-    failures,
-    nowMs: deps.clock.nowMs(),
-  });
-  if (!gate.ok) return gate;
+  // A kill between this insert and the transition repeats the action on resume. Gate rows are insert-only and tell the truth about each
+  // evaluation, but a repeat that finds the identical verdict already recorded for the same contract, policy and revision adds nothing.
+  const contractVersion = loaded.value?.version ?? 1;
+  const earlier = deps.ledger.listGateResults(ctx.runId);
+  if (!earlier.ok) return earlier;
+  const sameVerdict = earlier.value.some(
+    (g) =>
+      g.gate === 'G0' &&
+      g.contractVersion === contractVersion &&
+      g.policyRevision === contract.policyRevision &&
+      g.revision === contract.workspace.baseRevision &&
+      g.passed === (failures.length === 0) &&
+      canonicalJson(g.failures) === canonicalJson(failures),
+  );
+  if (!sameVerdict) {
+    const gate = deps.ledger.recordGateResult({
+      runId: ctx.runId,
+      gate: 'G0',
+      contractVersion,
+      policyRevision: contract.policyRevision,
+      revision: contract.workspace.baseRevision,
+      passed: failures.length === 0,
+      failures,
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!gate.ok) return gate;
+  }
 
   const place = { workspacePath: workspace.value.path, branch: workspace.value.branch };
   if (failures.length > 0) {

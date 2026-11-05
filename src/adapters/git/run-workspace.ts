@@ -275,6 +275,75 @@ export class CloneRunWorkspace implements RunWorkspace {
     return this.head(path);
   }
 
+  // The subset of `paths` that exists at HEAD.
+  private presentAtHead(path: string, paths: readonly string[]): Result<Set<string>> {
+    const listed = runGit(['ls-tree', '--name-only', '-z', 'HEAD', '--', ...paths], { cwd: path, literalPathspecs: true });
+    return listed.ok ? ok(new Set(nulSplit(listed.value.stdout))) : failure(listed.error);
+  }
+
+  private checkedPaths(relPaths: readonly string[]): Result<string[]> {
+    if (!Array.isArray(relPaths) || relPaths.length === 0) return invalid('paths', 'at least one path is required');
+    const paths: string[] = [];
+    for (const candidate of relPaths) {
+      const checked = checkCommitPath(candidate);
+      if (!checked.ok) return checked;
+      paths.push(checked.value);
+    }
+    return ok([...new Set(paths)]);
+  }
+
+  restorePaths(path: string, relPaths: readonly string[]): Result<string[]> {
+    const paths = this.checkedPaths(relPaths);
+    if (!paths.ok) return paths;
+    const present = this.presentAtHead(path, paths.value);
+    if (!present.ok) return present;
+    const missing = paths.value.filter((p) => !present.value.has(p));
+    if (missing.length > 0) return err({ kind: 'conflict', expected: 'every path to exist at HEAD', actual: `${missing.slice(0, 5).join(', ')} not at HEAD` });
+    for (let start = 0; start < paths.value.length; start += RESTORE_CHUNK) {
+      const batch = paths.value.slice(start, start + RESTORE_CHUNK);
+      const done = runGit(['restore', '--source=HEAD', '--worktree', '--', ...batch], { cwd: path, neutralizeFilters: true, literalPathspecs: true, timeoutMs: TREE_TIMEOUT_MS });
+      if (!done.ok) return failure(done.error);
+    }
+    return ok(paths.value);
+  }
+
+  removeUntracked(path: string, relPaths: readonly string[]): Result<string[]> {
+    const paths = this.checkedPaths(relPaths);
+    if (!paths.ok) return paths;
+    const present = this.presentAtHead(path, paths.value);
+    if (!present.ok) return present;
+    const tracked = paths.value.filter((p) => present.value.has(p));
+    if (tracked.length > 0) return err({ kind: 'conflict', expected: 'untracked paths only', actual: `${tracked.slice(0, 5).join(', ')} exist at HEAD` });
+    let root: string;
+    try {
+      root = realpathSync(path);
+    } catch {
+      return err({ kind: 'not_found', ref: path });
+    }
+    const removed: string[] = [];
+    for (const rel of paths.value) {
+      const gone = removeAddedPath(root, rel);
+      if (!gone.ok) return gone;
+      if (gone.value) removed.push(rel);
+      // The directories the file leaves empty go too; a directory with anything in it stays.
+      const parts = rel.split('/');
+      for (let depth = parts.length - 1; depth > 0; depth -= 1) {
+        const dir = join(root, ...parts.slice(0, depth));
+        try {
+          rmdirSync(dir);
+        } catch {
+          break;
+        }
+      }
+    }
+    return ok(removed);
+  }
+
+  diffCommits(path: string, from: string, to: string): Result<PathChange[]> {
+    if (!COMMIT_SHA.test(from) || !COMMIT_SHA.test(to)) return invalid('revision', 'full lowercase commit SHAs are required');
+    return this.diffTrees(path, from, to);
+  }
+
   fetchIntoSource(input: FetchIntoSourceInput): Result<HandoffResult> {
     if (!RUN_BRANCH.test(input.branch)) return invalid('branch', 'avarice/<runId> is required');
     if (!isAbsolute(input.clonePath)) return invalid('clonePath', 'an absolute path is required');

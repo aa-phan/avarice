@@ -1,7 +1,8 @@
 // The run's process model (plan 02-12; D-18, FR-2, FR-7, CON-3, SC 6): `start` records the run and spawns a detached
 // `avarice supervise <runId>`; the supervisor takes the run lease and runs the checkpointed stages. Without an admitted host
-// the run blocks with enforcement_failure; with the fake host (descriptor `enforced`) it reaches `running` and stops, because
-// plan 02-13 adds the stage for that state. No test calls a real model.
+// the run blocks with enforcement_failure; with the fake host (descriptor `enforced`) it goes on to the `running` stage of plan 02-13.
+// This host is the onboarding fake, which cannot run a unit (its run purpose is `unsupported`), so the run ends in
+// `blocked_on_decision (decision)`; the full path to `ready_for_review` is run-baseline-workflow.test.ts. No test calls a real model.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -164,7 +165,7 @@ describe('start --wait: a detached supervisor clones the workspace and blocks wi
     const failures = JSON.parse(g0.failures_json) as Array<{ rule: string }>;
     assert.deepEqual(failures.map((x) => x.rule), ['host-enforcement']);
 
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'verify-enforcement', 'none'], 'a checkpoint before each side effect, then the blocked transition');
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'verify-enforcement', 'none'], 'a checkpoint before each side effect, then the blocked transition');
     const steps = rows<{ step: string; status: string; result_json: string }>(f.roots, "SELECT step, status, result_json FROM run_steps WHERE run_id = ? AND step IN ('workspace:prepare', 'supervisor:spawn') ORDER BY rowid", runId);
     assert.deepEqual(steps.map((s) => s.step), ['supervisor:spawn', 'workspace:prepare']);
     assert.ok(steps.every((s) => s.status === 'completed'));
@@ -207,9 +208,11 @@ describe('start --wait: a detached supervisor clones the workspace and blocks wi
     const spawned = only(rows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'supervisor:spawn'", runId), 'a supervisor:spawn step');
     const pid = (JSON.parse(spawned.result_json) as { pid: number }).pid;
     assert.notEqual(pid, child.pid, 'the supervisor PID differs from the start PID');
-    await waitFor('the run to reach running', () => (runOf(f.roots, runId).state === 'running' ? true : undefined));
-    // The fake host is enforced, so the unit stops in running with no stage for it (plan 02-13 adds one).
-    assert.equal(runOf(f.roots, runId).lease_holder, null);
+    // The fake host is enforced; its run purpose is unsupported, so the unit ends in a decision and the supervisor lets go of the lease.
+    await waitFor('the run to stop and the lease to be released', () => {
+      const run = runOf(f.roots, runId);
+      return run.state === 'blocked_on_decision' && run.lease_holder === null ? true : undefined;
+    });
   });
 });
 
@@ -255,20 +258,20 @@ describe('spawnSupervisor: its own process group, stdio ignored, cwd the data ro
 });
 
 describe('supervise: the stage loop under the run lease', () => {
-  it('with an enforced host the run reaches running and the supervisor stops with `no stage for running`', () => {
+  it('with an enforced host the run passes G0, enters running, and ends in a decision when the host cannot run the unit', () => {
     const f = fixture();
     const runId = createRun(f);
     const r = superviseCli(f, runId);
     assert.equal(r.code, 3, r.stderr + r.stdout);
-    assert.match(r.stdout, new RegExp(`^run ${runId}: running\\n`));
-    assert.match(r.stdout, /no stage for running/);
+    assert.match(r.stdout, new RegExp(`^run ${runId}: blocked_on_decision \\(decision\\)\\n`));
+    assert.match(r.stdout, /the host could not run the unit \(unsupported\)/);
     const run = runOf(f.roots, runId);
-    assert.equal(run.state, 'running');
+    assert.equal(run.state, 'blocked_on_decision');
     assert.equal(run.lease_holder, null, 'the lease is released');
     assert.equal(run.lease_fence, 1);
     assert.equal(run.workspace_path, join(f.roots.AVARICE_WORK_ROOT, runId, 'clone'));
     assert.equal(run.branch, `avarice/${runId}`);
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'verify-enforcement', 'context-pack']);
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none']);
     const g0 = only(rows<{ passed: number }>(f.roots, "SELECT passed FROM gate_results WHERE run_id = ? AND gate = 'G0'", runId), 'one G0 row');
     assert.equal(g0.passed, 1);
   });
@@ -397,12 +400,16 @@ describe('one supervisor per run', () => {
 
     const second = superviseCli(f, runId, { AVARICE_LEASE_TTL_MS: '200' });
     assert.equal(second.code, 3, second.stderr + second.stdout);
-    assert.match(second.stdout, new RegExp(`^run ${runId}: running\\n`));
+    assert.match(second.stdout, new RegExp(`^run ${runId}: blocked_on_decision \\(decision\\)\\n`));
     const run = runOf(f.roots, runId);
     assert.equal(run.lease_fence, 2, 'the takeover bumped the fence');
     assert.equal(run.lease_holder, null, 'and the new holder released it');
-    assert.equal(run.state, 'running');
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'prepare-workspace', 'verify-enforcement', 'context-pack'], 'the killed side effect was repeated once, nothing else');
+    assert.equal(run.state, 'blocked_on_decision');
+    assert.deepEqual(
+      checkpointsOf(f.roots, runId),
+      ['prepare-workspace', 'prepare-workspace', 'configure-gsd', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none'],
+      'the killed side effect was repeated once, nothing else',
+    );
     assert.ok(existsSync(join(f.roots.AVARICE_WORK_ROOT, runId, 'clone', '.git')));
   });
 });
@@ -444,7 +451,7 @@ describe('the run outlives the command that started it, and a dead supervisor is
     assert.equal(lines.at(-1), `continue with: avarice resume ${runId}`);
     const run = runOf(g.roots, runId);
     assert.equal(run.state, 'contract_ready');
-    assert.deepEqual(checkpointsOf(g.roots, runId), ['prepare-workspace', 'verify-enforcement']);
+    assert.deepEqual(checkpointsOf(g.roots, runId), ['prepare-workspace', 'configure-gsd', 'verify-enforcement']);
     const pid = spawnedPid(g.roots, runId);
     assert.ok(pid !== undefined && !alive(pid), 'the supervisor is gone');
   });

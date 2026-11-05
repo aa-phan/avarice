@@ -15,6 +15,8 @@ import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
 import type { AppDeps } from './deps.ts';
 import { faultPoint, leaseTtlMs } from './onboarding-service.ts';
 import { writeContractFile } from './run-start.ts';
+import { runningStage } from './run-stages/item.ts';
+import { verifyingStage } from './run-stages/finish.ts';
 import { contractReadyStage } from './run-stages/prepare.ts';
 import type { RunRow } from '../ports/ledger.ts';
 import type { RunStage, RunStageContext, RunTransitionOptions } from './run-stages/stage.ts';
@@ -37,6 +39,8 @@ export function registerRunStage(state: RunState, stage: RunStage): void {
 }
 
 registerRunStage('contract_ready', contractReadyStage);
+registerRunStage('running', runningStage);
+registerRunStage('verifying', verifyingStage);
 
 function makeContext(deps: AppDeps, runId: string, fence: number, notes: string[]): RunStageContext {
   return {

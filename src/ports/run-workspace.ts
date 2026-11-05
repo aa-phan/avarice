@@ -97,6 +97,14 @@ export interface RunWorkspace {
   commit(path: string, input: CommitInput): Result<string>;
   // D-02: fetch `refs/heads/<branch>` of the clone into the source as a new local branch. Create-only.
   fetchIntoSource(input: FetchIntoSourceInput): Result<HandoffResult>;
+  // Puts tracked paths back to their content at HEAD (D-17: the GSD records and settings the supervisor keeps off the review branch).
+  // Every path must exist at HEAD (`conflict` otherwise, nothing changed); a path is one file, never a directory. Returns the paths restored.
+  restorePaths(path: string, relPaths: readonly string[]): Result<string[]>;
+  // Deletes untracked files (a file or a link, never a directory, never through a symlink) and then the directories they leave empty,
+  // up to but not including the clone root. A path that exists at HEAD is refused (`conflict`) and nothing is changed. Returns the files removed.
+  removeUntracked(path: string, relPaths: readonly string[]): Result<string[]>;
+  // What changed between two commits, by path (the diff gate of G4 reads `<pin> HEAD`).
+  diffCommits(path: string, from: string, to: string): Result<PathChange[]>;
   // UTF-8 text of a clone file; null when absent; refuses traversal, absolute paths and symlinks that leave the clone.
   readText(path: string, relPath: string, maxBytes: number): Result<string | null>;
   ensureDir(path: string, relPath: string): Result<void>;

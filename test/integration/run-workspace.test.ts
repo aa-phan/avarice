@@ -578,3 +578,68 @@ describe('snapshot, changedSince and discard (CON-16, CON-9)', () => {
     assert.equal(read(info.path, 'src/b.ts'), BASE_FILES['src/b.ts']);
   });
 });
+
+describe('restorePaths, removeUntracked and diffCommits (plan 02-13; D-17, the artifacts the supervisor keeps off the review branch)', () => {
+  it('restorePaths puts tracked paths back to HEAD, refuses an untracked path and changes nothing then', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    write(info.path, 'src/a.ts', 'export const a = 99;\n');
+    write(info.path, 'README.md', 'edited\n');
+    assert.deepEqual(must(ws.restorePaths(info.path, ['src/a.ts'])), ['src/a.ts']);
+    assert.equal(readFileSync(join(info.path, 'src/a.ts'), 'utf8'), BASE_FILES['src/a.ts']);
+    assert.equal(readFileSync(join(info.path, 'README.md'), 'utf8'), 'edited\n', 'a path that was not named is not touched');
+
+    write(info.path, 'fresh.txt', 'new\n');
+    const error = mustFail(ws.restorePaths(info.path, ['README.md', 'fresh.txt']));
+    assert.equal(error.kind, 'conflict');
+    assert.equal(readFileSync(join(info.path, 'README.md'), 'utf8'), 'edited\n', 'nothing was restored');
+  });
+
+  it('restorePaths refuses an absolute path, a parent reference, a .git segment, an option and an empty list', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    for (const bad of ['/etc/passwd', '../x', '.git/config', '-n', '']) {
+      mustFail(ws.restorePaths(info.path, [bad]));
+    }
+    assert.equal(mustFail(ws.restorePaths(info.path, [])).kind, 'invalid');
+  });
+
+  it('removeUntracked deletes the files and the directories they leave empty, keeps a directory with anything else in it, and refuses a tracked path', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    write(info.path, '.planning/quick/q1/q1-PLAN.md', 'plan\n');
+    write(info.path, '.planning/quick/q1/q1-SUMMARY.md', 'summary\n');
+    write(info.path, '.planning/quick/q2/other.md', 'other\n');
+    assert.deepEqual(must(ws.removeUntracked(info.path, ['.planning/quick/q1/q1-PLAN.md', '.planning/quick/q1/q1-SUMMARY.md'])), ['.planning/quick/q1/q1-PLAN.md', '.planning/quick/q1/q1-SUMMARY.md']);
+    assert.equal(existsSync(join(info.path, '.planning/quick/q1')), false, 'the emptied directory is gone');
+    assert.equal(existsSync(join(info.path, '.planning/quick/q2/other.md')), true, 'a sibling directory is kept');
+    assert.equal(existsSync(join(info.path, '.planning/quick')), true, 'a directory that still holds something is kept');
+    const error = mustFail(ws.removeUntracked(info.path, ['src/a.ts']));
+    assert.equal(error.kind, 'conflict');
+    assert.equal(existsSync(join(info.path, 'src/a.ts')), true);
+  });
+
+  it('removeUntracked removes a symlink as a link and never follows it', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    const outside = tempDir('avarice-outside-');
+    writeFileSync(join(outside, 'secret.txt'), 'keep\n');
+    symlinkSync(join(outside, 'secret.txt'), join(info.path, 'link.txt'));
+    assert.deepEqual(must(ws.removeUntracked(info.path, ['link.txt'])), ['link.txt']);
+    assert.equal(existsSync(join(outside, 'secret.txt')), true, 'the target outside the clone is untouched');
+  });
+
+  it('diffCommits lists the paths that differ between two commits and refuses anything that is not a full SHA', () => {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    write(info.path, 'src/a.ts', 'export const a = 2;\n');
+    write(info.path, 'src/c.ts', 'export const c = 3;\n');
+    const commit = must(ws.commit(info.path, { paths: ['src/a.ts', 'src/c.ts'], message: 'change' }));
+    assert.deepEqual(must(ws.diffCommits(info.path, repo.head, commit)), [
+      { path: 'src/a.ts', status: 'modified' },
+      { path: 'src/c.ts', status: 'added' },
+    ]);
+    assert.equal(mustFail(ws.diffCommits(info.path, 'HEAD', commit)).kind, 'invalid');
+    assert.equal(mustFail(ws.diffCommits(info.path, repo.head, '--output=x')).kind, 'invalid');
+  });
+});
