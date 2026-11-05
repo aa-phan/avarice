@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Contained onboarding of one repository
 status: executing
 stopped_at: Completed 01-26-PLAN.md
-last_updated: "2026-11-05T01:50:27.453Z"
+last_updated: "2026-11-05T08:07:20.143Z"
 last_activity: 2026-11-05
 last_activity_desc: Completed 01-26-PLAN.md
-state_head: ceeb101936bf9e515a057e2b4bd26310b96fe07c
+state_head: 4ac1127f2e04e4af9beb5ba1d9e90acd584f758e
 progress:
   total_phases: 8
   completed_phases: 1
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-04)
 Phase: 01 (Contained onboarding of one repository) — EXECUTING
 Plan: 26 of 26
 Status: Phase 01 plans complete — ready for verification
-Last activity: 2026-11-05 — Completed 01-26-PLAN.md (live unread gate, production-path proof, docs contract; G-01-154)
+Last activity: 2026-11-05 - Completed quick task 261105-2i2: Fix phase 01 code-review findings WR-05..WR-08
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -202,6 +202,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 | 261104-jnc | Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04 | 2026-11-04 | 974d8b1 | [261104-jnc-close-p-3-grep-d-directories-recursion-b](./quick/261104-jnc-close-p-3-grep-d-directories-recursion-b/) |
 | 261104-l3t | Resolve WR-02: drop grep from the shell read-only commands (shell grep denied by name; search via Grep tool) and deny bfs find -rm | 2026-11-04 | 07e6a34 | [261104-l3t-resolve-wr-02-establish-which-grep-the-c](./quick/261104-l3t-resolve-wr-02-establish-which-grep-the-c/) |
 | 261104-nxh | Fix Phase 1 code review warnings WR-01 (runtime check that workRoot is a normalized absolute path) and WR-02 (npm test now exercises the missing-work-root guard) | 2026-11-04 | e50de6f | [261104-nxh-fix-phase-1-code-review-warnings-wr-01-a](./quick/261104-nxh-fix-phase-1-code-review-warnings-wr-01-a/) |
+| 261105-2i2 | Fix phase 01 code-review findings WR-05..WR-08 (parseArgs prototype names, gsd_run argument checks, sandbox probe retry, exit-run spend guard) | 2026-11-05 | 4ac1127 | [261105-2i2-fix-phase-01-code-review-findings-wr-05-](./quick/261105-2i2-fix-phase-01-code-review-findings-wr-05-/) |
 
 ## Deferred Items
 
