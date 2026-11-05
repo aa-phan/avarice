@@ -9,11 +9,11 @@ findings:
     title: "`computeInvocationScope` can now throw after the invocation has been reserved, leaving an unsettled reservation"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The `assert-exit` unread gate trusts self-reported counters with no consistency check"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "`chunkPlanNormalized` swallows every error, so the plan-equality assertions can pass vacuously"
   - id: IN-01
     severity: info
@@ -67,9 +67,9 @@ findings:
     severity: info
     disposition: open
     title: "The profile `config.json` is written but never read"
-open: 14
+open: 12
 total: 16
-recorded: 2026-11-05T02:16:28.626Z
+recorded: 2026-11-05T04:07:31.166Z
 ---
 
 # Phase 01: Code Review Disposition
@@ -77,8 +77,8 @@ recorded: 2026-11-05T02:16:28.626Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md |
+| WR-03 | warning | fixed | 01-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
