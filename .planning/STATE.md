@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-11-05T11:07:02.777Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-11-05T18:39:24.510Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 12a1da594ca94a3a3b74c30448a93f916916982c
+state_head: bc4ff6cfbfe325d0769dc7dc8661dad107531b39
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 4 of 22
+Plan: 5 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -86,6 +86,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P01 | 55 min | 2 tasks | 13 files |
 | Phase 02 P02 | 18 min | 2 tasks | 21 files |
 | Phase 02 P03 | 19 min | 3 tasks | 14 files |
+| Phase 02 P04 | 30 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-02: Phase 1 --json shapes are frozen by normalized snapshots committed before the renderer change (AVARICE_SNAPSHOT_WRITE=1 regenerates); every renderer string passes stripControl; composition failures are prefixed by the dispatcher, not hand-built
 - [Phase 02]: 02-03: migration 0002 also carries insert-only triggers for evidence and gate_results (T-02-06); the run lifecycle and work item tables are pure tables in src/domain/run-lifecycle.ts and a Phase 1 carrier row (state onboarding) is invisible to every run method — The plan marks T-02-06 mitigate, and a schema trigger keeps the property for every later writer, as events already have
 - [Phase 02]: 02-03: transitionRun writes state, checkpoint (seq max+1 per run) and a run.transition event in one transaction under the version and fence guard; work item blocked_on_decision may return to ready; entering delegated counts one attempt — Phase 3 decide needs a way to release a blocked item, and the discard-and-retry shows as two attempts
+- [Phase 02]: 02-04: the routine contract compiler only narrows: a brief glob must sit inside a conventions write glob and off protected paths, budgets only lower (budget.<name>), check and agent commands starting with git, avarice, claude, gh, curl, wget, ssh, scp or sudo are refused, and G0 static failures are reported together under field g0 — RC-5 is enforced at the one place every later stage trusts; subagentsTotal 10 and invocations 3 carry recorded derivations (one CON-16 retry of a full quick unit fits), and policyRevision is digestOf(ROUTINE_PRESET)
 
 ### Pending Todos
 
@@ -224,6 +226,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T11:07:02.633Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-11-05T18:39:24.374Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
