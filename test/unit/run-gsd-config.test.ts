@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RUN_GSD_SETTINGS, RUN_NO_COMMIT_SENTENCE, RUN_PROMPT_MAX_BYTES, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import { RUN_GSD_SETTINGS, RUN_NO_COMMIT_SENTENCE, RUN_PROMPT_MAX_BYTES, RUN_WORKFLOW_SENTENCE, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
 import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
 
 const CONTRACT: RunPromptContract = {
@@ -25,7 +25,7 @@ const PACK = 'context for "swipe" in /repo\n   1. useSwipeStep (src/hooks/useSwi
 const QUOTED = /^\/gsd-quick --validate --text "(?:[^"\\]|\\[\s\S])*"$/;
 
 describe('RUN_GSD_SETTINGS', () => {
-  it('is exactly the eight run-scoped pairs, in order, with no ninth key until plan 02-09 verifies one', () => {
+  it('is exactly the seven run-scoped pairs config-set accepted in the S2-B spike, in order', () => {
     assert.deepEqual(RUN_GSD_SETTINGS, [
       ['workflow.text_mode', 'true'],
       ['gates.execute_next_plan', 'false'],
@@ -34,9 +34,13 @@ describe('RUN_GSD_SETTINGS', () => {
       ['workflow.use_worktrees', 'false'],
       ['commit_docs', 'false'],
       ['git.branching_strategy', 'none'],
-      ['git.quick_branch_template', ''],
     ]);
     assert.equal(RUN_GSD_SETTINGS.some(([key]) => key === 'workflow.windows_enforce'), false, 'unverified key (RESEARCH A5)');
+  });
+
+  it('holds no value the GSD adapter would refuse: every value is a plain word (the empty branch template was removed by plan 02-09)', () => {
+    for (const [key, value] of RUN_GSD_SETTINGS) assert.match(value, /^[A-Za-z0-9_.-]+$/, key);
+    assert.equal(RUN_GSD_SETTINGS.some(([key]) => key === 'git.quick_branch_template'), false);
   });
 });
 
@@ -56,6 +60,15 @@ describe('runUnitPrompt', () => {
     ]) {
       assert.ok(prompt.includes(text), text);
     }
+  });
+
+  it('tells the model to run the whole validate workflow, not to make the change by hand (S2-B round 1)', () => {
+    assert.equal(
+      RUN_WORKFLOW_SENTENCE,
+      'Run the whole quick workflow in validate mode: its planner, plan-checker, executor and verifier steps, ending with the verifier. Do not make the change by hand instead of the workflow.',
+    );
+    assert.ok(runUnitPrompt(CONTRACT, PACK).includes(RUN_WORKFLOW_SENTENCE));
+    assert.match(runUnitPrompt(CONTRACT, ''), QUOTED);
   });
 
   it('holds the exact sentence that keeps the model from committing (D-03)', () => {

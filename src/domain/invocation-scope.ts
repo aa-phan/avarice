@@ -132,10 +132,13 @@ export const GSD_READ_VERBS: Readonly<Record<InvocationPurpose, readonly string[
   intel: [...GSD_BASE_VERBS, ...GSD_INTEL_VERBS],
   // The knowledge pass has no shell, so no GSD verb.
   knowledge: [],
-  // The Phase 1 read verbs plus `query init.quick`, which the quick workflow's first shell step runs
-  // (~/.claude/gsd-core/workflows/quick.md line 125). Plan 02-09's spike observes the real workflow and extends this list, each
-  // verb with its source line; no verb that writes (`config-set`, `query commit`) is here.
-  run: [...GSD_BASE_VERBS, 'query init.quick'],
+  // The Phase 1 read verbs plus the ones the quick workflow runs, each with the GSD source line that runs it (plan 02-09, spike S2-B;
+  // ~/.claude/gsd-core/workflows/quick.md, GSD 1.17.0). No verb that writes (`config-set`, `query commit`, `quick-tasks-append`) is here.
+  //   - `query init.quick`: line 125, the workflow's first shell step (`--validate` is the only extra flag, GSD_VERB_FLAGS).
+  //   - `query config-get <key>`: quick.md lines 43, 143, 144 and 698, and agents/gsd-executor.md lines 310-312; the key must be one of
+  //     GSD_OPERAND_NAMES.
+  //   - `loop render-hooks <point>`: lines 289 (plan:pre) and 560 (execute:post); read-only, the point is one of GSD_OPERAND_NAMES.
+  run: [...GSD_BASE_VERBS, 'query init.quick', 'query config-get', 'loop render-hooks'],
 };
 
 // Never allowed, whatever else matches (deny rules beat allow rules).

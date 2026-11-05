@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { sha256Hex } from '../../src/domain/digest.ts';
 import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
-import type { HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
+import type { HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
 import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 
 const STAGING = '/work/onb-1/staging';
@@ -819,6 +819,60 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     const d = decide(shell(`${PREAMBLE}\nnpm test`), runPolicy());
     assert.deepEqual([d.decision, d.rule], ['allow', 'agent-command']);
     assert.equal(decide(shell(`${PREAMBLE}\nnpm test -- --watch`), runPolicy()).rule, 'shell-not-allowed');
+  });
+
+  // Plan 02-09 (spike S2-B): the GSD verbs of the quick workflow, each admitted in the one form quick.md issues it, with a refused neighbour.
+  describe('the GSD verbs of the quick workflow (CON-2; plan 02-09)', () => {
+    const gsd = (line: string): HookDecision => decide(shell(`${PREAMBLE}\n${line}`), runPolicy());
+    const gsdAllowed = (line: string): void => {
+      const d = gsd(line);
+      assert.deepEqual([d.decision, d.rule, d.budget], ['allow', 'shell-identity', 'toolCalls'], line);
+    };
+    const gsdDenied = (line: string, rule: string): void => {
+      const d = gsd(line);
+      assert.deepEqual([d.decision, d.rule], ['deny', rule], line);
+    };
+
+    it('admits query init.quick with the one flag quick.md line 125 passes in validate mode, and refuses any other flag', () => {
+      gsdAllowed('INIT=$(gsd_run query init.quick "Collapse repeated dashes")');
+      gsdAllowed('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --validate)');
+      gsdDenied('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --full)', 'shell-gsd-option');
+      gsdDenied('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --ws=other)', 'shell-gsd-option');
+      gsdDenied('INIT=$(gsd_run query init.quick "x" --cwd /etc)', 'shell-gsd-option');
+    });
+
+    it('admits query config-get only for the keys quick.md and the gsd-executor agent read, with --default as its one value option', () => {
+      for (const key of ['response_language', 'workflow.use_worktrees', 'runtime', 'workflow._auto_chain_active', 'workflow.auto_advance', 'workflow.human_verify_mode', 'commit_docs']) {
+        gsdAllowed(`gsd_run query config-get ${key} --raw`);
+      }
+      gsdAllowed('HUMAN_VERIFY_MODE=$(gsd_run query config-get workflow.human_verify_mode --default end-of-phase --raw)');
+      gsdAllowed('RESPONSE_LANGUAGE=$(gsd_run query config-get response_language --raw --default "")');
+      // The refused neighbours: another key, no key, two keys, another option, a redirection.
+      gsdDenied('gsd_run query config-get brave_search --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get commit_docs runtime --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get commit_docs --pick x', 'shell-gsd-option');
+      gsdDenied('RESPONSE_LANGUAGE=$(gsd_run query config-get response_language --raw --default "" 2>/dev/null || echo "")', 'shell-syntax');
+    });
+
+    it('admits loop render-hooks only for the two points quick.md renders', () => {
+      gsdAllowed('PLAN_PRE_HOOKS_JSON=$(gsd_run loop render-hooks plan:pre --raw)');
+      gsdAllowed('EXECUTE_POST_HOOKS_JSON=$(gsd_run loop render-hooks execute:post --raw)');
+      gsdDenied('gsd_run loop render-hooks verify:post --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run loop render-hooks --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run loop run-step plan:pre', 'shell-gsd-verb');
+    });
+
+    it('keeps every GSD verb that writes denied: config-set, query commit and quick-tasks-append', () => {
+      gsdDenied('gsd_run config-set workflow.text_mode false', 'shell-gsd-verb');
+      gsdDenied('gsd_run query commit "docs: x" --files a', 'shell-gsd-verb');
+      gsdDenied('gsd_run quick-tasks-append --quick-id 1 --slug x --task y', 'shell-gsd-verb');
+    });
+
+    it('keeps the git shapes of quick.md denied by design: commit, add, push, checkout -b, fetch and worktree', () => {
+      for (const command of ['git commit -m x', 'git push origin HEAD']) denied(command, 'shell-denied-prefix');
+      for (const command of ['git add src/slug.ts', 'git checkout -b quick/x', 'git fetch origin main', 'git worktree add ../x']) denied(command, 'shell-not-allowed');
+    });
   });
 });
 

@@ -11,6 +11,13 @@ import { parseAgentFile } from './agent-frontmatter.ts';
 // A plain file name: no separator, no leading dot, so `..` and absolute paths are refused.
 export const PLAIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+// D-03 (plan 02-09): the supervisor commits, never the model. GSD's executor ends every task with its own commit protocol
+// (`git add`, `git commit`), which the hook denies; this addendum tells it so instead of leaving it to retry. Appended to the
+// `gsd-executor` agent and to no other (the hook, the `.git` denyWrite and the moved-HEAD classifier rule stay the enforcement).
+export const AVARICE_EXECUTOR_ADDENDUM =
+  'AVARICE run: edit files only; the supervisor commits after the run\'s gates pass. Never run git add or git commit; report the task done with the files changed.';
+const ADDENDUM_AGENT = 'gsd-executor';
+
 export function buildAgentsJson(agentsDir: string, names: readonly string[], outFile: string): Result<{ file: string; agents: string[] }> {
   const agents: Record<string, unknown> = {};
   for (const name of names) {
@@ -32,7 +39,7 @@ export function buildAgentsJson(agentsDir: string, names: readonly string[], out
     const { description, prompt, tools, disallowedTools, effort } = parsed.value;
     agents[name] = {
       description,
-      prompt,
+      prompt: name === ADDENDUM_AGENT ? `${prompt.replace(/\s+$/, '')}\n\n${AVARICE_EXECUTOR_ADDENDUM}\n` : prompt,
       ...(tools !== undefined ? { tools } : {}),
       ...(disallowedTools !== undefined ? { disallowedTools } : {}),
       ...(effort !== undefined ? { effort } : {}),

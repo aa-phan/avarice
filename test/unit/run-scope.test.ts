@@ -85,6 +85,9 @@ describe('the run purpose spec (CON-1, CON-6)', () => {
   it('admits the Phase 1 GSD read verbs and query init.quick, and no verb that writes', () => {
     assert.ok(GSD_READ_VERBS.run.includes('query init.quick'));
     assert.ok(GSD_READ_VERBS.run.includes('runtime-identity'));
+    // Plan 02-09: the read verbs quick.md runs besides init.quick (their operands are pinned in hook-decision.test.ts).
+    assert.deepEqual(GSD_READ_VERBS.run.slice(-3), ['query init.quick', 'query config-get', 'loop render-hooks']);
+    assert.equal(GSD_READ_VERBS.map.includes('query config-get'), false);
     for (const verb of GSD_READ_VERBS.run) assert.doesNotMatch(verb, /^(config-set|query commit|stamp-codebase-map|init onboard|intel patch-meta|intel snapshot)/);
     // The onboarding purposes keep their lists.
     assert.equal(GSD_READ_VERBS.map.includes('query init.quick'), false);

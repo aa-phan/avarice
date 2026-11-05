@@ -337,6 +337,23 @@ export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
 const GSD_FLAG_OPTIONS: readonly string[] = ['--raw'];
 export const GSD_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'graphify query': ['--budget'],
+  // agents/gsd-executor.md line 312: `gsd_run query config-get workflow.human_verify_mode --default end-of-phase --raw`.
+  'query config-get': ['--default'],
+};
+// Boolean flags a verb takes besides `--raw` (plan 02-09, spike S2-B). Every other option stays `shell-gsd-option`.
+//   - `query init.quick --validate`: quick.md line 122 sets VALIDATE_PARAM and line 125 passes it to `gsd_run query init.quick`; without
+//     the flag the workflow cannot enter validate mode, which the run prompt asks for (`/gsd-quick --validate --text`).
+export const GSD_VERB_FLAGS: Readonly<Record<string, readonly string[]>> = {
+  'query init.quick': ['--validate'],
+};
+// Verbs whose first operand must be one of a fixed set (a name GSD's own workflow passes), so the verb cannot be aimed at an arbitrary
+// key; anything else is refused `shell-gsd-operand`. Both verbs only read GSD's resolved configuration.
+//   - `query config-get <key>`: quick.md lines 43 (response_language), 143 (workflow.use_worktrees), 144 (runtime) and 698 (commit_docs);
+//     agents/gsd-executor.md lines 310-312 (workflow._auto_chain_active, workflow.auto_advance, workflow.human_verify_mode).
+//   - `loop render-hooks <point>`: quick.md lines 289 (plan:pre) and 560 (execute:post).
+export const GSD_OPERAND_NAMES: Readonly<Record<string, readonly string[]>> = {
+  'query config-get': ['response_language', 'workflow.use_worktrees', 'runtime', 'workflow._auto_chain_active', 'workflow.auto_advance', 'workflow.human_verify_mode', 'commit_docs'],
+  'loop render-hooks': ['plan:pre', 'execute:post'],
 };
 // Verbs whose operands GSD writes (`intel patch-meta <file>` rewrites `_meta.updated_at` in the named file).
 const GSD_WRITE_OPERAND_VERBS: readonly string[] = ['intel patch-meta'];
@@ -431,13 +448,14 @@ function matchAgentCommand(words: readonly string[], expands: boolean, call: Ext
 // the same fail-closed choice parseReadArgs makes.
 function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy: HookPolicy, canon: Canon): string | null {
   const valued = GSD_VALUE_OPTIONS[verb] ?? [];
+  const flags = GSD_VERB_FLAGS[verb] ?? [];
   const operands: string[] = [];
   const optionValues: string[] = [];
   for (let i = 0; i < rest.length; i += 1) {
     const word = rest[i] as string;
     if (!word.startsWith('-')) {
       operands.push(word);
-    } else if (GSD_FLAG_OPTIONS.includes(word)) {
+    } else if (GSD_FLAG_OPTIONS.includes(word) || flags.includes(word)) {
       continue;
     } else {
       const equals = word.indexOf('=');
@@ -450,6 +468,8 @@ function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy
       optionValues.push(value);
     }
   }
+  const allowedOperands = GSD_OPERAND_NAMES[verb];
+  if (allowedOperands !== undefined && (operands.length !== 1 || !allowedOperands.includes(operands[0] as string))) return 'shell-gsd-operand';
   const named = [...operands, ...optionValues].map((word) => absolutize(cwd, word));
   const readRule = checkRead(named, policy, canon);
   if (readRule !== null) return readRule;

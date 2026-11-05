@@ -8,7 +8,12 @@ import { printable } from './context.ts';
 // Applied with `config-set` by AVARICE, outside any invocation, as step `gsd:configure` (RESEARCH Pitfall 2): no human prompt
 // (`text_mode`, both gates off), no worktree and no branch (the run's clone is the workspace and the supervisor owns git), no commit by
 // GSD's own `query commit` (`commit_docs`), and the audit trail on. `workflow.windows_enforce` is absent until `config-set` is shown
-// to accept it (RESEARCH A5); `git.branching_strategy=none` is assumed an accepted value until plan 02-09 runs it.
+// to accept it (RESEARCH A5).
+//
+// Plan 02-09, spike S2-B: all seven keys below were applied with `config-set` in a scratch GSD project and accepted. The eighth key of
+// plan 02-08, `git.quick_branch_template` = '' (an empty template), was refused by the adapter ('"" is not a plain value': a setting
+// value must match [A-Za-z0-9_.-]+) and is removed (disposition c): with `git.branching_strategy` = none the workflow's
+// `branch_name` stays empty and quick.md Step 2.5 then skips branching (lines 184-186).
 export const RUN_GSD_SETTINGS: readonly GsdSetting[] = [
   ['workflow.text_mode', 'true'],
   ['gates.execute_next_plan', 'false'],
@@ -17,12 +22,16 @@ export const RUN_GSD_SETTINGS: readonly GsdSetting[] = [
   ['workflow.use_worktrees', 'false'],
   ['commit_docs', 'false'],
   ['git.branching_strategy', 'none'],
-  ['git.quick_branch_template', ''],
 ];
 
 // D-03: the supervisor commits, the model never writes git metadata. The executor's own task-commit protocol is told here and denied by
 // the hook; a moved clone HEAD is the classifier's backstop.
 export const RUN_NO_COMMIT_SENTENCE = 'Edit files only. The supervisor commits. Do not run git add or git commit.';
+
+// Spike S2-B round 1: given only the task, the model made the one-line change by hand and wrote its own SUMMARY, skipping the planner,
+// plan checker, executor and verifier the `--validate` workflow runs, so the run contract's GSD verifier gate had nothing to read. The
+// prompt now says the workflow itself is the work.
+export const RUN_WORKFLOW_SENTENCE = 'Run the whole quick workflow in validate mode: its planner, plan-checker, executor and verifier steps, ending with the verifier. Do not make the change by hand instead of the workflow.';
 
 // The whole prompt, in bytes. The context pack is cut to fit; the contract text never is.
 export const RUN_PROMPT_MAX_BYTES = 32 * 1024;
@@ -62,6 +71,7 @@ function contractText(contract: RunPromptContract): string {
     ...bullets(files.artifacts, 'none'),
     'Commands you may run, exactly as written:',
     ...bullets(execution.commands, 'none'),
+    RUN_WORKFLOW_SENTENCE,
     RUN_NO_COMMIT_SENTENCE,
   ].join('\n');
 }
