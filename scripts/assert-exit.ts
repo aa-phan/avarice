@@ -6,6 +6,11 @@
 // document nodes (and a knowledge section that counts document nodes), and whose `indexes.graph.builtAtCommit` and
 // `indexes.intel.refreshedAtCommit` both equal the onboarded revision. Revisions are compared without the `git:` prefix.
 //
+// The knowledge section must account for every manifest document and leave none unread (UAT 154, plans 01-25 and 01-26):
+// `knowledge.documentsExpected` and `knowledge.dropped.unread` must both be present, and `unread` must be 0. The gate checks
+// zero unread, not the stage's at-least-half admission share, because it checks that every corpus document became a document
+// node. The rehearsal picks the problem up through its existing `assert-exit:` problems.
+//
 // Prints the JSON facts on stdout (`ok` says whether every check held). Exit 0 when every check holds, 1 when one fails
 // (each failure is a line on stderr), 2 for a usage error, an unknown onboarding or an unreadable ledger.
 // Without --db the ledger is `$AVARICE_DATA_ROOT/state.db`, else `~/.local/share/avarice/personal-local/state.db`;
@@ -33,6 +38,8 @@ export interface ExitFacts {
   nodes: Record<string, number> | null;
   edges: Record<string, number> | null;
   documentNodes: number | null;
+  documentsExpected: number | null;
+  unreadDocuments: number | null;
   graphBuiltAtCommit: string | null;
   intelRefreshedAtCommit: string | null;
   intelFiles: number | null;
@@ -59,6 +66,8 @@ export function readExitFacts(db: Db, onboardingId: string): ExitFacts | null {
     nodes: null,
     edges: null,
     documentNodes: null,
+    documentsExpected: null,
+    unreadDocuments: null,
     graphBuiltAtCommit: null,
     intelRefreshedAtCommit: null,
     intelFiles: null,
@@ -82,6 +91,12 @@ export function readExitFacts(db: Db, onboardingId: string): ExitFacts | null {
     facts.graphBuiltAtCommit = strip(graph['builtAtCommit']);
     const knowledge = isObject(graph['knowledge']) ? graph['knowledge'] : null;
     facts.documentNodes = knowledge === null ? null : count(knowledge['documentNodes']);
+    // An absent value stays null (count() would turn it into 0 and let a record without accounting pass).
+    const finite = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+    if (knowledge !== null) {
+      facts.documentsExpected = finite(knowledge['documentsExpected']);
+      facts.unreadDocuments = isObject(knowledge['dropped']) ? finite(knowledge['dropped']['unread']) : null;
+    }
   }
   if (intel !== null) {
     facts.intelRefreshedAtCommit = strip(intel['refreshedAtCommit']);
@@ -105,6 +120,13 @@ export function judgeExit(f: ExitFacts): string[] {
     if (count(f.nodes['code']) <= 0) problems.push('the graph lists no code nodes');
     if (count(f.nodes['document']) <= 0 || f.documentNodes === null || f.documentNodes <= 0) {
       problems.push(`the graph lists no document nodes (nodes.document ${count(f.nodes['document'])}, knowledge.documentNodes ${f.documentNodes === null ? 'absent' : f.documentNodes})`);
+    }
+    if (f.documentNodes !== null) {
+      if (f.documentsExpected === null || f.unreadDocuments === null) {
+        problems.push('the knowledge section has no per-document accounting (documentsExpected, dropped.unread)');
+      } else if (f.unreadDocuments > 0) {
+        problems.push(`${f.unreadDocuments} of ${f.documentsExpected} corpus documents have no document node (knowledge.dropped.unread)`);
+      }
     }
     if (f.graphBuiltAtCommit !== f.onboardedRevision) {
       problems.push(`graph builtAtCommit ${String(f.graphBuiltAtCommit)} is not the onboarded revision ${String(f.onboardedRevision)}`);
