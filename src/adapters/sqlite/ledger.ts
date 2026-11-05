@@ -8,6 +8,8 @@ import type { IdPrefix } from '../../domain/ids.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
+import { assertRunTransition, RUN_BLOCKED_REASONS } from '../../domain/run-lifecycle.ts';
+import type { RunState } from '../../domain/run-lifecycle.ts';
 import type {
   ActivateInput,
   ActivationResult,
@@ -28,9 +30,12 @@ import type {
   LeaseGrant,
   NewOnboarding,
   NewProject,
+  NewRun,
   OnboardingRow,
   ProjectQuery,
   ProjectRow,
+  RunRow,
+  RunTransitionInput,
   StepResultInput,
   StepResultRow,
   StoreContractInput,
@@ -362,9 +367,9 @@ export class SqliteLedger implements Ledger {
     return this.toOnboarding(this.lockRow(onboardingId));
   }
 
-  private checkVersion(row: Row, version: number): void {
+  private checkVersion(row: Row, version: number, label: 'onboarding' | 'run' = 'onboarding'): void {
     if (Number(row['version']) !== version) {
-      abort({ kind: 'conflict', expected: `onboarding version ${version}`, actual: `onboarding version ${Number(row['version'])}` });
+      abort({ kind: 'conflict', expected: `${label} version ${version}`, actual: `${label} version ${Number(row['version'])}` });
     }
   }
 
@@ -387,12 +392,22 @@ export class SqliteLedger implements Ledger {
   ): CheckpointRow {
     const contractRun = this.db.prepare('SELECT contract_run_id FROM onboardings WHERE onboarding_id = ?').get(onboardingId) as Row | undefined;
     const other = strOrNull(contractRun?.['contract_run_id']) ?? onboardingId;
-    const next = this.db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM checkpoints WHERE run_id IN (?, ?, ?)').get(onboardingId, other, runId) as { next: number };
+    return toCheckpoint(this.writeCheckpoint([onboardingId, other, runId], { runId, from, to, revision, nextAction, nowMs }));
+  }
+
+  // The one checkpoint writer for onboardings and runs. The sequence is max + 1 over every run ID of `scope` (an onboarding
+  // shares one sequence between its own ID and its carrier run ID; a run's scope is itself), so seq is continuous per scope.
+  private writeCheckpoint(
+    scope: readonly string[],
+    c: { runId: string; attemptId?: string | null; itemId?: string | null; from: string | null; to: string; revision: string | null; nextAction: string; nowMs: number },
+  ): Row {
+    const marks = scope.map(() => '?').join(', ');
+    const next = this.db.prepare(`SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM checkpoints WHERE run_id IN (${marks})`).get(...scope) as { next: number };
     const checkpointId = this.newId('ckp_');
     this.db
-      .prepare('INSERT INTO checkpoints (checkpoint_id, run_id, seq, from_state, to_state, revision, next_action, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(checkpointId, runId, Number(next.next), from, to, revision, nextAction, iso(nowMs));
-    return toCheckpoint(this.db.prepare('SELECT * FROM checkpoints WHERE checkpoint_id = ?').get(checkpointId) as Row);
+      .prepare('INSERT INTO checkpoints (checkpoint_id, run_id, attempt_id, seq, item_id, from_state, to_state, revision, next_action, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(checkpointId, c.runId, c.attemptId ?? null, Number(next.next), c.itemId ?? null, c.from, c.to, c.revision, c.nextAction, iso(c.nowMs));
+    return this.db.prepare('SELECT * FROM checkpoints WHERE checkpoint_id = ?').get(checkpointId) as Row;
   }
 
   // ---- contracts, steps, attempts ------------------------------------------------------------------
@@ -647,6 +662,101 @@ export class SqliteLedger implements Ledger {
         .run(input.name, input.port, input.adapter, input.configDigest, canonicalJson(input.descriptor));
     });
   }
+
+  // ---- runs ------------------------------------------------------------------------------------------
+  // Run methods address `runs` rows whose state is a run state. A Phase 1 carrier row (state `onboarding`) is invisible
+  // to them: lockRun reports it as not found, so no run method can read, lease or move an onboarding's carrier.
+
+  createRun(input: NewRun): Result<RunRow> {
+    return tx(this.db, () => {
+      if (input.runId === '') abort({ kind: 'invalid', field: 'runId', reason: 'a run needs an ID' });
+      if (input.title === '') abort({ kind: 'invalid', field: 'title', reason: 'a run needs a title' });
+      if (!this.db.prepare('SELECT 1 AS found FROM projects WHERE project_id = ?').get(input.projectId)) throw notFound(`project ${input.projectId}`);
+      if (this.db.prepare('SELECT 1 AS found FROM runs WHERE run_id = ?').get(input.runId)) {
+        abort({ kind: 'conflict', expected: `no run ${input.runId}`, actual: `a run row ${input.runId} already exists` });
+      }
+      const now = iso(input.nowMs);
+      this.db
+        .prepare("INSERT INTO runs (run_id, project_id, state, version, title, created_at, updated_at) VALUES (?, ?, 'contract_ready', 1, ?, ?, ?)")
+        .run(input.runId, input.projectId, input.title, now, now);
+      this.insertEvent({ type: 'run.created', runId: input.runId, data: { runId: input.runId, projectId: input.projectId, state: 'contract_ready', version: 1 }, nowMs: input.nowMs });
+      return this.readRun(input.runId);
+    });
+  }
+
+  getRun(runId: string): Result<RunRow> {
+    return guarded(() => this.readRun(runId));
+  }
+
+  transitionRun(runId: string, guard: TransitionGuard, t: RunTransitionInput): Result<RunRow> {
+    return tx(this.db, () => {
+      const row = this.lockRun(runId);
+      this.checkVersion(row, guard.version, 'run');
+      this.checkFence(row, guard.fence);
+      const from = str(row['state']) as RunState;
+      const edge = assertRunTransition(from, t.to);
+      if (!edge.ok) abort(edge.error);
+      if (t.to === 'blocked_on_decision') {
+        if (t.reason === undefined) abort({ kind: 'invalid', field: 'reason', reason: 'a transition to blocked_on_decision needs a blocked reason' });
+        if (!RUN_BLOCKED_REASONS.includes(t.reason)) abort({ kind: 'invalid', field: 'reason', reason: `${String(t.reason)} is not a documented blocked reason` });
+      } else if (t.reason !== undefined) {
+        abort({ kind: 'invalid', field: 'reason', reason: `a reason is only recorded for blocked_on_decision, not ${t.to}` });
+      }
+      if (t.attemptId !== undefined) this.checkRunAttempt(runId, t.attemptId);
+      const version = Number(row['version']) + 1;
+      this.db
+        .prepare(
+          `UPDATE runs SET state = ?, version = ?, updated_at = ?, reason = ?,
+             workspace_path = COALESCE(?, workspace_path), branch = COALESCE(?, branch), base_revision = COALESCE(?, base_revision)
+           WHERE run_id = ?`,
+        )
+        .run(t.to, version, iso(t.nowMs), t.to === 'blocked_on_decision' ? (t.reason ?? null) : null, t.workspacePath ?? null, t.branch ?? null, t.baseRevision ?? null, runId);
+      const checkpoint = this.writeCheckpoint([runId], {
+        runId,
+        attemptId: t.attemptId ?? null,
+        itemId: t.itemId ?? null,
+        from,
+        to: t.to,
+        revision: t.revision ?? null,
+        nextAction: t.nextAction,
+        nowMs: t.nowMs,
+      });
+      this.insertEvent({
+        type: 'run.transition',
+        runId,
+        ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
+        data: {
+          ...(t.data ?? {}),
+          runId,
+          from,
+          to: t.to,
+          version,
+          nextAction: t.nextAction,
+          checkpointId: str(checkpoint['checkpoint_id']),
+          ...(t.reason !== undefined ? { reason: t.reason } : {}),
+        },
+        nowMs: t.nowMs,
+      });
+      return this.readRun(runId);
+    });
+  }
+
+  // The run row, or not_found when there is none or it is an onboarding carrier.
+  private lockRun(runId: string): Row {
+    const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ? AND state <> 'onboarding'").get(runId) as Row | undefined;
+    if (!row) throw notFound(`run ${runId}`);
+    return row;
+  }
+
+  private readRun(runId: string): RunRow {
+    return toRun(this.lockRun(runId));
+  }
+
+  // An attempt named by a run write must be one of that run's own.
+  private checkRunAttempt(runId: string, attemptId: string): void {
+    const row = this.db.prepare('SELECT run_id FROM attempts WHERE attempt_id = ?').get(attemptId) as Row | undefined;
+    if (!row || str(row['run_id']) !== runId) abort({ kind: 'invalid', field: 'attemptId', reason: `${attemptId} is not an attempt of run ${runId}` });
+  }
 }
 
 function notFound(ref: string): LedgerAbort {
@@ -727,6 +837,25 @@ function toCheckpoint(r: Row): CheckpointRow {
     revision: strOrNull(r['revision']),
     nextAction: str(r['next_action']),
     createdAt: str(r['created_at']),
+  };
+}
+
+function toRun(r: Row): RunRow {
+  return {
+    runId: str(r['run_id']),
+    projectId: str(r['project_id']),
+    state: str(r['state']) as RunState,
+    version: Number(r['version']),
+    title: str(r['title']),
+    reason: strOrNull(r['reason']) as RunRow['reason'],
+    workspacePath: strOrNull(r['workspace_path']),
+    branch: strOrNull(r['branch']),
+    baseRevision: strOrNull(r['base_revision']),
+    createdAt: str(r['created_at']),
+    updatedAt: str(r['updated_at']),
+    leaseHolder: strOrNull(r['lease_holder']),
+    leaseExpiresAt: strOrNull(r['lease_expires_at']),
+    leaseFence: Number(r['lease_fence']),
   };
 }
 

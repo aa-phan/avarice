@@ -13,6 +13,7 @@ import type { Db } from '../adapters/sqlite/db.ts';
 import { migrate, pendingMigrations } from '../adapters/sqlite/migrate.ts';
 import type { Migration } from '../adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../adapters/sqlite/migrations/0001-initial.ts';
+import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
 import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
@@ -37,7 +38,7 @@ import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboardin
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { AppDeps, Clock, GsdProblem, IdSource } from '../app/deps.ts';
 
-export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001];
+export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002];
 export const EXIT_INTERNAL = 70;
 
 export interface DepsOverrides {

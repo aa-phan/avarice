@@ -6,7 +6,7 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const MAX_TIME_MS = 2 ** 48 - 1;
 const RANDOM_BYTES = 10;
 
-export const ID_PREFIXES = ['proj_', 'onb_', 'run_', 'inv_', 'att_', 'ckp_'] as const;
+export const ID_PREFIXES = ['proj_', 'onb_', 'run_', 'inv_', 'att_', 'ckp_', 'ev_', 'dec_'] as const;
 export type IdPrefix = (typeof ID_PREFIXES)[number];
 
 function encode(value: bigint, chars: number): string {

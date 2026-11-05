@@ -5,6 +5,7 @@
 // adapter reads no clock.
 import type { Result } from '../domain/result.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
+import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
 
 export interface ProjectRow {
   projectId: string;
@@ -240,6 +241,66 @@ export interface AdapterConfigInput {
   descriptor: unknown;
 }
 
+// ---- runs (plan 02-03) -------------------------------------------------------------------------------
+// A run is a `runs` row whose state is one of RUN_STATES. The Phase 1 carrier rows (state `onboarding`) are
+// not runs: no run method reads, lists or changes them.
+
+export interface RunRow {
+  runId: string;
+  projectId: string;
+  state: RunState;
+  version: number;
+  title: string;
+  // The code of the entry into blocked_on_decision; null in every other state.
+  reason: RunBlockedReason | null;
+  workspacePath: string | null;
+  branch: string | null;
+  baseRevision: string | null;
+  createdAt: string;
+  updatedAt: string;
+  leaseHolder: string | null;
+  leaseExpiresAt: string | null;
+  leaseFence: number;
+}
+
+export interface NewRun {
+  runId: string;
+  projectId: string;
+  title: string;
+  nowMs: number;
+}
+
+export interface RunTransitionInput {
+  to: RunState;
+  // Written to checkpoints.next_action.
+  nextAction: string;
+  nowMs: number;
+  // Required when `to` is `blocked_on_decision`; refused otherwise.
+  reason?: RunBlockedReason;
+  revision?: string;
+  // Recorded on the run row the first time they are known and kept afterwards.
+  workspacePath?: string;
+  branch?: string;
+  baseRevision?: string;
+  itemId?: string;
+  attemptId?: string;
+  // Extra event data: IDs, counts, digests and exit codes only.
+  data?: Readonly<Record<string, unknown>>;
+}
+
+export interface RunCheckpointRow {
+  checkpointId: string;
+  runId: string;
+  seq: number;
+  attemptId: string | null;
+  itemId: string | null;
+  fromState: RunState | null;
+  toState: RunState;
+  revision: string | null;
+  nextAction: string;
+  createdAt: string;
+}
+
 export interface Ledger {
   registerProject(input: NewProject): Result<ProjectRow>;
   findProject(query: ProjectQuery): Result<ProjectRow | null>;
@@ -286,4 +347,11 @@ export interface Ledger {
   appendEvent(input: EventInput): Result<EventReceipt>;
   recordArtifact(input: ArtifactInput): Result<void>;
   upsertAdapterConfig(input: AdapterConfigInput): Result<void>;
+
+  // Runs. A new run is `contract_ready` at version 1 with no checkpoint and no lease (fence 0).
+  createRun(input: NewRun): Result<RunRow>;
+  getRun(runId: string): Result<RunRow>;
+  // One transaction: the edge is checked against RUN_TRANSITIONS, the version and the lease fence are checked, the run row,
+  // a checkpoint (seq = max + 1 for the run) and a `run.transition` event with the run ID are written together or not at all.
+  transitionRun(runId: string, guard: TransitionGuard, t: RunTransitionInput): Result<RunRow>;
 }
