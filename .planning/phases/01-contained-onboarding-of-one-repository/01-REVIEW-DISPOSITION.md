@@ -3,34 +3,34 @@ phase: 01
 review: 01-REVIEW.md
 titles: json
 findings:
+  - id: WR-01
+    severity: warning
+    disposition: open
+    title: "The sandbox probe retry blocks the event loop for up to 20 s on every call, and a failed probe is never cached"
   - id: IN-01
     severity: info
-    disposition: skipped
-    title: "Pre-clustering chunk-usable gate is redundant with the per-document gate and gives a less accurate message"
+    disposition: open
+    title: "`exit-run.sh` still defaults a missing or falsy `spentUsdSoFar` to 0 and accepts loosely coerced values"
   - id: IN-02
     severity: info
-    disposition: fixed
-    title: "Work-root and corpus-root validators are duplicated"
+    disposition: open
+    title: "`intel patch-meta` with no operand passes the write check vacuously"
   - id: IN-03
     severity: info
-    disposition: skipped
-    title: "The model still builds the path of the plan file itself"
+    disposition: open
+    title: "The per-verb tables in `hook-decision.ts` are keyed by strings that duplicate the verb list in `invocation-scope.ts`"
   - id: IN-04
     severity: info
-    disposition: fixed
-    title: "The new catch blocks are broader than the condition they name, and one of them is unreachable and untested"
+    disposition: open
+    title: "The IN-05 node-count gate assumes unique manifest paths, but `documentsExpected` counts entries"
   - id: IN-05
     severity: info
-    disposition: fixed
-    title: "The exit gate does not tie `documentNodes` to the document accounting"
+    disposition: open
+    title: "The WR-07 probe-timeout tests assume a stub shell script starts within 200 ms"
   - id: IN-06
     severity: info
     disposition: fixed
     title: "The header comment of `invocation.ts` describes the old ordering"
-  - id: WR-01
-    severity: warning
-    disposition: fixed
-    title: "`computeInvocationScope` can now throw after the invocation has been reserved"
   - id: WR-02
     severity: warning
     disposition: fixed
@@ -71,22 +71,22 @@ findings:
     severity: warning
     disposition: fixed
     title: "`exit-run.sh` spend guard fails open on a non-numeric value"
-open: 0
+open: 6
 total: 17
-recorded: 2026-11-05T07:41:53.761Z
+recorded: 2026-11-05T08:23:45.374Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | skipped | 01-REVIEW-FIX.md (gate kept by design, reason documented in 089d7c6) |
-| IN-02 | info | fixed | 01-REVIEW-FIX.md |
-| IN-03 | info | skipped | 01-REVIEW-FIX.md |
-| IN-04 | info | fixed | 01-REVIEW-FIX.md (2f58f10) |
-| IN-05 | info | fixed | 01-REVIEW-FIX.md |
-| IN-06 | info | fixed | 01-REVIEW-FIX.md |
-| WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-01 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | open | - |
+| IN-04 | info | open | - |
+| IN-05 | info | open | - |
+| IN-06 | info | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 | CR-01 | critical | fixed | quick 261104-jnc (5e67793), superseded by 261104-l3t (99dd4fb): shell grep denied by name (not in the current review) |
