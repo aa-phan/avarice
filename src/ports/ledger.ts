@@ -575,6 +575,9 @@ export interface Ledger {
   countBudgetDenials(runId: string, invocationId: string): Result<number>;
   // Every hook denial the invocation recorded (`total`), and how many of them were budget_exhausted (`budget`).
   countHookDenials(invocationId: string): Result<{ total: number; budget: number }>;
+  // The first `loop.limit` event the hook recorded for the invocation (CON-14): the hook stopped it after `count` consecutive denials or
+  // searches, and `limit` is the contract's limit. null when the invocation never reached one.
+  findLoopLimit(invocationId: string): Result<{ reason: string; count: number; limit: number } | null>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
   recordArtifact(input: ArtifactInput): Result<void>;

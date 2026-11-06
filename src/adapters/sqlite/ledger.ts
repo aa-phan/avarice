@@ -703,6 +703,15 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  findLoopLimit(invocationId: string): Result<{ reason: string; count: number; limit: number } | null> {
+    return guarded(() => {
+      const row = this.db.prepare("SELECT data_json FROM events WHERE type = 'loop.limit' AND invocation_id = ? ORDER BY seq LIMIT 1").get(invocationId) as { data_json: string } | undefined;
+      if (row === undefined) return null;
+      const data = JSON.parse(row.data_json) as Record<string, unknown>;
+      return { reason: String(data['reason'] ?? 'unknown'), count: Number(data['count'] ?? 0), limit: Number(data['limit'] ?? 0) };
+    });
+  }
+
   recordArtifact(input: ArtifactInput): Result<void> {
     return tx(this.db, () => {
       this.db

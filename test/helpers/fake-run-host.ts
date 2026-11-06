@@ -6,7 +6,8 @@
 // What a unit does here: for each edit, PreToolUse and PostToolUse Read, PreToolUse Edit, the write, PostToolUse Edit (a new file: Write);
 // then the quick records (`.planning/quick/<id>/<id>-PLAN.md`, `-SUMMARY.md`, `-VERIFICATION.md`) with Write. The misbehaviours the run
 // tests need are options: an attempted commit and a moved HEAD, a pause question, an edit outside the write set, a direct write the hook
-// never sees (a sandbox gap), and a fix that leaves the check failing.
+// never sees (a sandbox gap), a fix that leaves the check failing, and (plan 02-16) a crash or a wall-clock kill after some files were written,
+// a loop of denied calls, a flood of tool calls, and a different behaviour per attempt.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,12 +55,30 @@ export interface FakeRunOptions {
   recordTo?: string;
   // Quick directory name; default `261105-fk1-fix`.
   quickId?: string;
+  // Plan 02-16 (CON-16). The unit writes these clone-relative files (an existing one gets a trailing line, a missing one is created, both
+  // through the hook) and then dies: exit 1, no result event, no quick records. `costUsd` is what the host reports it spent.
+  crash?: { afterFiles: readonly string[]; costUsd?: number };
+  // The unit runs past the wall clock: it is killed after this many milliseconds (SIGKILL, timedOut, no result). Combines with `crash`
+  // (the files it wrote before the kill) or stands alone.
+  timeoutMs?: number;
+  // The unit makes this many denied calls in a row (a Write outside the write set). The real hook turns the third into `continue: false`
+  // and a loop.limit event; the host stops making calls at that point, as the real one ends the session.
+  denyLoop?: number;
+  // The unit makes this many Read calls of src/slug.ts (each is a tool call the hook charges to the toolCalls budget).
+  toolCallFlood?: number;
+  // Clone-relative files whose content (null when absent) is recorded under `observed` in the `recordTo` file at the start of the invocation:
+  // what the clone looked like when the unit began.
+  observe?: readonly string[];
+  // The n-th invocation of this host (1-based; index n-1) plays these options over the base ones. Lets one test script attempt 1 and attempt 2.
+  perAttempt?: readonly FakeRunOptions[];
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
 
 interface HookRun {
   denied: string | null;
+  // The hook told the host to stop (`continue: false`, a loop limit).
+  stopped: boolean;
 }
 
 function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolName: string, toolInput: Record<string, unknown>): HookRun {
@@ -69,9 +88,9 @@ function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolNa
     timeout: 30_000,
   });
   if (result.status !== 0) throw new Error(`the hook exited ${String(result.status)}: ${result.stderr}`);
-  if (event === 'post' || result.stdout.trim() === '') return { denied: null };
-  const reason = (JSON.parse(result.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } }).hookSpecificOutput.permissionDecisionReason;
-  return { denied: reason.replace(/^avarice: /, '') };
+  if (event === 'post' || result.stdout.trim() === '') return { denied: null, stopped: false };
+  const out = JSON.parse(result.stdout) as { continue?: boolean; hookSpecificOutput: { permissionDecisionReason: string } };
+  return { denied: out.hookSpecificOutput.permissionDecisionReason.replace(/^avarice: /, ''), stopped: out.continue === false };
 }
 
 const gitHead = (cwd: string): string => execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
@@ -95,12 +114,16 @@ export class FakeRunHost implements AgentHost {
   async invoke(req: InvocationRequest, _signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     this.calls.push(req);
     if (req.purpose !== 'run') return err({ kind: 'unsupported', capability: `fake-run-host:${req.purpose}` });
-    const o = this.options;
+    const o: FakeRunOptions = { ...this.options, ...(this.options.perAttempt?.[this.calls.length - 1] ?? {}) };
     if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
     const startedMs = Date.now();
     const cwd = realpathSync(req.cwd);
-    if (o.recordTo !== undefined) writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId }));
+    if (o.recordTo !== undefined) {
+      const observed: Record<string, string | null> = {};
+      for (const rel of o.observe ?? []) observed[rel] = existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null;
+      writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, observed }));
+    }
     const head = gitHead(cwd);
 
     const built = buildHookPolicy(
@@ -114,9 +137,11 @@ export class FakeRunHost implements AgentHost {
     writeFileSync(policyFile, JSON.stringify(built.value), { mode: 0o600 });
 
     let denies = 0;
+    let stopped = false;
     // One tool call: PreToolUse, the effect when allowed, PostToolUse.
     const tool = (name: string, input: Record<string, unknown>, effect: () => void): boolean => {
       const pre = callHook(policyFile, cwd, 'pre', name, input);
+      if (pre.stopped) stopped = true;
       if (pre.denied !== null) {
         denies += 1;
         return false;
@@ -166,6 +191,12 @@ export class FakeRunHost implements AgentHost {
       edits['src/slug.ts'] = `${original}// attempted fix\n`;
     }
     for (const [rel, text] of Object.entries(edits)) edit(rel, text);
+    const crashed = o.crash !== undefined || o.timeoutMs !== undefined;
+    for (const rel of o.crash?.afterFiles ?? []) {
+      const marker = '// partial write of a unit that stopped before it finished\n';
+      edit(rel, existsSync(join(cwd, rel)) ? `${readFileSync(join(cwd, rel), 'utf8')}${marker}` : marker);
+    }
+    for (let i = 0; i < (o.toolCallFlood ?? 0); i += 1) tool('Read', { file_path: join(cwd, 'src/slug.ts') }, () => {});
 
     if (o.deniedEdit !== undefined) {
       const target = join(cwd, o.deniedEdit);
@@ -174,7 +205,7 @@ export class FakeRunHost implements AgentHost {
 
     const quick = o.quickId ?? FAKE_QUICK_ID;
     const wroteEdits = Object.keys(edits).length > 0;
-    if (o.summary ?? wroteEdits) {
+    if ((o.summary ?? wroteEdits) && !crashed) {
       const base = `.planning/quick/${quick}`;
       tool('Write', { file_path: join(cwd, `${base}/${quick}-PLAN.md`), content: 'plan' }, () => write(`${base}/${quick}-PLAN.md`, '# Plan\n\nFix the slug.\n'));
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
@@ -184,6 +215,11 @@ export class FakeRunHost implements AgentHost {
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
         tool('Write', { file_path: join(cwd, `${base}/${quick}-VERIFICATION.md`), content: text }, () => write(`${base}/${quick}-VERIFICATION.md`, text));
       }
+    }
+
+    // A loop of denied calls: after the third the hook asks the host to stop, and the host makes no further call.
+    for (let i = 0; i < (o.denyLoop ?? 0) && !stopped; i += 1) {
+      tool('Write', { file_path: join(cwd, 'outside-the-write-set.txt'), content: 'x\n' }, () => write('outside-the-write-set.txt', 'x\n'));
     }
 
     if (o.commitAttempt === true) {
@@ -202,26 +238,29 @@ export class FakeRunHost implements AgentHost {
     }
 
     const headAfter = gitHead(cwd);
+    // A killed unit: the host waits out the clock, then ends the process group.
+    if (o.timeoutMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.timeoutMs));
+    const elapsed = Math.max(Date.now() - startedMs, o.timeoutMs ?? 0);
     return ok({
       sessionId: `fake-run-session-${this.calls.length}`,
-      kind: denies > 0 && !wroteEdits ? 'denied' : 'progressed',
+      kind: crashed ? 'inconclusive' : denies > 0 && !wroteEdits ? 'denied' : 'progressed',
       permissionDenials: [],
-      costUsd: 0,
-      durationMs: Date.now() - startedMs,
+      costUsd: o.crash?.costUsd ?? 0,
+      durationMs: elapsed,
       headBefore: head,
       headAfter,
       ...(o.question !== undefined ? { question: o.question } : {}),
       details: {
-        exitCode: 0,
-        signal: null,
-        timedOut: false,
+        exitCode: o.timeoutMs !== undefined ? null : crashed ? 1 : 0,
+        signal: o.timeoutMs !== undefined ? 'SIGKILL' : null,
+        timedOut: o.timeoutMs !== undefined,
         headMoved: head !== headAfter,
         transcriptBytes: 0,
         hookDenies: denies,
         hookBudgetDenies: 0,
         numTurns: 1,
-        resultSeen: true,
-        isError: false,
+        resultSeen: !crashed,
+        ...(crashed ? {} : { isError: false }),
       },
     });
   }

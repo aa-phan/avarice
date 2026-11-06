@@ -4,7 +4,9 @@
 //   context-pack  an index-first pack (intel, then graph) for the prompt; the step keeps item references and a digest, never text (S-41)
 //   launch:run    attempt, item ready -> delegated, a snapshot of the clone, one contained invocation of the unit
 //   classify      resultSeen, is_error, exit, signal, timeout, denials, clone HEAD before and after, a quick SUMMARY, in-scope changes since the
-//                 snapshot, a structural pause signal; model text decides nothing (AUT-7). Anything but `progressed` ends in a decision.
+//                 snapshot, a structural pause signal, a hook loop-limit stop; model text decides nothing (AUT-7). Anything but `progressed` ends in a
+//                 decision, except a crashed or timed-out unit with no moved HEAD: it is discarded to its snapshot and retried once (CON-16)
+//   discard-attempt  the CON-16 recovery (discard.ts), then the retry attempt goes straight on to `launch:run`
 //   gate:g2       scope, deletions, GSD verification status, overrides, PRUNE entries, and the required checks on the working tree
 //   commit        quick records and GSD bookkeeping archived and taken out of the clone, then the supervisor commits only the in-scope paths
 //                 with `Avarice-Run` and `Avarice-Attempt` trailers; the run moves to `verifying`
@@ -34,6 +36,7 @@ import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { faultPoint } from '../onboarding-service.ts';
 import { runUnitPrompt } from '../run-gsd-config.ts';
 import { blockRun } from './blocked.ts';
+import { discardAttempt } from './discard.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
 const RECORD_MAX_BYTES = 64 * 1024;
@@ -43,6 +46,8 @@ const MAX_IGNORED_STORED = 200;
 const STORE = 'local';
 const RUN_RETENTION = 'run';
 const QUICK_RECORD_KIND = 'gsd-quick-record';
+// The reason of the attempt that follows a discard (CON-16).
+const RETRY_REASON = 'con16-retry';
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -135,6 +140,8 @@ interface Classified {
   // The pause text the host captured, stored as data by the decision.
   question: string | undefined;
   hostError: PortError | undefined;
+  // The hook stopped this invocation at a loop limit (CON-14): `loop.limit` event for it.
+  loopLimit: { reason: string; count: number; limit: number } | null;
 }
 
 const isInScope = (change: PathChange, contract: RunContract): boolean =>
@@ -188,6 +195,8 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
 
   const hooks = deps.ledger.countHookDenials(prepared.request.invocationId);
   if (!hooks.ok) return hooks;
+  const loopLimit = deps.ledger.findLoopLimit(prepared.request.invocationId);
+  if (!loopLimit.ok) return loopLimit;
   const details = outcome.ok ? outcome.value.details : undefined;
   const question = outcome.ok ? outcome.value.question : undefined;
   const waitingJson = changes.some((c) => c.status !== 'deleted' && /(^|\/)WAITING\.json$/.test(c.path));
@@ -224,6 +233,7 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
     pauseSignal: pause.signal,
     question,
     hostError: outcome.ok ? undefined : outcome.error,
+    loopLimit: loopLimit.value,
   });
 }
 
@@ -276,7 +286,7 @@ function snapshotOf(ctx: RunStageContext, attemptId: string): Result<WorkspaceSn
 }
 
 // item ready -> delegated -> (launch, classify) -> implemented -> (G2) -> gated -> (commit) -> done
-async function attemptUnit(unit: Unit, row: RunRow): Promise<Result<void>> {
+async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean } = {}): Promise<Result<void>> {
   const { ctx, contract } = unit;
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
@@ -295,12 +305,16 @@ async function attemptUnit(unit: Unit, row: RunRow): Promise<Result<void>> {
   }
   const ordinal = adopted?.ordinal ?? attempts.value.length + 1;
 
-  const marked = ctx.checkpoint('context-pack', { itemId: unit.item.itemId });
-  if (!marked.ok) return marked;
+  // The CON-16 retry follows its `discard-attempt` checkpoint with `launch:run`: the pack is rebuilt for the prompt (the step is recorded again),
+  // and the stage does not commit a second `context-pack` checkpoint between the discard and the launch.
+  if (options.retry !== true) {
+    const marked = ctx.checkpoint('context-pack', { itemId: unit.item.itemId });
+    if (!marked.ok) return marked;
+  }
   const pack = await contextPack(unit, row, ordinal);
   if (!pack.ok) return pack;
 
-  const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason: ordinal === 1 ? 'initial' : 'retry', nowMs: deps.clock.nowMs() });
+  const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason: ordinal === 1 ? 'initial' : RETRY_REASON, nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
   const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId });
@@ -369,22 +383,25 @@ async function attemptUnit(unit: Unit, row: RunRow): Promise<Result<void>> {
       overrides: c.verification.overrides,
       pruneEntries: c.pruneEntries,
       pauseSignal: c.pauseSignal,
+      loopLimit: c.loopLimit === null ? null : c.loopLimit.reason,
       ...(c.hostError !== undefined ? { hostError: c.hostError.kind } : {}),
     },
     classifyStarted,
   );
   if (!recorded.ok) return recorded;
 
-  if (c.kind !== 'progressed') return routeOutcome(unit, attemptId, c);
+  // A unit the hook stopped at a loop limit is routed whatever else it did (CON-14): it is not committed.
+  if (c.kind !== 'progressed' || c.loopLimit !== null) return routeOutcome(unit, row, attemptId, c, snapshot.value);
 
   const implemented = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'implemented', nowMs: deps.clock.nowMs(), attemptId });
   if (!implemented.ok) return implemented;
   return gateUnit(unit, row, attemptId, snapshot.value);
 }
 
-// The routing table of a unit that did not progress: classified kind -> (blocked reason, decision class). Plan 02-16 inserts the CON-16
-// discard-and-retry before the `failed` and `inconclusive` fallbacks.
-function routeOutcome(unit: Unit, attemptId: string, c: Classified): Result<void> {
+// The routing table of a unit that did not progress: classified kind -> (blocked reason, decision class). The CON-16 discard-and-retry sits
+// before the `failed` and `inconclusive` fallbacks, and the loop-limit escalation (CON-14) ahead of the other kinds; a moved HEAD stays first,
+// because it is a breach of containment and no recovery may touch a clone whose HEAD the supervisor did not move.
+async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Classified, snapshot: WorkspaceSnapshot): Promise<Result<void>> {
   const { ctx } = unit;
   const common = { attemptId, itemId: unit.item.itemId } as const;
   const done = (blocked: Result<RunRow>): Result<void> => (blocked.ok ? ok(undefined) : blocked);
@@ -400,6 +417,12 @@ function routeOutcome(unit: Unit, attemptId: string, c: Classified): Result<void
         ...common,
       }),
     );
+  }
+  // A budget that ran out denies every call after it, so a long unit reaches the denial limit on the way: the spent budget is the cause and
+  // is what the decision names, so `budget_exhausted` is routed before the loop limit.
+  if (c.loopLimit !== null && c.kind !== 'budget_exhausted') {
+    const what = c.loopLimit.reason === 'consecutive-denials' ? 'consecutive denials' : 'consecutive searches without a read';
+    return done(blockRun(ctx, { reason: 'decision', decisionClass: 'repeated_failure', issue: `loop limit: ${c.loopLimit.count} ${what}`, data: { loopLimit: c.loopLimit.reason, count: c.loopLimit.count, limit: c.loopLimit.limit }, ...common }));
   }
   if (c.kind === 'budget_exhausted') {
     const budgets = ctx.deps.ledger.getBudgets(ctx.runId);
@@ -418,7 +441,33 @@ function routeOutcome(unit: Unit, attemptId: string, c: Classified): Result<void
   if (c.kind === 'no_progress') {
     return done(blockRun(ctx, { reason: 'decision', decisionClass: 'repeated_failure', issue: 'the unit ended without a SUMMARY and an in-scope change', ...common }));
   }
+
   // failed without a moved HEAD, and inconclusive
+  // CON-16: a unit that crashed or was killed by the wall clock (no result, a non-zero exit or a signal), with no moved HEAD and no host refusal,
+  // had no effect outside the machine in Phase 2: its clone is put back to the snapshot and the unit is tried once more. A unit that made
+  // progress, paused, was denied or made no progress is never retried (FR-4), and neither is a host that refused to launch.
+  const crashed = c.kind === 'inconclusive' || (c.kind === 'failed' && (c.facts.exitCode !== 0 || c.facts.signal !== null || !c.facts.resultSeen));
+  const hostRefused = c.hostError !== undefined && c.hostError.kind !== 'timeout';
+  const history = attemptHistory(unit, attemptId, c);
+  if (!history.ok) return history;
+  const stored = ctx.deps.ledger.getRunContract(ctx.runId);
+  if (!stored.ok) return stored;
+  const retries = stored.value === null ? 0 : (stored.value.body as RunContract).budgets.retry;
+  if (crashed && !hostRefused && history.value.length < 1 + retries) {
+    const budgets = ctx.deps.ledger.getBudgets(ctx.runId);
+    if (!budgets.ok) return budgets;
+    const invocations = budgets.value.find((b) => b.name === 'invocations');
+    if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
+      return done(
+        blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the invocations budget is spent, so the crashed unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common }),
+      );
+    }
+    const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal: history.value.length, snapshot });
+    if (!discarded.ok) return discarded;
+    if (!discarded.value.discarded) return ok(undefined);
+    return attemptUnit(unit, row, { retry: true });
+  }
+
   const why =
     c.hostError !== undefined
       ? `the host could not run the unit (${c.hostError.kind})`
@@ -427,8 +476,43 @@ function routeOutcome(unit: Unit, attemptId: string, c: Classified): Result<void
         : 'the unit ended in error (non-zero exit, a signal or an error result)';
   // A host that refused to launch (no sandbox, a failed self-test) is a containment condition, not a model failure.
   const enforcement = c.hostError !== undefined && (c.hostError.kind === 'unavailable' || c.hostError.kind === 'denied');
-  return done(blockRun(ctx, { reason: enforcement ? 'enforcement_failure' : 'decision', decisionClass: enforcement ? 'permission' : 'repeated_failure', issue: why, ...common }));
+  // A second failure names every attempt and what each ended as: the retry was the one chance (FR-4).
+  const issue = history.value.length > 1 ? `${why}, again after a discard and retry: ${describeHistory(history.value)}` : why;
+  return done(
+    blockRun(ctx, {
+      reason: enforcement ? 'enforcement_failure' : 'decision',
+      decisionClass: enforcement ? 'permission' : 'repeated_failure',
+      issue,
+      ...(history.value.length > 1 ? { data: { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } } : {}),
+      ...common,
+    }),
+  );
 }
+
+// The attempts of the run so far, oldest first, each with the kind it was classified as (this attempt's classification is `c`; an earlier one is
+// read from its `classify` step).
+interface AttemptKind {
+  attemptId: string;
+  kind: string;
+}
+
+function attemptHistory(unit: Unit, attemptId: string, c: Classified): Result<AttemptKind[]> {
+  const attempts = unit.ctx.deps.ledger.listRunAttempts(unit.ctx.runId);
+  if (!attempts.ok) return attempts;
+  const history: AttemptKind[] = [];
+  for (const a of attempts.value) {
+    if (a.attemptId === attemptId) {
+      history.push({ attemptId: a.attemptId, kind: c.kind });
+      continue;
+    }
+    const classified = stepOfAttempt(unit.ctx, 'classify', a.attemptId);
+    if (!classified.ok) return classified;
+    history.push({ attemptId: a.attemptId, kind: typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'unknown' });
+  }
+  return ok(history);
+}
+
+const describeHistory = (history: readonly AttemptKind[]): string => history.map((a) => `attempt ${a.attemptId} ended ${a.kind}`).join('; ');
 
 // G2 over the unit's changes (AUT-7): facts AVARICE measured. The required checks run on the working tree only when the unit already
 // passes every other rule, so agent-changed code is not run for a unit that is already stopped.
