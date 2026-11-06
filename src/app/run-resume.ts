@@ -195,7 +195,7 @@ function markInterruptedChecks(ctx: RunStageContext, row: RunRow, contract: RunC
 
 // A `verifying` run (or a `paused` one that was on its way back to verifying): shown paused with the reason, its interrupted checks marked, then
 // back to `verifying` with the action it resumes at: the hand-off when G4 already passed for this very commit, else the checks.
-async function reconcileVerifying(ctx: RunStageContext, run: RunRow): Promise<Result<void>> {
+function reconcileVerifying(ctx: RunStageContext, run: RunRow): Result<void> {
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
@@ -238,7 +238,7 @@ async function reconcileVerifying(ctx: RunStageContext, run: RunRow): Promise<Re
 
 // A `running` run (or a `paused` one on its way back to running): the item that was in flight is reconciled by item.ts, which owns what an attempt
 // leaves behind; the run is paused around a reconcile of a delegated item (reason `interrupted`) and put back to `running` afterwards.
-async function reconcileRunning(ctx: RunStageContext, run: RunRow): Promise<Result<void>> {
+function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   const { deps } = ctx;
   const items = deps.ledger.listWorkItems(ctx.runId);
   if (!items.ok) return items;
@@ -253,7 +253,7 @@ async function reconcileRunning(ctx: RunStageContext, run: RunRow): Promise<Resu
   }
   let outcome: string = 'none';
   if (inFlight) {
-    const reconciled = await reconcileItem(ctx, current);
+    const reconciled = reconcileItem(ctx, current);
     if (!reconciled.ok) return reconciled;
     outcome = reconciled.value;
     // A reconcile that blocked the run has already moved it to blocked_on_decision.

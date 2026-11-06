@@ -282,8 +282,149 @@ export const runningStage: RunStage = async (ctx, row) => {
 // `blocked` (the run was moved to blocked_on_decision).
 export type ItemReconcile = 'none' | 'retry' | 'committed' | 'blocked';
 
-export function reconcileItem(_ctx: RunStageContext, _row: RunRow): Promise<Result<ItemReconcile>> {
-  return Promise.resolve(ok('none'));
+// Called by the supervisor's resume prelude (run-resume.ts) after every surviving host has been reaped, so nothing writes the clone while it is read.
+// Only `delegated` and `gated` items can have been in flight; every other item state is continued by the stage as it is. The decisions rest on the
+// ledger (the attempt, its snapshot and classify steps) and on git (the clone's HEAD and its trailers), never on anything the unit said.
+export function reconcileItem(ctx: RunStageContext, row: RunRow): Result<ItemReconcile> {
+  const loaded = loadUnit(ctx, row);
+  if (!loaded.ok) return loaded;
+  const unit = loaded.value;
+  if (unit.item.state === 'delegated') return reconcileDelegated(unit);
+  if (unit.item.state === 'gated') return reconcileGated(unit);
+  return ok('none');
+}
+
+// An attempt that was in flight (item `delegated`): its invocation was killed with the supervisor, or it had ended and the supervisor died before its
+// classification was recorded, or the supervisor died inside the discard of a crashed unit. All are read as the attempt having ended `inconclusive` and
+// take the CON-16 road: the clone goes back to the attempt's snapshot, and the item is retried once. The killed invocation stays charged (the next
+// reservation turns its orphaned reservation into spent invocations); nothing is refunded.
+function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const attempt = latestAttempt(ctx);
+  if (!attempt.ok) return attempt;
+  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is delegated but run ${ctx.runId} has no attempt` });
+  const { attemptId, ordinal } = attempt.value;
+  const common = { attemptId, itemId: unit.item.itemId } as const;
+
+  const snapshotStep = stepOfAttempt(ctx, 'snapshot', attemptId);
+  if (!snapshotStep.ok) return snapshotStep;
+  if (snapshotStep.value === null) {
+    // The supervisor died after it marked the item delegated and before it took the snapshot: no unit was launched, so the clone is as it was. The
+    // item is ready again; an `initial` attempt that never started is adopted by the next pass, any other is ended so it is not left open.
+    if (attempt.value.reason !== 'initial') {
+      const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'discarded', nowMs: deps.clock.nowMs() });
+      if (!ended.ok && ended.error.kind !== 'conflict') return ended;
+    }
+    const moved = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'ready', nowMs: deps.clock.nowMs(), attemptId, data: { reconciled: true } });
+    return moved.ok ? ok('retry') : moved;
+  }
+  const snapshot = snapshotOf(ctx, attemptId);
+  if (!snapshot.ok) return snapshot;
+  const head = workspace.head(unit.clone);
+  if (!head.ok) return head;
+
+  // The classification: a unit that was classified before the kill keeps its record; one that was not is recorded here as inconclusive, which is what
+  // the attempt history, the status and a second failure's decision read.
+  const classified = stepOfAttempt(ctx, 'classify', attemptId);
+  if (!classified.ok) return classified;
+  let kind = typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'inconclusive';
+  if (classified.value === null) {
+    const recorded = recordStep(
+      ctx,
+      'classify',
+      ordinal,
+      { attemptId, kind: 'inconclusive', interrupted: true, headMoved: head.value !== snapshot.value.head, headBefore: snapshot.value.head, headAfter: head.value, resultSeen: false },
+      deps.clock.nowMs(),
+    );
+    if (!recorded.ok) return recorded;
+    kind = 'inconclusive';
+  }
+
+  // The supervisor alone commits, and it commits only an item that passed its gate: a HEAD that moved under a delegated item is a breach.
+  if (head.value !== snapshot.value.head) {
+    const blocked = blockRun(ctx, {
+      reason: 'enforcement_failure',
+      decisionClass: 'permission',
+      issue: 'the clone HEAD moved while the unit was in flight: the supervisor alone commits, so containment did not hold',
+      finding: { check: 'head-moved' },
+      data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
+      ...common,
+    });
+    return blocked.ok ? ok('blocked') : blocked;
+  }
+
+  const history = attemptHistoryOf(unit, attemptId, kind);
+  if (!history.ok) return history;
+  const stored = deps.ledger.getRunContract(ctx.runId);
+  if (!stored.ok) return stored;
+  const retries = stored.value === null ? 0 : (stored.value.body as RunContract).budgets.retry;
+  if (history.value.length >= 1 + retries) {
+    // The interrupted attempt was itself the retry: the one chance is spent, and the owner decides (FR-4).
+    const blocked = blockRun(ctx, {
+      reason: 'decision',
+      decisionClass: 'repeated_failure',
+      issue: `the unit was interrupted, again after a discard and retry: ${describeHistory(history.value)}`,
+      data: { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') },
+      ...common,
+    });
+    return blocked.ok ? ok('blocked') : blocked;
+  }
+  const budgets = deps.ledger.getBudgets(ctx.runId);
+  if (!budgets.ok) return budgets;
+  const invocations = budgets.value.find((b) => b.name === 'invocations');
+  // The killed invocation's reservation counts here: it is spent by the next reservation, so the retry needs a unit beyond it.
+  if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
+    const blocked = blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the invocations budget is spent, so the interrupted unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common });
+    return blocked.ok ? ok('blocked') : blocked;
+  }
+
+  const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal, snapshot: snapshot.value });
+  if (!discarded.ok) return discarded;
+  return ok(discarded.value.discarded ? 'retry' : 'blocked');
+}
+
+// An item that passed its gate (`gated`): the supervisor may have made its commit and died before it recorded it. A HEAD that moved is the item's own
+// commit only when its message carries this run's ID and the open attempt's ID in its `Avarice-*` trailers (the supervisor writes both); then the
+// `commit` step is recorded with it, the item is done, and no second commit is made. Any other commit on the clone is not ours.
+function reconcileGated(unit: Unit): Result<ItemReconcile> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const attempt = latestAttempt(ctx);
+  if (!attempt.ok) return attempt;
+  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt` });
+  const { attemptId, ordinal } = attempt.value;
+  const snapshot = snapshotOf(ctx, attemptId);
+  if (!snapshot.ok) return snapshot;
+  const head = workspace.head(unit.clone);
+  if (!head.ok) return head;
+  // HEAD still at the snapshot: the commit was not made, and the stage makes it.
+  if (head.value === snapshot.value.head) return ok('none');
+
+  const trailers = workspace.headTrailers(unit.clone);
+  if (!trailers.ok) return trailers;
+  if (trailers.value.runId !== ctx.runId || trailers.value.attemptId !== attemptId) {
+    const blocked = blockRun(ctx, {
+      reason: 'enforcement_failure',
+      decisionClass: 'permission',
+      issue: 'the clone HEAD moved to a commit the supervisor did not make for this attempt (its Avarice-Run and Avarice-Attempt trailers do not name it): containment did not hold',
+      finding: { check: 'head-moved' },
+      data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
+      attemptId,
+      itemId: unit.item.itemId,
+    });
+    return blocked.ok ? ok('blocked') : blocked;
+  }
+  const changed = workspace.diffCommits(unit.clone, snapshot.value.head, head.value);
+  if (!changed.ok) return changed;
+  const recorded = recordStep(ctx, 'commit', ordinal, { attemptId, commit: head.value, paths: changed.value.length, archived: 0, artifactsRemoved: 0, reconciled: true }, deps.clock.nowMs());
+  if (!recorded.ok) return recorded;
+  const done = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'done', nowMs: deps.clock.nowMs(), attemptId, data: { commit: head.value.slice(0, 12), reconciled: true } });
+  return done.ok ? ok('committed') : done;
 }
 
 function snapshotOf(ctx: RunStageContext, attemptId: string): Result<WorkspaceSnapshot> {
@@ -457,7 +598,7 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   // progress, paused, was denied or made no progress is never retried (FR-4), and neither is a host that refused to launch.
   const crashed = c.kind === 'inconclusive' || (c.kind === 'failed' && (c.facts.exitCode !== 0 || c.facts.signal !== null || !c.facts.resultSeen));
   const hostRefused = c.hostError !== undefined && c.hostError.kind !== 'timeout';
-  const history = attemptHistory(unit, attemptId, c);
+  const history = attemptHistoryOf(unit, attemptId, c.kind);
   if (!history.ok) return history;
   const stored = ctx.deps.ledger.getRunContract(ctx.runId);
   if (!stored.ok) return stored;
@@ -498,20 +639,20 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   );
 }
 
-// The attempts of the run so far, oldest first, each with the kind it was classified as (this attempt's classification is `c`; an earlier one is
+// The attempts of the run so far, oldest first, each with the kind it was classified as (this attempt's classification is `kind`; an earlier one is
 // read from its `classify` step).
 interface AttemptKind {
   attemptId: string;
   kind: string;
 }
 
-function attemptHistory(unit: Unit, attemptId: string, c: Classified): Result<AttemptKind[]> {
+function attemptHistoryOf(unit: Unit, attemptId: string, kind: string): Result<AttemptKind[]> {
   const attempts = unit.ctx.deps.ledger.listRunAttempts(unit.ctx.runId);
   if (!attempts.ok) return attempts;
   const history: AttemptKind[] = [];
   for (const a of attempts.value) {
     if (a.attemptId === attemptId) {
-      history.push({ attemptId: a.attemptId, kind: c.kind });
+      history.push({ attemptId: a.attemptId, kind });
       continue;
     }
     const classified = stepOfAttempt(unit.ctx, 'classify', a.attemptId);

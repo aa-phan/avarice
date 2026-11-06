@@ -292,6 +292,8 @@ async function handoff(ctx: Parameters<RunStage>[0], row: Parameters<RunStage>[1
       return fetched;
     }
     if (fetched.value.commit !== h.head) return err({ kind: 'internal', cause: `the hand-off carried ${fetched.value.commit}, not the verified commit ${h.head}` });
+    // The ref is in the source and nothing records it yet: a kill here leaves the effect unrecorded, and the resume repeats the (idempotent) fetch.
+    faultPoint('mid-handoff');
     const attemptOrdinal = deps.ledger.listRunAttempts(ctx.runId);
     const ordinal = attemptOrdinal.ok ? (attemptOrdinal.value.find((a) => a.attemptId === h.attemptId)?.ordinal ?? 1) : 1;
     const recorded = deps.ledger.recordRunStep(ctx.runId, {
@@ -311,6 +313,7 @@ async function handoff(ctx: Parameters<RunStage>[0], row: Parameters<RunStage>[1
       nowMs: deps.clock.nowMs(),
     });
     if (!event.ok) return event;
+    // The hand-off is recorded and the run has not moved yet (`mid-handoff#2`): the resume finds the step and only moves the run.
     faultPoint('mid-handoff');
   }
 

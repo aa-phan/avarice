@@ -1,0 +1,24 @@
+{
+  "command": "node --test test/integration/run-resume.test.ts",
+  "ranAgainst": "the Task 1 commit 59eebe0 (resume, reap and the verifying reconcile in place; reconcileItem a stub returning `none`; mid-handoff still fires after the step is recorded) plus the Task 2 tests appended to test/integration/run-resume.test.ts",
+  "exitCode": 1,
+  "reason": "with the item reconcile absent, a resume of a run whose item is `delegated` or `gated` has nothing that discards the interrupted attempt, recognises the supervisor's own commit by its trailer, or blocks on a foreign commit: the stage meets the delegated item and stops with its 'interrupted attempt is reconciled by resume' error, and the gated item is committed a second time; the hand-off kill point fires after its record, so there is no unrecorded fetch to repeat",
+  "failingFiles": ["test/integration/run-resume.test.ts"],
+  "failingTests": [
+    "the next resume reaps the host first, then discards the clone to the attempt snapshot and retries once, and the run is ready_for_review",
+    "ordering edge: the reap is recorded before the run is paused, and the pause before the retry attempt starts",
+    "the killed invocation stays charged: 2 invocations used, cost at least its reservation, every limit as the contract set it (CON-13)",
+    "resume records the item checkpoint with that commit and goes on to verifying with no second commit",
+    "HEAD moved with no Avarice-Attempt trailer: the run blocks with enforcement_failure, records no commit and hands nothing off",
+    "the ref is in the source but no handoff step is recorded and the run is still verifying",
+    "resume repeats the fetch (created false), records it once and reaches ready_for_review on the same commit",
+    "resume restores the clone, retries once and reaches ready_for_review; the crashed attempt is `discarded`, the retry handed off"
+  ],
+  "passingAtBase": [
+    "the Task 1 tracer and stop-state tests (7 + 3)",
+    "a reap that fails stops the resume (exit 70) with the launch still `started`: this is the Task 1 prelude",
+    "empty edge (killed at the baseline checkpoint) and adjacency edge (killed between the two commits of `context-pack`): the stage already resumes from the recorded steps",
+    "the preconditions of each kill (host alive, partial write present, commit made, crashed files still in the clone)"
+  ],
+  "summary": "24 tests, 16 pass, 8 fail; the eight failures are the reconcile of an interrupted unit, commit and hand-off"
+}
