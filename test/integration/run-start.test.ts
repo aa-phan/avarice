@@ -156,9 +156,15 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), body, 'the file equals the stored body');
     assert.equal(digestOf(JSON.parse(readFileSync(file, 'utf8'))), contracts[0]?.digest);
 
-    // D-19: the new run does not change `status --json`.
+    // D-19: the new run adds one `runs` key (plan 02-15) and changes no other key or value of `status --json`.
     const statusAfter = runCli(['status', '--json'], { roots: f.roots });
-    assert.equal(statusAfter.stdout, statusBefore.stdout);
+    const after = JSON.parse(statusAfter.stdout) as Array<Record<string, unknown>>;
+    const runs = after[0]?.['runs'] as Array<{ runId: string; state: string }>;
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0]?.runId, runId);
+    assert.equal(runs[0]?.state, 'contract_ready');
+    delete after[0]?.['runs'];
+    assert.equal(JSON.stringify(after, null, 2) + '\n', statusBefore.stdout);
   });
 
   it('does not touch the repository, and a subdirectory of it resolves the same project', () => {
