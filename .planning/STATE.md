@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-18-PLAN.md
-last_updated: "2026-11-06T08:30:39.109Z"
+stopped_at: Completed 02-19-PLAN.md
+last_updated: "2026-11-06T09:11:10.272Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: b6271266757d913a6492464c05e23565be326334
+state_head: 6f5a5352162a6f822487dee9be2ec9eab8eecaf9
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 19 of 22
+Plan: 20 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -101,6 +101,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P16 | 29 min | 2 tasks | 10 files |
 | Phase 02 P17 | 120min | 3 tasks | 19 files |
 | Phase 02 P18 | 27 min | 2 tasks | 8 files |
+| Phase 02 P19 | 100 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -210,6 +211,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-17: an interrupted invocation is reconciled as inconclusive (discard to its snapshot, one CON-16 retry); the mid-handoff kill point sits between the fetch and its record so resume repeats the idempotent fetch
 - [Phase 02]: 02-17: resume spends a killed invocation's orphaned reservation as soon as it has reaped it (CON-13), and an attempt that never launched a unit does not use the item's retry
 - [Phase 02]: 02-18: S2-D measured that an in-sandbox git commit needs eight writable entries under the clone's .git (objects, refs/heads/avarice, logs/HEAD, logs/refs/heads/avarice, index, index.lock, COMMIT_EDITMSG, HEAD.lock) and fails with only objects and the run ref; limitation 8 is resolved and the supervisor still commits (D-03) — CON-1 and D-03: no agent gets any of those entries; docs/containment.md has ten run-purpose matrix rows and test/unit/containment-matrix.test.ts fails on an empty cell, a misordered mechanism or an untracked test file
+- [Phase 02]: 02-19: the interactive shell is one session engine with two input modes (raw keys on a terminal, whole lines for TERM=dumb); it holds no ledger connection and strips all output once — ADR-013 decisions 3 and 6; one Consumer interface keeps the menu, prompts and live views single-sourced
+- [Phase 02]: 02-19: Ledger.listRunEvents added as the only port change, a read-only latest-events query for the watch view; macOS script cannot type after the screen is up, so key handling is proven on a python3 pty driver (test tooling only) — the Ledger port had no event read; script sends end-of-file at once and drops a completed line at the raw-mode switch
 
 ### Pending Todos
 
@@ -259,6 +262,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T08:30:32.670Z
-Stopped at: Completed 02-18-PLAN.md
+Last session: 2026-11-06T09:11:10.107Z
+Stopped at: Completed 02-19-PLAN.md
 Resume file: None

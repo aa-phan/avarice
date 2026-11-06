@@ -44,7 +44,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-24** [Later]: Each machine that runs work for a profile has a host record (identity, capability descriptor, status); a host is not deactivated while an active project or run depends on it.
 - [ ] **FR-25** [MVP]: A repository may declare an architecture model in `.avarice/architecture.json` (components with path globs, allowed edges with contract symbols, shared resources with UUIDs); AVARICE drafts it deterministically from the code graph as a proposal that takes effect only after user approval, and an `architecture-model` check reports departures (ADR-012).
 - [ ] **FR-26** [MVP]: `avarice dashboard` renders one self-contained, read-only HTML page from the profile's ledger, with no server, no listening port and no network access, redacted like events and limited to one profile (ADR-011).
-- [ ] **FR-27** [MVP]: `avarice` with no arguments, when standard input and standard output are both terminals, opens an interactive shell that shows the profile's runs, onboardings, open decisions and live progress and runs every command in-process with the one-shot checks; otherwise, or under `AVARICE_RUN`, it prints usage and exits 64; no daemon, listening port or runtime dependency (ADR-013).
+- [x] **FR-27** [MVP]: `avarice` with no arguments, when standard input and standard output are both terminals, opens an interactive shell that shows the profile's runs, onboardings, open decisions and live progress and runs every command in-process with the one-shot checks; otherwise, or under `AVARICE_RUN`, it prints usage and exits 64; no daemon, listening port or runtime dependency (ADR-013).
 
 ### Run contract (RC-1 to RC-8)
 
@@ -145,7 +145,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
 - [ ] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
 - [ ] **OPS-6** [MVP]: Upgrading GSD, the agent host or AVARICE is detectable by `doctor`; incompatible versions fail with an actionable message, not partial behavior.
-- [ ] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
+- [x] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
 
 ## v2 Requirements (Deferred)
 
@@ -238,7 +238,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-24 | Phase 7 | Pending |
 | FR-25 | Phase 5 | Pending |
 | FR-26 | Phase 5 | Pending |
-| FR-27 | Phase 2 | Pending |
+| FR-27 | Phase 2 | Complete |
 | RC-1 | Phase 2 | Complete |
 | RC-2 | Phase 2 | Pending |
 | RC-3 | Phase 2 | Pending |
@@ -318,7 +318,7 @@ Each v1 requirement maps to exactly one phase.
 | OPS-4 | Phase 5 | Pending |
 | OPS-5 | Phase 4 | Pending |
 | OPS-6 | Phase 4 | Pending |
-| OPS-7 | Phase 2 | Pending |
+| OPS-7 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 106 total (107 normative minus FR-23 deferred)
