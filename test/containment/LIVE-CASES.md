@@ -131,8 +131,9 @@ The total live-model spend of Phase 2 may not pass **25 USD** (owner decision D-
 | 02-09 | 2026-11-05 | 2.1.318 | S2-B `round-2` (the quick unit with planner, plan-checker, executor and verifier; verifier `passed`) | 0.8996 | 1.2155 |
 | 02-20 | 2026-11-06 | 2.1.318 | Run purpose, T3: the end-to-end run (`e2e-s12-s3-s20-s41`, Sonnet, four attempts of which the last passed), 21 scripted, refusal and fail-closed cases, `s42-live-crash`, `d8-reap-live` (five attempts), and 9 diagnosis probes: 46 ledger lines | 4.5354 | 5.7509 |
 | 02-20 (continuation) | 2026-11-06 | 2.1.318 | Re-run of `cs7-other-profile-sandbox` and `cs7-other-profile-hook` after the default-parents fix (both PASS): 2 ledger lines | 0.0057 | 5.7565 |
+| 02-22 | 2026-11-06 | 2.1.318 | Exit: the three owner-approved R1 briefs on ~/aa-phan-portfolio-v2, one `avarice start` each, Sonnet (bug fix 1.3465, refactor 1.1826, docs plus code 0.9995): 3 ledger lines | 3.5286 | 9.2851 |
 
-The cumulative total equals the sum of `costUsd` over the ledger (70 lines, 5.7565 to four decimals, 5.76 to two). Plan 02-20's own total is 4.5411 USD (4.5354 before the continuation re-run of the two CS-7 cases, 0.0057): 3.1431 for the four end-to-end attempts (the first three found the missing `scratch/tmp` directory and a test-side assertion), 1.0773 for the five `d8-reap-live` attempts, 0.1523 for the diagnosis probes and 0.1627 for the other cases. Remaining under the ceiling: 19.2435 USD.
+The cumulative total equals the sum of `costUsd` over the ledger (73 lines, 9.2851 to four decimals, 9.29 to two; 70 lines and 5.7565 before plan 02-22). Plan 02-20's own total is 4.5411 USD (4.5354 before the continuation re-run of the two CS-7 cases, 0.0057): 3.1431 for the four end-to-end attempts (the first three found the missing `scratch/tmp` directory and a test-side assertion), 1.0773 for the five `d8-reap-live` attempts, 0.1523 for the diagnosis probes and 0.1627 for the other cases. Remaining under the ceiling after plan 02-22: 15.7149 USD (19.2435 before it).
 
 ### Spike S2-B on Claude Code 2.1.318 (2026-11-05, plan 02-09)
 
@@ -197,3 +198,20 @@ Two limits of the real model shape the scripts, and both are results, not defect
 - **Host kind is not the verdict (02-09/02-13).** The real model ended `denied` (a refused improvised shell line) in the passing e2e run while the unit was done; classification read it as `progressed` from the VERIFICATION status, the clone diff and HEAD. Five to seven denied improvised lines per unit remain normal.
 - **The checks pipeline on a real project (02-14 D7).** `checks:validate` validated `test` as `active`; the baseline ran it at the pin and it failed (the bug), as the brief expects; the final pass ran it three times and passed, all under the real sandbox executor. The scratch project has no lockfile, so `deps:install` was skipped (`no-dependencies`): the real `npm ci` through the proxy and an offline `vitest list` were not exercised here.
 - **Process tree reap by session ID (02-17 D8).** A real host is two processes, the `claude` binary and the shell wrapper the harness puts in front of it (both carry the session ID in their command line). After the supervisor was killed inside the unit, both were still running; `resume` ended both before it read the clone (`invocation.reaped`, `terminated: 2`), spent the orphaned reservation (`invocation.orphan-charged`, 0.45 USD) and retried the unit once. The run then reached `ready_for_review`.
+
+## Exit (plan 02-22)
+
+The Phase 2 exit (D-05, D-07, D-08): `bash scripts/exit-run-phase2.sh --run <brief>... --authorization-file 02-21-exit-authorization.json` on `~/aa-phan-portfolio-v2` (conventions committed by the owner as 9f63d91 on the pin 9f1cd8d), the owner's default profile, claude 2.1.318, each run `avarice start --brief <file> --policy routine --wait` with the portfolio as the working directory. Every start went through `authorize` (brief digest equal to the approved one, preflight ok, `fitsPhase2Ceiling(5.00)`). Evidence: `.planning/phases/02-contained-unattended-run-of-one-work-item/02-22-evidence-exit.json`; verdict `exit: 3/3 ready_for_review`.
+
+| Brief | Run ID | State | Commit | Cost (USD) | Retries | Tool calls | AskUserQuestion |
+|---|---|---|---|---|---|---|---|
+| `r1-bug-swipe-nonfinite.md` (bug fix with a failing test) | `run_01M6SE68ZTSJPBARR0DVKDKAMR` | ready_for_review | `0c4b58dffe2864f1521216fc87e7b7a0f0e3ece4` | 1.3465 | 0 | 43 | 0 |
+| `r1-refactor-copy-textarea.md` (small refactor) | `run_01M6SEKC0QAEW1HQHBANRCJPE7` | ready_for_review | `c093ca0` (full hash in the evidence file) | 1.1826 | 0 | 50 | 0 |
+| `r1-docs-dates-predicate.md` (docs plus code) | `run_01M6SEY4D8H2AWJX3PTTVZE1HR` | ready_for_review | `54b2500` (full hash in the evidence file) | 0.9995 | 0 | 47 | 0 |
+
+Phase 2 cumulative spend after the exit: **9.2851 USD** of the 25 USD ceiling (the ledger sum above); the three runs cost 3.5286 USD, 20 to 27 percent of the 5.00 USD per-run cap each (flagged assumption A9 held: three R1 tasks at Sonnet fit the cap).
+
+- Each run: one attempt, gates G0, G2 and G4 passed, 12 required checks at the handed-off revision on a clean tree (`format:check` failed and is reported pre-existing, D-12; the other 11 passed), the three acceptance criteria each mapped to passed deterministic check evidence.
+- The portfolio's checked-out branch (`gsd/phase-02-deployed-themed-skeleton` at 9f63d91), index, working tree (including the untracked `.env`), `main`, `origin/main` and worktrees are byte-identical before the first run and after the third; the only change is the three new `refs/heads/avarice/run_*` branches, each at the commit its run handed off (D-02, S-20).
+- The model improvised no question to a human in any transcript (AskUserQuestion count 0 in all three; S-12). Host outcome kinds were not used as a verdict.
+

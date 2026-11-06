@@ -2,9 +2,9 @@
   "schema": 1,
   "plan": "02-22",
   "decision": "D-05, D-07, D-08",
-  "updatedAt": "2026-11-06T22:10:06.290Z",
-  "verdict": "exit: 1/3 ready_for_review (2 not run yet)",
-  "phase2SpentUsd": 7.102984974999999,
+  "updatedAt": "2026-11-06T22:21:58.993Z",
+  "verdict": "exit: 3/3 ready_for_review",
+  "phase2SpentUsd": 9.285101274999999,
   "runs": [
     {
       "runId": "run_01M6SE68ZTSJPBARR0DVKDKAMR",
@@ -942,6 +942,1893 @@
         "at": "2026-11-06T22:09:05.073Z"
       },
       "problems": []
+    },
+    {
+      "runId": "run_01M6SEKC0QAEW1HQHBANRCJPE7",
+      "brief": "test/benchmark/r1/r1-refactor-copy-textarea.md",
+      "briefDigest": "sha256:163548ea7154fd4791d8ce565085d94879886dcf407ef6e80546916b80152c2f",
+      "startExit": 0,
+      "startedAt": "2026-11-06T22:10:21Z",
+      "endedAt": "2026-11-06T22:16:12.990Z",
+      "startStdoutTail": "run run_01M6SEKC0QAEW1HQHBANRCJPE7: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: Extract the off-screen textarea of the copy fallback\nacceptance: 3 criteria\nwrite paths: src/lib/copy.ts\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 5.00 USD per run, 2.00 USD per invocation; 60 min, 3 invocations, 400 tool calls\nmodel: sonnet\ncontract: routine v1 sha256:c34120abba2e66d68640ddb791adcbe65ec5c64c73dc8712b5738f865114ef6a\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M6SEKC0QAEW1HQHBANRCJPE7/contract-v1.json\nrun run_01M6SEKC0QAEW1HQHBANRCJPE7: ready_for_review\n",
+      "digestBefore": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "digestAfter": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "checkout": {
+        "before": {
+          "schema": 1,
+          "takenAt": "2026-11-06T22:10:21.402Z",
+          "repo": "/Users/aphan/aa-phan-portfolio-v2",
+          "digest": {
+            "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+            "branch": "gsd/phase-02-deployed-themed-skeleton",
+            "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+            "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+            "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+            "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+            "counts": {
+              "tracked": 364,
+              "untracked": 1,
+              "statusEntries": 1,
+              "refs": 3,
+              "refsAllowed": 1
+            }
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton"
+        },
+        "after": {
+          "schema": 1,
+          "takenAt": "2026-11-06T22:16:13.296Z",
+          "repo": "/Users/aphan/aa-phan-portfolio-v2",
+          "digest": {
+            "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+            "branch": "gsd/phase-02-deployed-themed-skeleton",
+            "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+            "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+            "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+            "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+            "counts": {
+              "tracked": 364,
+              "untracked": 1,
+              "statusEntries": 1,
+              "refs": 3,
+              "refsAllowed": 2
+            }
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton"
+        },
+        "newRefs": [
+          "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7"
+        ],
+        "removedOrChangedRefs": []
+      },
+      "state": "ready_for_review",
+      "reason": null,
+      "title": "Extract the off-screen textarea of the copy fallback",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+      "status": {
+        "runId": "run_01M6SEKC0QAEW1HQHBANRCJPE7",
+        "title": "Extract the off-screen textarea of the copy fallback",
+        "state": "ready_for_review",
+        "reason": null,
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "handoff:fetch",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "at": "2026-11-06T22:16:12.922Z"
+        },
+        "branch": "avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+        "commit": "c093ca053c949863220e150c4f98168d439e9ac5",
+        "clean": true,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true,
+            "preExisting": true
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+            "clean": true
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          },
+          {
+            "gate": "G2",
+            "passed": true,
+            "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4"
+          },
+          {
+            "gate": "G4",
+            "passed": true,
+            "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5"
+          }
+        ],
+        "openDecisions": 0,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 1.1825668,
+            "limit": 5
+          },
+          {
+            "name": "invocations",
+            "used": 1,
+            "limit": 3
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 10
+          },
+          {
+            "name": "toolCalls",
+            "used": 50,
+            "limit": 400
+          },
+          {
+            "name": "wallClockMs",
+            "used": 277899,
+            "limit": 3600000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "r1-refactor-copy-textarea.md",
+            "revision": "sha256:163548ea7154fd4791d8ce565085d94879886dcf407ef6e80546916b80152c2f"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ]
+      },
+      "commit": "c093ca053c949863220e150c4f98168d439e9ac5",
+      "clean": true,
+      "costUsd": 1.1825668,
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 1.1825668,
+          "limit": 5
+        },
+        {
+          "name": "invocations",
+          "used": 1,
+          "limit": 3
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "limit": 10
+        },
+        {
+          "name": "toolCalls",
+          "used": 50,
+          "limit": 400
+        },
+        {
+          "name": "wallClockMs",
+          "used": 277899,
+          "limit": 3600000
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M6SEKFRJHW7P6HDNX5Y00G54",
+          "ordinal": 1,
+          "reason": "initial",
+          "outcome": "handed-off"
+        }
+      ],
+      "retries": 0,
+      "gates": [
+        {
+          "gate": "G0",
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "passed": true,
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "failures": []
+        },
+        {
+          "gate": "G4",
+          "passed": true,
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "failures": []
+        }
+      ],
+      "branchRefCommit": "c093ca053c949863220e150c4f98168d439e9ac5",
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "preExisting": true
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "typecheck",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "lint",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "format:check",
+          "kind": "check",
+          "status": "failed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "preExisting": true
+        },
+        {
+          "name": "test",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:case",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:colors",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:contrast",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "build",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:meta",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:budget",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:no-phone",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        },
+        {
+          "name": "check:images",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "diff:tests/unit/copy.test.ts unchanged"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "diff",
+              "name": "tests/unit/copy.test.ts unchanged",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC1"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [
+            "AC1"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3d4e61c5ee7014e214bb676f8b6a5964e1ccb22f01001aa7bc343cdfafcda7e4",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [
+            "AC1"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "gsd-verdict",
+          "name": "gsd-verification",
+          "status": "passed",
+          "independence": "model-review",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": []
+        },
+        {
+          "kind": "diff",
+          "name": "tests/unit/copy.test.ts unchanged",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:c093ca053c949863220e150c4f98168d439e9ac5",
+          "clean": true,
+          "acceptance": [
+            "AC2"
+          ]
+        }
+      ],
+      "transcriptDigests": [
+        "sha256:18f2b352653bed5391fc32abed68c0d43fc6edea3231f29171b366530929f127"
+      ],
+      "toolCounts": {
+        "Bash": 29,
+        "Read": 24,
+        "Agent": 4,
+        "Grep": 1,
+        "Write": 3,
+        "Edit": 4
+      },
+      "askUserQuestion": 0,
+      "spendLine": {
+        "plan": "02-22",
+        "case": "exit-r1-refactor-copy-textarea-run_01M6SEKC0QAEW1HQHBANRCJPE7",
+        "costUsd": 1.1825668,
+        "claudeVersion": "2.1.318"
+      },
+      "problems": []
+    },
+    {
+      "runId": "run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+      "brief": "test/benchmark/r1/r1-docs-dates-predicate.md",
+      "briefDigest": "sha256:8f40d2419e47b82a45893116e58799e8b34c762119c46e16a28da19c462cad36",
+      "startExit": 0,
+      "startedAt": "2026-11-06T22:16:14Z",
+      "endedAt": "2026-11-06T22:21:58.135Z",
+      "startStdoutTail": "run run_01M6SEY4D8H2AWJX3PTTVZE1HR: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: Export the ISO year-month predicate and document the content date rule\nacceptance: 3 criteria\nwrite paths: src/lib/dates.ts, tests/unit/dates.test.ts, docs/architecture.md\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 5.00 USD per run, 2.00 USD per invocation; 60 min, 3 invocations, 400 tool calls\nmodel: sonnet\ncontract: routine v1 sha256:11dbbd4c858e0f0f202ba18788873fa20e5b297bbcbe8cddd763199b06a10186\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M6SEY4D8H2AWJX3PTTVZE1HR/contract-v1.json\nrun run_01M6SEY4D8H2AWJX3PTTVZE1HR: ready_for_review\n",
+      "digestBefore": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "digestAfter": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "checkout": {
+        "before": {
+          "schema": 1,
+          "takenAt": "2026-11-06T22:16:14.151Z",
+          "repo": "/Users/aphan/aa-phan-portfolio-v2",
+          "digest": {
+            "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+            "branch": "gsd/phase-02-deployed-themed-skeleton",
+            "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+            "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+            "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+            "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+            "counts": {
+              "tracked": 364,
+              "untracked": 1,
+              "statusEntries": 1,
+              "refs": 3,
+              "refsAllowed": 2
+            }
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton"
+        },
+        "after": {
+          "schema": 1,
+          "takenAt": "2026-11-06T22:21:58.623Z",
+          "repo": "/Users/aphan/aa-phan-portfolio-v2",
+          "digest": {
+            "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+            "branch": "gsd/phase-02-deployed-themed-skeleton",
+            "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+            "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+            "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+            "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+            "counts": {
+              "tracked": 364,
+              "untracked": 1,
+              "statusEntries": 1,
+              "refs": 3,
+              "refsAllowed": 3
+            }
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton"
+        },
+        "newRefs": [
+          "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR"
+        ],
+        "removedOrChangedRefs": []
+      },
+      "state": "ready_for_review",
+      "reason": null,
+      "title": "Export the ISO year-month predicate and document the content date rule",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+      "status": {
+        "runId": "run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+        "title": "Export the ISO year-month predicate and document the content date rule",
+        "state": "ready_for_review",
+        "reason": null,
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "handoff:fetch",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "at": "2026-11-06T22:21:58.051Z"
+        },
+        "branch": "avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+        "commit": "54b250016cd436fd2b340795b13c2cfadad6599f",
+        "clean": true,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true,
+            "preExisting": true
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+            "clean": true
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          },
+          {
+            "gate": "G2",
+            "passed": true,
+            "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398"
+          },
+          {
+            "gate": "G4",
+            "passed": true,
+            "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f"
+          }
+        ],
+        "openDecisions": 0,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0.9995495,
+            "limit": 5
+          },
+          {
+            "name": "invocations",
+            "used": 1,
+            "limit": 3
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 10
+          },
+          {
+            "name": "toolCalls",
+            "used": 47,
+            "limit": 400
+          },
+          {
+            "name": "wallClockMs",
+            "used": 270520,
+            "limit": 3600000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "r1-docs-dates-predicate.md",
+            "revision": "sha256:8f40d2419e47b82a45893116e58799e8b34c762119c46e16a28da19c462cad36"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ]
+      },
+      "commit": "54b250016cd436fd2b340795b13c2cfadad6599f",
+      "clean": true,
+      "costUsd": 0.9995495,
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 0.9995495,
+          "limit": 5
+        },
+        {
+          "name": "invocations",
+          "used": 1,
+          "limit": 3
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "limit": 10
+        },
+        {
+          "name": "toolCalls",
+          "used": 47,
+          "limit": 400
+        },
+        {
+          "name": "wallClockMs",
+          "used": 270520,
+          "limit": 3600000
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M6SEY7WSR3K2G1DHVZT0A0WC",
+          "ordinal": 1,
+          "reason": "initial",
+          "outcome": "handed-off"
+        }
+      ],
+      "retries": 0,
+      "gates": [
+        {
+          "gate": "G0",
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "passed": true,
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "failures": []
+        },
+        {
+          "gate": "G4",
+          "passed": true,
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "failures": []
+        }
+      ],
+      "branchRefCommit": "54b250016cd436fd2b340795b13c2cfadad6599f",
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "preExisting": true
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "typecheck",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "lint",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "format:check",
+          "kind": "check",
+          "status": "failed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "preExisting": true
+        },
+        {
+          "name": "test",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:case",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:colors",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:contrast",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "build",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:meta",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:budget",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:no-phone",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        },
+        {
+          "name": "check:images",
+          "kind": "check",
+          "status": "passed",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:isIsoYearMonth"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:c679d7fc8bdb5b8547f18e778db43f2f822b52d21c23632b4f118234b6788398",
+          "clean": false,
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "gsd-verdict",
+          "name": "gsd-verification",
+          "status": "passed",
+          "independence": "model-review",
+          "revision": "git:54b250016cd436fd2b340795b13c2cfadad6599f",
+          "clean": true,
+          "acceptance": []
+        }
+      ],
+      "transcriptDigests": [
+        "sha256:6061b9860dc8fd0bcbd65fc5ba53ff094bdae156f8d1c604439fd001c1b17ea0"
+      ],
+      "toolCounts": {
+        "Bash": 23,
+        "Read": 22,
+        "Agent": 4,
+        "Write": 3,
+        "Edit": 6
+      },
+      "askUserQuestion": 0,
+      "spendLine": {
+        "plan": "02-22",
+        "case": "exit-r1-docs-dates-predicate-run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+        "costUsd": 0.9995495,
+        "claudeVersion": "2.1.318"
+      },
+      "problems": []
     }
-  ]
+  ],
+  "crossRun": {
+    "note": "first run before-snapshot compared with a snapshot taken after the third run (checkout digest parts, index digest, symbolic HEAD) by the executor of plan 02-22",
+    "equal": true,
+    "newRefs": [
+      "refs/heads/avarice/run_01M6SE68ZTSJPBARR0DVKDKAMR",
+      "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+      "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR"
+    ],
+    "ownerHead": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+    "ownerBranch": "gsd/phase-02-deployed-themed-skeleton"
+  }
 }

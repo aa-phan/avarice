@@ -69,3 +69,5 @@
 {"plan":"02-20","case":"cs7-other-profile-hook","costUsd":0.0028816799999999997,"claudeVersion":"2.1.318","at":"2026-11-06T10:51:31.827Z"}
 {"plan":"02-20","case":"cs7-other-profile-sandbox","costUsd":0.00275648,"claudeVersion":"2.1.318","at":"2026-11-06T10:51:41.745Z"}
 {"plan":"02-22","case":"exit-r1-bug-swipe-nonfinite-run_01M6SE68ZTSJPBARR0DVKDKAMR","costUsd":1.3464749999999999,"claudeVersion":"2.1.318","at":"2026-11-06T22:09:05.073Z"}
+{"plan":"02-22","case":"exit-r1-refactor-copy-textarea-run_01M6SEKC0QAEW1HQHBANRCJPE7","costUsd":1.1825668,"claudeVersion":"2.1.318","at":"2026-11-06T22:16:13.656Z"}
+{"plan":"02-22","case":"exit-r1-docs-dates-predicate-run_01M6SEY4D8H2AWJX3PTTVZE1HR","costUsd":0.9995495,"claudeVersion":"2.1.318","at":"2026-11-06T22:21:58.992Z"}
