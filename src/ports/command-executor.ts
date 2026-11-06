@@ -25,6 +25,9 @@ export interface CommandSpec {
   writePaths: readonly string[];
   // Absolute paths the command may not read.
   denyReadPaths: readonly string[];
+  // Absolute paths read again below a denied path (each is its own subtree, and wins over every denyReadPaths entry): the working
+  // tree and scratch of a run whose work root's parent is denied. Absent means none.
+  allowReadPaths?: readonly string[];
   // Loopback ports the command may connect to (integers 1..65535); the network is otherwise denied. Only AVARICE's own
   // supervisor steps set this, never an agent invocation (D-11).
   allowLoopbackPorts?: readonly number[];

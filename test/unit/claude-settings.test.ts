@@ -481,6 +481,19 @@ describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () 
     assert.ok(fs.allowRead.includes(slash(clone)) && fs.allowRead.includes(slash(scratch)));
   });
 
+  it('puts the default AVARICE parents in the sandbox denyRead with only the clone and scratch re-allowed (plan 02-20, other profiles)', () => {
+    const fs = settings().sandbox.filesystem;
+    for (const parent of [join(home, '.local/share/avarice'), join(home, '.config/avarice'), join(home, '.local/share/avarice-work')]) {
+      assert.ok(fs.denyRead.includes(slash(parent)), parent);
+    }
+    assert.deepEqual(fs.allowRead, [slash(clone), slash(scratch)]);
+    // The parent of the work roots holds the clone, so it stays out of the permission denies (a permission deny has no re-allow); the
+    // data and config parents do not, and the Read tool is refused there too.
+    const deny: string[] = settings().permissions.deny;
+    assert.ok(deny.includes(`Read(${slash(join(home, '.local/share/avarice'))}/**)`));
+    assert.ok(deny.includes(`Read(${slash(join(home, '.config/avarice'))}/**)`));
+  });
+
   it('allows no network domain and keeps the sandbox required', () => {
     const sandbox = settings().sandbox;
     assert.deepEqual(sandbox.network, { allowedDomains: [], strictAllowlist: true });

@@ -21,6 +21,7 @@ import { digestOf, sha256Hex } from '../domain/digest.ts';
 import { evidenceStatusOf, revisionOf } from '../domain/evidence.ts';
 import type { CheckOutcome, CommandResultStatus, EvidenceStatus } from '../domain/evidence.ts';
 import { matchesAny } from '../domain/glob.ts';
+import { defaultAvariceParents } from '../domain/invocation-scope.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
@@ -96,9 +97,14 @@ interface SandboxSetup {
   scratch: string;
   env: Record<string, string>;
   denyReadPaths: string[];
+  // Re-allowed below a denied parent: the command's working tree and the run's scratch directory, nothing else under the work root.
+  allowReadPaths: string[];
 }
 
-export function sandboxSetup(deps: AppDeps, run: RunRow): Result<SandboxSetup> {
+// `cwd` is the working tree the command runs in (the run's clone, the validation clone or the baseline clone): the only part of the work
+// root, besides the scratch directory, a command may read. The default parents of every profile's roots are denied (plan 02-20): another
+// profile's data root, config and run clones are out of reach; a profile placed elsewhere by an environment variable is not covered.
+export function sandboxSetup(deps: AppDeps, run: RunRow, cwd: string): Result<SandboxSetup> {
   const scratch = join(canonical(deps.profile.workRoot), run.runId, 'scratch');
   try {
     mkdirSync(join(scratch, 'npm-cache'), { recursive: true, mode: 0o700 });
@@ -111,7 +117,8 @@ export function sandboxSetup(deps: AppDeps, run: RunRow): Result<SandboxSetup> {
   return ok({
     scratch: scratchReal,
     env: { PATH: path, HOME: scratchReal, TMPDIR: scratchReal, npm_config_cache: join(scratchReal, 'npm-cache'), CI: '1', LANG: 'C' },
-    denyReadPaths: [join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), canonical(deps.profile.dataRoot)],
+    denyReadPaths: [join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), canonical(deps.profile.dataRoot), ...defaultAvariceParents(home)],
+    allowReadPaths: [canonical(cwd), scratchReal],
   });
 }
 
@@ -171,7 +178,7 @@ export async function runRequiredChecks(deps: AppDeps, run: RunRow, contract: Ru
 
   const where = cloneRevision(deps, cwd);
   if (!where.ok) return where;
-  const sandbox = sandboxSetup(deps, run);
+  const sandbox = sandboxSetup(deps, run, cwd);
   if (!sandbox.ok) return sandbox;
 
   // A check that has not passed active validation is never run (ONB-10): a required one is then `missing` in the delta and blocks.
@@ -195,6 +202,7 @@ export async function runRequiredChecks(deps: AppDeps, run: RunRow, contract: Ru
       invocationId: deps.ids.next('inv_'),
       writePaths,
       denyReadPaths: sandbox.value.denyReadPaths,
+      allowReadPaths: sandbox.value.allowReadPaths,
     });
 
     let commandStatus: CommandResultStatus;
@@ -332,7 +340,7 @@ export async function installDependencies(deps: AppDeps, run: RunRow, contract: 
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
   const cwd = canonical(clonePath);
 
-  const sandbox = sandboxSetup(deps, run);
+  const sandbox = sandboxSetup(deps, run, cwd);
   if (!sandbox.ok) return sandbox;
   const lock = workspace.readText(cwd, spec.lockfile, LOCKFILE_MAX_BYTES);
   if (!lock.ok) return lock;
@@ -358,6 +366,7 @@ export async function installDependencies(deps: AppDeps, run: RunRow, contract: 
       invocationId: deps.ids.next('inv_'),
       writePaths: [join(cwd, 'node_modules'), sandbox.value.scratch],
       denyReadPaths: sandbox.value.denyReadPaths,
+      allowReadPaths: sandbox.value.allowReadPaths,
       allowLoopbackPorts: [proxy.value.port],
     });
     const attempts = groupAttempts(proxy.value.attempts());
@@ -409,7 +418,7 @@ export async function measureInventory(deps: AppDeps, run: RunRow, contract: Run
   const root = canonical(cwd);
   const where = cloneRevision(deps, root);
   if (!where.ok) return where;
-  const sandbox = sandboxSetup(deps, run);
+  const sandbox = sandboxSetup(deps, run, root);
   if (!sandbox.ok) return sandbox;
 
   let status: EvidenceStatus = 'passed';
@@ -425,6 +434,7 @@ export async function measureInventory(deps: AppDeps, run: RunRow, contract: Run
       invocationId: deps.ids.next('inv_'),
       writePaths: [sandbox.value.scratch],
       denyReadPaths: sandbox.value.denyReadPaths,
+      allowReadPaths: sandbox.value.allowReadPaths,
     });
     if (ran.ok) {
       status = evidenceStatusOf(ran.value.status);

@@ -68,7 +68,7 @@ function unexpectedWrites(before: readonly string[], after: readonly string[], w
 async function validateOne(deps: AppDeps, run: RunRow, contract: RunContract, spec: RunContract['execution']['checks'][number], clone: string): Promise<Result<{ verdict: CheckVerdict; detail: CheckVerdictDetail }>> {
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
-  const sandbox = sandboxSetup(deps, run);
+  const sandbox = sandboxSetup(deps, run, clone);
   if (!sandbox.ok) return sandbox;
   // The empty-allowlist proxy is a detector: it records what a check tries to reach. When it cannot be started (a process that has no network
   // at all cannot even listen on loopback) the check runs with no network, not one loopback port, so nothing can leak and only the

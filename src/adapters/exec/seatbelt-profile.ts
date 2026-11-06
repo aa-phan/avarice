@@ -7,6 +7,7 @@
 //   4. deny writes below each protected path (the command's working tree, which may itself sit under a temp area)
 //   5. allow writes below each declared path (they win over step 4)
 //   6. deny reads below each denyRead path
+//   7. allow reads below each allowRead path (they win over step 6: a run's own clone below a denied work-root parent)
 // Seatbelt cannot filter by host name (`host must be * or localhost`), so the only network a command can be given is one
 // loopback port; the registry-only path is an allowlisting proxy listening there (D-11).
 // Every path is resolved to its real location first (Seatbelt matches the resolved path, and macOS /tmp and
@@ -20,6 +21,8 @@ export interface SeatbeltInput {
   writePaths: readonly string[];
   // Subtrees the command may not read.
   denyReadPaths: readonly string[];
+  // Subtrees readable again below a denied one; the rule follows every denial, so it wins.
+  allowReadPaths?: readonly string[];
   // Subtrees closed for writing even when they lie under an allowed temp area; `writePaths` below them are
   // re-allowed. The executor passes the command's working directory.
   protectedPaths?: readonly string[];
@@ -59,6 +62,8 @@ export function buildSeatbeltProfile(input: SeatbeltInput): Result<string> {
   if (!writes.ok) return writes;
   const denyReads = all(input.denyReadPaths);
   if (!denyReads.ok) return denyReads;
+  const allowReads = all(input.allowReadPaths ?? []);
+  if (!allowReads.ok) return allowReads;
   const protectedPaths = all(input.protectedPaths ?? []);
   if (!protectedPaths.ok) return protectedPaths;
 
@@ -80,5 +85,6 @@ export function buildSeatbeltProfile(input: SeatbeltInput): Result<string> {
   for (const path of protectedPaths.value) lines.push(`(deny file-write* (subpath "${path}"))`);
   for (const path of writes.value) lines.push(`(allow file-write* (subpath "${path}"))`);
   for (const path of denyReads.value) lines.push(`(deny file-read* (subpath "${path}"))`);
+  for (const path of allowReads.value) lines.push(`(allow file-read* (subpath "${path}"))`);
   return ok(lines.join('\n') + '\n');
 }

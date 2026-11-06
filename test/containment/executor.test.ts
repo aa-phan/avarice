@@ -52,6 +52,22 @@ describe('buildSeatbeltProfile', () => {
     assert.ok(text.includes(`(deny file-read* (subpath "${secret}"))`), 'one read denial per denyRead path');
   });
 
+  it('writes one read allowance per allowReadPaths entry after every read denial, so the specific allowance wins (plan 02-20)', () => {
+    const s = staging();
+    const parent = join(s.base, 'work-parent');
+    const own = join(parent, 'run', 'clone');
+    mkdirSync(own, { recursive: true });
+    const built = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [parent], allowReadPaths: [own] });
+    assert.ok(built.ok, JSON.stringify(built));
+    const lines = built.value.split('\n');
+    const deny = lines.indexOf(`(deny file-read* (subpath "${parent}"))`);
+    const allow = lines.indexOf(`(allow file-read* (subpath "${own}"))`);
+    assert.ok(deny > -1 && allow > deny, 'the allowance follows the denial');
+    const none = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [parent] });
+    assert.ok(none.ok);
+    assert.ok(!none.value.includes('(allow file-read*'), 'no read allowance unless asked for');
+  });
+
   it('resolves symlinks in every path before writing them', () => {
     const s = staging();
     const link = join(s.base, 'link');

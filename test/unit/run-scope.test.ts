@@ -23,6 +23,8 @@ const SCRATCH = `${WORK}/${RUN}/scratch`;
 const REPO = '/home/u/repo';
 const DATA = '/home/u/.local/share/avarice/p1';
 const HOME = '/home/u';
+// The default parents of every profile's roots (plan 02-20 owner decision): all default data roots, the config home and all default work roots.
+const DEFAULT_PARENTS = [`${HOME}/.local/share/avarice`, `${HOME}/.config/avarice`, `${HOME}/.local/share/avarice-work`];
 
 const WORKSPACE: RunWorkspaceShape = {
   topLevelEntries: ['src', 'tests', '.planning', 'node_modules', 'package.json', '.github'],
@@ -160,7 +162,7 @@ describe('computeRunScope: write roots and files from the contract globs (CON-2)
 describe('computeRunScope: reads, subagents and commands', () => {
   it('keeps the repository, data root, credentials and work root out of reach, with the own clone and scratch re-allowed', () => {
     const scope = computeRunScope(input());
-    assert.deepEqual(scope.denyRead, [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`, WORK]);
+    assert.deepEqual(scope.denyRead, [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`, WORK, ...DEFAULT_PARENTS]);
     assert.deepEqual(scope.allowRead, [CLONE, SCRATCH]);
     assert.deepEqual(scope.denyReadGlobs, ['**/.env', '**/*.pem']);
     assert.deepEqual(scope.readRoots, ['/gsd/core', '/gsd/agents']);
@@ -216,6 +218,33 @@ describe('computeRunScope: reads, subagents and commands', () => {
   });
 });
 
+describe('computeRunScope: the default AVARICE parents are denied to a run (CON-1, plan 02-20 finding cs7-other-profile-sandbox)', () => {
+  it('denies the parent of every default data root, the config home and the parent of every default work root, home-relative', () => {
+    const scope = computeRunScope(input());
+    for (const parent of DEFAULT_PARENTS) assert.ok(scope.denyRead.includes(parent), parent);
+  });
+
+  it('a sibling profile data root and a sibling profile work root are covered, this run own clone and scratch are the only re-allowed paths', () => {
+    const scope = computeRunScope(input());
+    const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
+    for (const sibling of [`${HOME}/.local/share/avarice/other/state.db`, `${HOME}/.local/share/avarice-work/other/run_B/clone/src/a.ts`, `${HOME}/.config/avarice/other.json`]) {
+      assert.ok(scope.denyRead.some((root) => under(sibling, root)), sibling);
+      assert.ok(!scope.allowRead.some((root) => under(sibling, root)), sibling);
+    }
+    assert.deepEqual(scope.allowRead, [CLONE, SCRATCH]);
+  });
+
+  it('names a data root and a work root placed under the default parents once, and takes the parents from the home it is given', () => {
+    const own = { ...input(), dataRoot: `${HOME}/.local/share/avarice/p1`, workRoot: `${HOME}/.local/share/avarice-work/p1`, clonePath: `${HOME}/.local/share/avarice-work/p1/run_A/clone`, scratchDir: `${HOME}/.local/share/avarice-work/p1/run_A/scratch`, workspace: { ...WORKSPACE, gitPaths: [`${HOME}/.local/share/avarice-work/p1/run_A/clone/.git`] } };
+    const scope = computeRunScope(own);
+    assert.equal(new Set(scope.denyRead).size, scope.denyRead.length, 'no duplicates');
+    assert.ok(scope.denyRead.includes(`${HOME}/.local/share/avarice-work`));
+    const other = computeRunScope({ ...input(), home: '/Users/z' });
+    assert.ok(other.denyRead.includes('/Users/z/.local/share/avarice-work'));
+    assert.ok(!other.denyRead.includes(`${HOME}/.local/share/avarice-work`));
+  });
+});
+
 describe('computeRunScope: the three edges (CON-2)', () => {
   it('adjacency: src-evil and a sibling run whose ID shares a prefix are outside the scope', () => {
     const scope = computeRunScope(input({ write: ['src/**'], artifacts: [], workspace: { ...WORKSPACE, topLevelEntries: [...WORKSPACE.topLevelEntries, 'src-evil'] } }));
@@ -262,7 +291,7 @@ describe('computeRunScope: the work root check of Phase 1 (WR-01) applies', () =
 
   it('trims trailing slashes', () => {
     const scope = computeRunScope(input({ workRoot: `${WORK}/` }));
-    assert.deepEqual(scope.denyRead.at(-1), WORK);
+    assert.deepEqual(scope.denyRead[5], WORK);
   });
 });
 

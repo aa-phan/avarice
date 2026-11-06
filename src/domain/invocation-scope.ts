@@ -369,6 +369,16 @@ const RUN_EXEMPT_PREFIXES: readonly string[] = ['npm', 'npx'];
 const WILDCARD_CHARS = /[*?[{]/;
 
 const uniqueInOrder = (items: Iterable<string>): string[] => [...new Set(items)];
+
+// The default parents of every AVARICE profile's roots (profile-paths.ts): all default data roots, the config home and all default work
+// roots (which hold other profiles' run clones). A run may read none of them; its own clone and scratch, which lie under the work parent,
+// are re-allowed one by one (plan 02-20: a declared command could read another profile's data root). A profile whose roots were placed
+// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is not covered (docs/containment.md). `home` is the
+// symlink-resolved home the credential directories already use.
+export function defaultAvariceParents(home: string): string[] {
+  const root = trimTrailingSlashes(home);
+  return [join(root, '.local/share/avarice'), join(root, '.config/avarice'), join(root, '.local/share/avarice-work')];
+}
 const isUsableGlob = (glob: string): boolean => glob !== '' && !glob.startsWith('/') && !glob.split('/').some((segment) => segment === '' || segment === '.' || segment === '..');
 
 // The static prefix of a glob: the segments before the first one holding a wildcard. A glob with no wildcard names one path (a file root).
@@ -504,7 +514,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.
-    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot]),
+    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home)]),
     denyReadGlobs: [...contract.files.secretGlobs],
     allowRead: [...workspace.repoReadAllow.map(trimTrailingSlashes), clone, scratch],
     readRoots: input.readRoots.map(trimTrailingSlashes),
