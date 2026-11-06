@@ -8,7 +8,7 @@
 // the shell leaves it running. With `--wait` it polls the ledger and exits 0 at `ready_for_review` and 3 at any other stop state or when
 // the supervisor died with the run unfinished, printing the final result line and, when interrupted, how to continue.
 import { startRun } from '../../app/run-start.ts';
-import { spawnSupervisor, waitForRun } from '../spawn-supervisor.ts';
+import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import type { WaitResult } from '../spawn-supervisor.ts';
 import type { RunStartOutcome } from '../../app/run-start.ts';
 import { ROUTINE_POLICY } from '../../domain/run-contract.ts';
@@ -80,19 +80,6 @@ export function renderWait(runId: string, result: WaitResult | { kind: 'error'; 
     default:
       return [errorLine('start', result.message)];
   }
-}
-
-// The supervisor reads the same three profile roots this command resolved, whatever else its environment says.
-function supervisorEnv(deps: AppDeps): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    AVARICE_CONFIG_HOME: deps.profile.configHome,
-    AVARICE_DATA_ROOT: deps.profile.dataRoot,
-    AVARICE_WORK_ROOT: deps.profile.workRoot,
-  };
-  // Under `node --test` this variable would make a spawned test entry do nothing.
-  delete env['NODE_TEST_CONTEXT'];
-  return env;
 }
 
 const WAIT_MARGIN_MIN = 15;

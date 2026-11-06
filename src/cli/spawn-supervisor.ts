@@ -41,6 +41,19 @@ export function spawnSupervisor(request: SpawnRequest): SpawnResult {
   }
 }
 
+// The supervisor reads the same three profile roots the spawning command resolved, whatever else its environment says.
+export function supervisorEnv(deps: AppDeps): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: deps.profile.configHome,
+    AVARICE_DATA_ROOT: deps.profile.dataRoot,
+    AVARICE_WORK_ROOT: deps.profile.workRoot,
+  };
+  // Under `node --test` this variable would make a spawned test entry do nothing.
+  delete env['NODE_TEST_CONTEXT'];
+  return env;
+}
+
 export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);

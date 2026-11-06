@@ -79,6 +79,11 @@ export interface WorkspaceSnapshot {
   ignored: string[];
 }
 
+export interface HeadTrailers {
+  runId: string | null;
+  attemptId: string | null;
+}
+
 export interface DiscardResult {
   // Paths put back to their snapshot content (a path the run changed or deleted).
   restored: string[];
@@ -95,6 +100,9 @@ export interface RunWorkspace {
   // path. An existing validation clone of this repository at the pin is reused.
   prepareValidationClone(input: PrepareValidationInput): Result<string>;
   head(path: string): Result<string>;
+  // The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD commit message (plan 02-17: a resume decides whether a commit on the clone is the
+  // supervisor's own, made for the open attempt, from these and nothing else). A trailer the message does not carry is null.
+  headTrailers(path: string): Result<HeadTrailers>;
   // Every path that differs from HEAD or is not tracked, one record per file: tracked changes, untracked files and ignored files
   // (an ignored directory is listed file by file). The validation of a check compares two of these.
   statusAll(path: string): Result<string[]>;

@@ -21,6 +21,7 @@ import type {
   DiscardResult,
   FetchIntoSourceInput,
   HandoffResult,
+  HeadTrailers,
   PathChange,
   PrepareRunInput,
   PrepareValidationInput,
@@ -160,6 +161,22 @@ export class CloneRunWorkspace implements RunWorkspace {
   head(path: string): Result<string> {
     const head = runGit(['rev-parse', 'HEAD'], { cwd: path });
     return head.ok ? ok(head.value.stdout.trim()) : failure(head.error);
+  }
+
+  // The last `Avarice-Run:` and `Avarice-Attempt:` lines of the HEAD message. The message is read as data and only those two keys are matched, each
+  // on a line of its own, so text elsewhere in the message cannot pose as a trailer (the supervisor writes them last, after a blank line).
+  headTrailers(path: string): Result<HeadTrailers> {
+    const message = runGit(['log', '-1', '--format=%B'], { cwd: path });
+    if (!message.ok) return failure(message.error);
+    const found: HeadTrailers = { runId: null, attemptId: null };
+    const lines = message.value.stdout.split('\n');
+    for (const line of lines) {
+      const run = /^Avarice-Run: ([A-Za-z0-9_]{1,64})\s*$/.exec(line);
+      if (run !== null) found.runId = run[1] as string;
+      const attempt = /^Avarice-Attempt: ([A-Za-z0-9_]{1,64})\s*$/.exec(line);
+      if (attempt !== null) found.attemptId = attempt[1] as string;
+    }
+    return ok(found);
   }
 
   // `--ignored=traditional` with `--untracked-files=all` prints each ignored file as its own record (the matching mode hides the files of

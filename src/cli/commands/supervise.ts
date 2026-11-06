@@ -4,6 +4,7 @@
 // 3 for any other stop state, a state with no stage yet, or a lease another supervisor still holds, 64 for a usage error or an
 // unknown run, 70 for an internal failure.
 import { describeError } from '../../adapters/sqlite/db.ts';
+import { reconcileRun } from '../../app/run-resume.ts';
 import { runSupervisor } from '../../app/run-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
@@ -29,7 +30,9 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     io.err(`${errorLine('supervise', usage(args) ?? USAGE)}\n`);
     return EXIT_USAGE;
   }
-  const outcome = await runSupervisor(deps, runId);
+  // Always the reconcile prelude (plan 02-17): a fresh run has nothing to reap or reconcile, and a run being resumed (or supervised by hand after
+  // its supervisor died) must not go on beside a surviving host or on an interrupted unit.
+  const outcome = await runSupervisor(deps, runId, { prelude: reconcileRun });
   if (!outcome.ok) {
     const e = outcome.error;
     if (e.kind === 'not_found') {

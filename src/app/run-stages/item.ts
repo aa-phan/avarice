@@ -277,6 +277,15 @@ export const runningStage: RunStage = async (ctx, row) => {
   }
 };
 
+// What reconcileItem did for an item that was in flight when the supervisor died (plan 02-17): `none` (the stage carries on from the item's state),
+// `retry` (the attempt was discarded and the item is ready for its one retry), `committed` (the supervisor's own commit was found and recorded) or
+// `blocked` (the run was moved to blocked_on_decision).
+export type ItemReconcile = 'none' | 'retry' | 'committed' | 'blocked';
+
+export function reconcileItem(_ctx: RunStageContext, _row: RunRow): Promise<Result<ItemReconcile>> {
+  return Promise.resolve(ok('none'));
+}
+
 function snapshotOf(ctx: RunStageContext, attemptId: string): Result<WorkspaceSnapshot> {
   const step = stepOfAttempt(ctx, 'snapshot', attemptId);
   if (!step.ok) return step;

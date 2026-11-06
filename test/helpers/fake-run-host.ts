@@ -8,15 +8,16 @@
 // tests need are options: an attempted commit and a moved HEAD, a pause question, an edit outside the write set, a direct write the hook
 // never sees (a sandbox gap), a fix that leaves the check failing, and (plan 02-16) a crash or a wall-clock kill after some files were written,
 // a loop of denied calls, a flood of tool calls, and a different behaviour per attempt.
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
 import { PURPOSE_EXTENSIONS } from '../../src/domain/invocation-scope.ts';
 import { err, ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
-import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
+import type { AgentHost, InvocationOutcome, InvocationRequest, ReapRequest } from '../../src/ports/agent-host.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import { HOOK_ENTRY } from './fake-agent-host.ts';
 
@@ -71,6 +72,12 @@ export interface FakeRunOptions {
   observe?: readonly string[];
   // The n-th invocation of this host (1-based; index n-1) plays these options over the base ones. Lets one test script attempt 1 and attempt 2.
   perAttempt?: readonly FakeRunOptions[];
+  // Plan 02-17 (FR-7). The supervisor dies inside the unit, as a kill of the supervisor would: the unit writes these clone-relative files (as
+  // `crash.afterFiles` does) and, when `survivorPidFile` is given, leaves a process carrying the invocation's session ID in its command line
+  // running (the host the supervisor's death orphaned; its PID is written to the file), then the supervisor process is SIGKILLed.
+  killInUnit?: { afterFiles?: readonly string[]; survivorPidFile?: string };
+  // The host's `reap` fails with an internal error (it could not search for processes), so a resume must not go on.
+  reapFails?: boolean;
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
@@ -198,6 +205,20 @@ export class FakeRunHost implements AgentHost {
     }
     for (let i = 0; i < (o.toolCallFlood ?? 0); i += 1) tool('Read', { file_path: join(cwd, 'src/slug.ts') }, () => {});
 
+    if (o.killInUnit !== undefined) {
+      const marker = '// partial write of a unit whose supervisor was killed\n';
+      for (const rel of o.killInUnit.afterFiles ?? []) edit(rel, existsSync(join(cwd, rel)) ? `${readFileSync(join(cwd, rel), 'utf8')}${marker}` : marker);
+      if (o.killInUnit.survivorPidFile !== undefined) {
+        // stdio must be `ignore`: the process that waits on this supervisor's pipes would otherwise wait for the survivor too.
+        const survivor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', req.sessionId ?? ''], { detached: true, stdio: 'ignore' });
+        survivor.unref();
+        if (survivor.pid !== undefined) writeFileSync(o.killInUnit.survivorPidFile, String(survivor.pid));
+        // Start-up margin: the process must have parsed its arguments before the supervisor dies, or the reap cannot find it.
+        await new Promise<void>((resolve) => setTimeout(resolve, 600));
+      }
+      process.kill(process.pid, 'SIGKILL');
+    }
+
     if (o.deniedEdit !== undefined) {
       const target = join(cwd, o.deniedEdit);
       tool('Write', { file_path: target, content: 'outside the write set\n' }, () => write(o.deniedEdit as string, 'outside the write set\n'));
@@ -263,5 +284,14 @@ export class FakeRunHost implements AgentHost {
         ...(crashed ? {} : { isError: false }),
       },
     });
+  }
+
+  // The production reaper, so a resume that reaps through this host ends survivors the way the real adapter does (plan 02-17).
+  readonly reaped: string[] = [];
+  async reap(request: ReapRequest): Promise<Result<{ terminated: number }>> {
+    if (this.options.reapFails === true) return err({ kind: 'internal', cause: 'the fake host could not search for processes' });
+    const ended = await reapBySessionId(request.sessionId);
+    if (ended.ok && ended.value.terminated > 0) this.reaped.push(request.sessionId);
+    return ended;
   }
 }
