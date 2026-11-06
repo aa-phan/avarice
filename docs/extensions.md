@@ -40,7 +40,7 @@ Ordered by priority. "MVP" means required for the first usable release.
 
 #### Human-readable output
 
-These rules are the target format for human-readable text from every command and from the interactive shell (entry 2j), which renders through the same functions ([ADR-013](decisions/ADR-013-interactive-shell.md) decision 6); OPS-7 makes the style a requirement. `init`, `repo`, `status` and the error lines of the dispatcher in `src/cli/main.ts` print through the shared functions in `src/cli/render/` (`resultLine`, `stateWord`, `errorLine`, `renderTable`, `stripControl`, `usd`, `duration`, `localTime`, `colourEnabled`). `onboard` and `resume` meet the result-line rule with their own text and keep it. The rules bind the text format only; `--json` output is the stable interface for scripts, and its shape never depends on them.
+These rules are the target format for human-readable text from every command and from the interactive shell (entry 2j), which renders through the same functions ([ADR-013](decisions/ADR-013-interactive-shell.md) decision 6); OPS-7 makes the style a requirement. `init`, `repo`, `status` (including the run rows and their detail lines), `inbox`, `install-host` and the error lines of the dispatcher in `src/cli/main.ts` print through the shared functions in `src/cli/render/` (`resultLine`, `stateWord`, `errorLine`, `renderTable`, `stripControl`, `usd`, `duration`, `localTime`, `colourEnabled`, and `renderRuns`, `renderRunDetails` and `renderInbox` for runs). `onboard` and `resume` meet the result-line rule with their own text and keep it. The rules bind the text format only; `--json` output is the stable interface for scripts, and its shape never depends on them.
 
 | Element | Rule |
 |---|---|
