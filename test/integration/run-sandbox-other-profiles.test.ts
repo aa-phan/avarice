@@ -110,6 +110,34 @@ describe('the sandbox of a run command denies the default AVARICE parents (cs7-o
     assert.equal(relative.stdout, 'own clone');
   });
 
+  // Plan 02-21 finding (the dry run on the default profile): node resolves the real path of its main script with an lstat of every directory
+  // above it, and the denied parent is one of them, so every npm script of the default profile died with `EPERM: lstat
+  // ~/.local/share/avarice-work`. Only the metadata of the directories on the way to the clone is given back, never their contents.
+  it('runs a node script that lives in its own clone, and resolves the real path of its main file through the denied parents', async () => {
+    writeFileSync(join(own.clone, 'src/hello.mjs'), 'process.stdout.write("hello " + process.cwd())');
+    const direct = await exec([process.execPath, 'src/hello.mjs']);
+    assert.equal(direct.exitCode, 0, direct.stderr);
+    assert.equal(direct.stdout, `hello ${own.clone}`);
+    const absolute = await exec([process.execPath, join(own.clone, 'src/hello.mjs')]);
+    assert.equal(absolute.exitCode, 0, absolute.stderr);
+    const resolved = await exec([process.execPath, '-e', 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))', join(own.clone, 'src/a.ts')]);
+    assert.equal(resolved.exitCode, 0, resolved.stderr);
+    assert.equal(resolved.stdout, join(own.clone, 'src/a.ts'));
+  });
+
+  it('gives back the metadata of the directories above the clone and nothing more: no listing, no read of a sibling, no read through them', async () => {
+    const stat = await exec(['/usr/bin/stat', '-f', '%HT', own.workRoot]);
+    assert.equal(stat.exitCode, 0, stat.stderr);
+    assert.equal(stat.stdout.trim(), 'Directory');
+    assert.equal(await listable(own.workRoot), false);
+    assert.equal(await listable(join(home, '.local/share/avarice-work')), false);
+    assert.equal(await readable(join(own.workRoot, 'run_B/clone/b.ts')), false);
+    assert.equal(await listable(join(own.workRoot, 'run_B/clone')), false);
+    assert.equal(await readable(join(home, '.local/share/avarice-work/other/run_C/clone/src/c.ts')), false);
+    // The data root and the other profile data root are not on the way to the clone, so not even their metadata is given back.
+    assert.notEqual((await exec(['/usr/bin/stat', '-f', '%HT', join(home, '.local/share/avarice/other')])).exitCode, 0);
+  });
+
   it('keeps the carve-out narrow: a symlink inside the clone to another profile data root does not read through', async () => {
     symlinkSync(join(home, '.local/share/avarice/other'), join(own.clone, 'link-to-other'));
     assert.equal(await readable(join(own.clone, 'link-to-other/state.db')), false);

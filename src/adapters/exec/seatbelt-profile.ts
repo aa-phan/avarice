@@ -8,6 +8,8 @@
 //   5. allow writes below each declared path (they win over step 4)
 //   6. deny reads below each denyRead path
 //   7. allow reads below each allowRead path (they win over step 6: a run's own clone below a denied work-root parent)
+//   8. allow the metadata (not the contents, not a listing) of each directory above an allowRead path that lies inside a denied one, so
+//      a program can resolve the real path of a file below it
 // Seatbelt cannot filter by host name (`host must be * or localhost`), so the only network a command can be given is one
 // loopback port; the registry-only path is an allowlisting proxy listening there (D-11).
 // Every path is resolved to its real location first (Seatbelt matches the resolved path, and macOS /tmp and
@@ -86,5 +88,22 @@ export function buildSeatbeltProfile(input: SeatbeltInput): Result<string> {
   for (const path of writes.value) lines.push(`(allow file-write* (subpath "${path}"))`);
   for (const path of denyReads.value) lines.push(`(deny file-read* (subpath "${path}"))`);
   for (const path of allowReads.value) lines.push(`(allow file-read* (subpath "${path}"))`);
+  // A program resolves the real path of a file with an lstat of every directory above it (node does for its main script), and the
+  // directories on the way to a re-allowed path lie inside the denied subtree. Their metadata is given back, one literal each: no
+  // listing, no content, no sibling (plan 02-21: every npm script of a profile under the default parents died on `lstat <work parent>`).
+  for (const path of ancestorsInside(allowReads.value, denyReads.value)) lines.push(`(allow file-read-metadata (literal "${path}"))`);
   return ok(lines.join('\n') + '\n');
+}
+
+// The proper ancestors of each allowed path that sit inside a denied subtree (a denied path itself included), once each, outermost first.
+function ancestorsInside(allowed: readonly string[], denied: readonly string[]): string[] {
+  const found = new Set<string>();
+  for (const path of allowed) {
+    const segments = path.split('/').filter((segment) => segment !== '');
+    for (let depth = 1; depth < segments.length; depth++) {
+      const ancestor = `/${segments.slice(0, depth).join('/')}`;
+      if (denied.some((deny) => ancestor === deny || ancestor.startsWith(`${deny}/`))) found.add(ancestor);
+    }
+  }
+  return [...found].sort((a, b) => a.length - b.length);
 }

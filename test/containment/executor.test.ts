@@ -68,6 +68,27 @@ describe('buildSeatbeltProfile', () => {
     assert.ok(!none.value.includes('(allow file-read*'), 'no read allowance unless asked for');
   });
 
+  it('gives back only the metadata of the directories between a denied path and an allowed one below it, one literal each (plan 02-21)', () => {
+    const s = staging();
+    const parent = join(s.base, 'work-parent');
+    const own = join(parent, 'profile', 'run', 'clone');
+    mkdirSync(own, { recursive: true });
+    const built = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [parent], allowReadPaths: [own] });
+    assert.ok(built.ok, JSON.stringify(built));
+    const metadata = built.value.split('\n').filter((line) => line.startsWith('(allow file-read-metadata'));
+    assert.deepEqual(metadata, [parent, join(parent, 'profile'), join(parent, 'profile', 'run')].map((p) => `(allow file-read-metadata (literal "${p}"))`));
+    // Nothing above the denied path, nothing below the allowed one, no content or listing rule beyond the allowance itself.
+    assert.ok(!built.value.includes(`(literal "${s.base}")`));
+    assert.ok(!built.value.includes(`(literal "${own}")`));
+    assert.equal(built.value.split('\n').filter((line) => line.startsWith('(allow file-read*')).length, 1);
+    // An allowed path that is not inside a denied one needs nothing back.
+    const outside = join(s.base, 'elsewhere');
+    mkdirSync(outside, { recursive: true });
+    const free = buildSeatbeltProfile({ writePaths: [], denyReadPaths: [parent], allowReadPaths: [outside] });
+    assert.ok(free.ok);
+    assert.ok(!free.value.includes('file-read-metadata'));
+  });
+
   it('resolves symlinks in every path before writing them', () => {
     const s = staging();
     const link = join(s.base, 'link');
