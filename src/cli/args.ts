@@ -84,5 +84,6 @@ export interface CommandModule<Deps> {
   needsGsd?: boolean;
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
-  usage?(args: ParsedArgs): string | undefined;
+  // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
+  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv): string | undefined;
 }

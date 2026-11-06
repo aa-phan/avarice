@@ -9,7 +9,7 @@ import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
 import { errorLine } from './render/style.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host'] as const;
 export const EXIT_USAGE = 64;
 
 export interface MainOverrides extends DepsOverrides {
@@ -67,7 +67,7 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
   }
 
   const args = parseArgs(argv.slice(1), { boolean: mod.booleanFlags ?? [] });
-  const usageError = mod.usage?.(args);
+  const usageError = mod.usage?.(args, env);
   if (usageError !== undefined) {
     io.err(`${errorLine(name, usageError)}\n${USAGE}`);
     return EXIT_USAGE;
