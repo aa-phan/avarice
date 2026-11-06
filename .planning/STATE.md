@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-16-PLAN.md
-last_updated: "2026-11-06T06:52:21.166Z"
+stopped_at: Completed 02-17-PLAN.md
+last_updated: "2026-11-06T07:47:30.913Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: a929842ff54c283b3bb45cfdcaaf8951848944ae
+state_head: 343fd179f508d44e739ae03961f7cae668d4c6ef
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 17 of 22
+Plan: 18 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -99,6 +99,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P14 | 85 min | 3 tasks | 21 files |
 | Phase 02 P15 | 19 min | 3 tasks | 20 files |
 | Phase 02 P16 | 29 min | 2 tasks | 10 files |
+| Phase 02 P17 | 120min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-15: status gains one optional runs key (last key of a project entry) built from ledger rows only; lastCheckpoint skips the closing none checkpoint; a resumable run with no live lease is shown paused (verification interrupted or supervisor interrupted) with its open attempt and step; inbox prints each issue on its own width-cut line; install-host refuses under AVARICE_RUN before the profile resolves and refuses symlinks and files without the marker line - FR-11, OPS-7, D-19, CS-11, RC-5, CON-6 — The Phase 1 JSON stays byte-identical (four snapshots unchanged); a refusal writes nothing
 - [Phase 02]: 02-16: a crashed or wall-clock-killed unit with no moved HEAD is discarded to its snapshot and retried once; a second failure is a repeated_failure decision naming both attempts; a spent invocations budget blocks before the discard — CON-16 and FR-4: one retry, no competing loop, budgets charged stay charged
 - [Phase 02]: 02-16: routeOutcome order is moved HEAD, spent budget, hook loop limit, then paused, denied, no_progress, discard-and-retry — A spent budget denies every later call, so the budget is the cause when a long unit also reaches three denials
+- [Phase 02]: 02-17: an interrupted invocation is reconciled as inconclusive (discard to its snapshot, one CON-16 retry); the mid-handoff kill point sits between the fetch and its record so resume repeats the idempotent fetch
+- [Phase 02]: 02-17: resume spends a killed invocation's orphaned reservation as soon as it has reaped it (CON-13), and an attempt that never launched a unit does not use the item's retry
 
 ### Pending Todos
 
@@ -254,6 +257,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T06:52:21.007Z
-Stopped at: Completed 02-16-PLAN.md
+Last session: 2026-11-06T07:47:30.755Z
+Stopped at: Completed 02-17-PLAN.md
 Resume file: None

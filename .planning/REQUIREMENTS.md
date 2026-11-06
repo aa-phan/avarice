@@ -14,12 +14,12 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 ### Workflow (FR-1 to FR-11)
 
 - [ ] **FR-1** [MVP]: A run starts from a manual brief (Markdown text or file) or a typed external task reference; a manual brief is sufficient on its own.
-- [ ] **FR-2** [MVP]: A run follows the explicit run state machine; every transition is persisted before the side effect that depends on it begins.
+- [x] **FR-2** [MVP]: A run follows the explicit run state machine; every transition is persisted before the side effect that depends on it begins.
 - [ ] **FR-3** [MVP]: Context assembly produces a bounded, cited context pack; each item records source identity, revision, retrieval time and scope.
 - [ ] **FR-4** [MVP]: Planning, phase decomposition and implementation are delegated to GSD through supported commands; AVARICE keeps no competing plan, task list or retry loop for the same work.
 - [x] **FR-5** [MVP]: Verification runs the repository's own check commands as deterministic subprocesses and records exit status, duration, command and the verified workspace state.
 - [ ] **FR-6** [MVP]: Completion evidence names the exact revision verified (commit SHA plus clean-tree flag, or a content digest of the dirty tree); model-written text is never completion evidence.
-- [ ] **FR-7** [MVP]: A checkpoint is written at every state transition; resume rebuilds the next action from checkpoints, GSD state files and live git state, without chat history.
+- [x] **FR-7** [MVP]: A checkpoint is written at every state transition; resume rebuilds the next action from checkpoints, GSD state files and live git state, without chat history.
 - [ ] **FR-8** [MVP]: On resume, every external reference in the context pack is refreshed or marked stale before the run continues.
 - [ ] **FR-9** [MVP summary, Contract PR]: Change preparation produces a change summary from recorded evidence; PR creation is a privileged action (FR-12).
 - [ ] **FR-10** [Contract]: Review and CI feedback enter as new evidence attached to a new attempt and never overwrite an earlier attempt's evidence.
@@ -214,12 +214,12 @@ Each v1 requirement maps to exactly one phase.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FR-1 | Phase 2 | Pending |
-| FR-2 | Phase 2 | Pending |
+| FR-2 | Phase 2 | Complete |
 | FR-3 | Phase 4 | Pending |
 | FR-4 | Phase 2 | Pending |
 | FR-5 | Phase 2 | Complete |
 | FR-6 | Phase 2 | Pending |
-| FR-7 | Phase 2 | Pending |
+| FR-7 | Phase 2 | Complete |
 | FR-8 | Phase 4 | Pending |
 | FR-9 | Phase 5 | Pending |
 | FR-10 | Phase 5 | Pending |
