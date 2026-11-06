@@ -120,7 +120,7 @@ Plans:
   6. `avarice` with no arguments in a terminal opens the interactive shell (ADR-013): the user starts, watches and resumes the Phase 2 run from it, closing the shell leaves the supervisor running, and the same command outside a terminal or under `AVARICE_RUN` prints usage and exits 64
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
 
-**Plans:** 15/22 plans executed (10 waves)
+**Plans:** 16/22 plans executed (10 waves)
 
 Plans:
 **Wave 1**
@@ -149,7 +149,7 @@ Plans:
 - [x] 02-15-PLAN.md — `status` run views with optional `runs` JSON key, `inbox`, `install-host` with the avarice-run skill
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 02-16-PLAN.md — CON-16 discard and retry once (S-42), loop and budget escalations, S-20 source checkout untouched
+- [x] 02-16-PLAN.md — CON-16 discard and retry once (S-42), loop and budget escalations, S-20 source checkout untouched
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 02-17-PLAN.md — `resume` for runs, reconcile prelude, S-3, AC-3 kill-point suite over every run checkpoint
@@ -274,7 +274,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 15/22 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 16/22 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |

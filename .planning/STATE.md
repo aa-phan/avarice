@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-15-PLAN.md
-last_updated: "2026-11-06T06:00:05.390Z"
+stopped_at: Completed 02-16-PLAN.md
+last_updated: "2026-11-06T06:52:21.166Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: af6612dee2947fec03bf00214cd7f9c58e10004f
+state_head: a929842ff54c283b3bb45cfdcaaf8951848944ae
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 16 of 22
+Plan: 17 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -98,6 +98,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P13 | 38 min | 3 tasks | 23 files |
 | Phase 02 P14 | 85 min | 3 tasks | 21 files |
 | Phase 02 P15 | 19 min | 3 tasks | 20 files |
+| Phase 02 P16 | 29 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-13: start refuses with exit 3 and creates nothing when no admitted GSD is found; gate.result and decision.opened events carry the attempt ID; an item found delegated when the running stage starts is an error left to resume (02-16, 02-17) - RC-1 and OPS-2
 - [Phase 02]: 02-14: a declared check is repository code, validated in a scratch clone (undeclared writes, network by proxy or error text) and cached per project, pin and that one check's spec before it can be evidence; the baseline is measured at the pin and the unit is judged against it, a failure at base and head is a preExisting flag on a failed row; the install is the only network step, through a registry-only proxy; the test inventory is measured by AVARICE after the invocation, and G2 holds the checks delta so a failing target stops at G2 - ONB-10, AUT-8, AUT-9, CON-8, D-11, D-12
 - [Phase 02]: 02-15: status gains one optional runs key (last key of a project entry) built from ledger rows only; lastCheckpoint skips the closing none checkpoint; a resumable run with no live lease is shown paused (verification interrupted or supervisor interrupted) with its open attempt and step; inbox prints each issue on its own width-cut line; install-host refuses under AVARICE_RUN before the profile resolves and refuses symlinks and files without the marker line - FR-11, OPS-7, D-19, CS-11, RC-5, CON-6 — The Phase 1 JSON stays byte-identical (four snapshots unchanged); a refusal writes nothing
+- [Phase 02]: 02-16: a crashed or wall-clock-killed unit with no moved HEAD is discarded to its snapshot and retried once; a second failure is a repeated_failure decision naming both attempts; a spent invocations budget blocks before the discard — CON-16 and FR-4: one retry, no competing loop, budgets charged stay charged
+- [Phase 02]: 02-16: routeOutcome order is moved HEAD, spent budget, hook loop limit, then paused, denied, no_progress, discard-and-retry — A spent budget denies every later call, so the budget is the cause when a long unit also reaches three denials
 
 ### Pending Todos
 
@@ -251,6 +254,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T06:00:05.027Z
-Stopped at: Completed 02-15-PLAN.md
+Last session: 2026-11-06T06:52:21.007Z
+Stopped at: Completed 02-16-PLAN.md
 Resume file: None
