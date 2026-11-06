@@ -53,6 +53,16 @@ Claude Code 2.1.312, and 2.1.316 on re-check, offers headless invocations (`clau
 - Claude Code changes the meaning of `dontAsk`, `--permission-prompts` or `--max-budget-usd`.
 - Outcome classification produces more than 10% `inconclusive` endings in the benchmark.
 
+## Phase 2 implementation note (2026-11-06)
+
+This note records what Phase 2 built against the decision above. The decision text is unchanged and the status stays Proposed.
+
+- **Run-scoped configuration (decision 3).** The keys AVARICE applies with `config-set` as the step `gsd:configure` are `workflow.text_mode=true`, `gates.execute_next_plan=false`, `gates.confirm_transition=false`, `audit.enabled=true`, `workflow.use_worktrees=false`, `commit_docs=false` and `git.branching_strategy=none` (`RUN_GSD_SETTINGS`). `workflow.windows_enforce` is not applied: `config-set` accepts it, but nothing in the quick workflow needs it. The values are in [extensions.md](../extensions.md#2b-run-scoped-gsd-configuration-mvp).
+- **The supervisor commits (D-03).** The contained unit edits files only and is told so; its `git add` and `git commit` are denied by the hook, and a moved clone `HEAD` is an enforcement failure. After gate G2 the supervisor commits the unit's paths outside the invocation, and after G4 it fetches the run branch into the source repository as one new local ref (D-02). The unit's GSD records (`.planning/quick/**`, `STATE.md`, the run's `config.json`) are archived as run artifacts and kept off the review branch (D-17). Spike S2-D measured that an in-sandbox commit would need eight writable entries under `.git` (host limitation 8, resolved); none is granted.
+- **Unit and outcome (decisions 2 and 4).** The unit is `/gsd-quick --validate --text` with a prompt that names the whole workflow as the work. Spike S2-B confirmed the unit runs under containment (planner, plan-checker, executor and verifier, 4 subagents in the live round, 0.8996 USD). The model drives the quick workflow by reading it and spawning subagents, not through `gsd_run` verbs, and improvised compound shell lines are denied (5 to 7 per unit), so the host outcome `denied` is not a verdict: the supervisor judges a unit from the clone, the quick records, the VERIFICATION status line and `HEAD`. The classifier's order is moved `HEAD`, spent budget, hook loop limit, paused, denied, no progress, then discard-and-retry.
+- **Retry (CON-16).** A crashed or killed unit with no moved `HEAD` is discarded to its snapshot and run once more; a second failure is a `repeated_failure` decision naming both attempts. The invocation budget is 3 (the unit, one retry, one interruption relaunch), and charged budgets stay charged.
+- **Not built in Phase 2.** Answering a GSD pause and resuming it (`decide`), `/gsd-autonomous` units and `workflow.auto_advance`, and push or draft-PR delivery (decision 7 stops at the local branch).
+
 ## References
 
 - `~/.claude/gsd-core/references/checkpoints.md:11-23`

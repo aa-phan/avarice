@@ -51,6 +51,16 @@ These rules are the target format for human-readable text from every command and
 | Numbers | Money is in USD with two decimals, durations use the largest whole unit (`3 min 10 s`), and times are local with a relative form (`14:02, 3 min ago`). |
 | Colour and escapes | Colour and cursor escapes are printed only when standard output is a terminal, `NO_COLOR` is unset and `TERM` is not `dumb`. |
 
+Commands added for runs in Phase 2 follow the same table and use the exit codes below. Exit 3 means the command did not reach its goal for a reason AVARICE recorded: a start rule refused the run, the run stopped in a state other than `ready_for_review`, another supervisor holds the lease, or an install target was refused.
+
+| Command | What it does | Exit codes |
+|---|---|---|
+| `avarice start --brief <file> --policy routine [--project <id>] [--budget name=value]... [--wait]` | Compiles and stores the contract, then spawns a detached `avarice supervise` and returns; `--wait` blocks until a stop state | 0 run stored (with `--wait`: `ready_for_review`), 3 refused by a start rule with nothing created (or, with `--wait`, any other stop state), 64 usage, invalid brief or budget override, or a G0 failure, 70 internal |
+| `avarice supervise <runId>` | The supervisor of one run: takes the lease and runs the checkpointed stages; started by `start`, or by hand to continue | 0 `ready_for_review`, 3 any other stop state or a lease held elsewhere, 64 usage or unknown run, 70 internal |
+| `avarice resume <runId>` | Continues an interrupted run from its committed state (an onboarding ID keeps its Phase 1 path) | 0 `ready_for_review`, 3 any other stop state or a live lease, 64 unknown ID, 70 internal |
+| `avarice inbox [--json]` | Open decisions and runs waiting for review; read-only, offline, no lease | 0, 64 for an argument it does not take, 70 when the ledger cannot be read |
+| `avarice install-host [--config-dir <dir>]` | Writes the `avarice-run` skill to `<claude config dir>/skills/avarice-run/SKILL.md` for attended sessions; refuses symlinks and files without the marker line, and refuses inside a run | 0 installed, unchanged or updated, 3 refused, 64 usage or inside a run, 70 internal |
+
 ### 2. Run hook set: `avarice hook pre-tool-use | post-tool-use | config-change` (MVP)
 
 | Field | Value |
@@ -82,7 +92,19 @@ The same PreToolUse entry point serves attended sessions when installed in the u
 
 ### 2b. Run-scoped GSD configuration (MVP)
 
-Set in the run's worktree with `gsd_run config-set` before the first invocation: `workflow.text_mode=true`, `gates.execute_next_plan=false`, `gates.confirm_transition=false`, `workflow.windows_enforce=true`, `audit.enabled=true`; `workflow.auto_advance=true` only for `/gsd-autonomous` units. These are configuration of supported keys. The user's main checkout keeps its own configuration.
+Applied in the run's clone by AVARICE, outside any invocation, as the step `gsd:configure`, with `config-set` before the first invocation. The list is `RUN_GSD_SETTINGS` in `src/app/run-gsd-config.ts`, and plan 02-09's live spike (S2-B, [record](../spikes/phase-2-wave-0/S2-B-gsd-quick.md)) applied every pair below in a scratch GSD project and `config-set` accepted all seven:
+
+| Key | Value | Why |
+|---|---|---|
+| `workflow.text_mode` | `true` | numbered text choices instead of interactive questions, so a pause is detectable as text |
+| `gates.execute_next_plan` | `false` | no confirmation before the next plan |
+| `gates.confirm_transition` | `false` | no confirmation at a transition |
+| `audit.enabled` | `true` | keeps GSD's audit trail |
+| `workflow.use_worktrees` | `false` | the run's clone is the workspace |
+| `commit_docs` | `false` | GSD's own `query commit` does not commit; the supervisor commits (D-03) |
+| `git.branching_strategy` | `none` | no branch is created inside the unit; the clone is already on `avarice/run_<id>` |
+
+Two keys named in earlier drafts are not applied. `git.quick_branch_template` set to an empty template was refused by the adapter before GSD ran (a setting value must match `[A-Za-z0-9_.-]+`), and `git.branching_strategy=none` makes the quick workflow skip branching, so it is not needed. `workflow.windows_enforce` is accepted by `config-set` but nothing in the quick workflow needs it, so it is not applied. `workflow.auto_advance=true` is for `/gsd-autonomous` units only and no Phase 2 unit uses it. `config-set` leaves an untracked `.planning/config.json` in the clone; it is a run artifact, archived and kept off the review branch (D-17). The user's own checkout keeps its own configuration.
 
 ### 2c. Notifier adapters and digest scheduler (MVP: local; later: push)
 
