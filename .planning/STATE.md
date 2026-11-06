@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-19-PLAN.md
-last_updated: "2026-11-06T09:11:10.272Z"
+stopped_at: "Completed 02-20-PLAN.md (open finding: other-profile-root read, owner decision)"
+last_updated: "2026-11-06T10:24:36.689Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 6f5a5352162a6f822487dee9be2ec9eab8eecaf9
+state_head: ff4a5940782dba846460baf45670f088dbbbc8c2
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 45
+  completed_plans: 46
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 20 of 22
+Plan: 21 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -102,6 +102,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P17 | 120min | 3 tasks | 19 files |
 | Phase 02 P18 | 27 min | 2 tasks | 8 files |
 | Phase 02 P19 | 100 min | 3 tasks | 20 files |
+| Phase 02 P20 | 70 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-18: S2-D measured that an in-sandbox git commit needs eight writable entries under the clone's .git (objects, refs/heads/avarice, logs/HEAD, logs/refs/heads/avarice, index, index.lock, COMMIT_EDITMSG, HEAD.lock) and fails with only objects and the run ref; limitation 8 is resolved and the supervisor still commits (D-03) — CON-1 and D-03: no agent gets any of those entries; docs/containment.md has ten run-purpose matrix rows and test/unit/containment-matrix.test.ts fails on an empty cell, a misordered mechanism or an untracked test file
 - [Phase 02]: 02-19: the interactive shell is one session engine with two input modes (raw keys on a terminal, whole lines for TERM=dumb); it holds no ledger connection and strips all output once — ADR-013 decisions 3 and 6; one Consumer interface keeps the menu, prompts and live views single-sourced
 - [Phase 02]: 02-19: Ledger.listRunEvents added as the only port change, a read-only latest-events query for the watch view; macOS script cannot type after the screen is up, so key handling is proven on a python3 pty driver (test tooling only) — the Ledger port had no event read; script sends end-of-file at once and drops a completed line at the raw-mode switch
+- [Phase 02]: 02-20: prepareRunInvocation creates the host TMPDIR (scratch/tmp) and scratch/npm-cache before launch; without it every sandboxed Bash call of a real unit failed to initialize the sandbox
+- [Phase 02]: 02-20: attempts a real model declines in words (credential reads, settings, contract and budget writes) are made by a probe script run through the declared npm test, so the sandbox layer answers; the hook layer is judged by the model-driven forms it does attempt
+- [Phase 02]: 02-20: cs7-other-profile-sandbox is recorded FAIL and left failing: the sandbox denyRead does not list another profile root; closing it needs an owner decision, CON-1 not marked complete
 
 ### Pending Todos
 
@@ -242,6 +246,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - [Phase 1, backlog 999.1]: A real `avarice onboard --mode fast` reaching `active` with completeness `partial` is unchecked live (UAT test 13, deferred)
 - [Phase 1, backlog 999.2]: The local-mount refusal (`local` flag heuristic, A6) is unverified against a real smbfs or nfs mount (UAT test 10, deferred)
+- 02-20 open finding: a command the run declares can read another profile root (sandbox denyRead has no entry for other profiles); owner decision needed before 02-21/02-22 exit runs
 
 ### Quick Tasks Completed
 
@@ -262,6 +267,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T09:11:10.107Z
-Stopped at: Completed 02-19-PLAN.md
+Last session: 2026-11-06T10:24:25.688Z
+Stopped at: Completed 02-20-PLAN.md (open finding: other-profile-root read, owner decision)
 Resume file: None

@@ -52,7 +52,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **RC-2** [MVP]: A contract is assembled from a reusable policy preset, repository conventions and the brief; `avarice start --brief <file> --policy <preset>` is sufficient for a routine task.
 - [ ] **RC-3** [MVP]: The user's authorization comes from the brief, the selected preset or an explicit instruction; AVARICE adds no confirmation step for authority already granted.
 - [ ] **RC-4** [MVP]: Within the contract, routine actions and phase transitions proceed without human prompts.
-- [ ] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
+- [x] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
 - [ ] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
 - [ ] **RC-7** [MVP]: Each work item carries a size (`small`, `medium`, `large`) and a specification (files it may change, public symbols it adds or changes, configuration keys it touches, documents it cites); when the brief omits them the compiler derives them from the brief, the indexes and the GSD plan and records which were derived.
 - [ ] **RC-8** [MVP]: The model for each work item's invocation comes from its size through the preset's size-to-model map, unless the contract overrides it for that item.
@@ -74,7 +74,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
 - [x] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
 - [ ] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
-- [ ] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
+- [x] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
 
 ### Autonomy and human involvement (AUT-1 to AUT-17)
 
@@ -243,7 +243,7 @@ Each v1 requirement maps to exactly one phase.
 | RC-2 | Phase 2 | Pending |
 | RC-3 | Phase 2 | Pending |
 | RC-4 | Phase 2 | Pending |
-| RC-5 | Phase 2 | Pending |
+| RC-5 | Phase 2 | Complete |
 | RC-6 | Phase 3 | Pending |
 | RC-7 | Phase 3 | Pending |
 | RC-8 | Phase 3 | Pending |
@@ -262,7 +262,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-13 | Phase 2 | Complete |
 | CON-14 | Phase 2 | Complete |
 | CON-15 | Phase 3 | Pending |
-| CON-16 | Phase 2 | Pending |
+| CON-16 | Phase 2 | Complete |
 | AUT-1 | Phase 3 | Pending |
 | AUT-2 | Phase 3 | Pending |
 | AUT-3 | Phase 3 | Pending |
