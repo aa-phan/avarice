@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: "Completed 02-20-PLAN.md (other-profile-root finding fixed: default AVARICE parents denied, live cs7 PASS)"
-last_updated: "2026-11-06T10:24:36.689Z"
+stopped_at: Completed 02-21-PLAN.md (exit drafts proven by dry run, owner approval recorded, conventions committed 9f63d91)
+last_updated: "2026-11-06T21:58:46.571Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: ff4a5940782dba846460baf45670f088dbbbc8c2
+state_head: dfe1faf45c9c46fedb647c54f3c7e5aead4a0f89
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 46
+  completed_plans: 47
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 21 of 22
+Plan: 22 of 22
 Status: Ready to execute
 Last activity: 2026-11-05 — Phase 02 execution started
 
@@ -103,6 +103,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P18 | 27 min | 2 tasks | 8 files |
 | Phase 02 P19 | 100 min | 3 tasks | 20 files |
 | Phase 02 P20 | 70 min | 3 tasks | 8 files |
+| Phase 02 P21 | 3 sessions | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-20: prepareRunInvocation creates the host TMPDIR (scratch/tmp) and scratch/npm-cache before launch; without it every sandboxed Bash call of a real unit failed to initialize the sandbox
 - [Phase 02]: 02-20: attempts a real model declines in words (credential reads, settings, contract and budget writes) are made by a probe script run through the declared npm test, so the sandbox layer answers; the hook layer is judged by the model-driven forms it does attempt
 - [Phase 02]: 02-20: cs7-other-profile-sandbox was recorded FAIL (the sandbox denyRead did not list another profile root) and is now fixed by owner decision: every run sandbox (host settings and the SandboxedExecutor paths of checks, validation, baseline and npm ci) denies the default parents ~/.local/share/avarice, ~/.config/avarice and ~/.local/share/avarice-work and re-allows only the run own clone and scratch; roots placed by AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME are a documented limit; live re-run PASS
+- [Phase 02]: 02-21: the portfolio conventions draft adds node_modules/.tmp/** and node_modules/.vite-temp/** to test:e2e writes (found by ONB-10 validation); the owner committed it as 9f63d91 in ~/aa-phan-portfolio-v2 with checks digest sha256:43b374ff... (the plan's uncorrected text digests to sha256:efe24475...)
+- [Phase 02]: 02-21: owner approved the three R1 briefs (parseBrief digests recorded) and the exit spend at 5.00 USD per run, 2.00 per invocation; 5.7565 of the 25 USD Phase 2 ceiling spent so far (D-15)
 
 ### Pending Todos
 
@@ -266,6 +269,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T10:24:25.688Z
-Stopped at: Completed 02-20-PLAN.md (other-profile-root finding fixed: default AVARICE parents denied, live cs7 PASS)
+Last session: 2026-11-06T21:58:46.416Z
+Stopped at: Completed 02-21-PLAN.md (exit drafts proven by dry run, owner approval recorded, conventions committed 9f63d91)
 Resume file: None
