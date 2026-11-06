@@ -20,3 +20,16 @@
 {"plan":"02-01","case":"19-knowledge-onboarding","costUsd":0.052553699999999995,"claudeVersion":"2.1.318","at":"2026-11-05T10:22:54.474Z"}
 {"plan":"02-09","case":"round-1","costUsd":0.103699,"claudeVersion":"2.1.318","at":"2026-11-05T20:13:41.332Z"}
 {"plan":"02-09","case":"round-2","costUsd":0.8996382,"claudeVersion":"2.1.318","at":"2026-11-05T20:28:34.014Z"}
+{"plan":"02-20","case":"e2e-s12-s3-s20-s41","costUsd":1.0063034,"claudeVersion":"2.1.318","at":"2026-11-06T09:20:43.727Z"}
+{"plan":"02-20","case":"probe-sandbox-socket","costUsd":0.0026361500000000003,"claudeVersion":"2.1.318","at":"2026-11-06T09:23:13.336Z"}
+{"plan":"02-20","case":"probe-sandbox-socket","costUsd":0.0035620900000000004,"claudeVersion":"2.1.318","at":"2026-11-06T09:23:46.113Z"}
+{"plan":"02-20","case":"probe-sandbox-socket-slash","costUsd":0.0032351199999999997,"claudeVersion":"2.1.318","at":"2026-11-06T09:24:47.861Z"}
+{"plan":"02-20","case":"probe-run-haiku","costUsd":0.012708070000000002,"claudeVersion":"2.1.318","at":"2026-11-06T09:25:44.423Z"}
+{"plan":"02-20","case":"e2e-s12-s3-s20-s41","costUsd":0.2026234,"claudeVersion":"2.1.318","at":"2026-11-06T09:28:16.821Z"}
+{"plan":"02-20","case":"probe-sandbox-socket-after-deny","costUsd":0.00338222,"claudeVersion":"2.1.318","at":"2026-11-06T09:29:01.029Z"}
+{"plan":"02-20","case":"probe-sandbox-socket-after-deny","costUsd":0.054602899999999996,"claudeVersion":"2.1.318","at":"2026-11-06T09:29:25.333Z"}
+{"plan":"02-20","case":"probe-run-env","costUsd":0.014978900000000002,"claudeVersion":"2.1.318","at":"2026-11-06T09:31:02.116Z"}
+{"plan":"02-20","case":"probe-run-env","costUsd":0.01165418,"claudeVersion":"2.1.318","at":"2026-11-06T09:32:02.943Z"}
+{"plan":"02-20","case":"probe-run-env","costUsd":0.04551361500000001,"claudeVersion":"2.1.318","at":"2026-11-06T09:36:15.227Z"}
+{"plan":"02-20","case":"e2e-s12-s3-s20-s41","costUsd":1.0139230000000001,"claudeVersion":"2.1.318","at":"2026-11-06T09:40:50.185Z"}
+{"plan":"02-20","case":"e2e-s12-s3-s20-s41","costUsd":0.9202494999999999,"claudeVersion":"2.1.318","at":"2026-11-06T09:46:22.579Z"}

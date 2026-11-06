@@ -362,10 +362,12 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
   const clone = canonical(run.workspacePath);
   const described = workspace.describe(clone, runScopeDirs(contract.files));
   if (!described.ok) return described;
-  // The scratch directory (TMPDIR and the npm cache) is made by AVARICE, beside the clone, owner only.
+  // The scratch directory (TMPDIR and the npm cache) is made by AVARICE, beside the clone, owner only. The host's TMPDIR (`scratch/tmp`) and the
+  // npm cache (`scratch/npm-cache`) must exist before it starts: the host listens on a unix socket in its TMPDIR when its sandbox initializes, so
+  // a missing directory leaves every Bash call failing `Sandbox is required but failed to initialize` (plan 02-20, first live run).
   const scratchParent = join(deps.profile.workRoot, run.runId);
   try {
-    mkdirSync(join(scratchParent, 'scratch'), { recursive: true, mode: 0o700 });
+    for (const name of ['tmp', 'npm-cache']) mkdirSync(join(scratchParent, 'scratch', name), { recursive: true, mode: 0o700 });
   } catch (cause) {
     return err({ kind: 'internal', cause: `the scratch directory of run ${run.runId} could not be created: ${cause instanceof Error ? cause.message : String(cause)}` });
   }

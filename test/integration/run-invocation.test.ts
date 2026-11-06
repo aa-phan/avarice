@@ -4,7 +4,7 @@
 // onboarding pair generalized (budget.ts, invocation.ts), so Phase 1 behaviour is pinned by its own suites. No model is called.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { reserveRunInvocation, settleInvocation } from '../../src/app/budget.ts';
@@ -257,6 +257,11 @@ describe('prepareRunInvocation: launch:run is recorded before the host starts', 
       assert.match(request.sessionId ?? '', /^[0-9a-f-]{36}$/);
       assert.deepEqual(request.extensions.skills, ['gsd-quick']);
       assert.equal(prepared.value.prepared.attempt, 1);
+      // The host's TMPDIR and the npm cache exist before it starts: its sandbox listens on a unix socket in TMPDIR, and a missing
+      // directory made every Bash call fail `Sandbox is required but failed to initialize` in the first live run (plan 02-20).
+      const scratch = request.scope.scratchDir as string;
+      assert.ok(statSync(join(scratch, 'tmp')).isDirectory(), 'scratch/tmp exists');
+      assert.ok(statSync(join(scratch, 'npm-cache')).isDirectory(), 'scratch/npm-cache exists');
 
       const steps = u.deps.ledger.getRunSteps(u.runId).ok ? (u.deps.ledger.getRunSteps(u.runId) as { ok: true; value: Array<{ step: string; attempt: number; status: string; result: unknown }> }).value : [];
       const launch = steps.filter((s) => s.step === 'launch:run');
