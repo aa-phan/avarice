@@ -12,12 +12,28 @@
 //       Read-only: finds the conventions the way `avarice start` does (D-16), parses them, compares the checks digest with the draft's and
 //       judges the staleness rules (D-04). Prints `conventions: ok|FAIL` and `staleness: ok|FAIL` lines; exit 1 on a FAIL.
 //
-// Plan 02-22 adds `evidence` to this file (the assembly of the exit evidence JSON).
+// Plan 02-22 adds the three subcommands of the live exit (they never start a model; `avarice start` does, from the shell script):
+//   authorize --authorization-file F --brief B --repo REPO --config F [--evidence F] [--pin SHA]
+//       Before a run: the owner's approval names this brief (parseBrief digest equal), the evidence file holds no run of it yet and fewer
+//       than maxRuns runs, the preflight (D-04, D-16) is ok, and the Phase 2 ceiling guard `fitsPhase2Ceiling(perRunCap)` (D-15) says the
+//       recorded spend plus this run's cap fits. Exit 0 ok, 75 when the ceiling would be passed ("stop and ask the owner"), 1 otherwise.
+//   snapshot --repo REPO
+//       Read-only JSON of the owner's checkout: the checkout digest (HEAD, branch, status, tracked and untracked file bytes, refs excluding
+//       refs/heads/avarice/run_*, worktrees), a digest of the index entries, the symbolic HEAD, and every ref with its object.
+//   evidence --run-id ID --brief B --before F --after F --start-exit N --start-out F --out F --ledger F [--repo REPO] [--plan 02-22]
+//       After a run: reads the run from the owner's profile (read-only), appends its spend line to the Phase 2 ledger (once per run), and
+//       writes the run's record into the exit evidence JSON, with the diagnosis when the run did not reach ready_for_review.
+//       Exit 0 when the run is a clean `ready_for_review`, 1 otherwise.
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { checkoutDigest, RUN_REF_GLOB } from './checkout-digest.ts';
+import { fitsPhase2Ceiling, phase2Ceiling, phase2LedgerPath, phase2Spent } from '../test/helpers/live-harness.ts';
+import { getRunStatuses } from '../src/app/run-status.ts';
 import { GitRunSource } from '../src/adapters/git/run-source.ts';
 import { runGit } from '../src/adapters/git/safe-git.ts';
 import { blockingOf, validateChecks } from '../src/app/check-validation.ts';
@@ -515,10 +531,328 @@ function installView(result: InstallResult): Json {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The live exit (plan 02-22): authorize, snapshot, evidence
+// ---------------------------------------------------------------------------------------------------------------
+
+const EXIT_CEILING = 75;
+const sha256 = (data: string | Buffer): string => `sha256:${createHash('sha256').update(data).digest('hex')}`;
+const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function readJson(path: string): Json | undefined {
+  if (!existsSync(path)) return undefined;
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  return isObject(parsed) ? parsed : undefined;
+}
+
+function briefDigest(path: string): string | undefined {
+  const parsed = parseBrief(readFileSync(path, 'utf8'), { kind: 'file', id: path.split('/').pop() as string });
+  return parsed.ok ? parsed.value.digest : undefined;
+}
+
+// The Phase 2 spend recorded for plan 02-22 so far, per run ID (the case name carries the run ID).
+function ledgerLines(path: string): Json[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8').split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l) as Json);
+}
+
+function authorize(argv: readonly string[]): number {
+  const { named } = flags(argv);
+  const authPath = named['authorization-file'];
+  const briefArg = named['brief'];
+  const repo = named['repo'];
+  const configPath = named['config'];
+  if (authPath === undefined || briefArg === undefined || repo === undefined || configPath === undefined) {
+    errOut('usage: authorize --authorization-file F --brief B --repo REPO --config F [--evidence F] [--pin SHA]');
+    return 2;
+  }
+  const refuse = (text: string, code = 1): number => {
+    errOut(`exit-run: ${text}`);
+    return code;
+  };
+  const auth = readJson(resolve(authPath));
+  if (auth === undefined) return refuse(`refusing to spend: ${authPath} is not the owner's authorization file`, 2);
+  if (auth['selection'] !== 'approve') return refuse(`the authorization selection is ${JSON.stringify(auth['selection'])}, not "approve"`, 2);
+  const approved = Array.isArray(auth['approvedBriefs']) ? (auth['approvedBriefs'] as Json[]) : [];
+  const perRun = Number(auth['perRunCapUsd']);
+  const cap = Number(auth['capUsd']);
+  const maxRuns = Number(auth['maxRuns']);
+  if (!(Number.isFinite(perRun) && perRun > 0 && Number.isFinite(cap) && cap > 0 && Number.isFinite(maxRuns) && maxRuns > 0)) return refuse('the authorization names no finite positive per-run cap, ceiling and run count', 2);
+
+  const briefPath = resolve(briefArg);
+  const digest = existsSync(briefPath) ? briefDigest(briefPath) : undefined;
+  if (digest === undefined) return refuse(`${briefArg} does not parse as a brief`, 2);
+  const entry = approved.find((a) => isObject(a) && a['digest'] === digest);
+  if (entry === undefined) return refuse(`the brief ${briefArg} (digest ${digest}) is not one of the briefs the owner approved: stop and report`, 2);
+  if (entry['path'] !== undefined && resolve(REPO_ROOT, String(entry['path'])) !== briefPath) return refuse(`the approved digest ${digest} belongs to ${String(entry['path'])}, not ${briefArg}`, 2);
+
+  // No run is repeated by hand (the plan's prohibition): a brief that already has a recorded run, and a fourth run, are refused.
+  const evidencePath = named['evidence'];
+  const existing = evidencePath === undefined ? undefined : readJson(resolve(evidencePath));
+  const runs = existing !== undefined && Array.isArray(existing['runs']) ? (existing['runs'] as Json[]) : [];
+  if (runs.some((r) => r['briefDigest'] === digest)) return refuse(`the evidence file already records a run of ${briefArg}: a run is never started twice by hand; stop and report`, 2);
+  if (runs.length >= maxRuns) return refuse(`the evidence file already records ${runs.length} runs (the owner approved ${maxRuns})`, 2);
+
+  const report = preflight(resolve(repo), resolve(configPath), named['pin'] ?? DEFAULT_PIN, Date.now());
+  for (const line of report.lines) out(`${line}\n`);
+  if (!report.ok) return refuse('the preflight failed (see above); nothing was started', 1);
+
+  // D-15: the guard every live start goes through; the authorization's own ceiling may lower it and never raises it.
+  process.env['AVARICE_PHASE2_PLAN'] = process.env['AVARICE_PHASE2_PLAN'] ?? '02-22';
+  const spent = phase2Spent();
+  const ceiling = Math.min(phase2Ceiling(), cap);
+  if (!fitsPhase2Ceiling(perRun) || spent + perRun > ceiling + 1e-9) {
+    return refuse(`stop and ask the owner (D-15): recorded Phase 2 spend ${spent.toFixed(4)} USD plus this run's cap ${perRun.toFixed(2)} USD would pass the ${ceiling} USD ceiling`, EXIT_CEILING);
+  }
+  out(`authorized: ${briefArg} (${digest.slice(0, 19)}...), spend ${spent.toFixed(4)} USD plus ${perRun.toFixed(2)} fits ${ceiling} USD, run ${runs.length + 1} of ${maxRuns}\n`);
+  return 0;
+}
+
+interface RefLine {
+  ref: string;
+  object: string;
+}
+
+function snapshot(repo: string): Json {
+  const digest = checkoutDigest(repo, [RUN_REF_GLOB]);
+  const stage = mustGit(repo, ['ls-files', '--stage', '-z']);
+  const refs: RefLine[] = mustGit(repo, ['for-each-ref', '--format=%(refname) %(objectname)'])
+    .split('\n')
+    .filter((l) => l !== '')
+    .map((l) => ({ ref: l.slice(0, l.indexOf(' ')), object: l.slice(l.indexOf(' ') + 1) }));
+  const headRef = mustGit(repo, ['symbolic-ref', '-q', 'HEAD']).trim();
+  const composite = sha256(JSON.stringify({ digest, indexDigest: sha256(stage), headRef }));
+  return { schema: 1, takenAt: new Date().toISOString(), repo, digest, indexDigest: sha256(stage), headRef, composite, refs };
+}
+
+function toolCounts(text: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isObject(event) || event['type'] !== 'assistant' || !isObject(event['message']) || !Array.isArray(event['message']['content'])) continue;
+    for (const part of event['message']['content'] as unknown[]) {
+      if (isObject(part) && part['type'] === 'tool_use' && typeof part['name'] === 'string') counts[part['name']] = (counts[part['name']] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function claudeVersionOf(bin: string | undefined): string {
+  if (bin === undefined || bin === '') return 'unknown';
+  const ran = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 20_000 });
+  return /^\s*(\d+\.\d+\.\d+)\b/.exec(ran.stdout ?? '')?.[1] ?? 'unknown';
+}
+
+function evidenceCommand(argv: readonly string[]): number {
+  const { named } = flags(argv);
+  const need = ['run-id', 'brief', 'before', 'after', 'start-exit', 'start-out', 'out', 'ledger', 'repo'];
+  const missing = need.filter((k) => named[k] === undefined);
+  if (missing.length > 0) {
+    errOut(`usage: evidence needs --${missing.join(' --')}`);
+    return 2;
+  }
+  const runId = named['run-id'] as string;
+  const outPath = resolve(named['out'] as string);
+  const ledgerPath = resolve(named['ledger'] as string);
+  const briefPath = resolve(named['brief'] as string);
+  const repo = resolve(named['repo'] as string);
+  const plan = named['plan'] ?? '02-22';
+  const before = readJson(resolve(named['before'] as string)) ?? {};
+  const after = readJson(resolve(named['after'] as string)) ?? {};
+  const startOut = existsSync(resolve(named['start-out'] as string)) ? readFileSync(resolve(named['start-out'] as string), 'utf8') : '';
+  const startErr = named['start-err'] !== undefined && existsSync(resolve(named['start-err'])) ? readFileSync(resolve(named['start-err']), 'utf8') : '';
+  const problems: string[] = [];
+
+  const entry: Json = {
+    runId,
+    brief: briefPath.replace(`${REPO_ROOT}/`, ''),
+    briefDigest: briefDigest(briefPath) ?? null,
+    startExit: Number(named['start-exit']),
+    startedAt: named['started-at'] ?? null,
+    endedAt: named['ended-at'] ?? new Date().toISOString(),
+    startStdoutTail: startOut.slice(-2000),
+    ...(startErr !== '' ? { startStderrTail: startErr.slice(-2000) } : {}),
+  };
+
+  // ---- the owner's checkout: before and after ----
+  const digestBefore = String(before['composite'] ?? '');
+  const digestAfter = String(after['composite'] ?? '');
+  const refsOf = (snap: Json): RefLine[] => (Array.isArray(snap['refs']) ? (snap['refs'] as RefLine[]) : []);
+  const beforeRefs = new Map(refsOf(before).map((r) => [r.ref, r.object]));
+  const afterRefs = new Map(refsOf(after).map((r) => [r.ref, r.object]));
+  const newRefs = [...afterRefs.keys()].filter((r) => !beforeRefs.has(r));
+  const changedRefs = [...beforeRefs].filter(([r, o]) => afterRefs.get(r) !== o).map(([r]) => r);
+  entry['digestBefore'] = digestBefore;
+  entry['digestAfter'] = digestAfter;
+  entry['checkout'] = { before: { ...before, refs: undefined }, after: { ...after, refs: undefined }, newRefs, removedOrChangedRefs: changedRefs };
+  if (digestBefore === '' || digestBefore !== digestAfter) problems.push('the checkout digest differs before and after the run (or one is missing)');
+  if (changedRefs.length > 0) problems.push(`refs removed or changed: ${changedRefs.join(', ')}`);
+  if (newRefs.some((r) => r !== `refs/heads/avarice/${runId}`)) problems.push(`refs added other than the run's own branch: ${newRefs.join(', ')}`);
+
+  // ---- the run, read-only from the owner's profile ----
+  const composed = createDeps(process.env);
+  let state = 'unknown';
+  let costUsd = 0;
+  let version = 'unknown';
+  if (!composed.ok) {
+    problems.push(`cannot read the profile: ${composed.message}`);
+  } else {
+    const deps = composed.value.deps;
+    try {
+      const run = deps.ledger.getRun(runId);
+      if (!run.ok) {
+        problems.push(`the run ${runId} is not in the ledger: ${describeError(run.error)}`);
+      } else {
+        state = run.value.state;
+        const statuses = getRunStatuses(deps.ledger, run.value.projectId, deps.clock.nowMs());
+        const status = statuses.ok ? statuses.value.find((s) => s.runId === runId) : undefined;
+        const contractRow = deps.ledger.getRunContract(runId);
+        const contract = contractRow.ok && contractRow.value !== null ? (contractRow.value.body as RunContract) : undefined;
+        const evidenceRows = deps.ledger.listEvidence(runId);
+        const gateRows = deps.ledger.listGateResults(runId);
+        const attempts = deps.ledger.listRunAttempts(runId);
+        const budgets = deps.ledger.getBudgets(runId);
+        const decisions = deps.ledger.listDecisions({ runId });
+        const costRow = budgets.ok ? budgets.value.find((b) => b.name === 'costUsd') : undefined;
+        costUsd = costRow?.used ?? 0;
+        entry['state'] = state;
+        entry['reason'] = run.value.reason;
+        entry['title'] = run.value.title;
+        entry['baseRevision'] = run.value.baseRevision;
+        entry['branch'] = run.value.branch;
+        entry['status'] = status ?? null;
+        entry['commit'] = status?.commit ?? null;
+        entry['clean'] = status?.clean ?? null;
+        entry['costUsd'] = costUsd;
+        entry['budgets'] = status?.budgets ?? [];
+        entry['attempts'] = attempts.ok ? attempts.value.map((a) => ({ attemptId: a.attemptId, ordinal: a.ordinal, reason: a.reason, outcome: a.outcome })) : [];
+        entry['retries'] = attempts.ok ? Math.max(0, attempts.value.length - 1) : null;
+        entry['gates'] = gateRows.ok ? gateRows.value.map((g) => ({ gate: g.gate, passed: g.passed, revision: g.revision, failures: g.failures })) : [];
+
+        // the branch the supervisor fetched into the portfolio
+        const branchRef = `refs/heads/avarice/${runId}`;
+        entry['branchRefCommit'] = afterRefs.get(branchRef) ?? null;
+        if (status !== undefined && status.commit !== null && afterRefs.get(branchRef) !== undefined && afterRefs.get(branchRef) !== status.commit) problems.push(`the branch ${branchRef} is at ${afterRefs.get(branchRef)} but the handed-off commit is ${status.commit}`);
+
+        // ---- required checks and the acceptance mapping, from the final revision ----
+        const requiredNames = contract?.verification.requiredChecks ?? [];
+        const finalChecks = status?.evidence.filter((e) => e.kind === 'check') ?? [];
+        entry['requiredChecks'] = requiredNames.map((name) => {
+          const row = finalChecks.find((c) => c.name === name);
+          return { name, status: row?.status ?? 'missing', revision: row?.revision ?? null, clean: row?.clean ?? null, ...(row?.preExisting === true ? { preExisting: true } : {}) };
+        });
+        entry['checks'] = finalChecks;
+        const finalRevision = finalChecks[0]?.revision;
+        const rows = evidenceRows.ok ? evidenceRows.value.filter((e) => e.revision === finalRevision) : [];
+        entry['acceptance'] = (contract?.intent.acceptance ?? []).map((a) => {
+          const by = rows.filter((e) => e.independence === 'deterministic' && e.status === 'passed' && e.acceptance.includes(a.id)).map((e) => ({ kind: e.kind, name: e.name, status: e.status, independence: e.independence }));
+          return { id: a.id, verifiedBy: a.verifiedBy, satisfiedBy: by, satisfied: by.length > 0 };
+        });
+        entry['evidenceRows'] = (evidenceRows.ok ? evidenceRows.value : []).map((e) => ({ kind: e.kind, name: e.name, status: e.status, independence: e.independence, revision: e.revision, clean: e.clean, acceptance: e.acceptance, ...(e.environment['phase'] !== undefined ? { phase: e.environment['phase'] } : {}), ...(e.environment['preExisting'] === true ? { preExisting: true } : {}) }));
+        if (state === 'ready_for_review') {
+          for (const c of entry['requiredChecks'] as Array<{ name: string; status: string; preExisting?: true }>) if (c.status !== 'passed' && c.preExisting !== true) problems.push(`required check ${c.name} is ${c.status} at the final revision`);
+          for (const a of entry['acceptance'] as Array<{ id: string; satisfied: boolean }>) if (!a.satisfied) problems.push(`acceptance criterion ${a.id} has no passed deterministic evidence at the final revision`);
+          if (status?.clean !== true) problems.push('the final evidence was not taken on a clean tree');
+          if (status?.commit === null || status?.commit === undefined) problems.push('no handed-off commit');
+          if (!gateRows.ok || !gateRows.value.some((g) => g.gate === 'G4' && g.passed)) problems.push('gate G4 did not pass');
+        }
+
+        // ---- the transcripts of this run: the model's tool calls (S-12) ----
+        const db = new DatabaseSync(join(deps.profile.dataRoot, 'state.db'), { readOnly: true });
+        let digests: string[] = [];
+        try {
+          digests = (db.prepare("SELECT digest FROM artifacts WHERE kind = 'transcript' AND run_id = ? ORDER BY rowid").all(runId) as Array<{ digest: string }>).map((r) => r.digest);
+        } finally {
+          db.close();
+        }
+        const totals: Record<string, number> = {};
+        for (const digest of digests) {
+          const bytes = deps.artifacts.get(digest);
+          if (!bytes.ok) {
+            problems.push(`transcript ${digest} is not readable: ${bytes.error.kind}`);
+            continue;
+          }
+          for (const [tool, n] of Object.entries(toolCounts(new TextDecoder().decode(bytes.value)))) totals[tool] = (totals[tool] ?? 0) + n;
+        }
+        entry['transcriptDigests'] = digests;
+        entry['toolCounts'] = totals;
+        entry['askUserQuestion'] = totals['AskUserQuestion'] ?? 0;
+        if (digests.length === 0 && state === 'ready_for_review') problems.push('the run has no transcript artifact');
+        if ((totals['AskUserQuestion'] ?? 0) !== 0) problems.push(`the transcript has ${totals['AskUserQuestion']} AskUserQuestion call(s) (S-12)`);
+
+        // ---- a run that did not reach review: the diagnosis ----
+        if (state !== 'ready_for_review') {
+          entry['diagnosis'] = {
+            state,
+            reason: run.value.reason,
+            decisions: decisions.ok ? decisions.value.map((d) => ({ decisionId: d.decisionId, class: d.class, issue: d.issue, state: d.state, urgency: d.urgency })) : [],
+            gateFailures: gateRows.ok ? gateRows.value.filter((g) => !g.passed).map((g) => ({ gate: g.gate, failures: g.failures, revision: g.revision })) : [],
+            transcriptDigests: digests,
+            statusJson: status ?? null,
+          };
+          problems.push(`the run ended ${state}${run.value.reason !== null ? ` (${run.value.reason})` : ''}, not ready_for_review`);
+        }
+        version = claudeVersionOf(process.env['AVARICE_CLAUDE_BIN']);
+      }
+    } finally {
+      composed.value.close();
+    }
+  }
+  if (entry['state'] === undefined) entry['state'] = state;
+  entry['askUserQuestion'] ??= 0;
+  entry['costUsd'] ??= 0;
+  entry['clean'] ??= null;
+
+  // ---- the spend line, once per run (the cost is whatever the run's costUsd budget says, also for a failed run) ----
+  const caseName = `exit-${(briefPath.split('/').pop() ?? 'brief').replace(/\.md$/, '')}-${runId}`;
+  const lines = ledgerLines(ledgerPath);
+  if (composed.ok && state !== 'unknown' && !lines.some((l) => typeof l['case'] === 'string' && l['case'].endsWith(runId))) {
+    appendFileSync(ledgerPath, `${JSON.stringify({ plan, case: caseName, costUsd, claudeVersion: version, at: new Date().toISOString() })}\n`);
+    entry['spendLine'] = { plan, case: caseName, costUsd, claudeVersion: version };
+  } else entry['spendLine'] = 'already recorded or the run could not be read';
+  entry['problems'] = problems;
+
+  // ---- the evidence file: this run replaces an earlier record of itself, and the verdict is recomputed ----
+  const file = readJson(outPath) ?? {};
+  const prior = Array.isArray(file['runs']) ? (file['runs'] as Json[]).filter((r) => r['runId'] !== runId) : [];
+  const runs = [...prior, entry];
+  const good = runs.filter((r) => r['state'] === 'ready_for_review' && Array.isArray(r['problems']) && (r['problems'] as unknown[]).length === 0);
+  const total = Number(named['expected-runs'] ?? 3);
+  const allPass = good.length === total && runs.length === total && new Set(runs.map((r) => String(r['digestAfter']))).size >= 1;
+  const finalNewRefs = runs.flatMap((r) => (isObject(r['checkout']) && Array.isArray(r['checkout']['newRefs']) ? (r['checkout']['newRefs'] as string[]) : []));
+  const spend = phase2Spent();
+  const verdict = allPass && finalNewRefs.length === total ? `exit: ${total}/${total} ready_for_review` : `exit: ${good.length}/${total} ready_for_review${runs.length < total ? ` (${total - runs.length} not run yet)` : ''}${runs.some((r) => Array.isArray(r['problems']) && (r['problems'] as unknown[]).length > 0) ? ' (problems recorded)' : ''}`;
+  const result = { schema: 1, plan, decision: 'D-05, D-07, D-08', updatedAt: new Date().toISOString(), verdict, phase2SpentUsd: spend, runs };
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`);
+
+  out(`run ${runId}: state ${String(entry['state'])}, cost ${costUsd.toFixed(4)} USD, ${problems.length} problem(s)\n`);
+  for (const p of problems) out(`PROBLEM: ${p}\n`);
+  out(`${verdict}; Phase 2 spend now ${spend.toFixed(4)} USD; evidence ${outPath}\n`);
+  return problems.length === 0 && state === 'ready_for_review' ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 
 export async function main(argv: readonly string[]): Promise<number> {
   const [command, ...rest] = argv;
   if (command === 'dry-run') return dryRun(rest);
+  if (command === 'authorize') return authorize(rest);
+  if (command === 'evidence') return evidenceCommand(rest);
+  if (command === 'snapshot') {
+    const { named } = flags(rest);
+    if (named['repo'] === undefined) {
+      errOut('usage: snapshot --repo REPO');
+      return 2;
+    }
+    out(`${JSON.stringify(snapshot(resolve(named['repo'])))}\n`);
+    return 0;
+  }
   if (command === 'preflight') {
     const { named } = flags(rest);
     if (named['repo'] === undefined || named['config'] === undefined) {
@@ -529,7 +863,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase2-tools.ts (dry-run | preflight) ...');
+  errOut('usage: exit-run-phase2-tools.ts (dry-run | preflight | authorize | snapshot | evidence) ...');
   return 2;
 }
 
