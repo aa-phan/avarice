@@ -12,9 +12,17 @@ import { errorLine } from './render/style.ts';
 export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host'] as const;
 export const EXIT_USAGE = 64;
 
+// The terminal the interactive shell (FR-27, ADR-013) reads keys from and draws on. `isTTY` is how a stream says it is a terminal;
+// `setRawMode` exists only on a real terminal input; `columns` and `rows` are the size a terminal reports.
+export type ShellInput = NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?(mode: boolean): unknown };
+export type ShellOutput = NodeJS.WritableStream & { isTTY?: boolean; columns?: number; rows?: number };
+
 export interface MainOverrides extends DepsOverrides {
   env?: NodeJS.ProcessEnv;
   io?: Io;
+  // Standard input and output for the no-argument shell; the process streams when absent. Tests inject streams that claim to be a terminal.
+  stdin?: ShellInput;
+  stdout?: ShellOutput;
 }
 
 const USAGE = `usage: avarice <command> [options]
@@ -41,6 +49,16 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
   if (name === '--help' || name === '-h') {
     io.out(USAGE);
     return 0;
+  }
+  // FR-27, ADR-013 decision 1: bare `avarice` opens the interactive shell when both standard streams are terminals and no run marker is
+  // set; in every other case it keeps the usage and exit 64. The shell module loads only here, so no one-shot command pays for it.
+  if (argv.length === 0) {
+    const stdin = overrides.stdin ?? process.stdin;
+    const stdout = overrides.stdout ?? process.stdout;
+    if (stdin.isTTY === true && stdout.isTTY === true && env['AVARICE_RUN'] === undefined) {
+      const { runShell } = await import('./shell/shell.ts');
+      return runShell({ stdin, stdout, env, overrides, io });
+    }
   }
   if (name === undefined || !isCommand(name)) {
     io.err(`${errorLine(undefined, name === undefined ? 'no command given' : `unknown command '${name}'`)}\n${USAGE}`);

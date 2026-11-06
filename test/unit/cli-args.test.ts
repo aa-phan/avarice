@@ -72,3 +72,34 @@ describe('avarice onboard with an Object.prototype flag name (WR-05)', () => {
     });
   }
 });
+
+describe('avarice with no arguments (FR-27, ADR-013 decision 1)', () => {
+  let roots: CliRoots | undefined;
+  afterEach(() => {
+    if (roots) rmSync(roots.base, { recursive: true, force: true });
+    roots = undefined;
+  });
+
+  // The child's standard streams are pipes, so neither is a terminal: the shell does not open.
+  it('prints usage on standard error and exits 64 when no stream is a terminal', () => {
+    roots = makeRoots();
+    const r = runCli([], { roots });
+    assert.equal(r.code, 64, r.stderr);
+    assert.match(r.stderr, /avarice: no command given/);
+    assert.match(r.stderr, /usage: avarice <command> \[options\]/);
+    assert.equal(r.stdout, '');
+  });
+
+  it('prints usage and exits 64 under AVARICE_RUN too, and leaves `avarice <command>` and `--help` one-shot', () => {
+    roots = makeRoots();
+    const bare = runCli([], { roots, env: { AVARICE_RUN: 'run_01HX' } });
+    assert.equal(bare.code, 64, bare.stderr);
+    assert.match(bare.stderr, /no command given/);
+    const status = runCli(['status'], { roots });
+    assert.equal(status.code, 0, status.stderr);
+    assert.match(status.stdout, /^status: 0 project\(s\)/);
+    const help = runCli(['--help'], { roots });
+    assert.equal(help.code, 0);
+    assert.match(help.stdout, /usage: avarice <command>/);
+  });
+});
