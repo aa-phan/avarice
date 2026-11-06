@@ -9,8 +9,9 @@ import { COMMANDS, main } from '../../src/cli/main.ts';
 import type { MainOverrides } from '../../src/cli/main.ts';
 import { renderHome } from '../../src/cli/shell/home-view.ts';
 import type { HomeView } from '../../src/cli/shell/home-view.ts';
-import { LineEditor } from '../../src/cli/shell/line-editor.ts';
+import { completeCommand, LineEditor } from '../../src/cli/shell/line-editor.ts';
 import type { EditorResult, KeyInput } from '../../src/cli/shell/line-editor.ts';
+import { appendHistory, HISTORY_CAP, loadHistory } from '../../src/cli/shell/history.ts';
 import { runShell } from '../../src/cli/shell/shell.ts';
 import type { RunStatus } from '../../src/app/run-status.ts';
 import type { ProjectStatus } from '../../src/app/status.ts';
@@ -715,5 +716,176 @@ describe('watch and resume read the ledger (ADR-013 decisions 3 and 4)', () => {
     assert.match(screen(term), new RegExp(`run\\s+${fixture.runId}\\s+paused \\(supervisor interrupted\\)`));
     term.type('q');
     assert.equal(await exited, 0);
+  });
+});
+
+// ---- completion and history (Task 3) --------------------------------------------------------------------------------------------------------
+
+describe('completion (ADR-013 decision 2)', () => {
+  it('completes the one candidate with a trailing space', () => {
+    assert.deepEqual(completeCommand('stat', COMMANDS), { buffer: 'status ', candidates: ['status'] });
+    assert.deepEqual(completeCommand('ins', COMMANDS), { buffer: 'install-host ', candidates: ['install-host'] });
+    assert.deepEqual(completeCommand('status', COMMANDS), { buffer: 'status ', candidates: ['status'] });
+  });
+
+  it('lists the sorted candidates when ambiguous and extends the common prefix', () => {
+    assert.deepEqual(completeCommand('st', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
+    assert.deepEqual(completeCommand('sta', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
+    assert.deepEqual(completeCommand('', COMMANDS)?.candidates, [...COMMANDS].sort());
+    assert.deepEqual(completeCommand('s', COMMANDS)?.candidates, ['start', 'status', 'supervise']);
+  });
+
+  it('offers nothing for an unknown prefix or once a second word is being typed', () => {
+    assert.equal(completeCommand('zzz', COMMANDS), undefined);
+    assert.equal(completeCommand('status --j', COMMANDS), undefined);
+    assert.equal(completeCommand('status ', COMMANDS), undefined);
+  });
+
+  it('Tab in the editor completes, shows the ambiguous candidates, and clears them on the next key', () => {
+    const editor = new LineEditor({ prompt: '> ', commands: COMMANDS });
+    chars(editor, 'st');
+    editor.handle(key('tab', { sequence: '\t' }));
+    assert.equal(editor.text, 'sta');
+    assert.deepEqual(editor.candidates, ['start', 'status']);
+    chars(editor, 't');
+    assert.deepEqual(editor.candidates, []);
+    editor.handle(key('tab', { sequence: '\t' }));
+    assert.equal(editor.text, 'status ');
+    assert.equal(editor.position, 7);
+  });
+
+  it('Tab does nothing in an editor without commands', () => {
+    const editor = new LineEditor({ prompt: '> ' });
+    chars(editor, 'st');
+    editor.handle(key('tab', { sequence: '\t' }));
+    assert.equal(editor.text, 'st');
+    assert.deepEqual(editor.candidates, []);
+  });
+
+  it('in the shell, Tab on the command line completes `stat` to `status ` and Enter runs it; an ambiguous prefix shows the candidates', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('6');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.type('st\t');
+    await waitFor(() => screen(term).includes('start  status'), 'the candidates of an ambiguous prefix');
+    term.type('t\t\r');
+    await waitFor(() => screen(term).includes('ran status'), 'the completed command');
+    assert.deepEqual(s.calls, [['status']]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+});
+
+describe('history (ADR-013 decision 2; ordering edge)', () => {
+  it('recalls newest first with the up arrow, goes back down to the typed draft', () => {
+    const editor = new LineEditor({ prompt: '> ', history: ['oldest', 'middle', 'newest'] });
+    chars(editor, 'dr');
+    editor.handle(key('up'));
+    assert.equal(editor.text, 'newest');
+    editor.handle(key('up'));
+    assert.equal(editor.text, 'middle');
+    editor.handle(key('up'));
+    editor.handle(key('up'));
+    assert.equal(editor.text, 'oldest', 'stops at the oldest entry');
+    editor.handle(key('down'));
+    editor.handle(key('down'));
+    editor.handle(key('down'));
+    assert.equal(editor.text, 'dr', 'the draft comes back');
+  });
+
+  it('up with no history leaves the text alone', () => {
+    const editor = new LineEditor({ prompt: '> ' });
+    chars(editor, 'abc');
+    editor.handle(key('up'));
+    editor.handle(key('down'));
+    assert.equal(editor.text, 'abc');
+  });
+
+  it('keeps the file oldest first, creates it 0600 in the data root, one line per entry', () => {
+    const roots = newRoots();
+    mkdirSync(roots.AVARICE_DATA_ROOT, { recursive: true });
+    assert.deepEqual(loadHistory(roots.AVARICE_DATA_ROOT), []);
+    assert.equal(appendHistory(roots.AVARICE_DATA_ROOT, 'status'), true);
+    appendHistory(roots.AVARICE_DATA_ROOT, 'inbox --json');
+    const path = join(roots.AVARICE_DATA_ROOT, 'shell-history');
+    assert.equal(readFileSync(path, 'utf8'), 'status\ninbox --json\n');
+    assert.deepEqual(loadHistory(roots.AVARICE_DATA_ROOT), ['status', 'inbox --json']);
+    assert.equal(statSync(path).mode & 0o777, 0o600);
+  });
+
+  it('tightens a history file that exists with a wider mode', () => {
+    const roots = newRoots();
+    mkdirSync(roots.AVARICE_DATA_ROOT, { recursive: true });
+    const path = join(roots.AVARICE_DATA_ROOT, 'shell-history');
+    writeFileSync(path, 'old\n', { mode: 0o644 });
+    chmodSync(path, 0o644);
+    appendHistory(roots.AVARICE_DATA_ROOT, 'new');
+    assert.equal(statSync(path).mode & 0o777, 0o600);
+    assert.deepEqual(loadHistory(roots.AVARICE_DATA_ROOT), ['old', 'new']);
+  });
+
+  it('stores an entry without its control characters and skips one that is empty afterwards', () => {
+    const roots = newRoots();
+    mkdirSync(roots.AVARICE_DATA_ROOT, { recursive: true });
+    appendHistory(roots.AVARICE_DATA_ROOT, 'sta\x1b[31mtus\x07\nwith\x00more\x7f');
+    assert.equal(appendHistory(roots.AVARICE_DATA_ROOT, '\x07\x1b'), true, 'an entry with nothing left is skipped, which is not a failure');
+    appendHistory(roots.AVARICE_DATA_ROOT, '   ');
+    assert.deepEqual(loadHistory(roots.AVARICE_DATA_ROOT), ['statuswithmore']);
+    assert.equal(readFileSync(join(roots.AVARICE_DATA_ROOT, 'shell-history'), 'utf8'), 'statuswithmore\n');
+  });
+
+  it(`is capped at ${HISTORY_CAP} lines, dropping the oldest, and keeps its mode when it is rewritten`, () => {
+    const roots = newRoots();
+    mkdirSync(roots.AVARICE_DATA_ROOT, { recursive: true });
+    for (let i = 1; i <= HISTORY_CAP + 5; i += 1) appendHistory(roots.AVARICE_DATA_ROOT, `entry ${i}`);
+    const entries = loadHistory(roots.AVARICE_DATA_ROOT);
+    assert.equal(entries.length, HISTORY_CAP);
+    assert.equal(entries[0], 'entry 6');
+    assert.equal(entries.at(-1), `entry ${HISTORY_CAP + 5}`);
+    assert.equal(statSync(join(roots.AVARICE_DATA_ROOT, 'shell-history')).mode & 0o777, 0o600);
+  });
+
+  it('a missing or unreadable location is an empty history, and a failed append does not throw', () => {
+    assert.deepEqual(loadHistory('/nonexistent/avarice-test-root'), []);
+    assert.equal(appendHistory('/nonexistent/avarice-test-root', 'status'), false);
+  });
+
+  it('the shell appends one entry per command-line run and the next shell recalls it with the up arrow', async () => {
+    const roots = newRoots();
+    const env = terminalEnv(roots);
+    const first = spy();
+    const one = await openShell(env, first);
+    one.term.type('6');
+    await waitFor(() => screen(one.term).includes('avarice> '), 'the command-line prompt');
+    one.term.type('status --json\r');
+    await waitFor(() => screen(one.term).includes('ran status --json'), 'the first command');
+    one.term.type('6');
+    await waitFor(() => (screen(one.term).match(/avarice> /g) ?? []).length > 1, 'the command-line prompt again');
+    one.term.type('\r');
+    one.term.type('6');
+    await waitFor(() => (screen(one.term).match(/avarice> /g) ?? []).length > 2, 'the command-line prompt a third time');
+    one.term.type('inbox\r');
+    await waitFor(() => screen(one.term).includes('ran inbox'), 'the second command');
+    one.term.type('q');
+    assert.equal(await one.exited, 0);
+    const file = join(roots.AVARICE_DATA_ROOT, 'shell-history');
+    assert.equal(readFileSync(file, 'utf8'), 'status --json\ninbox\n', 'one entry per run; the empty entry is not recorded');
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+
+    const second = spy();
+    const two = await openShell(env, second);
+    two.term.type('6');
+    await waitFor(() => screen(two.term).includes('avarice> '), 'the command-line prompt');
+    two.term.type('\x1b[A');
+    await waitFor(() => screen(two.term).includes('avarice> inbox'), 'the newest entry on the first up arrow');
+    two.term.type('\x1b[A');
+    await waitFor(() => screen(two.term).includes('avarice> status --json'), 'the older entry on the second up arrow');
+    two.term.type('\r');
+    await waitFor(() => screen(two.term).includes('ran status --json'), 'the recalled command');
+    two.term.type('q');
+    assert.equal(await two.exited, 0);
+    assert.deepEqual(second.calls, [['status', '--json']]);
   });
 });

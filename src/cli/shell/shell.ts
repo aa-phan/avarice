@@ -17,12 +17,13 @@ import { getStatus } from '../../app/status.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io } from '../args.ts';
 import { createDeps } from '../composition.ts';
-import { EXIT_USAGE, main } from '../main.ts';
+import { COMMANDS, EXIT_USAGE, main } from '../main.ts';
 import type { MainOverrides, ShellInput, ShellOutput } from '../main.ts';
 import { colourEnabled, errorLine, stripControl } from '../render/style.ts';
 import { terminalWidth } from '../render/table.ts';
 import { runCommandLine, SHELL_ACTIONS } from './actions.ts';
 import type { ShellAction } from './actions.ts';
+import { appendHistory, HISTORY_CAP, historyEntry, loadHistory } from './history.ts';
 import { renderHome } from './home-view.ts';
 import type { HomeView } from './home-view.ts';
 import { LineEditor, printable } from './line-editor.ts';
@@ -134,7 +135,9 @@ class Session implements ActionContext {
   private rl: Interface | undefined;
   private finished = false;
   private resolveRun: (code: number) => void = () => undefined;
+  // The command-line history, oldest first, and where it is kept (the data root; none when the profile could not be resolved).
   private entries: string[] = [];
+  private dataRoot: string | undefined;
   // Ends the live view that is running, if any (clears its timer and resolves it).
   private stopLive: (() => void) | undefined;
   readonly pollMs: number;
@@ -156,7 +159,11 @@ class Session implements ActionContext {
 
   start(): Promise<number> {
     const resolved = resolveProfile(this.env);
-    if (resolved.ok) this.profile = resolved.value.profile;
+    if (resolved.ok) {
+      this.profile = resolved.value.profile;
+      this.dataRoot = resolved.value.dataRoot;
+      this.entries = loadHistory(resolved.value.dataRoot);
+    }
     this.home = this.readHome();
     return new Promise<number>((resolve) => {
       this.resolveRun = resolve;
@@ -309,9 +316,8 @@ class Session implements ActionContext {
   // ---- ActionContext -----------------------------------------------------------------------------------------------
 
   prompt(label: string, options: PromptOptions = {}): Promise<string | undefined> {
-    void options;
     return new Promise((resolve) => {
-      const editor = new LineEditor({ prompt: label });
+      const editor = new LineEditor({ prompt: label, history: options.history === true ? this.entries : [], commands: options.complete === true ? COMMANDS : [] });
       this.ui = { kind: 'prompt', editor };
       const done = (value: string | undefined): void => {
         this.ui = { kind: 'plain' };
@@ -440,8 +446,13 @@ class Session implements ActionContext {
     });
   }
 
+  // One entry per command-line run, in memory for the up arrow and in the history file (0600, in the data root) for the next shell.
   remember(entry: string): void {
-    this.entries.push(entry);
+    const clean = historyEntry(entry);
+    if (clean === '') return;
+    this.entries.push(clean);
+    if (this.entries.length > HISTORY_CAP) this.entries.splice(0, this.entries.length - HISTORY_CAP);
+    if (this.dataRoot !== undefined) appendHistory(this.dataRoot, clean);
   }
 
   // ---- reading the ledger ------------------------------------------------------------------------------------------
@@ -503,9 +514,10 @@ class Session implements ActionContext {
       const output = this.outputLines(home.length + menu.length + 3);
       lines = [...home, '', ...menu, ...(output.length > 0 ? ['', ...output] : []), '', hint];
     } else if (ui.kind === 'prompt') {
-      const output = this.outputLines(2);
+      const candidates = ui.editor.candidates.length > 0 ? [ui.editor.candidates.join('  ')] : [];
+      const output = this.outputLines(2 + candidates.length);
       const typed = `${ui.editor.prompt}${ui.editor.text}`;
-      lines = [...output, ...(output.length > 0 ? [''] : []), typed];
+      lines = [...output, ...(output.length > 0 ? [''] : []), ...candidates, typed];
       cursorBack = Array.from(ui.editor.text).length - ui.editor.position;
     } else {
       lines = this.outputLines(1);

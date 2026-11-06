@@ -17,9 +17,37 @@ export type EditorResult = { kind: 'pending' } | { kind: 'submit'; line: string 
 
 export interface LineEditorOptions {
   prompt: string;
+  // Earlier entries, oldest first. Up recalls the newest first; down goes back toward the line being typed.
+  history?: readonly string[];
+  // The command names Tab completes (the first word of the line).
+  commands?: readonly string[];
+}
+
+export interface Completion {
+  // The whole line after completing.
+  buffer: string;
+  // The sorted command names that match, shown to the user when there is more than one.
+  candidates: string[];
 }
 
 const PENDING: EditorResult = { kind: 'pending' };
+
+function commonPrefix(words: readonly string[]): string {
+  let prefix = words[0] ?? '';
+  for (const word of words) while (!word.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  return prefix;
+}
+
+// Completes the first word of a line against the command names. One match completes it with a trailing space; several extend it to their common
+// prefix and are returned sorted, for the caller to show. Nothing for an unknown prefix or once the line has a space (a second word).
+export function completeCommand(buffer: string, commands: readonly string[]): Completion | undefined {
+  if (/\s/.test(buffer)) return undefined;
+  const matches = commands.filter((name) => name.startsWith(buffer)).sort();
+  const only = matches[0];
+  if (only === undefined) return undefined;
+  if (matches.length === 1) return { buffer: `${only} `, candidates: matches };
+  return { buffer: commonPrefix(matches), candidates: matches };
+}
 
 // Typed or pasted text without control characters, including the newline and tab that stripControl keeps.
 export function printable(text: string): string {
@@ -30,13 +58,61 @@ export class LineEditor {
   readonly prompt: string;
   private chars: string[] = [];
   private cursor = 0;
+  private readonly history: readonly string[];
+  private readonly commands: readonly string[];
+  // Which history entry is on the line (an index into `history`), or -1 for the line the user was typing; that line is kept in `draft`.
+  private recall = -1;
+  private draft = '';
+  private shown: readonly string[] = [];
 
   constructor(options: LineEditorOptions) {
     this.prompt = options.prompt;
+    this.history = options.history ?? [];
+    this.commands = options.commands ?? [];
   }
 
   get text(): string {
     return this.chars.join('');
+  }
+
+  // The matching command names after an ambiguous Tab, until the next key.
+  get candidates(): readonly string[] {
+    return this.shown;
+  }
+
+  private setText(text: string): void {
+    this.chars = Array.from(text);
+    this.cursor = this.chars.length;
+  }
+
+  private older(): void {
+    if (this.history.length === 0) return;
+    if (this.recall === -1) {
+      this.draft = this.text;
+      this.recall = this.history.length - 1;
+    } else {
+      this.recall = Math.max(0, this.recall - 1);
+    }
+    this.setText(this.history[this.recall] as string);
+  }
+
+  private newer(): void {
+    if (this.recall === -1) return;
+    this.recall += 1;
+    if (this.recall >= this.history.length) {
+      this.recall = -1;
+      this.setText(this.draft);
+    } else {
+      this.setText(this.history[this.recall] as string);
+    }
+  }
+
+  private complete(): void {
+    if (this.commands.length === 0 || this.cursor !== this.chars.length) return;
+    const completion = completeCommand(this.text, this.commands);
+    if (completion === undefined) return;
+    this.setText(completion.buffer);
+    this.shown = completion.candidates.length > 1 ? completion.candidates : [];
   }
 
   // The cursor offset in characters from the start of the text.
@@ -59,6 +135,8 @@ export class LineEditor {
   }
 
   handle(key: KeyInput): EditorResult {
+    // The candidates of an ambiguous Tab stay only until the next key.
+    if (!(key.name === 'tab' && key.ctrl !== true)) this.shown = [];
     if (key.ctrl === true) {
       switch (key.name) {
         case 'c':
@@ -113,6 +191,15 @@ export class LineEditor {
         return PENDING;
       case 'end':
         this.cursor = this.chars.length;
+        return PENDING;
+      case 'up':
+        this.older();
+        return PENDING;
+      case 'down':
+        this.newer();
+        return PENDING;
+      case 'tab':
+        this.complete();
         return PENDING;
       default:
         break;
