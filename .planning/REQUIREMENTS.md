@@ -23,7 +23,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-8** [MVP]: On resume, every external reference in the context pack is refreshed or marked stale before the run continues.
 - [ ] **FR-9** [MVP summary, Contract PR]: Change preparation produces a change summary from recorded evidence; PR creation is a privileged action (FR-12).
 - [ ] **FR-10** [Contract]: Review and CI feedback enter as new evidence attached to a new attempt and never overwrite an earlier attempt's evidence.
-- [ ] **FR-11** [MVP]: A read-only `status` command prints run state, last checkpoint, evidence and stale references; it works offline and without a model.
+- [x] **FR-11** [MVP]: A read-only `status` command prints run state, last checkpoint, evidence and stale references; it works offline and without a model.
 
 ### Authorization (FR-12 to FR-15)
 
@@ -223,7 +223,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-8 | Phase 4 | Pending |
 | FR-9 | Phase 5 | Pending |
 | FR-10 | Phase 5 | Pending |
-| FR-11 | Phase 2 | Pending |
+| FR-11 | Phase 2 | Complete |
 | FR-12 | Phase 4 | Pending |
 | FR-13 | Phase 4 | Pending |
 | FR-14 | Phase 4 | Pending |
