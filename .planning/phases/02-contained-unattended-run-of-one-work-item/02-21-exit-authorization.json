@@ -1,0 +1,20 @@
+{
+  "plan": "02-21",
+  "decision": "D-06, D-15",
+  "selection": "approve",
+  "approvedBriefs": [
+    { "path": "test/benchmark/r1/r1-bug-swipe-nonfinite.md", "digest": "sha256:f8d386f827784c2fc36438b0c0931d1d76db2c42952b659cdb6fea5c9675c916" },
+    { "path": "test/benchmark/r1/r1-refactor-copy-textarea.md", "digest": "sha256:163548ea7154fd4791d8ce565085d94879886dcf407ef6e80546916b80152c2f" },
+    { "path": "test/benchmark/r1/r1-docs-dates-predicate.md", "digest": "sha256:8f40d2419e47b82a45893116e58799e8b34c762119c46e16a28da19c462cad36" }
+  ],
+  "digestKind": "parseBrief(...).value.digest (digest of the parsed brief, as `avarice start` computes it)",
+  "perRunCapUsd": 5.0,
+  "perInvocationCapUsd": 2.0,
+  "maxInvocationsPerRun": 3,
+  "maxRuns": 3,
+  "spentUsdSoFar": 5.7565,
+  "spentUsdSource": "sum of costUsd in test/containment/live-spend-phase2.jsonl",
+  "capUsd": 25,
+  "approvedBy": "owner",
+  "approvedAt": "2026-11-06"
+}
