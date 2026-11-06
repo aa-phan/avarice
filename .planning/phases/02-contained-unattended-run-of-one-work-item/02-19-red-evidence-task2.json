@@ -1,0 +1,27 @@
+{
+  "command": "SHELL_TEST_WAIT_MS=1500 node --test test/unit/shell.test.ts test/integration/shell-supervisor.test.ts",
+  "ranAgainst": "the task 1 commit 2e8301a (a menu with only the command line and Quit, no actions.ts items, no watch view) plus the new menu, watch and resume cases of test/unit/shell.test.ts, the new test/integration/shell-supervisor.test.ts, and the test helper option FakeRunOptions.delayMs",
+  "exitCode": 1,
+  "reason": "the menu has no numbered Start, Watch, Resume, Status or Inbox items and no run to pick, so every case that presses 1 to 5 waits for a prompt or a screen that never appears; the integration cases time out at the brief prompt (start) and at the resume prompt (resume)",
+  "failingFiles": ["test/unit/shell.test.ts", "test/integration/shell-supervisor.test.ts"],
+  "failingTests": [
+    "lists start, watch, resume, status, inbox, command line and quit, numbered",
+    "arrow keys move the selection and Enter activates it",
+    "a number activates an item: 4 runs status and 5 runs inbox, through the same dispatcher as the command line",
+    "6 opens the command line; Ctrl-C cancels it and runs nothing",
+    "Start asks for a brief path, shows the policy routine and runs the start command module with it",
+    "Start with a cancelled or empty path runs nothing",
+    "Watch and Resume with nothing to list say so and stay in the shell",
+    "in line mode a number picks an item and any other text is a command-line entry",
+    "a failing action is shown and the shell stays open",
+    "Watch lists the runs, then redraws about once a second with state, checkpoints and events, and `q` stops it with no timer left",
+    "Watch takes a run ID as well as a number, and refuses an unknown one without watching",
+    "Resume lists what can be resumed and runs the resume command module with the chosen ID",
+    "Start, Watch until launch:run appears, quit the shell: the supervisor is alive and the run reaches ready_for_review",
+    "Resume continues a run killed at launch:run; the supervisor outlives the shell and the run reaches ready_for_review"
+  ],
+  "passingAtBase": [
+    "the 24 task 1 cases and `the home view lists the run with its state`, which the task 1 home view already satisfies"
+  ],
+  "summary": "unit file: 36 tests, 24 pass, 12 fail; integration file: 2 tests, 0 pass, 2 fail (both time out at the first menu key that does not exist yet)"
+}

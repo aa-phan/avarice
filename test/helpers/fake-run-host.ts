@@ -78,6 +78,9 @@ export interface FakeRunOptions {
   killInUnit?: { afterFiles?: readonly string[]; survivorPidFile?: string };
   // The host's `reap` fails with an internal error (it could not search for processes), so a resume must not go on.
   reapFails?: boolean;
+  // Plan 02-19. The unit waits this many milliseconds (asynchronously, so the supervisor's timers keep running) before it touches the clone: a run an
+  // observer can watch in `running`, with the `launch:run` checkpoint committed, while its supervisor is still working.
+  delayMs?: number;
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
@@ -131,6 +134,7 @@ export class FakeRunHost implements AgentHost {
       for (const rel of o.observe ?? []) observed[rel] = existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null;
       writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, observed }));
     }
+    if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
 
     const built = buildHookPolicy(

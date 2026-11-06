@@ -40,6 +40,7 @@ import type {
   GateResultInput,
   GateResultRow,
   HookReadRow,
+  RunEventRow,
   Ledger,
   LeaseGrant,
   NewOnboarding,
@@ -607,6 +608,13 @@ export class SqliteLedger implements Ledger {
 
   appendEvent(input: EventInput): Result<EventReceipt> {
     return tx(this.db, () => this.insertEvent(input));
+  }
+
+  listRunEvents(runId: string, limit: number): Result<RunEventRow[]> {
+    return guarded(() => {
+      const rows = this.db.prepare('SELECT seq, ts, level, type, data_json FROM events WHERE run_id = ? ORDER BY seq DESC LIMIT ?').all(runId, Math.max(0, Math.floor(limit))) as Row[];
+      return rows.reverse().map(toRunEvent);
+    });
   }
 
   // The caller's transaction must be open. Appends one row to the hash chain (events.ts).
@@ -1484,6 +1492,17 @@ function toCheckValidation(r: Row): CheckValidationRow {
     detail: parseJson(r['detail_json']),
     validatedAt: str(r['validated_at']),
   };
+}
+
+function toRunEvent(r: Row): RunEventRow {
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(str(r['data_json']));
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) data = parsed as Record<string, unknown>;
+  } catch {
+    // an unreadable data column shows as no data
+  }
+  return { seq: Number(r['seq']), at: str(r['ts']), level: str(r['level']), type: str(r['type']), data };
 }
 
 function toHookRead(r: Row): HookReadRow {

@@ -223,6 +223,17 @@ export interface EventReceipt {
   rowHash: string;
 }
 
+// One row of the event log as the interactive shell's watch view reads it (plan 02-19; ADR-013 decision 4): the type and the small
+// data object the event was recorded with (IDs, counts, digests, exit codes), never a payload.
+export interface RunEventRow {
+  seq: number;
+  // ISO time the event was recorded.
+  at: string;
+  level: string;
+  type: string;
+  data: Readonly<Record<string, unknown>>;
+}
+
 export interface ArtifactInput {
   digest: string;
   size: number;
@@ -580,6 +591,8 @@ export interface Ledger {
   findLoopLimit(invocationId: string): Result<{ reason: string; count: number; limit: number } | null>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
+  // The latest `limit` events recorded with the run's ID, oldest first. Read-only: the interactive shell polls this about once a second.
+  listRunEvents(runId: string, limit: number): Result<RunEventRow[]>;
   recordArtifact(input: ArtifactInput): Result<void>;
   upsertAdapterConfig(input: AdapterConfigInput): Result<void>;
 

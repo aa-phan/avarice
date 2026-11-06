@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, it } from 'node:test';
+import { after, afterEach, describe, it } from 'node:test';
 import { COMMANDS, main } from '../../src/cli/main.ts';
 import type { MainOverrides } from '../../src/cli/main.ts';
 import { renderHome } from '../../src/cli/shell/home-view.ts';
@@ -18,7 +18,9 @@ import { fakeTerminal, HAS_ESC, HAS_SGR, waitFor } from '../helpers/shell-stream
 import type { FakeTerminal } from '../helpers/shell-streams.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
-import { profileEnv } from '../helpers/run-fixtures.ts';
+import { commitConventions, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
+import { startRun } from '../../src/app/run-start.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanup: string[] = [];
@@ -455,5 +457,263 @@ describe('the line editor', () => {
     assert.equal(editor.text, 'repo add ');
     editor.handle(key('u', { ctrl: true, sequence: '\x15' }));
     assert.equal(editor.text, '');
+  });
+});
+
+// ---- the action menu (Task 2) ---------------------------------------------------------------------------------------------------------------
+
+interface Spy {
+  calls: string[][];
+  dispatch: (argv: readonly string[], overrides: MainOverrides) => Promise<number>;
+}
+
+// A dispatcher that records what the shell ran and prints a line for it, instead of loading the command modules.
+function spy(code = 0): Spy {
+  const calls: string[][] = [];
+  return {
+    calls,
+    dispatch: (argv, overrides) => {
+      calls.push([...argv]);
+      overrides.io?.out(`ran ${argv.join(' ')}\n`);
+      return Promise.resolve(code);
+    },
+  };
+}
+
+const screen = (term: FakeTerminal): string => withoutEscapes(term.output());
+
+async function openShell(env: NodeJS.ProcessEnv, extra: Partial<Parameters<typeof runShell>[0]> = {}): Promise<{ term: FakeTerminal; exited: Promise<number> }> {
+  const term = fakeTerminal();
+  const exited = runShell({ stdin: term.stdin, stdout: term.stdout, env, ...extra });
+  await waitFor(() => term.output().includes('open decisions:'), 'the home view');
+  return { term, exited };
+}
+
+describe('the action menu (ADR-013 decision 2)', () => {
+  it('lists start, watch, resume, status, inbox, command line and quit, numbered', async () => {
+    const roots = newRoots();
+    const { term, exited } = await openShell(terminalEnv(roots), spy());
+    const text = screen(term);
+    for (const line of ['1  Start a run', '2  Watch a run', '3  Resume a run', '4  Status', '5  Inbox', '6  Command line', 'q  Quit']) assert.ok(text.includes(line), `the menu has "${line}"`);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('arrow keys move the selection and Enter activates it', async () => {
+    const roots = newRoots();
+    const { term, exited } = await openShell(terminalEnv(roots, { NO_COLOR: '1' }), spy());
+    assert.match(screen(term), /> 1 {2}Start a run/);
+    term.mark();
+    term.type('\x1b[B');
+    await waitFor(() => /> 2 {2}Watch a run/.test(withoutEscapes(term.sinceMark())), 'the selection to move down');
+    term.mark();
+    term.type('\x1b[A\x1b[A');
+    await waitFor(() => /> q {2}Quit/.test(withoutEscapes(term.sinceMark())), 'the selection to wrap from the first item to Quit');
+    term.type('\r');
+    assert.equal(await exited, 0, 'Enter on Quit leaves the shell');
+  });
+
+  it('a number activates an item: 4 runs status and 5 runs inbox, through the same dispatcher as the command line', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('4');
+    await waitFor(() => screen(term).includes('ran status'), 'status');
+    term.type('5');
+    await waitFor(() => screen(term).includes('ran inbox'), 'inbox');
+    assert.deepEqual(s.calls, [['status'], ['inbox']]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('6 opens the command line; Ctrl-C cancels it and runs nothing', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('6');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.mark();
+    term.type('\x03');
+    await waitFor(() => withoutEscapes(term.sinceMark()).includes('open decisions:'), 'the menu to return');
+    assert.deepEqual(s.calls, []);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Start asks for a brief path, shows the policy routine and runs the start command module with it', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('1');
+    await waitFor(() => screen(term).includes('brief path: '), 'the brief prompt');
+    assert.match(screen(term), /policy: routine/);
+    term.type('briefs/fix.md\r');
+    await waitFor(() => screen(term).includes('ran start --brief briefs/fix.md --policy routine'), 'the start result');
+    assert.deepEqual(s.calls, [['start', '--brief', 'briefs/fix.md', '--policy', 'routine']]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Start with a cancelled or empty path runs nothing', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('1');
+    await waitFor(() => screen(term).includes('brief path: '), 'the brief prompt');
+    term.type('\x03');
+    await waitFor(() => (screen(term).match(/Start a run/g) ?? []).length > 1, 'the menu to return');
+    term.type('1');
+    await waitFor(() => (screen(term).match(/brief path: /g) ?? []).length > 1, 'the brief prompt again');
+    term.type('   \r');
+    await waitFor(() => (screen(term).match(/Start a run/g) ?? []).length > 2, 'the menu to return again');
+    assert.deepEqual(s.calls, []);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Watch and Resume with nothing to list say so and stay in the shell', async () => {
+    const roots = newRoots();
+    const { term, exited } = await openShell(terminalEnv(roots), spy());
+    term.type('2');
+    await waitFor(() => screen(term).includes('no runs to watch'), 'the empty watch list');
+    term.type('3');
+    await waitFor(() => screen(term).includes('nothing to resume'), 'the empty resume list');
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('in line mode a number picks an item and any other text is a command-line entry', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots, { TERM: 'dumb' }), s);
+    term.type('4\ninbox --json\nq\n');
+    assert.equal(await exited, 0);
+    assert.deepEqual(s.calls, [['status'], ['inbox', '--json']]);
+    assert.doesNotMatch(term.output(), HAS_ESC);
+  });
+
+  it('a failing action is shown and the shell stays open', async () => {
+    const roots = newRoots();
+    const { term, exited } = await openShell(terminalEnv(roots), {
+      dispatch: () => Promise.reject(new Error('the dispatcher fell over')),
+    });
+    term.type('4');
+    await waitFor(() => screen(term).includes('the dispatcher fell over'), 'the failure');
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+});
+
+// A profile with one onboarded repository and one run stored in `contract_ready` with no supervisor: the shell lists it, offers it to resume,
+// and watches it. The run is started through the application layer, as `start` does before it spawns a supervisor.
+function profileWithRun(): { roots: CliRoots; runId: string } {
+  const roots = newRoots();
+  const repo = makeRunRepo();
+  cleanup.push(repo.base);
+  onboardRunRepo(roots, repo);
+  commitConventions(repo);
+  const brief = writeBrief(join(roots.base, 'briefs'));
+  const composed = createDeps(profileEnv(roots), {});
+  assert.ok(composed.ok, 'composition');
+  try {
+    const started = startRun(composed.value.deps, { cwd: repo.path, briefPath: brief, policy: 'routine', budgetOverrides: {} });
+    assert.ok(started.ok, JSON.stringify(started));
+    return { roots, runId: started.value.runId };
+  } finally {
+    composed.value.close();
+  }
+}
+
+describe('watch and resume read the ledger (ADR-013 decisions 3 and 4)', () => {
+  // Not removed by the per-test cleanup: the fixture is shared by the cases below and removed in `after`.
+  const fixture = profileWithRun();
+  const shared = cleanup.splice(0);
+  after(() => {
+    for (const dir of shared) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('Watch lists the runs, then redraws about once a second with state, checkpoints and events, and `q` stops it with no timer left', async () => {
+    let reads = 0;
+    const clock = {
+      nowMs: (): number => {
+        reads += 1;
+        return Date.now();
+      },
+    };
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), { overrides: { clock }, pollMs: 40 });
+    term.type('2');
+    await waitFor(() => screen(term).includes('run to watch (number or ID): '), 'the watch prompt');
+    assert.ok(screen(term).includes(fixture.runId), 'the list names the run');
+    term.type('1\r');
+    await waitFor(() => screen(term).includes(`run ${fixture.runId}: `) && screen(term).includes('checkpoints:'), 'the live view');
+    await waitFor(() => screen(term).includes('events:'), 'events in the view');
+    assert.match(screen(term), /run\.created|contract\.stored/, 'the latest events are listed by type');
+    const before = reads;
+    await waitFor(() => reads >= before + 3, 'at least three polls while watching');
+    term.mark();
+    term.type('q');
+    await waitFor(() => withoutEscapes(term.sinceMark()).includes('1  Start a run'), 'the menu after q');
+    const after = reads;
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    assert.equal(reads, after, 'no poll after the watch ended');
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Watch takes a run ID as well as a number, and refuses an unknown one without watching', async () => {
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), { pollMs: 40 });
+    term.type('2');
+    await waitFor(() => screen(term).includes('run to watch (number or ID): '), 'the watch prompt');
+    term.type('run_nope\r');
+    await waitFor(() => screen(term).includes('no run matches'), 'the refusal');
+    term.type('2');
+    await waitFor(() => (screen(term).match(/run to watch \(number or ID\): /g) ?? []).length > 1, 'the watch prompt again');
+    term.type(`${fixture.runId}\r`);
+    await waitFor(() => screen(term).includes('checkpoints:'), 'the live view by ID');
+    term.type('q');
+    await waitFor(() => (screen(term).match(/1 {2}Start a run/g) ?? []).length > 2, 'the menu after q');
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Resume lists what can be resumed and runs the resume command module with the chosen ID', async () => {
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), s);
+    term.type('3');
+    await waitFor(() => screen(term).includes('run or onboarding to resume (number or ID): '), 'the resume prompt');
+    assert.ok(screen(term).includes(fixture.runId), 'the list names the run');
+    term.type('1\r');
+    await waitFor(() => screen(term).includes(`ran resume ${fixture.runId}`), 'the resume result');
+    assert.deepEqual(s.calls, [['resume', fixture.runId]]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('the ledger lists the latest events of a run, oldest first, at most `limit`, and none for an unknown run', () => {
+    const composed = createDeps(profileEnv(fixture.roots), {}, { readOnly: true });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const { ledger } = composed.value.deps;
+      const all = ledger.listRunEvents(fixture.runId, 100);
+      assert.ok(all.ok && all.value.length >= 2, 'the run has events');
+      const seqs = all.value.map((e) => e.seq);
+      assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b), 'oldest first');
+      assert.ok(all.value.every((e) => typeof e.type === 'string' && typeof e.at === 'string' && typeof e.data === 'object'));
+      const latest = ledger.listRunEvents(fixture.runId, 2);
+      assert.ok(latest.ok);
+      assert.deepEqual(latest.value.map((e) => e.seq), seqs.slice(-2), 'the latest two');
+      const none = ledger.listRunEvents('run_unknown', 5);
+      assert.ok(none.ok);
+      assert.deepEqual(none.value, []);
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('the home view lists the run with its state', async () => {
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), spy());
+    assert.match(screen(term), new RegExp(`run\\s+${fixture.runId}\\s+paused \\(supervisor interrupted\\)`));
+    term.type('q');
+    assert.equal(await exited, 0);
   });
 });

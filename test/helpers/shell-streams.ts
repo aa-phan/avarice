@@ -59,7 +59,7 @@ export function fakeTerminal(options: FakeTerminalOptions = {}): FakeTerminal {
 }
 
 // Polls until `predicate` holds, failing with `what` after `timeoutMs`.
-export async function waitFor(predicate: () => boolean, what: string, timeoutMs = 10_000): Promise<void> {
+export async function waitFor(predicate: () => boolean, what: string, timeoutMs = Number(process.env['SHELL_TEST_WAIT_MS'] ?? 10_000)): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);

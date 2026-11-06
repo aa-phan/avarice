@@ -14,6 +14,7 @@ import type { Interface } from 'node:readline';
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { DEFAULT_PROFILE, resolveProfile } from '../../adapters/fs/profile-paths.ts';
 import { getStatus } from '../../app/status.ts';
+import type { AppDeps } from '../../app/deps.ts';
 import type { Io } from '../args.ts';
 import { createDeps } from '../composition.ts';
 import { EXIT_USAGE, main } from '../main.ts';
@@ -41,6 +42,18 @@ export interface ShellOptions {
   dispatch?: Dispatch;
   // The actions of the menu. The default is SHELL_ACTIONS.
   actions?: readonly ShellAction[];
+  // How often a live view reads the ledger again, in milliseconds. About one second (ADR-013 decision 4); tests pass less.
+  pollMs?: number;
+}
+
+export const DEFAULT_POLL_MS = 1000;
+
+export type ReadResult<T> = { ok: true; value: T } | { ok: false; detail: string };
+
+// One frame of a live view: the text to show, and whether the thing it follows has reached its end (the view then stops by itself).
+export interface LiveFrame {
+  text: string;
+  done: boolean;
 }
 
 export interface PromptOptions {
@@ -59,8 +72,17 @@ export interface ActionContext {
   show(text: string): void;
   // Runs `main(argv)` in this process with its output captured, shows the output and returns the exit code. A non-zero code is shown as `exit N`.
   command(argv: readonly string[]): Promise<number>;
+  // The terminal width in columns, or 100 when the terminal does not say.
+  readonly width: number;
+  // The interval of a live view.
+  readonly pollMs: number;
   // Reads the ledger again and returns the home view as it is now.
   reread(): HomeView;
+  // Opens the ledger read-only, runs `body` on the dependencies, and closes it again. A failure is returned, not thrown, with the error text.
+  read<T>(body: (deps: AppDeps) => T): ReadResult<T>;
+  // Shows a live view: calls `render` now and every `pollMs` until it reports `done` or the user presses q, Escape or Ctrl-C. The timer is
+  // unref'd and cleared on the way out. Resolves when the view has ended; the last frame stays in the output pane.
+  live(render: () => LiveFrame): Promise<void>;
   // Records one command-line entry in the history.
   remember(entry: string): void;
 }
@@ -113,8 +135,12 @@ class Session implements ActionContext {
   private finished = false;
   private resolveRun: (code: number) => void = () => undefined;
   private entries: string[] = [];
+  // Ends the live view that is running, if any (clears its timer and resolves it).
+  private stopLive: (() => void) | undefined;
+  readonly pollMs: number;
 
   constructor(options: ShellOptions) {
+    this.pollMs = options.pollMs ?? DEFAULT_POLL_MS;
     this.env = options.env;
     this.stdin = options.stdin;
     this.stdout = options.stdout;
@@ -156,6 +182,7 @@ class Session implements ActionContext {
   private finish(code: number): void {
     if (this.finished) return;
     this.finished = true;
+    this.stopLive?.();
     this.stdout.off('resize', this.onResize);
     if (this.full) {
       this.stdin.off('keypress', this.onKeypress);
@@ -338,9 +365,79 @@ class Session implements ActionContext {
     return code;
   }
 
+  get width(): number {
+    return terminalWidth(this.stdout.columns);
+  }
+
   reread(): HomeView {
     this.home = this.readHome();
     return this.home;
+  }
+
+  read<T>(body: (deps: AppDeps) => T): ReadResult<T> {
+    try {
+      const composed = createDeps(this.env, this.overrides, { readOnly: true });
+      if (!composed.ok) return { ok: false, detail: composed.message };
+      try {
+        return { ok: true, value: body(composed.value.deps) };
+      } finally {
+        composed.value.close();
+      }
+    } catch (e) {
+      return { ok: false, detail: message(e) };
+    }
+  }
+
+  live(render: () => LiveFrame): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.consumer = null;
+      let last = '';
+      let stopped = false;
+      const hint = this.full ? 'q stops watching; the run keeps going' : 'type q and Enter to stop watching; the run keeps going';
+      // Draws one frame: the view text and, while it runs, how to leave it. Line mode prints only a frame that differs from the last one.
+      const show = (frame: LiveFrame): void => {
+        const text = stripControl(frame.text).replace(/\n+$/, '');
+        this.output = frame.done ? text : `${text}\n\n${hint}`;
+        this.ui = { kind: 'plain' };
+        if (this.full) this.draw();
+        else if (text !== last) this.stdout.write(`${text}\n`);
+        last = text;
+      };
+      const tick = (): void => {
+        if (stopped || this.finished) return;
+        let frame: LiveFrame;
+        try {
+          frame = render();
+        } catch (e) {
+          frame = { text: errorLine(undefined, `watch failed: ${message(e)}`), done: false };
+        }
+        show(frame);
+        if (frame.done) stop();
+      };
+      const timer = setInterval(tick, this.pollMs);
+      timer.unref();
+      const stop = (): void => {
+        if (stopped) return;
+        stopped = true;
+        clearInterval(timer);
+        this.stopLive = undefined;
+        this.output = last;
+        this.consumer = null;
+        resolve();
+      };
+      this.stopLive = stop;
+      const leave = (): void => stop();
+      this.setConsumer({
+        key: (key) => {
+          if (key.name === 'escape' || ((key.name === 'c' || key.name === 'd') && key.ctrl === true) || (key.ctrl !== true && key.sequence?.toLowerCase() === 'q')) leave();
+        },
+        line: (text) => {
+          if (printable(text).trim().toLowerCase() === 'q') leave();
+        },
+      });
+      if (!this.full) this.stdout.write(`${hint}\n`);
+      tick();
+    });
   }
 
   remember(entry: string): void {
@@ -353,21 +450,13 @@ class Session implements ActionContext {
   // shown in the view as the failing query or error and does not close the shell.
   private readHome(): HomeView {
     const unavailable = (detail: string): HomeView => ({ profile: this.profile, store: { ok: false, detail }, projects: [], nowMs: Date.now() });
-    try {
-      const composed = createDeps(this.env, this.overrides, { readOnly: true });
-      if (!composed.ok) return unavailable(composed.message);
-      try {
-        const { deps } = composed.value;
-        const nowMs = deps.clock.nowMs();
-        const status = getStatus(deps.ledger, nowMs);
-        if (!status.ok) return unavailable(describeError(status.error));
-        return { profile: deps.profile.profile, store: { ok: true }, projects: status.value, nowMs };
-      } finally {
-        composed.value.close();
-      }
-    } catch (e) {
-      return unavailable(message(e));
-    }
+    const read = this.read((deps): HomeView | string => {
+      const nowMs = deps.clock.nowMs();
+      const status = getStatus(deps.ledger, nowMs);
+      return status.ok ? { profile: deps.profile.profile, store: { ok: true }, projects: status.value, nowMs } : describeError(status.error);
+    });
+    if (!read.ok) return unavailable(read.detail);
+    return typeof read.value === 'string' ? unavailable(read.value) : read.value;
   }
 
   // ---- drawing -----------------------------------------------------------------------------------------------------
