@@ -5,7 +5,7 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: "Completed 02-20-PLAN.md (open finding: other-profile-root read, owner decision)"
+stopped_at: "Completed 02-20-PLAN.md (other-profile-root finding fixed: default AVARICE parents denied, live cs7 PASS)"
 last_updated: "2026-11-06T10:24:36.689Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
@@ -216,7 +216,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-19: Ledger.listRunEvents added as the only port change, a read-only latest-events query for the watch view; macOS script cannot type after the screen is up, so key handling is proven on a python3 pty driver (test tooling only) — the Ledger port had no event read; script sends end-of-file at once and drops a completed line at the raw-mode switch
 - [Phase 02]: 02-20: prepareRunInvocation creates the host TMPDIR (scratch/tmp) and scratch/npm-cache before launch; without it every sandboxed Bash call of a real unit failed to initialize the sandbox
 - [Phase 02]: 02-20: attempts a real model declines in words (credential reads, settings, contract and budget writes) are made by a probe script run through the declared npm test, so the sandbox layer answers; the hook layer is judged by the model-driven forms it does attempt
-- [Phase 02]: 02-20: cs7-other-profile-sandbox is recorded FAIL and left failing: the sandbox denyRead does not list another profile root; closing it needs an owner decision, CON-1 not marked complete
+- [Phase 02]: 02-20: cs7-other-profile-sandbox was recorded FAIL (the sandbox denyRead did not list another profile root) and is now fixed by owner decision: every run sandbox (host settings and the SandboxedExecutor paths of checks, validation, baseline and npm ci) denies the default parents ~/.local/share/avarice, ~/.config/avarice and ~/.local/share/avarice-work and re-allows only the run own clone and scratch; roots placed by AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME are a documented limit; live re-run PASS
 
 ### Pending Todos
 
@@ -246,7 +246,6 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - [Phase 1, backlog 999.1]: A real `avarice onboard --mode fast` reaching `active` with completeness `partial` is unchecked live (UAT test 13, deferred)
 - [Phase 1, backlog 999.2]: The local-mount refusal (`local` flag heuristic, A6) is unverified against a real smbfs or nfs mount (UAT test 10, deferred)
-- 02-20 open finding: a command the run declares can read another profile root (sandbox denyRead has no entry for other profiles); owner decision needed before 02-21/02-22 exit runs
 
 ### Quick Tasks Completed
 
@@ -268,5 +267,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-06T10:24:25.688Z
-Stopped at: Completed 02-20-PLAN.md (open finding: other-profile-root read, owner decision)
+Stopped at: Completed 02-20-PLAN.md (other-profile-root finding fixed: default AVARICE parents denied, live cs7 PASS)
 Resume file: None
