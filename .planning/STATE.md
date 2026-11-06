@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
-status: executing
-stopped_at: Completed 02-21-PLAN.md (exit drafts proven by dry run, owner approval recorded, conventions committed 9f63d91)
-last_updated: "2026-11-06T21:58:46.571Z"
+status: verifying
+stopped_at: Completed 02-22-PLAN.md
+last_updated: "2026-11-06T22:23:55.853Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: dfe1faf45c9c46fedb647c54f3c7e5aead4a0f89
+state_head: f00579523fe5a32f8785f60ef146a43f796e79ea
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 48
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
 Plan: 22 of 22
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-05 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 14%
@@ -104,6 +104,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P19 | 100 min | 3 tasks | 20 files |
 | Phase 02 P20 | 70 min | 3 tasks | 8 files |
 | Phase 02 P21 | 3 sessions | 3 tasks | 17 files |
+| Phase 02 P22 | 50min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-20: cs7-other-profile-sandbox was recorded FAIL (the sandbox denyRead did not list another profile root) and is now fixed by owner decision: every run sandbox (host settings and the SandboxedExecutor paths of checks, validation, baseline and npm ci) denies the default parents ~/.local/share/avarice, ~/.config/avarice and ~/.local/share/avarice-work and re-allows only the run own clone and scratch; roots placed by AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME are a documented limit; live re-run PASS
 - [Phase 02]: 02-21: the portfolio conventions draft adds node_modules/.tmp/** and node_modules/.vite-temp/** to test:e2e writes (found by ONB-10 validation); the owner committed it as 9f63d91 in ~/aa-phan-portfolio-v2 with checks digest sha256:43b374ff... (the plan's uncorrected text digests to sha256:efe24475...)
 - [Phase 02]: 02-21: owner approved the three R1 briefs (parseBrief digests recorded) and the exit spend at 5.00 USD per run, 2.00 per invocation; 5.7565 of the 25 USD Phase 2 ceiling spent so far (D-15)
+- [Phase 02]: 02-22: the exit passed: three owner-approved R1 briefs each reached ready_for_review unattended on the real portfolio (one attempt each, 3.5286 USD), owner checkout unchanged but for three avarice/run_* branches; Phase 2 spend 9.2851 of 25 USD
 
 ### Pending Todos
 
@@ -269,6 +271,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T21:58:46.416Z
-Stopped at: Completed 02-21-PLAN.md (exit drafts proven by dry run, owner approval recorded, conventions committed 9f63d91)
+Last session: 2026-11-06T22:23:55.693Z
+Stopped at: Completed 02-22-PLAN.md
 Resume file: None

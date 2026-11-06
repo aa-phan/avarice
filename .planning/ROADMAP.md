@@ -120,7 +120,7 @@ Plans:
   6. `avarice` with no arguments in a terminal opens the interactive shell (ADR-013): the user starts, watches and resumes the Phase 2 run from it, closing the shell leaves the supervisor running, and the same command outside a terminal or under `AVARICE_RUN` prints usage and exits 64
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
 
-**Plans:** 21/22 plans executed (10 waves)
+**Plans:** 22/22 plans executed (10 waves)
 
 Plans:
 **Wave 1**
@@ -163,7 +163,7 @@ Plans:
 - [x] 02-21-PLAN.md — Exit drafts (portfolio `.avarice/config.json`, three R1 briefs), no-spend dry run, owner checkpoints D-06, D-15, D-09
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 02-22-PLAN.md — Exit: three R1 runs on ~/aa-phan-portfolio-v2, 3 of 3 ready_for_review with evidence (D-08)
+- [x] 02-22-PLAN.md — Exit: three R1 runs on ~/aa-phan-portfolio-v2, 3 of 3 ready_for_review with evidence (D-08)
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
@@ -274,7 +274,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 21/22 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 22/22 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
