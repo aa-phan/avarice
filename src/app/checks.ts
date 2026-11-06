@@ -426,13 +426,17 @@ export async function measureInventory(deps: AppDeps, run: RunRow, contract: Run
   let durationMs = 0;
   let ids: string[] = [];
   if (spec.argv !== undefined) {
+    // A list command loads the project's tool configuration, and the tool may make its cache directories while it does (vitest list on the
+    // portfolio makes node_modules/.cache/imagetools and node_modules/.vite-temp): the cache and output paths the repository's own checks
+    // declare as writes are the only places it may write, besides the scratch directory (plan 02-21; the dry run found `EPERM ... mkdir`).
+    const declared = contract.execution.checks.flatMap((check) => check.writes.flatMap((glob) => writePathOf(root, glob) ?? []));
     const ran = await deps.executor.run({
       argv: spec.argv,
       cwd: root,
       env: sandbox.value.env,
       timeoutMs: 120_000,
       invocationId: deps.ids.next('inv_'),
-      writePaths: [sandbox.value.scratch],
+      writePaths: [...new Set([sandbox.value.scratch, ...declared])],
       denyReadPaths: sandbox.value.denyReadPaths,
       allowReadPaths: sandbox.value.allowReadPaths,
     });

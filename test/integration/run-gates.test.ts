@@ -10,6 +10,7 @@ import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import {
   FIXED_SLUG,
+  LIST_TESTS_SCRIPT,
   RUN_CONVENTIONS_WITH_INVENTORY,
   briefWithAcceptance,
   commitConventions,
@@ -98,6 +99,38 @@ describe('the inventory at the pin is measured by AVARICE and recorded (AUT-9)',
     const finished = seq("SELECT seq FROM events WHERE run_id = ? AND type = 'invocation.finished' ORDER BY seq LIMIT 1");
     const after = seq("SELECT MAX(seq) AS seq FROM events WHERE run_id = ? AND type = 'evidence.recorded' AND data_json LIKE '%test-inventory%'");
     assert.ok(finished > 0 && after > finished, `inventory evidence seq ${after} after invocation.finished seq ${finished}`);
+  });
+});
+
+// Plan 02-21 finding: `npx vitest list` on the portfolio makes node_modules/.cache/imagetools and node_modules/.vite-temp while it loads the project
+// configuration, and the inventory command could write only the scratch directory, so it ended `failed` with an empty ID list. The list command may write
+// the cache and output paths the repository's own checks declare, and nothing else.
+describe('the list command may write the paths the checks declare, and no other (AUT-9, CON-8)', () => {
+  const CACHING_LIST = `import { mkdirSync, writeFileSync } from 'node:fs';\nmkdirSync('.cache/list', { recursive: true });\nwriteFileSync('.cache/list/touched', 'x');\n${LIST_TESTS_SCRIPT}`;
+  const UNDECLARED_LIST = CACHING_LIST.replaceAll('.cache/list', 'undeclared/list');
+  const withWrites = (writes: string[]): unknown => ({ ...RUN_CONVENTIONS_WITH_INVENTORY, checks: [{ name: 'test', argv: ['npm', 'test'], timeoutSec: 120, required: true, writes }] });
+
+  function baseInventory(script: string, writes: string[]): { status: string; count: number } {
+    const roots = makeRoots();
+    const repo = makeRunRepoWithInventory({ 'scripts/list-tests.mjs': script });
+    cleanup.push(roots.base, repo.base);
+    onboardRunRepo(roots, repo);
+    commitConventions(repo, withWrites(writes));
+    const { runId } = start({ roots, repo }, FIX);
+    const row = ledgerRows<{ status: string; tests_json: string; environment_json: string }>(
+      roots,
+      "SELECT e.status, e.tests_json, e.environment_json FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'test-inventory' ORDER BY e.rowid",
+      runId,
+    ).find((r) => (JSON.parse(r.environment_json) as { label: string }).label === 'base');
+    return { status: row?.status as string, count: (JSON.parse(row?.tests_json as string) as { count: number }).count };
+  }
+
+  it('a list command that writes a path a check declares is measured: passed, with both test IDs', () => {
+    assert.deepEqual(baseInventory(CACHING_LIST, ['.cache/**']), { status: 'passed', count: 2 });
+  });
+
+  it('a list command that writes a path no check declares fails under the sandbox: failed, no IDs', () => {
+    assert.deepEqual(baseInventory(UNDECLARED_LIST, ['.cache/**']), { status: 'failed', count: 0 });
   });
 });
 
