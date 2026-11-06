@@ -100,7 +100,6 @@ const DECISION_COLUMNS: readonly Column[] = [
   { key: 'class', header: 'CLASS', subject: true },
   { key: 'urgency', header: 'URGENCY', subject: true },
   { key: 'opened', header: 'OPENED' },
-  { key: 'issue', header: 'ISSUE', keep: true },
 ];
 
 const REVIEW_COLUMNS: readonly Column[] = [
@@ -116,15 +115,26 @@ const decisionRow = (d: InboxDecision, nowMs: number): Record<string, string> =>
   class: d.class,
   urgency: d.urgency,
   opened: localTime(Date.parse(d.openedAt), nowMs),
-  issue: d.issue,
 });
+
+// One line of free text cut to the terminal width with `…`: control characters removed, line breaks and runs of spaces made one space.
+function fit(text: string, width: number): string {
+  const flat = stripControl(text).replace(/\s+/g, ' ').trim();
+  const all = Array.from(flat);
+  return all.length <= width ? flat : width <= 1 ? '…' : `${all.slice(0, width - 1).join('')}…`;
+}
 
 const reviewRow = (r: InboxReview): Record<string, string> => ({ run: r.runId, branch: r.branch ?? '-', commit: r.commit === null ? '-' : sha7(r.commit), repository: r.repository });
 
-// `inbox: 1 open decision, 1 review`, then a table of each. The issue is the cut column, so a long issue never pushes an ID off the line.
+// `inbox: 1 open decision, 1 review`, then a table of each. A decision's issue is model-derived text: it is printed on its own line under
+// the table, cut to the terminal width, so a long issue never pushes an ID off a row.
 export function renderInbox(view: InboxView, nowMs: number, width: number): string {
   const head = `inbox: ${plural(view.decisions.length, 'open decision', 'open decisions')}, ${plural(view.reviews.length, 'review', 'reviews')}\n`;
-  const decisions = view.decisions.length === 0 ? '' : `decisions:\n${renderTable(DECISION_COLUMNS, view.decisions.map((d) => decisionRow(d, nowMs)), width)}`;
+  const issues = view.decisions.map((d) => {
+    const label = `issue ${stripControl(d.decisionId)}: `;
+    return `${label}${fit(d.issue, Math.max(8, width - Array.from(label).length))}\n`;
+  });
+  const decisions = view.decisions.length === 0 ? '' : `decisions:\n${renderTable(DECISION_COLUMNS, view.decisions.map((d) => decisionRow(d, nowMs)), width)}${issues.join('')}`;
   const reviews = view.reviews.length === 0 ? '' : `reviews:\n${renderTable(REVIEW_COLUMNS, view.reviews.map(reviewRow), width)}`;
   return `${head}${decisions}${reviews}`;
 }

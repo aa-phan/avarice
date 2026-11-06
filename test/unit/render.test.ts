@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { colourEnabled, duration, errorLine, localTime, resultLine, stateWord, stripControl, usd } from '../../src/cli/render/style.ts';
 import { renderTable, terminalWidth } from '../../src/cli/render/table.ts';
 import { renderStatus } from '../../src/cli/render/status-view.ts';
+import { renderInbox, renderRunDetails, renderRuns, runStateWord } from '../../src/cli/render/run-view.ts';
 import type { ProjectStatus } from '../../src/app/status.ts';
+import type { RunStatus } from '../../src/app/run-status.ts';
 
 describe('result line and states (OPS-7 rows 1 and 3)', () => {
   it('prints the ledger word with its reason in parentheses', () => {
@@ -280,5 +282,130 @@ describe('status through the shared functions', () => {
     const row = text.split('\n')[2] ?? '';
     assert.ok(row.includes('proj_01JABCDEFGHJKMNPQRSTVWXYZ0'));
     assert.ok(row.includes('…'));
+  });
+});
+
+// ---- run views (plan 02-15) --------------------------------------------------------------------------------------------------------------
+
+const NOW = Date.parse('2026-11-05T14:05:00.000Z');
+
+function runStatus(over: Partial<RunStatus> = {}): RunStatus {
+  return {
+    runId: 'run_01JABCDEFGHJKMNPQRSTVWXYZ0',
+    title: 'Collapse repeated dashes',
+    state: 'ready_for_review',
+    reason: null,
+    lastCheckpoint: { seq: 16, nextAction: 'handoff:fetch', revision: 'git:abcdef1234567890', at: '2026-11-05T14:02:00.000Z' },
+    branch: 'avarice/run_01JABCDEFGHJKMNPQRSTVWXYZ0',
+    commit: 'abcdef1234567890abcdef1234567890abcdef12',
+    clean: true,
+    evidence: [{ name: 'test', kind: 'check', status: 'passed', revision: 'git:abcdef1234567890', clean: true }],
+    gates: [
+      { gate: 'G2', passed: true, revision: 'git:abc' },
+      { gate: 'G4', passed: false, revision: 'git:abc' },
+    ],
+    openDecisions: 0,
+    budgets: [
+      { name: 'wallClockMs', used: 190_000, limit: 3_600_000 },
+      { name: 'costUsd', used: 0.5, limit: 5 },
+      { name: 'invocations', used: 1, limit: 3 },
+    ],
+    references: [{ kind: 'brief', id: 'brief.md', revision: 'sha256:0123456789abcdef0123' }],
+    ...over,
+  };
+}
+
+describe('run details (OPS-7, FR-11)', () => {
+  it('prints the result line, then the details, each as the plan lists them', () => {
+    const text = renderRunDetails(runStatus(), NOW, 100);
+    const lines = text.split('\n');
+    assert.equal(lines[0], 'run run_01JABCDEFGHJKMNPQRSTVWXYZ0: ready_for_review');
+    assert.match(text, /^ {2}last checkpoint: handoff:fetch \(\d{2}:\d{2}, 3 min ago\)$/m);
+    assert.match(text, /^ {2}branch avarice\/run_01JABCDEFGHJKMNPQRSTVWXYZ0 at abcdef1 \(clean\)$/m);
+    assert.match(text, /^ {2}evidence: test passed$/m);
+    assert.match(text, /^ {2}gates: G2 passed, G4 failed$/m);
+    assert.match(text, /^ {2}budget: cost 0\.50 USD of 5\.00 USD; invocations 1 of 3; wall clock 3 min 10 s of 1 h$/m);
+    assert.match(text, /^ {2}references: brief brief\.md at 0123456789ab$/m);
+    assert.ok(text.endsWith('\n'));
+  });
+
+  it('flags a check that already failed at the pin, and says when nothing was handed off or recorded', () => {
+    const flagged = renderRunDetails(runStatus({ evidence: [{ name: 'format', kind: 'check', status: 'failed', revision: 'git:a', clean: true, preExisting: true }] }), NOW, 100);
+    assert.match(flagged, /^ {2}evidence: format failed \(pre-existing\)$/m);
+    const bare = renderRunDetails(runStatus({ commit: null, clean: null, evidence: [], gates: [], budgets: [], references: [], lastCheckpoint: null }), NOW, 100);
+    assert.match(bare, /^ {2}branch avarice\/run_\S+ \(not handed off\)$/m);
+    assert.match(bare, /^ {2}evidence: none$/m);
+    assert.match(bare, /^ {2}gates: none$/m);
+    assert.doesNotMatch(bare, /last checkpoint|budget|references/);
+  });
+
+  it('shows an interrupted run as paused with its attempt, step and the command that continues it', () => {
+    const run = runStatus({
+      state: 'verifying',
+      interrupted: { state: 'verifying', presentedAs: 'paused', reason: 'verification interrupted', attemptId: 'att_01JX', step: 'verify:checks', nextAction: 'verify:checks', resumeCommand: 'avarice resume run_01JABCDEFGHJKMNPQRSTVWXYZ0' },
+    });
+    const text = renderRunDetails(run, NOW, 100);
+    assert.equal(text.split('\n')[0], 'run run_01JABCDEFGHJKMNPQRSTVWXYZ0: paused (verification interrupted)');
+    assert.match(text, /^ {2}interrupted attempt att_01JX at verify:checks$/m);
+    assert.match(text, /^ {2}continue with: avarice resume run_01JABCDEFGHJKMNPQRSTVWXYZ0$/m);
+    assert.equal(runStateWord(run), 'paused (verification interrupted)');
+  });
+
+  it('names the open decisions of a blocked run', () => {
+    const text = renderRunDetails(runStatus({ state: 'blocked_on_decision', reason: 'decision', openDecisions: 2 }), NOW, 100);
+    assert.equal(text.split('\n')[0], 'run run_01JABCDEFGHJKMNPQRSTVWXYZ0: blocked_on_decision (decision)');
+    assert.match(text, /^ {2}decisions: 2 open \(see avarice inbox\)$/m);
+  });
+
+  it('strips escape sequences from a title, a branch and an evidence name (T-02-49)', () => {
+    const text = renderRuns([runStatus({ title: 'fix \x1b[31mit\x1b[0m', branch: 'avarice/\x1b]0;x\x07r', evidence: [{ name: 'te\x1bst', kind: 'check', status: 'passed', revision: 'g', clean: true }] })], NOW, 120);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    assert.match(text, /fix it/);
+  });
+
+  it('lists interrupted runs first, then blocked ones, then the rest, in the order given within each', () => {
+    const interrupted = { state: 'running', presentedAs: 'paused', reason: 'supervisor interrupted', attemptId: null, step: 'launch:run', nextAction: 'launch:run', resumeCommand: 'avarice resume run_C' } as const;
+    const text = renderRuns(
+      [runStatus({ runId: 'run_A' }), runStatus({ runId: 'run_B', state: 'blocked_on_decision', reason: 'decision' }), runStatus({ runId: 'run_C', state: 'running', interrupted }), runStatus({ runId: 'run_D' })],
+      NOW,
+      120,
+    );
+    const at = (id: string): number => text.indexOf(`run ${id}:`);
+    assert.ok(at('run_C') < at('run_B') && at('run_B') < at('run_A') && at('run_A') < at('run_D'));
+    assert.equal(text.split('\n')[0], 'runs: 4');
+    assert.equal(renderRuns([], NOW, 100), '');
+  });
+});
+
+describe('inbox (OPS-7, FR-11)', () => {
+  const decision = { decisionId: 'dec_01JD', runId: 'run_01JR', class: 'acceptance', urgency: 'blocking', openedAt: '2026-11-05T14:02:00.000Z', issue: 'Which approach?\n1. a\n2. b' } as const;
+  const review = { runId: 'run_01JR2', title: 't', branch: 'avarice/run_01JR2', commit: 'abcdef1234567890abcdef1234567890abcdef12', repository: '/Users/me/projects/a-repository' } as const;
+
+  it('says how many decisions and reviews there are, and prints nothing else when there are none', () => {
+    assert.equal(renderInbox({ decisions: [], reviews: [] }, NOW, 100), 'inbox: 0 open decisions, 0 reviews\n');
+    assert.equal(renderInbox({ decisions: [decision], reviews: [review, review] }, NOW, 100).split('\n')[0], 'inbox: 1 open decision, 2 reviews');
+  });
+
+  it('prints a decision row and its issue on one line cut to the width, with line breaks made spaces', () => {
+    const text = renderInbox({ decisions: [decision], reviews: [] }, NOW, 100);
+    assert.match(text, /^dec_01JD\s+run_01JR\s+acceptance\s+blocking\s+\d{2}:\d{2}, 3 min ago$/m);
+    assert.match(text, /^issue dec_01JD: Which approach\? 1\. a 2\. b$/m);
+    const narrow = renderInbox({ decisions: [{ ...decision, issue: 'x'.repeat(200) }], reviews: [] }, NOW, 60);
+    const issue = narrow.split('\n').find((l) => l.startsWith('issue ')) ?? '';
+    assert.equal(Array.from(issue).length, 60);
+    assert.ok(issue.endsWith('…'));
+  });
+
+  it('strips control characters from an issue', () => {
+    const text = renderInbox({ decisions: [{ ...decision, issue: 'a\x1b[31mb\x1b[0m\x1b]0;t\x07c' }], reviews: [] }, NOW, 100);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    assert.match(text, /issue dec_01JD: abc$/m);
+  });
+
+  it('prints each review with its branch, a short commit and the repository cut from the start', () => {
+    const text = renderInbox({ decisions: [], reviews: [review] }, NOW, 55);
+    assert.match(text, /^reviews:$/m);
+    assert.match(text, /^run_01JR2\s+avarice\/run_01JR2\s+abcdef1\s+/m);
+    assert.ok(text.includes('…') && text.includes('a-repository'));
   });
 });

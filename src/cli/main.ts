@@ -9,7 +9,7 @@ import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
 import { errorLine } from './render/style.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'resume', 'context'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context'] as const;
 export const EXIT_USAGE = 64;
 
 export interface MainOverrides extends DepsOverrides {
