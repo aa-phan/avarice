@@ -1,0 +1,17 @@
+{
+  "command": "node --test test/unit/containment-matrix.test.ts",
+  "ranAgainst": "the plan base 45fe812 (docs/containment.md unchanged) plus the new test/unit/containment-matrix.test.ts",
+  "exitCode": 1,
+  "reason": "at the plan base the coverage matrix has no run-purpose rows (all ten are missing), the row 'Tests and acceptance criteria not weakened' states its mechanism as 'D and P at the gate' with no P:, D: or R: label, and host limitation 8 is still an open question with no spike record",
+  "failingFiles": ["test/unit/containment-matrix.test.ts"],
+  "failingTests": [
+    "is complete: five cells in every row, labelled mechanisms in order, every named test file tracked",
+    "has the run-purpose rows",
+    "names every limitation 8 outcome: resolved, with the spike record"
+  ],
+  "passingAtBase": [
+    "the nine synthetic-table cases of the checker: the adjacency, empty, encoding and ordering edges, the label rule, the wrong cell count, the missing table and the table boundary",
+    "names at least one tracked test for every run-purpose row (vacuous until the rows exist; the row-presence test above is the one that fails)"
+  ],
+  "summary": "13 tests, 10 pass, 3 fail at the base. test/containment/sandbox-commit.test.ts records a measurement (git version Apple Git-154 2.39.5 on macOS 15.5) and passes without a source change, so it has no red run; its first test shows a commit with only the object store and run ref writable failing on the index lock"
+}
