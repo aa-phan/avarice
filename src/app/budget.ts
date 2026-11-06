@@ -89,13 +89,11 @@ interface ReserveSource {
   subject: Readonly<Record<string, unknown>>;
 }
 
-function reserveFrom(deps: AppDeps, source: ReserveSource): Result<ReserveOutcome> {
+// A reservation whose holder died (a killed supervisor never settled it) is turned into spent `invocations`, each orphan charged the cost reservation it was
+// granted. Returns the budget rows as they are afterwards. The next reservation does this itself; a resume does it as soon as it has ended the orphan's host,
+// so a run that stops before it reserves again still shows the killed invocation as charged (CON-13: nothing is refunded).
+function chargeOrphans(deps: AppDeps, source: ReserveSource, rows: BudgetRow[]): Result<BudgetRow[]> {
   const { runId } = source;
-  // Rows are created with the contract; this only fills in rows an older store lacks, and never touches one that exists.
-  const ensured = deps.ledger.createBudgets(runId, source.version, source.rows);
-  if (!ensured.ok) return ensured;
-  let rows = ensured.value;
-
   const orphaned = rows.find((r) => r.name === 'invocations')?.reserved ?? 0;
   if (orphaned > 0) {
     // Each orphan is charged the cost reservation it was granted: at its start, the smaller of the per-invocation cap and what the
@@ -119,10 +117,19 @@ function reserveFrom(deps: AppDeps, source: ReserveSource): Result<ReserveOutcom
       nowMs: deps.clock.nowMs(),
     });
     if (!event.ok) return event;
-    const refreshed = deps.ledger.getBudgets(runId);
-    if (!refreshed.ok) return refreshed;
-    rows = refreshed.value;
+    return deps.ledger.getBudgets(runId);
   }
+  return ok(rows);
+}
+
+function reserveFrom(deps: AppDeps, source: ReserveSource): Result<ReserveOutcome> {
+  const { runId } = source;
+  // Rows are created with the contract; this only fills in rows an older store lacks, and never touches one that exists.
+  const ensured = deps.ledger.createBudgets(runId, source.version, source.rows);
+  if (!ensured.ok) return ensured;
+  const settled = chargeOrphans(deps, source, ensured.value);
+  if (!settled.ok) return settled;
+  const rows = settled.value;
   const byName = (name: string): BudgetRow | undefined => rows.find((r) => r.name === name);
 
   const wallClockMs = Math.min(source.wallClockCapMs, remaining(byName('wallClockMs')));
@@ -154,19 +161,36 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
 // A run's reservation (CON-13): the run's own rows, one invocation, the whole remaining wall clock up to the contract's, and the
 // per-invocation cost cap up to what is left. The orphan rule is the onboarding's: a reservation whose holder died is spent on the next reserve.
 export function reserveRunInvocation(deps: AppDeps, run: RunRow): Result<ReserveOutcome> {
-  const stored = deps.ledger.getRunContract(run.runId);
+  const source = runReserveSource(deps, run.runId);
+  return source.ok ? reserveFrom(deps, source.value) : source;
+}
+
+function runReserveSource(deps: AppDeps, runId: string): Result<ReserveSource> {
+  const stored = deps.ledger.getRunContract(runId);
   if (!stored.ok) return stored;
-  if (stored.value === null) return err({ kind: 'internal', cause: `run ${run.runId} has no stored contract` });
+  if (stored.value === null) return err({ kind: 'internal', cause: `run ${runId} has no stored contract` });
   const body = stored.value.body as RunContract;
-  return reserveFrom(deps, {
-    runId: run.runId,
+  return ok({
+    runId,
     version: stored.value.version,
     rows: budgetRowsOfRun(body),
     purpose: 'run',
     perInvocationUsd: body.budgets.costUsd.perInvocation,
     wallClockCapMs: body.budgets.wallClockMinutes * 60_000,
-    subject: { runId: run.runId },
+    subject: { runId },
   });
+}
+
+// A resume that has ended the host of a killed invocation spends its orphaned reservation at once (plan 02-17): the invocation did start, and a run that
+// stops before it reserves again (a blocked retry) must still show it as spent. Returns how many invocations were charged.
+export function chargeRunOrphans(deps: AppDeps, runId: string): Result<number> {
+  const source = runReserveSource(deps, runId);
+  if (!source.ok) return source;
+  const ensured = deps.ledger.createBudgets(runId, source.value.version, source.value.rows);
+  if (!ensured.ok) return ensured;
+  const before = ensured.value.find((r) => r.name === 'invocations')?.reserved ?? 0;
+  const settled = chargeOrphans(deps, source.value, ensured.value);
+  return settled.ok ? ok(before) : settled;
 }
 
 // Moves the invocation's reservation to used and charges what it cost: the reported cost, or for a killed invocation the larger of

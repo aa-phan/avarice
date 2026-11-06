@@ -224,7 +224,9 @@ export const RUN_KILL_POINTS = [
   'mid-verify',
   'after-checkpoint:gate:g4',
   'after-checkpoint:handoff:fetch',
+  // `mid-handoff` is after the fetch and before its record (the resume repeats the idempotent fetch); `#2` is after the record, before the move.
   'mid-handoff',
+  'mid-handoff#2',
 ] as const;
 export type RunKillPoint = (typeof RUN_KILL_POINTS)[number];
 
@@ -256,7 +258,15 @@ export function runSurvivorPidFile(roots: CliRoots): string {
 // Starts a run with the point armed and asserts that its supervisor was killed there: `start --wait` finds the run unfinished with nobody
 // holding the lease and exits 3 with `interrupted in <state>`. A point that is never reached lets the run finish, which fails here (a missed
 // kill point would otherwise pass for a resume that had nothing to do). `host` is what the fake unit does before the kill.
-export function runRunWithFault(roots: CliRoots, repo: ScratchRepo, briefPath: string, point: RunKillPoint | undefined, host: FakeRunOptions = {}, env: Record<string, string | undefined> = {}): KilledRun {
+export function runRunWithFault(
+  roots: CliRoots,
+  repo: ScratchRepo,
+  briefPath: string,
+  point: RunKillPoint | undefined,
+  host: FakeRunOptions = {},
+  env: Record<string, string | undefined> = {},
+  extraArgs: readonly string[] = [],
+): KilledRun {
   let hostOptions = host;
   let armed = true;
   if (point === 'mid-invocation:run') {
@@ -264,7 +274,7 @@ export function runRunWithFault(roots: CliRoots, repo: ScratchRepo, briefPath: s
     hostOptions = { ...host, killInUnit: { afterFiles: ['src/slug.ts'], survivorPidFile: runSurvivorPidFile(roots) } };
     armed = false;
   }
-  const start = runCli(startRunArgs(briefPath), {
+  const start = runCli([...startRunArgs(briefPath), ...extraArgs], {
     roots,
     cwd: repo.path,
     entry: TEST_CLI,

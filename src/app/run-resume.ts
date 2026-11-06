@@ -12,6 +12,7 @@
 //
 // Nothing is claimed that was not measured: an interrupted invocation is `inconclusive` (the conservative reading of the recovery table), and the
 // budgets it was charged stay charged (the next reservation turns the orphaned one into spent invocations; nothing is refunded, CON-13).
+import { chargeRunOrphans } from './budget.ts';
 import { cloneRevision, cachedVerdicts, checksToRun } from './checks.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
@@ -276,6 +277,9 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
 async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
   const reaped = await reapStartedLaunches(ctx);
   if (!reaped.ok) return reaped;
+  // Every host of this run is gone and nothing holds a reservation but a dead supervisor: its invocations are spent (CON-13), whatever the run does next.
+  const charged = chargeRunOrphans(ctx.deps, ctx.runId);
+  if (!charged.ok) return charged;
 
   const current = ctx.deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;

@@ -328,10 +328,15 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
 
   // The classification: a unit that was classified before the kill keeps its record; one that was not is recorded here as inconclusive, which is what
   // the attempt history, the status and a second failure's decision read.
+  const launched = launchedAttempts(ctx);
+  if (!launched.ok) return launched;
+  const ran = launched.value.has(attemptId);
   const classified = stepOfAttempt(ctx, 'classify', attemptId);
   if (!classified.ok) return classified;
   let kind = typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'inconclusive';
-  if (classified.value === null) {
+  // An attempt the supervisor died in before it launched the unit (no `launch:run` step names it) ran nothing: it is not classified, it does not use
+  // the item's one retry, and there is nothing in the clone to undo beyond what the discard finds.
+  if (ran && classified.value === null) {
     const recorded = recordStep(
       ctx,
       'classify',
@@ -361,6 +366,12 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   const stored = deps.ledger.getRunContract(ctx.runId);
   if (!stored.ok) return stored;
   const retries = stored.value === null ? 0 : (stored.value.body as RunContract).budgets.retry;
+  if (!ran) {
+    // Nothing to count against the retry or the budget: the clone is put back to the snapshot (a no-op when the unit never ran) and the attempt is redone.
+    const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal, snapshot: snapshot.value });
+    if (!discarded.ok) return discarded;
+    return ok(discarded.value.discarded ? 'retry' : 'blocked');
+  }
   if (history.value.length >= 1 + retries) {
     // The interrupted attempt was itself the retry: the one chance is spent, and the owner decides (FR-4).
     const blocked = blockRun(ctx, {
@@ -646,15 +657,30 @@ interface AttemptKind {
   kind: string;
 }
 
+// The attempts that launched a unit: a `launch:run` step names the attempt it served, whatever became of it (`started` when the supervisor died inside it).
+function launchedAttempts(ctx: RunStageContext): Result<Set<string>> {
+  const steps = ctx.deps.ledger.getRunSteps(ctx.runId);
+  if (!steps.ok) return steps;
+  const launched = new Set<string>();
+  for (const s of steps.value) {
+    if (s.step === 'launch:run' && isObject(s.result) && typeof s.result['attemptId'] === 'string') launched.add(s.result['attemptId']);
+  }
+  return ok(launched);
+}
+
 function attemptHistoryOf(unit: Unit, attemptId: string, kind: string): Result<AttemptKind[]> {
   const attempts = unit.ctx.deps.ledger.listRunAttempts(unit.ctx.runId);
   if (!attempts.ok) return attempts;
+  const launched = launchedAttempts(unit.ctx);
+  if (!launched.ok) return launched;
   const history: AttemptKind[] = [];
   for (const a of attempts.value) {
     if (a.attemptId === attemptId) {
       history.push({ attemptId: a.attemptId, kind });
       continue;
     }
+    // An attempt whose supervisor died before it launched a unit (a reconcile put it back) ran nothing: it is not a failure of the unit.
+    if (!launched.value.has(a.attemptId)) continue;
     const classified = stepOfAttempt(unit.ctx, 'classify', a.attemptId);
     if (!classified.ok) return classified;
     history.push({ attemptId: a.attemptId, kind: typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'unknown' });

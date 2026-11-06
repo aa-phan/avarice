@@ -210,7 +210,9 @@ export class FakeRunHost implements AgentHost {
       for (const rel of o.killInUnit.afterFiles ?? []) edit(rel, existsSync(join(cwd, rel)) ? `${readFileSync(join(cwd, rel), 'utf8')}${marker}` : marker);
       if (o.killInUnit.survivorPidFile !== undefined) {
         // stdio must be `ignore`: the process that waits on this supervisor's pipes would otherwise wait for the survivor too.
-        const survivor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-id', req.sessionId ?? ''], { detached: true, stdio: 'ignore' });
+        // Long-lived: a suite that builds several killed runs before its first test runs (a loaded machine) must still find it alive; every suite ends
+        // its survivors in `after`.
+        const survivor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1800000)', '--', '--session-id', req.sessionId ?? ''], { detached: true, stdio: 'ignore' });
         survivor.unref();
         if (survivor.pid !== undefined) writeFileSync(o.killInUnit.survivorPidFile, String(survivor.pid));
         // Start-up margin: the process must have parsed its arguments before the supervisor dies, or the reap cannot find it.

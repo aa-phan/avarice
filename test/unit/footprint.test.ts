@@ -97,9 +97,9 @@ describe('the supervisor spawn is the one deliberate detached process and it is 
     assert.match(source, /\[\.\.\.process\.execArgv, request\.entry, 'supervise', request\.runId\]/);
   });
 
-  it('is imported by the start command and nothing else', () => {
+  it('is imported by the start and resume commands and nothing else (resume continues a run with the same detached supervisor, plan 02-17)', () => {
     const importers = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => f !== SUPERVISOR_SPAWN && /spawn-supervisor\.ts['"]/.test(readFileSync(f, 'utf8')));
-    assert.deepEqual(importers.map((f) => basename(f)), ['start.ts']);
+    assert.deepEqual(importers.map((f) => basename(f)).sort(), ['resume.ts', 'start.ts']);
   });
 });
 
