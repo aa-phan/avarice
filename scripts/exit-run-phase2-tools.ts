@@ -620,8 +620,18 @@ function snapshot(repo: string): Json {
     .filter((l) => l !== '')
     .map((l) => ({ ref: l.slice(0, l.indexOf(' ')), object: l.slice(l.indexOf(' ') + 1) }));
   const headRef = mustGit(repo, ['symbolic-ref', '-q', 'HEAD']).trim();
-  const composite = sha256(JSON.stringify({ digest, indexDigest: sha256(stage), headRef }));
-  return { schema: 1, takenAt: new Date().toISOString(), repo, digest, indexDigest: sha256(stage), headRef, composite, refs };
+  const indexDigest = sha256(stage);
+  return { schema: 1, takenAt: new Date().toISOString(), repo, digest, indexDigest, headRef, composite: compositeOf({ digest, indexDigest, headRef }), refs };
+}
+
+// What "the checkout is unchanged" compares: the checkout digest (refs outside the run refs included), the index entries and the symbolic HEAD.
+// `counts.refsAllowed` is how many run refs exist: it changes by one per handed-off run and is judged on its own (newRefs), not here.
+// Recomputed from the parts by `evidence`, so a snapshot file cannot carry a stale rule.
+function compositeOf(snap: Json): string {
+  const digest = isObject(snap['digest']) ? snap['digest'] : {};
+  const counts = isObject(digest['counts']) ? { ...digest['counts'] } : {};
+  delete counts['refsAllowed'];
+  return sha256(JSON.stringify({ digest: { ...digest, counts }, indexDigest: snap['indexDigest'], headRef: snap['headRef'] }));
 }
 
 function toolCounts(text: string): Record<string, number> {
@@ -674,14 +684,15 @@ function evidenceCommand(argv: readonly string[]): number {
     briefDigest: briefDigest(briefPath) ?? null,
     startExit: Number(named['start-exit']),
     startedAt: named['started-at'] ?? null,
-    endedAt: named['ended-at'] ?? new Date().toISOString(),
+    // The run's own last update (the ledger), not the time this record was written.
+    endedAt: null,
     startStdoutTail: startOut.slice(-2000),
     ...(startErr !== '' ? { startStderrTail: startErr.slice(-2000) } : {}),
   };
 
   // ---- the owner's checkout: before and after ----
-  const digestBefore = String(before['composite'] ?? '');
-  const digestAfter = String(after['composite'] ?? '');
+  const digestBefore = isObject(before['digest']) ? compositeOf(before) : '';
+  const digestAfter = isObject(after['digest']) ? compositeOf(after) : '';
   const refsOf = (snap: Json): RefLine[] => (Array.isArray(snap['refs']) ? (snap['refs'] as RefLine[]) : []);
   const beforeRefs = new Map(refsOf(before).map((r) => [r.ref, r.object]));
   const afterRefs = new Map(refsOf(after).map((r) => [r.ref, r.object]));
@@ -689,7 +700,7 @@ function evidenceCommand(argv: readonly string[]): number {
   const changedRefs = [...beforeRefs].filter(([r, o]) => afterRefs.get(r) !== o).map(([r]) => r);
   entry['digestBefore'] = digestBefore;
   entry['digestAfter'] = digestAfter;
-  entry['checkout'] = { before: { ...before, refs: undefined }, after: { ...after, refs: undefined }, newRefs, removedOrChangedRefs: changedRefs };
+  entry['checkout'] = { before: { ...before, refs: undefined, composite: undefined }, after: { ...after, refs: undefined, composite: undefined }, newRefs, removedOrChangedRefs: changedRefs };
   if (digestBefore === '' || digestBefore !== digestAfter) problems.push('the checkout digest differs before and after the run (or one is missing)');
   if (changedRefs.length > 0) problems.push(`refs removed or changed: ${changedRefs.join(', ')}`);
   if (newRefs.some((r) => r !== `refs/heads/avarice/${runId}`)) problems.push(`refs added other than the run's own branch: ${newRefs.join(', ')}`);
@@ -721,6 +732,7 @@ function evidenceCommand(argv: readonly string[]): number {
         const costRow = budgets.ok ? budgets.value.find((b) => b.name === 'costUsd') : undefined;
         costUsd = costRow?.used ?? 0;
         entry['state'] = state;
+        entry['endedAt'] = run.value.updatedAt;
         entry['reason'] = run.value.reason;
         entry['title'] = run.value.title;
         entry['baseRevision'] = run.value.baseRevision;
@@ -814,7 +826,7 @@ function evidenceCommand(argv: readonly string[]): number {
   if (composed.ok && state !== 'unknown' && !lines.some((l) => typeof l['case'] === 'string' && l['case'].endsWith(runId))) {
     appendFileSync(ledgerPath, `${JSON.stringify({ plan, case: caseName, costUsd, claudeVersion: version, at: new Date().toISOString() })}\n`);
     entry['spendLine'] = { plan, case: caseName, costUsd, claudeVersion: version };
-  } else entry['spendLine'] = 'already recorded or the run could not be read';
+  } else entry['spendLine'] = lines.find((l) => typeof l['case'] === 'string' && l['case'].endsWith(runId)) ?? 'the run could not be read';
   entry['problems'] = problems;
 
   // ---- the evidence file: this run replaces an earlier record of itself, and the verdict is recomputed ----

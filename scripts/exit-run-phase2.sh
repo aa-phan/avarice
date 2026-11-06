@@ -82,7 +82,6 @@ if [ "$RUN" = 1 ]; then
     echo "exit-run-phase2: starting $name ($n of ${#RUN_BRIEFS[@]}) at $started_at"
     (cd "$SOURCE" && "${AVARICE[@]}" start --brief "$brief" --policy routine --wait) > "$RUN_OUT/$name.start.out" 2> "$RUN_OUT/$name.start.err"
     start_exit=$?
-    ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     cat "$RUN_OUT/$name.start.out"
     [ -s "$RUN_OUT/$name.start.err" ] && cat "$RUN_OUT/$name.start.err" >&2
     "${TOOLS[@]}" snapshot --repo "$SOURCE" > "$RUN_OUT/$name.after.json" || { echo "exit-run-phase2: cannot snapshot $SOURCE after the run" >&2; exit 1; }
@@ -90,7 +89,7 @@ if [ "$RUN" = 1 ]; then
     if [ -z "$run_id" ]; then echo "exit-run-phase2: start printed no run ID (exit $start_exit): nothing was stored; see $RUN_OUT/$name.start.err" >&2; exit 1; fi
     "${TOOLS[@]}" evidence --run-id "$run_id" --brief "$brief" --before "$RUN_OUT/$name.before.json" --after "$RUN_OUT/$name.after.json" \
       --start-exit "$start_exit" --start-out "$RUN_OUT/$name.start.out" --start-err "$RUN_OUT/$name.start.err" \
-      --started-at "$started_at" --ended-at "$ended_at" --out "$EVID" --ledger "$LEDGER" --repo "$SOURCE"
+      --started-at "$started_at" --out "$EVID" --ledger "$LEDGER" --repo "$SOURCE"
     ecode=$?
     if [ "$ecode" != 0 ] || [ "$start_exit" != 0 ]; then
       echo "exit-run-phase2: $name did not end clean in ready_for_review (start exit $start_exit, evidence exit $ecode); stopping for the diagnosis in $EVID (D-08)" >&2
