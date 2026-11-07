@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-23-PLAN.md
-last_updated: "2026-11-07T10:48:41.703Z"
-last_activity: 2026-11-06
+stopped_at: Completed 02-26-PLAN.md
+last_updated: "2026-11-07T22:37:55.641Z"
+last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: 69f042f783d40be40c0ba67c1370e230657e1b92
+state_head: c136cbae45aa3b8c2e372dd4bc6696e5da34a228
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 52
-  completed_plans: 49
+  completed_plans: 52
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 ## Current Position
 
-Phase: 02 (Contained unattended run of one work item) — READY TO EXECUTE
-Plan: 1 of 25
+Phase: 02 (Contained unattended run of one work item) — EXECUTING
+Plan: 2 of 26
 Status: Ready to execute
-Last activity: 2026-11-06 — Phase 02 execution started
+Last activity: 2026-11-07 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -106,6 +106,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P21 | 3 sessions | 3 tasks | 17 files |
 | Phase 02 P22 | 50min | 2 tasks | 5 files |
 | Phase 02 P23 | one long session | 7 tasks | 94 files |
+| Phase 02 P26 | 127 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -224,6 +225,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-21: owner approved the three R1 briefs (parseBrief digests recorded) and the exit spend at 5.00 USD per run, 2.00 per invocation; 5.7565 of the 25 USD Phase 2 ceiling spent so far (D-15)
 - [Phase 02]: 02-22: the exit passed: three owner-approved R1 briefs each reached ready_for_review unattended on the real portfolio (one attempt each, 3.5286 USD), owner checkout unchanged but for three avarice/run_* branches; Phase 2 spend 9.2851 of 25 USD
 - [Phase 02]: 02-23: runs.md was not re-grounded after its review; the hook-rule and event-kind denominators are reproducible commands now (33 rule IDs, 28 event kinds)
+- [Phase 02]: 02-26: the hook judges the path part of git object names and allow-lists log and status options; show takes only object-by-path operands (CR-01)
+- [Phase 02]: 02-26: the contract-command sandbox residual is named in containment.md and findings.md for owner acceptance (T-02-91)
 
 ### Pending Todos
 
@@ -273,6 +276,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-07T03:47:38.901Z
-Stopped at: Completed 02-23-PLAN.md
+Last session: 2026-11-07T22:37:46.091Z
+Stopped at: Completed 02-26-PLAN.md
 Resume file: None
