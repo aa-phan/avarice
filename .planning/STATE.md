@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
-status: executing
-stopped_at: Completed 02-22-PLAN.md
-last_updated: "2026-11-07T00:04:35.897Z"
+status: verifying
+stopped_at: Completed 02-23-PLAN.md
+last_updated: "2026-11-07T03:47:39.060Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 02 execution started
-state_head: 1859f5e888c2d8f1c359c9e59871d99f75a0d870
+state_head: d40beb1b6753d045b4952edacedff1bff475db22
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 49
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 Phase: 02 (Contained unattended run of one work item) — READY TO EXECUTE
 Plan: 22 of 22
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-05 — Phase 02 execution started
 
 Progress: [█░░░░░░░░░] 14%
@@ -105,6 +105,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P20 | 70 min | 3 tasks | 8 files |
 | Phase 02 P21 | 3 sessions | 3 tasks | 17 files |
 | Phase 02 P22 | 50min | 2 tasks | 5 files |
+| Phase 02 P23 | one long session | 7 tasks | 94 files |
 
 ## Accumulated Context
 
@@ -222,6 +223,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-21: the portfolio conventions draft adds node_modules/.tmp/** and node_modules/.vite-temp/** to test:e2e writes (found by ONB-10 validation); the owner committed it as 9f63d91 in ~/aa-phan-portfolio-v2 with checks digest sha256:43b374ff... (the plan's uncorrected text digests to sha256:efe24475...)
 - [Phase 02]: 02-21: owner approved the three R1 briefs (parseBrief digests recorded) and the exit spend at 5.00 USD per run, 2.00 per invocation; 5.7565 of the 25 USD Phase 2 ceiling spent so far (D-15)
 - [Phase 02]: 02-22: the exit passed: three owner-approved R1 briefs each reached ready_for_review unattended on the real portfolio (one attempt each, 3.5286 USD), owner checkout unchanged but for three avarice/run_* branches; Phase 2 spend 9.2851 of 25 USD
+- [Phase 02]: 02-23: runs.md was not re-grounded after its review; the hook-rule and event-kind denominators are reproducible commands now (33 rule IDs, 28 event kinds)
 
 ### Pending Todos
 
@@ -271,6 +273,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T22:23:55.693Z
-Stopped at: Completed 02-22-PLAN.md
+Last session: 2026-11-07T03:47:38.901Z
+Stopped at: Completed 02-23-PLAN.md
 Resume file: None

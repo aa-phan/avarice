@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 22/23 plans executed (11 waves)
+**Plans:** 23/23 plans executed (11 waves)
 
 Plans:
 **Wave 1**
@@ -167,7 +167,7 @@ Plans:
 - [x] 02-22-PLAN.md — Exit: three R1 runs on ~/aa-phan-portfolio-v2, 3 of 3 ready_for_review with evidence (D-08)
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 02-23-PLAN.md — Documentation pass: docs/system/ describes what Phase 2 built, grounded and fresh-eyes reviewed (success criterion 8)
+- [x] 02-23-PLAN.md — Documentation pass: docs/system/ describes what Phase 2 built, grounded and fresh-eyes reviewed (success criterion 8)
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
@@ -278,7 +278,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 22/22 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 23/23 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
