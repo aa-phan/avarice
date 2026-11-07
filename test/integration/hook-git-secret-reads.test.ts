@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { rmSync } from 'node:fs';
 
+import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
+import { decideToolCall } from '../../src/domain/hook-decision.ts';
 import { makeHookFixture, runHook } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 import { git, gitRun, makeScratchRepo } from '../helpers/scratch-repo.ts';
@@ -21,23 +23,39 @@ after(() => {
 interface Rig {
   repo: ScratchRepo;
   fx: HookFixture;
+  // The object name of `.env` at HEAD, for the forms that name a blob by its hash.
+  blob: string;
 }
 
-// A repository that tracks `.env` (two commits) and `src/a.ts`, and a hook fixture whose policy points at it.
+// A repository that tracks `.env` (two commits, then a third version staged), `certs/server.pem` and ordinary files, and a hook
+// fixture whose policy points at it.
 function rig(): Rig {
   const repo = makeScratchRepo({
-    files: { '.env': `TOKEN=${SENTINEL}-v1\n`, 'src/a.ts': 'export const a = 1;\n' },
+    files: {
+      '.env': `TOKEN=${SENTINEL}-v1\n`,
+      'certs/server.pem': `${SENTINEL}-pem\n`,
+      '.env.example': 'TOKEN=changeme\n',
+      'src/a.ts': 'export const a = 1;\n',
+      'sub/b.txt': 'b\n',
+    },
     commits: [{ '.env': `TOKEN=${SENTINEL}-v2\n` }],
+    modified: { '.env': `TOKEN=${SENTINEL}-v3\n` },
   });
+  git(repo.path, ['add', '.env']);
   const fx = makeHookFixture({ policy: { stagingPath: repo.path } });
   cleanup.push(
     () => repo.dispose(),
     () => rmSync(fx.dir, { recursive: true, force: true }),
   );
-  return { repo, fx };
+  return { repo, fx, blob: git(repo.path, ['rev-parse', 'HEAD:.env']).trim() };
 }
 
-// The hook's verdict on a Bash command run in the repository: the denial rule, or 'allow' when the hook prints nothing.
+// The pure decision, with the production canon, for a Bash command run in the repository.
+function decide({ repo, fx }: Rig, command: string): { decision: string; rule?: string } {
+  return decideToolCall({ kind: 'shell', command, background: false, cwd: repo.path }, fx.policy, canonicalAbsolute);
+}
+
+// The real hook entry's verdict: the denial rule, or 'allow' when the hook prints nothing.
 function hookVerdict({ repo, fx }: Rig, command: string): string {
   const result = runHook(fx, 'pre', { cwd: repo.path, tool_name: 'Bash', tool_input: { command } });
   assert.equal(result.code, 0, result.stderr);
@@ -46,7 +64,7 @@ function hookVerdict({ repo, fx }: Rig, command: string): string {
   return reason.replace(/^avarice: /, '');
 }
 
-// What real git prints for the words of a corpus line (no quoted words in the corpus).
+// What real git prints (stdout and stderr) for the words of a corpus line; the corpus uses no quoted words.
 function gitOutput({ repo }: Rig, command: string): string {
   const out = gitRun(repo.path, command.split(' ').slice(1));
   return out.stdout + out.stderr;
@@ -68,6 +86,77 @@ describe('tracer: git show of a secret path through the real hook', () => {
   it('allows git show HEAD:src/a.ts, which git prints as the file text', () => {
     assert.equal(hookVerdict(r, 'git show HEAD:src/a.ts'), 'allow');
     assert.equal(gitOutput(r, 'git show HEAD:src/a.ts'), 'export const a = 1;\n');
-    assert.equal(git(r.repo.path, ['rev-parse', 'HEAD']).trim(), r.repo.head);
+  });
+});
+
+describe('admitted git forms print no secret content', () => {
+  const r = rig();
+  const admitted = [
+    'git log', 'git log --oneline', 'git log -1 --stat', 'git log --stat --format=%h', 'git log --name-status -2', 'git log --all --graph --oneline --decorate',
+    'git log -n 1 --format=%H', `git log -1 --stat ${r.blob}`, 'git log --follow --oneline -- src/a.ts', 'git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:',
+    'git show HEAD:.env.example', 'git show HEAD:sub', 'git status', 'git status --short', 'git status -sb', 'git status -uall', 'git status --porcelain=v2',
+    'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse HEAD:src/a.ts',
+  ];
+  for (const command of admitted) {
+    it(`${command}: allowed by the hook, and git prints no sentinel`, () => {
+      const d = decide(r, command);
+      assert.deepEqual([d.decision, d.rule], ['allow', 'shell-identity'], command);
+      assert.ok(!gitOutput(r, command).includes(SENTINEL), `${command} printed the sentinel`);
+    });
+  }
+});
+
+describe('refused git forms are real leaks', () => {
+  const r = rig();
+  const leaks: Array<[string, string]> = [
+    ['git show HEAD:.env', 'deny-secret-read'],
+    ['git show :.env', 'deny-secret-read'],
+    ['git show :0:.env', 'deny-secret-read'],
+    ['git show HEAD~1:.env', 'deny-secret-read'],
+    ['git show HEAD:./.env', 'deny-secret-read'],
+    ['git show HEAD:certs/server.pem', 'deny-secret-read'],
+    ['git show', 'shell-git-object'],
+    ['git show HEAD', 'shell-git-object'],
+    [`git show ${r.blob}`, 'shell-git-object'],
+    [`git show -s ${r.blob}`, 'shell-git-output'],
+    ['git log -p', 'shell-git-output'],
+    ['git log -L1,1:.env', 'shell-git-output'],
+    ['git status -v', 'shell-git-output'],
+  ];
+  for (const [command, rule] of leaks) {
+    it(`${command}: denied ${rule}, and git does print the sentinel`, () => {
+      const d = decide(r, command);
+      assert.deepEqual([d.decision, d.rule], ['deny', rule], command);
+      assert.ok(gitOutput(r, command).includes(SENTINEL), `${command} printed no sentinel: the refusal would be vacuous`);
+    });
+  }
+});
+
+describe('refused forms, git output reported', () => {
+  const r = rig();
+  const hookOnly: Array<[string, string]> = [
+    ['git log --cc', 'shell-git-output'],
+    ['git log --word-diff', 'shell-git-output'],
+    ['git log --pat', 'shell-git-output'],
+    ['git log -S TOKEN --oneline', 'shell-git-output'],
+    ['git log --raw', 'shell-git-output'],
+    ['git show HEAD:sub/../.env', 'deny-secret-read'],
+  ];
+  for (const [command, rule] of hookOnly) {
+    it(`${command}: denied ${rule}`, (t) => {
+      const d = decide(r, command);
+      assert.deepEqual([d.decision, d.rule], ['deny', rule], command);
+      t.diagnostic(`${command}: git printed the sentinel: ${gitOutput(r, command).includes(SENTINEL) ? 'yes' : 'no'}`);
+    });
+  }
+});
+
+describe('case variant of a secret path', () => {
+  const r = rig();
+
+  it('git show HEAD:.ENV prints no sentinel from real git, or the hook denies it', (t) => {
+    const printed = gitOutput(r, 'git show HEAD:.ENV').includes(SENTINEL);
+    t.diagnostic(`git show HEAD:.ENV printed the sentinel: ${printed ? 'yes' : 'no'}`);
+    if (printed) assert.equal(decide(r, 'git show HEAD:.ENV').decision, 'deny');
   });
 });

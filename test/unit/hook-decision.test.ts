@@ -1133,4 +1133,70 @@ describe('git object reads and output forms (CR-01)', () => {
       assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
     }
   });
+
+  it('git show operands: no operand, a bare revision or a hash is shell-git-object; any option is shell-git-output; object paths are allowed', () => {
+    for (const command of ['git show', 'git show HEAD', 'git show HEAD~1', 'git show main', 'git show 0123abcd']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
+    }
+    for (const command of ['git show -s HEAD', 'git show --stat HEAD', 'git show --no-patch HEAD', 'git show --format=%s HEAD', 'git show HEAD:src/a.ts --stat', 'git show -- HEAD:src/a.ts']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    assert.deepEqual(verdict('git show HEAD:src/a.ts HEAD:README.md'), ['allow', 'shell-identity']);
+  });
+
+  it('git log options: patch, diff, line log, pickaxe, abbreviation and bare value options are shell-git-output', () => {
+    const refused = [
+      '-p', '--patch', '-u', '-U3', '--unified=3', '-c', '--cc', '-m', '--raw', '--word-diff', '--color-words', '-W', '--function-context', '--binary',
+      '--patch-with-stat', '-L1,1:.env', '-S TOKEN', '-G TOKEN', '--find-object=0123abcd', '--pat', '--show-signature', '--notes', '--format', '--author', '--format=',
+    ];
+    for (const option of refused) {
+      assert.deepEqual(verdict(`git log ${option}`), ['deny', 'shell-git-output'], `git log ${option}`);
+    }
+  });
+
+  it('git log options: the listed options print no file content and stay shell-identity', () => {
+    const allowed = [
+      '', '--oneline', '-5 --oneline', '--oneline -5', '--format=%H -1', '-n 3', '-n3', '--max-count=3', '-1 --stat', '--stat --format=%h', '--stat -5', '--name-status -2',
+      '--name-only -1', '--shortstat -1', '--all --graph --oneline --decorate', '--since=2.weeks --author=a --grep=fix', 'main..HEAD --oneline', '--oneline -- src',
+      '--follow --oneline -- src/a.ts', '--date=short --format=%ad', '--no-merges --first-parent --reverse --oneline', '-s --oneline', '--no-patch -1',
+    ];
+    for (const option of allowed) {
+      const command = `git log ${option}`.trim();
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('git status options: verbose output (a patch of staged changes) is shell-git-output; the short and porcelain forms stay allowed', () => {
+    for (const option of ['-v', '-vv', '--verbose', '-sv', '--verb']) {
+      assert.deepEqual(verdict(`git status ${option}`), ['deny', 'shell-git-output'], `git status ${option}`);
+    }
+    for (const option of ['', '--short', '-s', '-sb', '-uall', '--porcelain', '--porcelain=v2', '--branch', '--short --branch', '-z']) {
+      const command = `git status ${option}`.trim();
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('ordering: an option position never changes a decision; a git global option before the subcommand is not admitted', () => {
+    for (const command of ['git log -p --oneline', 'git log --oneline -p', 'git log -p | head']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    for (const command of ['git log -1 --oneline', 'git log --oneline -1', 'git log --oneline | head -5']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+    assert.deepEqual(verdict('git --no-pager log -p'), ['deny', 'shell-not-allowed']);
+    assert.deepEqual(verdict('git -C . show HEAD:.env'), ['deny', 'shell-not-allowed']);
+    assert.deepEqual(verdict('git -c x=y show HEAD:.env'), ['deny', 'shell-denied-prefix']);
+  });
+
+  it('earlier git rules keep their names, and git ls-files and git rev-parse stay allowed', () => {
+    for (const command of ['git show --textconv HEAD:a', 'git show --ext-diff HEAD', 'git log --output=out.txt']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-option'], command);
+    }
+    assert.deepEqual(verdict('git log -pO/home/u/.ssh/id_rsa'), ['deny', 'deny-read']);
+    assert.deepEqual(verdict('git log -O/home/u/.netrc'), ['deny', 'outside-read-set']);
+    assert.deepEqual(verdict('git log -- *.ts'), ['deny', 'shell-syntax']);
+    for (const command of ['git ls-files', 'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse --show-toplevel']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
 });
