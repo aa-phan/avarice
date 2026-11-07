@@ -511,6 +511,82 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
   return null;
 }
 
+// The options of an admitted git command that print no file content, per READ_ONLY_COMMANDS entry. shortFlags are the short option
+// letters that take no value; shortValued the letters that take one (attached, or the next word); counts admits `-<digits>`; flags are
+// long options without a value; valued are long options that need a non-empty `=value`. The lists are an allow-list compared whole,
+// because git accepts an unambiguous abbreviation of a long option (`--pat` is `--patch`) and several spellings imply a patch. A
+// `--format` placeholder names commit fields only, never a blob. `git show` takes no option: a commit prints its patch, and a blob or
+// a tag pointing at one prints its content even with `-s`, which the hook cannot tell from a commit by the hash.
+export interface GitOutputForm {
+  shortFlags: string;
+  shortValued: string;
+  counts: boolean;
+  flags: readonly string[];
+  valued: readonly string[];
+  objectOperandsOnly: boolean;
+}
+
+export const GIT_OUTPUT_FORMS: Readonly<Record<string, GitOutputForm>> = {
+  'git log': {
+    shortFlags: 's',
+    shortValued: 'n',
+    counts: true,
+    flags: [
+      '--oneline', '--abbrev-commit', '--no-abbrev-commit', '--all', '--branches', '--tags', '--remotes', '--reverse', '--no-merges', '--merges', '--first-parent',
+      '--graph', '--decorate', '--no-decorate', '--follow', '--stat', '--shortstat', '--name-only', '--name-status', '--relative-date', '--pretty', '--no-color', '--no-patch',
+    ],
+    valued: ['--format', '--pretty', '--max-count', '--skip', '--since', '--until', '--after', '--before', '--author', '--committer', '--grep', '--date', '--decorate'],
+    objectOperandsOnly: false,
+  },
+  'git status': {
+    shortFlags: 'sbz',
+    shortValued: 'u',
+    counts: false,
+    flags: [
+      '--short', '--branch', '--porcelain', '--long', '--ignored', '--untracked-files', '--ahead-behind', '--no-ahead-behind', '--renames', '--no-renames', '--show-stash', '--null',
+    ],
+    valued: ['--porcelain', '--untracked-files', '--ignored', '--ignore-submodules', '--find-renames'],
+    objectOperandsOnly: false,
+  },
+  'git show': { shortFlags: '', shortValued: '', counts: false, flags: [], valued: [], objectOperandsOnly: true },
+};
+
+const GIT_OUTPUT_RULE = 'shell-git-output';
+
+// An option outside the allow-list is shell-git-output; `git show` also needs an object-by-path operand (shell-git-object otherwise).
+function checkGitOutput(entryKey: string, args: readonly string[], operands: readonly string[]): string | null {
+  const form = GIT_OUTPUT_FORMS[entryKey];
+  if (form === undefined) return null;
+  if (form.objectOperandsOnly) {
+    if (args.some((arg) => arg.startsWith('-'))) return GIT_OUTPUT_RULE;
+    return operands.length === 0 || operands.some((operand) => !operand.includes(':')) ? GIT_OBJECT_RULE : null;
+  }
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') break;
+    // `-` alone is standard input; a word that is not an option is an operand.
+    if (arg === '-' || !arg.startsWith('-')) continue;
+    if (/^-[0-9]+$/.test(arg)) {
+      if (form.counts) continue;
+      return GIT_OUTPUT_RULE;
+    }
+    if (arg.startsWith('--')) {
+      const equals = arg.indexOf('=');
+      if (equals === -1 ? form.flags.includes(arg) : form.valued.includes(arg.slice(0, equals)) && equals < arg.length - 1) continue;
+      return GIT_OUTPUT_RULE;
+    }
+    for (let k = 1; k < arg.length; k += 1) {
+      const char = arg[k] as string;
+      if (form.shortValued.includes(char)) {
+        if (k === arg.length - 1) i += 1;
+        break;
+      }
+      if (!form.shortFlags.includes(char)) return GIT_OUTPUT_RULE;
+    }
+  }
+  return null;
+}
+
 function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
@@ -547,7 +623,8 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   const cwd = shellCwd(call, policy);
   const named = checkRead([...parsed.positional, ...parsed.values].map((arg) => absolutize(cwd, arg)), policy, canon);
   if (named !== null) return named;
-  return words[0] === 'git' ? checkGitObjects(parsed.positional, call, policy, canon) : null;
+  if (words[0] !== 'git') return null;
+  return checkGitObjects(parsed.positional, call, policy, canon) ?? checkGitOutput(entry.join(' '), args, parsed.positional);
 }
 
 function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {

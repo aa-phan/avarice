@@ -77,7 +77,9 @@ export const PURPOSE_SUBAGENT_TYPES: Readonly<Record<InvocationPurpose, readonly
 
 // Commands the hook admits without a GSD verb. `find` is admitted only without the actions in
 // FIND_DENIED_ACTIONS; the other entries are admitted as written (the hook also refuses redirections, `git -c`
-// and `git log --output`). `grep` is not admitted (review WR-02): the Bash tool may run it as the embedded ugrep or the
+// and `git log --output`). The hook also judges the path of a git object name (`<rev>:<path>`), admits only listed options
+// for `git log` and `git status`, and admits `git show` only with object-by-path operands and no option, so a secret file
+// is not printed through history or the index. `grep` is not admitted (review WR-02): the Bash tool may run it as the embedded ugrep or the
 // system grep, chosen per call, so the hook cannot model its options. Searches go through the Grep tool, whose root the
 // hook judges.
 export const READ_ONLY_COMMANDS: readonly string[] = [
