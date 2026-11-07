@@ -342,7 +342,8 @@ export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
   'git log': 'nSGOLUMCBl',
   'git show': 'nSGOLUMCBl',
   'git ls-files': 'xX',
-  'git status': 'uM',
+  // `-u` of `git status` takes its mode only attached (`-uall`), so the next word is an operand, not a value.
+  'git status': 'M',
 };
 
 // Options of a `gsd_run` read verb. GSD consumes `--cwd`, `--project-dir`, `--ws`, `--pick` and its other global options from any
