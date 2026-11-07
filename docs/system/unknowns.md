@@ -44,6 +44,14 @@ This document lists what the grounding did not determine, and for each entry wha
 - Whether the host honors each generated setting on the admitted versions. Host behavior; not determinable from code.
 - Hook latency against its 5 second host timeout. No performance test run.
 
+## From runs
+
+- Whether the states `waiting_external`, `awaiting_review`, `failed`, `cancelled`, `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states (no match), a search of `src` for the four reason names (only the lifecycle definition and an unrelated freshness enum), and the command list in `src/cli/main.ts` (no command answers a decision).
+- Whether containment.md is complete for the run purpose. Checked: the run-owner rule, the scope inputs, the scratch directory creation, the run skill and agents and the canonical clone working directory were read in `src/domain/invocation-scope.ts`, `src/adapters/host-claude/claude-host.ts` and `src/app/invocation.ts`; the hook rule list and the settings generator were not read for this document.
+- What the install, check validation, baseline, evidence and gate rules do in detail. Checked: `src/app/checks.ts` lines 325 to 390 (the install summary and the start of the install) and `src/domain/evidence.ts` (the baseline delta); `src/app/check-validation.ts` was not read for this document.
+- Whether the behavior holds on a live host. Checked: code only; no run was executed and no test was run.
+- Whether the onboarding document's statement that the worktree adapter is dormant still holds for onboarding. Checked: for runs, the run workspace module is separate from the onboarding staging modules, reuses only the clone helper and has no worktree variant; the onboarding side was not re-checked here.
+
 ## Campaign-wide
 
 - No test suite and no live run was executed for this tree; every claim rests on code read at the pinned commit and on test files read, not run.

@@ -16,6 +16,7 @@ A document marked "drafted, not yet reviewed" under its title has not had a seco
 | [cli-reference.md](cli-reference.md) | Every command, flag, exit code and output |
 | [config-reference.md](config-reference.md) | Every environment variable, config file key and built-in limit |
 | [onboarding.md](onboarding.md) | Lifecycle, preflight, contract and budgets, staging, mapping, validation, activation, resume |
+| [runs.md](runs.md) | The unattended run: start and its refusals, the brief and the contract, the supervisor and its lease, the stages, discard and retry, the hand-off, escalation to a decision, resume and the status read model |
 | [containment.md](containment.md) | Launch checks, generated settings, the PreToolUse hook, budgets, the sandboxed executor, git safety, root placement |
 | [indexes-and-context.md](indexes-and-context.md) | The code graph, intel and knowledge indexes, and `avarice context` |
 | [data-model.md](data-model.md) | The ledger, events, budgets, the artifact store, the project record, files on disk |
@@ -34,13 +35,13 @@ Each proposal in `docs/` maps to the living documents that describe the part of 
 |---|---|
 | [repository-onboarding.md](../repository-onboarding.md) | [onboarding.md](onboarding.md), [indexes-and-context.md](indexes-and-context.md) |
 | [containment.md](../containment.md) | [containment.md](containment.md) |
-| [contracts-and-state.md](../contracts-and-state.md) | [data-model.md](data-model.md) |
+| [contracts-and-state.md](../contracts-and-state.md) | [data-model.md](data-model.md), [runs.md](runs.md) |
 | [architecture.md](../architecture.md) | [overview.md](overview.md) |
 | [existing-tooling-assessment.md](../existing-tooling-assessment.md) | [integrations.md](integrations.md) |
 | [requirements.md](../requirements.md) | partly: [cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md) |
 | [operations-and-testing.md](../operations-and-testing.md) | partly: [processes.md](processes.md), [coverage.md](coverage.md) |
-| [autonomy-and-decisions.md](../autonomy-and-decisions.md) | none yet |
-| [extensions.md](../extensions.md) | none yet |
+| [autonomy-and-decisions.md](../autonomy-and-decisions.md) | partly: [runs.md](runs.md), for the decision record only |
+| [extensions.md](../extensions.md) | partly: [runs.md](runs.md), for the run commands and the supervisor |
 | [deployment-and-portability.md](../deployment-and-portability.md) | none yet |
 | [enterprise-adaptation.md](../enterprise-adaptation.md) | none yet |
 | [implementation-plan.md](../implementation-plan.md), [reference-system-comparison.md](../reference-system-comparison.md), [reference-system-deep-dive.md](../reference-system-deep-dive.md) | none: planning and comparison material, not a description of the system |

@@ -17,6 +17,7 @@ Counted at commit `5457f85` on 2026-11-05.
 | Event kinds | 12 | `git grep -hoE "type: '(onboarding\|contract\|invocation\|containment\|index\|hook\|tool\|config)[.][a-z.-]+'" -- src \| sort -u` |
 | Schema migrations | 1 | `ls src/adapters/sqlite/migrations` |
 | Lifecycle states and transitions | 14 and 29 | the lifecycle module's state and transition lists |
+| Run lifecycle states and transitions | 11 and 37 (counted at `6f825ce`; recounted at the pass's final state) | `node --input-type=module -e` importing the run lifecycle module: `RUN_STATES.length`, `RUN_TRANSITIONS.length` |
 | Ports | 8 (plus one shared descriptor type) | `ls src/ports` |
 | External systems | 10 (9 used, `gh` proven unused) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin` |
 | Index steps | 3 | the index step registry |
@@ -34,6 +35,10 @@ Counted at commit `5457f85` on 2026-11-05.
 | Profile config keys | 4 of 4, marked dead | config-reference.md |
 | Lifecycle states and transitions | 14 of 14, 29 of 29 | onboarding.md |
 | Validation checks | 7 of 7 | onboarding.md |
+| Run lifecycle states and transitions | 11 of 11, 37 of 37 | runs.md |
+| Run blocked reasons, step statuses, work item states | 7 of 7, 6 of 6, 6 of 6 | runs.md |
+| Run start refusal codes, overridable budget names, run GSD settings | 10 of 10, 7 of 7, 7 of 7 | runs.md |
+| Run outcome kinds, decision classes, budget rows | 7 of 7, 4 of 4, 5 of 5 | runs.md |
 | Read-only commands, denied prefixes, denied find actions, GSD verbs | 11 of 11, 16 of 16, 10 of 10, 14 of 14 | containment.md |
 | Required settings keys, admitted host versions | 9 of 9, 3 of 3 | containment.md |
 | Budgets | 5 of 5 | containment.md, onboarding.md |
@@ -54,6 +59,7 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | indexes-and-context.md | reviewed | 25+ claims verified; fixed rollback files, intel failure reasons, freshness check scope |
 | data-model.md | reviewed | 15+ claims verified; fixed the hook's separate ledger open, deletion scope, record content |
 | integrations.md | reviewed | 20+ claims verified; fixed unavailable-host stage, git config reads, descriptor scope |
+| runs.md | drafted | grounded; awaiting fresh review |
 | processes.md, diagrams/ | drafted | cross-subsystem trace output; seams it found were applied to the leaf documents; diagrams not rendered |
 | overview.md | drafted | written from the import lint and the leaf documents |
 | history.md | drafted | from `git log` |

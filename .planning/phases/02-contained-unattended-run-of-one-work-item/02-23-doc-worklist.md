@@ -214,6 +214,7 @@ code: src/domain/test-inventory.ts
   - 02-21: the test inventory command may write the cache paths the declared checks name (Rule 1 fix from the dry run).
   - D-11 supervisor dependency install with registry-only network; D-12 baseline and delta.
 - claims to recheck: containment.md says the dependency install is "a supervisor step, not an invocation"; make sure this document and containment.md agree on which carries the proxy detail (containment owns the proxy, this document owns the step).
+- seam from the runs grounder (runs.md already links this document, which does not exist yet; the link settles when it lands): own the install rules, check validation, baseline, required and target checks, the test inventory, evidence statuses and independence, the baseline delta semantics (pre-existing versus blocking, including a target check that already fails at the base) and the rules of gates G2 (8 rules) and G4 (7 rules) and their order.
 - proposal counterparts: docs/contracts-and-state.md (gates G0 to G4, evidence, "Run state machine"); docs/requirements.md ONB-10, AUT-8; docs/operations-and-testing.md (partly).
 - denominators it reports: evidence statuses (count from `EVIDENCE_STATUSES.length`, import `src/domain/evidence.ts`); G2 rules and G4 rules (`G2_RULES.length`, `G4_RULES.length`, import `src/domain/gates.ts`); skip and focus markers (`SKIP_FOCUS_MARKERS.length`, import `src/domain/test-inventory.ts`). Each as `N of M` with that command.
 - cross-links: runs.md (stage order, what a failure does), containment.md (executor, proxy), data-model.md (evidence, gate_results, check_validations, artifacts), config-reference.md (conventions keys).
@@ -293,7 +294,7 @@ code: src/cli/spawn-supervisor.ts
   - line 41: "Only `status` and `context` declare `--json` as boolean. On the other commands `--json` is an unknown flag".
   - line 60 exit-code table: the "Used by" column (3 is now used by start, supervise, resume for runs; 75 is not a CLI exit).
   - Section "Order of checks and profile side effects" and the Quirks section: recheck each against the new commands.
-  - Seams from the runs grounder (copied in by Task 3): none recorded yet.
+  - Seam from the runs grounder: carry `start` (flags `--brief`, `--policy routine`, `--project`, `--budget`, `--wait`; exit 0, 3, 64, 70), `supervise <runId>` (exit 0, 3, 64, 70), the run branch of `resume` (`--wait`, exit 70 on a failed reconcile, 24 hour wait bound) and the `runs` key of `status --json` and `inbox --json`. The grounder found ten start refusal codes (four beside the six preflight codes), not six.
 - proposal counterparts: docs/requirements.md (FR commands, OPS-7); docs/extensions.md section 1 and the Phase 2 command table (`docs/extensions.md:56`, exit-code summary `docs/extensions.md:35`, which still lacks exit 3); docs/decisions/ADR-013-interactive-shell.md.
 - denominators it reports: CLI commands 10 of 10 (`grep -n "COMMANDS =" src/cli/main.ts`); every flag; every exit code (0, 1?, 3, 64, 70; derive from the code, not from this line); both output forms.
 - cross-links: runs.md (what each run command does to a run), interactive-shell.md, config-reference.md, onboarding.md.
@@ -346,6 +347,7 @@ code: src/domain/run-preflight.ts
   - section "Command-line flags that configure a run" (onboarding flags only; `start` has `--brief`, `--policy`, `--project`, `--budget`, `--wait`).
   - section "Built-in constants": the budgets cover the onboarding preset only; add the routine preset.
   - section "Profile config file": confirm unchanged (`src/adapters/fs/profile-paths.ts` is not in the diff).
+  - Seam from the runs grounder: carry the routine preset values (protected, artifacts and secret globs, tool classes, budgets, escalation limits, decision lists, delivery), the seven budget override names, the conventions schema 1 key list and limits (reserved check environment names, refused agent command words), staleness limits (25 commits, 14 days), brief limits, the seven GSD settings, the run prompt cap (32 KiB), the quick record read cap (64 KiB) and archive cap (2 MiB), and the wait margins. Reconcile the `.avarice/config.json` section (the onboarding reader, `docs/system/config-reference.md:71`) with the run reader, which refuses `paths.read`, `paths.generated`, `commands` and `verificationByChangeType` (`src/domain/conventions.ts:243`).
 - proposal counterparts: docs/contracts-and-state.md "The `routine` preset in Phase 2" (`docs/contracts-and-state.md:198`) and its preset table (not re-read against the code; the pass does that); docs/requirements.md (config requirements, partly).
 - denominators it reports: `AVARICE_*` names 15 (8 read, 1 read and set, 6 constants; `git grep -ohE "AVARICE_[A-Z0-9_]+" -- src bin | sort -u`, classified by reading each site); other variables read (the 8 of the ledger plus `NO_COLOR` and `TERM`, to be confirmed; the command is `git grep -nE "process[.]env|env[[]" -- src bin` plus the passthrough lists in the GSD, graphify and host adapters; a plain `env\[` pattern is refused by this harness' secret read guard, so use that form); profile config keys 4 (dead, unchanged); budgets in the routine preset.
 - cross-links: cli-reference.md, runs.md (what the limits do), containment.md (the environment scrub), checks-and-evidence.md.
@@ -396,6 +398,7 @@ code: src/ports/command-executor.ts
   - `docs/system/findings.md` line for `docs/containment.md:151` (read-before-edit "not implemented"): now implemented for runs at `src/domain/hook-decision.ts:626`.
   - findings line for `docs/containment.md:122` (spec executor): still true; the executor is `/usr/bin/sandbox-exec`; the network rule changed.
   - launch checks: admitted versions list; the "refuses an unadmitted host" wording.
+  - Seam from the runs grounder (it did not read the hook rule list or the settings generator, so it claims nothing about them): carry the run purpose scope (writes from the contract globs, denial of existing entries outside the write roots, protected globs that always include the clone git directory and the GSD configuration file, read-before-edit, loop limits from the contract escalation, background shell and the interactive question tool denied, reads confined to the run's clone and scratch), the run invocation directory under the data root, the scratch directories under the work root, the run skill and agents (the quick skill; planner, plan checker, executor, verifier), the executor addendum, and the hook decisions that end a unit at a loop limit.
 - proposal counterparts: docs/containment.md (matrix rows, "Generated host settings" example, run-purpose rows); docs/extensions.md section 2 "PreToolUse checks" (`docs/extensions.md:71`).
 - denominators it reports: hook rules (allow and deny): the ledger's 5 allow and 21 deny at the old pin cannot be reproduced by any command it names; the packet's grounder must define a command that lists every rule id of the decision module and the hook entry, count at HEAD, and say so in its coverage file; read-only commands, denied prefixes, denied find actions, GSD verbs (11, 16, 10, 14 at the old pin; recount); required settings keys 9; admitted host versions 4; budgets (onboarding 5; add the run budgets).
 - cross-links: runs.md (the supervisor's use of these controls), checks-and-evidence.md (the install step), config-reference.md (environment), integrations.md, data-model.md (`hook_reads`, events).
@@ -435,6 +438,7 @@ code: src/ports/ledger.ts
   - "12 event kinds": the broad `type: '<prefix>.<name>'` literal search finds 26 event kinds at the plan base (28 literals; `command` and `implement` are not events). Check for events whose type is computed, not a literal.
   - findings lines `src/adapters/sqlite/ledger.ts:409` (carrier row) and `src/adapters/sqlite/migrations/0001-initial.ts:5` (six tables with no writer).
   - the Quirks section.
+  - Seam from the runs grounder: carry the run tables and events (run steps and their replace-per-name-and-attempt write, checkpoints, attempts, work items, decisions, gate results, evidence, budget rows) and the events `run.created`, `run.transition`, `handoff.fetched`, `invocation.reaped`, `invocation.interrupted`, `invocation.orphan-charged`, `verification.interrupted`, `containment.finding`. The current text says leases live on the onboardings row only (`docs/system/data-model.md:142`); a run has a lease too.
 - proposal counterparts: docs/contracts-and-state.md "Persisted entities" (`docs/contracts-and-state.md:738`), "Run state machine", "Decision records", "Budget accounting".
 - denominators it reports: tables 23 (`git grep "CREATE TABLE" -- src`, 20 + 3), 21 with a writer and 2 without; event kinds 26; artifact kinds (recount); schema migrations 2; run lifecycle states and transitions 11 and 37.
 - cross-links: runs.md, checks-and-evidence.md, containment.md (hook), interactive-shell.md.
@@ -470,6 +474,7 @@ code: src/ports/run-workspace.ts
 - owns: every port, adapter and external system the run touches, with direction and failure behavior: the three new ports (`EgressProxy`, `RunSource`, `RunWorkspace`) and their adapters, the executor port's new fields, the agent host port's run owner fields, the git section (run clone, supervisor commit, fetch into the source repository), the package registry (reached only through the allowlist proxy during the install step), the Claude configuration directory (written by install-host), the detached supervisor (a child of the CLI), the admitted host versions.
 - summary notes: 02-06 (proxy, loopback allow), 02-07 (run adapters, option allowlists, `scripts/checkout-digest.ts` allows run refs), 02-08 (owner-aware host), 02-10 (`AppDeps.runSource`, `runWorkspace`, `egress`, composed in `createDeps`), 02-15 (install-host writes `<claude config dir>/skills/avarice-run/SKILL.md`; adapter config row `host-skill:avarice-run`).
 - claims to recheck: "8 ports" (the plan base lists 11 port files plus one shared descriptor, `ls src/ports`); the external systems list ("10 (9 used, `gh` proven unused)"; add the registry traffic through the proxy and the Claude configuration directory; spawn sites at the plan base: sandbox-exec, git, claude, gsd-tools, graphify, pgrep, ps, mount, plus a detached self-spawn of node for the supervisor); the git section (the hand-off creates one run branch ref in the source repository, so "never writes the user's repository" no longer holds); `gh` still unused (`git grep -nE "'gh'" -- src` to confirm); findings `src/cli/composition.ts:23` (`findGraphifyBinary` unused) re-check.
+- seam from the runs grounder: carry the run ports (run source, run workspace) and the dependency on GSD's quick workflow.
 - proposal counterparts: docs/existing-tooling-assessment.md (`:76` gh, `:24` host versions); docs/architecture.md (ports, partly).
 - denominators it reports: ports 11 plus one shared descriptor (`ls src/ports`); external systems (recount with `git grep -nE "spawn|execFile|execSync" -- src bin`, classified by reading each site).
 - cross-links: runs.md, containment.md, checks-and-evidence.md, config-reference.md.
@@ -512,6 +517,7 @@ code: src/cli/spawn-supervisor.ts
 - summary notes: use the runs packet's notes (02-12, 02-13, 02-16, 02-17). The runs document is landed in the tree before this grounder starts; link to it as the leaf. Kill points: 24 run kill points (`RUN_KILL_POINTS` in `test/helpers/fault-run.ts`); the mid-handoff point sits between fetch and record.
 - claims to recheck: the "Things to look out for at the hand-offs" section and the diagram index (two rows now; five after); the existing diagrams are "not rendered" (coverage.md "Outstanding"; no render step exists).
 - proposal counterparts: docs/operations-and-testing.md (partly).
+- seam from the runs grounder: carry the three run flows (start to ready_for_review, a unit crash with discard and retry, kill and resume of a run); runs.md links processes.md for them.
 - denominators it reports: flows traced 5 (2 existing, 3 new); diagram sources 5.
 - cross-links: runs.md, checks-and-evidence.md, containment.md, data-model.md.
 - must not cover: mechanisms beyond the trace (the leaf documents own them; a flow step points to the leaf).
@@ -535,6 +541,7 @@ code: src/cli/spawn-supervisor.ts
 - code: none
 - owns: the opening sentence (the tree covers the unattended run as well as onboarding), the documents table (add runs.md, checks-and-evidence.md, interactive-shell.md; update the processes row to say five flows), the proposal counterparts table.
 - claims to recheck: line 3 "the onboarding of one existing repository to an active project record"; counterparts table rows: autonomy-and-decisions.md ("none yet", runs.md covers its decision record partly), extensions.md ("none yet"; cli-reference.md, interactive-shell.md and runs.md cover part), contracts-and-state.md (add runs.md, checks-and-evidence.md), containment.md (unchanged target), requirements.md, operations-and-testing.md. Decision ADR-013 maps to interactive-shell.md; ADR-006 maps to runs.md (the proposal is still Proposed).
+- seam from the runs grounder: counterparts for runs.md are the run state machine, run contract and routine preset sections of `docs/contracts-and-state.md`, the run rows of the matrix in `docs/containment.md`, section 2b and the command table of `docs/extensions.md`, `docs/autonomy-and-decisions.md` (partly) and `docs/decisions/ADR-006-unattended-delegation.md`. Task 3 already added runs.md to the documents table and to the contracts-and-state, autonomy-and-decisions and extensions rows; add it to the containment.md row.
 - cross-links: every document.
 
 ## Packet: onboarding
@@ -550,6 +557,7 @@ code: src/app/onboarding-service.ts
 code: src/domain/outcome.ts
 
 - claims to recheck: line 43 "`paused` is entered only by the resume prelude ... the outcome classifier never produces it" (the classifier now returns `paused` only when a caller passes `pauseSignal`; no onboarding stage does, so the claim holds in substance but its wording must say so; `src/app/stages/map.ts:107` still has the branch); line 111 and 115 (staging is a local clone; the worktree adapter is dormant; confirm after the staging helpers became shared); the budget and invocation sections (`src/app/budget.ts` and `invocation.ts` were extracted into shared cores; confirm no behavior change); "Resume, reconcile and reaping" (line 207) is onboarding only (the run resume lives in runs.md; add a one-line pointer if the section implies it covers every owner).
+- seam from the runs grounder: the statement that the worktree adapter is dormant concerns onboarding staging only; runs use a separate clone adapter that shares the clone helper with the staging clone. Add a link to runs.md from the lease and resume sections for the run counterparts.
 - cross-links: runs.md (the run resume and the shared budget core).
 
 ## Built decisions
@@ -647,3 +655,6 @@ Counted at HEAD `72a86b1` on 2026-11-06, one command each. The commands are thos
 
 | Document | Report | Verdict | Fixes applied | Answers | Status |
 |---|---|---|---|---|---|
+| runs.md | pending (Task 4) | pending | Task 3 gate fix: one sentence that named a repository path in prose (the example of a prefix that is not containment) was reworded to `lib-evil/**` against `lib/**`, meaning unchanged | none | landed, drafted, awaiting review |
+
+Anchors to settle in Task 5: runs.md links `checks-and-evidence.md`, `interactive-shell.md` is not linked; `checks-and-evidence.md` does not exist until Task 5 lands it. runs.md also links `processes.md`, which is updated by the processes grounder in Task 4 and landed in Task 5.
