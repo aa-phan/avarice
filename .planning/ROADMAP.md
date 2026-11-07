@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 24/25 plans executed (13 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9)
+**Plans:** 25/25 plans executed (13 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9)
 
 Plans:
 **Wave 1**
@@ -173,7 +173,7 @@ Plans:
 - [x] 02-24-PLAN.md — G-02-10: dedicated stale-fence discard test on the crash and resume paths, lease edges, the after-checkpoint window; fence the failed reconcile record
 
 **Wave 13** *(gap closure, blocked on Wave 12 completion)*
-- [ ] 02-25-PLAN.md — G-02-9: the avarice-run skill in ten real attended sessions (status first, stop on a denial, routable question) under the D-15 ceiling
+- [x] 02-25-PLAN.md — G-02-9: the avarice-run skill in ten real attended sessions (status first, stop on a denial, routable question) under the D-15 ceiling
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
@@ -284,7 +284,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 24/25 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 25/25 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
