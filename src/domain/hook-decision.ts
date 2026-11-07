@@ -520,6 +520,8 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
 export interface GitOutputForm {
   shortFlags: string;
   shortValued: string;
+  // Short option letters whose value is only the rest of the cluster (`-uall`); the next word is never their value.
+  shortAttached: string;
   counts: boolean;
   flags: readonly string[];
   valued: readonly string[];
@@ -530,6 +532,7 @@ export const GIT_OUTPUT_FORMS: Readonly<Record<string, GitOutputForm>> = {
   'git log': {
     shortFlags: 's',
     shortValued: 'n',
+    shortAttached: '',
     counts: true,
     flags: [
       '--oneline', '--abbrev-commit', '--no-abbrev-commit', '--all', '--branches', '--tags', '--remotes', '--reverse', '--no-merges', '--merges', '--first-parent',
@@ -540,7 +543,8 @@ export const GIT_OUTPUT_FORMS: Readonly<Record<string, GitOutputForm>> = {
   },
   'git status': {
     shortFlags: 'sbz',
-    shortValued: 'u',
+    shortValued: '',
+    shortAttached: 'u',
     counts: false,
     flags: [
       '--short', '--branch', '--porcelain', '--long', '--ignored', '--untracked-files', '--ahead-behind', '--no-ahead-behind', '--renames', '--no-renames', '--show-stash', '--null',
@@ -548,7 +552,7 @@ export const GIT_OUTPUT_FORMS: Readonly<Record<string, GitOutputForm>> = {
     valued: ['--porcelain', '--untracked-files', '--ignored', '--ignore-submodules', '--find-renames'],
     objectOperandsOnly: false,
   },
-  'git show': { shortFlags: '', shortValued: '', counts: false, flags: [], valued: [], objectOperandsOnly: true },
+  'git show': { shortFlags: '', shortValued: '', shortAttached: '', counts: false, flags: [], valued: [], objectOperandsOnly: true },
 };
 
 const GIT_OUTPUT_RULE = 'shell-git-output';
@@ -577,6 +581,7 @@ function checkGitOutput(entryKey: string, args: readonly string[], operands: rea
     }
     for (let k = 1; k < arg.length; k += 1) {
       const char = arg[k] as string;
+      if (form.shortAttached.includes(char)) break;
       if (form.shortValued.includes(char)) {
         if (k === arg.length - 1) i += 1;
         break;

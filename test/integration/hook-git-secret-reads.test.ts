@@ -96,6 +96,8 @@ describe('admitted git forms print no secret content', () => {
     'git log -n 1 --format=%H', `git log -1 --stat ${r.blob}`, 'git log --follow --oneline -- src/a.ts', 'git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:',
     'git show HEAD:.env.example', 'git show HEAD:sub', 'git status', 'git status --short', 'git status -sb', 'git status -uall', 'git status --porcelain=v2',
     'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse HEAD:src/a.ts',
+    // git takes the word after -n as its count, so a patch option there is refused by git itself and prints nothing.
+    'git log -n -p', 'git status -u', 'git status -u -s', 'git status -uno',
   ];
   for (const command of admitted) {
     it(`${command}: allowed by the hook, and git prints no sentinel`, () => {
