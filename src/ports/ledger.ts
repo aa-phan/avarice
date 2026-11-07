@@ -625,7 +625,8 @@ export interface Ledger {
   // The highest version, or null.
   getRunContract(runId: string): Result<ContractRow | null>;
 
-  recordRunStep(runId: string, input: StepResultInput): Result<RunStepRow>;
+  // When a guard is given, the step is written only while that fence is current; a stale one is a conflict and nothing is written.
+  recordRunStep(runId: string, input: StepResultInput, guard?: { fence: number }): Result<RunStepRow>;
   getRunSteps(runId: string): Result<RunStepRow[]>;
 
   // Attempts: ordinal 1, 2, ... per run. An attempt ends once, with an outcome.

@@ -933,9 +933,10 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  recordRunStep(runId: string, input: StepResultInput): Result<RunStepRow> {
+  recordRunStep(runId: string, input: StepResultInput, guard?: { fence: number }): Result<RunStepRow> {
     return tx(this.db, () => {
-      this.lockRun(runId);
+      const row = this.lockRun(runId);
+      if (guard !== undefined) this.checkFence(row, guard.fence);
       if (input.step === '') abort({ kind: 'invalid', field: 'step', reason: 'a step needs a name' });
       if (!(RUN_STEP_STATUSES as readonly string[]).includes(input.status)) {
         abort({ kind: 'invalid', field: 'status', reason: `${input.status} is not a run step status (${RUN_STEP_STATUSES.join(', ')})` });

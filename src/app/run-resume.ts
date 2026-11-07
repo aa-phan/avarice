@@ -297,7 +297,8 @@ async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
 }
 
 // The prelude the supervisor always runs under the lease. A failure is recorded as a failed `resume:reconcile` step (the resume reports it) and
-// stops the supervisor, with the rows it could not settle left as they were.
+// stops the supervisor, with the rows it could not settle left as they were. The record presents the supervisor's fence: a supervisor that another
+// one superseded records nothing, so its refusal is never read as a failed reconcile.
 export async function reconcileRun(ctx: RunStageContext): Promise<Result<void>> {
   const done = await reconcile(ctx);
   if (done.ok) return done;
@@ -306,13 +307,17 @@ export async function reconcileRun(ctx: RunStageContext): Promise<Result<void>> 
   const attempt = earlier.ok ? earlier.value.filter((s) => s.step === RECONCILE_STEP).length + 1 : 1;
   const nowMs = deps.clock.nowMs();
   const detail = 'cause' in done.error && typeof done.error.cause === 'string' ? done.error.cause : '';
-  deps.ledger.recordRunStep(ctx.runId, {
-    step: RECONCILE_STEP,
-    attempt,
-    status: 'failed',
-    result: { error: done.error.kind, detail: detail.slice(0, 300) },
-    nowMs,
-    completedAtMs: nowMs,
-  });
+  deps.ledger.recordRunStep(
+    ctx.runId,
+    {
+      step: RECONCILE_STEP,
+      attempt,
+      status: 'failed',
+      result: { error: done.error.kind, detail: detail.slice(0, 300) },
+      nowMs,
+      completedAtMs: nowMs,
+    },
+    { fence: ctx.fence },
+  );
   return done;
 }
