@@ -205,7 +205,7 @@ The decision and its charge are one step. The pure rules decide first. For an al
 
 The subagent types a policy lists are the names in the invocation's agents file plus a per-purpose extra list that is empty for every purpose. Subagent tool calls reach the same hook with an agent identifier, which is recorded, and draw on the same budget.
 
-The decision rule names are a contract surface: 33 distinct rule IDs, of which 6 appear on allow decisions (`write-set`, `read-set`, `subagent-type`, `meta`, `shell-identity`, `agent-command`) and 28 on deny decisions. `subagent-type` appears on both. Two of the deny rules, `budget_exhausted` and `budget:subagentsConcurrent`, are decided by the hook entry when it applies the budget, not by the pure rules. The count and its command are in the coverage ledger.
+The decision rule names are a contract surface: 35 distinct rule IDs, of which 6 appear on allow decisions (`write-set`, `read-set`, `subagent-type`, `meta`, `shell-identity`, `agent-command`) and 30 on deny decisions. `subagent-type` appears on both. Two of the deny rules, `budget_exhausted` and `budget:subagentsConcurrent`, are decided by the hook entry when it applies the budget, not by the pure rules. The count and its command are in the coverage ledger.
 
 ### Read rules
 
@@ -215,6 +215,8 @@ One ordered rule set confines every read kind: the Read tool, search paths and s
 2. A path under a denied root is `deny-read`, unless it is also under a re-allowed root.
 3. A path not under the working copy, a read root or a re-allowed root is `outside-read-set`.
 4. A path below the working copy that matches a secret glob is `deny-secret-read`. The glob is matched against the path relative to the working copy; the root itself is never matched; the glob applies to paths below the working copy, wherever the read rule came from.
+
+An operand of an admitted git command that names a git object by path (`<revision>:<path>`, `:<path>` or `:<stage>:<path>`) is judged by these rules on its path part. Together with the git output rules below, this keeps an admitted read-only command from printing a secret file in readable form. That holds for the working copy, for history and for the index. The exception is a path with a component that is a symlink in the working copy (see rule 12). This rule does not cover a contract command or the compressed object store (see Limits of containment).
 
 The denied roots are the user checkout, the data root, the three credential directories and the work root; the invocation's own working copy is re-allowed beneath the work root. For a run the default AVARICE parents are denied too, and the clone and scratch directory are the re-allowed roots. The secret globs come from the contract.
 
@@ -261,10 +263,32 @@ The hook admits a shell command only when it is a plain pipeline of admitted com
 9. An unquoted `*`, `?`, `[` or `{` in an admitted command is `shell-syntax`: the shell would expand it into names the path check never sees.
 10. `find` with any denied action is `shell-find-action`. `git` with `--output`, `--ext-diff` or `--textconv` (bare or with `=`) is `shell-git-option`.
 11. Every operand and every option value is treated as a path candidate and given the read rules, so a value that is not a path (a search term starting with `/`) is still judged as a path. Option clusters are read per character. Letters that take a value consume the rest of the cluster or the next word. A character in a cluster that is not an ASCII letter or digit and not consumed as a value is `shell-option-value`. A word after a bare double hyphen is an operand even when it looks like an option. A lone `-` is standard input and names no path. A short option that takes a value (for example `head -n`, `git log -n`, `git ls-files -x`) consumes its value as a path candidate.
+12. Git object names. A word with a colon in the operands of an admitted git command is treated as a git object name by path: `<revision>:<path>`, `:<path>` or `:<stage>:<path>` with a stage number from 0 to 3. A brace anywhere in the word is `shell-git-object`, because a reflog or date form can hold a colon of its own and git would split the word at a different colon from the hook. So is a path part that starts with a slash, `!`, `(` or `^`. So is a path part that holds a wildcard (`*`, `?`, `[`) or a backslash. The hook refuses these forms rather than model them. Git can read the same word as a message search (`:/text`) or as a pathspec (`:!`, `:^`, `:(`, or a quoted `:*`). `git show` then prints HEAD's patch for the paths the pathspec matches. A backslash reaches git only inside a quoted word, and git reads a word that holds one as a pathspec. A path part that passes these tests is given the read rules twice. One check resolves it from the working copy root, where git resolves it. The other resolves it from the shell's directory, for the `./` and `../` forms. Both must pass. The path is resolved on the working copy's file system, not in the revision's tree. A component that is a symlink in the working copy (a directory or the file itself) is judged by where the link points, even if the revision holds a real directory or file there. An empty path part is judged as the working copy root and as the shell's directory, like any other path. After a revision it names that revision's root tree, and `git show <revision>:` prints the names in that tree, not file content.
+13. Git output forms. `git log` and `git status` are admitted only with the options below, and `git show` with none. The options print no file content. They are an allow-list, because some git commands accept an unambiguous abbreviation of a long option (`git status --verb` is `--verbose`). Several spellings also imply a patch. A long option is compared as a whole word. A short option cluster is read per character. Any other option is `shell-git-output`. An option listed both bare and with a value (`--pretty`, `--decorate`, `--porcelain`, `--untracked-files`, `--ignored`) is admitted in both forms.
+    - `git log`:
+      - Short options: `-s`, and `-n` with its count attached or in the next word. A count of the form `-<digits>` is also admitted.
+      - Long options without a value: `--oneline`, `--abbrev-commit`, `--no-abbrev-commit`, `--all`, `--branches`, `--tags`, `--remotes`, `--reverse`, `--no-merges`, `--merges`, `--first-parent`, `--graph`, `--decorate`, `--no-decorate`, `--follow`, `--stat`, `--shortstat`, `--name-only`, `--name-status`, `--relative-date`, `--pretty`, `--no-color` and `--no-patch`.
+      - Long options with a non-empty `=value`: `--format`, `--pretty`, `--max-count`, `--skip`, `--since`, `--until`, `--after`, `--before`, `--author`, `--committer`, `--grep`, `--date` and `--decorate`.
+    - `git status`:
+      - Short options: `-s`, `-b`, `-z` and `-u`. The mode of `-u` is only attached, as in `-uall`. The next word is an option or an operand like any other.
+      - Long options without a value: `--short`, `--branch`, `--porcelain`, `--long`, `--ignored`, `--untracked-files`, `--ahead-behind`, `--no-ahead-behind`, `--renames`, `--no-renames`, `--show-stash` and `--null`.
+      - Long options with a non-empty `=value`: `--porcelain`, `--untracked-files`, `--ignored`, `--ignore-submodules` and `--find-renames`.
+    - `git show` takes no option, and every operand must be an object by path (rule 12). With no operand it is `shell-git-object`. So it is with an operand that has no colon (a revision or an object name). Git prints a commit's patch or an object's content, and the hook cannot tell which a name is. A word that starts with a dash is `shell-git-output`, a bare `--` and a lone `-` included.
+
+For a git command the checks that follow the command match run in this order.
+
+1. `shell-syntax` for an expanding word.
+2. `shell-git-option`.
+3. `shell-option-value`.
+4. The read rules on every operand and option value.
+5. Rule 12, per object name: `shell-git-object` for a refused form, then the read rules on its path part.
+6. Rule 13: `shell-git-output`, or `shell-git-object` for a `git show` operand that is not an object by path.
+
+For `git show` the option test comes before the test that every operand names an object by path, so `git show -s HEAD` is `shell-git-output`. A git global option before the subcommand (`git --no-pager log`, `git -C dir show`) matches no admitted command and is `shell-not-allowed`; `git -c` is `shell-denied-prefix`.
 
 The run scope drops from the contract any command that chains, redirects, substitutes, quotes, starts with a refused word or starts with a prefix that stays denied, before the policy is written. A contract command that runs repository code, such as a test command, is admitted by its words alone. What it does after that is limited by the sandbox and detected by the gates, not by the hook.
 
-The admitted read-only commands are eleven: `ls`, `cat`, `head`, `tail`, `wc`, `find`, `git ls-files`, `git log`, `git rev-parse`, `git status` and `git show`.
+The admitted read-only commands are eleven: `ls`, `cat`, `head`, `tail`, `wc`, `find`, `git ls-files`, `git log`, `git rev-parse`, `git status` and `git show`. `git log`, `git show` and `git status` are admitted only in the forms of rule 13, and a git operand that names an object is admitted only as rule 12 allows.
 
 The denied prefixes are sixteen: `git push`, `git commit`, `git -c`, `git config`, `gh`, `claude`, `avarice`, `npm`, `npx`, `pnpm`, `yarn`, `curl`, `wget`, `pip`, `uv pip` and `make`. The host's own deny rules carry the same list. For a run, `npm` and `npx` are removed from both lists when the contract lists a command that starts with that word; any other form of either still ends in `shell-not-allowed`.
 
@@ -415,6 +439,7 @@ These are the places where containment detects, or does not reach, instead of pr
 - **Install scripts.** The install's ignore-scripts switch is an environment variable for the package manager. It does not constrain a package manager that does not read it. The sandbox bounds what a script can do either way: network only to the allowed registry, writes only to `node_modules` and the scratch directory.
 - **Generated, not re-verified at launch.** The allow and deny lists, the filesystem lists and the hook policy are generated by AVARICE and are not re-checked at launch. Launch readiness checks nine settings keys, the hook entries and the hook self-test only, and the self-test proves one thing: a Write outside the write roots is denied.
 - **The model's own traffic.** The model API traffic is the host's, outside the sandbox and not confined by AVARICE. Whether the host honors each setting is the host's behavior; AVARICE verifies the admitted version and the hook self-test, not each setting's effect. Results of live runs against real host versions are runtime evidence and are not asserted here.
+- **Secret files read by code the run executes.** The secret globs confine the model's own tools and the admitted shell commands, through the hook and the host's Read deny rules. The sandbox denies reads by root, not by secret glob. Code that a contract command runs (a test the run wrote, for example) can therefore read a secret file present in the clone and print it. The clone is checked out at the pin, so it starts with only the files committed there. Installs and the run's own writes add more. The git object store under the clone's git directory holds every object of the source repository's object store, committed or not, compressed. The read rules do not refuse that directory, and `cat` of an object file there prints it compressed. No admitted command decompresses an object file that it names by path, but a contract command's code can. Whether to deny the clone's secret paths at the sandbox, which can break a check that loads them, is an open owner decision (see [findings.md](findings.md)).
 - **Registry resolution and tunnels.** The proxy trusts DNS for an allowed registry name and does not inspect an allowed tunnel.
 - **Local-mount heuristic.** A FUSE or synced-folder mount can still report `local`.
 
@@ -427,6 +452,7 @@ These are the places where containment detects, or does not reach, instead of pr
 - Read confinement checks the path a tool names, not the Grep pattern or file-type filters. Reads outside confinement through a pattern are stopped only by the sandbox and host deny rules for shell, and by the Read allow rules for file tools.
 - The GSD secret read guard, when present, is non-blocking, so a crash in it does not stop a call.
 - Shell reads under the sandbox can reach anything not in the sandbox read denies; the hook's allow-list (the working copy, read roots) is stricter than the sandbox's deny-list, which is why both exist.
+- `git show` of a commit and `git log -p` are refused even when no secret file changed, because the hook cannot tell which paths a patch or an object name will print. `git log -1 --stat <revision>` lists the changed paths with line counts, and `git show <revision>:<path>` prints a file as it stood at that revision; neither prints the patch.
 - A hook with an unreadable policy blocks every call, including harmless ones.
 - The hook cannot tell a modification from a creation, so a file tool can modify a tracked file that matches only a create glob. The gate after the unit refuses it.
 - For a run, `hook.decision` and `tool.completed` events name the run in the field that holds the onboarding ID for an onboarding.

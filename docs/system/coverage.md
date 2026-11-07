@@ -4,7 +4,7 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `fdc29c6` on 2026-11-07; no code under `src`, `bin` or `scripts` changed after `b9c7aca`; only tests did.
+Counted at commit `ac520c1` on 2026-11-07. The commands for the hook rules, source lines, test files, event kinds, tables, migrations, ports, `AVARICE_*` names and the import-boundary lint were re-run at `9383cb8`. The two that depend on the last code change (hook rules, source lines) were re-run at `ac520c1`. The other counts rest on sources that did not change since `fdc29c6`. The only code changed after it is the hook's git rules and one comment in the invocation scope.
 
 | Surface | Count | Command |
 |---|---|---|
@@ -24,9 +24,9 @@ Counted at commit `fdc29c6` on 2026-11-07; no code under `src`, `bin` or `script
 | Ports | 11 (plus one shared descriptor) | `ls src/ports` |
 | External systems | 13 (12 used, `gh` proven unused) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
-| Hook rules | 33 distinct rule IDs (6 allow, 28 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
-| Source lines | 26,157 | `git ls-files src \| xargs wc -l` |
-| Test files | 116 | `git ls-files test \| grep -c '\.test\.ts$'` |
+| Hook rules | 35 distinct rule IDs (6 allow, 30 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
+| Source lines | 26,261 | `git ls-files src \| xargs wc -l` |
+| Test files | 117 | `git ls-files test \| grep -c '\.test\.ts$'` |
 | Import-boundary lint | passes (79 files) | `node scripts/check-boundaries.ts` |
 
 ## Documented counts
@@ -47,7 +47,7 @@ Counted at commit `fdc29c6` on 2026-11-07; no code under `src`, `bin` or `script
 | Read-only commands, denied prefixes, denied find actions | 11 of 11, 16 of 16, 10 of 10 | containment.md |
 | GSD verbs | map 11, intel 14, run 14 | containment.md |
 | Required settings keys, admitted host versions | 9 of 9, 4 of 4 | containment.md |
-| Hook rule IDs | 33 of 33 | containment.md |
+| Hook rule IDs | 35 of 35 | containment.md |
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
 | Tables, event kinds, artifact kinds, ID prefixes, migrations | 23 of 23, 28 of 28, 7 of 7, 8 of 8, 2 of 2 | data-model.md |
@@ -67,16 +67,16 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length; the paragraphs on a supervisor superseded after the discard checkpoint and on the fenced reconcile record were re-reviewed fresh (two rounds) against the discard stage, the ledger fence checks, the resume command and the stale-fence fault test, and fixed the ordering, the scope of "records nothing" and the removed list; the added sentence on which pause signals the Claude host can produce was re-reviewed fresh (three rounds, see 02-25-reviews) against the pause detection and the host outcome, and fixed the wording of what the host hands over |
 | checks-and-evidence.md | reviewed | install, validation, baseline, inventory, evidence statuses and both gates verified; fixed the inventory status mapping, the duplicated sandbox posture and the revision wording |
 | interactive-shell.md | reviewed | dispatch, views, actions, line editor and history verified; fixed the line-mode menu, the full-screen only statements, the Ctrl-C claim and the watch view ending |
-| containment.md | reviewed | launch checks, hook rules, scopes, executor, proxy and git safety verified, 33 rule IDs; fixed the prevention and detection labels, the gate table row, the safe git row and the validation network claim |
+| containment.md | reviewed | launch checks, hook rules, scopes, executor, proxy and git safety verified, 35 rule IDs; fixed the prevention and detection labels, the gate table row, the safe git row and the validation network claim; the git object and output rules (12 and 13), the check order, the rule count, the Limits bullet on secret files read by contract-command code (against the generated sandbox settings) and the Quirks bullet were re-reviewed fresh (twelve rounds, see 02-26-reviews) against the hook code and real git, and fixed a wrong check order, the abbreviated-option example, the symlink exception, sentence length and the object-store wording |
 | indexes-and-context.md | reviewed | 25+ claims verified; fixed rollback files, intel failure reasons, freshness check scope; no index or context file changed since |
 | data-model.md | reviewed | passed its fresh review with no findings: tables, columns, indexes, triggers, 28 event kinds and files on disk verified; the added fence exception for the failed reconcile step and the quirks bullet were re-reviewed fresh (two rounds) against the ledger fence checks, and fixed one sentence over the length cap |
 | integrations.md | reviewed | ports, adapters and external systems verified; fixed the descriptor claim, the `install-host` exit codes, the discard wording, the launch refusal reasons and the duplicated install detail |
 | processes.md | reviewed | five flows traced against the code; the three run diagrams (run-to-ready.puml, run-resume-after-kill.puml, run-discard-retry.puml) and the two earlier ones read but not rendered; fixed the host-error branch, the spent-budget order and the kill-point citation |
 | history.md | reviewed | commits and dates spot-checked; fixed the counts (pinned to the end commit), the quoted commands and the delivery labels |
 | README.md | reviewed | both tables checked against the files and the proposals; fixed the sentence length and the scope of the counterpart claim |
-| findings.md | reviewed | every line added since the pass began checked at its cited line; fixed the wrong citations and annotated the moved ones; the three lines on the attended sessions and the annotated `docs/extensions.md:215` line were re-reviewed fresh (three rounds) against the code and the session record, and fixed two accuracy claims, the routing citation, sentence length and a delivery-history hash |
+| findings.md | reviewed | every line added since the pass began checked at its cited line; fixed the wrong citations and annotated the moved ones; the three lines on the attended sessions and the annotated `docs/extensions.md:215` line were re-reviewed fresh (three rounds) against the code and the session record, and fixed two accuracy claims, the routing citation, sentence length and a delivery-history hash; the three added lines on the git object bypass, the symlink gap and the sandbox read denial, and the moved hook-decision and settings citations, were re-reviewed fresh with the containment.md changes (twelve rounds, see 02-26-reviews) and fixed the overstated proposal line and the anchors |
 | unknowns.md | reviewed | added entries checked against the files they cite; fixed the test paths and the delivery wording |
-| coverage.md | ledger | counts re-run at `6b82da2` |
+| coverage.md | ledger | counts re-run at `ac520c1` |
 
 ## Outstanding
 
