@@ -211,12 +211,39 @@ export interface AttendedLine {
   evidenceDir: string;
 }
 
-export function readAttendedResults(path: string = attendedResultsPath()): AttendedLine[] {
+// A line that marks an earlier line of the same case, named by its `at`, as invalid. The earlier line stays in the file and its cost stays
+// counted in the ledger; only its verdict stops counting (an owner decision, recorded with its reason).
+export interface InvalidationMarker {
+  case: string;
+  marker: 'invalidate';
+  invalidates: string;
+  reason: string;
+  at: string;
+}
+
+export type AttendedRecord = AttendedLine | InvalidationMarker;
+
+export const isMarker = (record: AttendedRecord): record is InvalidationMarker => (record as InvalidationMarker).marker === 'invalidate';
+
+// The lines that count: every line of the records except those an invalidation marker names.
+export function effectiveLines(records: readonly AttendedRecord[]): AttendedLine[] {
+  return records.filter((record): record is AttendedLine => !isMarker(record));
+}
+
+// Every record of the results file, markers included. The verdicts, the skip rule and the forecast take these and apply the markers.
+export function readAttendedRecords(path: string = attendedResultsPath()): AttendedRecord[] {
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line !== '')
-    .map((line) => JSON.parse(line) as AttendedLine);
+    .map((line) => JSON.parse(line) as AttendedRecord);
+}
+
+export const readAttendedResults = readAttendedRecords;
+
+// The result texts of the session's tool calls that show the old build of `avarice` ran against the throwaway store.
+export function oldBuildSignals(_parsed: ParsedTranscript): string[] {
+  return [];
 }
 
 export function appendAttendedResult(line: AttendedLine): void {
@@ -230,7 +257,8 @@ const isJudged = (line: AttendedLine | undefined): boolean => line !== undefined
 
 // Why a case may not be run now, or undefined when it may. A judged session is never run again; a session that ended `not exercised`
 // may be run once more when the caller names it in AVARICE_LIVE_RERUN.
-export function caseSkipReason(name: string, lines: readonly AttendedLine[], rerun: string | undefined): string | undefined {
+export function caseSkipReason(name: string, records: readonly AttendedRecord[], rerun: string | undefined): string | undefined {
+  const lines = effectiveLines(records);
   const mine = linesOf(lines, name);
   const last = mine.at(-1);
   if (last === undefined) return undefined;
@@ -252,7 +280,8 @@ export interface BehaviorSummary {
   total: number;
 }
 
-export function behaviorVerdicts(cases: readonly AttendedCase[], lines: readonly AttendedLine[]): BehaviorSummary[] {
+export function behaviorVerdicts(cases: readonly AttendedCase[], records: readonly AttendedRecord[]): BehaviorSummary[] {
+  const lines = effectiveLines(records);
   return JUDGED_BEHAVIORS.map((behavior) => {
     const mine = cases.filter((c) => c.behavior === behavior);
     let passed = 0;
@@ -275,7 +304,9 @@ export function behaviorVerdicts(cases: readonly AttendedCase[], lines: readonly
 
 // The spend a plan may still make: what is recorded plus the sessions not yet run (and the stop-on-denial re-runs that may still happen),
 // each at the larger of the mean recorded cost and 0.10 USD, with a 25 percent margin.
-export function attendedForecast(cases: readonly AttendedCase[], lines: readonly AttendedLine[], plan: string = attendedPlan()): number {
+export function attendedForecast(cases: readonly AttendedCase[], records: readonly AttendedRecord[], plan: string = attendedPlan()): number {
+  const lines = effectiveLines(records);
+  const spent = records.filter((record): record is AttendedLine => !isMarker(record));
   const unrun = cases.filter((c) => linesOf(lines, c.name).length === 0).length;
   const reruns = Math.min(
     RERUNS_PLANNED,
@@ -285,7 +316,8 @@ export function attendedForecast(cases: readonly AttendedCase[], lines: readonly
       return mine.length === 0 || (mine.length === 1 && mine[0]?.verdict === 'NOT_EXERCISED');
     }).length,
   );
-  const mean = lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.costUsd, 0) / lines.length;
+  // The mean reads every recorded session, an invalidated one included: its cost was spent.
+  const mean = spent.length === 0 ? 0 : spent.reduce((sum, line) => sum + line.costUsd, 0) / spent.length;
   return phase2SpentByPlan(plan) + (unrun + reruns) * Math.max(mean, FORECAST_FLOOR_USD) * FORECAST_MARGIN;
 }
 

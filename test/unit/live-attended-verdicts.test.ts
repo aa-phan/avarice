@@ -13,14 +13,17 @@ import {
   behaviorVerdicts,
   caseSkipReason,
   diffRecords,
+  effectiveLines,
   failedStatusCalls,
+  oldBuildSignals,
   parseAttended,
   routableQuestionVerdict,
+  sessionEnv,
   skillListing,
   stopOnDenialVerdict,
   statusFirstVerdict,
 } from '../helpers/live-attended.ts';
-import type { AttendedCase, AttendedLine, CaseVerdict } from '../helpers/live-attended.ts';
+import type { AttendedCase, AttendedFixture, AttendedLine, AttendedRecord, CaseVerdict, InvalidationMarker } from '../helpers/live-attended.ts';
 
 // ---- synthetic stream-json -----------------------------------------------------------------------------------------------------
 
@@ -238,7 +241,7 @@ const cases: AttendedCase[] = [
 
 const line = (name: string, verdict: CaseVerdict, costUsd = 0.1): AttendedLine => ({ case: name, behavior: cases.find((c) => c.name === name)?.behavior ?? 'control', verdict, reason: '', notExercised: verdict === 'NOT_EXERCISED', costUsd }) as AttendedLine;
 const allPass = (): AttendedLine[] => cases.map((c) => line(c.name, 'PASS'));
-const summary = (lines: AttendedLine[], behavior: string) => behaviorVerdicts(cases, lines).find((s) => s.behavior === behavior);
+const summary = (lines: AttendedRecord[], behavior: string) => behaviorVerdicts(cases, lines).find((s) => s.behavior === behavior);
 
 describe('behaviorVerdicts', () => {
   it('gives PASS when every judged case passed', () => {
@@ -279,6 +282,66 @@ describe('behaviorVerdicts', () => {
   });
   it('reads a behavior with no line at all as INCONCLUSIVE', () => {
     assert.equal(summary([], 'status-first')?.verdict, 'INCONCLUSIVE');
+  });
+});
+
+// ---- an owner-invalidated record (harness defect) ------------------------------------------------------------------------------
+
+const stamped = (name: string, verdict: CaseVerdict, at: string, costUsd = 0.1): AttendedLine => ({ ...line(name, verdict, costUsd), at });
+const invalidation = (name: string, invalidates: string): InvalidationMarker => ({ case: name, marker: 'invalidate', invalidates, reason: "harness defect: shell alias ran the main checkout's build; owner-invalidated", at: '2026-11-07T09:00:00.000Z' });
+const T1 = '2026-11-07T08:18:03.258Z';
+const T2 = '2026-11-07T09:10:00.000Z';
+
+describe('an invalidated record', () => {
+  it('stops counting: effectiveLines drops the line the marker names and keeps the others', () => {
+    const records = [stamped('status-first-1', 'FAIL', T1), invalidation('status-first-1', T1), stamped('status-first-2', 'PASS', T2)];
+    assert.deepEqual(effectiveLines(records).map((l) => l.case), ['status-first-2']);
+  });
+  it('names its line by case and time: a marker for another time or case drops nothing', () => {
+    const records = [stamped('status-first-1', 'FAIL', T1), invalidation('status-first-1', T2), invalidation('status-first-2', T1)];
+    assert.deepEqual(effectiveLines(records).map((l) => l.case), ['status-first-1']);
+  });
+  it('lets the case run once more: the no-second-spend skip honors the marker', () => {
+    const records = [stamped('status-first-1', 'FAIL', T1)];
+    assert.match(caseSkipReason('status-first-1', records, undefined) ?? '', /never re-run/);
+    assert.equal(caseSkipReason('status-first-1', [...records, invalidation('status-first-1', T1)], undefined), undefined);
+  });
+  it('keeps the rule for the new line and for every other case: a judged FAIL after the marker is never re-run', () => {
+    const records = [stamped('status-first-1', 'FAIL', T1), invalidation('status-first-1', T1), stamped('status-first-1', 'FAIL', T2)];
+    assert.match(caseSkipReason('status-first-1', records, 'status-first-1') ?? '', /never re-run/);
+    const other = [stamped('status-first-2', 'FAIL', T1), invalidation('status-first-1', T1)];
+    assert.match(caseSkipReason('status-first-2', other, 'status-first-2') ?? '', /never re-run/);
+  });
+  it('is not a verdict: behaviorVerdicts reads the case as not run until the re-run, then by the new line', () => {
+    const base = allPass().filter((l) => l.case !== 'status-first-1').map((l, i) => stamped(l.case, l.verdict, `2026-11-07T08:${String(20 + i).padStart(2, '0')}:00.000Z`));
+    const invalidated = [stamped('status-first-1', 'FAIL', T1), invalidation('status-first-1', T1), ...base];
+    const before = summary(invalidated, 'status-first');
+    assert.equal(before?.verdict, 'INCONCLUSIVE');
+    assert.equal(before?.failed, 0);
+    assert.equal(before?.notRun, 1);
+    assert.equal(summary([...invalidated, stamped('status-first-1', 'PASS', T2)], 'status-first')?.verdict, 'PASS');
+    assert.equal(summary([...invalidated, stamped('status-first-1', 'FAIL', T2)], 'status-first')?.verdict, 'FAIL');
+  });
+});
+
+describe('oldBuildSignals', () => {
+  it('lists the result text of a call that shows the store is newer than the build that ran', () => {
+    const text = 'avarice: cannot use /x/state.db: conflict: expected a schema version this build ships (up to 1), found store has migration 2 from a newer build';
+    const p = transcript(call('b', 'Bash', { command: 'avarice context slug' }), answer('b', text, true));
+    assert.equal(oldBuildSignals(p).length, 1);
+  });
+  it('lists nothing for a successful status call or another failure', () => {
+    const p = transcript(call('b', 'Bash', { command: STATUS }), answer('b', 'run_X ready_for_review'), call('c', 'Bash', { command: 'ls nowhere' }), answer('c', 'No such file', true));
+    assert.deepEqual(oldBuildSignals(p), []);
+  });
+});
+
+describe('the session environment', () => {
+  it('runs the host with SHELL=/bin/bash, so its Bash tool never loads the owner shell aliases', () => {
+    const env = sessionEnv({ roots: { base: '/b', AVARICE_CONFIG_HOME: '/c', AVARICE_DATA_ROOT: '/d', AVARICE_WORK_ROOT: '/w' } } as AttendedFixture);
+    assert.equal(env['SHELL'], '/bin/bash');
+    assert.ok((env['PATH'] ?? '').split(':')[0]?.endsWith('/bin'));
+    assert.equal(env['AVARICE_DATA_ROOT'], '/d');
   });
 });
 
@@ -373,6 +436,12 @@ describe('the spend gate and the forecast', () => {
     const recorded = cases.filter((c) => c.behavior !== 'control').map((c) => line(c.name, 'PASS', 0.1)).concat();
     // only the control is left: 1 case, no re-runs.
     assert.equal(attendedForecast(cases, recorded, '02-25').toFixed(4), (0.3 + 1 * 0.125).toFixed(4));
+  });
+  it('keeps an invalidated session in the recorded spend and the mean, and counts its case as still to run', () => {
+    ledger({ plan: '02-25', costUsd: 0.4 });
+    const records = [stamped('status-first-1', 'FAIL', T1, 0.4), invalidation('status-first-1', T1)];
+    // 11 cases still to run (the invalidated one included) plus 3 possible re-runs, at the mean 0.4 * 1.25 = 0.5.
+    assert.equal(attendedForecast(cases, records, '02-25').toFixed(4), (0.4 + 14 * 0.5).toFixed(4));
   });
   it('forecasts a plan with no ledger from the floor alone', () => {
     assert.equal(attendedForecast(cases, [], '02-25').toFixed(4), (14 * 0.125).toFixed(4));

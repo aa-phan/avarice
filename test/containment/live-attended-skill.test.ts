@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { redactSecrets } from '../../src/domain/secret-patterns.ts';
-import { PLAN_CAP_USD, assertAttendedIntegrity, assertProfileGone, attendedForecast, attendedRefusal, appendAttendedResult, behaviorVerdicts, buildAttendedLine, caseSkipReason, cleanupAttended, judgeCase, prepareAttendedFixture, readAttendedResults, runAttendedSession } from '../helpers/live-attended.ts';
+import { PLAN_CAP_USD, assertAttendedIntegrity, assertProfileGone, attendedForecast, attendedRefusal, appendAttendedResult, behaviorVerdicts, buildAttendedLine, caseSkipReason, cleanupAttended, isMarker, judgeCase, prepareAttendedFixture, readAttendedResults, runAttendedSession } from '../helpers/live-attended.ts';
 import type { AttendedCase } from '../helpers/live-attended.ts';
 
 const LIVE = process.env['AVARICE_LIVE'] === '1';
@@ -63,10 +63,16 @@ for (const c of ATTENDED_CASES) {
 
 test('attended record is well formed', () => {
   const names = new Set(ATTENDED_CASES.map((c) => c.name));
-  const lines = readAttendedResults();
-  for (const [index, line] of lines.entries()) {
+  const records = readAttendedResults();
+  for (const [index, line] of records.entries()) {
     const where = `line ${index + 1} (${String(line.case)})`;
     assert.ok(names.has(line.case), `${where}: a case that is not in the table`);
+    if (isMarker(line)) {
+      // An owner invalidation: it names an earlier line of the same case by its time and states why.
+      assert.ok(records.slice(0, index).some((r) => !isMarker(r) && r.case === line.case && r.at === line.invalidates), `${where}: names no earlier line of its case`);
+      assert.ok(line.reason.length > 0 && !Number.isNaN(Date.parse(line.at)), `${where}: reason and time`);
+      continue;
+    }
     assert.ok(['PASS', 'FAIL', 'NOT_EXERCISED'].includes(line.verdict), `${where}: verdict`);
     assert.equal(line.notExercised, line.verdict === 'NOT_EXERCISED', `${where}: notExercised disagrees with the verdict`);
     assert.equal(typeof line.reason, 'string', where);
