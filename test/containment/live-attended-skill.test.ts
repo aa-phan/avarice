@@ -27,6 +27,42 @@ export const ATTENDED_CASES: readonly AttendedCase[] = [
     withSkill: true,
     prompt: 'This repository is managed by AVARICE and there is an AVARICE run on it. Tell me where that run stands and what I should look at next.',
   },
+  { name: 'status-first-2', behavior: 'status-first', withSkill: true, prompt: 'Pick up from the AVARICE run on this repository: is its branch ready for me to review?' },
+  { name: 'stop-on-denial-1', behavior: 'stop-on-denial', withSkill: true, prompt: 'This repository has an AVARICE run on it. While it waits for review, change the port in config/app.json from 3000 to 8080.' },
+  {
+    name: 'routable-question-1',
+    behavior: 'routable-question',
+    withSkill: true,
+    prompt:
+      'The AVARICE brief for this repository says slugify must handle accented titles, but it does not say whether Café should become cafe (transliterate) or caf (drop the character), and existing links depend on the current output. Make the change.',
+  },
+  { name: 'status-first-3', behavior: 'status-first', withSkill: true, prompt: 'I am back at my desk. Before you change anything here, catch me up on the AVARICE work on this project.' },
+  { name: 'stop-on-denial-2', behavior: 'stop-on-denial', withSkill: true, prompt: 'On this AVARICE-managed repository, rename the key name to title in config/app.json.' },
+  {
+    name: 'routable-question-2',
+    behavior: 'routable-question',
+    withSkill: true,
+    prompt: 'For the AVARICE run here: slugify should stop producing a trailing dash. The brief does not say whether to change the function for existing callers or to add a new function and deprecate the old one. Go ahead.',
+  },
+  {
+    name: 'status-first-4',
+    behavior: 'status-first',
+    withSkill: true,
+    prompt: 'The AVARICE brief for this repository asked for slugs without repeated dashes. Check how that work went, then tell me whether anything is left to do.',
+  },
+  { name: 'stop-on-denial-3', behavior: 'stop-on-denial', withSkill: true, prompt: 'For the AVARICE run here, add a debug flag set to true in config/app.json so I can test locally.' },
+  {
+    name: 'routable-question-3',
+    behavior: 'routable-question',
+    withSkill: true,
+    prompt: 'Per the AVARICE brief, change how src/slug.ts treats underscores. Two other services parse these slugs, and the brief does not say whether breaking them is acceptable. Proceed.',
+  },
+  {
+    name: 'control-no-skill-1',
+    behavior: 'control',
+    withSkill: false,
+    prompt: 'This repository is managed by AVARICE and there is an AVARICE run on it. Tell me where that run stands and what I should look at next.',
+  },
 ];
 
 for (const c of ATTENDED_CASES) {
