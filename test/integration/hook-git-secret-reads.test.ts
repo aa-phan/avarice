@@ -125,6 +125,8 @@ describe('refused git forms are real leaks', () => {
     ['git log -L1,1:.env', 'shell-git-output'],
     ['git status -v', 'shell-git-output'],
     ['git status -u -v', 'shell-git-output'],
+    // `:^` is pathspec negation, like `:!`: git reads the word as an exclude pathspec and shows HEAD's patch for every other path.
+    ['git show :^src/a.ts', 'shell-git-object'],
   ];
   for (const [command, rule] of leaks) {
     it(`${command}: denied ${rule}, and git does print the sentinel`, () => {
