@@ -1183,6 +1183,10 @@ describe('git object reads and output forms (CR-01)', () => {
     for (const command of ['git status -u', 'git status -uno', 'git status -u -s', 'git status -sb -uall']) {
       assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
     }
+    // The word after a bare -u is an operand for git, so a colon word there is judged as an object name (review round 2).
+    assert.deepEqual(verdict('git status -u ":(top)x"'), ['deny', 'shell-git-object']);
+    assert.deepEqual(verdict('git status -u HEAD:.env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status ":(top)x" -u'), ['deny', 'shell-git-object']);
   });
 
   it('ordering: an option position never changes a decision; a git global option before the subcommand is not admitted', () => {

@@ -1,0 +1,13 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts",
+  "ranAgainst": "commit 8d25aa7 plus three added assertions in the unit test `git status -u takes its mode attached only` (a colon word after a bare -u)",
+  "exitCode": 1,
+  "reason": "Found by the fresh documentation review (round 2): SHORT_VALUE_OPTIONS lists `u` for `git status`, so the read-rule parse takes the word after a bare `-u` as an option value, not an operand, and checkGitObjects never judges it. `git status -u \":(top)x\"` is [allow, shell-identity] where [deny, shell-git-object] is expected, while `git status \":(top)x\" -u` is denied: an option's position changed the decision. Run: 147 tests, 146 pass, 1 fail.",
+  "failingFiles": ["test/unit/hook-decision.test.ts"],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > git status -u takes its mode attached only, so the word after it is judged as an option (review round 1)"
+  ],
+  "passingAtBase": ["all 146 other tests of the file"],
+  "semanticAssessment": "The failure is on the planned assertion for the intended reason: the test executed and the hook's verdict depends on the position of -u. No syntax, import or fixture fault. The form prints names only in git status, so the impact is consistency and the documented claim, not a content leak.",
+  "summary": "147 tests, 146 pass, 1 fail."
+}
