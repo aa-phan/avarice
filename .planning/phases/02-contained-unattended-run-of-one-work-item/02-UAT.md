@@ -833,7 +833,9 @@ blocked: 0
 
 - gap_id: G-02-9
   truth: "The installed avarice-run skill makes a real attended Claude Code session call avarice status first, stop on a denial, and phrase questions the supervisor can route"
-  status: failed
+  status: resolved
+  resolved_by: 02-25-PLAN.md
+  resolved_at: 2026-11-07
   reason: "User reported: test it (not verified by anything; owner wants the skill effect on a real attended session tested)"
   severity: major
   test: 9
@@ -843,7 +845,9 @@ blocked: 0
     - "A test (live, attended-session style, under the Phase 2 spend guard) that installs the skill and checks the three behaviors"
 - gap_id: G-02-10
   truth: "A supervisor holding a stale lease fence cannot commit the discard-attempt checkpoint or discard the workspace"
-  status: failed
+  status: resolved
+  resolved_by: 02-24-PLAN.md
+  resolved_at: 2026-11-07
   reason: "User reported: test it (only covered by the general lease-fence tests; owner wants a dedicated stale-fence discard test)"
   severity: major
   test: 10
