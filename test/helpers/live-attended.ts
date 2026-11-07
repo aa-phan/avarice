@@ -227,7 +227,8 @@ export const isMarker = (record: AttendedRecord): record is InvalidationMarker =
 
 // The lines that count: every line of the records except those an invalidation marker names.
 export function effectiveLines(records: readonly AttendedRecord[]): AttendedLine[] {
-  return records.filter((record): record is AttendedLine => !isMarker(record));
+  const markers = records.filter(isMarker);
+  return records.filter((record): record is AttendedLine => !isMarker(record) && !markers.some((m) => m.case === record.case && m.invalidates === record.at));
 }
 
 // Every record of the results file, markers included. The verdicts, the skip rule and the forecast take these and apply the markers.
@@ -242,8 +243,9 @@ export function readAttendedRecords(path: string = attendedResultsPath()): Atten
 export const readAttendedResults = readAttendedRecords;
 
 // The result texts of the session's tool calls that show the old build of `avarice` ran against the throwaway store.
-export function oldBuildSignals(_parsed: ParsedTranscript): string[] {
-  return [];
+const OLD_BUILD = /expected a schema version this build ships|found store has migration \d+ from a newer build/;
+export function oldBuildSignals(parsed: ParsedTranscript): string[] {
+  return parsed.trace.filter((call) => OLD_BUILD.test(call.resultText)).map((call) => cut(call.resultText, 200));
 }
 
 export function appendAttendedResult(line: AttendedLine): void {
@@ -605,6 +607,9 @@ export function sessionEnv(fixture: AttendedFixture): NodeJS.ProcessEnv {
   delete env['AVARICE_RUN'];
   delete env['NODE_TEST_CONTEXT'];
   env['CLAUDE_CODE_DISABLE_AUTO_MEMORY'] = '1';
+  // The host's Bash tool builds its shell snapshot from $SHELL. The owner's zsh sets `alias avarice=<main checkout>/bin/avarice`, which
+  // shadows PATH and ran an older build against the throwaway store in the first tracer session; bash does not load ~/.zshrc.
+  env['SHELL'] = '/bin/bash';
   env['PATH'] = [join(REPO_ROOT, 'bin'), dirname(process.execPath), process.env['PATH'] ?? ''].join(':');
   env['AVARICE_CONFIG_HOME'] = fixture.roots.AVARICE_CONFIG_HOME;
   env['AVARICE_DATA_ROOT'] = fixture.roots.AVARICE_DATA_ROOT;
@@ -721,6 +726,8 @@ export function assertAttendedIntegrity(fixture: AttendedFixture, caseName: stri
   const listing = skillListing(s.parsed.init);
   assert.equal(listing.listed, fixture.withSkill, `${caseName}: the init event ${fixture.withSkill ? 'does not list' : 'lists'} the avarice-run skill (skills: ${JSON.stringify(s.parsed.init?.['skills'])})`);
   // An `avarice status` that fails inside the session is a defect of the harness (the wrong build, a store it cannot read), never a verdict on the model.
+  const older = oldBuildSignals(s.parsed);
+  assert.deepEqual(older, [], `${caseName}: the session's avarice is an older build than this checkout's (the store was written by a newer one), so no verdict is recorded (a harness defect): ${older.join(' | ')}`);
   const failed = failedStatusCalls(s.parsed);
   assert.deepEqual(failed, [], `${caseName}: avarice status failed inside the session, so no verdict is recorded (a harness defect): ${failed.join(' | ')}`);
   const statuses = topLevel(s.parsed).filter((call) => call.tool === 'Bash' && typeof call.input['command'] === 'string' && STATUS_COMMAND.test((call.input['command'] as string).trim()) && call.isError === false);
