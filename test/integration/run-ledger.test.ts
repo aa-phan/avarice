@@ -455,6 +455,30 @@ describe('run steps', () => {
     assert.deepEqual(steps[0]?.result, { session: 'abc', exit: 0 });
   });
 
+  it('records a step under a fence guard only while that fence is current (G-02-10)', () => {
+    const h = harness();
+    seedRun(h);
+    const old = must(h.ledger.acquireRunLease('run_1', 'old', 100, T0 + 10));
+    const recorded = must(h.ledger.recordRunStep('run_1', { step: 'resume:reconcile', status: 'failed', result: { error: 'x' }, nowMs: T0 + 11 }, { fence: old.fence }));
+    assert.equal(recorded.step, 'resume:reconcile');
+    must(h.ledger.acquireRunLease('run_1', 'new', 1_000, T0 + 5_000));
+    const rowsBefore = h.count('run_steps');
+    const stale = h.ledger.recordRunStep('run_1', { step: 'resume:reconcile', attempt: 2, status: 'failed', result: { error: 'y' }, nowMs: T0 + 5_001 }, { fence: old.fence });
+    refused(stale, 'conflict');
+    assert.ok(!stale.ok && stale.error.kind === 'conflict');
+    assert.deepEqual(stale.error.kind === 'conflict' ? [stale.error.expected, stale.error.actual] : [], [`lease fence ${old.fence}`, `lease fence ${old.fence + 1}`]);
+    assert.equal(h.count('run_steps'), rowsBefore, 'a stale fence writes no step');
+  });
+
+  it('records a step with no guard as before, whoever holds the lease (G-02-10)', () => {
+    const h = harness();
+    seedRun(h);
+    must(h.ledger.acquireRunLease('run_1', 'old', 100, T0 + 10));
+    must(h.ledger.acquireRunLease('run_1', 'new', 1_000, T0 + 5_000));
+    must(h.ledger.recordRunStep('run_1', { step: 'discard', status: 'completed', result: {}, nowMs: T0 + 5_001 }));
+    assert.equal(h.count('run_steps'), 1);
+  });
+
   it('accepts exactly the six step statuses', () => {
     const h = harness();
     seedRun(h);

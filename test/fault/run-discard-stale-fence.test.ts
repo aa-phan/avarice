@@ -18,7 +18,7 @@ import type { Result } from '../../src/domain/result.ts';
 import type { RunWorkspace } from '../../src/ports/run-workspace.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
-import { openRaw } from '../helpers/fault-run.ts';
+import { RUN_EXPIRY_WAIT_MS, openRaw, runRunWithFault, sleepSync } from '../helpers/fault-run.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, RUN_REPO_FILES, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
@@ -97,8 +97,10 @@ interface Capture {
   run: RunDb;
 }
 
-// `checkpoint`: the other holder acts inside the supervisor's `discard-attempt` checkpoint call, before it reaches the ledger.
-type Hook = 'take' | 'none';
+// What happens to the run lease inside the supervisor's `discard-attempt` checkpoint call, before the call reaches the ledger:
+// `take` another holder acquires it; `take-release` another holder acquires it and releases it; `expire` its expiry is moved into the past and
+// nobody acquires it; `none` nothing.
+type Hook = 'take' | 'take-release' | 'expire' | 'none';
 
 interface Scenario {
   hook: Hook;
@@ -129,10 +131,26 @@ function instrument(f: Fixture, runId: string, supervisor: Composed, other: Comp
   const takeover = (): void => {
     if (scenario.hook === 'none' || state.fired > 0) return;
     state.fired += 1;
-    const ttl = leaseTtlMs();
-    const grant = other.deps.ledger.acquireRunLease(runId, OTHER_HOLDER, ttl, Date.now() + ttl + 1000);
-    assert.ok(grant.ok, `the other holder takes the lease: ${JSON.stringify(grant)}`);
-    state.grantFence = grant.value.fence;
+    if (scenario.hook === 'expire') {
+      // The expiry column holds an ISO instant; write an instant before now in the form the row has.
+      const db = openRaw(f.roots, false);
+      try {
+        const stored = (db.prepare('SELECT lease_expires_at AS at FROM runs WHERE run_id = ?').get(runId) as { at: unknown }).at;
+        assert.match(String(stored), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'the stored expiry is an ISO instant');
+        db.prepare('UPDATE runs SET lease_expires_at = ? WHERE run_id = ?').run(new Date(Date.now() - 1000).toISOString(), runId);
+      } finally {
+        db.close();
+      }
+    } else {
+      const ttl = leaseTtlMs();
+      const grant = other.deps.ledger.acquireRunLease(runId, OTHER_HOLDER, ttl, Date.now() + ttl + 1000);
+      assert.ok(grant.ok, `the other holder takes the lease: ${JSON.stringify(grant)}`);
+      state.grantFence = grant.value.fence;
+      if (scenario.hook === 'take-release') {
+        const released = other.deps.ledger.releaseRunLease(runId, OTHER_HOLDER, grant.value.fence);
+        assert.ok(released.ok, `the other holder releases it: ${JSON.stringify(released)}`);
+      }
+    }
     const run = runRow(f.roots, runId);
     state.atTakeover = { clone: checkoutSnapshot(run.workspace_path), dump: storeDump(f.roots), run };
   };
@@ -184,49 +202,103 @@ async function crashPath(scenario: Scenario): Promise<World> {
   return { f, runId, outcome, ...state, close };
 }
 
+// The resume path: the supervisor was killed after `classify` with the item delegated; a later supervisor's reconcile prelude reaches the discard.
+async function resumePath(scenario: Scenario): Promise<World> {
+  const f = fixture();
+  const killed = runRunWithFault(f.roots, f.repo, f.brief, 'after-checkpoint:classify', { crash: { afterFiles: TWO_FILES } });
+  sleepSync(RUN_EXPIRY_WAIT_MS);
+  const supervisor = compose(f.roots, FIX);
+  const other = compose(f.roots, {});
+  const close = (): void => {
+    supervisor.close();
+    other.close();
+  };
+  const state = { fired: 0, discardCalls: 0, grantFence: null as number | null, atTakeover: null as Capture | null };
+  instrument(f, killed.runId, supervisor, other, scenario, state);
+  const outcome = await runSupervisor(supervisor.deps, killed.runId, { prelude: reconcileRun });
+  return { f, runId: killed.runId, outcome, ...state, close };
+}
+
 const checkpointsOf = (f: Fixture, runId: string): string[] => ledgerRows<{ next_action: string }>(f.roots, 'SELECT next_action FROM checkpoints WHERE run_id = ? ORDER BY seq', runId).map((r) => r.next_action);
 const attemptOutcomes = (f: Fixture, runId: string): Array<string | null> => ledgerRows<{ outcome: string | null }>(f.roots, 'SELECT outcome FROM attempts WHERE run_id = ? ORDER BY ordinal', runId).map((a) => a.outcome);
 
-describe('stale fence on the crash path', () => {
+interface AfterRun {
+  clone: ReturnType<typeof checkoutSnapshot>;
+  dump: StoreDump;
+  run: RunDb;
+}
+
+// A superseded supervisor is refused at the checkpoint and changes nothing: the same properties on every path that reaches the discard.
+// `held` is the fence the supervisor holds, `taken` the fence of the holder that took the lease (or released it).
+function refusedSuite(name: string, make: () => Promise<World>, fences: { held: number; taken: number }, options: { released?: boolean } = {}): void {
+  describe(name, () => {
+    let w: World;
+    let afterRun: AfterRun;
+    before(async () => {
+      w = await make();
+      const run = runRow(w.f.roots, w.runId);
+      afterRun = { clone: checkoutSnapshot(run.workspace_path), dump: storeDump(w.f.roots), run };
+    });
+    after(() => w.close());
+
+    it('refuses the supervisor at the checkpoint with a conflict naming both fences', () => {
+      assert.equal(w.fired, 1, 'the takeover happened once');
+      assert.equal(w.grantFence, fences.taken, 'the other holder holds the next fence');
+      assert.deepEqual(conflictOf(w.outcome), { expected: `lease fence ${fences.held}`, actual: `lease fence ${fences.taken}` });
+    });
+
+    it('commits no `discard-attempt` checkpoint and never calls the workspace restore', () => {
+      assert.equal(checkpointsOf(w.f, w.runId).includes('discard-attempt'), false);
+      assert.equal(w.discardCalls, 0);
+    });
+
+    it('leaves the clone as it was at the takeover: HEAD, index, the crashed unit\'s edits and its extra file', () => {
+      assert.deepEqual(afterRun.clone, (w.atTakeover as Capture).clone);
+      const clone = afterRun.run.workspace_path;
+      assert.equal(existsSync(join(clone, 'src', 'extra.ts')), true, 'the file the crashed unit created is still there');
+      assert.notEqual(readFileSync(join(clone, 'src', 'slug.ts'), 'utf8'), RUN_REPO_FILES['src/slug.ts'], 'the crashed unit\'s partial write is still there');
+    });
+
+    it('leaves every table of the store row for row as it was at the takeover', () => {
+      assert.deepEqual(afterRun.dump, (w.atTakeover as Capture).dump);
+      const failed = ledgerRows<{ step: string }>(w.f.roots, "SELECT step FROM run_steps WHERE run_id = ? AND step = 'resume:reconcile'", w.runId);
+      assert.deepEqual(failed, [], 'no failed reconcile record');
+    });
+
+    it('leaves the other holder\'s lease row untouched, and the source checkout unchanged', () => {
+      assert.deepEqual(leaseOf(afterRun.run), leaseOf((w.atTakeover as Capture).run));
+      assert.equal(afterRun.run.lease_fence, fences.taken);
+      if (options.released === true) {
+        assert.equal(afterRun.run.lease_holder, null, 'the other holder released it');
+        assert.equal(afterRun.run.lease_expires_at, null);
+      } else {
+        assert.equal(afterRun.run.lease_holder, OTHER_HOLDER);
+        assert.notEqual(afterRun.run.lease_expires_at, null, 'it keeps the expiry it acquired');
+      }
+      assert.deepEqual(checkoutSnapshot(w.f.repo.path), w.f.before);
+    });
+  });
+}
+
+refusedSuite('stale fence on the crash path', () => crashPath({ hook: 'take', at: 'checkpoint' }), { held: 1, taken: 2 });
+refusedSuite('stale fence on the resume path', () => resumePath({ hook: 'take', at: 'checkpoint' }), { held: 2, taken: 3 });
+refusedSuite('taken and released on the crash path (the fence stays bumped)', () => crashPath({ hook: 'take-release', at: 'checkpoint' }), { held: 1, taken: 2 }, { released: true });
+
+describe('expired, not taken (the fence, not the expiry, decides)', () => {
   let w: World;
-  let afterRun: { clone: ReturnType<typeof checkoutSnapshot>; dump: StoreDump; run: RunDb };
   before(async () => {
-    w = await crashPath({ hook: 'take', at: 'checkpoint' });
-    const run = runRow(w.f.roots, w.runId);
-    afterRun = { clone: checkoutSnapshot(run.workspace_path), dump: storeDump(w.f.roots), run };
+    w = await crashPath({ hook: 'expire', at: 'checkpoint' });
   });
   after(() => w.close());
 
-  it('refuses the supervisor at the checkpoint with a conflict naming both fences', () => {
-    assert.equal(w.fired, 1, 'the takeover happened once');
-    assert.equal(w.grantFence, 2, 'the other holder holds fence 2');
-    assert.deepEqual(conflictOf(w.outcome), { expected: 'lease fence 1', actual: 'lease fence 2' });
-  });
-
-  it('commits no `discard-attempt` checkpoint and never calls the workspace restore', () => {
-    assert.equal(checkpointsOf(w.f, w.runId).includes('discard-attempt'), false);
-    assert.equal(w.discardCalls, 0);
-  });
-
-  it('leaves the clone as it was at the takeover: HEAD, index, the crashed unit\'s edits and its extra file', () => {
-    const taken = w.atTakeover as Capture;
-    assert.deepEqual(afterRun.clone, taken.clone);
-    const clone = afterRun.run.workspace_path;
-    assert.equal(existsSync(join(clone, 'src', 'extra.ts')), true, 'the file the crashed unit created is still there');
-    assert.notEqual(readFileSync(join(clone, 'src', 'slug.ts'), 'utf8'), RUN_REPO_FILES['src/slug.ts'], 'the crashed unit\'s partial write is still there');
-  });
-
-  it('leaves every table of the store row for row as it was at the takeover', () => {
-    assert.deepEqual(afterRun.dump, (w.atTakeover as Capture).dump);
-  });
-
-  it('leaves the other holder\'s lease row untouched, and the source checkout unchanged', () => {
-    const taken = w.atTakeover as Capture;
-    assert.deepEqual(leaseOf(afterRun.run), leaseOf(taken.run));
-    assert.equal(afterRun.run.lease_holder, OTHER_HOLDER);
-    assert.equal(afterRun.run.lease_fence, 2);
-    assert.notEqual(afterRun.run.lease_expires_at, null, 'it keeps the expiry it acquired');
-    assert.deepEqual(checkoutSnapshot(w.f.repo.path), w.f.before);
+  it('accepts the checkpoint, discards once and reaches ready_for_review with attempts `discarded`, `handed-off`', () => {
+    assert.equal(w.fired, 1, 'the expiry was moved once');
+    assert.equal(w.grantFence, null, 'nobody took the lease');
+    assert.ok(w.outcome.ok, JSON.stringify(w.outcome));
+    assert.equal(w.outcome.value.state, 'ready_for_review');
+    assert.equal(checkpointsOf(w.f, w.runId).filter((m) => m === 'discard-attempt').length, 1);
+    assert.equal(w.discardCalls, 1);
+    assert.deepEqual(attemptOutcomes(w.f, w.runId), ['discarded', 'handed-off']);
   });
 });
 
