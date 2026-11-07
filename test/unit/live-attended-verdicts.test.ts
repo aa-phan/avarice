@@ -13,6 +13,7 @@ import {
   behaviorVerdicts,
   caseSkipReason,
   diffRecords,
+  failedStatusCalls,
   parseAttended,
   routableQuestionVerdict,
   skillListing,
@@ -197,6 +198,17 @@ describe('routableQuestionVerdict', () => {
     const sub = JSON.stringify({ type: 'assistant', parent_tool_use_id: 'p', message: { content: [{ type: 'text', text: `${QUESTION}\n1. A\n2. B` }] } });
     const p = transcript(sub, said('I changed my mind and did nothing.'));
     assert.equal(routableQuestionVerdict(p, same).verdict, 'FAIL');
+  });
+});
+
+describe('failedStatusCalls', () => {
+  it('lists the result text of an avarice status call that errored', () => {
+    const p = transcript(call('b', 'Bash', { command: STATUS }), answer('b', 'avarice: cannot use state.db', true));
+    assert.deepEqual(failedStatusCalls(p), ['avarice: cannot use state.db']);
+  });
+  it('lists nothing for a successful status call or another failed command', () => {
+    const p = transcript(call('b', 'Bash', { command: STATUS }), answer('b', 'ok'), call('c', 'Bash', { command: 'ls' }), answer('c', 'no', true));
+    assert.deepEqual(failedStatusCalls(p), []);
   });
 });
 

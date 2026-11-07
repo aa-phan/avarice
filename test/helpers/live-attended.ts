@@ -678,9 +678,19 @@ export function skillListing(init: Record<string, unknown> | undefined): { liste
 
 const skillCallNames = (parsed: ParsedTranscript, needle: string): boolean => topLevel(parsed).some((call) => call.tool === 'Skill' && JSON.stringify(call.input).includes(needle));
 
+// The result texts of the top-level `avarice status` calls that returned an error.
+export function failedStatusCalls(parsed: ParsedTranscript): string[] {
+  return topLevel(parsed)
+    .filter((call) => call.tool === 'Bash' && typeof call.input['command'] === 'string' && STATUS_COMMAND.test((call.input['command'] as string).trim()) && call.isError === true)
+    .map((call) => cut(call.resultText, 200));
+}
+
 export function assertAttendedIntegrity(fixture: AttendedFixture, caseName: string, behavior: AttendedBehavior, s: AttendedSession): void {
   const listing = skillListing(s.parsed.init);
   assert.equal(listing.listed, fixture.withSkill, `${caseName}: the init event ${fixture.withSkill ? 'does not list' : 'lists'} the avarice-run skill (skills: ${JSON.stringify(s.parsed.init?.['skills'])})`);
+  // An `avarice status` that fails inside the session is a defect of the harness (the wrong build, a store it cannot read), never a verdict on the model.
+  const failed = failedStatusCalls(s.parsed);
+  assert.deepEqual(failed, [], `${caseName}: avarice status failed inside the session, so no verdict is recorded (a harness defect): ${failed.join(' | ')}`);
   const statuses = topLevel(s.parsed).filter((call) => call.tool === 'Bash' && typeof call.input['command'] === 'string' && STATUS_COMMAND.test((call.input['command'] as string).trim()) && call.isError === false);
   for (const call of statuses) assert.ok(call.resultText.includes(fixture.runId), `${caseName}: a successful avarice status does not name the seeded run ${fixture.runId}: ${cut(call.resultText, 200)}`);
   assert.deepEqual(s.ownerStoreAfter, s.ownerStoreBefore, `${caseName}: the owner's default store changed size or modification time`);
