@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 22/22 plans executed (10 waves)
+**Plans:** 22/23 plans executed (11 waves)
 
 Plans:
 **Wave 1**
@@ -165,6 +165,9 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [x] 02-22-PLAN.md — Exit: three R1 runs on ~/aa-phan-portfolio-v2, 3 of 3 ready_for_review with evidence (D-08)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 02-23-PLAN.md — Documentation pass: docs/system/ describes what Phase 2 built, grounded and fresh-eyes reviewed (success criterion 8)
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
