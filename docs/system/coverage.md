@@ -4,7 +4,7 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `0632fd4` on 2026-11-06; recounted in the closing step of the documentation pass.
+Counted at commit `6b82da2` on 2026-11-06; no code changed after it.
 
 | Surface | Count | Command |
 |---|---|---|
@@ -22,7 +22,7 @@ Counted at commit `0632fd4` on 2026-11-06; recounted in the closing step of the 
 | Run step statuses | 6 | the same import, `RUN_STEP_STATUSES.length` |
 | Work item states | 6 | the same import, `WORK_ITEM_STATES.length` |
 | Ports | 11 (plus one shared descriptor) | `ls src/ports` |
-| External systems | to be recounted | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin` |
+| External systems | 13 (12 used, `gh` proven unused) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
 | Hook rules | 33 distinct rule IDs (6 allow, 28 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
 | Source lines | 26,150 | `git ls-files src \| xargs wc -l` |
@@ -51,35 +51,35 @@ Counted at commit `0632fd4` on 2026-11-06; recounted in the closing step of the 
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
 | Tables, event kinds, artifact kinds, ID prefixes, migrations | 23 of 23, 28 of 28, 7 of 7, 8 of 8, 2 of 2 | data-model.md |
-| Ports, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 4 of 4, 4 of 4, 5 of 5 | integrations.md |
+| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 13 of 13, 4 of 4, 4 of 4, 5 of 5 | integrations.md |
 | Flows traced, diagram sources | 5 of 5, 5 of 5 | processes.md |
 
 ## Per-document status
 
-Reviewed means a second reader (a fresh-eyes reviewer) checked claims against the code and every finding was applied or answered. Every document that changed in the documentation pass for the unattended run is drafted until its fresh review has been applied.
+Reviewed means a second reader (a fresh-eyes reviewer) checked claims against the code and every finding was applied or answered. Each reviewer bounced its first draft except one; the fixes were applied from the reviewer's code evidence, and no document was bounced twice.
 
 | Document | Status | Review notes |
 |---|---|---|
-| overview.md | drafted | regrounded for the run slice; awaiting fresh review |
-| cli-reference.md | drafted | regrounded for ten commands and the shell dispatch; awaiting fresh review |
-| config-reference.md | drafted | regrounded for the run environment, the routine preset and the conventions readers; awaiting fresh review |
-| onboarding.md | drafted | pointers to the run added, one claim about the pause outcome corrected; awaiting fresh review |
+| overview.md | reviewed | boundary, import map and run ports verified; fixed the lint description, the adapter count claim and one long sentence |
+| cli-reference.md | reviewed | ten commands, flags, exit codes and output forms verified; fixed the `inbox` exit codes, placement rules, the stdout exception of the wait line and the project registration claim |
+| config-reference.md | reviewed | environment variables, preset values, conventions keys and limits verified; fixed the reserved-name claim and the ignored-entry cap |
+| onboarding.md | reviewed | pause outcome, lease and resume pointers verified; fixed long sentences |
 | runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length |
-| checks-and-evidence.md | drafted | new; awaiting fresh review |
-| interactive-shell.md | drafted | new; awaiting fresh review |
-| containment.md | drafted | regrounded for the run purpose, the proxy and the hook rules; awaiting fresh review |
+| checks-and-evidence.md | reviewed | install, validation, baseline, inventory, evidence statuses and both gates verified; fixed the inventory status mapping, the duplicated sandbox posture and the revision wording |
+| interactive-shell.md | reviewed | dispatch, views, actions, line editor and history verified; fixed the line-mode menu, the full-screen only statements, the Ctrl-C claim and the watch view ending |
+| containment.md | reviewed | launch checks, hook rules, scopes, executor, proxy and git safety verified, 33 rule IDs; fixed the prevention and detection labels, the gate table row, the safe git row and the validation network claim |
 | indexes-and-context.md | reviewed | 25+ claims verified; fixed rollback files, intel failure reasons, freshness check scope; no index or context file changed since |
-| data-model.md | drafted | regrounded for the second migration, the run tables and the event kinds; awaiting fresh review |
-| integrations.md | drafted | regrounded for the run ports, the proxy and the supervisor; awaiting fresh review |
-| processes.md | drafted | five flows; the three run diagrams (run-to-ready.puml, run-resume-after-kill.puml, run-discard-retry.puml) and the two earlier ones are not rendered; awaiting fresh review |
-| history.md | drafted | extended from `git log`; awaiting fresh review |
-| README.md | drafted | opening, documents table and counterparts table updated; awaiting fresh review |
-| findings.md | drafted | run slice lines added, annotated lines never deleted; awaiting fresh review |
-| unknowns.md | drafted | run slice entries added; awaiting fresh review |
-| coverage.md | ledger | counts re-run in the closing step |
+| data-model.md | reviewed | passed its fresh review with no findings: tables, columns, indexes, triggers, 28 event kinds and files on disk verified |
+| integrations.md | reviewed | ports, adapters and external systems verified; fixed the descriptor claim, the `install-host` exit codes, the discard wording, the launch refusal reasons and the duplicated install detail |
+| processes.md | reviewed | five flows traced against the code; the three run diagrams (run-to-ready.puml, run-resume-after-kill.puml, run-discard-retry.puml) and the two earlier ones read but not rendered; fixed the host-error branch, the spent-budget order and the kill-point citation |
+| history.md | reviewed | commits and dates spot-checked; fixed the counts (pinned to the end commit), the quoted commands and the delivery labels |
+| README.md | reviewed | both tables checked against the files and the proposals; fixed the sentence length and the scope of the counterpart claim |
+| findings.md | reviewed | every line added since the pass began checked at its cited line; fixed the wrong citations and annotated the moved ones |
+| unknowns.md | reviewed | added entries checked against the files they cite; fixed the test paths and the delivery wording |
+| coverage.md | ledger | counts re-run at `6b82da2` |
 
 ## Outstanding
 
-- A fresh review of every document marked drafted above.
 - Rendering the five PlantUML diagrams; no render step exists in the repository.
 - The owner's classification of every line in findings.md.
+- The owner's decision on the proposal documents this branch edited before the documentation rule reached it, listed in findings.md.

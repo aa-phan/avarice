@@ -1,12 +1,10 @@
 # History
 
-> Status: drafted, not yet reviewed.
-
-This document records what the g''it history of this repository shows about how the built system arrived, dated by commit. It is historical: entries are not revised when the code changes. Inference about intent is labeled as inference and names what it is inferred from. The current behavior is described in the other documents of this tree, never here. The history below ends at commit `0632fd4`; dates are author dates, so a few commits sit under an earlier day than their neighbors.
+This document records what the git history of this repository shows about how the built system arrived, dated by commit. It is historical: entries are not revised when the code changes. Inference about intent is labeled as inference and names what it is inferred from. The current behavior is described in the other documents of this tree, never here. The history below ends at commit `0632fd4`; dates are author dates, so a few commits sit under an earlier day than their neighbors.
 
 ## Summary
 
-The repository started on 2026-11-01 as a specification package with no code. Between 2026-11-02 and 2026-11-05 the onboarding slice was built: one existing repository is taken to an active project record by contained Claude Code invocations, with GSD as the mapper. Between 2026-11-05 and 2026-11-06 the run slice was built on top of it: one work item is taken from a brief to a reviewable branch, unattended, inside the same containment. The history shows 412 commits over six days (`g''it log --format=%ad --date=short | sort | uniq -c`). The onboarding slice ended with the commit that closed it (`5457f85`); the run slice's first commit follows the planning records that opened it (`e725db6`).
+The repository started on 2026-11-01 as a specification package with no code. Between 2026-11-02 and 2026-11-05 the onboarding slice was built: one existing repository is taken to an active project record by contained Claude Code invocations, with GSD as the mapper. Between 2026-11-05 and 2026-11-06 the run slice was built on top of it: one work item is taken from a brief to a reviewable branch, unattended, inside the same containment. The history shows 412 commits over six days (`git log --format=%ad --date=short 0632fd4 | sort | uniq -c`). The onboarding slice ended with the commit that closed it (`5457f85`); the run slice's first commit follows the planning records that opened it (`e725db6`).
 
 | Date | Commits |
 |---|---|
@@ -17,12 +15,12 @@ The repository started on 2026-11-01 as a specification package with no code. Be
 | 2026-11-05 | 108 |
 | 2026-11-06 | 43 |
 
-The run slice itself is the 114 commits after `e725db6` (`g''it log --oneline e725db6..HEAD | wc -l`): 71 dated 2026-11-05 and 43 dated 2026-11-06. It includes the documentation work that follows it. The run behavior is described in [runs.md](runs.md).
+The run slice itself is the 114 commits after `e725db6` (`git log --oneline e725db6..0632fd4 | wc -l`): 71 dated 2026-11-05 and 43 dated 2026-11-06. It includes the documentation work that follows it. The run behavior is described in [runs.md](runs.md).
 
 ## 2026-11-01: specification package
 
 - The specification package (requirements, architecture, containment, contracts and state, onboarding, the ADRs) was added with no implementation (`9858bd0`).
-- Pre-build spike results were recorded and applied to the specification the same day (`c67a82e`, `22769b7`). The spike notes live in `spikes/2026-11-01-pre-slice-0/README.md`.
+- Pre-build spike results were recorded and applied to the specification the same day (`c67a82e`, `22769b7`).
 
 ## 2026-11-02: the onboarding slice end to end
 
@@ -52,15 +50,15 @@ The first implementation day built the whole path from an empty store to an acti
 - Shell `grep` was removed from the admitted read commands, so searches go through the host's Grep tool (`99dd4fb`).
 - Knowledge coverage began to be counted per document after the merge (`8054cb8`). Inferred from the commit subject and its gap reference: this followed a live run in which the knowledge agent read the wrong copies of the documents.
 
-## 2026-11-05: review fixes and phase close
+## 2026-11-05: review fixes and the end of the onboarding slice
 
-- Code review findings were fixed: option-name parsing, `gsd_run` argument checks, sandbox probe retry and the exit-run spend guard (commits under the `261105-2i2` quick task, ending at `4ac1127`).
-- The planning records closed the onboarding phase (`5457f85`).
+- Code review findings were fixed: option-name parsing, GSD run argument checks, sandbox probe retry and the exit-run spend guard (ending at `4ac1127`).
+- The planning records closed the onboarding slice (`5457f85`).
 
 ## 2026-11-05: the onboarding slice documented
 
 - The built onboarding slice was written up in `docs/system/` from the code (`f742b3e`).
-- The documentation rules followed: `docs/system/` became the source of truth for built behavior, with the proposal documents left as plans for unbuilt work (`ff670c4`, `bec3507`, `b8c7ca4`). Later phases were each given a closing documentation step (`b9e4d58`).
+- The documentation rules followed: `docs/system/` became the source of truth for built behavior, with the proposal documents left as plans for unbuilt work (`ff670c4`, `bec3507`, `b8c7ca4`). Later slices were each given a closing documentation step (`b9e4d58`).
 
 ## 2026-11-05: run slice, groundwork
 
@@ -87,7 +85,7 @@ The run kernel arrived as a chain of small slices, each starting from a tracer:
 ## 2026-11-06: run slice, recovery and the shell
 
 - A crashed or timed-out attempt is discarded to its snapshot and retried once (`be1abd5`). Loop-limit and budget endings became decisions, and a test shows the source checkout untouched through failure and recovery (`a017bf1`).
-- `resume` reaps by session identifier, reconciles a verification killed mid-pass and a unit, commit or hand-off interrupted mid-way from the ledger and g''it, and re-verifies (`537337d`, `1e1bafa`). A kill-point suite covers every run transition and checkpoint, and the budgets across kill and resume (`1afb0ec`).
+- `resume` reaps by session identifier, reconciles a verification killed mid-pass and a unit, commit or hand-off interrupted mid-way from the ledger and git, and re-verifies (`537337d`, `1e1bafa`). A kill-point suite covers every run transition and checkpoint, and the budgets across kill and resume (`1afb0ec`).
 - The run-purpose rows of the containment matrix and a completeness test for it were added after a spike, and the proposal documents were amended for the run purpose (`265b57a`, `3fb6ae4`, `53181e7`).
 - The interactive shell arrived in three steps: a home view with in-process commands, an action menu that starts, watches and resumes a run while the supervisor outlives the shell, and command-name completion with a 0600 history file (`beff8ef`, `e6c9e70`, `378de13`).
 

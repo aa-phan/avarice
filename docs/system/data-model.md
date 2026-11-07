@@ -1,7 +1,5 @@
 # Data model
 
-> Status: drafted, not yet reviewed.
-
 This document describes what AVARICE persists, as implemented in `src/adapters/sqlite/`, `src/adapters/fs/`, `src/domain/project-record.ts`, `src/domain/ids.ts`, `src/domain/run-lifecycle.ts`, `src/ports/ledger.ts`, `src/ports/artifact-store.ts` and the PreToolUse hook (`src/hook/pre-tool-use.ts`). The file layouts it lists are written by `src/app/run-start.ts`, `src/adapters/host-claude/claude-host.ts`, `src/adapters/git/run-workspace.ts` and `src/cli/shell/history.ts`.
 
 AVARICE keeps three kinds of state: one SQLite file per profile (the ledger), a content-addressed blob store beside it, and working directories under a separate work root. The ledger holds 23 tables; 21 are written by the built code and 2 are created empty and have no writer. In the data root nothing is ever deleted: no code removes a row, a blob, a backup or a per-invocation directory, and events are append-only by trigger. Columns belong to the migrations; this document states mechanisms and consequences. Hook rules are in [containment.md](containment.md), onboarding transitions in [onboarding.md](onboarding.md), run behavior in [runs.md](runs.md), evidence meaning in [checks-and-evidence.md](checks-and-evidence.md), the interactive shell in [interactive-shell.md](interactive-shell.md) and CLI flags in [cli-reference.md](cli-reference.md).

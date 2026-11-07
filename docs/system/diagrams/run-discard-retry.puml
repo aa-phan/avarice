@@ -17,8 +17,10 @@ Supervisor -> Ledger : classify step (inconclusive, or failed)
 == Routing ==
 alt the clone HEAD moved
   Supervisor -> Ledger : containment finding, decision record,\nrun blocked_on_decision (enforcement failure), clone untouched
-else the host refused to launch
+else the host was unavailable or denied the launch
   Supervisor -> Ledger : decision record, run blocked_on_decision (enforcement failure)
+else any other host error except a timeout
+  Supervisor -> Ledger : decision record (repeated failure), run blocked_on_decision, never retried
 else a loop limit, a spent budget, a pause, a denial, no progress,\nor an error result with exit 0
   Supervisor -> Ledger : decision record (reason and class by ending), run blocked_on_decision,\nnever retried
 else crash or timeout, and the one retry is still available

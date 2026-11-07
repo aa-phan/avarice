@@ -1,7 +1,5 @@
 # Interactive shell
 
-> Status: drafted, not yet reviewed.
-
 Bare `avarice`, typed in a terminal, opens a full-screen menu over the runs and onboardings of the profile. The shell is a presentation layer: every action runs the same command the one-shot CLI runs, in the same process, and the shell re-reads the ledger for each view. This document describes the dispatch gate and the shell (`src/cli/main.ts`, `src/cli/shell/`), the shared text renderers it prints through (`src/cli/render/`) and the read-only event query it adds to the ledger (`src/adapters/sqlite/ledger.ts`). The flags, exit codes and output of the commands the shell runs are in [cli-reference.md](cli-reference.md). The run lifecycle and the interrupted state are in [runs.md](runs.md).
 
 ## When the shell opens
@@ -27,7 +25,7 @@ Colour is used only when standard output is a terminal, `NO_COLOR` is unset and 
 
 ### Home view
 
-The first screen, and the view the shell returns to after every action, shows:
+The first screen, and the view the shell returns to after every action, shows the items below. With an unavailable store only the first two print, with no table and no decisions count.
 
 1. `shell: <profile>`, the profile name.
 2. `store: ok`, or `store: unavailable (<detail>)` when the ledger could not be opened or read. The detail names the failing query or error, is flattened to one line and is cut to 300 characters. An unavailable store does not close the shell.
@@ -48,7 +46,7 @@ The watch view follows one run and is the only view that polls. It shows:
 - the latest four checkpoints, oldest first, each as `#seq next action (local time, relative time)`;
 - the latest six events of the run, oldest first, each as `#seq type` followed by up to four scalar entries of the event data as `name=value`, each value cut to 28 characters. Nested objects and arrays in the event data are not shown, and an event whose data cannot be parsed shows no data.
 
-The view reads the ledger again every second. No setting changes that interval. It ends by itself when the run is in `ready_for_review`, `blocked_on_decision`, `failed`, `cancelled` or `closed` and is not presented as interrupted. An interrupted run is watched on, because another terminal may resume it. The user ends the view with `q`, Escape or Ctrl-C (in line mode, `q` and Enter). The run is not touched: it keeps going, and the last frame stays on screen. A run ID that does not exist ends the view at once with `run <id>: not found`. A failed read shows `store: unavailable (...)` and polling continues.
+The view reads the ledger again every second. No setting changes that interval. It ends by itself when the run is in `ready_for_review`, `blocked_on_decision`, `failed`, `cancelled` or `closed` and is not presented as interrupted. An interrupted run is watched on, because another terminal may resume it. The user ends the view with `q`, Escape, Ctrl-C or Ctrl-D (in line mode, `q` and Enter). The run is not touched: it keeps going, and the last frame stays on screen. The watch action accepts only a listed run ID. If a listed run vanishes between the listing and the read, the view ends at once with `run <id>: not found`. A failed read shows `store: unavailable (...)` and polling continues.
 
 Table rows are cut to the terminal width with an ellipsis, but an ID or a state is never cut, so a narrow terminal makes a table overflow instead. The width is the stream's reported column count, or 100 when it reports none.
 
@@ -70,15 +68,15 @@ Start passes no `--project`, no `--budget` and no `--wait`. The command spawns t
 
 Watch with no runs shows `no runs to watch`. Resume with nothing interrupted shows `nothing to resume: no interrupted run or onboarding`. An answer that matches no entry shows `no run matches "<entry>"` (watch) or `no run or onboarding matches "<entry>"` (resume). In resume, an ID that is not on the list but starts with `run_` or `onb_` goes to the resume command anyway, which checks it and says why it cannot be resumed. In watch, only a listed ID is accepted. A cancelled prompt (Escape, Ctrl-C or an empty answer) returns to the menu and runs nothing.
 
-Every command the shell runs goes through the one-shot dispatcher, in this process, with its output captured and shown in the pane under the menu. The dispatcher receives the same overrides the shell received, except the terminal streams. A non-zero exit code is appended as `exit N`. A command that throws instead of returning shows `avarice <command>: failed: <message>` and `exit 70`. While it works, the screen shows `running <command> ...`. The shell holds no child process and sends no signal to any process, so a supervisor started from the shell keeps running after the shell exits.
+Every command the shell runs goes through the one-shot dispatcher, in this process, with its output captured and shown in the pane under the menu. The dispatcher receives the same overrides the shell received, except the terminal streams. A non-zero exit code is appended as `exit N`. A command that throws instead of returning shows `avarice <command>: failed: <message>` and `exit 70`. In full-screen mode, while it works, the screen shows `running <command> ...`. Line mode prints nothing until the command ends. The shell holds no child process and sends no signal to any process, so a supervisor started from the shell keeps running after the shell exits.
 
 ### The command line
 
 The command-line action takes one line in the one-shot grammar without the program name, such as `status --json` or `resume run_123`. Words are split on whitespace. Single and double quotes group words and are dropped; there are no escapes, and an unterminated quote is an error that runs nothing. A leading `avarice` word is ignored. The words `quit` and `exit` alone leave the shell. An empty line runs nothing.
 
-Line mode has no separate command-line item. A line that is not a menu key (`1` to `6`, `:` or `q`, case-insensitive) is taken as a command-line entry directly, and a blank line redraws the menu.
+Line mode lists the same menu, including the command-line item. A line that is not a menu key (`1` to `6`, `:` or `q`, case-insensitive) is also taken as a command-line entry directly, without the prompt. A blank line redraws the menu.
 
-Everything printed from a command, a ledger row or a model is stripped of escape sequences and control characters before it is drawn. A recorded title that carries an escape sequence cannot rewrite the terminal. The strip prevents it at the display; it does not change what is stored.
+Everything printed from a command, a ledger row or a model is stripped of escape sequences and of control characters other than newline and tab before it is drawn. A recorded title that carries an escape sequence cannot rewrite the terminal. The strip prevents it at the display; it does not change what is stored.
 
 ## Line editing and completion
 
@@ -99,7 +97,7 @@ Other Ctrl combinations are ignored. Completion works only on the first word, an
 
 ## Command history
 
-Each command-line entry that runs is recorded in `shell-history` in the data root, by default under `~/.local/share/avarice/personal-local` (`AVARICE_DATA_ROOT` moves it; see [config-reference.md](config-reference.md)). The file holds one entry per line, oldest first. It is created with mode 0600, and an existing file is tightened to 0600 on the next write, because a line can name a brief path or a run ID.
+Each command-line entry that runs is recorded in `shell-history` in the data root, at the data root that [config-reference.md](config-reference.md) names. The file holds one entry per line, oldest first. It is created with mode 0600, and an existing file is tightened to 0600 on the next write, because a line can name a brief path or a run ID.
 
 - An entry is stored with escape sequences and every control character removed, and trimmed. An entry empty after that is not stored.
 - The cap is 1000 lines. A write that would pass the cap rewrites the file without its oldest lines through a temporary file in the same directory and renames it over the original, so a crash leaves the old file or the new one. A file longer than the cap is read as its last 1000 lines.
@@ -110,18 +108,18 @@ Each command-line entry that runs is recorded in `shell-history` in the data roo
 
 ## How the shell reads the ledger
 
-Every view opens the ledger read-only, reads and closes it. The one ledger query added for the shell is the event listing: the latest N events of a run, returned oldest first, with no side effect. The shell asks for six. The other reads are the status, run-status and checkpoint reads that `status` and `inbox` already use. The shell never writes to the ledger itself; writes happen only inside the commands it runs.
+Every view opens the ledger read-only, reads and closes it. The one ledger query added for the shell is the event listing: the latest N events of a run, returned oldest first, with no side effect. The shell asks for six. The other reads are the run row read of the watch view and the status, run-status and checkpoint reads that `status` and `inbox` already use. The shell never writes to the ledger itself; writes happen only inside the commands it runs.
 
 ## Shared renderers
 
-The shell and the one-shot commands print through the same functions, so they use the same words. These are the result line (`subject: state (reason)`), the error line (`avarice <command>: <message>`), state words, money as `1.25 USD`, durations (`1 h 5 min`), local time with a relative form (`14:02, 3 min ago`, with the date first when not today), aligned tables, and the status and run views. The functions are pure: callers pass in the time and the width, and the `--json` output never goes through them.
+The shell and the one-shot commands print through the same functions, so they use the same words. The shared forms are the result line (`subject: state (reason)`) and the error line (`avarice <command>: <message>`). They also include state words, money as `1.25 USD`, durations (`1 h 5 min`) and aligned tables. Local time has a relative form (`14:02, 3 min ago`, with the date first when not today). The status and run views are shared too. The functions are pure: callers pass in the time and the width, and the `--json` output never goes through them.
 
 Tables follow fixed rules. They have a header row, columns in the order given, control characters removed from every cell, and each row cut to the width with an ellipsis. Columns holding a subject (an ID, a state) are never cut. A column marked to keep its text is cut only after the other columns are at their minimum of four characters. A repository path is cut from its start so its tail stays visible. Widths are counted in code points, which is exact for ASCII and Latin text and approximate for wide East Asian characters.
 
 ## Quirks
 
 - The "read-only" ledger open is not purely a read. If the profile directories or the ledger file do not exist, opening creates them. If migrations are pending, the open applies them on a write connection and then reopens read-only. The shell can therefore create or migrate the ledger just by showing the home view.
-- In full-screen mode Ctrl-C arrives as a key, not as a signal, and it is queued while an action works. It reaches the menu or prompt only after the action ends, so it does not interrupt a running command.
+- In full-screen mode the shell reads Ctrl-C as a key press and queues it while an action works. It reaches the menu or prompt only after the action ends. How a terminal signal behaves outside that path was not run.
 - In line mode, typing `status` runs the command and is recorded in history, but typing `4` runs the same menu item and is not. A start made through the menu leaves no history entry, so the up arrow cannot recall it.
 - `AVARICE_RUN` set to an empty string still counts as set and blocks the shell.
 - Inside a run, the user sees the generic "no command given" message, not the shell's own refusal text.

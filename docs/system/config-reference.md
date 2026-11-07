@@ -1,7 +1,5 @@
 # Configuration reference
 
-> Status: drafted, not yet reviewed.
-
 This document describes every configuration input AVARICE reads and every built-in limit that acts as configuration. The inputs are the environment variables that the `avarice` CLI, its detached supervisor and its hook read and set. They also include the profile `config.json`, the repository-side `.avarice/config.json` and `.planning/config.json`, the `routine` and `onboarding` presets, and the sandbox and egress-proxy settings. The sources are the profile and root resolution (`src/adapters/fs/profile-paths.ts`); the repository conventions and the run contract (`src/domain/conventions.ts`, `src/domain/run-contract.ts`, `src/domain/run-preflight.ts`, `src/domain/policy-narrowing.ts`); the run services (`src/app/`); the host, executor and proxy adapters (`src/adapters/`); and the CLI (`src/cli/`).
 
 ## Summary
@@ -265,7 +263,7 @@ The loop limits are prevention. At 25 searches in a row with no read, edit or wr
 | Test inventory | list command 120 s; at most 50000 test IDs of 500 characters each; at most 20000 test files of 4 MiB each |
 | Check validation | at most 20 unexpected paths and 10 hosts kept |
 | Check output | 5 MiB per stream, then cut with a marker |
-| Run branch hand-off | fetch 120 s; tree and snapshot calls 120 s; at most 10000 ignored entries kept |
+| Run branch hand-off | fetch 120 s; tree and snapshot calls 120 s; at most 10000 ignored entries listed; the snapshot step record stores 200 of them and the total count |
 
 ### The sandboxed executor and the egress proxy
 
@@ -351,7 +349,7 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 - `AVARICE_RUN` is read at only three places. `start`, `supervise` and the other commands do not look at it, so it blocks only the shell and `install-host`.
 - Children differ in how they get `PATH`: git falls back to a fixed `PATH` only when the parent's is empty, while graphify and the host build their own `PATH` regardless of the parent.
 - A run host and a run's checks differ in home and temp. The host keeps the forwarded `HOME` and gets `TMPDIR` at `<scratch>/tmp`. Checks, install and list commands get both set to the scratch directory itself.
-- A check's `env` cannot change `CI`, `LANG` or the other sandbox names, although only `PATH`, `HOME`, `TMPDIR` and the loader names are refused at parse. The sandbox value silently wins.
+- A check's `env` cannot change `CI`, `LANG` or the other sandbox names, although only the reserved names and prefixes listed above are refused at parse, and `CI`, `LANG` and the rest of the sandbox names are not. The sandbox value silently wins.
 - `AVARICE_GRAPHIFY_BIN` set to a bad path disables the `PATH` search.
 - Sandboxed supervisor commands (checks, install, list) deny reading the SSH, AWS and GitHub CLI credential directories of the home directory, the data root and the three default AVARICE parent directories. They then allow back the run's own clone and scratch. A work root or config home placed elsewhere by an environment variable is not denied by name, except the data root.
 - The preset records values that no code reads back: the no-progress limit, the decision lists, the tool classes, delivery, notification, the verification list and the repair-attempt count. Changing them would change only the policy revision.

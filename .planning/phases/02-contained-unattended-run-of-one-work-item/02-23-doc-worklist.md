@@ -656,6 +656,20 @@ Counted at HEAD `72a86b1` on 2026-11-06, one command each. The commands are thos
 | Document | Report | Verdict | Fixes applied | Answers | Status |
 |---|---|---|---|---|---|
 | runs.md | 02-23-reviews/runs.md | BLOCKED (no BLOCKER, 7 WARNING, 7 OBS) | Task 3 gate fix (`lib-evil/**` for a repository path in prose). Task 5: default roots with the profile segment; both reasons at the enforcement check; the pause only for a delegated item; inbox fields; run events listed; findings citations corrected; every long sentence split; OBS 10 to 13 applied | `## Answers` in the report: the opening module list is exempt from the sentence cap; OBS 9 left | reviewed (Task 5) |
+| README.md | 02-23-reviews/readme.md | BLOCKED (0 BLOCKER, 2 WARNING, 1 OBS) | first sentence split; counterpart claim scoped to decision records with a counterpart; opening says written from the code; integrations row widened | `## Answers` in the report | reviewed |
+| overview.md | 02-23-reviews/overview.md | BLOCKED (0, 3, 2) | long sentence split; lint described as run by hand; adapter row names the refusing host and the dormant adapter; containment pointer | OBS 5 left | reviewed |
+| cli-reference.md | 02-23-reviews/cli-reference.md | BLOCKED (1, 4, 3) | inbox exit codes; placement rules; stdout exception; project registration; sentence splits; checkpoint fallback; opening deferrals; unknowns link | residual exit lines answered | reviewed |
+| config-reference.md | 02-23-reviews/config-reference.md | BLOCKED (0, 1, 1) | reserved-name claim; ignored-entry cap | none | reviewed |
+| onboarding.md | 02-23-reviews/onboarding.md | BLOCKED (0, 1, 1) | six long sentences split | reference list answered | reviewed |
+| containment.md | 02-23-reviews/containment.md | BLOCKED (0, 6, 3) | opening labels; moved HEAD wording; safe git row; gate table row; validation network; environment wording; sentence splits; glob wording | O3 and reference lists answered | reviewed |
+| data-model.md | 02-23-reviews/data-model.md | PASS (0, 0, 0) | none needed | none | reviewed |
+| integrations.md | 02-23-reviews/integrations.md | BLOCKED (0, 7, 4) | descriptor claim; install-host exit codes; discard wording; sentence splits and list; install detail moved to checks-and-evidence.md; git commands and timeouts; launch refusal reasons; four OBS | none | reviewed |
+| processes.md | 02-23-reviews/processes.md | BLOCKED (0, 3, 4) | sentence splits; citation dropped; host-error branch; diagram edits (three); cross-link | OBS 7a answered | reviewed |
+| history.md | 02-23-reviews/history.md | BLOCKED (0, 4, 2) | commands pinned to the end commit; corrupted word; delivery labels; path and function name | OBS 6 answered | reviewed |
+| checks-and-evidence.md | 02-23-reviews/checks-and-evidence.md | BLOCKED (0, 3, 4) | sandbox posture row routed to containment.md; inventory status mapping; sentence split; revision wording; host grammar routed | OBS 5 and 7 answered | reviewed |
+| interactive-shell.md | 02-23-reviews/interactive-shell.md | BLOCKED (0, 5, 6) | line-mode menu; full-screen statements; Ctrl-C; watch ending; sentence split; five OBS | OBS 11 left | reviewed |
+| findings.md | 02-23-reviews/findings.md | BLOCKED (0, 5, 3) | five wrong citations corrected; moved lines annotated; three OBS citations | none | reviewed |
+| unknowns.md | 02-23-reviews/unknowns.md | BLOCKED (0, 1, 4) | test paths; delivery wording; first person | sentence length answered | reviewed |
 
 Anchors settled in Task 5: runs.md links `checks-and-evidence.md` and `processes.md`; both now exist in the tree.
 

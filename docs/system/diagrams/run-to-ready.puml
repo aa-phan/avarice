@@ -58,9 +58,11 @@ end
 Supervisor -> Ledger : checkpoint, context pack step (references and digest only)
 Supervisor -> Ledger : item ready to delegated
 Supervisor -> Clone : snapshot
-Supervisor -> Ledger : snapshot step, reserve an invocation, launch step started (session ID)
+Supervisor -> Ledger : snapshot step
 alt a budget is spent
   Supervisor -> Ledger : decision record, run blocked_on_decision (budget exhausted), host never called
+else
+  Supervisor -> Ledger : reserve an invocation, launch step started (session ID)
 end
 Supervisor -> Host : launch /gsd-quick (detached, sandboxed)
 Host -> Hook : every tool call

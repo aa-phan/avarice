@@ -1,7 +1,5 @@
 # Checks and evidence
 
-> Status: drafted, not yet reviewed.
-
 A run proves its work with commands the repository declares, and AVARICE runs them itself. This document describes how those commands become evidence and how two gates judge it: the dependency install, the validation of each declared check, the baseline, the required and target checks, the test inventory, evidence rows and the acceptance mapping, the baseline delta, and gates G2 and G4. It covers the check and install code, the allowlist proxy, the run clone adapter, the stage code that calls them, and the domain modules for evidence, gates, test inventory and conventions (`src/app/checks.ts`, `src/app/check-validation.ts`, `src/app/run-stages/prepare.ts`, `src/app/run-stages/item.ts`, `src/app/run-stages/finish.ts`, `src/adapters/exec/allowlist-proxy.ts`, `src/adapters/git/run-workspace.ts`, `src/domain/evidence.ts`, `src/domain/gates.ts`, `src/domain/test-inventory.ts`, `src/domain/conventions.ts`).
 
 Every verdict here comes from a status AVARICE measured by running a command itself, inside the sandbox and outside any agent invocation. Model text, such as a GSD verification status or a summary, can fail a gate and can never pass one. [runs.md](runs.md) owns the stage order and what a blocked gate does to the run. [containment.md](containment.md) owns the sandbox, the proxy internals and the hook. [data-model.md](data-model.md) owns the tables and event payloads. [config-reference.md](config-reference.md) owns the conventions keys and limits; this document says only what the checks section of the conventions means for validation and execution.
@@ -24,9 +22,7 @@ The install, the validation runs, the baseline, G2, the final proof and the test
 
 | Aspect | Rule |
 |---|---|
-| Environment | Built by AVARICE. Only `PATH` is inherited: the supervisor's `PATH`, preceded by the directory of the running Node binary. `HOME` and `TMPDIR` are the scratch directory, the npm cache is inside it, `CI=1` and `LANG=C`. A check's own `env` is merged first, so these values win. |
-| Reads denied | `~/.ssh`, `~/.aws`, `~/.config/gh`, the profile's data root, and the default AVARICE data, config and work parents. A profile moved by an environment variable is not covered by the default parents. |
-| Reads re-allowed | The command's working tree and the scratch directory. The validation run passes no re-allowance (see Quirks). |
+| Environment and reads | Built and denied by AVARICE as [containment.md](containment.md) describes. A check's own `env` is merged first, so the sandbox values win. The validation run passes no read re-allowance (see Quirks). |
 | Writes | Checks: the scratch directory and that check's declared `writes`. Install: `node_modules` in the clone and the scratch directory. List command: the scratch directory and the `writes` of every declared check. Validation: anywhere in the validation clone. |
 | Network | Checks, the baseline and the list command: none. Install: one loopback port. Validation: one loopback port when the detector proxy starts, otherwise none. |
 
@@ -54,7 +50,7 @@ A failed install blocks the run. The reason depends on the condition that select
 | The command timed out or exited non-zero, and no target was refused | `decision` | `repeated_failure` |
 | The lockfile is absent | `decision` | `repeated_failure` |
 
-A refused target is judged before the exit status, so an install that was refused and also failed is reported as the refusal. A registry host is a bare host name of dotted labels made of letters, digits and hyphens, so an IPv4 literal is accepted. At most 16 hosts may be declared.
+A refused target is judged before the exit status, so an install that was refused and also failed is reported as the refusal. A registry host is a bare host name, so an IPv4 literal is accepted, and at most 16 hosts may be declared. [config-reference.md](config-reference.md) gives the host grammar.
 
 ## Validating a declared check
 
@@ -70,7 +66,7 @@ Each declared check, required or not, runs once in a separate validation clone d
 
 An undeclared write is judged first, so a check that did both is rejected as `unexpected-write` with its hosts attached.
 
-Write detection is detection only. The sandbox lets the check write anywhere in the validation clone, because the point is to measure what it writes. The paths come from the clone's status before and after, ignored files included, and count only when they were not in the status before. Network use is prevented by the sandbox and detected from two signals: an attempt that reached the proxy, whose allowlist is empty, and the error text in the check's output (`ENOTFOUND`, `EAI_AGAIN`, `getaddrinfo`, `connect EPERM`, `ECONNREFUSED`). When the proxy cannot start, the check runs with no network at all and only the text signal remains.
+Write detection is detection only. The sandbox lets the check write anywhere in the validation clone, because the point is to measure what it writes. The paths come from the clone's status before and after, ignored files included, and count only when they were not in the status before. The sandbox prevents network use, and the pipeline detects it from two signals. One is an attempt that reached the proxy, whose allowlist is empty. The other is error text in the check's output (`ENOTFOUND`, `EAI_AGAIN`, `getaddrinfo`, `connect EPERM`, `ECONNREFUSED`). When the proxy cannot start, the check runs with no network at all and only the text signal remains.
 
 A verdict is cached in the ledger per project, pinned revision, check name and a digest of that one check's whole declaration (name, arguments, timeout, required flag, environment and writes). A later run on the same pin reuses it, and a change to one declaration re-validates that check alone. A `rejected` verdict is cached like an `active` one, so a rejected check stays rejected until its declaration changes. Each fresh validation appends a `check.validated` event with the check name, the verdict and, when there is one, the reason.
 
@@ -110,7 +106,7 @@ Evidence is an insert-only row per measured fact. It has a status, an independen
 
 The kinds written are `check`, `test-inventory`, `diff` and `gsd-verdict`. The domain also names `mutation`, `ci`, `review` and `manual`; none is written. Independence is `deterministic` for every row AVARICE measured and `model-review` for the GSD verdict. The value `external` exists in the type and is never written.
 
-A row's revision is `git:<commit>` when the working tree matches its commit exactly, and otherwise `tree:sha256:<digest>` of the tree content (tracked and untracked files, ignored files excluded). The revision is taken before a check runs. The baseline rows are measured in a clone that holds the untracked GSD configuration file, so they carry a tree revision unless the repository ignores that file. G2 rows always carry a tree revision. Only the final proof runs on a clean commit.
+A row's revision is `git:<commit>` when the working tree matches its commit exactly, and otherwise `tree:sha256:<digest>` of the tree content (tracked and untracked files, ignored files excluded). The revision is taken before a check runs. The baseline rows are measured in a clone that holds the untracked GSD configuration file, so they carry a tree revision unless the repository ignores that file. G2 rows carry a tree revision, because the unit has changed the clone. Only the final proof runs on a clean commit.
 
 Three kinds are not check rows:
 
@@ -164,7 +160,7 @@ When the conventions declare a test inventory, AVARICE measures it at the baseli
 | `{ skip: true }`, `{ only: true }` | the key inside an object literal on one line |
 | `@pytest.mark.skip`, `@unittest.skip` | the decorator |
 
-The row is of kind `test-inventory` with the count, a digest of the sorted ID list, the markers per file and the file count. The sorted ID list is stored as a `test-inventory` artifact for the life of the run. A list command that cannot run or fails is recorded as `unavailable` or `failed` with an empty ID list.
+The row is of kind `test-inventory` with the count, a digest of the sorted ID list, the markers per file and the file count. The sorted ID list is stored as a `test-inventory` artifact for the life of the run. A list command that cannot run, fails or times out is recorded with the mapped status (`unavailable`, `failed` or `inconclusive`) and an empty ID list.
 
 G2 compares the two measurements and reports failures in this order:
 

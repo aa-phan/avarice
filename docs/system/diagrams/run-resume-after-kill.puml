@@ -54,7 +54,7 @@ Supervisor -> Clone : read HEAD, compare with the attempt's snapshot
 alt HEAD moved under a delegated item
   Supervisor -> Ledger : containment finding, decision record,\nrun blocked_on_decision (enforcement failure), no discard
 else the launch step names the attempt (the unit ran)
-  Supervisor -> Ledger : classify step: inconclusive (interrupted)
+  Supervisor -> Ledger : classify step: inconclusive (interrupted), unless already classified
   alt the interrupted attempt was already the retry
     Supervisor -> Ledger : decision record (repeated failure), run blocked_on_decision
   else the invocations budget cannot cover another unit

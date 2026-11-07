@@ -1,8 +1,6 @@
 # Built system documentation
 
-> Status: drafted, not yet reviewed.
-
-This tree describes AVARICE as it is built: the onboarding of one existing repository to an active project record, and the unattended run of one work item on an onboarded repository to a reviewable local branch, together with the interactive shell. Every document here is checked against the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
+This tree describes AVARICE as it is built: the onboarding of one existing repository to an active project record, and the unattended run of one work item on an onboarded repository to a reviewable local branch. It also covers the interactive shell. Every document here is written from the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
 
 ## How to read this
 
@@ -24,7 +22,7 @@ A document marked "drafted, not yet reviewed" under its title has not had a seco
 | [containment.md](containment.md) | Launch checks, generated settings, the PreToolUse hook, budgets, the sandboxed executor, the egress proxy, git safety, root placement |
 | [indexes-and-context.md](indexes-and-context.md) | The code graph, intel and knowledge indexes, and `avarice context` |
 | [data-model.md](data-model.md) | The ledger, events, budgets, the artifact store, the project record, files on disk |
-| [integrations.md](integrations.md) | Claude Code, GSD, git, graphify, the macOS sandbox, `mount`, Node and SQLite |
+| [integrations.md](integrations.md) | Claude Code, GSD, git, graphify, the macOS sandbox, the egress proxy and package registry, the Claude configuration directory, the detached supervisor, `mount`, Node and SQLite |
 | [processes.md](processes.md) | Five flows end to end, with [diagrams](diagrams/): onboard, kill then resume, start to ready for review, kill during the unit then resume a run, and a crashed unit discarded and retried |
 | [history.md](history.md) | How the built system arrived, from the git history |
 | [findings.md](findings.md) | Suspected defects and code-versus-specification differences, for the owner |
@@ -33,7 +31,7 @@ A document marked "drafted, not yet reviewed" under its title has not had a seco
 
 ## Proposal counterparts
 
-Each proposal in `docs/` maps to the living documents that describe the part of it that is built. A proposal with no counterpart has nothing built yet. The documents here are written from the code, not copied from the proposals, so their names and boundaries follow the built system.
+Each proposal document in `docs/`, and each decision record in `docs/decisions/` that has a counterpart, maps to the living documents that describe the part of it that is built. A proposal with no counterpart has nothing built yet. The decision records not listed here have no counterpart of their own. The documents here are written from the code, not copied from the proposals, so their names and boundaries follow the built system.
 
 | Proposal | Living counterparts |
 |---|---|

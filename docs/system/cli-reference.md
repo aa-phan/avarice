@@ -1,14 +1,12 @@
 # CLI reference
 
-> Status: drafted, not yet reviewed.
-
-This document describes the command-line surface in `src/cli/` (entry `bin/avarice.ts`), the read models behind `status` and `inbox` (`src/app/status.ts`, `src/app/run-status.ts`), the start service behind `start` (`src/app/run-start.ts`) and the skill file that `install-host` writes (`src/adapters/host-claude/avarice-run-skill.ts`, `src/adapters/host-claude/skill-install.ts`). It covers ten commands, a bare `avarice` that may open the interactive shell, one exit-code convention and one argument parser shared by all commands.
+This document describes the command-line surface in `src/cli/` (entry `bin/avarice.ts`), the read models behind `status` and `inbox` (`src/app/status.ts`, `src/app/run-status.ts`), the start service behind `start` (`src/app/run-start.ts`) and the skill file that `install-host` writes (`src/adapters/host-claude/avarice-run-skill.ts`, `src/adapters/host-claude/skill-install.ts`). The `context`, `onboard` and `resume` sections defer to [indexes-and-context.md](indexes-and-context.md), [onboarding.md](onboarding.md) and [runs.md](runs.md) for their mechanics. It covers ten commands, a bare `avarice` that may open the interactive shell, one exit-code convention and one argument parser shared by all commands.
 
 ## Summary
 
 - Commands: `init`, `repo add`, `onboard`, `start`, `supervise`, `status`, `inbox`, `resume`, `context`, `install-host`. Bare `avarice` opens the interactive shell on a terminal and is a usage error elsewhere. Any other word is a usage error.
 - Exit codes: `0` success, `3` the command ran correctly but the answer is "not active, not ready, refused, held or unavailable", `64` usage error, `70` internal failure.
-- Streams: results go to stdout; every error and every warning goes to stderr. Only `status`, `inbox` and `context` have a `--json` form. All three print pretty-printed JSON (two-space indent) and a trailing newline.
+- Streams: results go to stdout; every error and every warning goes to stderr, except the unreadable-run line of `start --wait` and `resume --wait`, which goes to stdout (see Quirks). Only `status`, `inbox` and `context` have a `--json` form. All three print pretty-printed JSON (two-space indent) and a trailing newline.
 - Leases: `onboard`, `supervise` and the onboarding path of `resume` take a lease and run stages in their own process. `start` and the run path of `resume` start a detached `supervise` process, which takes the lease.
 - Read-only commands: `status`, `inbox` and `context` write no project, onboarding, run, adapter or lease rows. See "Order of checks and profile side effects" for what every command creates.
 - Network: the CLI layer opens no network connection, and `status`, `inbox` and `context` are offline. `onboard` and the supervisor that `start` and `resume` spawn may launch the contained agent host, whose behavior belongs to [containment.md](containment.md).
@@ -29,7 +27,7 @@ The PreToolUse hook entry is not a user command; it runs inside the agent host a
 | A command module that fails to load for another reason | `avarice <name>: cannot load: <message>` on stderr | 70 |
 | A command module that exports no entry point | `avarice <name>: the command module does not export run()` on stderr | 70 |
 
-Only the ten listed names are ever loaded, so a path-like name is an unknown command. `--help` and `-h` are recognised only as the first word, and `avarice --help` with more words behind it still prints usage and exits 0. After a command name they are not special: `init -h` is rejected as an unexpected argument, and `status --help` is accepted and ignored.
+Only the ten listed names are ever loaded, so a path-like name is an unknown command. `--help` and `-h` are recognised only as the first word. `avarice --help` with more words behind it still prints usage and exits 0. After a command name they are not special. `init -h` is rejected as an unexpected argument, and `status --help` is accepted and ignored.
 
 The shell condition is checked only when there are no words at all. `avarice --json` or any other word never opens the shell. The shell module is loaded only on that path. The shell refuses again when `AVARICE_RUN` is set (exit 64, `the interactive shell does not open inside a run`).
 
@@ -49,21 +47,21 @@ All commands share one parser. Its rules are the contract:
 
 ### Order of checks and profile side effects
 
-For every command that passes dispatch, the work runs in this order: parse arguments; run the command's own usage check if it has one; resolve and prepare the profile and open the ledger; run the command.
+For every command that passes dispatch, the work runs in this order. It parses arguments, then runs the command's own usage check if it has one. It then resolves and prepares the profile and opens the ledger, and last it runs the command.
 
 `init`, `repo add`, `start`, `supervise`, `inbox`, `install-host` and `context` have a usage check, so a malformed command line exits 64 before anything is created. The usage check of `install-host` also refuses a run environment, so that refusal creates nothing either.
 
-`onboard` and `resume` check their arguments inside the command, after the profile is prepared, so a usage error from either can leave a freshly created profile behind. `status` has no usage check and ignores extra words.
+`onboard` and `resume` check their arguments inside the command, after the profile is prepared. A usage error from either can therefore leave a freshly created profile behind. `status` has no usage check and ignores extra words.
 
 Checks that depend on the ledger or the repository (an unknown run, an invalid brief, a budget override the contract rules reject) run after the profile is prepared. Their exit-64 errors can therefore follow profile creation.
 
 Preparing the profile (every command, including `status`, `inbox` and `context`):
 
 - Roots: config home, data root and work root come from `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT` and `AVARICE_WORK_ROOT`. The only profile is `personal-local`, and the default data and work roots carry its name. Defaults and overrides are in [config-reference.md](config-reference.md).
-- Placement is refused when a root lies under a `~/.claude*` directory or under `CLAUDE_CONFIG_DIR`, when roots are nested, or when the data root is not on local storage (or its mount cannot be determined). The refusal is exit 70 with the reason on stderr.
+- Placement is judged for the data root and the work root only; the config home is not checked. Either root is refused when it lies under a `~/.claude*` directory or under `CLAUDE_CONFIG_DIR`, or when it would contain the home or Claude configuration directory. Refusal also follows when the two roots are nested, or when the data root is not on local storage (or its mount cannot be determined). The refusal is exit 70 with the reason on stderr.
 - Missing directories are created with mode 0700; a missing profile `config.json` is created with mode 0600 and never overwritten.
 - The ledger (`state.db` in the data root) is created and migrated when absent or behind. A read-only command opens an already current ledger read-only. If the ledger is absent or has pending migrations, it is created or migrated first and then reopened read-only.
-- A command that is not read-only (`init`, `repo add`, `onboard`, `start`, `supervise`, `resume`, `install-host`) also records the executor, graph, GSD (when located) and agent-host adapter descriptors in the ledger. `status` and `inbox` record none. `context` records none and locates GSD only to read the indexes.
+- A command that is not read-only (`init`, `repo add`, `onboard`, `start`, `supervise`, `resume`, `install-host`) also records the executor, graph, GSD (when located) and agent-host adapter descriptors. The ledger holds them. `status` and `inbox` record none. `context` records none and locates GSD only to read the indexes.
 - Failure of any of these steps is exit 70 with a message of the form `avarice <command>: <what>: <reason>`.
 
 ### Output style
@@ -83,7 +81,7 @@ Tables are aligned columns with a header row. A row is cut to the terminal width
 | 64 | Usage error, an unknown run or onboarding ID (`resume`, `supervise`), an invalid brief or budget override (`start`), a path that is not a repository (`repo add`, `onboard`), several active projects without `--project` (`context`), or `install-host` inside a run | dispatch, `init`, `repo add`, `onboard`, `start`, `supervise`, `inbox`, `resume`, `context`, `install-host` |
 | 70 | Internal failure: profile, store or adapter failure, an unexpected exception, a supervisor that could not be started | all |
 
-`status` and `inbox` return only 0 and 70. An uncaught exception inside a command is caught by dispatch, printed as `avarice <name>: failed: <message>` and returned as 70. The store is closed on every path. An exception thrown by a usage check or while preparing the profile is outside that handler (see the unknowns).
+`status` returns only 0 and 70. `inbox` returns 0, 64 (a positional argument) and 70. An uncaught exception inside a command is caught by dispatch, printed as `avarice <name>: failed: <message>` and returned as 70. The store is closed on every path. An exception thrown by a usage check or while preparing the profile is outside that handler (see [unknowns.md](unknowns.md)).
 
 ## init
 
@@ -122,7 +120,7 @@ Behavior when the repository is already known (same root commit and path):
 - An active project record exists: refused, exit 3, stderr `avarice repo add: refused: conflict: ...` naming `existing_state_conflict`, followed by the line `run: avarice status`.
 - Another onboarding is past `discovered` and not stopped: refused the same way (exit 3); the message names the onboarding and the `avarice resume <id>` command.
 - An onboarding still in `discovered` exists: it is reused, no second project or onboarding is created, and its stored request is not changed.
-- Otherwise a new project and onboarding are created.
+- Otherwise a new onboarding is created, on the existing project when one is registered for this root commit and path, else on a new project.
 
 A path that is not a repository prints the error and then a line `run: ` followed by the command that prints the repository's top-level directory for that path. The path is quoted when it holds characters outside a plain set.
 
@@ -160,7 +158,7 @@ Registration refusals mirror `repo add`: an active record or another in-flight o
 
 Output (stdout, no `--json` form): `onboarding <id>: <state>` with ` (<reason>)` appended when the onboarding has a blocked reason. Then, when the stages left an explanation, one line with that message (for example why GSD was incompatible or why a contract was refused). Reasons are `enforcement_failure`, `budget_exhausted`, `existing_state_conflict`, `scope_unavailable`, `adapter_incompatible` and `decision`.
 
-Exit: 0 when the final state is `active`; 3 when it ends in any other state (blocked, incompatible, or an in-progress state the loop cannot advance); 64 usage; 70 when the run fails (stderr `avarice onboard: onboarding <id> did not finish: ...`), including a lease already held by another process (another process running the same `discovered` onboarding) and a lease lost mid-run.
+Exit: 0 when the final state is `active`. Exit 3 when it ends in any other state (blocked, incompatible, or an in-progress state the loop cannot advance). Exit 64 is usage. Exit 70 is a failed run (stderr `avarice onboard: onboarding <id> did not finish: ...`), including a lease already held by another process running the same `discovered` onboarding and a lease lost mid-run.
 
 Side effects: registers the project and onboarding. Takes the lease on the onboarding (default lifetime 180 seconds, override `AVARICE_LEASE_TTL_MS`, see [config-reference.md](config-reference.md); renewed every third of the lifetime while stages run, released on exit). Creates a staging copy under the work root, runs the GSD mapping through the contained agent host, builds the code graph, intel and knowledge indexes in staging, and on success writes the active project record. The user's checkout is not modified. When GSD is missing or not admitted, the onboarding stops `incompatible` rather than failing; when the host cannot enforce containment, it ends `blocked` with reason `enforcement_failure`. Not read-only, not offline.
 
@@ -179,7 +177,7 @@ Authorizes one run of one brief against an onboarded repository and hands it to 
 | `--wait` | boolean | off | Boolean; never consumes a following word. Follows the run to where it stops. |
 | positionals | none | | Any positional is a usage error. |
 
-The shape checks run before the profile is prepared. The checks that follow run in this order, and a failure creates nothing: policy; an admitted GSD installation; the brief file and its parse; the project; the active record; the repository preflight; the contract compile and its static checks.
+The shape checks run before the profile is prepared. The checks that follow run in this order, and a failure creates nothing. They are the policy, an admitted GSD installation, the brief file and its parse, the project, the active record, the repository preflight, and the contract compile with its static checks.
 
 Refusals (exit 3, stderr `avarice start: refused: <message>`, nothing created). Ten rules refuse a start. The message differs per rule; the rule's code is not printed.
 
@@ -265,7 +263,7 @@ There is no usage check: extra positionals and unknown flags are ignored.
 
 Human output: a first line `status: N project(s)`. With none, it is followed by `No projects registered. Add one with: avarice repo add <path>`. Otherwise:
 
-- A table with the columns `PROJECT`, `REPOSITORY` (cut from its start when too long), `ACTIVITY` (`not onboarded`, `onboarding` or `interrupted`), `STATE` and `NEXT`. `STATE` is the ledger state with the reason in parentheses; for an interrupted onboarding it is the state it stopped in. `NEXT` is the checkpoint's next action for an interrupted onboarding and `-` otherwise.
+- A table with the columns `PROJECT`, `REPOSITORY` (cut from its start when too long), `ACTIVITY` (`not onboarded`, `onboarding` or `interrupted`), `STATE` and `NEXT`. `STATE` is the ledger state with the reason in parentheses. For an interrupted onboarding it is the state it stopped in. `NEXT` is the checkpoint's next action for an interrupted onboarding and `-` otherwise.
 - Per project, in table order: `onboarding <id>: <state>`, which for an interrupted one reads `<state> (interrupted)`; `continue with: avarice resume <id>` for an interrupted one; and, when an active record exists, `record vN at <revision>; mapping <mode> (<completeness>, <freshness>); indexes: <list>`. The list holds the indexes the record lists (`graph, intel`), absent ones as `graph absent (<reason>)`, or `none`.
 - When any project has runs: `runs: N`, a table with `RUN`, `STATE` and `TITLE`, and one detail block per run (below). The runs of all projects are listed together: interrupted first, then those blocked on a decision, then the rest in creation order.
 
@@ -308,7 +306,7 @@ Each element of `runs`:
 | `title` | string | The work item's title, free text from the brief. |
 | `state` | string | The ledger state; an interrupted run keeps its real state here. |
 | `reason` | string or null | Blocked reason: `decision`, `enforcement_failure`, `budget_exhausted`, `unauthenticated`, `ref_changed`, `ref_deleted` or `access_revoked`. |
-| `lastCheckpoint` | object or null | The latest checkpoint that names an action (the closing `none` checkpoint of a stop state is skipped): `seq`, `nextAction`, `revision` (string or null), `at` (ISO time). Null when there is no checkpoint. |
+| `lastCheckpoint` | object or null | The latest checkpoint that names an action (the closing `none` checkpoint of a stop state is skipped): `seq`, `nextAction`, `revision` (string or null), `at` (ISO time). When every checkpoint is a closing `none`, the latest of them. Null when there is no checkpoint. |
 | `branch` | string or null | The run's branch name. |
 | `commit` | string or null | The commit handed to the source repository; null until the hand-off. |
 | `clean` | boolean or null | Whether every final evidence row was taken on a clean tree; null without evidence. |
@@ -336,7 +334,7 @@ Lists the open decisions of runs and the runs that wait for a review. Read-only,
 
 Unknown flags are ignored.
 
-Human output: `inbox: N open decision(s), M review(s)`, in the singular for one. Nothing follows when both are zero. When there are decisions: `decisions:`, a table with `DECISION`, `RUN`, `CLASS`, `URGENCY` and `OPENED` (local time with a relative form), then one `issue <decision id>: <text>` line per decision, with the text flattened to one line and cut to the terminal width. When there are reviews: `reviews:` and a table with `RUN`, `BRANCH`, `COMMIT` (seven characters, `-` when not handed off) and `REPOSITORY`.
+Human output: `inbox: N open decision(s), M review(s)`, in the singular for one. Nothing follows when both are zero. When there are decisions, the output is `decisions:` and a table with `DECISION`, `RUN`, `CLASS`, `URGENCY` and `OPENED` (local time with a relative form). Then comes one `issue <decision id>: <text>` line per decision. The text is flattened to one line and cut to the terminal width. When there are reviews: `reviews:` and a table with `RUN`, `BRANCH`, `COMMIT` (seven characters, `-` when not handed off) and `REPOSITORY`.
 
 JSON output: an object with two arrays.
 
@@ -380,7 +378,7 @@ Side effects: as `onboard` after registration; also appends `invocation.reaped` 
 - Otherwise the command prints `run <id>: resuming from <state>`, with ` (next: <action>)` when a checkpoint exists. When a step was in flight it then prints `interrupted attempt <attempt> at <step>` (or `interrupted at <step>`).
 - It then spawns a detached supervisor exactly as `start` does and records the step `supervisor:resume`. The supervisor takes the lease, reaps what the dead supervisor left running, reconciles and goes on. Without `--wait` the command then exits 0.
 
-With `--wait` the command polls every 250 milliseconds for at most 24 hours and prints the same result block as `start --wait`, with the same exit codes: 0 at `ready_for_review`; 3 for any other stop state, an interrupted supervisor or the wait bound; 70 for a run that cannot be read. One case differs. When the supervisor stopped because its own reconcile failed (a failed reap, or a reconcile that could not read the repository), the command prints `avarice resume: run <id> could not be resumed: <reason>` on stderr, prints no result block, and exits 70. A reconcile failure is told from a second death by a new failed reconcile step on the run.
+With `--wait` the command polls every 250 milliseconds for at most 24 hours and prints the same result block as `start --wait`. The exit codes are the same. Exit 0 is `ready_for_review`. Exit 3 is any other stop state, an interrupted supervisor or the wait bound. Exit 70 is a run that cannot be read. One case differs. When the supervisor stopped because its own reconcile failed (a failed reap, or a reconcile that could not read the repository), the command prints `avarice resume: run <id> could not be resumed: <reason>` on stderr, prints no result block, and exits 70. A reconcile failure is told from a second death by a new failed reconcile step on the run.
 
 Exit: 0 `ready_for_review`, or the supervisor was spawned without `--wait`. 3 stopped elsewhere, lease held, or the wait ended unfinished. 64 usage or no such run. 70 failure, including a supervisor that could not be started or whose spawn step could not be recorded (`run <id> was not resumed: ...`).
 
@@ -401,7 +399,7 @@ Asks the active project record's indexes (intel first, then the graph) for a ter
 
 Selection: intel may use at most half of the budget, rounded up, and the graph may use the rest, so the graph is always asked. Within a source, entries are taken in the source's order while they fit; one that does not fit is left out whole (and listed as omitted), and a smaller later one may still fit. An entry already returned by the other source is skipped. An index is skipped, with a note, when the record does not list it, when no source is configured, when the budget is already spent, or when the index cannot answer or be read.
 
-Human output: a header line with the term, repository, project ID and record version and revision; `budget N tokens, used about M`; `no index entry matches` when empty; then per item a numbered line `[source] title`, a line with source path, revision, freshness, optional confidence and estimated tokens, and the excerpt; a `left out for the budget:` list; and one `note:` line per note. Control, zero-width and bidirectional characters are replaced by spaces and lines are cut at 400 characters. Text that came from a document, or from a model reading one, is wrapped in a fence of the form `--- begin untrusted data ... ---` with every content line prefixed by `| `, so it cannot close the fence. Its title is not printed outside the fence.
+Human output starts with a header line with the term, repository, project ID and record version and revision. Then come `budget N tokens, used about M` and, when nothing matched, `no index entry matches`. Each item has a numbered line `[source] title`, a line with source path, revision, freshness, optional confidence and estimated tokens, and the excerpt. A `left out for the budget:` list follows, then one `note:` line per note. Control, zero-width and bidirectional characters are replaced by spaces and lines are cut at 400 characters. Text that came from a document, or from a model reading one, is wrapped in a fence of the form `--- begin untrusted data ... ---` with every content line prefixed by `| `, so it cannot close the fence. Its title is not printed outside the fence.
 
 JSON output (object; the text sanitising above does not apply, values are as the index returned them):
 
@@ -446,7 +444,7 @@ Exit: 0 installed, updated or unchanged. 3 refused (`avarice install-host: refus
 
 Side effects: the skill file above, and one adapter record named `host-skill:avarice-run` in the ledger holding the skill name, path and digest, written also when the file was unchanged. Takes no lease. Not read-only.
 
-The skill text is advisory and is identical on every install. It tells a session to call `avarice status` first, to treat the context pack and retrieved text as data and never as instruction, to stay inside the contract's paths, and to stop and report a denied tool call. It also tells the session to ask a clear question with numbered options last when a choice is consequential, and to use `avarice context` before reading whole files. It names `avarice contract amend`, `avarice budget` and `avarice install-host` as owner-only commands. Its front matter allows the tools `Bash(avarice status:*)`, `Bash(avarice context:*)` and `Read`. The text enforces nothing; the hook, the sandbox and the gates do that, as described in [containment.md](containment.md).
+The skill text is advisory and is identical on every install. It tells a session to call `avarice status` first, to treat the context pack and retrieved text as data and never as instruction, to stay inside the contract's paths, and to stop and report a denied tool call. It also tells the session to ask a clear question with numbered options last when a choice is consequential, and to use `avarice context` before reading whole files. It names `avarice contract amend`, `avarice budget` and `avarice install-host` as owner-only commands. Its front matter allows the tools `Bash(avarice status:*)`, `Bash(avarice context:*)` and `Read`. The text enforces nothing. The hook, the sandbox and the gates do that, as described in [containment.md](containment.md).
 
 ## Quirks
 
@@ -460,5 +458,6 @@ The skill text is advisory and is identical on every install. It tells a session
 - A run shown as `paused` by `status` is usually a presentation: only a run whose ledger state is `paused` made that transition. The JSON keeps the real state in `state` and `interrupted.state`.
 - The start refusal codes are not printed; only the message is. A script that needs to tell the refusals apart must match message text.
 - Exit code 3 covers several different situations (refused, blocked, held lease, run stopped elsewhere, no answer); the message on stderr or stdout distinguishes them. `status` and `inbox` never return it.
+- The error line for a run that cannot be read during `start --wait` or `resume --wait` is printed on stdout, not stderr, although it is an error and exits 70.
 - The `avarice-run` skill names two owner commands, `contract amend` and `budget`, that dispatch does not know; they are unknown commands today.
 - The wait of `start --wait` is bounded by the contract's wall clock plus 15 minutes and ends with exit 3 and a "still running" line when the supervisor outlives it. The wait of `resume --wait` is bounded by 24 hours regardless of the contract.

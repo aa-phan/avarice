@@ -46,7 +46,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From runs
 
-- Whether the states `waiting_external`, `awaiting_review`, `failed`, `cancelled`, `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states (no match), a search of `src` for the four reason names (only the lifecycle definition and an unrelated freshness enum), and the command list in `src/cli/main.ts` (no command answers a decision).
+- Whether the states `waiting_external`, `awaiting_review`, `failed`, `cancelled`, `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states (no match that writes the state), a search of `src` for the four reason names (only the lifecycle definition and an unrelated freshness enum), and the command list in `src/cli/main.ts` (no command answers a decision).
 - Whether containment.md is complete for the run purpose. Checked: the run-owner rule, the scope inputs, the scratch directory creation, the run skill and agents and the canonical clone working directory were read in `src/domain/invocation-scope.ts`, `src/adapters/host-claude/claude-host.ts` and `src/app/invocation.ts`; the hook rule list and the settings generator were not read for this document.
 - What the install, check validation, baseline, evidence and gate rules do in detail. Checked: `src/app/checks.ts` lines 325 to 390 (the install summary and the start of the install) and `src/domain/evidence.ts` (the baseline delta); `src/app/check-validation.ts` was not read for this document.
 - Whether the behavior holds on a live host. Checked: code only; no run was executed and no test was run.
@@ -64,13 +64,13 @@ This document lists what the grounding did not determine, and for each entry wha
 
 - Whether an exception thrown by a command's usage check or by profile composition (outside the try in `src/cli/main.ts`) ends the process with a code other than 70 (for example Node's own code 1 through the top-level await in `bin/avarice.ts`): checked by reading `src/cli/main.ts` and `bin/avarice.ts` only; no such exception was provoked.
 - The exit codes of the interactive shell (the "the shell's" row of the dispatch table): only the usage refusal under `AVARICE_RUN` was read; `src/cli/shell/` is owned by interactive-shell.md and was not read in full.
-- Behavior of `src/app/context.ts` and the context adapters: unchanged since the diff base, so the existing `context` section was kept after checking the CLI layer and the budget constants only.
+- Behavior of `src/app/context.ts` and the context adapters: no file of it changed in the run slice, so the existing `context` section was kept after checking the CLI layer and the budget constants only.
 - Whether a second supervisor spawned by `resume` against a just-started run is refused the lease: not read in `acquireRunLease`; no claim made in the document.
 - Order in which the ledger returns open decisions (`listDecisions`): not read; the document says "the order the ledger returns them".
 
 ## From config-reference (run slice)
 
-- Whether check validation can read its own clone under the default work root: the validation call passes no allow-read paths (`src/app/check-validation.ts:90`) and I did not run it. Checked: the sandbox profile builder and the call sites by reading; not checked: a live run.
+- Whether check validation can read its own clone under the default work root: the validation call passes no allow-read paths (`src/app/check-validation.ts:90`) and it was not run. Checked: the sandbox profile builder and the call sites by reading; not checked: a live run.
 - What a run ends in when an artifact file over 2 MiB stops classification: the stage returns an error to the supervisor loop, which releases the lease without a transition (`src/app/run-service.ts`). Not traced further into resume or status rendering.
 - Whether the hook's search-loop window (the last 2000 decision events) can hide a long search run: not read beyond the constant and the call.
 - Shell source (`src/cli/shell/shell.ts`, `src/cli/render/style.ts`) read only for environment, history and polling constants; the key handling and views were not read. Not covered: the rest of the 537-line shell.
@@ -81,7 +81,7 @@ This document lists what the grounding did not determine, and for each entry wha
 - Whether the package manager's ignore-scripts environment variable outranks a flag in a declared install argv: npm behavior, not in this code. Checked: `src/app/checks.ts:364`.
 - Whether the settings keys the host honors (permission rules, sandbox lists) take effect as generated: host behavior, outside this code. Checked: settings generator and preflight.
 - Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no runtime claim is made.
-- `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the previous document and `src/app/stages/activate.ts:98`.
+- `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the earlier text of this tree and `src/app/stages/activate.ts:98`.
 
 ## From data-model (run slice)
 
@@ -92,23 +92,23 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From history
 
-- The evidence files of the exit run were not opened (brief item 6): the exit-run entries rest on commit subjects of `f759ec8` and `58fd5e9` and the file stat of `92bdf9c` and `52fe97c`.
+- The evidence files of the exit run were not opened: the exit-run entries rest on commit subjects of `f759ec8` and `58fd5e9` and the file stat of `92bdf9c` and `52fe97c`.
 - Whether the other-profile sandbox finding was recorded as closed by the suite itself was not read. The "inferred" label rests on the subjects of `95b494e`, `059cd3d`, `e1740a6` and `4c4cd49`.
 - Commit bodies were not read for the run slice; entries rest on subjects, plus the file stat of `3fb6ae4`, `059cd3d`, `7fe273c`, `52fe97c`, `92bdf9c` and `f742b3e`.
 
 ## From integrations (run slice)
 
-- The test-only adapters of the agent host, executor and egress ports come from the previous document plus a search of `test/` for the egress override; the fake host and fake `claude` executable were not re-read at HEAD.
+- The test-only adapters of the agent host, executor and egress ports come from the earlier text of this tree plus a search of `test/` for the egress override; the fake host and fake `claude` executable were not re-read at HEAD.
 - Whether the hook policy fields of the run purpose (globs, loop limits, denied tools) are enforced as the settings describe was not checked; the hook source is outside this packet and belongs to containment.md.
 - Whether `avarice contract amend` and `avarice budget` are planned commands is not determinable from the code (checked the command list in `src/cli/main.ts` and searched `src` for "contract amend").
-- Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the existing document after spot checks of timeouts and limits by grep; they were not re-read line by line.
+- Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the earlier text of this tree after spot checks of timeouts and limits by grep; they were not re-read line by line.
 - The order in which supervisor steps call the install and validation helpers was read only at the call sites in `src/app/run-stages/prepare.ts`; runs.md owns the sequence.
 
 ## From interactive-shell
 
 - Whether a terminal in raw mode delivers Ctrl-C as a key and never as SIGINT in every Node and terminal combination: checked only that the code takes the key path (`src/cli/shell/shell.ts:176`, `:249`) and queues input while an action runs (`:290-:306`); the signal behavior is runtime and was not run. The document states only the queueing and the key path.
 - Whether the shell behaves well with `TERM` unset on real terminals: checked the code (`full` is true when `TERM` is not `dumb`, `src/cli/shell/shell.ts:153`); no live terminal run was made.
-- Test files (`test/unit/shell.test.ts`, `shell-tty.test.ts`, `shell-supervisor.test.ts`) were listed but not read; no claim rests on them.
+- Test files (`test/unit/shell.test.ts`, `test/integration/shell-tty.test.ts` and `test/integration/shell-supervisor.test.ts`) were listed but not read; no claim rests on them.
 
 ## From overview
 
@@ -124,5 +124,5 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## Campaign-wide
 
-- What the documentation pass executed: the denominator commands of coverage.md, the import-boundary lint, the prose and link gates over this tree, and the type check and the unit suite named in coverage.md. It executed no live run and no full test run, so every behavior claim rests on code read at the counted commit and on test files read, not run.
+- What the documentation pass executed: the denominator commands of coverage.md, the import-boundary lint, the prose and link gates over this tree, the type check and the unit suite (1236 tests, all passing). It executed no live run and no full test run beyond the unit suite, so every behavior claim rests on code read at the counted commit and on test files read, not run.
 - Nothing in this tree was checked against a running host: the admitted host versions, the sandbox profile, the egress proxy and the run flows are described from code, and the diagrams were not rendered (no render step exists in the repository).
