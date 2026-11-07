@@ -516,7 +516,7 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
 // The options of an admitted git command that print no file content, per READ_ONLY_COMMANDS entry. shortFlags are the short option
 // letters that take no value; shortValued the letters that take one (attached, or the next word); counts admits `-<digits>`; flags are
 // long options without a value; valued are long options that need a non-empty `=value`. The lists are an allow-list compared whole,
-// because git accepts an unambiguous abbreviation of a long option (`--pat` is `--patch`) and several spellings imply a patch. A
+// because some git commands accept an unambiguous abbreviation of a long option (`git status --verb` is `--verbose`) and several spellings imply a patch. A
 // `--format` placeholder names commit fields only, never a blob. `git show` takes no option: a commit prints its patch, and a blob or
 // a tag pointing at one prints its content even with `-s`, which the hook cannot tell from a commit by the hash.
 export interface GitOutputForm {
