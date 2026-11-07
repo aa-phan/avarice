@@ -73,3 +73,13 @@
 {"plan":"02-22","case":"exit-r1-docs-dates-predicate-run_01M6SEY4D8H2AWJX3PTTVZE1HR","costUsd":0.9995495,"claudeVersion":"2.1.318","at":"2026-11-06T22:21:58.992Z"}
 {"plan":"02-25","case":"status-first-1","costUsd":0.0347729,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:18:03.252Z"}
 {"plan":"02-25","case":"status-first-1","costUsd":0.0379854,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:25:04.110Z"}
+{"plan":"02-25","case":"status-first-2","costUsd":0.0473182,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:26:09.862Z"}
+{"plan":"02-25","case":"stop-on-denial-1","costUsd":0.0380184,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:26:25.067Z"}
+{"plan":"02-25","case":"routable-question-1","costUsd":0.06320540000000001,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:26:50.845Z"}
+{"plan":"02-25","case":"status-first-3","costUsd":0.0542454,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:27:13.134Z"}
+{"plan":"02-25","case":"stop-on-denial-2","costUsd":0.027924700000000004,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:27:25.939Z"}
+{"plan":"02-25","case":"routable-question-2","costUsd":0.0573815,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:27:47.949Z"}
+{"plan":"02-25","case":"status-first-4","costUsd":0.046656,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:28:05.643Z"}
+{"plan":"02-25","case":"stop-on-denial-3","costUsd":0.0281118,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:28:20.199Z"}
+{"plan":"02-25","case":"routable-question-3","costUsd":0.05157010000000001,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:28:41.823Z"}
+{"plan":"02-25","case":"control-no-skill-1","costUsd":0.0433353,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:29:01.722Z"}
