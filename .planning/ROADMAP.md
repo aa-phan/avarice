@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 25/25 plans executed (13 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9)
+**Plans:** 25/26 plans executed (14 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01)
 
 Plans:
 **Wave 1**
@@ -174,6 +174,9 @@ Plans:
 
 **Wave 13** *(gap closure, blocked on Wave 12 completion)*
 - [x] 02-25-PLAN.md — G-02-9: the avarice-run skill in ten real attended sessions (status first, stop on a denial, routable question) under the D-15 ceiling
+
+**Wave 14** *(gap closure, blocked on Wave 13 completion)*
+- [ ] 02-26-PLAN.md — CR-01: git object reads and content-printing git output refused by the hook (proven against real git), the sandbox residual named, docs/system updated and reviewed fresh
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
