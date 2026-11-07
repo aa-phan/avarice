@@ -1,0 +1,7 @@
+- src/app/deps.ts: covered (diff adds three optional run ports to the dependency shape; documented in the layers section).
+- src/cli/composition.ts: covered (run ports built, egress override, host fallback; documented). The adapter-selection details are left to integrations.md.
+- src/cli/main.ts: covered (ten-command allowlist, bare-command shell rule; the error-line rendering change has no documentable behavior beyond the exit codes owned by cli-reference.md).
+- scripts/check-boundaries.ts (read, unchanged since base): covered for the rules; test/unit/footprint.test.ts read for the network and detach exemptions.
+- Counts: ten commands, `grep -n "COMMANDS =" src/cli/main.ts` (10 of 10 listed); ports 11 of 12 files in `ls src/ports` (the twelfth, capability.ts, is the shared descriptor); lint files 79 of 79, `node scripts/check-boundaries.ts` printed "ok (79 file(s))" (domain 34, ports 12, app 33 by `find src/<dir> -name '*.ts' | wc -l`).
+- Alive proofs: egress proxy composed at composition.ts:252 and used at src/app/checks.ts:355; spawn-supervisor spawns at src/cli/spawn-supervisor.ts:28. App imports no child_process: `grep -rln "node:child_process" src/app src/domain src/ports` printed nothing.
+- Not checked: the internals of every adapter, the hook beyond its imports, interactive-shell internals, the claude host's own network use.

@@ -1,0 +1,6 @@
+- cli-reference.md: its dispatch row for `avarice` with no words (line 22) must say the shell opens when stdin and stdout are terminals and `AVARICE_RUN` is unset; otherwise `avarice: no command given` plus usage, exit 64. It must not say the shell is unimplemented.
+- config-reference.md: `AVARICE_RUN` is now read (it gates the shell and `install-host`); its line 37 saying nothing reads it is stale. `NO_COLOR` and `TERM` are read for colour and input mode. The `shell-history` file (mode 0600, 1000-line cap) belongs in its files or limits tables.
+- data-model.md: `shell-history` in the data root (0600, 1000 lines, temporary file `shell-history.<pid>.tmp` during a rewrite) belongs in files on disk; the ledger gains the read-only event listing (latest N events of a run, oldest first).
+- findings.md: line 9 is stale (see findings.md of this package).
+- README.md: a documents-table row and a proposal-counterparts row for this document (the shell decision record and its requirement). coverage.md: shell actions 7 of 7, history cap 1000.
+- runs.md: owns the `paused` presentation of an interrupted run, which this document refers to and does not restate.

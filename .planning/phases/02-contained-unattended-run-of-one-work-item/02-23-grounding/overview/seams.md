@@ -1,0 +1,5 @@
+- README.md: the overview row should read as boundary, the two slices, layers and the import rule; also interactive-shell.md and checks-and-evidence.md rows must exist for the overview links.
+- coverage.md: CLI commands 10 (not 6), ports 11 plus one shared descriptor, import-lint files 79 (denominators from this packet).
+- integrations.md: line 25 says the ports directory holds eight ports; it holds eleven plus the shared descriptor.
+- cli-reference.md: it says six commands; `COMMANDS` has ten.
+- interactive-shell.md and checks-and-evidence.md: the overview links to both; they must exist.

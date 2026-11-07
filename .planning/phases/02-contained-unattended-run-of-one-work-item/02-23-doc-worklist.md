@@ -655,6 +655,10 @@ Counted at HEAD `72a86b1` on 2026-11-06, one command each. The commands are thos
 
 | Document | Report | Verdict | Fixes applied | Answers | Status |
 |---|---|---|---|---|---|
-| runs.md | pending (Task 4) | pending | Task 3 gate fix: one sentence that named a repository path in prose (the example of a prefix that is not containment) was reworded to `lib-evil/**` against `lib/**`, meaning unchanged | none | landed, drafted, awaiting review |
+| runs.md | 02-23-reviews/runs.md | BLOCKED (no BLOCKER, 7 WARNING, 7 OBS) | Task 3 gate fix (`lib-evil/**` for a repository path in prose). Task 5: default roots with the profile segment; both reasons at the enforcement check; the pause only for a delegated item; inbox fields; run events listed; findings citations corrected; every long sentence split; OBS 10 to 13 applied | `## Answers` in the report: the opening module list is exempt from the sentence cap; OBS 9 left | reviewed (Task 5) |
 
-Anchors to settle in Task 5: runs.md links `checks-and-evidence.md`, `interactive-shell.md` is not linked; `checks-and-evidence.md` does not exist until Task 5 lands it. runs.md also links `processes.md`, which is updated by the processes grounder in Task 4 and landed in Task 5.
+Anchors settled in Task 5: runs.md links `checks-and-evidence.md` and `processes.md`; both now exist in the tree.
+
+Correction to the plan-base denominators: the event-kind count is 28, not 26. The pattern `type: '[a-z.-]+'` skipped event names with an underscore (`work_item.transition`, `work_item.upserted`); `type: '[a-z_]+[.][a-z_.-]+'` finds 28.
+
+Task 5 landing notes: sections dropped from the current documents by a package are all renames (containment: "Staging checks after the run" became "Staging and clone checks after the work" and "What is not covered here" became "Limits of containment"; data-model: "Attempts and onboarding steps" became "Attempts and steps" and "Files left on disk by an onboarding" became "Files left on disk"; config-reference: "Budgets (the onboarding preset)" became "The onboarding preset"), except data-model's "Run-shaped tables used by onboarding", whose claim the run tables falsify. Nothing was restored. The status line `drafted` was added to README.md and onboarding.md, which had none.

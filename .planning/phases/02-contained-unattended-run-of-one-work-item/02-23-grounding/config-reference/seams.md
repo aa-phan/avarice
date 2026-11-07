@@ -1,0 +1,6 @@
+- `data-model.md` must list the event kinds `check.validated` and `check.finished` (written by `src/app/check-validation.ts` and `src/app/checks.ts`); its event table has `invocation.orphan-charged` but neither of these (a search of that file for `check.finished` finds nothing).
+- `data-model.md` must carry the files the data root receives: `shell-history`, the run contract file (mode 0600 in a 0700 directory) and the per-invocation directory of a run.
+- `checks-and-evidence.md` must carry the behavior of install, check validation (verdicts `active`, `rejected`, `unavailable`, caching per project, pin and check digest) and the evidence rows; this document gives only their environment, ports and caps.
+- `containment.md` must carry what the sandbox profile allows beyond the network rule (temp areas, re-allowed reads, metadata of ancestor directories) and the hook's loop-limit stop.
+- `runs.md` states the brief format and its limits, which this document repeats in one table row; the format stays with `runs.md`.
+- `cli-reference.md` must carry the exit codes of `install-host` (0, 3, 64, 70) and the refusal inside a run.

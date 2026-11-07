@@ -1,0 +1,15 @@
+# Brief amendments (from the tracer review of runs.md)
+
+Systemic faults the runs.md review found, which any grounder could repeat. Every grounder in Task 4 applies these on top of the Grounder brief. runs.md itself is fixed by the executor in Task 5; it was not wrong-shaped, so it is not re-grounded.
+
+1. **Defaults with the profile segment.** Default data and work roots include the profile name: `~/.local/share/avarice/personal-local/...` and `~/.local/share/avarice-work/personal-local`, with config under `~/.config/avarice`. Check `src/adapters/fs/profile-paths.ts` before writing any default path, or point to config-reference.md instead of restating it.
+2. **One reason per code path.** When a step can end in more than one blocked reason, outcome or exit code, state each and the condition that selects it (example: the enforcement check gives `enforcement_failure` only for a host failure and `decision` for a static G0 failure). Never generalize one branch into "the run is X".
+3. **Conditions narrower than the heading.** A behavior that applies only under a condition (an item state, a flag, a purpose) names the condition. Check the guard expression in the code, not the surrounding comment.
+4. **Contract surfaces are exhaustive, events included.** List every event kind, field and returned value the code in your packet writes (grep for `type: '` in your packet files), or point to the one document that lists them and confirm it does. Do not claim "every value is an ID, a state..." without checking each returned field; free-text fields (issues, titles, paths) exist.
+5. **35-word sentence cap.** Running prose follows the technical-writing skill's hard cap of 35 words per sentence (lists and tables excepted). Split at semicolons and colons before returning. Count before returning.
+6. **Exact `file:line` citations.** Every findings.md line cites the exact line that shows the claim (not the import above it, not the function start, not a table header). Re-open each cited line before writing it.
+7. **Self-consistency.** A general sentence ("every block opens a decision record") must not be contradicted by a quirk or exception elsewhere in the same document; scope the general sentence.
+8. **Prevention vs detection labels.** A hook or sandbox denial that stops the action is prevention; a check after the fact is detection. Do not under- or over-claim.
+9. **Partial reads.** A file you read only in part is marked "covered in part" in coverage.md, and unknowns.md says which part was not read.
+10. **Worklist counts are testimony.** The worklist's counts (e.g. it said six start refusal codes; the code has ten) must be re-derived from the code with the command recorded in coverage.md. The old hook-rule count (5 allow, 21 deny) is not reproducible; the containment grounder defines a reproducible command and records it.
+11. **Real transitions vs presentation.** Distinguish a ledger state transition from how `status` renders a state (e.g. a run that really moves `verifying` to `paused` vs a run `status` shows as interrupted). Name which one you mean.

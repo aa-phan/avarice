@@ -1,0 +1,8 @@
+- `src/cli/commands/init.ts:15`: the user-facing usage error reads "only personal-local in Phase 1", delivery narrative in a string; intent unknown.
+- `src/cli/commands/context.ts:50`: the "onboard a repository first" hint prints `avarice onboard <repo>`, which omits the required `--policy onboarding` and would itself be a usage error.
+- `src/adapters/host-claude/avarice-run-skill.ts:37`: the skill tells sessions not to run `avarice contract amend` and `avarice budget`; neither is in COMMANDS (`src/cli/main.ts:12`); intent unknown (forward reference or stale).
+- `src/cli/commands/install-host.ts:35`: the config directory reads `process.env` for `CLAUDE_CONFIG_DIR`, while the usage check at `install-host.ts:25` uses the environment passed to `main`; the two can differ when `main` is given an environment; intent unknown.
+- `src/app/run-status.ts:143`: a run with no lease holder (a just-started `contract_ready` run before its supervisor takes the lease) is presented as interrupted and `paused`, with a resume hint; intent unknown.
+- `src/cli/main.ts:94`: `createDeps` and the usage check (`src/cli/main.ts:88`) are outside the try block that maps exceptions to exit 70; a throw there is not handled by dispatch; intent unknown.
+- `docs/extensions.md:35`: spec contradiction: the proposal's exit-code summary lists 0, 1, 2, 64, 69, 70; the CLI returns only 0, 3, 64 and 70 (`src/cli/main.ts:13`).
+- `docs/extensions.md:60`: spec contradiction: the proposal's `resume <runId>` row has no `--wait` flag; the code declares it (`src/cli/commands/resume.ts:26`) and adds exit 70 for a failed reconcile.

@@ -1,0 +1,4 @@
+- runs.md: its status/inbox paragraph says "Every value is an ID, a state, a status, a revision or a count"; free-text fields exist (`title`, `branch`, check and gate names, reference `id`, and the model-derived decision `issue`). It also gives the default contract path as `~/.local/share/avarice/runs/<runId>/`; the data root default carries the profile segment.
+- runs.md: its start refusal table lists four codes; the code has ten (six preflight codes plus `gsd-not-admitted`, `no-project`, `no-active-record`, `conventions-invalid`). The codes are not printed by the CLI.
+- interactive-shell.md: must state the shell's own exit codes and the refusal under `AVARICE_RUN`; this document only gives the dispatch conditions.
+- config-reference.md: `AVARICE_RUN` (read by dispatch, `install-host` and the shell) and `CLAUDE_CONFIG_DIR` as read by `install-host` should be listed there.

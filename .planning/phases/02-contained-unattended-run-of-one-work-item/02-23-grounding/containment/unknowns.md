@@ -1,0 +1,5 @@
+- Whether a declared check validated under the default roots can read its own validation clone: the code passes read denials without a re-allowance (`src/app/check-validation.ts:90`); no Seatbelt run was made. Checked: the code path and `git log` for that file.
+- Whether the package manager's ignore-scripts environment variable outranks a flag in a declared install argv: npm behavior, not in this code. Checked: `src/app/checks.ts:364`.
+- Whether the settings keys the host honors (permission rules, sandbox lists) take effect as generated: host behavior, outside this code. Checked: settings generator and preflight.
+- Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no runtime claim is made.
+- `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the previous document and `src/app/stages/activate.ts:98`.

@@ -1,0 +1,3 @@
+- The evidence files of the exit run were not opened (brief item 6): the exit-run entries rest on commit subjects of `f759ec8` and `58fd5e9` and the file stat of `92bdf9c` and `52fe97c`.
+- Whether the other-profile sandbox finding was recorded as closed by the suite itself was not read. The "inferred" label rests on the subjects of `95b494e`, `059cd3d`, `e1740a6` and `4c4cd49`.
+- Commit bodies were not read for the run slice; entries rest on subjects, plus the file stat of `3fb6ae4`, `059cd3d`, `7fe273c`, `52fe97c`, `92bdf9c` and `f742b3e`.

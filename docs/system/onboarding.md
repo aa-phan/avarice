@@ -1,8 +1,10 @@
 # Onboarding
 
+> Status: drafted, not yet reviewed.
+
 This document describes the onboarding flow implemented by the onboarding service, its stages, the resume and reconcile logic, the supporting domain modules (lifecycle, preflight, mapping, onboarding contract, validation, project record) and the git staging adapters (`src/app/onboarding-service.ts`, `src/app/stages/`, `src/app/resume.ts`, `src/domain/`, `src/adapters/git/`).
 
-Onboarding takes one existing git repository to one immutable project record, in a fixed pipeline: register and preflight, compile a contract, stage a clone, map with GSD in a contained host, validate, build indexes, activate. Nothing is written to the user's repository or to its `.planning/`. Every stage commits a checkpoint before its side effect and a transition after it, so a killed run resumes from the committed state. The sibling documents own what this one leaves out: [containment.md](containment.md) (hook and sandbox), [data-model.md](data-model.md) (tables), [indexes-and-context.md](indexes-and-context.md) (index internals), [cli-reference.md](cli-reference.md) (flags).
+Onboarding takes one existing git repository to one immutable project record, in a fixed pipeline: register and preflight, compile a contract, stage a clone, map with GSD in a contained host, validate, build indexes, activate. Nothing is written to the user's repository or to its `.planning/`. Every stage commits a checkpoint before its side effect and a transition after it, so a killed run resumes from the committed state. The sibling documents own what this one leaves out: [containment.md](containment.md) (hook and sandbox), [data-model.md](data-model.md) (tables), [indexes-and-context.md](indexes-and-context.md) (index internals), [cli-reference.md](cli-reference.md) (flags) and [runs.md](runs.md) (the unattended run of one work item, which starts from the active record this pipeline produces).
 
 ## Entry points
 
@@ -40,7 +42,7 @@ Every pre-activation state (discovered through planning_ready) may move to `bloc
 Which states the code reaches:
 
 - Reached by the stage loop: discovered, contract_proposed, mapping, validating, validation_failed, planning_ready, active, blocked, incompatible.
-- `paused` is entered only by the resume prelude, which also leaves it. The map stage has a `paused` branch for an invocation outcome, but the outcome classifier never produces it.
+- `paused` is entered only by the resume prelude, which also leaves it. The map stage has a `paused` branch for an invocation outcome. The outcome classifier returns `paused` only when a caller passes it a structural pause signal, and no onboarding stage does, so that branch is not reached.
 - Never entered by any stage, command or adapter: `planning`, `stale`, `deactivated`. Their edges exist in the table only.
 - The edges out of `blocked` and `incompatible` (back to `contract_proposed`) and out of `deactivated` are never driven. A blocked or incompatible onboarding is final in practice: resume reports it and changes nothing, and a new `onboard` creates a fresh onboarding for the same project.
 
@@ -52,7 +54,7 @@ The loop reads the committed state, runs the one stage for it, and repeats until
 
 A run holds a lease on its onboarding. Taking it succeeds only when the lease is free or its expiry has passed, and every take bumps a fence number. The default lifetime is 180 seconds (an environment variable overrides it in the fault tests). The holder renews every third of the lifetime from a background timer, so a stage that waits on the host for a long time keeps the lease. Every transition, checkpoint and activation carries the fence, so a previous holder that wakes up after a takeover is refused at its next write. A failed renewal ends the loop at its next check. The lease is released on the way out.
 
-Consequence: two processes racing for an expired lease produce exactly one runner; the loser reports a conflict and changes nothing. A live lease also blocks `resume`; `status` shows a pre-activation onboarding as interrupted when its lease is absent or expired.
+Consequence: two processes racing for an expired lease produce exactly one runner; the loser reports a conflict and changes nothing. A live lease also blocks `resume`; `status` shows a pre-activation onboarding as interrupted when its lease is absent or expired. The unattended run takes its lease on its own row by the same rules; [runs.md](runs.md) describes that supervisor.
 
 ## Preflight and refusals
 
@@ -205,6 +207,8 @@ Every checkpoint and transition runs through helpers that also fire fault points
 One checkpoint fires twice: the first index checkpoint is committed once with the planning_ready transition and once by the index stage before the step; `#2` targets the gap between them.
 
 ## Resume, reconcile and reaping
+
+This section describes the resume of an onboarding. The resume of an unattended run is in [runs.md](runs.md).
 
 `resume` on a stop state reports where it ended and takes no lease. Otherwise it takes over the lease (only once expired) and runs a prelude before the stage loop.
 

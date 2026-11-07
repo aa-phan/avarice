@@ -1,0 +1,15 @@
+- `src/adapters/sqlite/ledger.ts:484`: the carrier `runs` row is inserted with state 'onboarding' and never updated; its lease columns are unused (replaces the finding at old line 409)
+- `src/adapters/sqlite/ledger.ts:1183`: a decision is inserted with state 'open' and no code updates a decision, so the answer columns and the states answered, stale and withdrawn are unreachable (intent unknown; no command answers a decision)
+- `src/adapters/sqlite/ledger.ts:1029`: the evidence insert binds ext_ref to a NULL literal, so the column is never set (intent unknown)
+- `src/adapters/sqlite/migrations/0001-initial.ts:17`: task_refs has no writer or reader; the earlier finding that six spec tables lack a writer (old line 5) is now two tables
+- `src/adapters/sqlite/migrations/0001-initial.ts:76`: approvals has no writer or reader
+- `src/adapters/sqlite/migrations/0001-initial.ts:30`: checkpoints.gsd_state_digest has no writer; item_id is now written for runs (`src/adapters/sqlite/ledger.ts:468`), so the earlier finding at old line 23 is half stale
+- `src/adapters/sqlite/ledger.ts:746`: createRun is called by no production code (only by createRunWithContract internally and a test)
+- `src/adapters/sqlite/ledger.ts:903`: storeRunContract has no production caller (only a test); runs store contract version 1 only
+- `src/adapters/sqlite/ledger.ts:1105`: upsertWorkItem has no production caller; the type 'harden' it accepts (line 1116) is written by nothing
+- `src/adapters/sqlite/ledger.ts:1257`: listHookReads has no production caller (only a test)
+- `src/app/invocation.ts:404`: a run invocation passes the run ID as onboardingId, so hook events name a run in a field called onboarding
+- `src/adapters/host-claude/claude-host.ts:153`: a run's invocation directory is under `run/`, while its contract file is under `runs/` (`src/app/run-start.ts:145`); intent unknown
+- `src/hook/pre-tool-use.ts:134`: the hook counts events by invocation_id, which has no index (only events_run and evidence_attempt exist), so each decision scans the log
+- `src/adapters/sqlite/migrations/0002-run.ts:30`: check_validations has no immutability trigger although evidence and gate_results have one; code never updates it (intent unknown)
+- Moved lines of existing findings: the blocked-reason event scan is now `src/adapters/sqlite/ledger.ts:212`, supersession `:578`, the onboarding step upsert `:513`, the artifact insert-or-ignore `:726`, the budget_exhausted-only denial count `:696` and `:706`

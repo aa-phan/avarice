@@ -1,0 +1,5 @@
+- Whether an exception thrown by a command's usage check or by profile composition (outside the try in `src/cli/main.ts`) ends the process with a code other than 70 (for example Node's own code 1 through the top-level await in `bin/avarice.ts`): checked by reading `src/cli/main.ts` and `bin/avarice.ts` only; no such exception was provoked.
+- The exit codes of the interactive shell (the "the shell's" row of the dispatch table): only the usage refusal under `AVARICE_RUN` was read; `src/cli/shell/` is owned by interactive-shell.md and was not read in full.
+- Behavior of `src/app/context.ts` and the context adapters: unchanged since the diff base, so the existing `context` section was kept after checking the CLI layer and the budget constants only.
+- Whether a second supervisor spawned by `resume` against a just-started run is refused the lease: not read in `acquireRunLease`; no claim made in the document.
+- Order in which the ledger returns open decisions (`listDecisions`): not read; the document says "the order the ledger returns them".

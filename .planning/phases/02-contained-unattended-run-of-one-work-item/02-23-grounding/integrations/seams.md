@@ -1,0 +1,7 @@
+- `docs/system/containment.md` (admitted versions paragraph) and `docs/system/config-reference.md` (Claude Code versions row) list 2.1.312, 2.1.316 and 2.1.317; the code admits 2.1.318 as well (`src/adapters/host-claude/launch-preflight.ts:22`). `docs/system/history.md` should record the admission of 2.1.318 from the commit history.
+- `docs/system/containment.md` must carry the run purpose's scope, hook policy fields, the egress allowlist as a control, the scratch directory write root and the re-allowed read paths; this document states only the port fields and the proxy mechanism.
+- `docs/system/runs.md` must carry the call sequence of the install step, check validation, discard and retry, the hand-off and the supervisor lease, and GSD's quick workflow as the unit it drives; this document states only the integration behavior.
+- `docs/system/config-reference.md` must list `--config-dir` of `install-host`, the conventions key `dependencies.registryHosts` and the variables `AVARICE_CLAUDE_BIN`, `AVARICE_HOOK_ENTRY`, `AVARICE_GRAPHIFY_BIN` and `AVARICE_RUN`; this document names them.
+- `docs/system/cli-reference.md` must carry the `install-host` and `supervise` commands, flags and exit codes (3 refused, 70 internal).
+- `docs/system/data-model.md` must carry the run tables and the `host-skill:avarice-run` adapter-config row.
+- `docs/system/coverage.md` must update the port count (11 ports plus one shared descriptor).

@@ -1,0 +1,3 @@
+- Whether a terminal in raw mode delivers Ctrl-C as a key and never as SIGINT in every Node and terminal combination: checked only that the code takes the key path (`src/cli/shell/shell.ts:176`, `:249`) and queues input while an action runs (`:290-:306`); the signal behavior is runtime and was not run. The document states only the queueing and the key path.
+- Whether the shell behaves well with `TERM` unset on real terminals: checked the code (`full` is true when `TERM` is not `dumb`, `src/cli/shell/shell.ts:153`); no live terminal run was made.
+- Test files (`test/unit/shell.test.ts`, `shell-tty.test.ts`, `shell-supervisor.test.ts`) were listed but not read; no claim rests on them.
