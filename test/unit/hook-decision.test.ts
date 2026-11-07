@@ -1129,7 +1129,7 @@ describe('git object reads and output forms (CR-01)', () => {
   });
 
   it('unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object', () => {
-    for (const command of ['git show "HEAD@{0}:.env"', 'git show "HEAD@{10:00}:.env"', 'git show ":/fix"', 'git show ":!x"', 'git ls-files ":(exclude)src"', 'git show HEAD:/etc/passwd', 'git show ":^src/a.ts"', 'git show ":^"', 'git show ":*"', 'git show ":.env*"', 'git show ":?nv"', 'git show ":[.]env"']) {
+    for (const command of ['git show "HEAD@{0}:.env"', 'git show "HEAD@{10:00}:.env"', 'git show ":/fix"', 'git show ":!x"', 'git ls-files ":(exclude)src"', 'git show HEAD:/etc/passwd', 'git show ":^src/a.ts"', 'git show ":^"', 'git show ":*"', 'git show ":.env*"', 'git show ":?env"', 'git show ":[.]env"']) {
       assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
     }
   });

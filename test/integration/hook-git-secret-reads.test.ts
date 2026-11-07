@@ -38,7 +38,7 @@ function rig(): Rig {
       'src/a.ts': 'export const a = 1;\n',
       'sub/b.txt': 'b\n',
     },
-    commits: [{ '.env': `TOKEN=${SENTINEL}-v2\n` }],
+    commits: [{ '.env': `TOKEN=${SENTINEL}-v2\n`, 'sub/.env': `TOKEN=${SENTINEL}-sub\n` }],
     modified: { '.env': `TOKEN=${SENTINEL}-v3\n` },
   });
   git(repo.path, ['add', '.env']);
@@ -139,7 +139,7 @@ describe('refused git forms are real leaks', () => {
 
 describe('a quoted wildcard after a leading colon is a pathspec for git (review round 6)', () => {
   const r = rig();
-  for (const word of [':*', ':.env*', ':?nv', ':[.]env']) {
+  for (const word of [':*', ':.env*', ':?env', ':[.]env']) {
     it(`git show "${word}": denied shell-git-object, and git does print the sentinel`, () => {
       const d = decide(r, `git show "${word}"`);
       assert.deepEqual([d.decision, d.rule], ['deny', 'shell-git-object'], word);
@@ -166,6 +166,17 @@ describe('refused forms, git output reported', () => {
       t.diagnostic(`${command}: git printed the sentinel: ${gitOutput(r, command).includes(SENTINEL) ? 'yes' : 'no'}`);
     });
   }
+});
+
+describe('index form naming a directory (reported, not asserted)', () => {
+  const r = rig();
+
+  it('reports whether git show :sub prints the patch of HEAD for the files below sub, and what the hook decides', (t) => {
+    const out = gitRun(r.repo.path, ['show', ':sub']);
+    const printed = (out.stdout + out.stderr).includes(`${SENTINEL}-sub`);
+    const d = decide(r, 'git show :sub');
+    t.diagnostic(`git show :sub printed the sentinel of sub/.env: ${printed ? 'yes' : 'no'}; hook: ${d.decision} ${d.rule}`);
+  });
 });
 
 describe('case variant of a secret path', () => {

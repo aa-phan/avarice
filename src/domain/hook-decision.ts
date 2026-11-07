@@ -504,7 +504,8 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
     if (!operand.includes(':')) continue;
     if (operand.includes('{') || operand.includes('}')) return GIT_OBJECT_RULE;
     const path = operand.startsWith(':') ? (/^:[0-3]:/.test(operand) ? operand.slice(3) : operand.slice(1)) : operand.slice(operand.indexOf(':') + 1);
-    if (/^[/!(^]/.test(path)) return GIT_OBJECT_RULE;
+    // A wildcard or a backslash (a quoted word the lexer kept) makes git read an index form as a pathspec that matches more than the path judged.
+    if (/^[/!(^]/.test(path) || /[*?[\\]/.test(path)) return GIT_OBJECT_RULE;
     // Git resolves the path from the top of the working copy; `./` and `../` forms resolve from the shell's directory. Both must pass.
     const rule = checkRead([absolutize(policy.stagingPath, path), absolutize(shellCwd(call, policy), path)], policy, canon);
     if (rule !== null) return rule;
