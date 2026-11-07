@@ -1061,3 +1061,76 @@ describe('parseHookPolicy for readBeforeEdit and loopLimits', () => {
     assert.equal(parseHookPolicy(JSON.parse(JSON.stringify(p))).ok, true);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// CR-01: an admitted git command prints tracked or staged content of a secret path (object names and output forms).
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('git object reads and output forms (CR-01)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const runPolicy = (): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['tests/unit/*.test.ts'],
+        protectedGlobs: ['package.json', '.git/**'],
+        agentCommands: [{ words: ['npm', 'test'], paths: false }],
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED },
+    );
+  const verdict = (command: string, p: HookPolicy = policy(), cwd = STAGING): [string, string | undefined] => {
+    const d = decide(shell(command, cwd), p);
+    return [d.decision, d.rule];
+  };
+
+  it('repro: git show HEAD:.env and git show :.env are denied deny-secret-read under the map and the run policy, as cat .env is', () => {
+    for (const p of [policy(), runPolicy()]) {
+      for (const command of ['git show HEAD:.env', 'git show :.env', 'cat .env']) {
+        assert.deepEqual(verdict(command, p), ['deny', 'deny-secret-read'], `${p.purpose}: ${command}`);
+      }
+    }
+  });
+
+  it('more object forms: a stage number, an ancestor, a nested path, a pem file and git rev-parse deny deny-secret-read', () => {
+    for (const command of ['git show :0:.env', 'git show :2:.env', 'git show HEAD~1:.env', 'git show main:config/.env', 'git show HEAD:certs/server.pem', 'git rev-parse HEAD:.env']) {
+      assert.deepEqual(verdict(command), ['deny', 'deny-secret-read'], command);
+    }
+  });
+
+  it('allowed object paths: a tracked source file, the root tree, an example file and git rev-parse stay shell-identity', () => {
+    for (const command of ['git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:', 'git show HEAD:.env.example', 'git show HEAD:.envrc', 'git rev-parse HEAD:src/a.ts']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('adjacency: git show of an object path is decided like cat of the same path, for every stage spelling', () => {
+    for (const path of ['.env', 'config/.env', 'certs/server.pem', '.env.example', '.envrc', 'src/a.ts']) {
+      const expected = verdict(`cat ${path}`);
+      for (const command of [`git show HEAD:${path}`, `git show :${path}`, `git show :0:${path}`]) {
+        assert.deepEqual(verdict(command), expected, command);
+      }
+    }
+    assert.deepEqual(verdict('git show HEAD:.env.example'), ['allow', 'shell-identity']);
+    assert.deepEqual(verdict('git show HEAD:.envrc'), ['allow', 'shell-identity']);
+  });
+
+  it('encoding: a dot segment, a quoted operand, an empty quote pair and a subdirectory cwd do not hide the secret path', () => {
+    for (const command of ['git show HEAD:./.env', 'git show HEAD:sub/../.env', 'git show "HEAD:.env"', 'git show HEAD:.e""nv']) {
+      assert.deepEqual(verdict(command), ['deny', 'deny-secret-read'], command);
+    }
+    const sub = `${STAGING}/sub`;
+    assert.deepEqual(verdict('git show HEAD:../.env', policy(), sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git show HEAD:.env', policy(), sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git show HEAD:../../../../home/u/repo/.env', policy(), sub), ['deny', 'outside-read-set']);
+  });
+
+  it('unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object', () => {
+    for (const command of ['git show "HEAD@{0}:.env"', 'git show "HEAD@{10:00}:.env"', 'git show ":/fix"', 'git show ":!x"', 'git ls-files ":(exclude)src"', 'git show HEAD:/etc/passwd']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
+    }
+  });
+});

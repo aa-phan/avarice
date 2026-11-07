@@ -1,7 +1,7 @@
 // Scratch git repositories for integration tests. Every repository lives under os.tmpdir(); a test never
 // points git at the AVARICE checkout or at the user's repositories. The helper runs git with a clean
 // global configuration (no signing, no user hooks) so results do not depend on the machine.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -42,6 +42,12 @@ function gitEnv(): NodeJS.ProcessEnv {
 
 export function git(cwd: string, args: readonly string[]): string {
   return execFileSync('git', [...args], { cwd, env: gitEnv(), encoding: 'utf8' });
+}
+
+// A git call in the same clean environment that never throws: a refused or failing call still returns what git printed.
+export function gitRun(cwd: string, args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync('git', [...args], { cwd, env: gitEnv(), encoding: 'utf8' });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
 function writeFiles(root: string, files: Readonly<Record<string, string>>): void {
