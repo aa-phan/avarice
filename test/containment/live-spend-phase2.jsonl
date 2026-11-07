@@ -72,3 +72,4 @@
 {"plan":"02-22","case":"exit-r1-refactor-copy-textarea-run_01M6SEKC0QAEW1HQHBANRCJPE7","costUsd":1.1825668,"claudeVersion":"2.1.318","at":"2026-11-06T22:16:13.656Z"}
 {"plan":"02-22","case":"exit-r1-docs-dates-predicate-run_01M6SEY4D8H2AWJX3PTTVZE1HR","costUsd":0.9995495,"claudeVersion":"2.1.318","at":"2026-11-06T22:21:58.992Z"}
 {"plan":"02-25","case":"status-first-1","costUsd":0.0347729,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:18:03.252Z"}
+{"plan":"02-25","case":"status-first-1","costUsd":0.0379854,"claudeVersion":"2.1.319 (Claude Code)","at":"2026-11-07T08:25:04.110Z"}
