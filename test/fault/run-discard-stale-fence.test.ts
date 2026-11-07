@@ -18,7 +18,7 @@ import type { Result } from '../../src/domain/result.ts';
 import type { RunWorkspace } from '../../src/ports/run-workspace.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
-import { RUN_EXPIRY_WAIT_MS, openRaw, runRunWithFault, sleepSync } from '../helpers/fault-run.ts';
+import { RUN_EXPIRY_WAIT_MS, normalizeRunResult, openRaw, runRunWithFault, sleepSync } from '../helpers/fault-run.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, RUN_REPO_FILES, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
@@ -104,8 +104,9 @@ type Hook = 'take' | 'take-release' | 'expire' | 'none';
 
 interface Scenario {
   hook: Hook;
-  // Where the hook fires on the supervisor's way to the discard.
-  at: 'checkpoint';
+  // Where the hook fires on the supervisor's way to the discard: inside the `discard-attempt` checkpoint call (before it commits), or inside the
+  // workspace restore call (after the checkpoint committed, before the restore runs).
+  at: 'checkpoint' | 'restore';
 }
 
 interface World {
@@ -160,7 +161,7 @@ function instrument(f: Fixture, runId: string, supervisor: Composed, other: Comp
     get(target, prop) {
       if (prop === 'recordRunCheckpoint') {
         return (...args: Parameters<typeof target.recordRunCheckpoint>) => {
-          if (args[2].nextAction === 'discard-attempt') takeover();
+          if (scenario.at === 'checkpoint' && args[2].nextAction === 'discard-attempt') takeover();
           return target.recordRunCheckpoint(...args);
         };
       }
@@ -175,6 +176,7 @@ function instrument(f: Fixture, runId: string, supervisor: Composed, other: Comp
       if (prop === 'discard') {
         return (...args: Parameters<typeof target.discard>) => {
           state.discardCalls += 1;
+          if (scenario.at === 'restore') takeover();
           return target.discard(...args);
         };
       }
@@ -316,5 +318,107 @@ describe('no takeover (control)', () => {
     assert.equal(w.discardCalls, 1);
     assert.deepEqual(attemptOutcomes(w.f, w.runId), ['discarded', 'handed-off']);
     assert.equal(w.fired, 0);
+  });
+});
+
+// What changed between two dumps, table by table: rows added (by rowid) and rows whose columns changed, with the columns named.
+interface DumpDiff {
+  added: Array<Record<string, unknown>>;
+  changed: Array<{ rowid: unknown; columns: string[] }>;
+}
+
+function dumpDiff(before: StoreDump, after: StoreDump): Record<string, DumpDiff> {
+  const diff: Record<string, DumpDiff> = {};
+  for (const table of Object.keys(after)) {
+    const was = new Map((before[table] ?? []).map((r) => [(r as Record<string, unknown>)['__rowid'], r as Record<string, unknown>]));
+    const entry: DumpDiff = { added: [], changed: [] };
+    for (const row of after[table] as Array<Record<string, unknown>>) {
+      const prior = was.get(row['__rowid']);
+      if (prior === undefined) entry.added.push(row);
+      else {
+        const columns = Object.keys(row).filter((c) => JSON.stringify(row[c]) !== JSON.stringify(prior[c]));
+        if (columns.length > 0) entry.changed.push({ rowid: row['__rowid'], columns });
+      }
+    }
+    assert.ok((before[table] ?? []).length <= (after[table] as unknown[]).length, `${table}: no row was deleted`);
+    if (entry.added.length > 0 || entry.changed.length > 0) diff[table] = entry;
+  }
+  return diff;
+}
+
+const itemStates = (f: Fixture, runId: string): string[] => ledgerRows<{ state: string }>(f.roots, 'SELECT state FROM work_items WHERE run_id = ? ORDER BY item_id', runId).map((r) => r.state);
+
+describe('superseded after the checkpoint, then resumed (the window the fence cannot cover)', () => {
+  let w: World;
+  let afterRun: AfterRun;
+  before(async () => {
+    w = await crashPath({ hook: 'take', at: 'restore' });
+    const run = runRow(w.f.roots, w.runId);
+    afterRun = { clone: checkoutSnapshot(run.workspace_path), dump: storeDump(w.f.roots), run };
+  });
+  after(() => w.close());
+
+  it('commits the checkpoint and restores the clone: the pin bytes are back and the crashed unit\'s extra file is gone', () => {
+    assert.equal(w.fired, 1);
+    assert.equal(w.discardCalls, 1);
+    assert.equal(checkpointsOf(w.f, w.runId).filter((m) => m === 'discard-attempt').length, 1);
+    const clone = afterRun.run.workspace_path;
+    assert.equal(readFileSync(join(clone, 'src', 'slug.ts'), 'utf8'), RUN_REPO_FILES['src/slug.ts']);
+    assert.equal(existsSync(join(clone, 'src', 'extra.ts')), false);
+  });
+
+  it('refuses the work item transition on the fence, and leaves the run, the item and the other holder\'s lease as they were', () => {
+    const taken = w.atTakeover as Capture;
+    assert.deepEqual(conflictOf(w.outcome), { expected: 'lease fence 1', actual: 'lease fence 2' });
+    assert.equal(afterRun.run.state, taken.run.state);
+    assert.equal(afterRun.run.version, taken.run.version);
+    assert.deepEqual(itemStates(w.f, w.runId), ['delegated']);
+    assert.deepEqual(leaseOf(afterRun.run), leaseOf(taken.run));
+    assert.equal(afterRun.run.lease_holder, OTHER_HOLDER);
+  });
+
+  it('writes, after the takeover, only the unfenced rows the documented rule allows: the `discard` step, the attempt\'s end and its event', () => {
+    const diff = dumpDiff((w.atTakeover as Capture).dump, afterRun.dump);
+    assert.deepEqual(Object.keys(diff).sort(), ['attempts', 'events', 'run_steps']);
+    const steps = (diff['run_steps'] as DumpDiff).added;
+    assert.equal(steps.length, 1);
+    assert.deepEqual([steps[0]?.['step'], steps[0]?.['attempt'], steps[0]?.['status']], ['discard', 1, 'completed']);
+    assert.deepEqual((diff['run_steps'] as DumpDiff).changed, []);
+    const attempts = diff['attempts'] as DumpDiff;
+    assert.deepEqual(attempts.added, []);
+    assert.equal(attempts.changed.length, 1);
+    assert.deepEqual(attempts.changed[0]?.columns.sort(), ['ended_at', 'outcome']);
+    const events = diff['events'] as DumpDiff;
+    assert.deepEqual(events.changed, []);
+    assert.deepEqual(events.added.map((e) => e['type']), ['attempt.ended']);
+    assert.equal((afterRun.dump['attempts'] as Array<Record<string, unknown>>)[0]?.['outcome'], 'discarded');
+  });
+
+  it('converges: once the other holder lets go, a resume reaches ready_for_review as an uninterrupted crash-and-retry run does (final discard lists are reported)', async (t) => {
+    const resumer = compose(w.f.roots, FIX);
+    try {
+      const released = resumer.deps.ledger.releaseRunLease(w.runId, OTHER_HOLDER, w.grantFence as number);
+      assert.ok(released.ok, JSON.stringify(released));
+      const resumed = await runSupervisor(resumer.deps, w.runId, { prelude: reconcileRun });
+      assert.ok(resumed.ok, JSON.stringify(resumed));
+      assert.equal(resumed.value.state, 'ready_for_review');
+      assert.deepEqual(attemptOutcomes(w.f, w.runId), ['discarded', 'handed-off'], 'no third attempt');
+
+      const reference = await crashPath({ hook: 'none', at: 'checkpoint' });
+      try {
+        assert.ok(reference.outcome.ok, JSON.stringify(reference.outcome));
+        assert.deepEqual(normalizeRunResult(w.f.roots, w.runId), normalizeRunResult(reference.f.roots, reference.runId));
+      } finally {
+        reference.close();
+      }
+
+      const discards = ledgerRows<{ attempt: number; result_json: string }>(w.f.roots, "SELECT attempt, result_json FROM run_steps WHERE run_id = ? AND step = 'discard' ORDER BY attempt", w.runId);
+      for (const step of discards) {
+        const lists = JSON.parse(step.result_json) as { restored: string[]; removed: string[]; ignoredLeft: string[] };
+        t.diagnostic(`discard step, attempt ${step.attempt}: restored ${JSON.stringify(lists.restored)}, removed ${JSON.stringify(lists.removed)}, ignoredLeft ${JSON.stringify(lists.ignoredLeft)}`);
+      }
+    } finally {
+      resumer.close();
+    }
   });
 });
