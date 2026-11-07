@@ -137,6 +137,18 @@ describe('refused git forms are real leaks', () => {
   }
 });
 
+describe('a quoted wildcard after a leading colon is a pathspec for git (review round 6)', () => {
+  const r = rig();
+  for (const word of [':*', ':.env*', ':?nv', ':[.]env']) {
+    it(`git show "${word}": denied shell-git-object, and git does print the sentinel`, () => {
+      const d = decide(r, `git show "${word}"`);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-git-object'], word);
+      const out = gitRun(r.repo.path, ['show', word]);
+      assert.ok((out.stdout + out.stderr).includes(SENTINEL), `${word} printed no sentinel: the refusal would be vacuous`);
+    });
+  }
+});
+
 describe('refused forms, git output reported', () => {
   const r = rig();
   const hookOnly: Array<[string, string]> = [

@@ -1,0 +1,20 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "commit 156ce48 plus the quoted wildcard words `:*`, `:.env*`, `:?nv` and `:[.]env` in the unresolvable-colon-words unit test and the new integration describe `a quoted wildcard after a leading colon is a pathspec for git`",
+  "exitCode": 1,
+  "reason": "Found by the fresh documentation review (round 6): the lexer keeps a quoted `*`, `?` or `[` and does not mark the word as expanding, and checkGitObjects judges the path part (`*`, `.env*`) as a literal path that no secret glob matches. Git cannot find `:*` in the index and falls back to reading the word as a pathspec, so `git show` prints HEAD's patch for every matching path. The hook allows all four words. Run: 202 tests, 197 pass, 5 fail (the unit test and the four integration tests; the hook assertion fails first in each).",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object",
+    "a quoted wildcard after a leading colon is a pathspec for git (review round 6) > git show \":*\": denied shell-git-object, and git does print the sentinel",
+    "a quoted wildcard after a leading colon is a pathspec for git (review round 6) > git show \":.env*\": denied shell-git-object, and git does print the sentinel",
+    "a quoted wildcard after a leading colon is a pathspec for git (review round 6) > git show \":?nv\": denied shell-git-object, and git does print the sentinel",
+    "a quoted wildcard after a leading colon is a pathspec for git (review round 6) > git show \":[.]env\": denied shell-git-object, and git does print the sentinel"
+  ],
+  "passingAtBase": ["all 197 other tests of the two files"],
+  "semanticAssessment": "Each failure is on the planned assertion for the intended reason: the hook allows a form the plan refuses. The tests executed on the sentinel-bearing repository; no failure is a syntax, import or fixture fault. Whether real git prints the sentinel for each word is asserted after the hook assertion and is observed in the GREEN run.",
+  "summary": "202 tests, 197 pass, 5 fail."
+}
