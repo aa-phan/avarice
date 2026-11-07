@@ -1176,6 +1176,15 @@ describe('git object reads and output forms (CR-01)', () => {
     }
   });
 
+  it('git status -u takes its mode attached only, so the word after it is judged as an option (review round 1)', () => {
+    for (const command of ['git status -u -v', 'git status -u -vv', 'git status -uall -v', 'git status -v -u', 'git status -u --verbose']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    for (const command of ['git status -u', 'git status -uno', 'git status -u -s', 'git status -sb -uall']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
   it('ordering: an option position never changes a decision; a git global option before the subcommand is not admitted', () => {
     for (const command of ['git log -p --oneline', 'git log --oneline -p', 'git log -p | head']) {
       assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);

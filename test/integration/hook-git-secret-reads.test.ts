@@ -122,6 +122,7 @@ describe('refused git forms are real leaks', () => {
     ['git log -p', 'shell-git-output'],
     ['git log -L1,1:.env', 'shell-git-output'],
     ['git status -v', 'shell-git-output'],
+    ['git status -u -v', 'shell-git-output'],
   ];
   for (const [command, rule] of leaks) {
     it(`${command}: denied ${rule}, and git does print the sentinel`, () => {
