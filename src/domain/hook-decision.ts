@@ -494,6 +494,23 @@ function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy
   return null;
 }
 
+// Git names an object by path in an operand (`<rev>:<path>`, `:<path>`, `:<stage>:<path>`), so the path part is a read like any other.
+// A word git would split differently from this plain split (a brace, an index form that is a search or a pathspec) is refused.
+const GIT_OBJECT_RULE = 'shell-git-object';
+
+function checkGitObjects(operands: readonly string[], call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+  for (const operand of operands) {
+    if (!operand.includes(':')) continue;
+    if (operand.includes('{') || operand.includes('}')) return GIT_OBJECT_RULE;
+    const path = operand.startsWith(':') ? (/^:[0-3]:/.test(operand) ? operand.slice(3) : operand.slice(1)) : operand.slice(operand.indexOf(':') + 1);
+    if (/^[/!(]/.test(path)) return GIT_OBJECT_RULE;
+    // Git resolves the path from the top of the working copy; `./` and `../` forms resolve from the shell's directory. Both must pass.
+    const rule = checkRead([absolutize(policy.stagingPath, path), absolutize(shellCwd(call, policy), path)], policy, canon);
+    if (rule !== null) return rule;
+  }
+  return null;
+}
+
 function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
   const { commands } = policy;
   if (words[0] === 'gsd_run') {
@@ -529,7 +546,8 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   if (parsed.malformed) return 'shell-option-value';
   const cwd = shellCwd(call, policy);
   const named = checkRead([...parsed.positional, ...parsed.values].map((arg) => absolutize(cwd, arg)), policy, canon);
-  return named;
+  if (named !== null) return named;
+  return words[0] === 'git' ? checkGitObjects(parsed.positional, call, policy, canon) : null;
 }
 
 function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
