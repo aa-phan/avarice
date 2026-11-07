@@ -248,6 +248,8 @@ The GSD records of the unit under `.planning/quick/` are read for three facts. T
 
 A crashed or wall-clock-killed unit with no moved HEAD is discarded and tried once more. The retry is the second and last attempt. Before the discard, if the invocations budget cannot cover another unit (counting the killed one's reservation), the run blocks with `budget_exhausted` (class `permission`) instead. The discard checkpoints first, so a supervisor with a stale fence cannot reach it. It then puts the clone back to the snapshot taken right before the launch, limited to the paths the unit changed after it. A file that was in the clone before the snapshot is restored to that version and not to HEAD. Ignored paths are never touched, and nothing is deleted recursively. An added path is removed only as a file or link, never through a symlink. The step records what was restored, removed and left, with the side effect `none`. A unit has no network, no push and no change request, so there is no external effect to roll back. That claim is recorded with its basis so that a later delivery capability must re-check it. If the clone HEAD moved by then, the discard is refused with nothing changed, and the run blocks with `enforcement_failure`.
 
+A supervisor superseded after the discard's checkpoint still restores the clone and records the `discard` step and the attempt's end, which take no fence. Its work item move then fails on the fence, and the run and the item stay as they were. The next supervisor's resume repeats the discard, which finds nothing left to restore, and retries once. The repeated discard replaces the step record, so the final record lists nothing restored or removed.
+
 The attempt ends `discarded`, the item goes back to `ready`, and the retry attempt runs from the launch action with a rebuilt context pack. A second crash or timeout blocks with `decision`, class `repeated_failure`, naming both attempts and how each ended. A unit that progressed, paused, was denied or made no progress is never retried, and neither is one the host refused to launch.
 
 ### Gate G2 and the commit
@@ -303,7 +305,7 @@ The supervisor always runs a prelude under the lease before its loop:
    - `contract_ready`: nothing to reap; the stage repeats the actions whose step is not recorded.
 4. The stage loop continues from the committed state.
 
-A prelude failure is recorded as a failed `resume:reconcile` step and ends the supervisor; `resume --wait` then exits 70 with that detail, not a second "interrupted".
+A prelude failure is recorded as a failed `resume:reconcile` step and ends the supervisor; `resume --wait` then exits 70 with that detail, not a second "interrupted". The record presents the supervisor's fence. A supervisor that another one superseded therefore records no failed reconcile step, so a later `resume --wait` does not read its refusal as one.
 
 Nothing is claimed that was not measured. An interrupted invocation is `inconclusive`, and the budgets it was charged stay charged.
 

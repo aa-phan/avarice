@@ -125,7 +125,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/app/run-stages/prepare.ts:88`: `docs/contracts-and-state.md:566` and `:600` say `contract_ready` to `running` creates a worktree and reserves budgets; the code makes a clone here, creates the budget rows at start (`src/app/run-start.ts:252`) and reserves per invocation (`src/app/budget.ts:125`). Spec contradiction.
 - `src/adapters/git/run-workspace.ts:242`: `docs/contracts-and-state.md:631` discards by resetting the worktree to the item's last checkpoint commit or `baseRevision`; the code restores a snapshot tree taken before the launch, path by path, with no reset. Spec contradiction.
 - `src/domain/run-lifecycle.ts:10`: five run states (`waiting_external`, `awaiting_review`, `failed`, `cancelled`, `closed`) and four blocked reasons (`unauthenticated`, `ref_changed`, `ref_deleted`, `access_revoked`, lines 27 to 30) are never entered or recorded. Intent unknown (later features may drive them).
-- `src/domain/run-lifecycle.ts:132`: the run step status `reconciled` is in the table and accepted by the ledger (`src/adapters/sqlite/ledger.ts:940`) but no run code writes it; only onboarding resume does (`src/app/resume.ts:125`). Intent unknown.
+- `src/domain/run-lifecycle.ts:132`: the run step status `reconciled` is in the table and accepted by the ledger (`src/adapters/sqlite/ledger.ts:941`) but no run code writes it; only onboarding resume does (`src/app/resume.ts:125`). Intent unknown.
 - `src/app/run-resume.ts:47`: no command answers a decision, and `resumeRun` reports a `blocked_on_decision` run as stopped; the edges out of `blocked_on_decision` and the item edge `blocked_on_decision` to `ready` (`src/domain/run-lifecycle.ts:152`) are never driven, so a blocked run is final. Intent unknown.
 - `src/app/run-stages/item.ts:203`: `detectPause` is called without `stateNeedsHuman`, so the `state-needs-human` pause signal (`src/domain/outcome.ts:113`) can never fire in a run. Intent unknown.
 - `src/domain/run-contract.ts:505`: `expectedDecisions` is parsed (`src/domain/brief.ts:189`) and stored in the contract; nothing reads it. Intent unknown.
@@ -179,15 +179,15 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 ## From data-model (run slice)
 
 - `src/adapters/sqlite/ledger.ts:484`: the carrier `runs` row is inserted with state 'onboarding' and never updated; its lease columns are unused (replaces the finding at old line 409)
-- `src/adapters/sqlite/ledger.ts:1183`: a decision is inserted with state 'open' and no code updates a decision, so the answer columns and the states answered, stale and withdrawn are unreachable (intent unknown; no command answers a decision)
-- `src/adapters/sqlite/ledger.ts:1029`: the evidence insert binds ext_ref to a NULL literal, so the column is never set (intent unknown)
+- `src/adapters/sqlite/ledger.ts:1184`: a decision is inserted with state 'open' and no code updates a decision, so the answer columns and the states answered, stale and withdrawn are unreachable (intent unknown; no command answers a decision)
+- `src/adapters/sqlite/ledger.ts:1030`: the evidence insert binds ext_ref to a NULL literal, so the column is never set (intent unknown)
 - `src/adapters/sqlite/migrations/0001-initial.ts:17`: task_refs has no writer or reader; the earlier finding that six spec tables lack a writer (old line 5) is now two tables
 - `src/adapters/sqlite/migrations/0001-initial.ts:76`: approvals has no writer or reader
 - `src/adapters/sqlite/migrations/0001-initial.ts:30`: checkpoints.gsd_state_digest has no writer; item_id is now written for runs (`src/adapters/sqlite/ledger.ts:468`), so the earlier finding at old line 23 is half stale
 - `src/adapters/sqlite/ledger.ts:746`: createRun has no production caller (createRunWithContract calls insertRun directly); only `test/integration/run-ledger.test.ts` calls it
 - `src/adapters/sqlite/ledger.ts:903`: storeRunContract has no production caller (only a test); runs store contract version 1 only
-- `src/adapters/sqlite/ledger.ts:1105`: upsertWorkItem has no production caller; the type 'harden' it accepts (line 1116) is written by nothing
-- `src/adapters/sqlite/ledger.ts:1257`: listHookReads has no production caller (only a test)
+- `src/adapters/sqlite/ledger.ts:1106`: upsertWorkItem has no production caller; the type 'harden' it accepts (line 1117) is written by nothing
+- `src/adapters/sqlite/ledger.ts:1258`: listHookReads has no production caller (only a test)
 - `src/adapters/host-claude/claude-host.ts:153`: a run's invocation directory is under `run/`, while its contract file is under `runs/` (`src/app/run-start.ts:145`); intent unknown
 - `src/hook/pre-tool-use.ts:134`: the hook counts events by invocation_id, which has no index (only events_run and evidence_attempt exist), so each decision scans the log
 - `src/adapters/sqlite/migrations/0002-run.ts:30`: check_validations has no immutability trigger although evidence and gate_results have one; code never updates it (intent unknown)

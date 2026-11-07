@@ -194,7 +194,7 @@ An onboarding's sequence is continuous across its own id and its carrier run id:
 
 A lease lives on the row of whatever holds it: the `onboardings` row for an onboarding, the `runs` row for a run. Both use one rule. Acquiring takes a free lease or one whose expiry has passed and bumps a fence counter, so a previous holder's next fenced write fails. Renew and release require the holder and fence to match. Expiry is compared as ISO timestamp text.
 
-The fence guards the writes that move a thing forward. For an onboarding these are every transition and checkpoint; transitions also present the row version they last read. For a run these are every transition (which also presents the version), run checkpoint, contract storage and work item transition. A mismatch is a conflict and nothing is written. The other run writes take no fence: steps, attempts, evidence, gate results, decisions and budget changes. A superseded supervisor can still record those until its next fenced write fails. The transition rules themselves are in [onboarding.md](onboarding.md) and [runs.md](runs.md).
+The fence guards the writes that move a thing forward. For an onboarding these are every transition and checkpoint; transitions also present the row version they last read. For a run these are every transition (which also presents the version), run checkpoint, contract storage and work item transition. A mismatch is a conflict and nothing is written. The other run writes take no fence: steps, attempts, evidence, gate results, decisions and budget changes. The one exception is the failed reconcile step, which presents the fence, so a superseded supervisor cannot record it. A superseded supervisor can still record the other unfenced rows until its next fenced write fails. The transition rules themselves are in [onboarding.md](onboarding.md) and [runs.md](runs.md).
 
 ## Budgets
 
@@ -315,5 +315,5 @@ Nothing is promoted anywhere else: the record's promotion field is `none`, and t
 - Step rows are replaced on re-record; budgets, events, evidence and gate results are not.
 - The run's directory in the data root is `runs` for the contract and `run` for the invocation inputs.
 - The hook's event field for the owner is called onboarding even when the owner is a run.
-- A block of a run is not one transaction, and the fence guards a run's transitions, checkpoints, contract and work item moves but not its steps, attempts, evidence, gates or decisions.
+- A block of a run is not one transaction. The fence guards a run's transitions, checkpoints, contract and work item moves, and a failed reconcile step, but not its other steps, attempts, evidence, gates or decisions.
 - A carrier run row of an onboarding is invisible to every run operation, so the `runs` table holds rows that no run listing shows.

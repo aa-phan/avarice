@@ -4,7 +4,7 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `6b82da2` on 2026-11-06; no code changed after it.
+Counted at commit `b9c7aca` on 2026-11-06; no code changed after it.
 
 | Surface | Count | Command |
 |---|---|---|
@@ -25,8 +25,8 @@ Counted at commit `6b82da2` on 2026-11-06; no code changed after it.
 | External systems | 13 (12 used, `gh` proven unused) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
 | Hook rules | 33 distinct rule IDs (6 allow, 28 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
-| Source lines | 26,150 | `git ls-files src \| xargs wc -l` |
-| Test files | 113 | `git ls-files test \| grep -c '\.test\.ts$'` |
+| Source lines | 26,157 | `git ls-files src \| xargs wc -l` |
+| Test files | 114 | `git ls-files test \| grep -c '\.test\.ts$'` |
 | Import-boundary lint | passes (79 files) | `node scripts/check-boundaries.ts` |
 
 ## Documented counts
@@ -64,12 +64,12 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | cli-reference.md | reviewed | ten commands, flags, exit codes and output forms verified; fixed the `inbox` exit codes, placement rules, the stdout exception of the wait line and the project registration claim |
 | config-reference.md | reviewed | environment variables, preset values, conventions keys and limits verified; fixed the reserved-name claim and the ignored-entry cap |
 | onboarding.md | reviewed | pause outcome, lease and resume pointers verified; fixed long sentences |
-| runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length |
+| runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length; the paragraphs on a supervisor superseded after the discard checkpoint and on the fenced reconcile record were re-reviewed fresh (two rounds) against the discard stage, the ledger fence checks, the resume command and the stale-fence fault test, and fixed the ordering, the scope of "records nothing" and the removed list |
 | checks-and-evidence.md | reviewed | install, validation, baseline, inventory, evidence statuses and both gates verified; fixed the inventory status mapping, the duplicated sandbox posture and the revision wording |
 | interactive-shell.md | reviewed | dispatch, views, actions, line editor and history verified; fixed the line-mode menu, the full-screen only statements, the Ctrl-C claim and the watch view ending |
 | containment.md | reviewed | launch checks, hook rules, scopes, executor, proxy and git safety verified, 33 rule IDs; fixed the prevention and detection labels, the gate table row, the safe git row and the validation network claim |
 | indexes-and-context.md | reviewed | 25+ claims verified; fixed rollback files, intel failure reasons, freshness check scope; no index or context file changed since |
-| data-model.md | reviewed | passed its fresh review with no findings: tables, columns, indexes, triggers, 28 event kinds and files on disk verified |
+| data-model.md | reviewed | passed its fresh review with no findings: tables, columns, indexes, triggers, 28 event kinds and files on disk verified; the added fence exception for the failed reconcile step and the quirks bullet were re-reviewed fresh (two rounds) against the ledger fence checks, and fixed one sentence over the length cap |
 | integrations.md | reviewed | ports, adapters and external systems verified; fixed the descriptor claim, the `install-host` exit codes, the discard wording, the launch refusal reasons and the duplicated install detail |
 | processes.md | reviewed | five flows traced against the code; the three run diagrams (run-to-ready.puml, run-resume-after-kill.puml, run-discard-retry.puml) and the two earlier ones read but not rendered; fixed the host-error branch, the spent-budget order and the kill-point citation |
 | history.md | reviewed | commits and dates spot-checked; fixed the counts (pinned to the end commit), the quoted commands and the delivery labels |
