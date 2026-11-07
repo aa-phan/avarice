@@ -4,7 +4,7 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `b9c7aca` on 2026-11-06; no code changed after it.
+Counted at commit `fdc29c6` on 2026-11-07; no code under `src`, `bin` or `scripts` changed after `b9c7aca`; only tests did.
 
 | Surface | Count | Command |
 |---|---|---|
@@ -26,7 +26,7 @@ Counted at commit `b9c7aca` on 2026-11-06; no code changed after it.
 | Index steps | 3 | the index step registry |
 | Hook rules | 33 distinct rule IDs (6 allow, 28 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
 | Source lines | 26,157 | `git ls-files src \| xargs wc -l` |
-| Test files | 114 | `git ls-files test \| grep -c '\.test\.ts$'` |
+| Test files | 116 | `git ls-files test \| grep -c '\.test\.ts$'` |
 | Import-boundary lint | passes (79 files) | `node scripts/check-boundaries.ts` |
 
 ## Documented counts
@@ -64,7 +64,7 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | cli-reference.md | reviewed | ten commands, flags, exit codes and output forms verified; fixed the `inbox` exit codes, placement rules, the stdout exception of the wait line and the project registration claim |
 | config-reference.md | reviewed | environment variables, preset values, conventions keys and limits verified; fixed the reserved-name claim and the ignored-entry cap |
 | onboarding.md | reviewed | pause outcome, lease and resume pointers verified; fixed long sentences |
-| runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length; the paragraphs on a supervisor superseded after the discard checkpoint and on the fenced reconcile record were re-reviewed fresh (two rounds) against the discard stage, the ledger fence checks, the resume command and the stale-fence fault test, and fixed the ordering, the scope of "records nothing" and the removed list |
+| runs.md | reviewed | claims verified across the start refusals, brief, conventions, contract, lifecycle, stages, resume and status; fixed the default roots, the two reasons at the enforcement check, the pause only for a delegated item, the inbox fields, the run events and sentence length; the paragraphs on a supervisor superseded after the discard checkpoint and on the fenced reconcile record were re-reviewed fresh (two rounds) against the discard stage, the ledger fence checks, the resume command and the stale-fence fault test, and fixed the ordering, the scope of "records nothing" and the removed list; the added sentence on which pause signals the Claude host can produce was re-reviewed fresh (three rounds, see 02-25-reviews) against the pause detection and the host outcome, and fixed the wording of what the host hands over |
 | checks-and-evidence.md | reviewed | install, validation, baseline, inventory, evidence statuses and both gates verified; fixed the inventory status mapping, the duplicated sandbox posture and the revision wording |
 | interactive-shell.md | reviewed | dispatch, views, actions, line editor and history verified; fixed the line-mode menu, the full-screen only statements, the Ctrl-C claim and the watch view ending |
 | containment.md | reviewed | launch checks, hook rules, scopes, executor, proxy and git safety verified, 33 rule IDs; fixed the prevention and detection labels, the gate table row, the safe git row and the validation network claim |
@@ -74,7 +74,7 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | processes.md | reviewed | five flows traced against the code; the three run diagrams (run-to-ready.puml, run-resume-after-kill.puml, run-discard-retry.puml) and the two earlier ones read but not rendered; fixed the host-error branch, the spent-budget order and the kill-point citation |
 | history.md | reviewed | commits and dates spot-checked; fixed the counts (pinned to the end commit), the quoted commands and the delivery labels |
 | README.md | reviewed | both tables checked against the files and the proposals; fixed the sentence length and the scope of the counterpart claim |
-| findings.md | reviewed | every line added since the pass began checked at its cited line; fixed the wrong citations and annotated the moved ones |
+| findings.md | reviewed | every line added since the pass began checked at its cited line; fixed the wrong citations and annotated the moved ones; the three lines on the attended sessions and the annotated `docs/extensions.md:215` line were re-reviewed fresh (three rounds) against the code and the session record, and fixed two accuracy claims, the routing citation, sentence length and a delivery-history hash |
 | unknowns.md | reviewed | added entries checked against the files they cite; fixed the test paths and the delivery wording |
 | coverage.md | ledger | counts re-run at `6b82da2` |
 

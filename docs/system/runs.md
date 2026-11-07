@@ -226,7 +226,7 @@ Before the host starts, a budget reservation is made. If the invocations, wall c
 | 7 | Any host or hook denial | `denied` |
 | 8 | Otherwise | `no_progress` |
 
-A pause signal is a waiting file (`WAITING.json`) among the changes, a VERIFICATION status of `human_needed`, or a final text ending in a question followed by numbered choices. An in-scope path is a changed path that is not an artifact, not protected, and matches the write or create globs.
+A pause signal is a waiting file (`WAITING.json`) among the changes, a VERIFICATION status of `human_needed`, or a final text ending in a question followed by numbered choices. The Claude host hands no final text to the supervisor, so for it only the waiting file and the VERIFICATION status signal a pause. An in-scope path is a changed path that is not an artifact, not protected, and matches the write or create globs.
 
 The GSD records of the unit under `.planning/quick/` are read for three facts. The first is the VERIFICATION `status:` line: an absent record is `missing`, and one that is too large, not a regular file or has an unknown status is `gaps_found`. The second is the number of overrides the unit applied. The third is the number of node-repair PRUNE entries in its records. Records are read as data, at most 64 KiB each. A model-written status can fail a gate and can never pass one.
 
