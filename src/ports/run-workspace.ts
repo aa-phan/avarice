@@ -82,6 +82,8 @@ export interface WorkspaceSnapshot {
 export interface HeadTrailers {
   runId: string | null;
   attemptId: string | null;
+  // The parent commit IDs of HEAD, first parent first: one for an ordinary commit, two for a merge, none for a root commit.
+  parents: string[];
 }
 
 export interface DiscardResult {

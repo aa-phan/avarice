@@ -3,7 +3,7 @@
 //
 //   1. reap       every `launch:*` step left `started` is a host that may still be running (it is detached, in its own process group, and outlives a
 //                 killed supervisor): it is ended by the session ID its step recorded. Every reap completes before any row is marked or anything is
-//                 read from the clone, and a reap that fails stops the resume with every row still `started` (T-02-56, FR-7).
+//                 read from the clone, and a reap that fails stops the resume with every row still `started` (T-02-56, FR-7); so does a started launch that cannot be reaped at all (no recorded session ID, or a host with no reap).
 //   2. reconcile  by the run's state: a `running` run whose item was in flight is put back to its attempt's snapshot and retried once (CON-16) or, when
 //                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); a `verifying` run is shown
 //                 `paused (verification interrupted)`, the checks of the interrupted final pass that never finished get `inconclusive` evidence (T-02-58),
@@ -67,7 +67,8 @@ export function resumeRun(deps: AppDeps, runId: string): Result<ResumeDecision> 
 // ---- reconcileRun: the supervisor's prelude -----------------------------------------------------------------------------------------------
 
 // Ends the host of every `launch:*` step the previous holder left `started`, then marks those steps `interrupted`. Every reap completes before any
-// row is marked, so a reap that fails leaves every row `started` and the next resume tries again.
+// row is marked, so a reap that fails leaves every row `started` and the next resume tries again. A started launch that cannot be reaped at all (the
+// host has no reap, or the step recorded no session ID) stops the resume the same way.
 async function reapStartedLaunches(ctx: RunStageContext): Promise<Result<void>> {
   const { deps, runId } = ctx;
   const steps = deps.ledger.getRunSteps(runId);
@@ -78,7 +79,9 @@ async function reapStartedLaunches(ctx: RunStageContext): Promise<Result<void>> 
   for (const launch of started) {
     const body = isObject(launch.result) ? launch.result : {};
     const sessionId = body['sessionId'];
-    if (deps.host.reap === undefined || typeof sessionId !== 'string' || sessionId === '') continue;
+    // A launch that cannot be reaped stops the resume like a reap that fails: its host may still be running, and nothing may read the clone beside it.
+    if (deps.host.reap === undefined) return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: the host has no reap` });
+    if (typeof sessionId !== 'string' || sessionId === '') return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: it recorded no session ID` });
     const reaped = await deps.host.reap({ sessionId });
     if (!reaped.ok) return reaped;
     if (reaped.value.terminated === 0) continue;

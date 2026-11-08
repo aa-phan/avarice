@@ -398,7 +398,8 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
 }
 
 // An item that passed its gate (`gated`): the supervisor may have made its commit and died before it recorded it. A HEAD that moved is the item's own
-// commit only when its message carries this run's ID and the open attempt's ID in its `Avarice-*` trailers (the supervisor writes both); then the
+// commit only when its message carries this run's ID and the open attempt's ID in its `Avarice-*` trailers (the supervisor writes both) and its single
+// parent is the attempt's snapshot head; then the
 // `commit` step is recorded with it, the item is done, and no second commit is made. Any other commit on the clone is not ours.
 function reconcileGated(unit: Unit): Result<ItemReconcile> {
   const { ctx } = unit;
@@ -423,6 +424,20 @@ function reconcileGated(unit: Unit): Result<ItemReconcile> {
       reason: 'enforcement_failure',
       decisionClass: 'permission',
       issue: 'the clone HEAD moved to a commit the supervisor did not make for this attempt (its Avarice-Run and Avarice-Attempt trailers do not name it): containment did not hold',
+      finding: { check: 'head-moved' },
+      data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
+      attemptId,
+      itemId: unit.item.itemId,
+    });
+    return blocked.ok ? ok('blocked') : blocked;
+  }
+  // The trailers are text any commit can repeat. The supervisor's own commit sits directly on the attempt's snapshot (a single parent), which also
+  // proves the moved range is that one commit.
+  if (trailers.value.parents.length !== 1 || trailers.value.parents[0] !== snapshot.value.head) {
+    const blocked = blockRun(ctx, {
+      reason: 'enforcement_failure',
+      decisionClass: 'permission',
+      issue: "the clone HEAD moved to a commit that carries this attempt's trailers but does not sit directly on the attempt's snapshot: containment did not hold",
       finding: { check: 'head-moved' },
       data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
       attemptId,

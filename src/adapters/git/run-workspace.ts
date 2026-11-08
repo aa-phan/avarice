@@ -166,10 +166,15 @@ export class CloneRunWorkspace implements RunWorkspace {
   // The last `Avarice-Run:` and `Avarice-Attempt:` lines of the HEAD message. The message is read as data and only those two keys are matched, each
   // on a line of its own, so text elsewhere in the message cannot pose as a trailer (the supervisor writes them last, after a blank line).
   headTrailers(path: string): Result<HeadTrailers> {
-    const message = runGit(['log', '-1', '--format=%B'], { cwd: path });
+    // One call: the first line is the space-separated parent IDs, the rest is the message.
+    const message = runGit(['log', '-1', '--format=%P%n%B'], { cwd: path });
     if (!message.ok) return failure(message.error);
-    const found: HeadTrailers = { runId: null, attemptId: null };
-    const lines = message.value.stdout.split('\n');
+    const output = message.value.stdout;
+    const newline = output.indexOf('\n');
+    const parents = (newline === -1 ? output : output.slice(0, newline)).split(' ').filter((id) => id !== '');
+    if (!parents.every((id) => COMMIT_SHA.test(id))) return err({ kind: 'internal', cause: 'git log did not print commit ids as the parents of HEAD' });
+    const found: HeadTrailers = { runId: null, attemptId: null, parents };
+    const lines = (newline === -1 ? '' : output.slice(newline + 1)).split('\n');
     for (const line of lines) {
       const run = /^Avarice-Run: ([A-Za-z0-9_]{1,64})\s*$/.exec(line);
       if (run !== null) found.runId = run[1] as string;
