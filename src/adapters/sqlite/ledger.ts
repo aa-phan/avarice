@@ -16,6 +16,7 @@ import type {
   ActiveRecord,
   AdapterConfigInput,
   ArtifactInput,
+  BudgetCharge,
   BudgetReservation,
   BudgetRow,
   BudgetRowInput,
@@ -671,19 +672,31 @@ export class SqliteLedger implements Ledger {
   }
 
   chargeBudget(runId: string, name: string, amount: number, options: { fromReserved: boolean }): Result<BudgetRow> {
+    return tx(this.db, () => this.applyCharge(runId, name, amount, options));
+  }
+
+  // The charges and the event are written in one transaction: a failure at any of them (a conflict, the store) rolls the others back.
+  settleBudgets(runId: string, charges: readonly BudgetCharge[], event?: EventInput): Result<BudgetRow[]> {
     return tx(this.db, () => {
-      checkAmount(amount);
-      this.readBudget(runId, name);
-      if (options.fromReserved) {
-        const changed = this.db
-          .prepare('UPDATE budgets SET reserved = reserved - ?, used = used + ? WHERE run_id = ? AND name = ? AND reserved >= ?')
-          .run(amount, amount, runId, name, amount).changes;
-        if (Number(changed) === 0) abort({ kind: 'conflict', expected: `a reservation of at least ${amount} on ${name}`, actual: `reserved ${this.readBudget(runId, name).reserved}` });
-      } else {
-        this.db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ?').run(amount, runId, name);
-      }
-      return this.readBudget(runId, name);
+      for (const charge of charges) this.applyCharge(runId, charge.name, charge.amount, { fromReserved: charge.fromReserved });
+      if (event !== undefined) this.insertEvent(event);
+      return this.readBudgets(runId);
     });
+  }
+
+  // chargeBudget's rules, for a caller whose transaction is already open.
+  private applyCharge(runId: string, name: string, amount: number, options: { fromReserved: boolean }): BudgetRow {
+    checkAmount(amount);
+    this.readBudget(runId, name);
+    if (options.fromReserved) {
+      const changed = this.db
+        .prepare('UPDATE budgets SET reserved = reserved - ?, used = used + ? WHERE run_id = ? AND name = ? AND reserved >= ?')
+        .run(amount, amount, runId, name, amount).changes;
+      if (Number(changed) === 0) abort({ kind: 'conflict', expected: `a reservation of at least ${amount} on ${name}`, actual: `reserved ${this.readBudget(runId, name).reserved}` });
+    } else {
+      this.db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ?').run(amount, runId, name);
+    }
+    return this.readBudget(runId, name);
   }
 
   getBudgets(runId: string): Result<BudgetRow[]> {

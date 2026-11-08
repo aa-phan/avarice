@@ -8,6 +8,9 @@
 // Nothing here refunds. A reservation whose holder died (a killed run never settled) is turned into spent
 // `invocations` by the next reserveInvocation, because the invocation did start.
 //
+// A settlement and an orphan conversion each commit as one transaction (Ledger.settleBudgets): the charges of one invocation, or of one
+// orphan with its warning event, are all written or none, so a kill cannot leave a reservation spent while its cost is uncharged.
+//
 // A killed or interrupted invocation is charged its full cost reservation, not 0 (owner decision 2026-11-03, 01-19 finding C): a
 // host that is killed prints no result, yet it ran, and an orphaned host keeps working after its supervisor died. The reservation
 // is what the cap logic let the host spend (the smaller of the per-invocation cap and what was left of the run's cost budget), so
@@ -105,19 +108,21 @@ function chargeOrphans(deps: AppDeps, source: ReserveSource, rows: BudgetRow[]):
       costLeft -= reservedUsd;
       costCharged += reservedUsd;
     }
-    const spent = deps.ledger.chargeBudget(runId, 'invocations', orphaned, { fromReserved: true });
-    if (!spent.ok) return spent;
-    const cost = deps.ledger.chargeBudget(runId, 'costUsd', costCharged, { fromReserved: false });
-    if (!cost.ok) return cost;
-    const event = deps.ledger.appendEvent({
-      type: 'invocation.orphan-charged',
-      level: 'warn',
+    // One transaction: the orphan count is read from `reserved`, which the first charge empties, so a kill between separate writes would lose the cost.
+    return deps.ledger.settleBudgets(
       runId,
-      data: { ...source.subject, invocations: orphaned, costChargedUsd: costCharged },
-      nowMs: deps.clock.nowMs(),
-    });
-    if (!event.ok) return event;
-    return deps.ledger.getBudgets(runId);
+      [
+        { name: 'invocations', amount: orphaned, fromReserved: true },
+        { name: 'costUsd', amount: costCharged, fromReserved: false },
+      ],
+      {
+        type: 'invocation.orphan-charged',
+        level: 'warn',
+        runId,
+        data: { ...source.subject, invocations: orphaned, costChargedUsd: costCharged },
+        nowMs: deps.clock.nowMs(),
+      },
+    );
   }
   return ok(rows);
 }
@@ -199,14 +204,15 @@ export function settleInvocation(deps: AppDeps, reservation: InvocationReservati
   if (!Number.isFinite(settlement.durationMs) || !Number.isFinite(settlement.costUsd)) {
     return err({ kind: 'invalid', field: 'settlement', reason: 'duration and cost must be finite numbers' });
   }
-  const spent = deps.ledger.chargeBudget(reservation.runId, 'invocations', 1, { fromReserved: true });
-  if (!spent.ok) return spent;
-  const clock = deps.ledger.chargeBudget(reservation.runId, 'wallClockMs', Math.max(0, Math.round(settlement.durationMs)), { fromReserved: false });
-  if (!clock.ok) return clock;
   const reported = Math.max(0, settlement.costUsd);
   const killed = settlement.killed === true;
   const chargedUsd = killed ? Math.max(reported, reservation.costCapUsd) : reported;
-  const cost = deps.ledger.chargeBudget(reservation.runId, 'costUsd', chargedUsd, { fromReserved: false });
-  if (!cost.ok) return cost;
+  // One transaction: the reservation becomes spent, and the time and the cost are charged, together or not at all.
+  const settled = deps.ledger.settleBudgets(reservation.runId, [
+    { name: 'invocations', amount: 1, fromReserved: true },
+    { name: 'wallClockMs', amount: Math.max(0, Math.round(settlement.durationMs)), fromReserved: false },
+    { name: 'costUsd', amount: chargedUsd, fromReserved: false },
+  ]);
+  if (!settled.ok) return settled;
   return ok({ chargedUsd, basis: killed && chargedUsd > reported ? 'reservation' : 'reported' });
 }

@@ -639,4 +639,51 @@ describe('budget charges are one transaction (R-WR-05)', () => {
       assert.equal(orphanEvents(roots), eventsBefore + 1, 'one event');
     });
   });
+
+  it('settleBudgets commits two charges and an event together', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const before = budgetsOfRun(deps, runId);
+      const eventsBefore = rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n ?? 0;
+      const settled = deps.ledger.settleBudgets(
+        runId,
+        [
+          { name: 'toolCalls', amount: 5, fromReserved: false },
+          { name: 'costUsd', amount: 0.5, fromReserved: false },
+        ],
+        { type: 'budget.test-settled', runId, data: { toolCalls: 5 }, nowMs: 1 },
+      );
+      assert.ok(settled.ok);
+      assert.equal(named(settled.value, 'toolCalls').used, named(before, 'toolCalls').used + 5);
+      assert.ok(Math.abs(named(settled.value, 'costUsd').used - (named(before, 'costUsd').used + 0.5)) < 1e-9);
+      assert.deepEqual(settled.value, budgetsOfRun(deps, runId), 'the returned rows are the stored ones');
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n, eventsBefore + 1);
+    });
+  });
+
+  it('settleBudgets rolls back every charge and the event when a reserved charge is larger than `reserved`', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const before = budgetsOfRun(deps, runId);
+      assert.equal(named(before, 'invocations').reserved, 0, 'nothing is reserved');
+      const failed = deps.ledger.settleBudgets(
+        runId,
+        [
+          { name: 'toolCalls', amount: 5, fromReserved: false },
+          { name: 'invocations', amount: 1, fromReserved: true },
+        ],
+        { type: 'budget.test-settled', runId, data: {}, nowMs: 1 },
+      );
+      assert.equal(failed.ok, false);
+      if (!failed.ok) assert.equal(failed.error.kind, 'conflict');
+      assert.deepEqual(budgetsOfRun(deps, runId), before, 'the direct charge made before the conflict is rolled back');
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n, 0);
+    });
+  });
 });

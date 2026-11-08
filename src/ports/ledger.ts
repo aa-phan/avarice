@@ -110,6 +110,13 @@ export interface BudgetRow {
   contractVersion: number;
 }
 
+// One charge of Ledger.settleBudgets: the budget row's name, the amount, and whether the amount moves out of `reserved` first.
+export interface BudgetCharge {
+  name: string;
+  amount: number;
+  fromReserved: boolean;
+}
+
 export interface BudgetReservation {
   // False when `used + reserved + amount` would pass the limit; nothing was reserved then.
   granted: boolean;
@@ -581,6 +588,9 @@ export interface Ledger {
   // Adds `amount` to `used`. With `fromReserved` the amount moves out of `reserved` first (a reservation settling);
   // without it the amount is charged directly (an estimated cost after the fact), and may pass the limit.
   chargeBudget(runId: string, name: string, amount: number, options: { fromReserved: boolean }): Result<BudgetRow>;
+  // Every charge, and the event when one is given, in one transaction, so a kill or a failure leaves all of them written or none. Each charge
+  // follows chargeBudget's rules. Returns the run's budget rows afterwards.
+  settleBudgets(runId: string, charges: readonly BudgetCharge[], event?: EventInput): Result<BudgetRow[]>;
   getBudgets(runId: string): Result<BudgetRow[]>;
   // How many hook denials with rule `budget_exhausted` the invocation recorded.
   countBudgetDenials(runId: string, invocationId: string): Result<number>;
