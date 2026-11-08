@@ -213,7 +213,72 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: TBD
+**Plans:** 33 plans (15 waves)
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md — Phase 3 spend ledger (25 USD, lower-only) and admission of the installed Claude Code 2.1.319
+- [ ] 03-02-PLAN.md — Migration 0003; ledger answer, stale re-open and withdraw of decisions; per-item attempts
+- [ ] 03-04-PLAN.md — Pure scheduler: readiness, dependents, dispositions, continuable blocked rule; repair edge
+- [ ] 03-05-PLAN.md — Decision policy (classes, options, records), one state digest, D-15 response validation
+- [ ] 03-06-PLAN.md — Gates G1 and G3, the integrity gate map, the smallest reproducer
+- [ ] 03-07-PLAN.md — Notify policy: profile notify keys, destination subset, quiet hours, batching, backoff, banner text
+- [ ] 03-08-PLAN.md — Host resume launch line, reap by `--resume`, final-text question, stop-and-ask and resume prompts
+- [ ] 03-09-PLAN.md — RunWorkspace park and unpark of a paused item's delta
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-03-PLAN.md — Brief `items`, N-item compile with derived specs, scaled routine budgets, repair limit 1
+- [ ] 03-11-PLAN.md — Fake host per-item scripts, resume, missing session, subagents, plan text; items brief fixture
+- [ ] 03-12-PLAN.md — Ledger amendRunContract (append-only invalidation, decision resolution), notifications, cancel request
+- [ ] 03-13-PLAN.md — Spike S3-A: live pause, `--resume`, missing session and plan format on a scratch repository
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-10-PLAN.md — Amendment domain: next contract version, field diff, D-20 invalidation classes
+- [ ] 03-14-PLAN.md — Multi-item kernel tracer: one unit, gate and commit per item to ready_for_review
+- [ ] 03-16-PLAN.md — Notifier port, osascript adapter (argv only), profile config reader, banners with retry and quiet hours
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-15-PLAN.md — `avarice contract amend` and the terminal identity rule (CS-11), shell command line
+- [ ] 03-17-PLAN.md — Spec derivation from the indexes at start, per-item summary (S-50), model per invocation (S-51)
+- [ ] 03-18-PLAN.md — Item-local decisions with park, S-17 offline, block-release-recheck, continuable pickup
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-19-PLAN.md — Bounded repair, regression charging (S-52), G3 and integrity (S-21), G1 in the item flow
+- [ ] 03-20-PLAN.md — `avarice decide` with the response validation suite, stale re-open and supervisor pickup
+- [ ] 03-21-PLAN.md — `status` and `inbox`: items, decisions, banner state, cancel request (optional JSON keys only)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03-22-PLAN.md — `claude -p --resume` of an answered item with unpark, fallbacks, resume kill points
+- [ ] 03-23-PLAN.md — `avarice digest`, `avarice schedule install/remove` (user LaunchAgent)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03-24-PLAN.md — `avarice cancel` with and without a live supervisor, races and kill points
+- [ ] 03-25-PLAN.md — Interactive `decide` prompt, the chain into amend, the shell Decide action
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03-26-PLAN.md — Offline gate: D-03 runs offline, S-18 on a simulated clock, the lost-wakeup race, kill-point coverage
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 03-27-PLAN.md — Live scratch cases S-17, S-18, S-21, S-50, S-51, S-52, CS-5, CS-15
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 03-29-PLAN.md — Exit part 1: run 1 block and resume to ready_for_review; run 2 started and blocked
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs, data model and processes with three diagrams, from the code
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence, containment, integrations, overview, from the code
+
+**Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings, fresh reviews of every new or changed document (success criterion 6)
+
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
 
 ### Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof
@@ -307,7 +372,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
+| 3. Decisions, independent work and amendments | v1.0 | 0/31 | Planned | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
