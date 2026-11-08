@@ -1,0 +1,15 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/run-preflight.test.ts\" \"test/integration/run-start.test.ts\"",
+  "exitCode": 1,
+  "reason": "the Task 1 start has no preflight judge: it never compares the brief's base revision with the pin, never counts commits or age past the pin, and never checks .planning/ROADMAP.md at the pin, so those four starts succeed (exit 0) instead of being refused with exit 3; src/domain/run-preflight.ts does not exist, so the unit test file fails to load",
+  "failingFiles": ["test/unit/run-preflight.test.ts", "test/integration/run-start.test.ts"],
+  "failingTests": [
+    "a brief that names another base revision: exit 3, asks for a re-onboard",
+    "26 commits outside .avarice/ and .planning/ refuse; 25 start",
+    "an oldest outside commit more than 14 days old refuses; 13 days starts",
+    "a pin tree without .planning/ROADMAP.md: exit 3",
+    "test/unit/run-preflight.test.ts (ERR_MODULE_NOT_FOUND: src/domain/run-preflight.ts)"
+  ],
+  "summary": "27 tests, 22 pass, 5 fail. The refusals that Task 1 already produced as a side effect (no project, no conventions, conventions committed with code, invalid conventions, not a descendant) pass; the staleness, revision and roadmap rules fail",
+  "outputHead": "not ok 4 - a brief that names another base revision: exit 3, asks for a re-onboard\nnot ok 7 - 26 commits outside .avarice/ and .planning/ refuse; 25 start\nnot ok 9 - an oldest outside commit more than 14 days old refuses; 13 days starts\nnot ok 13 - a pin tree without .planning/ROADMAP.md: exit 3\nnot ok 2 - test/unit/run-preflight.test.ts"
+}

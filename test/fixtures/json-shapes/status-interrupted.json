@@ -1,0 +1,18 @@
+[
+  {
+    "projectId": "<id>",
+    "repoPath": "<tmp>/repo",
+    "onboardingId": "<id>",
+    "state": "contract_proposed",
+    "reason": null,
+    "interrupted": {
+      "state": "contract_proposed",
+      "nextAction": "configure-gsd",
+      "resumeCommand": "avarice resume <id>"
+    },
+    "recordVersion": null,
+    "onboardedRevision": null,
+    "mapping": null,
+    "indexes": {}
+  }
+]

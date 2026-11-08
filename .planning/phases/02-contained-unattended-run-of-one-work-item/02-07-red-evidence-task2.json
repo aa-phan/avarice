@@ -1,0 +1,16 @@
+{
+  "command": "node --test --test-reporter=tap \"test/integration/run-workspace.test.ts\"",
+  "exitCode": 1,
+  "reason": "discard is not implemented: CloneRunWorkspace has snapshot and changedSince from task 1 but no discard, so every test that calls ws.discard throws 'ws.discard is not a function'",
+  "failingFiles": ["test/integration/run-workspace.test.ts"],
+  "failingTests": [
+    "discard restores what the run changed to the snapshot content, deletes what it added, keeps user content and ignored files",
+    "discard with nothing changed is a no-op success, and a second discard after a first lists no paths and leaves the same tree",
+    "discard when HEAD moved is a head-moved conflict and changes nothing",
+    "a directory replaced by a file and a file replaced by a directory are both put back",
+    "a symlink the run planted is removed as a link and never followed: the target outside the clone is untouched",
+    "a filter and hooks of the clone do not run during snapshot or discard"
+  ],
+  "summary": "6 new tests fail (pass 21, fail 6); the snapshot test passes already because snapshot() was built with the tracer's temporary-index tree in task 1.",
+  "outputHead": "not ok 2 - discard restores what the run changed to the snapshot content, deletes what it added, keeps user content and ignored files\nnot ok 3 - discard with nothing changed is a no-op success, and a second discard after a first lists no paths and leaves the same tree\nnot ok 4 - discard when HEAD moved is a head-moved conflict and changes nothing"
+}

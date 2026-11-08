@@ -1,0 +1,52 @@
+@startuml
+title A crashed unit, discarded and retried once
+
+participant Supervisor
+database Ledger
+participant "Run clone" as Clone
+participant "Claude Code host" as Host
+
+== First attempt ==
+Supervisor -> Ledger : item ready to delegated, snapshot step, launch step started
+Supervisor -> Host : launch the unit
+Host --> Supervisor : ends with no result, a signal or a non-zero exit,\nor the wall clock fires
+Supervisor -> Ledger : settle the budget (a killed unit is charged at least its cost cap)
+Supervisor -> Clone : measure HEAD and the changes since the snapshot
+Supervisor -> Ledger : classify step (inconclusive, or failed)
+
+== Routing ==
+alt the clone HEAD moved
+  Supervisor -> Ledger : containment finding, decision record,\nrun blocked_on_decision (enforcement failure), clone untouched
+else the host was unavailable or denied the launch
+  Supervisor -> Ledger : decision record, run blocked_on_decision (enforcement failure)
+else any other host error except a timeout
+  Supervisor -> Ledger : decision record (repeated failure), run blocked_on_decision, never retried
+else a loop limit, a spent budget, a pause, a denial, no progress,\nor an error result with exit 0
+  Supervisor -> Ledger : decision record (reason and class by ending), run blocked_on_decision,\nnever retried
+else crash or timeout, and the one retry is still available
+  alt the invocations budget cannot cover another unit
+    Supervisor -> Ledger : decision record, run blocked_on_decision (budget exhausted)
+  else the budget allows it
+    Supervisor -> Ledger : checkpoint discard-attempt (carries the lease fence)
+    Supervisor -> Clone : restore changed paths to the snapshot, remove added files\n(ignored paths and earlier files are left alone)
+    alt HEAD moved since the snapshot
+      Supervisor -> Ledger : decision record, run blocked_on_decision\n(enforcement failure), nothing changed
+    else restored
+      Supervisor -> Ledger : discard step (side effect none), attempt discarded,\nitem delegated to ready
+    end
+  end
+end
+
+== Second attempt ==
+Supervisor -> Ledger : context pack rebuilt, retry attempt opened,\nitem ready to delegated, snapshot step, launch step started
+Supervisor -> Host : launch the unit again
+Host --> Supervisor : result
+Supervisor -> Ledger : classify step
+alt progressed
+  note over Supervisor, Ledger : continues as in the run to ready flow:\nG2, commit, final proof, hand-off
+else crash or timeout again
+  Supervisor -> Ledger : decision record (repeated failure) naming both attempts\nand how each ended, run blocked_on_decision
+else any other ending
+  note over Supervisor, Ledger : routed as in the first attempt
+end
+@enduml

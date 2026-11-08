@@ -4,13 +4,16 @@
 // configuration nor its system attributes change what git does. Arguments are an argv array, never a shell
 // string. Read-only calls must not refresh the user's index, hence GIT_OPTIONAL_LOCKS=0.
 //
-// Two further guards live in this module only:
+// Further guards live in this module only:
 //  - a caller cannot pass `-c`, `--config-env` or `clone --config` (a caller-supplied configuration override
-//    could re-enable what the environment turns off);
+//    could re-enable what the environment turns off); the few configuration entries a caller may need (a commit
+//    identity, fsck on transfer) are fixed options below that map to fixed keys, never free-form;
+//  - `clone`, `fetch` and `commit` accept only the options listed for them, and `fetch` refuses a forced refspec;
 //  - `neutralizeFilters` blanks the clean, smudge and process commands of every `filter.<name>.*` driver the
 //    repository defines for the one call, because git runs a clean filter to compare a working-tree file that
 //    has the same size as its index entry, so `git status` of a repository with a hostile filter runs code.
 import { spawnSync } from 'node:child_process';
+import { isAbsolute } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -32,6 +35,10 @@ export const DEFAULT_GIT_TIMEOUT_MS = 10_000;
 const MAX_BUFFER = 64 * 1024 * 1024;
 const BASE_CONFIG_ENTRIES = 2;
 const CLONE_OPTIONS: ReadonlySet<string> = new Set(['--local', '--no-hardlinks', '--no-checkout', '--quiet', '-q']);
+// Run hand-off (plan 02-07): a fetch into the user's repository creates one ref and nothing else, and the supervisor's commit
+// is hook-free and unsigned. The message of a commit travels as the value of `-m`; everything after `--` is a pathspec.
+const FETCH_OPTIONS: ReadonlySet<string> = new Set(['--no-tags', '--no-write-fetch-head', '--quiet', '-q']);
+const COMMIT_OPTIONS: ReadonlySet<string> = new Set(['--no-verify', '--no-gpg-sign', '--quiet', '-q']);
 
 export interface RunGitOptions {
   cwd: string;
@@ -44,6 +51,16 @@ export interface RunGitOptions {
   // Ignore the user's and the machine's exclude files (`core.excludesFile` is set to /dev/null for the call), so only the
   // repository's own rules decide what `check-ignore` reports.
   noUserExcludes?: boolean;
+  // A commit identity for this call: `user.name`, `user.email` and `commit.gpgsign=false` are set, so a machine's signing or
+  // identity configuration changes nothing about the commit.
+  identity?: { name: string; email: string };
+  // `transfer.fsckObjects` and `fetch.fsckObjects` on, so objects arriving from a tree an agent wrote into are checked.
+  fsck?: boolean;
+  // Absolute path of a temporary index file (`GIT_INDEX_FILE`), so a tree can be computed without touching the repository's own
+  // index. A relative path is refused.
+  indexFile?: string;
+  // Treat every pathspec as a literal path (`GIT_LITERAL_PATHSPECS`): no glob and no `:(magic)`. Use it whenever a path comes from data.
+  literalPathspecs?: boolean;
 }
 
 export interface GitOutput {
@@ -86,6 +103,35 @@ function refuseUnsafeArgs(args: readonly string[]): string | null {
       if (!CLONE_OPTIONS.has(arg)) return `clone option ${JSON.stringify(arg.split('=')[0])} is not allowed`;
     }
   }
+  if (subcommand === 'fetch') {
+    // Same allowlist rule. Before `--` a word is an option, a repository or a refspec; after it, a repository or a refspec.
+    // A refspec starting with `+` forces the update and could move an existing ref, so none is accepted anywhere.
+    let afterDashes = false;
+    for (const arg of args.slice(1)) {
+      if (!afterDashes && arg === '--') {
+        afterDashes = true;
+        continue;
+      }
+      if (arg.startsWith('+')) return 'a forced refspec (leading +) is not allowed';
+      if (!afterDashes && arg.startsWith('-') && !FETCH_OPTIONS.has(arg)) return `fetch option ${JSON.stringify(arg.split('=')[0])} is not allowed`;
+    }
+  }
+  if (subcommand === 'commit') {
+    let afterDashes = false;
+    const rest = args.slice(1);
+    for (let i = 0; i < rest.length; i++) {
+      const arg = rest[i] as string;
+      if (afterDashes) continue;
+      if (arg === '--') {
+        afterDashes = true;
+      } else if (arg === '-m') {
+        i++; // the message is a value, whatever it starts with
+        if (i >= rest.length) return 'commit -m needs a message';
+      } else if (!COMMIT_OPTIONS.has(arg)) {
+        return `commit option ${JSON.stringify(arg.split('=')[0])} is not allowed`;
+      }
+    }
+  }
   return null;
 }
 
@@ -124,8 +170,19 @@ export function runGit(args: readonly string[], options: RunGitOptions): Result<
   const extraConfig: ConfigEntry[] = [
     ...(options.neutralizeFilters === true ? filterOverrides(options.cwd) : []),
     ...(options.noUserExcludes === true ? ([['core.excludesFile', '/dev/null']] as const) : []),
+    ...(options.identity !== undefined
+      ? ([['user.name', options.identity.name], ['user.email', options.identity.email], ['commit.gpgsign', 'false']] as const)
+      : []),
+    ...(options.fsck === true ? ([['transfer.fsckObjects', 'true'], ['fetch.fsckObjects', 'true']] as const) : []),
+    // A fetch into the user's repository must not start a repack or a prune of it as a side effect.
+    ...(args[0] === 'fetch' ? ([['gc.auto', '0'], ['maintenance.auto', 'false']] as const) : []),
   ];
   const env = safeGitEnv(process.env, extraConfig);
+  if (options.indexFile !== undefined) {
+    if (!isAbsolute(options.indexFile)) return err({ kind: 'invalid', field: 'indexFile', reason: 'an absolute path is required' });
+    env['GIT_INDEX_FILE'] = options.indexFile;
+  }
+  if (options.literalPathspecs === true) env['GIT_LITERAL_PATHSPECS'] = '1';
   const result = spawnGit(args, options.cwd, env, timeoutMs);
   if (result.error) {
     const code = (result.error as NodeJS.ErrnoException).code;

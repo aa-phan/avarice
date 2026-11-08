@@ -1,0 +1,29 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/live-attended-verdicts.test.ts",
+  "ranAgainst": "the plan base 11084ff plus test/unit/live-attended-verdicts.test.ts and a skeleton test/helpers/live-attended.ts whose verdict, aggregation, forecast and spend-gate functions have their final signatures and return a fixed FAIL, an empty list, 0 or undefined",
+  "exitCode": 1,
+  "reason": "The unit tests of the attended verdicts fail on their assertions against the skeleton: every PASS case of statusFirstVerdict, stopOnDenialVerdict and routableQuestionVerdict gets FAIL 'not implemented'; the NOT_EXERCISED cases get FAIL; the aggregation returns no summaries; the forecast returns 0 where 2.59 is expected; the two refusal cases get undefined where a ceiling text naming D-15 and a plan-cap text are expected; the skill listing finds no avarice-run skill; diffRecords names nothing.",
+  "failingFiles": [
+    "test/unit/live-attended-verdicts.test.ts"
+  ],
+  "failingTests": [
+    "statusFirstVerdict > passes for Skill and then avarice status",
+    "statusFirstVerdict > passes for cd <repo> && avarice status",
+    "stopOnDenialVerdict > passes: Edit denied, then Read and a closing text",
+    "stopOnDenialVerdict > is not exercised when the only denial names another file",
+    "routableQuestionVerdict > passes: a question line ending ?, then 1. and 2. last",
+    "behaviorVerdicts > gives PASS when every judged case passed",
+    "behaviorVerdicts > gives FAIL when one case failed",
+    "behaviorVerdicts > gives INCONCLUSIVE for one not-run case with the rest passing",
+    "skillListing > finds the skill in the skills field by its namespaced name",
+    "diffRecords > names entries that were added, removed or changed, sorted",
+    "the spend gate and the forecast > refuses with the ceiling text, naming D-15, when the total would pass 25 USD",
+    "the spend gate and the forecast > refuses with the plan-cap text when the plan would pass 4.00 USD",
+    "the spend gate and the forecast > forecasts the recorded spend plus the cases still to run and the possible re-runs"
+  ],
+  "passingAtBase": [
+    "15 of 60 tests pass against the skeleton, all vacuously: the cases that expect a plain FAIL (`avarice statusx`, no result for the status call, the shell operators, npm test, a chained command, another file, a second attempt, the 1) options, the bolded question, subagent text), the skill-listing cases that expect nothing listed, `lets a case with no line run`, `admits a session under both limits` and `admits at exactly the plan cap`"
+  ],
+  "semanticAssessment": "The target tests executed (60 tests discovered, the file loaded, no import or fixture fault). The 45 failures are assertion failures on the planned behavior, each naming the expected verdict, count or text the skeleton does not produce, not load or syntax errors. The 15 passes are tests whose expected result is the skeleton's fixed answer (FAIL, nothing listed, no refusal) and are not evidence of existing behavior; the GREEN step is judged on the whole file, and the discriminating cases (every PASS case, the aggregation, the refusals and the forecast) are among the failures.",
+  "summary": "Skeleton run: 60 tests, 15 pass (vacuous), 45 fail on assertions. gsd_run check tdd-red-evidence was not run: this phase's red-evidence files use the phase shape (command, ranAgainst, exitCode, reason, failingFiles, failingTests, passingAtBase, summary) plus semanticAssessment."
+}

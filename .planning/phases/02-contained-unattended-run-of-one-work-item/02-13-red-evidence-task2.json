@@ -1,0 +1,18 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/run-baseline-workflow.test.ts",
+  "ranAgainst": "the plan base source (git archive of 7b6a462, extracted to /tmp/red13) plus the new test file, fake run host and test-cli selection",
+  "exitCode": 1,
+  "reason": "the base stops every run with an enforced host in `running` (`no stage for running`), so none of the endings is classified and none opens a decision: there is no routing table, no containment.finding for head-moved or scope-of-writes, no decision record and no G2 or G4 row",
+  "failingFiles": ["test/integration/run-baseline-workflow.test.ts"],
+  "failingTests": [
+    "a commit attempt that moves the clone HEAD is a failed unit with headMoved: enforcement_failure and a head-moved finding",
+    "a pause text longer than 1000 characters is stored cut to 1000",
+    "a question whose choices end the text pauses the unit: blocked (decision), one open acceptance decision, its issue stored as data without control characters",
+    "only an edit outside the write set, denied by the hook, is a denied unit: decision, class permission",
+    "a direct write to README.md next to the in-scope edit (a sandbox gap) fails G2 scope-conformance: enforcement_failure and a finding naming it",
+    "an edit that leaves the check failing stops at G2 checks-delta with the failing evidence IDs, before any commit",
+    "an acceptance criterion verified only by a check that is never run fails G4 acceptance-mapped: blocked (decision), repeated_failure, no branch",
+    "a source that already has avarice/<runId> at another commit is a hand-off conflict: blocked (decision), scope_expansion, the ref left as it was"
+  ],
+  "summary": "8 Task 2 tests, 0 pass, 8 fail against the base (the same run as the Task 1 evidence: 16 tests, 16 fail)"
+}

@@ -1,0 +1,12 @@
+{
+  "command": "node --test --test-reporter=tap \"test/integration/run-source.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/adapters/git/run-source.ts does not exist yet: the whole test file fails to load before any test runs",
+  "failingFiles": ["test/integration/run-source.test.ts"],
+  "failingTests": [
+    "GitRunSource.conventionsAt (D-16)",
+    "GitRunSource.staleness (D-04)"
+  ],
+  "summary": "RED by missing module (ERR_MODULE_NOT_FOUND for src/adapters/git/run-source.ts); 0 tests run, 14 are defined in the file (11 conventionsAt, 3 staleness).",
+  "outputHead": "# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/adapters/git/run-source.ts' imported from .../test/integration/run-source.test.ts\nnot ok 1 - test/integration/run-source.test.ts\n# pass 0\n# fail 1"
+}

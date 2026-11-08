@@ -6,10 +6,14 @@
 // directory is always writable to a sandboxed shell, and a denyWrite on a path overrides an allowWrite beneath
 // it, so the only way to keep a shell out of `src/` is to deny each existing entry one by one. Entries created
 // later at unlisted locations are caught by the staging diff gate, not prevented.
+import { isRefusedAgentCommand } from './conventions.ts';
+import { matchesAny } from './glob.ts';
 import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
+import { ROUTINE_PRESET } from './run-contract.ts';
+import type { RunContract } from './run-contract.ts';
 
-export type InvocationPurpose = 'map' | 'intel' | 'knowledge';
+export type InvocationPurpose = 'map' | 'intel' | 'knowledge' | 'run';
 
 // How Bash commands are admitted under dontAsk (spike S0-A, 01-RESEARCH "Bash allow-list under dontAsk").
 //   blanket-bash-hook-identity  `Bash` is allowed; the AVARICE PreToolUse hook admits only commands matching the
@@ -38,10 +42,14 @@ export interface PurposeSpec {
 
 // The knowledge purpose (plan 01-19 decision B) reads the corpus `.avarice-knowledge` with Read, Glob and Grep and writes one
 // extraction JSON per chunk into `.avarice-knowledge/.extraction` with Write: no shell, no skill, no subagent.
+//
+// The run purpose (plan 02-08) has no single write directory: its writes come from the run contract's write, create and artifact
+// globs and are computed by computeRunScope. `writeDir` is empty for that reason and no code reads it for a run.
 export const INVOCATION_PURPOSES = {
   map: { writeDir: '.planning/codebase', cwd: 'staging' },
   intel: { writeDir: '.planning/intel', cwd: 'staging' },
   knowledge: { writeDir: '.avarice-knowledge/.extraction', cwd: 'read-dir', readDir: '.avarice-knowledge' },
+  run: { writeDir: '', cwd: 'staging' },
 } as const satisfies Record<InvocationPurpose, PurposeSpec>;
 
 // What each contained invocation may load: the skills the generated plugin directory links and the agents the
@@ -52,6 +60,9 @@ export const PURPOSE_EXTENSIONS: Readonly<Record<InvocationPurpose, { skills: re
   map: { skills: ['gsd-map-codebase'], agents: ['gsd-codebase-mapper'] },
   intel: { skills: [], agents: ['gsd-intel-updater'] },
   knowledge: { skills: [], agents: [] },
+  // The run purpose loads the GSD quick-task skill and the four agents `/gsd-quick --validate` starts (planner, plan checker,
+  // executor, verifier); the generated agent files keep `permissionMode` stripped like every other purpose's.
+  run: { skills: ['gsd-quick'], agents: ['gsd-planner', 'gsd-plan-checker', 'gsd-executor', 'gsd-verifier'] },
 };
 
 // Subagent types a purpose may start besides the agents it loads (PURPOSE_EXTENSIONS.agents are always allowed). Built-in
@@ -61,11 +72,14 @@ export const PURPOSE_SUBAGENT_TYPES: Readonly<Record<InvocationPurpose, readonly
   map: [],
   intel: [],
   knowledge: [],
+  run: [],
 };
 
 // Commands the hook admits without a GSD verb. `find` is admitted only without the actions in
 // FIND_DENIED_ACTIONS; the other entries are admitted as written (the hook also refuses redirections, `git -c`
-// and `git log --output`). `grep` is not admitted (review WR-02): the Bash tool may run it as the embedded ugrep or the
+// and `git log --output`). The hook also judges the path of a git object name (`<rev>:<path>`), admits only listed options
+// for `git log` and `git status`, and admits `git show` only with object-by-path operands and no option, so a secret file
+// is not printed through history or the index. `grep` is not admitted (review WR-02): the Bash tool may run it as the embedded ugrep or the
 // system grep, chosen per call, so the hook cannot model its options. Searches go through the Grep tool, whose root the
 // hook judges.
 export const READ_ONLY_COMMANDS: readonly string[] = [
@@ -121,6 +135,13 @@ export const GSD_READ_VERBS: Readonly<Record<InvocationPurpose, readonly string[
   intel: [...GSD_BASE_VERBS, ...GSD_INTEL_VERBS],
   // The knowledge pass has no shell, so no GSD verb.
   knowledge: [],
+  // The Phase 1 read verbs plus the ones the quick workflow runs, each with the GSD source line that runs it (plan 02-09, spike S2-B;
+  // ~/.claude/gsd-core/workflows/quick.md, GSD 1.17.0). No verb that writes (`config-set`, `query commit`, `quick-tasks-append`) is here.
+  //   - `query init.quick`: line 125, the workflow's first shell step (`--validate` is the only extra flag, GSD_VERB_FLAGS).
+  //   - `query config-get <key>`: quick.md lines 43, 143, 144 and 698, and agents/gsd-executor.md lines 310-312; the key must be one of
+  //     GSD_OPERAND_NAMES.
+  //   - `loop render-hooks <point>`: lines 289 (plan:pre) and 560 (execute:post); read-only, the point is one of GSD_OPERAND_NAMES.
+  run: [...GSD_BASE_VERBS, 'query init.quick', 'query config-get', 'loop render-hooks'],
 };
 
 // Never allowed, whatever else matches (deny rules beat allow rules).
@@ -152,6 +173,13 @@ export interface WorkspaceShape {
   repoReadAllow: readonly string[];
 }
 
+// One shell command the run contract lists for the agent (RC-1 execution.commands), split into words. `paths: true` is an entry that
+// ended in `<paths>`: further words are admitted when each is a relative path that passes the read rule.
+export interface AgentCommand {
+  words: string[];
+  paths: boolean;
+}
+
 export interface InvocationScope {
   purpose: InvocationPurpose;
   cwd: string;
@@ -159,6 +187,20 @@ export interface InvocationScope {
   repoPath: string;
   dataRoot: string;
   writeRoots: string[];
+  // Run purpose only (plan 02-08): files the contract names literally (a file root, not a directory), the contract's write, create
+  // and artifact globs and its protected globs (clone-relative, what the hook matches), the run's scratch directory (a write root
+  // beside the clone: TMPDIR and the npm cache live there), the tools the hook refuses by name and whether a background shell is refused.
+  writeFiles?: string[];
+  writeGlobs?: string[];
+  protectedGlobs?: string[];
+  scratchDir?: string;
+  deniedTools?: string[];
+  denyBackgroundShell?: boolean;
+  // Run purpose only (plan 02-11): the hook requires a recorded read of a file, by the same agent in this invocation, before an edit of it
+  // (CON-7).
+  readBeforeEdit?: boolean;
+  // Run purpose only (plan 02-11): the contract's loop limits (CON-14), which the hook turns into a stop for escalation.
+  escalation?: { consecutiveDenials: number; consecutiveSearches: number };
   denyWrite: string[];
   denyRead: string[];
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
@@ -172,6 +214,7 @@ export interface InvocationScope {
     readOnly: string[];
     gsdReadVerbs: string[];
     deniedPrefixes: string[];
+    agentCommands?: AgentCommand[];
     preambleSha256?: string;
   };
   subagents: { total: number; concurrent: number };
@@ -211,6 +254,8 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   // WR-01: refuses (RootRefusedError) a work root that is not a normalized absolute path, before any part of the scope is built.
   const workRoot = normalizedAbsoluteRoot(input.workRoot, 'computeInvocationScope: workRoot');
   const { purpose, contract, workspace } = input;
+  // The run purpose has no single write directory and no onboarding contract: computeRunScope builds its scope.
+  if (purpose === 'run') throw new TypeError('computeInvocationScope: the run purpose is computed by computeRunScope');
   const spec: PurposeSpec = INVOCATION_PURPOSES[purpose];
   const readDir = spec.cwd === 'read-dir' ? (spec.readDir ?? writeDirOf(purpose)) : undefined;
   const staging = trimTrailingSlashes(input.stagingPath);
@@ -243,7 +288,7 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
   // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
-  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), workRoot])];
+  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
   const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
@@ -279,6 +324,235 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
       ...(input.preambleSha256 !== undefined ? { preambleSha256: input.preambleSha256 } : {}),
     },
     subagents,
+    allowedDomains: [],
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// The run purpose (plan 02-08)
+// ---------------------------------------------------------------------------------------------------------
+
+// The parts of a RunWorkspaceDescription (src/ports/run-workspace.ts) this module reads, declared here so the domain imports no port.
+export interface RunWorkspaceShape {
+  topLevelEntries: readonly string[];
+  // Entry names of each directory above a write root (see runScopeDirs); a directory the clone does not have maps to [].
+  entriesByDir: Readonly<Record<string, readonly string[]>>;
+  gitPaths: readonly string[];
+  repoReadAllow: readonly string[];
+}
+
+export interface RunScopeInput {
+  contract: {
+    files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts' | 'protected' | 'secretGlobs'>;
+    execution: Pick<RunContract['execution'], 'commands'>;
+    budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent'>;
+    // The loop limits of the contract (CON-14); a contract stored before consecutiveSearches existed leaves the search limit at its preset value.
+    escalation?: Partial<Pick<RunContract['escalation'], 'consecutiveDenials' | 'consecutiveSearches'>>;
+  };
+  // The run's clone (cwd and staging root); `{workRoot}/{runId}/clone`.
+  clonePath: string;
+  repoPath: string;
+  dataRoot: string;
+  home: string;
+  workRoot: string;
+  // `{workRoot}/{runId}/scratch`: writable and readable beside the clone; TMPDIR and the npm cache live under it.
+  scratchDir: string;
+  workspace: RunWorkspaceShape;
+  readRoots: readonly string[];
+  strategy?: BashStrategy;
+  preambleSha256?: string;
+}
+
+// Paths the run may never write, whatever a write glob says: the clone's git directory and GSD's own configuration, which AVARICE sets
+// before the run starts.
+const RUN_ALWAYS_PROTECTED: readonly string[] = ['.git/**', '.planning/config.json'];
+// The only denied prefixes that may leave the list, and only when the contract lists a command that starts with the word.
+const RUN_EXEMPT_PREFIXES: readonly string[] = ['npm', 'npx'];
+const WILDCARD_CHARS = /[*?[{]/;
+
+const uniqueInOrder = (items: Iterable<string>): string[] => [...new Set(items)];
+
+// The default parents of every AVARICE profile's roots (profile-paths.ts): all default data roots, the config home and all default work
+// roots (which hold other profiles' run clones). A run may read none of them; its own clone and scratch, which lie under the work parent,
+// are re-allowed one by one (plan 02-20: a declared command could read another profile's data root). A profile whose roots were placed
+// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is not covered (docs/containment.md). `home` is the
+// symlink-resolved home the credential directories already use.
+export function defaultAvariceParents(home: string): string[] {
+  const root = trimTrailingSlashes(home);
+  return [join(root, '.local/share/avarice'), join(root, '.config/avarice'), join(root, '.local/share/avarice-work')];
+}
+
+// The credential stores of common tools, home-relative. Every sandboxed command, the model's host sandbox and the hook deny them. It is a
+// deny list over reads that are otherwise allowed, so a credential stored elsewhere under the home is not covered (R-WR-03).
+export const CREDENTIAL_PATHS: readonly string[] = [
+  '.ssh',
+  '.aws',
+  '.config/gh',
+  '.gnupg',
+  '.netrc',
+  '.npmrc',
+  '.docker',
+  '.kube',
+  '.config/gcloud',
+  'Library/Keychains',
+  '.git-credentials',
+  '.pgpass',
+];
+
+// CREDENTIAL_PATHS under `home` (the symlink-resolved home the other roots use), in list order.
+export function credentialPaths(home: string): string[] {
+  const root = trimTrailingSlashes(home);
+  return CREDENTIAL_PATHS.map((rel) => join(root, rel));
+}
+const isUsableGlob = (glob: string): boolean => glob !== '' && !glob.startsWith('/') && !glob.split('/').some((segment) => segment === '' || segment === '.' || segment === '..');
+
+// The static prefix of a glob: the segments before the first one holding a wildcard. A glob with no wildcard names one path (a file root).
+function globRoot(glob: string): { prefix: string; literal: boolean } {
+  const segments = glob.split('/');
+  const wild = segments.findIndex((segment) => WILDCARD_CHARS.test(segment));
+  return wild === -1 ? { prefix: glob, literal: true } : { prefix: segments.slice(0, wild).join('/'), literal: false };
+}
+
+const isUnder = (path: string, root: string): boolean => root === '' || path === root || path.startsWith(`${root}/`);
+
+// Directory roots and file roots of a set of globs, with every root another root already holds dropped. A directory root of '' is the
+// clone itself.
+function runRoots(globs: readonly string[]): { dirs: string[]; files: string[] } {
+  const dirs = new Set<string>();
+  const files = new Set<string>();
+  for (const glob of globs) {
+    const { prefix, literal } = globRoot(glob);
+    (literal ? files : dirs).add(prefix);
+  }
+  const keptDirs = [...dirs].filter((dir) => ![...dirs].some((other) => other !== dir && isUnder(dir, other)));
+  const keptFiles = [...files].filter((file) => !keptDirs.some((dir) => isUnder(file, dir)));
+  return { dirs: keptDirs.sort(), files: keptFiles.sort() };
+}
+
+function runWriteGlobs(files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts'>): string[] {
+  return uniqueInOrder([...files.write, ...files.create, ...files.artifacts].filter(isUsableGlob));
+}
+
+// The directories whose entry lists computeRunScope needs: every directory above a write root, so the caller asks the workspace for
+// exactly these (RunWorkspace.describe) and a directory the scope cannot enumerate is never left open. A write root itself is not listed.
+export function runScopeDirs(files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts'>): string[] {
+  const { dirs, files: fileRoots } = runRoots(runWriteGlobs(files));
+  const above = new Set<string>();
+  for (const root of [...dirs, ...fileRoots]) {
+    const segments = root.split('/');
+    for (let end = 1; end < segments.length; end += 1) above.add(segments.slice(0, end).join('/'));
+  }
+  return [...above].sort();
+}
+
+// Contract commands to the words the hook compares. An entry that could chain, redirect or substitute, one that starts with a word the
+// contract may never grant, and one that starts with a prefix that stays denied is dropped, so nothing here can reopen a Phase 1 denial.
+function parseAgentCommands(commands: readonly string[], stillDenied: readonly string[]): AgentCommand[] {
+  const out = new Map<string, AgentCommand>();
+  for (const command of commands) {
+    const tokens = command.split(' ');
+    // eslint-disable-next-line no-control-regex
+    if (tokens.some((token) => token === '' || /[\u0000-\u001f\u007f]/.test(token))) continue;
+    const paths = tokens[tokens.length - 1] === '<paths>';
+    const words = paths ? tokens.slice(0, -1) : tokens;
+    if (words.length === 0 || words.some((word) => /[;&|$`\\<>'"]/.test(word))) continue;
+    if (isRefusedAgentCommand(words[0] as string)) continue;
+    if (stillDenied.some((prefix) => prefix.split(' ').every((word, i) => words[i] === word))) continue;
+    out.set(`${paths ? 'p' : 'x'} ${words.join(' ')}`, { words, paths });
+  }
+  return [...out.values()];
+}
+
+export function computeRunScope(input: RunScopeInput): InvocationScope {
+  // The same refusal as Phase 1 (WR-01), for every root this function turns into a rule: a relative or non-normalized root would match
+  // no canonical path, so the rule would not apply.
+  const workRoot = normalizedAbsoluteRoot(input.workRoot, 'computeRunScope: workRoot');
+  const clone = normalizedAbsoluteRoot(input.clonePath, 'computeRunScope: clonePath');
+  const scratch = normalizedAbsoluteRoot(input.scratchDir, 'computeRunScope: scratchDir');
+  const { contract, workspace } = input;
+  const at = (rel: string): string => (rel === '' ? clone : join(clone, rel));
+
+  const writeGlobs = runWriteGlobs(contract.files);
+  const { dirs, files } = runRoots(writeGlobs);
+  const targets = [...dirs, ...files];
+
+  // Every existing entry on the ancestor chain of a write root that is not itself on a write root's path: the sandbox always lets a
+  // shell write under the working directory, and a denyWrite beats an allowWrite beneath it, so each is denied one by one (spike S0-B).
+  // Entries created later at unlisted places are the diff gate's to catch.
+  const deny = new Set<string>();
+  const visit = (dir: string): void => {
+    const names = dir === '' ? workspace.topLevelEntries : workspace.entriesByDir[dir];
+    if (names === undefined) {
+      throw new TypeError(`computeRunScope: workspace.entriesByDir has no listing for ${JSON.stringify(dir)}, a directory above a write root (ask the workspace for runScopeDirs)`);
+    }
+    for (const name of names) {
+      const rel = dir === '' ? name : `${dir}/${name}`;
+      if (targets.includes(rel)) continue;
+      if (targets.some((target) => target.startsWith(`${rel}/`))) visit(rel);
+      else deny.add(at(rel));
+    }
+  };
+  if (!dirs.includes('')) visit('');
+
+  // Every existing protected path: the static prefix of each protected glob, and every listed entry the glob matches.
+  const protectedGlobs = uniqueInOrder([...contract.files.protected, ...RUN_ALWAYS_PROTECTED].filter(isUsableGlob));
+  const listed = [...workspace.topLevelEntries, ...Object.entries(workspace.entriesByDir).flatMap(([dir, names]) => names.map((name) => `${dir}/${name}`))];
+  for (const glob of protectedGlobs) {
+    const { prefix } = globRoot(glob);
+    if (prefix !== '') deny.add(at(prefix));
+  }
+  for (const entry of listed) if (matchesAny(entry, protectedGlobs)) deny.add(at(entry));
+
+  deny.add(at('.git'));
+  for (const path of workspace.gitPaths) deny.add(trimTrailingSlashes(path));
+  const home = trimTrailingSlashes(input.home);
+  const repo = trimTrailingSlashes(input.repoPath);
+  const dataRoot = trimTrailingSlashes(input.dataRoot);
+  const credentialDirs = credentialPaths(home);
+  // The Phase 1 data-root and credential denials, as write denials too.
+  deny.add(dataRoot);
+  for (const path of credentialDirs) deny.add(path);
+
+  // npm and npx leave the denied prefixes only for a contract-listed exact form; everything else keeps its Phase 1 denial.
+  const base = DENIED_COMMAND_PREFIXES.filter((prefix) => !RUN_EXEMPT_PREFIXES.includes(prefix));
+  const agentCommands = parseAgentCommands(contract.execution.commands, base);
+  const deniedPrefixes = DENIED_COMMAND_PREFIXES.filter((prefix) => !RUN_EXEMPT_PREFIXES.includes(prefix) || !agentCommands.some((command) => command.words[0] === prefix));
+
+  return {
+    purpose: 'run',
+    cwd: clone,
+    stagingPath: clone,
+    repoPath: repo,
+    dataRoot,
+    writeRoots: dirs.map(at),
+    writeFiles: files.map(at),
+    writeGlobs,
+    protectedGlobs,
+    scratchDir: scratch,
+    deniedTools: ['AskUserQuestion'],
+    denyBackgroundShell: true,
+    readBeforeEdit: true,
+    escalation: {
+      consecutiveDenials: contract.escalation?.consecutiveDenials ?? ROUTINE_PRESET.escalation.consecutiveDenials,
+      consecutiveSearches: contract.escalation?.consecutiveSearches ?? ROUTINE_PRESET.escalation.consecutiveSearches,
+    },
+    denyWrite: uniqueSorted(deny),
+    // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
+    // prefix with this one, is compared whole by the hook and the sandbox and stays denied.
+    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home)]),
+    denyReadGlobs: [...contract.files.secretGlobs],
+    allowRead: [...workspace.repoReadAllow.map(trimTrailingSlashes), clone, scratch],
+    readRoots: input.readRoots.map(trimTrailingSlashes),
+    commands: {
+      strategy: input.strategy ?? ONBOARDING_BASH_STRATEGY,
+      readOnly: [...READ_ONLY_COMMANDS],
+      gsdReadVerbs: [...GSD_READ_VERBS.run],
+      deniedPrefixes,
+      agentCommands,
+      ...(input.preambleSha256 !== undefined ? { preambleSha256: input.preambleSha256 } : {}),
+    },
+    subagents: { total: contract.budgets.subagentsTotal, concurrent: contract.budgets.subagentsConcurrent },
+    // An agent invocation never gets a network domain or a loopback allowance (CON-2, CON-5).
     allowedDomains: [],
   };
 }

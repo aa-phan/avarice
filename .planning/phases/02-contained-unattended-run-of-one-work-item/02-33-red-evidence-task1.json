@@ -1,0 +1,31 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/run-sandbox-other-profiles.test.ts test/integration/check-validation.test.ts",
+  "ranAgainst": "the plan base 97dbeef (src unchanged) plus the new describe `credential locations are unreadable to run commands (R-WR-03)` in test/integration/run-sandbox-other-profiles.test.ts and the new describe `a secret printed by a check is stored redacted (R-WR-03, T-02-115)` in test/integration/check-validation.test.ts",
+  "exitCode": 1,
+  "reason": "At base sandboxSetup denies ~/.ssh, ~/.aws and ~/.config/gh only. The real sandbox lets /bin/cat read the sentinel at ~/.gnupg, ~/.netrc, ~/.npmrc, ~/.docker/config.json, ~/.kube/config, ~/.config/gcloud, ~/Library/Keychains, ~/.git-credentials and ~/.pgpass (assertion: `~/<path> printed its content`, true !== false), and `/bin/cp ~/.netrc <scratch>/stolen` exits 0 ('the copy succeeded', expected non-zero, actual 0). A check that prints AKIAABCDEFGHIJKLMNOP has the raw key id stored in its check-output artifact (the artifact text matched no /\\[REDACTED:/: it held `token AKIAABCDEFGHIJKLMNOP` and `again AKIAABCDEFGHIJKLMNOP`).",
+  "failingFiles": [
+    "test/integration/run-sandbox-other-profiles.test.ts",
+    "test/integration/check-validation.test.ts"
+  ],
+  "failingTests": [
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.gnupg/secring",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.netrc",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.npmrc",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.docker/config.json",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.kube/config",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.config/gcloud/credentials.db",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/Library/Keychains/login.keychain-db",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.git-credentials",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot read ~/.pgpass",
+    "credential locations are unreadable to run commands (R-WR-03) > cannot copy ~/.netrc into the scratch directory, where the next invocation could read it",
+    "a secret printed by a check is stored redacted (R-WR-03, T-02-115) > stores the check output with a redaction marker and without the key id"
+  ],
+  "passingAtBase": [
+    "cannot read ~/.ssh/id_rsa, ~/.aws/credentials and ~/.config/gh/hosts.yml (the three original directories)",
+    "npm still runs with its .npmrc read-denied (npm config get registry exits 0 with HOME set to the home; at base the file is simply readable, so this case proves the post-change behavior only once the list is extended)",
+    "the sentinel at ~/.npmrc is readable outside the sandbox",
+    "every other case of both files"
+  ],
+  "semanticAssessment": "The target tests executed (47 tests reported, none skipped, the credential describe ran because /usr/bin/sandbox-exec exists) and failed on the planned assertions for the intended reason: the nine added credential locations are readable and copyable under the real sandbox, and check output is stored raw. No import, syntax, fixture or setup fault is involved: the same sentinels at the three original locations are denied in the same run, which shows the fixture and the executor work. The redaction failure prints the stored artifact, which holds the raw key id.",
+  "summary": "Run at the base: 47 tests reported, 36 pass, 11 fail (nine reads, the copy, and the redaction case)."
+}

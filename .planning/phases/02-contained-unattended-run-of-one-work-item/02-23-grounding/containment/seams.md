@@ -1,0 +1,6 @@
+- data-model.md: the `hook_reads` table (written by the hook, one row per invocation, agent and path) and the `loop.limit` event (reason, count, limit) are not covered here beyond their behavior; the table layout and event field list belong there.
+- data-model.md and config-reference.md: `hook.decision` and `tool.completed` carry the run ID in the onboarding ID field for runs.
+- config-reference.md: environment variables of the host invocation (`AVARICE_RUN`, scratch `TMPDIR`, `npm_config_cache`, `npm_config_update_notifier`, the two instruction and memory switches), `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT`, `AVARICE_CONFIG_HOME`, and the contract escalation keys (preset 3 denials, 25 searches).
+- checks-and-evidence.md: install and validation mechanics; this document states only their sandbox posture and the validation network detection limit. It must not contradict the verdict rules (`active`, `rejected`, `unavailable`).
+- runs.md: the unit stage re-classifies the invocation outcome; `scope-of-writes` G2 failures block with `enforcement_failure`, other G2 failures with `decision`; recovery of the clone after a failed unit; the run's `launch:run` step.
+- integrations.md: the exact launch line, the egress proxy as an integration (registry hosts on 443 from the contract), and the hand-off fetch.

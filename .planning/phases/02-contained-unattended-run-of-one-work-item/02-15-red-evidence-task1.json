@@ -1,0 +1,21 @@
+{
+  "command": "node --test test/integration/run-status.test.ts test/unit/json-shapes.test.ts",
+  "ranAgainst": "the plan base e5dbd20 (git archive extracted to /tmp/avarice-15/base) plus the new run-status.test.ts, the extended json-shapes.test.ts and the status-runs.json fixture",
+  "exitCode": 1,
+  "reason": "at the plan base status prints no run and the `--json` project entry has no `runs` key: the run row, the branch/evidence/gates/checkpoint detail lines, the added `runs` array, the offline run line and src/app/run-status.ts do not exist",
+  "failingFiles": ["test/integration/run-status.test.ts", "test/unit/json-shapes.test.ts"],
+  "failingTests": [
+    "prints the run row and the detail lines of a ready run",
+    "status --json: every Phase 1 key and value is as before, and the project gains a `runs` array with one run",
+    "works with the network denied and no claude binary",
+    "reads ledger rows only: the run-status module calls no method that writes",
+    "status --json after start --wait reached ready_for_review"
+  ],
+  "passingAtBase": [
+    "the run reached ready_for_review",
+    "a project without runs has no `runs` key",
+    "takes no lease, writes no row and starts no model: the ledger is the same after status and inbox-free reads",
+    "the four Phase 1 json-shapes snapshots (status empty, interrupted, active; context active) and normalize()"
+  ],
+  "summary": "14 tests, 9 pass, 5 fail at the base; the passing ones pin behaviour that must not change (Phase 1 shapes, no `runs` key without runs, no writes)"
+}

@@ -112,6 +112,48 @@ describe('scripts/checkout-digest.ts', () => {
     assert.notEqual(digestOf(repo.path, '--allow-ref', 'refs/heads/avarice/onboard-*').json.refsDigest, allowed.refsDigest, 'a ref the glob does not match still counts');
   });
 
+  it('--allow-run-refs leaves refs/heads/avarice/run_* out of the refs digest and nothing else (plan 02-07, D-02)', () => {
+    const repo = scratch();
+    const before = digestOf(repo.path, '--allow-run-refs').json;
+    const plainBefore = digestOf(repo.path).json;
+
+    git(repo.path, ['branch', 'avarice/run_01TESTRUN']);
+    const after = digestOf(repo.path, '--allow-run-refs');
+    assert.equal(after.code, 0, after.stderr);
+    // refsAllowed counts the ref that was left out (0 before, 1 after); every digest is equal.
+    const { counts: afterCounts, ...afterRest } = after.json as Digest & { counts: { refsAllowed: number; refs: number } };
+    const { counts: beforeCounts, ...beforeRest } = before as Digest & { counts: { refsAllowed: number; refs: number } };
+    assert.deepEqual(afterRest, beforeRest, 'the run branch is the only change and every digest is equal');
+    assert.equal(afterCounts.refs, beforeCounts.refs);
+    assert.equal(afterCounts.refsAllowed, beforeCounts.refsAllowed + 1);
+    assert.notEqual(digestOf(repo.path).json.refsDigest, plainBefore.refsDigest, 'without the option the run branch is seen');
+
+    git(repo.path, ['branch', 'avarice/other']);
+    assert.notEqual(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest, 'a ref outside the run glob still counts');
+    git(repo.path, ['branch', '-D', 'avarice/other']);
+    git(repo.path, ['branch', 'feature/x']);
+    assert.notEqual(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest, 'so does any other branch');
+  });
+
+  it('--allow-run-refs does not hide a nested ref under the run prefix, and --allow-ref keeps its glob meaning across a slash (R-IN-09, T-02-104)', () => {
+    const repo = scratch();
+    const before = digestOf(repo.path, '--allow-run-refs').json;
+
+    git(repo.path, ['branch', 'avarice/run_01TESTRUN']);
+    assert.equal(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest, 'one run segment is left out');
+
+    git(repo.path, ['branch', 'avarice/run_Y/extra']);
+    const nested = digestOf(repo.path, '--allow-run-refs');
+    assert.equal(nested.code, 0, nested.stderr);
+    assert.notEqual(nested.json.refsDigest, before.refsDigest, 'a ref below a run segment still counts');
+    git(repo.path, ['branch', '-D', 'avarice/run_Y/extra']);
+    assert.equal(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest);
+
+    const plain = digestOf(repo.path, '--allow-ref', 'refs/heads/x/*').json;
+    git(repo.path, ['branch', 'x/deep/er']);
+    assert.equal(digestOf(repo.path, '--allow-ref', 'refs/heads/x/*').json.refsDigest, plain.refsDigest, 'a glob star still crosses a slash');
+  });
+
   it('never prints file contents', () => {
     const repo = scratch();
     const r = digestOf(repo.path);

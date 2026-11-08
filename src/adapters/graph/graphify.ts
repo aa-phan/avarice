@@ -13,6 +13,7 @@
 import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { credentialPaths } from '../../domain/invocation-scope.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
@@ -88,7 +89,7 @@ export class GraphifyTool implements GraphTool {
   constructor(executor: CommandExecutor, options: GraphifyToolOptions) {
     this.#executor = executor;
     this.#env = options.env ?? process.env;
-    this.#denyRead = [options.dataRoot, join(options.home, '.ssh'), join(options.home, '.aws'), join(options.home, '.config', 'gh')];
+    this.#denyRead = [options.dataRoot, ...credentialPaths(options.home)];
     this.descriptor = {
       port: 'graph-tool',
       adapter: 'graphify',

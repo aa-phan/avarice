@@ -91,6 +91,10 @@ export function renderClaudeSettings(scope: InvocationScope, options: RenderOpti
   if ((options.skillsAllowed ?? []).length > 0) allow.push('Skill');
   if (scope.subagents.total > 0) allow.push('Agent');
   for (const root of scope.writeRoots) allow.push(`Edit(${marked(root)}/**)`);
+  // The run purpose (plan 02-08): a file the contract names literally gets a file-level rule, and the scratch directory beside the
+  // clone (TMPDIR and the npm cache) is readable and writable to the file tools as to the shell. The hook narrows both by glob.
+  for (const file of scope.writeFiles ?? []) allow.push(`Edit(${marked(file)})`);
+  if (scope.scratchDir !== undefined) allow.push(`Read(${marked(scope.scratchDir)}/**)`, `Edit(${marked(scope.scratchDir)}/**)`);
   allow.push(...bashAllowRules(scope));
 
   const deny: string[] = [
@@ -108,13 +112,15 @@ export function renderClaudeSettings(scope: InvocationScope, options: RenderOpti
     'WebSearch',
     'NotebookEdit',
     `Edit(${marked(join(scope.stagingPath, '.planning/config.json'))})`,
+    // Tools a human would have to answer (the run purpose's AskUserQuestion): denied by the host too, not only by the hook (RC-4).
+    ...(scope.deniedTools ?? []),
     // No shell at all (the knowledge pass): Bash is denied outright, not only left without an allow rule.
     ...(scope.commands.strategy === 'none' ? ['Bash'] : []),
     ...scope.commands.deniedPrefixes.map((prefix) => `Bash(${prefix}:*)`),
   ];
 
   const filesystem: Record<string, string[]> = {
-    allowWrite: scope.writeRoots.map(marked),
+    allowWrite: [...scope.writeRoots, ...(scope.writeFiles ?? []), ...(scope.scratchDir !== undefined ? [scope.scratchDir] : [])].map(marked),
     denyWrite: scope.denyWrite.map(marked),
     denyRead: scope.denyRead.map(marked),
   };

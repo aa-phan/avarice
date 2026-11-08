@@ -1,0 +1,18 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/run-baseline-workflow.test.ts",
+  "ranAgainst": "the plan base source (git archive of 7b6a462, extracted to /tmp/red13) plus the new test file, fake run host and test-cli selection",
+  "exitCode": 1,
+  "reason": "the base has no `running` or `verifying` stage and no configure-gsd action, so a run with an enforced host stops in `running` with `no stage for running` (exit 3): start --wait never reaches ready_for_review and no unit is launched, classified, gated, committed or handed off",
+  "failingFiles": ["test/integration/run-baseline-workflow.test.ts"],
+  "failingTests": [
+    "exits 0 with no input after start, and the final line is `run <id>: ready_for_review`",
+    "passes each stage behind its checkpoint, in the order of the contract",
+    "launches exactly one unit and records the GSD configuration, the snapshot and the classification",
+    "records G2 and G4 as passed, and the check evidence at the clone HEAD, clean, with its command and exit code",
+    "commits only src/slug.ts, with the run and attempt trailers, and hands the branch to the source",
+    "archives each quick record as an artifact and leaves none of them, nor the GSD settings, in the clone",
+    "hands the unit one `/gsd-quick --validate --text` prompt with the no-commit sentence",
+    "the same run offline (S-12): reaches ready_for_review with exit 0"
+  ],
+  "summary": "16 tests in the file, 0 pass, 16 fail (8 of them are the Task 1 tracer tests listed here)"
+}

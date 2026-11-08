@@ -1,0 +1,4 @@
+- Whether the absent decision-answering path, the unused evidence external reference and the unreachable decision states are deliberate staging for later work: checked every INSERT, UPDATE and DELETE statement under src for decisions and evidence (only ledger.ts writes them, with no update); the owner classifies intent.
+- Event levels: invocation.finished, invocation.reconciled and the ledger-written kinds were checked for a level argument and have none, so they take the default info; every other kind's level was read at its call site.
+- The `containment.finding` check names a run's blocking stage chooses were not enumerated: the name comes from callers of the block function in item.ts, finish.ts and prepare.ts, read only where they write run rows and events. The runs and containment documents own the names.
+- src/ports/ledger.ts was read only for the Ledger method list (61 methods), not line by line.

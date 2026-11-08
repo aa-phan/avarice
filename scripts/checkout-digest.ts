@@ -1,7 +1,10 @@
 // Checkout digest (plan 01-19; docs/repository-onboarding.md, research "Staging worktree mechanics"): what "the user's
 // checkout is unchanged" means as one JSON line, so a before and an after can be compared.
 //
-//   node scripts/checkout-digest.ts <repo> [--allow-ref glob]...
+//   node scripts/checkout-digest.ts <repo> [--allow-ref glob]... [--allow-run-refs]
+//
+// `--allow-run-refs` leaves out refs named `refs/heads/avarice/run_` plus one segment of letters, digits and underscores: the
+// run branch a run hands to the source (D-02). A ref below that segment, such as `refs/heads/avarice/run_X/extra`, still counts.
 //
 // Prints { head, branch, statusDigest, filesDigest, refsDigest, worktreesDigest, counts }. Everything is read through
 // safe git (no hooks, no fsmonitor, no optional locks, filter drivers neutralized for the one call that compares
@@ -30,6 +33,11 @@ export interface CheckoutDigest {
   counts: { tracked: number; untracked: number; statusEntries: number; refs: number; refsAllowed: number };
 }
 
+// The one ref a run hands to the source repository (D-02, plan 02-07): `--allow-run-refs` leaves exactly these refs out of the
+// refs digest, so a before and an after compare equal when the only change is the new run branch. One ref segment: production run
+// IDs are `run_` and 26 characters and the test IDs are shorter, so no length is fixed; a ref below a run segment is not a run branch.
+export const RUN_REF_PATTERN = /^refs\/heads\/avarice\/run_[A-Za-z0-9_]+$/;
+
 const GIT_TIMEOUT_MS = 120_000;
 const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
 
@@ -44,7 +52,8 @@ export function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
-export function checkoutDigest(repo: string, allowRefs: readonly string[] = []): CheckoutDigest {
+// A string is a glob (`*` matches any characters including `/`); a RegExp is matched against the full ref name as given.
+export function checkoutDigest(repo: string, allowRefs: readonly (string | RegExp)[] = []): CheckoutDigest {
   const head = git(repo, ['rev-parse', 'HEAD']).trim();
   const branch = git(repo, ['branch', '--show-current']).trim();
   const status = git(repo, ['status', '--porcelain=v2', '-z', '--untracked-files=all'], true);
@@ -67,7 +76,7 @@ export function checkoutDigest(repo: string, allowRefs: readonly string[] = []):
     hash.update('\0');
   }
 
-  const allow = allowRefs.map(globToRegExp);
+  const allow = allowRefs.map((entry) => (typeof entry === 'string' ? globToRegExp(entry) : entry));
   const refLines = git(repo, ['for-each-ref', '--format=%(refname) %(objectname)']).split('\n').filter((l) => l !== '');
   const kept = refLines.filter((line) => !allow.some((re) => re.test(line.slice(0, line.indexOf(' ')))));
 
@@ -89,7 +98,7 @@ export function checkoutDigest(repo: string, allowRefs: readonly string[] = []):
 }
 
 function main(argv: readonly string[]): number {
-  const allow: string[] = [];
+  const allow: (string | RegExp)[] = [];
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i] as string;
@@ -102,6 +111,8 @@ function main(argv: readonly string[]): number {
       allow.push(value);
     } else if (word.startsWith('--allow-ref=')) {
       allow.push(word.slice('--allow-ref='.length));
+    } else if (word === '--allow-run-refs') {
+      allow.push(RUN_REF_PATTERN);
     } else if (word.startsWith('--')) {
       process.stderr.write(`checkout-digest: unknown option ${word}\n`);
       return 2;
@@ -111,7 +122,7 @@ function main(argv: readonly string[]): number {
   }
   const [repo] = positionals;
   if (repo === undefined || positionals.length !== 1) {
-    process.stderr.write('usage: node scripts/checkout-digest.ts <repo> [--allow-ref glob]...\n');
+    process.stderr.write('usage: node scripts/checkout-digest.ts <repo> [--allow-ref glob]... [--allow-run-refs]\n');
     return 2;
   }
   try {

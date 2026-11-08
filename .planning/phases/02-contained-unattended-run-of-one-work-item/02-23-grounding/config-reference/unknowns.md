@@ -1,0 +1,4 @@
+- Whether check validation can read its own clone under the default work root: the validation call passes no allow-read paths (`src/app/check-validation.ts:90`) and I did not run it. Checked: the sandbox profile builder and the call sites by reading; not checked: a live run.
+- What a run ends in when an artifact file over 2 MiB stops classification: the stage returns an error to the supervisor loop, which releases the lease without a transition (`src/app/run-service.ts`). Not traced further into resume or status rendering.
+- Whether the hook's search-loop window (the last 2000 decision events) can hide a long search run: not read beyond the constant and the call.
+- Shell source (`src/cli/shell/shell.ts`, `src/cli/render/style.ts`) read only for environment, history and polling constants; the key handling and views were not read. Not covered: the rest of the 537-line shell.

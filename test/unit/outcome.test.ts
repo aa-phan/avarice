@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 
 import { classifyOutcome } from '../../src/domain/outcome.ts';
 import type { OutcomeFacts } from '../../src/domain/outcome.ts';
+import { detectPause } from '../../src/domain/outcome.ts';
 
 const HEAD = 'a'.repeat(40);
 const MOVED = 'b'.repeat(40);
@@ -106,5 +107,102 @@ describe('classifyOutcome', () => {
   it('is a pure function of its facts: the same facts give the same answer', () => {
     const f = facts({ expectedFilesPresent: false });
     assert.deepEqual(classifyOutcome(f), classifyOutcome({ ...f }));
+  });
+});
+
+// A structural pause signal (02-RESEARCH Pitfall 11) makes a clean finished run paused, after failed and before progressed.
+describe('classifyOutcome with a pause signal', () => {
+  it('calls a clean run with pauseSignal paused even when the expected files are present', () => {
+    assert.deepEqual(classifyOutcome(facts({ pauseSignal: true })), { kind: 'paused', headMoved: false });
+  });
+
+  it('calls a clean run with pauseSignal paused when the expected files are absent too', () => {
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, expectedFilesPresent: false })).kind, 'paused');
+  });
+
+  it('still reports a moved HEAD as failed first', () => {
+    assert.deepEqual(classifyOutcome(facts({ pauseSignal: true, headAfter: MOVED })), { kind: 'failed', headMoved: true });
+  });
+
+  it('still reports a wall clock timeout or a missing result as inconclusive', () => {
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, timedOut: true })).kind, 'inconclusive');
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, resultSeen: false, exitCode: null, signal: 'SIGTERM' })).kind, 'inconclusive');
+  });
+
+  it('still reports a budget subtype or a hook budget deny as budget_exhausted', () => {
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, isError: true, subtype: 'error_max_budget_usd', exitCode: 1 })).kind, 'budget_exhausted');
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, hookDenies: 1, hookBudgetDenies: 1 })).kind, 'budget_exhausted');
+  });
+
+  it('still reports a non-zero exit, a signal or is_error as failed', () => {
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, exitCode: 2 })).kind, 'failed');
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, exitCode: null, signal: 'SIGSEGV' })).kind, 'failed');
+    assert.equal(classifyOutcome(facts({ pauseSignal: true, isError: true, exitCode: 1 })).kind, 'failed');
+  });
+
+  it('treats pauseSignal false the same as absent', () => {
+    assert.deepEqual(classifyOutcome(facts({ pauseSignal: false })), classifyOutcome(facts()));
+    assert.equal(classifyOutcome(facts({ pauseSignal: false, expectedFilesPresent: false })).kind, 'no_progress');
+  });
+});
+
+describe('detectPause', () => {
+  it('reads a waiting JSON file as waiting-json', () => {
+    assert.deepEqual(detectPause({ waitingJson: true }), { paused: true, signal: 'waiting-json' });
+  });
+
+  it('reads a human_needed VERIFICATION status as verification-human-needed', () => {
+    assert.deepEqual(detectPause({ verificationStatus: 'human_needed' }), { paused: true, signal: 'verification-human-needed' });
+  });
+
+  it('does not read any other VERIFICATION status as a pause', () => {
+    for (const verificationStatus of ['passed', 'gaps_found', 'missing', '']) {
+      assert.deepEqual(detectPause({ verificationStatus }), { paused: false, signal: null }, verificationStatus);
+    }
+  });
+
+  it('reads a STATE needing a human as state-needs-human', () => {
+    assert.deepEqual(detectPause({ stateNeedsHuman: true }), { paused: true, signal: 'state-needs-human' });
+  });
+
+  it('reads a final text ending in a question and two numbered choices as numbered-choice', () => {
+    const tail = 'I checked both files.\n\nWhich approach should I take?\n1. Edit the shared helper\n2. Duplicate the helper\n';
+    assert.deepEqual(detectPause({ finalTextTail: tail }), { paused: true, signal: 'numbered-choice' });
+  });
+
+  it('accepts blank lines between the choices and three or more choices', () => {
+    const tail = 'Which one?\n\n1. A\n\n2. B\n\n3. C\n\n';
+    assert.equal(detectPause({ finalTextTail: tail }).signal, 'numbered-choice');
+  });
+
+  it('does not read a question with a single numbered line, or choices with no question, as a pause', () => {
+    assert.equal(detectPause({ finalTextTail: 'Which one?\n1. only one' }).paused, false);
+    assert.equal(detectPause({ finalTextTail: 'Done. Steps taken:\n1. read\n2. edited\n3. tested' }).paused, false);
+  });
+
+  it('does not read a numbered list in the middle of the text as a pause', () => {
+    assert.equal(detectPause({ finalTextTail: 'Which one?\n1. A\n2. B\nI picked A and finished the work.' }).paused, false);
+  });
+
+  it('does not read choices that do not start at 1 as a pause', () => {
+    assert.equal(detectPause({ finalTextTail: 'Which one?\n3. A\n4. B' }).paused, false);
+  });
+
+  it('reads only the last 2000 characters of the tail', () => {
+    const noise = 'x'.repeat(5000);
+    assert.equal(detectPause({ finalTextTail: `Which one?\n1. A\n2. B\n${noise}` }).paused, false);
+    assert.equal(detectPause({ finalTextTail: `${noise}\nWhich one?\n1. A\n2. B` }).signal, 'numbered-choice');
+  });
+
+  it('reports no pause when no signal is present', () => {
+    assert.deepEqual(detectPause({}), { paused: false, signal: null });
+    assert.deepEqual(detectPause({ waitingJson: false, stateNeedsHuman: false, finalTextTail: '' }), { paused: false, signal: null });
+  });
+
+  it('prefers the structural signals over the text shape, in a fixed order', () => {
+    const tail = 'Which one?\n1. A\n2. B';
+    assert.equal(detectPause({ waitingJson: true, verificationStatus: 'human_needed', stateNeedsHuman: true, finalTextTail: tail }).signal, 'waiting-json');
+    assert.equal(detectPause({ verificationStatus: 'human_needed', stateNeedsHuman: true, finalTextTail: tail }).signal, 'verification-human-needed');
+    assert.equal(detectPause({ stateNeedsHuman: true, finalTextTail: tail }).signal, 'state-needs-human');
   });
 });

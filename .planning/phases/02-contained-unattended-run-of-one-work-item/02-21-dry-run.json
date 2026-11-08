@@ -1,0 +1,342 @@
+{
+  "schema": 1,
+  "plan": "02-21",
+  "startedAt": "2026-11-06T11:18:01.327Z",
+  "source": "/Users/aphan/aa-phan-portfolio-v2",
+  "pin": "9f1cd8d",
+  "profile": "default-parents",
+  "node": "v26.9.0",
+  "pinSha": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+  "onboarded": "onboarding onb_01M6R98XW27RZTF00YEMBF4S52: active",
+  "conventionsCommitTouches": [
+    ".avarice/config.json"
+  ],
+  "preflight": [
+    "ok   pin 9f1cd8d, source HEAD 5c38f0f",
+    "staleness: ok (HEAD descends from the pin; 0 commit(s) outside .avarice/ and .planning/ past the pin; the pin tree has .planning/ROADMAP.md)",
+    "conventions: ok (revision 5c38f0f571677b39168e61068a1ff88056271237, checks digest sha256:43b374ff784bfcab7e7533545e462d29edac345015ccb4b4328ff9041e99c214 equals the draft's, 13 checks)"
+  ],
+  "briefs": [
+    {
+      "path": "/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/benchmark/r1/r1-bug-swipe-nonfinite.md",
+      "title": "swipeDirection ignores non-finite deltas",
+      "compiled": true,
+      "digest": "sha256:f8d386f827784c2fc36438b0c0931d1d76db2c42952b659cdb6fea5c9675c916",
+      "write": [
+        "src/hooks/useSwipeStep.ts",
+        "tests/unit/swipe-step.test.ts"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:ignores non-finite deltas"
+          ]
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test"
+          ]
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint"
+          ]
+        }
+      ],
+      "budgets": {
+        "wallClockMinutes": 60,
+        "invocations": 3,
+        "toolCalls": 400,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 5
+      },
+      "expectedDecisions": 0
+    },
+    {
+      "path": "/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/benchmark/r1/r1-refactor-copy-textarea.md",
+      "title": "Extract the off-screen textarea of the copy fallback",
+      "compiled": true,
+      "digest": "sha256:163548ea7154fd4791d8ce565085d94879886dcf407ef6e80546916b80152c2f",
+      "write": [
+        "src/lib/copy.ts"
+      ],
+      "targetChecks": [
+        "test",
+        "typecheck"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test"
+          ]
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "diff:tests/unit/copy.test.ts unchanged"
+          ]
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint"
+          ]
+        }
+      ],
+      "budgets": {
+        "wallClockMinutes": 60,
+        "invocations": 3,
+        "toolCalls": 400,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 5
+      },
+      "expectedDecisions": 0
+    },
+    {
+      "path": "/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/benchmark/r1/r1-docs-dates-predicate.md",
+      "title": "Export the ISO year-month predicate and document the content date rule",
+      "compiled": true,
+      "digest": "sha256:8f40d2419e47b82a45893116e58799e8b34c762119c46e16a28da19c462cad36",
+      "write": [
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts",
+        "docs/architecture.md"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:isIsoYearMonth"
+          ]
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test"
+          ]
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint"
+          ]
+        }
+      ],
+      "budgets": {
+        "wallClockMinutes": 60,
+        "invocations": 3,
+        "toolCalls": 400,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 5
+      },
+      "expectedDecisions": 0
+    }
+  ],
+  "runClone": "/Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone",
+  "install": {
+    "outcome": "installed",
+    "lockfileDigest": "sha256:fafeb7d6d4de89ce2e150e8a6d5b2dc62cd5749a74e37f55379ae8fcc374ba93",
+    "exitCode": 0,
+    "durationMs": 1839,
+    "attempts": [
+      {
+        "host": "registry.npmjs.org",
+        "port": 443,
+        "allowed": true,
+        "count": 15
+      }
+    ]
+  },
+  "validationInstall": {
+    "outcome": "installed",
+    "lockfileDigest": "sha256:fafeb7d6d4de89ce2e150e8a6d5b2dc62cd5749a74e37f55379ae8fcc374ba93",
+    "exitCode": 0,
+    "durationMs": 1054,
+    "attempts": []
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 2746,
+      "validationReused": false
+    },
+    {
+      "name": "lint",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 465,
+      "validationReused": false
+    },
+    {
+      "name": "format:check",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "failed",
+      "exitCode": 1,
+      "baseDurationMs": 1143,
+      "validationReused": false,
+      "outputTail": "$ npm run format:check\n--- stdout ---\n\n> aa-phan-portfolio-v2@0.0.0 format:check\n> prettier --check .\n\nChecking formatting...\n\n--- stderr ---\n[\u001b[33mwarn\u001b[39m] index.html\n[\u001b[33mwarn\u001b[39m] Code style issues found in the above file. Run Prettier with --write to fix.\n\n"
+    },
+    {
+      "name": "test",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 14121,
+      "validationReused": false
+    },
+    {
+      "name": "check:case",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 172,
+      "validationReused": false
+    },
+    {
+      "name": "check:colors",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 158,
+      "validationReused": false
+    },
+    {
+      "name": "check:contrast",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 133,
+      "validationReused": false
+    },
+    {
+      "name": "build",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 3327,
+      "validationReused": false
+    },
+    {
+      "name": "check:meta",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 134,
+      "validationReused": false
+    },
+    {
+      "name": "check:budget",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 141,
+      "validationReused": false
+    },
+    {
+      "name": "check:no-phone",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 248,
+      "validationReused": false
+    },
+    {
+      "name": "check:images",
+      "required": true,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "passed",
+      "exitCode": 0,
+      "baseDurationMs": 140,
+      "validationReused": false
+    },
+    {
+      "name": "test:e2e",
+      "required": false,
+      "verdict": "active",
+      "verdictDetail": {},
+      "baseStatus": "failed",
+      "exitCode": 1,
+      "baseDurationMs": 2545,
+      "validationReused": false,
+      "outputTail": "...e-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/vite.config.ts\u001b[39m\n\u001b[31merror during build:\nError: VITE_SITE_ORIGIN is empty: set it in .env (canonical, og:url and sitemap need it)\n    at file:///Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/node_modules/.vite-temp/vite.config.ts.timestamp-1793963917447-3a617595c6c4f.mjs:39:21\n    at loadConfigFromFile (file:///Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/node_modules/vite/dist/node/chunks/node.js:37940:62)\n    at async resolveConfig (file:///Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/node_modules/vite/dist/node/chunks/node.js:37540:22)\n    at async createBuilder (file:///Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/node_modules/vite/dist/node/chunks/node.js:35112:17)\n    at async CAC.<anonymous> (file:///Users/aphan/.local/share/avarice-work/exit-dry-20261106T111801Z-18223/run_01M6R991K0492YVM6R747A3BCE/clone/node_modules/vite/dist/node/cli.js:769:19)\u001b[39m\n\n"
+    }
+  ],
+  "inventory": {
+    "status": "passed",
+    "tests": 322,
+    "files": 23,
+    "markers": {},
+    "sample": [
+      "tests/unit/active-section.test.ts > nav items > lists hero first then the six nav sections in order",
+      "tests/unit/active-section.test.ts > pickActive > ignores intersecting ids that are not in the order",
+      "tests/unit/active-section.test.ts > pickActive > returns the last id of the order when the page is at the bottom",
+      "tests/unit/active-section.test.ts > pickActive > returns the last intersecting id in DOM order when several intersect",
+      "tests/unit/active-section.test.ts > pickActive > returns the previous id for an empty order"
+    ]
+  },
+  "timingsMs": {
+    "installRunClone": 1845,
+    "validateChecks": 3159,
+    "baseline": 25794,
+    "inventory": 713
+  },
+  "portfolio": {
+    "before": {
+      "status": "?? .env\n",
+      "head": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+    },
+    "after": {
+      "status": "?? .env\n",
+      "head": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+    },
+    "unchanged": true
+  },
+  "problems": [],
+  "warnings": [
+    "check test:e2e is failed at the pin (exit 1); it is optional and neither required nor a brief target, so a real run never runs it (it needs a browser and a local server)"
+  ],
+  "wallSeconds": 37,
+  "spentUsd": 0
+}

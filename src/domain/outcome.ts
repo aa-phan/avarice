@@ -10,12 +10,16 @@
 //   3. budget: error_max_budget_usd, terminal reason budget_exhausted, or a hook budget_exhausted deny
 //                                              -> budget_exhausted
 //   4. is_error is not false, a non-zero exit or a signal -> failed
-//   5. the expected files are there            -> progressed
-//   6. any deny (host permission denial or hook deny) -> denied
-//   7. otherwise                               -> no_progress
+//   5. a structural pause signal               -> paused (a clean, finished run that stopped to ask; it never
+//                                                 passes a gate, it routes to a decision)
+//   6. the expected files are there            -> progressed
+//   7. any deny (host permission denial or hook deny) -> denied
+//   8. otherwise                               -> no_progress
 //
-// `paused` is not derived here: Phase 1 does no heuristic question detection (01-RESEARCH).
-export type ClassifiedKind = 'progressed' | 'denied' | 'budget_exhausted' | 'failed' | 'no_progress' | 'inconclusive';
+// `paused` is driven only by `pauseSignal`, a structural fact the caller derives with detectPause from a
+// waiting-JSON file, a GSD VERIFICATION status of human_needed, a STATE that needs a human, or the numbered-choice
+// shape of the final text (02-RESEARCH Pitfall 11). With pauseSignal absent every outcome is as in Phase 1.
+export type ClassifiedKind = 'progressed' | 'denied' | 'budget_exhausted' | 'failed' | 'no_progress' | 'inconclusive' | 'paused';
 
 export interface OutcomeFacts {
   // A `result` event was printed.
@@ -37,6 +41,8 @@ export interface OutcomeFacts {
   headAfter: string;
   // Every file the invocation was expected to leave is present in staging.
   expectedFilesPresent: boolean;
+  // A structural pause signal was found (see detectPause). Absent means no signal.
+  pauseSignal?: boolean;
 }
 
 export interface OutcomeClassification {
@@ -58,7 +64,53 @@ export function classifyOutcome(facts: OutcomeFacts): OutcomeClassification {
     return result('budget_exhausted');
   }
   if (facts.isError !== false || facts.signal !== null || facts.exitCode !== 0) return result('failed');
+  if (facts.pauseSignal === true) return result('paused');
   if (facts.expectedFilesPresent) return result('progressed');
   if (facts.permissionDenials > 0 || facts.hookDenies > 0) return result('denied');
   return result('no_progress');
+}
+
+export type PauseSignal = 'waiting-json' | 'verification-human-needed' | 'state-needs-human' | 'numbered-choice';
+
+export interface PauseInput {
+  // A GSD waiting JSON file exists in the run's workspace.
+  waitingJson?: boolean;
+  // Status read from the unit's VERIFICATION file.
+  verificationStatus?: string;
+  // The unit's STATE says it needs a human.
+  stateNeedsHuman?: boolean;
+  // The end of the model's final text. Data, read only for the numbered-choice shape.
+  finalTextTail?: string;
+}
+
+export interface PauseDetection {
+  paused: boolean;
+  signal: PauseSignal | null;
+}
+
+const TAIL_CAP = 2000;
+const CHOICE_LINE = /^(\d+)\.\s+\S/;
+
+// The final text ends in a question line followed by at least two `N. ` choice lines numbered 1, 2, ...
+function endsInNumberedChoice(tail: string): boolean {
+  const lines = tail.slice(-TAIL_CAP).split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+  let first = lines.length;
+  while (first > 0 && CHOICE_LINE.test(lines[first - 1] as string)) first -= 1;
+  const choices = lines.slice(first);
+  if (choices.length < 2 || first === 0) return false;
+  for (let i = 0; i < choices.length; i += 1) {
+    if (Number((CHOICE_LINE.exec(choices[i] as string) as RegExpExecArray)[1]) !== i + 1) return false;
+  }
+  return (lines[first - 1] as string).endsWith('?');
+}
+
+// Pure over structural facts. The structural signals are checked first, in a fixed order; the text shape is the
+// last resort. A pause only ever blocks (it routes to a decision), so a crafted text can cost a needless decision
+// record at worst, never pass a gate (T-02-14).
+export function detectPause(input: PauseInput): PauseDetection {
+  if (input.waitingJson === true) return { paused: true, signal: 'waiting-json' };
+  if (input.verificationStatus === 'human_needed') return { paused: true, signal: 'verification-human-needed' };
+  if (input.stateNeedsHuman === true) return { paused: true, signal: 'state-needs-human' };
+  if (input.finalTextTail !== undefined && endsInNumberedChoice(input.finalTextTail)) return { paused: true, signal: 'numbered-choice' };
+  return { paused: false, signal: null };
 }

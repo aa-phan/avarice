@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/outcome.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/outcome.ts exports no detectPause and has no paused rule yet",
+  "failingFiles": ["test/unit/outcome.test.ts"],
+  "failingTests": [],
+  "summary": "outcome.test.ts fails to load with SyntaxError (no export named detectPause): not ok 1, pass 0, fail 1.",
+  "outputHead": "# SyntaxError: The requested module '../../src/domain/outcome.ts' does not provide an export named 'detectPause'\nnot ok 1 - test/unit/outcome.test.ts\n# tests 1\n# pass 0\n# fail 1"
+}

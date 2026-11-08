@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
+import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { buildProjectRecord } from '../../src/domain/project-record.ts';
 import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
@@ -32,7 +33,7 @@ function rawDb(roots: CliRoots): DatabaseSync {
 }
 
 describe('status on a fresh profile (tracer)', () => {
-  it('exits 0 with an empty project list and migrates the store to schema version 1', () => {
+  it('exits 0 with an empty project list and migrates the store to the shipped schema version (2 since plan 02-03)', () => {
     const roots = freshRoots();
     const r = runCli(['status'], { roots });
     assert.equal(r.code, 0, r.stderr);
@@ -40,8 +41,8 @@ describe('status on a fresh profile (tracer)', () => {
     assert.equal(r.stderr, '');
     const db = rawDb(roots);
     try {
-      assert.deepEqual({ ...(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '1' });
-      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 1);
+      assert.deepEqual({ ...(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '2' });
+      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 2);
       assert.deepEqual({ ...(db.prepare('PRAGMA journal_mode').get() as object) }, { journal_mode: 'wal' });
     } finally {
       db.close();
@@ -68,7 +69,7 @@ describe('status on a fresh profile (tracer)', () => {
     assert.equal(runCli(['status', '--json'], { roots }).stdout.trim(), '[]');
     const db = rawDb(roots);
     try {
-      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 1);
+      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 2);
     } finally {
       db.close();
     }
@@ -99,7 +100,21 @@ describe('CLI dispatch', () => {
     const r = runCli(['bogus'], { roots });
     assert.equal(r.code, 64);
     assert.match(r.stderr, /unknown command 'bogus'/);
+    assert.match(r.stderr, /^avarice: unknown command 'bogus'\nusage: avarice <command> \[options\]\n/, 'before a command is chosen the prefix is `avarice: `, then the usage text');
     assert.equal(existsSync(roots.AVARICE_DATA_ROOT), false);
+  });
+
+  it('exits 64 with `avarice: no command given` and the usage text when no command is named', () => {
+    const r = runCli([], { roots: freshRoots() });
+    assert.equal(r.code, 64);
+    assert.match(r.stderr, /^avarice: no command given\nusage: avarice <command> \[options\]\n/);
+  });
+
+  it('prefixes a usage error with the command and follows it with the usage text', () => {
+    const r = runCli(['context'], { roots: freshRoots() });
+    assert.equal(r.code, 64);
+    assert.match(r.stderr, /^avarice context: a term is required\n/);
+    assert.match(r.stderr, /usage: avarice <command> \[options\]/);
   });
 
   it('exits 64 for an allowlisted command whose module is not built', () => {
@@ -147,7 +162,7 @@ describe('store failures exit 70 with the reason on stderr', () => {
     const roots = freshRoots();
     assert.equal(runCli(['status'], { roots }).code, 0);
     const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'));
-    db.exec("INSERT INTO schema_migrations VALUES (2, '2030-01-01T00:00:00.000Z', 'x')");
+    db.exec("INSERT INTO schema_migrations VALUES (3, '2030-01-01T00:00:00.000Z', 'x')");
     db.close();
     const r = runCli(['status'], { roots });
     assert.equal(r.code, 70);
@@ -175,7 +190,7 @@ function harness(roots: CliRoots = freshRoots()): Harness {
   const dbPath = join(roots.AVARICE_DATA_ROOT, 'state.db');
   const opened = openDb(dbPath);
   assert.ok(opened.ok, 'openDb');
-  const migrated = migrate(opened.value, [MIGRATION_0001], { nowMs: T0 });
+  const migrated = migrate(opened.value, [MIGRATION_0001, MIGRATION_0002], { nowMs: T0 });
   assert.ok(migrated.ok, 'migrate');
   let n = 0;
   const ledger = new SqliteLedger(opened.value, (prefix) => prefix + String(++n).padStart(26, '0'));

@@ -1,0 +1,22 @@
+{
+  "command": "node --test test/fault/run-lease-loss.test.ts",
+  "ranAgainst": "the plan base d401362 (src unchanged) plus the new FakeRunHost option `hangUntilAbort` in test/helpers/fake-run-host.ts and the new file test/fault/run-lease-loss.test.ts (a real process group, AVARICE_LEASE_TTL_MS=600, the run lease stolen from inside the unit through a second SQLite connection)",
+  "exitCode": 1,
+  "reason": "At base the unit's host is invoked with `new AbortController().signal`, which is never aborted, so the stolen lease only sets lease.lost and the host hangs until its 8000 ms maxMs (the supervisor call took 10718 ms). The target assertion `the host observes the abort within 2000 ms of the theft` fails on `the host never saw an abort`.",
+  "failingFiles": [
+    "test/fault/run-lease-loss.test.ts"
+  ],
+  "failingTests": [
+    "a lease lost while the unit is in flight aborts the unit (R-IN-06) > the host observes the abort within 2000 ms of the theft"
+  ],
+  "passingAtBase": [
+    "runs the supervisor with a unit that hangs until it is aborted and whose lease is taken (setup: the theft happened, the supervisor returned)",
+    "the sleeper's process group is gone within 15000 ms (the fake host itself ends the group when maxMs passes)",
+    "the supervisor ends with an error (the stolen fence refuses the classify checkpoint)",
+    "no classify checkpoint exists for the attempt (the stolen fence refuses it, so none is recorded)",
+    "the invocation stays charged",
+    "the unit was invoked once"
+  ],
+  "semanticAssessment": "The target test executed (7 tests discovered, none skipped) and failed on the planned assertion for the intended reason: the host never received an abort after the lease was stolen, because the supervisor never aborts the signal it hands the host. No import, syntax, fixture or setup fault is involved; the setup test passed, the theft was observed (stolenAtMs set), and the sleeper was started and ended by the host's own maxMs path. The error and no-classify assertions already pass at base because the stolen fence refuses the classify checkpoint, as the plan anticipated.",
+  "summary": "Run at the base: 7 tests reported, 6 pass, 1 fails (the abort-observed assertion); the supervisor call took about 10.7 s, the unit's whole 8 s hang plus bookkeeping."
+}

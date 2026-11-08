@@ -6,6 +6,8 @@ import type { Result } from '../domain/result.ts';
 import { isResumable } from '../domain/onboarding-lifecycle.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
 import type { Ledger } from '../ports/ledger.ts';
+import { getRunStatuses } from './run-status.ts';
+import type { RunStatus } from './run-status.ts';
 
 // An onboarding that stopped short of a stop state with nobody holding a live lease.
 export interface Interrupted {
@@ -26,6 +28,9 @@ export interface ProjectStatus {
   onboardedRevision: string | null;
   mapping: Readonly<Record<string, unknown>> | null;
   indexes: Readonly<Record<string, unknown>>;
+  // Plan 02-15 (D-19): the project's runs, present only when the project has any, and always the last key. Every key above is the
+  // Phase 1 shape and is unchanged.
+  runs?: RunStatus[];
 }
 
 function asObject(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -59,6 +64,8 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
         resumeCommand: `avarice resume ${latest.onboardingId}`,
       };
     }
+    const runs = getRunStatuses(ledger, project.projectId, nowMs);
+    if (!runs.ok) return runs;
     entries.push({
       projectId: project.projectId,
       repoPath: project.repoPath,
@@ -70,41 +77,8 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
       onboardedRevision: record ? record.onboardedRevision : null,
       mapping: record ? asObject(record.body['mapping']) : null,
       indexes: record ? (asObject(record.body['indexes']) ?? {}) : {},
+      ...(runs.value.length > 0 ? { runs: runs.value } : {}),
     });
   }
   return ok(entries);
-}
-
-// `graph, intel`: the indexes the record lists; `graph absent (graphify-missing)`: one it records as not built.
-function describeIndexes(indexes: Readonly<Record<string, unknown>>): string {
-  const parts = Object.keys(indexes).filter((name) => name !== 'absent');
-  const absent = indexes['absent'];
-  if (Array.isArray(absent)) {
-    for (const entry of absent) {
-      const item = asObject(entry);
-      if (item !== null) parts.push(`${String(item['index'])} absent (${String(item['reason'])})`);
-    }
-  }
-  return parts.length > 0 ? parts.join(', ') : 'none';
-}
-
-export function renderStatus(entries: readonly ProjectStatus[]): string {
-  if (entries.length === 0) return 'No projects registered.\n';
-  const lines: string[] = [];
-  for (const e of entries) {
-    lines.push(`${e.repoPath}  [${e.projectId}]`);
-    const reason = e.reason ? ` (${e.reason})` : '';
-    if (e.interrupted !== undefined) {
-      lines.push(`  onboarding ${e.onboardingId}: interrupted in ${e.interrupted.state} (next: ${e.interrupted.nextAction})`);
-      lines.push(`  continue with: ${e.interrupted.resumeCommand}`);
-    } else {
-      lines.push(e.onboardingId ? `  onboarding ${e.onboardingId}: ${e.state}${reason}` : '  not onboarded');
-    }
-    if (e.recordVersion !== null) {
-      const m = e.mapping;
-      const mapping = m ? `; mapping ${String(m['mode'])} (${String(m['completeness'])}, ${String(m['freshness'])})` : '';
-      lines.push(`  record v${e.recordVersion} at ${e.onboardedRevision}${mapping}; indexes: ${describeIndexes(e.indexes)}`);
-    }
-  }
-  return lines.join('\n') + '\n';
 }

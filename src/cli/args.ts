@@ -55,6 +55,22 @@ export function parseArgs(argv: readonly string[], options: ParseOptions = {}): 
   return { positionals, flags, repeated };
 }
 
+const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9]*)=(.+)$/;
+
+// Repeatable `--budget name=value`, shared by `onboard` and `start`. The names and the lower-only rule belong to the contract
+// compilers (RC-5); this only checks the shape, so a typo creates nothing. Returns the overrides or a message for the usage line.
+export function parseBudgetFlags(args: ParsedArgs): Record<string, number> | string {
+  if (args.flags['budget'] === true) return '--budget needs name=value';
+  const out: Record<string, number> = {};
+  for (const entry of args.repeated?.['budget'] ?? []) {
+    const match = BUDGET_FLAG.exec(entry);
+    const value = match === null ? Number.NaN : Number(match[2]);
+    if (match === null || !Number.isFinite(value)) return `--budget ${JSON.stringify(entry)} is not name=value with a number`;
+    out[match[1] as string] = value;
+  }
+  return out;
+}
+
 export interface Io {
   out(text: string): void;
   err(text: string): void;
@@ -68,5 +84,6 @@ export interface CommandModule<Deps> {
   needsGsd?: boolean;
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
-  usage?(args: ParsedArgs): string | undefined;
+  // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
+  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv): string | undefined;
 }

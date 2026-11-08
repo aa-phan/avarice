@@ -1,0 +1,5 @@
+- The test-only adapters of the agent host, executor and egress ports come from the previous document plus a search of `test/` for the egress override; the fake host and fake `claude` executable were not re-read at HEAD.
+- Whether the hook policy fields of the run purpose (globs, loop limits, denied tools) are enforced as the settings describe was not checked; the hook source is outside this packet and belongs to containment.md.
+- Whether `avarice contract amend` and `avarice budget` are planned commands is not determinable from the code (checked the command list in `src/cli/main.ts` and searched `src` for "contract amend").
+- Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the existing document after spot checks of timeouts and limits by grep; they were not re-read line by line.
+- The order in which supervisor steps call the install and validation helpers was read only at the call sites in `src/app/run-stages/prepare.ts`; runs.md owns the sequence.

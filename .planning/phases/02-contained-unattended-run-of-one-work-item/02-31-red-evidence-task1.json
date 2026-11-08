@@ -1,0 +1,21 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/live-harness-hygiene.test.ts",
+  "ranAgainst": "the plan base bf8fc24 (test/helpers unchanged) plus the new file test/unit/live-harness-hygiene.test.ts holding the redaction cases only (redactHome is looked up on the live-harness namespace, so its absence fails an assertion and not the import)",
+  "exitCode": 1,
+  "reason": "At base `redactHome` does not exist, so the stand-in returns its input unchanged and every case that expects `~` fails on the assertion: expected `~/.local/bin/claude`, actual the absolute home path followed by `/.local/bin/claude`. appendAttendedResult writes the raw home path, so the home-path assertion on the written file fails (expected true, actual false).",
+  "failingFiles": [
+    "test/unit/live-harness-hygiene.test.ts"
+  ],
+  "failingTests": [
+    "redactHome (R-IN-01) > replaces the real home directory with ~",
+    "redactHome (R-IN-01) > replaces the homedir() spelling with ~",
+    "redactHome (R-IN-01) > replaces every occurrence, inside quotes and at the end of the text",
+    "appendAttendedResult (R-IN-01) > writes a line whose reason holds the home path with ~ and no home path"
+  ],
+  "passingAtBase": [
+    "redactHome (R-IN-01) > leaves text without the home directory alone",
+    "redactHome (R-IN-01) > does not rewrite a path that only shares a prefix with the home directory"
+  ],
+  "semanticAssessment": "The target test executed (6 tests discovered, none skipped) and failed on the planned assertion for the intended reason: nothing replaces the home path with `~`. No import, syntax, fixture or setup fault is involved. The two cases that already pass at base are the negative cases (text without the home, a sibling sharing the prefix), which hold for the identity function and guard the later implementation against over-replacing. gsd-tools `check tdd-red-evidence` on the TAP report returned RED_EVIDENCE_OK (target_test_failed).",
+  "summary": "Run at the base: 6 tests reported, 2 pass, 4 fail (three redaction cases and the recorder write)."
+}

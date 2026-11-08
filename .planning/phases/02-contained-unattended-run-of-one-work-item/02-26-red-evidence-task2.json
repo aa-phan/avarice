@@ -1,0 +1,39 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "Task 1's GREEN commit 2d6ed2f (checkGitObjects in place, no output-form rules) plus the new unit tests (git show operands, git log options x2, git status options, ordering, earlier git rules) and the integration describes `admitted git forms print no secret content`, `refused git forms are real leaks`, `refused forms, git output reported` and the case-variant test",
+  "exitCode": 1,
+  "reason": "The hook has no rule for content-printing output forms or for git show operands that are not object paths. Run: 191 tests, 175 pass, 16 fail. Unit: `git show` (no operand) is [allow, shell-identity] where [deny, shell-git-object] is expected; `git log -p` and the other patch, diff, line-log and pickaxe options are allowed where shell-git-output is expected; `git status -v` is allowed; `git log -p --oneline` and `git log --oneline -p` are allowed. Integration: the hook allows `git show`, `git show HEAD`, `git show <blob of .env>`, `git show -s <blob of .env>`, `git log -p`, `git log -L1,1:.env` and `git status -v`, and the five hook-only forms (`git log --cc`, `--word-diff`, `--pat`, `-S TOKEN --oneline`, `--raw`) are allowed where shell-git-output is expected.",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > git show operands: no operand, a bare revision or a hash is shell-git-object; any option is shell-git-output; object paths are allowed",
+    "git object reads and output forms (CR-01) > git log options: patch, diff, line log, pickaxe, abbreviation and bare value options are shell-git-output",
+    "git object reads and output forms (CR-01) > git status options: verbose output (a patch of staged changes) is shell-git-output; the short and porcelain forms stay allowed",
+    "git object reads and output forms (CR-01) > ordering: an option position never changes a decision; a git global option before the subcommand is not admitted",
+    "refused git forms are real leaks > git show: denied shell-git-object, and git does print the sentinel",
+    "refused git forms are real leaks > git show HEAD: denied shell-git-object, and git does print the sentinel",
+    "refused git forms are real leaks > git show <blob of .env>: denied shell-git-object, and git does print the sentinel",
+    "refused git forms are real leaks > git show -s <blob of .env>: denied shell-git-output, and git does print the sentinel",
+    "refused git forms are real leaks > git log -p: denied shell-git-output, and git does print the sentinel",
+    "refused git forms are real leaks > git log -L1,1:.env: denied shell-git-output, and git does print the sentinel",
+    "refused git forms are real leaks > git status -v: denied shell-git-output, and git does print the sentinel",
+    "refused forms, git output reported > git log --cc: denied shell-git-output",
+    "refused forms, git output reported > git log --word-diff: denied shell-git-output",
+    "refused forms, git output reported > git log --pat: denied shell-git-output",
+    "refused forms, git output reported > git log -S TOKEN --oneline: denied shell-git-output",
+    "refused forms, git output reported > git log --raw: denied shell-git-output"
+  ],
+  "passingAtBase": [
+    "admitted git forms print no secret content (all 22 forms: allowed by the hook, no sentinel in git's output)",
+    "refused git forms are real leaks > the six object-by-path forms Task 1 covers (git show HEAD:.env, :.env, :0:.env, HEAD~1:.env, HEAD:./.env, HEAD:certs/server.pem), denied deny-secret-read with the sentinel printed by git",
+    "refused forms, git output reported > git show HEAD:sub/../.env denied deny-secret-read",
+    "case variant of a secret path > git show HEAD:.ENV",
+    "git object reads and output forms (CR-01) > git log options: the listed options print no file content and stay shell-identity",
+    "git object reads and output forms (CR-01) > earlier git rules keep their names, and git ls-files and git rev-parse stay allowed",
+    "the tracer and the Task 1 unit tests (7 tests), all 136 earlier tests"
+  ],
+  "semanticAssessment": "Each failure is on the planned assertion for the intended reason: the target tests executed on a built sentinel-bearing repository (the admitted-forms and Task 1 leak tests ran real git and the hook on the same repository and passed), and the actual value is the hook allowing a form the plan refuses (output option or non-object git show operand) where the rule is shell-git-object or shell-git-output. In the integration leak tests the hook assertion is the first to fail, so the git-prints-the-sentinel half of those tests is exercised only once the rule exists; it is observed in the GREEN run. No failure is a syntax, import or fixture fault. The allowed-list and earlier-rule tests pass at base by design: they pin existing behaviour that the narrowing must keep.",
+  "summary": "Run of the two files: 191 tests, 175 pass, 16 fail (4 unit, 12 integration). The hook allows `git log -p`, `git status -v`, `git show`, `git show HEAD` and the blob forms that real git prints the secret for."
+}

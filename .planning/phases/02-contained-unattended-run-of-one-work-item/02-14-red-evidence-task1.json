@@ -1,0 +1,19 @@
+{
+  "command": "node --test test/integration/check-validation.test.ts",
+  "ranAgainst": "the plan base bc763f2 (git archive extracted to /tmp/avarice-14/base) plus the new test file and the run-fixtures helper",
+  "exitCode": 1,
+  "reason": "at the plan base every required check is taken to pass at base (strict D-12) and no declared check is validated: a check that already fails at the pin (format) is judged `regressed` by G2, so the run ends blocked_on_decision instead of ready_for_review; there is no validate-checks or baseline action, no check_validations row, no base evidence, no preExisting flag and no pre-existing list in the ready_for_review transition; the variant that targets format is reported `regressed`, not `target-not-passed`",
+  "failingFiles": ["test/integration/check-validation.test.ts"],
+  "failingTests": [
+    "exits 0 at ready_for_review",
+    "validated both declared checks as active, in declared order, before any invocation",
+    "records each check at the pin: test failed (the bug), format failed",
+    "records the final evidence: test passed, format failed and flagged preExisting; G4 passed",
+    "lists the pre-existing failure in the ready_for_review transition",
+    "opens one attempt for the whole run: the baseline opens it and the unit adopts it",
+    "a second run on the same pin and checks reuses the two verdicts and adds no validation row",
+    "ends blocked_on_decision (decision) with a checks-delta failure naming format as target-not-passed, and no branch"
+  ],
+  "passingAtBase": [],
+  "summary": "8 tests, 0 pass, 8 fail at the base"
+}

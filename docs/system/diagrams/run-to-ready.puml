@@ -1,0 +1,112 @@
+@startuml
+title Start a run and take it to ready for review
+
+actor Operator
+participant "avarice CLI" as CLI
+database Ledger
+participant "Source repository" as Source
+participant Supervisor
+participant "Run clone" as Clone
+participant "GSD tools" as GSD
+participant "Claude Code host" as Host
+participant "PreToolUse hook" as Hook
+participant "Check commands" as Checks
+
+== Start: every rule is judged before anything is stored ==
+Operator -> CLI : start with a brief, policy routine
+alt policy is not routine, GSD not admitted, brief invalid, or no usable project
+  CLI --> Operator : usage error (64) or refusal (3), nothing stored
+end
+CLI -> Source : read HEAD, history since the onboarded revision,\nconventions and roadmap, all from repository objects
+alt a start rule fails (revision mismatch, not a descendant, too many\nor too old commits, no conventions, no roadmap)
+  CLI --> Operator : refusal (3), nothing stored
+end
+CLI -> CLI : compile the contract (narrows only), static gate G0
+alt compile fails, static G0 fails, or a budget override is invalid
+  CLI --> Operator : usage error (64), nothing stored
+end
+CLI -> Ledger : one transaction: run, contract v1, budgets, work item A
+note right of Ledger : run is contract_ready
+CLI -> CLI : write the contract file (temporary file, then rename)
+CLI -> Ledger : step start:preflight
+CLI -> Supervisor : spawn detached (own process group)
+CLI -> Ledger : step supervisor:spawn (PID)
+CLI --> Operator : one-screen summary, exit 0 (with --wait: follow the run)
+
+== Supervisor: lease and preparation ==
+Supervisor -> Ledger : take the lease
+Supervisor -> Ledger : rewrite the contract file if it is missing
+Supervisor -> Ledger : resume prelude (nothing to reap on a fresh run)
+loop each preparation action whose step is not yet completed
+  Supervisor -> Ledger : checkpoint (before the side effect)
+end
+Supervisor -> Clone : local clone at the onboarded revision, branch for the run
+Supervisor -> GSD : apply the run settings
+Supervisor -> Checks : install dependencies (declared registry hosts only)
+Supervisor -> Checks : validate every declared check in a scratch clone
+Supervisor -> Checks : baseline: required checks at the onboarded revision
+Supervisor -> Ledger : the baseline opens the first attempt
+alt a decision or a containment condition in one of these actions
+  Supervisor -> Ledger : decision record, run blocked_on_decision
+else host does not report enforcement as enforced (dynamic G0)
+  Supervisor -> Ledger : run blocked_on_decision (enforcement failure), no decision record
+else everything passes
+  Supervisor -> Ledger : G0 gate row, run moves to running
+end
+
+== The unit ==
+Supervisor -> Ledger : checkpoint, context pack step (references and digest only)
+Supervisor -> Ledger : item ready to delegated
+Supervisor -> Clone : snapshot
+Supervisor -> Ledger : snapshot step
+alt a budget is spent
+  Supervisor -> Ledger : decision record, run blocked_on_decision (budget exhausted), host never called
+else
+  Supervisor -> Ledger : reserve an invocation, launch step started (session ID)
+end
+Supervisor -> Host : launch /gsd-quick (detached, sandboxed)
+Host -> Hook : every tool call
+Hook -> Ledger : decision event, charge tool calls and subagents
+Host -> Clone : edit files
+Host --> Supervisor : final result
+Supervisor -> Ledger : settle the budget, launch step completed
+Supervisor -> Clone : measure HEAD, changes since the snapshot, quick records
+Supervisor -> Ledger : classify step (from measured facts, not model text)
+alt not progressed
+  note over Supervisor, Ledger : crash or timeout with HEAD unmoved: discard and retry once\n(see the discard and retry diagram);\nany other ending: decision record, run blocked_on_decision
+else progressed
+  Supervisor -> Ledger : item implemented
+end
+
+== Gate G2 and the commit ==
+Supervisor -> Checks : required checks on the working tree\n(only when every other G2 rule passed)
+Supervisor -> Ledger : evidence rows, G2 gate row
+alt G2 fails
+  Supervisor -> Ledger : decision record, run blocked_on_decision
+else G2 passes
+  Supervisor -> Ledger : item gated
+  Supervisor -> Ledger : archive the quick records as artifacts
+  Supervisor -> Clone : restore or remove every artifact path
+  Supervisor -> Clone : commit the in-scope paths only, with run and attempt trailers
+  Supervisor -> Ledger : commit step, item done, run moves to verifying
+end
+
+== Final proof and hand-off ==
+Supervisor -> Checks : required and target checks at the committed revision
+Supervisor -> Ledger : evidence rows, plus the GSD verdict as model review\n(never satisfies a criterion)
+Supervisor -> Ledger : G4 gate row
+alt G4 fails
+  Supervisor -> Ledger : decision record, run blocked_on_decision
+else G4 passes
+  Supervisor -> Source : fetch the run branch (create-only, never forced)
+  alt the branch exists at another commit
+    Supervisor -> Ledger : decision record (scope expansion), run blocked_on_decision
+  else created, or already at the same commit
+    Supervisor -> Ledger : hand-off step and event, attempt handed-off
+    Supervisor -> Ledger : run moves to ready_for_review
+  end
+end
+Supervisor -> Ledger : release the lease, exit 0 at ready_for_review
+Operator -> CLI : status or inbox (read only)
+note over Source : nothing is pushed or merged,\nthe user's checkout is never written
+@enduml

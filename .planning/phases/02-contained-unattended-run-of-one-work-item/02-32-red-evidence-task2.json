@@ -1,0 +1,20 @@
+{
+  "command": "node --test --test-reporter=tap test/fault/budgets.test.ts",
+  "ranAgainst": "commit 18d8e89 (Task 1 GREEN; src/app/invocation.ts unchanged) plus the new cases in the describe `a killed or interrupted invocation is charged its cost reservation` in test/fault/budgets.test.ts; the existing normal-finish case now sets resultSeen true explicitly",
+  "exitCode": 1,
+  "reason": "wasKilled counts only a timeout or a signal, so a host outcome with exitCode 1 (or 0), no signal, no timeout and resultSeen false reports cost 0 and is charged 0: the assertion fails with 'exit 1 charged 0' where the reservation of 3 is expected.",
+  "failingFiles": [
+    "test/fault/budgets.test.ts"
+  ],
+  "failingTests": [
+    "charges the reservation when the host ended without a result event, whether it exited non-zero or exited 0 (R-WR-04)"
+  ],
+  "passingAtBase": [
+    "charges the reported cost, with basis reported, when the host sent a result event and exited 0 (R-WR-04)",
+    "still charges exactly the reported cost for a run that finished on its own",
+    "every signal, timeout and host-error case of the same describe",
+    "the 22 other cases of the file"
+  ],
+  "semanticAssessment": "The target test executed (27 tests reported, none skipped) and failed on the planned assertion for the intended reason: the crashed no-result outcome is charged 0 instead of its cost reservation. The first loop iteration (exit 1) fails, so the exit 0 iteration is not reached at base; both are covered by the same test and the same one-line fix. The result-seen case passes at base and guards the fix against over-charging. gsd-tools `check tdd-red-evidence` on the TAP report returned RED_EVIDENCE_OK (target_test_failed).",
+  "summary": "Run at 18d8e89: 27 tests reported, 26 pass, 1 fail (the no-result crash case)."
+}

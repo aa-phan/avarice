@@ -1,0 +1,19 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "Task 2's GREEN commit 9383cb8 plus the new unit test `git status -u takes its mode attached only` and the added corpus form `git status -u -v` in the refused-forms-are-real-leaks describe",
+  "exitCode": 1,
+  "reason": "Found by the fresh documentation review (round 1): checkGitOutput treats `-u` of `git status` as a short option that takes the next word, but git takes the mode of `-u` only when it is attached (`-uno`). The word after a bare `-u` is skipped, so `git status -u -v` is allowed by the hook while real git prints the staged diff, including the sentinel. Run: 193 tests, 191 pass, 2 fail: the unit test (`git status -u -v` is [allow, shell-identity] where [deny, shell-git-output] is expected) and the integration leak test for `git status -u -v` (hook assertion fails first).",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > git status -u takes its mode attached only, so the word after it is judged as an option (review round 1)",
+    "refused git forms are real leaks > git status -u -v: denied shell-git-output, and git does print the sentinel"
+  ],
+  "passingAtBase": [
+    "all 191 other tests of the two files, including the 22 admitted forms and the 13 earlier leak forms"
+  ],
+  "semanticAssessment": "Both failures are on the planned assertion for the intended reason: the hook allows a form the plan refuses, and the same words run by real git print the staged secret. The target tests executed on the sentinel-bearing repository; no failure is a syntax, import or fixture fault.",
+  "summary": "193 tests, 191 pass, 2 fail. A real bypass of the git status verbose refusal through a bare `-u` followed by `-v`."
+}

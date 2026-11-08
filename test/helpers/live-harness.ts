@@ -13,7 +13,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { accessSync, appendFileSync, chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, chmodSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -30,13 +30,23 @@ import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-c
 import { StreamJsonParser } from '../../src/adapters/host-claude/stream-json.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
+import { RUN_GSD_SETTINGS, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
+import { runSupervisor } from '../../src/app/run-service.ts';
+import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import { matchesAny } from '../../src/domain/glob.ts';
+import { PURPOSE_EXTENSIONS, computeRunScope, runScopeDirs } from '../../src/domain/invocation-scope.ts';
+import type { RunContract } from '../../src/domain/run-contract.ts';
 import { redactSecrets } from '../../src/domain/secret-patterns.ts';
 import { err } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
+import type { GsdSetting } from '../../src/ports/gsd-onboarding.ts';
+import type { RunWorkspace } from '../../src/ports/run-workspace.ts';
 import { REPO_ROOT, makeRoots, runCli } from './run-cli.ts';
 import type { CliResult, CliRoots } from './run-cli.ts';
+import { RUN_CONVENTIONS, commitConventions, makeRunRepo, onboardRunRepo, onboardRunRepoWithIndexes, writeBrief } from './run-fixtures.ts';
 import { makeScratchRepo } from './scratch-repo.ts';
 import type { ScratchRepo } from './scratch-repo.ts';
 
@@ -109,7 +119,7 @@ function cleanGitEnv(): NodeJS.ProcessEnv {
   return { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: tmpdir(), LANG: 'C', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' };
 }
 
-const gitOut = (cwd: string, args: readonly string[]): string => execFileSync('git', [...args], { cwd, env: cleanGitEnv(), encoding: 'utf8' });
+const gitOut = (cwd: string, args: readonly string[]): string => execFileSync('git', [...args], { cwd, env: cleanGitEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 // Hash of every ref (`git for-each-ref`), HEAD, the symbolic HEAD target and the bytes of the common-dir `config`.
 export function refsDigest(repo: string): string {
@@ -137,6 +147,23 @@ export function capUsd(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, AUTHORIZED_CAP_USD) : AUTHORIZED_CAP_USD;
 }
 
+// The owner's home directory as `~` (plan 02-31, R-IN-01). Every live recorder writes through this so committed evidence holds no local
+// path. Both spellings of the home are replaced (the real path and the homedir() form), but only where the next character cannot continue a
+// path component, so a sibling such as `<home>2/x` or `<home>-backup` is kept.
+export function redactHome(text: string): string {
+  const real = (() => {
+    try {
+      return realpathSync(homedir());
+    } catch {
+      return homedir();
+    }
+  })();
+  const homes = [...new Set([real, homedir()])].filter((home) => home !== '' && home !== '/').sort((a, b) => b.length - a.length);
+  if (homes.length === 0) return text;
+  const escaped = homes.map((home) => home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return text.replace(new RegExp(`(?:${escaped.join('|')})(?![A-Za-z0-9._@+-])`, 'g'), '~');
+}
+
 export interface SpendEntry {
   case: string;
   costUsd: number;
@@ -154,13 +181,78 @@ export function recordedSpend(): number {
     .reduce((sum, line) => sum + (JSON.parse(line) as SpendEntry).costUsd, 0);
 }
 
-export function recordSpend(entry: Omit<SpendEntry, 'at'>): void {
+// Every host run is also added to the one Phase 2 ledger (plan 02-01, D-15), under the plan named in AVARICE_PHASE2_PLAN.
+export function recordSpend(entry: Omit<SpendEntry, 'at'>, claudeVersionForLedger = 'unknown'): void {
   appendFileSync(spendLedgerPath(), JSON.stringify({ ...entry, at: new Date().toISOString() }) + '\n');
+  recordPhase2Spend({ plan: process.env['AVARICE_PHASE2_PLAN'] ?? 'unknown', case: entry.case, costUsd: entry.costUsd, claudeVersion: claudeVersionForLedger });
 }
 
-// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total.
+// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total and under the Phase 2 ceiling.
 export function fitsCap(capUsdForRun: number): boolean {
-  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9;
+  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9 && fitsPhase2Ceiling(capUsdForRun);
+}
+
+// The skip text for a case that does not fit, or undefined when it fits. The Phase 2 ceiling is judged first.
+export function spendRefusal(capUsdForRun: number): string | undefined {
+  if (!fitsPhase2Ceiling(capUsdForRun)) {
+    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  }
+  if (!fitsCap(capUsdForRun)) return `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}`;
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Phase 2 spend ledger (D-15): the total live-model spend of Phase 2 may not pass 25 USD
+// ---------------------------------------------------------------------------------------------------------------
+
+export const PHASE2_CEILING_USD = 25;
+
+export const phase2LedgerPath = (): string => process.env['AVARICE_PHASE2_LEDGER'] ?? join(REPO_ROOT, 'test', 'containment', 'live-spend-phase2.jsonl');
+
+// AVARICE_PHASE2_CEILING_USD may lower the ceiling and never raise it; anything that is not a positive number is ignored.
+export function phase2Ceiling(): number {
+  const raw = Number(process.env['AVARICE_PHASE2_CEILING_USD']);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, PHASE2_CEILING_USD) : PHASE2_CEILING_USD;
+}
+
+export interface Phase2SpendEntry {
+  plan: string;
+  case: string;
+  costUsd: number;
+  claudeVersion: string;
+}
+
+// The recorded Phase 2 spend: the sum of costUsd over the ledger. No ledger is 0; a line that is not a JSON object with a
+// finite non-negative costUsd throws, so a corrupt ledger never reads as 0 and never lets a case run.
+export function phase2Spent(): number {
+  const path = phase2LedgerPath();
+  if (!existsSync(path)) return 0;
+  let total = 0;
+  readFileSync(path, 'utf8')
+    .split('\n')
+    .forEach((text, index) => {
+      if (text === '') return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} is not valid JSON`);
+      }
+      const cost = isObject(parsed) ? parsed['costUsd'] : undefined;
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} has no finite non-negative costUsd`);
+      total += cost;
+    });
+  return total;
+}
+
+// Whether a run that may cost up to `capUsdForRun` still fits under the Phase 2 ceiling.
+export function fitsPhase2Ceiling(capUsdForRun: number): boolean {
+  return phase2Spent() + capUsdForRun <= phase2Ceiling() + 1e-9;
+}
+
+export function recordPhase2Spend(entry: Phase2SpendEntry): void {
+  if (!Number.isFinite(entry.costUsd) || entry.costUsd < 0) throw new Error(`refusing to record a Phase 2 cost of ${String(entry.costUsd)}`);
+  appendFileSync(phase2LedgerPath(), JSON.stringify({ plan: entry.plan, case: entry.case, costUsd: entry.costUsd, claudeVersion: entry.claudeVersion, at: new Date().toISOString() }) + '\n');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -556,7 +648,8 @@ async function launchDirect(args: readonly string[], cwd: string, env: Record<st
 export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const costCap = spec.costCapUsd ?? SINGLE_CASE_CAP_USD;
   const spends = spec.noLaunch !== true;
-  if (spends && !fitsCap(costCap)) return { skipped: `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${costCap.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}` };
+  const refusal = spends ? spendRefusal(costCap) : undefined;
+  if (refusal !== undefined) return { skipped: refusal };
 
   const p = await prepareStaging();
   const dataRoot = p.deps.profile.dataRoot;
@@ -677,7 +770,7 @@ export async function runLiveCase(spec: LiveCaseSpec): Promise<LiveCaseRun> {
   const hostStarted = existsSync(wrapper.marker);
   if (spends && hostStarted) {
     const recorded = costAssumed ? costCap : costUsd;
-    recordSpend({ case: spec.name, costUsd: recorded, assumed: costAssumed });
+    recordSpend({ case: spec.name, costUsd: recorded, assumed: costAssumed }, versionNumber(version));
   }
 
   const parsed = parseTranscript(transcript);
@@ -776,7 +869,8 @@ export interface LiveOnboardingOptions {
 }
 
 export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP_USD, options: LiveOnboardingOptions = {}): Promise<{ skipped: string } | LiveOnboardingResult> {
-  if (!fitsCap(costCap)) return { skipped: `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${costCap.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}` };
+  const refusal = spendRefusal(costCap);
+  if (refusal !== undefined) return { skipped: refusal };
   const roots = makeRoots();
   const repo = writeScratchRepo(options.extraFiles);
   const realClaude = liveClaudeBin();
@@ -801,7 +895,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const hostStarted = existsSync(wrapper.marker);
   const costAssumed = hostStarted && (reports.length === 0 || reports.some((r) => r.costUsd === undefined || (r.costUsd === 0 && (r.numTurns ?? 0) === 0)));
   const costUsd = hostStarted ? (costAssumed ? costCap : reports.reduce((sum, r) => sum + (r.costUsd ?? 0), 0)) : 0;
-  if (hostStarted) recordSpend({ case: name, costUsd, assumed: costAssumed });
+  if (hostStarted) recordSpend({ case: name, costUsd, assumed: costAssumed }, versionNumber(version));
 
   const staging = onboarding?.staging_worktree ?? undefined;
   let stagingChanges: string[] = [];
@@ -858,6 +952,933 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
     transcript,
     validation,
     launches,
+    durationMs: Date.now() - started,
+    dispose: () => {
+      rmSync(roots.base, { recursive: true, force: true });
+      repo.dispose();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The real quick unit under the run purpose (plan 02-09, spike S2-B, RESEARCH A2)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const SPIKE_PLAN = '02-09';
+// The most plan 02-09 may spend in total over its two rounds.
+export const SPIKE_TOTAL_CAP_USD = 4.0;
+
+// Plan 02-09's own spend in the Phase 2 ledger.
+export function phase2SpentByPlan(plan: string): number {
+  const path = phase2LedgerPath();
+  if (!existsSync(path)) return 0;
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line) as Phase2SpendEntry)
+    .filter((entry) => entry.plan === plan)
+    .reduce((sum, entry) => sum + entry.costUsd, 0);
+}
+
+// The skip text for a spike round that does not fit, or undefined: judged against the Phase 2 ceiling (D-15) and the spike's own total.
+export function spikeRefusal(capUsdForRun: number): string | undefined {
+  if (!fitsPhase2Ceiling(capUsdForRun)) {
+    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  }
+  if (phase2SpentByPlan(SPIKE_PLAN) + capUsdForRun > SPIKE_TOTAL_CAP_USD + 1e-9) {
+    return `not run: plan ${SPIKE_PLAN} spend ${phase2SpentByPlan(SPIKE_PLAN).toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE_TOTAL_CAP_USD.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
+const realOrSelf = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};
+
+export interface RunUnitFixture {
+  roots: CliRoots;
+  repo: ScratchRepo;
+  deps: AppDeps;
+  env: NodeJS.ProcessEnv;
+  runId: string;
+  contract: RunContract;
+  contractDigest: string;
+  contractPath: string;
+  // Realpath forms: what the model is handed (02-01 carried finding).
+  clone: string;
+  scratch: string;
+  dataRoot: string;
+  workRoot: string;
+  gsdCoreDir: string;
+  close(): void;
+}
+
+// A scratch GSD project, onboarded with the fake host, with conventions and a brief, started through the real `startRun`, and a run
+// clone prepared at the run's base revision. No model is involved.
+export interface PrepareRunUnitOptions {
+  // Tracked files added to the scratch project (a guarded config file, a Makefile, a script a declared command runs).
+  files?: Readonly<Record<string, string>>;
+  // Runs after the project is generated and before it is onboarded: further commits (a symlink the project tracks).
+  setup?: (repo: ScratchRepo) => void;
+  // The conventions committed after onboarding (default: the run conventions with `npm test` as the one command).
+  conventions?: unknown;
+}
+
+export function prepareRunUnit(options: PrepareRunUnitOptions = {}): RunUnitFixture {
+  const roots = makeRoots();
+  const repo = makeRunRepo(options.files ?? {});
+  options.setup?.(repo);
+  onboardRunRepo(roots, repo);
+  commitConventions(repo, options.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'));
+  const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+  const composed = createDeps(env, {});
+  if (!composed.ok) throw new Error(`composition failed: ${composed.message}`);
+  const { deps } = composed.value;
+  const started = startRun(deps, { cwd: repo.path, briefPath, policy: 'routine', budgetOverrides: {} });
+  if (!started.ok) throw new Error(`start refused: ${JSON.stringify(started.failure)}`);
+  const located = locateGsdCore(env);
+  if (!located.ok) throw new Error('gsd-core was not found');
+  if (deps.runWorkspace === undefined) throw new Error('the run workspace is not composed');
+  mkdirSync(roots.AVARICE_WORK_ROOT, { recursive: true });
+  const workRoot = realOrSelf(roots.AVARICE_WORK_ROOT);
+  const prepared = deps.runWorkspace.prepare({ repoPath: repo.path, workRoot, runId: started.value.runId, pin: started.value.contract.workspace.baseRevision });
+  if (!prepared.ok) throw new Error(`the run clone was not prepared: ${JSON.stringify(prepared.error)}`);
+  const scratch = join(workRoot, started.value.runId, 'scratch');
+  mkdirSync(join(scratch, 'tmp'), { recursive: true });
+  mkdirSync(join(scratch, 'npm-cache'), { recursive: true });
+  return {
+    roots,
+    repo,
+    deps,
+    env,
+    runId: started.value.runId,
+    contract: started.value.contract,
+    contractDigest: started.value.contractDigest,
+    contractPath: realOrSelf(started.value.contractPath),
+    clone: realOrSelf(prepared.value.path),
+    scratch: realOrSelf(scratch),
+    dataRoot: realOrSelf(roots.AVARICE_DATA_ROOT),
+    workRoot,
+    gsdCoreDir: located.value.gsdCoreDir,
+    close: () => {
+      composed.value.close();
+    },
+  };
+}
+
+export interface ConfigureKeyResult {
+  key: string;
+  value: string;
+  accepted: boolean;
+  // The refusal message, trimmed of paths, when it was refused.
+  message?: string;
+}
+
+// Applies `settings` one key at a time through the GSD adapter's configure() (cwd = the clone), recording each key's result.
+export async function applyRunSettings(fixture: RunUnitFixture, settings: readonly GsdSetting[]): Promise<ConfigureKeyResult[]> {
+  const gsd = fixture.deps.gsd;
+  if (gsd === undefined) throw new Error('the GSD adapter is not composed');
+  const out: ConfigureKeyResult[] = [];
+  for (const setting of settings) {
+    const applied = await gsd.configure(fixture.clone, [setting]);
+    if (applied.ok) out.push({ key: setting[0], value: setting[1], accepted: true });
+    else out.push({ key: setting[0], value: setting[1], accepted: false, message: JSON.stringify(applied.error).replaceAll(fixture.clone, '<clone>').slice(0, 400) });
+  }
+  return out;
+}
+
+export const configDigest = (clone: string): string => fileDigest(join(clone, '.planning', 'config.json'));
+
+export interface RunUnitDenial {
+  tool: string;
+  // `hook` when the AVARICE hook refused it (the rule is named), `host` for any other error result.
+  by: 'hook' | 'host';
+  rule: string;
+  // The command, or the file path, with the run's own paths made symbolic.
+  target: string;
+  fromSubagent: boolean;
+  resultHead: string;
+}
+
+// The real paths a scripted prompt may name (realpath forms, 02-01 carried finding) and the files a case guards.
+export interface RunUnitContext {
+  clone: string;
+  scratch: string;
+  dataRoot: string;
+  workRoot: string;
+  home: string;
+  repo: string;
+  runId: string;
+  invDir: string;
+  settingsFile: string;
+  hookPolicyFile: string;
+  contractFile: string;
+  ledgerFile: string;
+}
+
+export interface RunUnitSpec {
+  name: string;
+  round: number;
+  costCapUsd: number;
+  wallClockMs?: number;
+  // Replaces runUnitPrompt (the contract and an empty pack) when a round must change the prompt. `ctx` names the real paths.
+  prompt?: (contract: RunPromptContract, ctx: RunUnitContext) => string;
+  // The plan the cost is recorded under in the Phase 2 ledger (default plan 02-09's spike); a plan other than the spike's is gated by the ceiling only.
+  plan?: string;
+  // The model of the invocation (default: the contract's work item model).
+  model?: string;
+  // The scratch project the case runs on.
+  project?: PrepareRunUnitOptions;
+  // Runs once the run exists and before the prompt is built (a canary file in the data root).
+  beforeLaunch?: (ctx: RunUnitContext) => void;
+  // Absolute paths whose bytes are compared before and after (guarded files, enforcement files).
+  watch?: (ctx: RunUnitContext) => readonly string[];
+  // `adapter` (default): the real ClaudeHostAdapter. `direct`: the host binary started with an edited copy of the generated settings, for
+  // the layers the adapter refuses to start without (CS-12).
+  launch?: 'adapter' | 'direct';
+  mutateSettings?: (settings: Record<string, unknown>, ctx: RunUnitContext) => void;
+  // Options for the adapter (a missing hook entry, a failing sandbox probe).
+  adapterOptions?: Partial<ClaudeHostOptions>;
+  // The case never launches the host (a refusal case); it costs nothing and the marker must stay absent.
+  noLaunch?: boolean;
+  // A pre-launch action AVARICE performs (b): directories created in the clone through the run workspace before the model starts.
+  ensureDirs?: readonly string[];
+  // Settings applied before launch (default RUN_GSD_SETTINGS).
+  settings?: readonly GsdSetting[];
+}
+
+export interface LiveRunUnitResult {
+  name: string;
+  round: number;
+  fixture: RunUnitFixture;
+  configure: ConfigureKeyResult[];
+  // `gsd:configure` was recorded as completed before the launch.
+  configureRecordedBeforeLaunch: boolean;
+  outcome: Result<InvocationOutcome>;
+  transcript: string;
+  parsed: ParsedTranscript;
+  hookDecisions: HookEvent[];
+  toolCompleted: CompletedTool[];
+  denials: RunUnitDenial[];
+  headBefore: string;
+  headAfter: string;
+  changedPaths: Array<{ path: string; status: string }>;
+  outsideWriteSet: string[];
+  summaryFiles: string[];
+  verificationStatus: string | undefined;
+  subagentsSpawned: number | undefined;
+  agentToolCalls: number;
+  askedUser: boolean;
+  costUsd: number;
+  costAssumed: boolean;
+  exitCode: number | null | undefined;
+  streamSubtype: string | undefined;
+  sourceUntouched: boolean;
+  hostStarted: boolean;
+  claudeVersion: string;
+  evidenceDir: string;
+  prompt: string;
+  durationMs: number;
+  ctx: RunUnitContext;
+  // Digest of each watched file before and after (`absent` for a path that does not exist).
+  watchedBefore: Record<string, string>;
+  watchedAfter: Record<string, string>;
+  // The contract versions and the budget limits of the run, before and after the unit.
+  contractVersionsBefore: number[];
+  contractVersionsAfter: number[];
+  budgetLimitsBefore: Record<string, number>;
+  budgetLimitsAfter: Record<string, number>;
+  // The clone's own files outside the contract's write set and `.git`, as one digest, before and after.
+  cloneOutsideBefore: string;
+  cloneOutsideAfter: string;
+  // `direct` launch details (exit code of the host process).
+  directExit: number | null | undefined;
+  dispose(): void;
+}
+
+export type LiveRunUnit = { skipped: string } | LiveRunUnitResult;
+
+function walkFiles(root: string, rel = ''): string[] {
+  const out: string[] = [];
+  let entries;
+  try {
+    entries = readdirSync(join(root, rel), { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (rel === '' && entry.name === '.git') continue;
+    const next = rel === '' ? entry.name : `${rel}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walkFiles(root, next));
+    else out.push(next);
+  }
+  return out.sort();
+}
+
+function describeDenials(parsed: ParsedTranscript, fixture: RunUnitFixture): RunUnitDenial[] {
+  const symbolic = (text: string): string =>
+    text.replaceAll(fixture.clone, '<clone>').replaceAll(fixture.scratch, '<scratch>').replaceAll(fixture.dataRoot, '<data>').replaceAll(fixture.workRoot, '<work>');
+  const out: RunUnitDenial[] = [];
+  for (const call of parsed.trace) {
+    if (call.isError !== true) continue;
+    const hookRule = /avarice: ([A-Za-z0-9_:.-]+)/.exec(call.resultText)?.[1];
+    const input = call.input;
+    const target = typeof input['command'] === 'string' ? input['command'] : typeof input['file_path'] === 'string' ? input['file_path'] : typeof input['path'] === 'string' ? input['path'] : JSON.stringify(input).slice(0, 300);
+    out.push({
+      tool: call.tool,
+      by: hookRule !== undefined ? 'hook' : 'host',
+      rule: hookRule ?? 'error-result',
+      target: symbolic(target).slice(0, 600),
+      fromSubagent: call.fromSubagent,
+      resultHead: symbolic(call.resultText).slice(0, 300),
+    });
+  }
+  return out;
+}
+
+export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
+  const plan = spec.plan ?? SPIKE_PLAN;
+  const spends = spec.noLaunch !== true;
+  const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : fitsPhase2Ceiling(spec.costCapUsd) ? undefined : `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this case's cap ${spec.costCapUsd.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  if (refusal !== undefined) return { skipped: refusal };
+
+  const fixture = prepareRunUnit(spec.project);
+  const { deps, contract, clone, scratch, runId } = fixture;
+  const workspace = deps.runWorkspace as RunWorkspace;
+  const evidenceDir = fixture.roots.base;
+  const realClaude = liveClaudeBin();
+  const version = claudeVersion(realClaude);
+  const wrapper = makeLaunchMarkerWrapper(evidenceDir, realClaude, version);
+
+  // gsd:configure first, recorded before the unit is launched (ordering edge).
+  const settings = spec.settings ?? RUN_GSD_SETTINGS;
+  const configureStarted = deps.clock.nowMs();
+  const configure = await applyRunSettings(fixture, settings);
+  const configured = deps.ledger.recordRunStep(runId, { step: 'gsd:configure', status: 'completed', result: { keys: configure }, nowMs: configureStarted, completedAtMs: deps.clock.nowMs() });
+  if (!configured.ok) throw new Error(`gsd:configure could not be recorded: ${JSON.stringify(configured.error)}`);
+
+  for (const dir of spec.ensureDirs ?? []) {
+    const made = workspace.ensureDir(clone, dir);
+    if (!made.ok) throw new Error(`ensureDir ${dir}: ${JSON.stringify(made.error)}`);
+  }
+
+  const snapshot = workspace.snapshot(clone);
+  if (!snapshot.ok) throw new Error(`snapshot: ${JSON.stringify(snapshot.error)}`);
+  const sourceBefore = { refs: refsDigest(fixture.repo.path), tree: treeDigest(fixture.repo.path) };
+
+  const dirs = runScopeDirs(contract.files);
+  const described = workspace.describe(clone, dirs);
+  if (!described.ok) throw new Error(`describe: ${JSON.stringify(described.error)}`);
+  const agentsDir = join(fixture.gsdCoreDir, '..', 'agents');
+  const scope = computeRunScope({
+    contract,
+    clonePath: clone,
+    repoPath: fixture.repo.path,
+    dataRoot: fixture.dataRoot,
+    home: realOrSelf(deps.home ?? homedir()),
+    workRoot: fixture.workRoot,
+    scratchDir: scratch,
+    workspace: described.value,
+    readRoots: [fixture.gsdCoreDir, agentsDir].map(realOrSelf),
+  });
+  const invocationId = deps.ids.next('inv_');
+  const invDir = join(fixture.dataRoot, 'run', runId, `run-${invocationId}`);
+  const ctx: RunUnitContext = {
+    clone,
+    scratch,
+    dataRoot: fixture.dataRoot,
+    workRoot: fixture.workRoot,
+    home: realOrSelf(deps.home ?? homedir()),
+    repo: fixture.repo.path,
+    runId,
+    invDir,
+    settingsFile: join(invDir, 'host-settings.json'),
+    hookPolicyFile: join(invDir, 'hook-policy.json'),
+    contractFile: fixture.contractPath,
+    ledgerFile: join(fixture.dataRoot, 'state.db'),
+  };
+  spec.beforeLaunch?.(ctx);
+  const prompt = spec.prompt !== undefined ? spec.prompt(contract, ctx) : runUnitPrompt(contract, '');
+  const extensions = PURPOSE_EXTENSIONS.run;
+  const request: InvocationRequest = {
+    onboardingId: 'onb_spike',
+    runId,
+    invocationId,
+    purpose: 'run',
+    contractVersion: contract.contractVersion,
+    contractDigest: fixture.contractDigest,
+    prompt,
+    cwd: scope.cwd,
+    model: spec.model ?? contract.intent.workItems[0]?.model ?? 'sonnet',
+    costCapUsd: spec.costCapUsd,
+    wallClockMs: spec.wallClockMs ?? 20 * 60_000,
+    scope,
+    extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
+    expectedFiles: [],
+    sessionId: randomUUID(),
+    ownerKind: 'run',
+    ownerId: runId,
+  };
+
+  const preamble = fingerprintGsdPreamble(fixture.gsdCoreDir);
+  if (!preamble.ok) throw new Error('the GSD preamble was not found');
+  const configDir = fixture.env['CLAUDE_CONFIG_DIR'] !== undefined && fixture.env['CLAUDE_CONFIG_DIR'] !== '' ? fixture.env['CLAUDE_CONFIG_DIR'] : join(deps.home ?? homedir(), '.claude');
+  const gsdLocations = { gsdCoreDir: fixture.gsdCoreDir, agentsDir: join(fixture.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir };
+  const writeGlobsOfContract = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
+  const cloneOutside = (): string => treeDigest(clone, (rel) => rel === '.claude' || rel.startsWith('.claude/') || matchesAny(rel, writeGlobsOfContract));
+  const contractVersions = (): number[] => ledgerRows<{ version: number }>(fixture.dataRoot, 'SELECT version FROM contracts WHERE run_id = ? ORDER BY version', runId).map((r) => r.version);
+  const budgetLimits = (): Record<string, number> => Object.fromEntries(ledgerRows<{ name: string; limit_value: number }>(fixture.dataRoot, 'SELECT name, limit_value FROM budgets WHERE run_id = ? ORDER BY name', runId).map((r) => [r.name, r.limit_value]));
+  const watchPaths = spec.watch?.(ctx) ?? [];
+  const watchedBefore: Record<string, string> = Object.fromEntries(watchPaths.map((p) => [p, fileDigest(p)]));
+  // The launch files exist only once the adapter has written them: their digests are taken then.
+  const resample = (): void => {
+    for (const p of watchPaths) if (watchedBefore[p] === 'absent') watchedBefore[p] = fileDigest(p);
+  };
+  const before = { cloneOutside: cloneOutside(), contracts: contractVersions(), budgets: budgetLimits() };
+  const adapter = new ClaudeHostAdapter({
+    claudeBin: wrapper.bin,
+    hookEntry: HOOK_ENTRY,
+    ledgerPath: join(fixture.dataRoot, 'state.db'),
+    dataRoot: fixture.dataRoot,
+    gsd: { ...gsdLocations, preamble: preamble.value },
+    artifacts: deps.artifacts,
+    staging: deps.staging,
+    countHookDenies: (id) => deps.ledger.countHookDenials(id),
+    env: fixture.env,
+    ...spec.adapterOptions,
+    onBeforeSpawn: (info: BeforeSpawn) => {
+      resample();
+      spec.adapterOptions?.onBeforeSpawn?.(info);
+    },
+  });
+
+  const launchStarted = deps.clock.nowMs();
+  const started = Date.now();
+  let outcome: Result<InvocationOutcome>;
+  let directExit: number | null | undefined;
+  let transcript = '';
+  let costUsd = 0;
+  let costAssumed = false;
+  if (spec.launch === 'direct') {
+    // The same inputs the adapter writes, then an edited copy of the settings and no launch checks.
+    const roots = [...request.scope.readRoots];
+    for (const skill of request.extensions.skills) {
+      try {
+        roots.push(realpathSync(join(gsdLocations.skillsRoot, skill)));
+      } catch {
+        // reported by the plugin directory builder
+      }
+    }
+    const written = writeInvocationFiles({ invDir, scope: { ...request.scope, readRoots: roots }, request, gsd: gsdLocations, hookEntry: HOOK_ENTRY, ledgerPath: join(fixture.dataRoot, 'state.db'), preamble: preamble.value });
+    if (!written.ok) throw new Error(`cannot write the invocation files: ${JSON.stringify(written.error)}`);
+    resample();
+    const mutated = join(invDir, 'host-settings.mutated.json');
+    copyFileSync(written.value.settingsFile, mutated);
+    const edited = JSON.parse(readFileSync(mutated, 'utf8')) as Record<string, unknown>;
+    spec.mutateSettings?.(edited, ctx);
+    writeFileSync(mutated, JSON.stringify(edited, null, 2) + '\n');
+    if (spec.noLaunch !== true) {
+      const args = buildLaunchArgs({ prompt: request.prompt, settingsFile: mutated, pluginDir: written.value.pluginDir, agentsFile: written.value.agentsFile, mcpFile: written.value.mcpFile, model: request.model, costCapUsd: spec.costCapUsd, sessionId: request.sessionId as string });
+      const safe = assertLaunchArgsSafe(args);
+      if (!safe.ok) throw new Error(`the harness built an unsafe launch line: ${JSON.stringify(safe.error)}`);
+      const env = buildInvocationEnv(fixture.env, { gsdCoreBin: join(fixture.gsdCoreDir, 'bin'), onboardingId: request.onboardingId, marker: runId, scratchDir: scratch });
+      const ran = await launchDirect(args, scope.cwd, env, wrapper.bin, request.wallClockMs);
+      transcript = ran.transcript;
+      costUsd = ran.costUsd;
+      costAssumed = !ran.hasResult;
+      directExit = ran.exitCode;
+    }
+    outcome = err({ kind: 'unavailable', cause: `direct launch, exit ${String(directExit)}` });
+  } else {
+    outcome = await adapter.invoke(request, new AbortController().signal);
+    if (outcome.ok) {
+      costUsd = outcome.value.costUsd;
+      const bytes = outcome.value.transcriptArtifact === undefined ? undefined : deps.artifacts.get(outcome.value.transcriptArtifact);
+      if (bytes?.ok) transcript = new TextDecoder().decode(bytes.value);
+      costAssumed = outcome.value.details?.resultSeen !== true;
+    }
+  }
+  const hostStarted = existsSync(wrapper.marker);
+  if (!outcome.ok && spec.launch !== 'direct') costAssumed = hostStarted;
+  const recorded = costAssumed ? spec.costCapUsd : costUsd;
+  if (hostStarted) recordPhase2Spend({ plan, case: spec.name, costUsd: recorded, claudeVersion: versionNumber(version) });
+
+  const steps = deps.ledger.getRunSteps(runId);
+  const configureStep = steps.ok ? steps.value.find((s) => s.step === 'gsd:configure') : undefined;
+  const parsed = parseTranscript(transcript);
+  // The evidence directory keeps the redacted transcript beside the profile until the caller removes it.
+  writeFileSync(join(evidenceDir, 'transcript.jsonl'), transcript);
+  const hooks = hookDecisions(fixture.dataRoot, request.invocationId);
+  const changed = workspace.changedSince(clone, snapshot.value);
+  const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
+  const writeGlobs = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
+  const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobs) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
+  const files = walkFiles(clone);
+  const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
+  const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
+  const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
+  const headNow = workspace.head(clone);
+
+  return {
+    name: spec.name,
+    round: spec.round,
+    fixture,
+    configure,
+    configureRecordedBeforeLaunch: configureStep !== undefined && configureStep.status === 'completed' && configureStep.completedAt !== null && Date.parse(configureStep.completedAt) <= launchStarted,
+    outcome,
+    transcript,
+    parsed,
+    hookDecisions: hooks,
+    toolCompleted: toolCompleted(fixture.dataRoot, request.invocationId),
+    denials: describeDenials(parsed, fixture),
+    headBefore: snapshot.value.head,
+    headAfter: headNow.ok ? headNow.value : 'unreadable',
+    changedPaths,
+    outsideWriteSet,
+    summaryFiles,
+    verificationStatus,
+    subagentsSpawned: outcome.ok ? outcome.value.details?.subagentsSpawned : undefined,
+    agentToolCalls: parsed.trace.filter((t) => t.tool === 'Agent' || t.tool === 'Task').length,
+    askedUser: parsed.trace.some((t) => t.tool === 'AskUserQuestion'),
+    costUsd: hostStarted ? recorded : 0,
+    costAssumed,
+    exitCode: outcome.ok ? outcome.value.details?.exitCode : undefined,
+    streamSubtype: outcome.ok ? outcome.value.details?.subtype : undefined,
+    sourceUntouched: refsDigest(fixture.repo.path) === sourceBefore.refs && treeDigest(fixture.repo.path) === sourceBefore.tree,
+    hostStarted,
+    claudeVersion: version,
+    evidenceDir,
+    prompt,
+    durationMs: Date.now() - started,
+    ctx,
+    watchedBefore,
+    watchedAfter: Object.fromEntries(watchPaths.map((p) => [p, fileDigest(p)])),
+    contractVersionsBefore: before.contracts,
+    contractVersionsAfter: contractVersions(),
+    budgetLimitsBefore: before.budgets,
+    budgetLimitsAfter: budgetLimits(),
+    cloneOutsideBefore: before.cloneOutside,
+    cloneOutsideAfter: cloneOutside(),
+    directExit,
+    dispose: () => {
+      fixture.close();
+      rmSync(fixture.roots.base, { recursive: true, force: true });
+      fixture.repo.dispose();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// A whole unattended run on the real host (plan 02-20, S-12, S-3, S-20, S-41, S-42)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const LIVE_RUN_PLAN = process.env['AVARICE_PHASE2_PLAN'] ?? '02-20';
+
+// Profile roots under /tmp (a real path of about 12 characters, where $TMPDIR is about 50).
+export function makeShortRoots(): CliRoots {
+  const base = realpathSync(mkdtempSync(join('/tmp', 'avr-')));
+  return { base, AVARICE_CONFIG_HOME: join(base, 'c'), AVARICE_DATA_ROOT: join(base, 'd'), AVARICE_WORK_ROOT: join(base, 'w') };
+}
+const PRODUCTION_ENTRY_FILE = join(REPO_ROOT, 'bin', 'avarice.ts');
+
+// The live brief. The title is the one word the fixture intel index answers (its documents describe `answer` in src/index.ts), so the
+// context pack has intel items as well as the graph's; the behavior text is what the model works from.
+export function liveBrief(model: 'haiku' | 'sonnet'): string {
+  return [
+    '---',
+    'title: answer',
+    `model: ${model}`,
+    '---',
+    '## Behavior',
+    'The function `slugify` in src/slug.ts must never return a slug with two dashes in a row, and must not start or end with a dash. Repeated separators collapse to one dash.',
+    '',
+    '## Acceptance criteria',
+    '- AC1: Repeated separators collapse to one dash | verifiedBy: check:test',
+    '',
+    '## Write',
+    '- src/**',
+    '- test/**',
+    '',
+    '## Target checks',
+    '- test',
+    '',
+  ].join('\n');
+}
+
+export type RunFault = 'mid-verify';
+
+export interface LiveRunSpec {
+  name: string;
+  model: 'haiku' | 'sonnet';
+  // Gates the start (fitsPhase2Ceiling) and becomes the run's and the invocation's cost budget.
+  capUsd: number;
+  // Kills the first supervisor at this point; `status --json` is captured, then `resume <id> --wait` runs.
+  fault?: RunFault;
+  // A run whose first supervisor is killed by other means (the wrapper below kills it in the unit): `status --json` and the host processes
+  // that outlive it are captured, then `resume <id> --wait` runs.
+  resumeAfterKill?: boolean;
+  // The per-invocation cost cap when it is lower than the run's (default: the run's cap).
+  perInvocationUsd?: number;
+  // Profile roots directly under /tmp, so the scratch directory the host's TMPDIR names is short enough for the host's own unix socket.
+  shortRoots?: boolean;
+  // Replaces the launch wrapper: given the real binary, the evidence directory and the marker path, the shell script text of the `claude` the supervisor starts.
+  wrapperScript?: (real: string, dir: string, marker: string) => string;
+  // Extra budget overrides (`name=value`).
+  budgets?: readonly string[];
+  // How long a lease lasts, ms (the killed supervisor's lease must lapse before the resume).
+  leaseTtlMs?: number;
+  // Invocations the run may use (default the preset's 3).
+  invocations?: number;
+  wallClockMinutes?: number;
+  // Environment of the `start` process only (a hook entry that exits 1); the supervisor it spawns inherits it.
+  startEnv?: (roots: CliRoots) => Record<string, string | undefined>;
+  // Called after the profile and repository exist and before `start` (replace the hook entry, and so on).
+  beforeStart?: (roots: CliRoots, repo: ScratchRepo) => void;
+}
+
+export interface LiveRunResult {
+  name: string;
+  roots: CliRoots;
+  repo: ScratchRepo;
+  runId: string;
+  start: CliResult;
+  interruptedStatus: Record<string, unknown> | undefined;
+  interruptedRun: Record<string, unknown> | undefined;
+  // `status` (the text view) while the run was interrupted.
+  interruptedStatusText: string;
+  // The processes of this run's host (command lines carrying its settings path) that were alive after the supervisor died and before the resume, and after the resume.
+  hostProcessesBeforeResume: string[];
+  hostProcessesAfterResume: string[];
+  resume: CliResult | undefined;
+  state: string;
+  reason: string | null;
+  attempts: Array<{ attemptId: string; ordinal: number; outcome: string | null }>;
+  steps: Array<{ step: string; status: string; attempt: number; result: Record<string, unknown> }>;
+  packSources: string[];
+  gates: Array<{ gate: string; passed: boolean }>;
+  evidence: Array<{ kind: string; name: string; status: string }>;
+  transcript: string;
+  parsed: ParsedTranscript;
+  toolNames: Record<string, number>;
+  askUserQuestions: number;
+  hookDenyRules: Record<string, number>;
+  readThenEdit: { editsOfExisting: number; readBefore: number; denied: Array<{ tool: string; rule: string }> };
+  invocationEvents: Array<{ type: string; data: Record<string, unknown> }>;
+  sourceTreeBefore: string;
+  sourceTreeAfter: string;
+  sourceRefsBefore: string;
+  sourceRefsAfter: string;
+  sourceStatusBefore: string;
+  sourceStatusAfter: string;
+  handoffBranch: string | undefined;
+  handoffCommit: string | undefined;
+  handoffSubject: string | undefined;
+  handoffChangedFiles: string[];
+  clone: string | undefined;
+  quickFiles: string[];
+  verificationStatus: string | undefined;
+  costUsd: number;
+  hostStarted: boolean;
+  claudeVersion: string;
+  evidenceDir: string;
+  durationMs: number;
+  dispose(): void;
+}
+
+export type LiveRun = { skipped: string } | LiveRunResult;
+
+export interface RefusedRunResult {
+  runId: string;
+  state: string;
+  reason: string | null;
+  decisions: Array<{ class: string; issue: string }>;
+  hostStarted: boolean;
+  // Paths git reports changed in the run clone, other than AVARICE's own `.planning/config.json`.
+  cloneChanges: string[];
+  clone: string | undefined;
+  sourceUntouched: boolean;
+  roots: CliRoots;
+  dispose(): void;
+}
+
+// A whole run (production `startRun` and the production supervisor, in this process) whose host is the real ClaudeHostAdapter built with
+// `adapterOptions` (a sandbox probe that fails, a hook entry that is missing): the run must end `blocked_on_decision (enforcement_failure)`
+// with the host never started and nothing written in the clone (S-14, CS-13). No model is called, so nothing is spent.
+export async function runLiveRunWithAdapterOptions(adapterOptions: Partial<ClaudeHostOptions>): Promise<RefusedRunResult> {
+  const roots = makeRoots();
+  const repo = makeRunRepo();
+  onboardRunRepo(roots, repo);
+  commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'));
+  const realClaude = liveClaudeBin();
+  const wrapper = makeLaunchMarkerWrapper(roots.base, realClaude, claudeVersion(realClaude));
+  const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT, AVARICE_CLAUDE_BIN: wrapper.bin };
+  const slot: { deps?: AppDeps } = {};
+  // The adapter is built before the dependencies exist (composition reads its descriptor), so the ports it uses are bound late.
+  const late = <T extends object>(pick: (deps: AppDeps) => T): T =>
+    new Proxy({} as T, {
+      get: (_target, property) => {
+        if (slot.deps === undefined) throw new Error('a port was used before the dependencies existed');
+        const port = pick(slot.deps) as Record<string | symbol, unknown>;
+        const value = port[property];
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(port) : value;
+      },
+    });
+  const located = locateGsdCore(env);
+  if (!located.ok) throw new Error('gsd-core was not found');
+  const preamble = fingerprintGsdPreamble(located.value.gsdCoreDir);
+  if (!preamble.ok) throw new Error('the GSD preamble was not found');
+  const configDir = env['CLAUDE_CONFIG_DIR'] !== undefined && env['CLAUDE_CONFIG_DIR'] !== '' ? env['CLAUDE_CONFIG_DIR'] : join(homedir(), '.claude');
+  const host = new ClaudeHostAdapter({
+    claudeBin: wrapper.bin,
+    hookEntry: HOOK_ENTRY,
+    ledgerPath: join(roots.AVARICE_DATA_ROOT, 'state.db'),
+    dataRoot: roots.AVARICE_DATA_ROOT,
+    gsd: { gsdCoreDir: located.value.gsdCoreDir, agentsDir: join(located.value.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir, preamble: preamble.value },
+    artifacts: late((deps) => deps.artifacts),
+    staging: late((deps) => deps.staging),
+    countHookDenies: (id) => (slot.deps as AppDeps).ledger.countHookDenials(id),
+    env,
+    ...adapterOptions,
+  });
+  const composed = createDeps(env, { host });
+  if (!composed.ok) throw new Error(`composition failed: ${composed.message}`);
+  slot.deps = composed.value.deps;
+  const before = treeDigest(repo.path);
+  try {
+    const started = startRun(composed.value.deps, { cwd: repo.path, briefPath, policy: 'routine', budgetOverrides: {} });
+    if (!started.ok) throw new Error(`start refused: ${JSON.stringify(started.failure)}`);
+    const outcome = await runSupervisor(composed.value.deps, started.value.runId);
+    if (!outcome.ok) throw new Error(`the supervisor failed: ${JSON.stringify(outcome.error)}`);
+    const runId = started.value.runId;
+    const [run] = ledgerRows<{ workspace_path: string | null }>(roots.AVARICE_DATA_ROOT, 'SELECT workspace_path FROM runs WHERE run_id = ?', runId);
+    const clone = run?.workspace_path ?? undefined;
+    const cloneChanges = clone === undefined ? [] : gitOut(clone, ['status', '--porcelain', '--untracked-files=all', '-z']).split('\0').filter((e) => e !== '').map((e) => e.slice(3)).filter((p) => p !== '.planning/config.json');
+    return {
+      runId,
+      state: outcome.value.state,
+      reason: outcome.value.reason,
+      decisions: ledgerRows<{ class: string; issue: string }>(roots.AVARICE_DATA_ROOT, 'SELECT class, issue FROM decisions WHERE run_id = ?', runId),
+      hostStarted: existsSync(wrapper.marker),
+      cloneChanges,
+      clone,
+      sourceUntouched: treeDigest(repo.path) === before,
+      roots,
+      dispose: () => {
+        rmSync(roots.base, { recursive: true, force: true });
+        repo.dispose();
+      },
+    };
+  } finally {
+    composed.value.close();
+  }
+}
+
+// The live processes whose command line names `needle` (pid and command, trimmed): the host of a run is found by its settings path, which sits
+// under the run's directory in the data root.
+export function processesMentioning(needle: string): string[] {
+  const listing = execFileSync('/bin/ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8' });
+  return listing
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && line.includes(needle) && !/\bps -axww\b/.test(line))
+    // The line is cut for the record; whether it carried a session ID is read before the cut (the flag sits at the end of a long line).
+    .map((line) => `${line.slice(0, 160)}${line.includes('--session-id') ? ' [carries --session-id]' : ''}`);
+}
+
+const ledgerEvents = (dataRoot: string): Array<{ type: string; data: Record<string, unknown>; invocationId: string | null }> =>
+  ledgerRows<{ type: string; data_json: string; invocation_id: string | null }>(dataRoot, "SELECT type, data_json, invocation_id FROM events WHERE type LIKE 'invocation.%' OR type LIKE 'loop.%' ORDER BY seq").map((r) => ({
+    type: r.type,
+    data: JSON.parse(r.data_json) as Record<string, unknown>,
+    invocationId: r.invocation_id,
+  }));
+
+// The Edit calls on files, and whether each was preceded by a Read of the same path (CON-7, plan 02-11 D6).
+export function readThenEditOf(parsed: ParsedTranscript, hooks: readonly HookEvent[]): LiveRunResult['readThenEdit'] {
+  const read = new Set<string>();
+  let editsOfExisting = 0;
+  let readBefore = 0;
+  for (const call of parsed.trace) {
+    const path = typeof call.input['file_path'] === 'string' ? call.input['file_path'] : undefined;
+    if (path === undefined) continue;
+    if (call.tool === 'Read') read.add(path);
+    if (call.tool === 'Edit') {
+      editsOfExisting += 1;
+      if (read.has(path)) readBefore += 1;
+    }
+  }
+  return {
+    editsOfExisting,
+    readBefore,
+    denied: hooks.filter((h) => h.decision === 'deny' && /^(edit-without-read|file-changed-since-read)$/.test(h.rule)).map((h) => ({ tool: h.tool, rule: h.rule })),
+  };
+}
+
+// One run on a generated GSD scratch project through the production CLI (`start --brief --policy routine --wait`) with the real host. The scratch
+// repository gets an uncommitted tracked change, an untracked file and an ignored file (S-20) after it is committed and onboarded with fixture
+// indexes (no model spend). Everything returned is ground truth: ledger rows, the transcripts of the host, the digests of the user's checkout.
+export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
+  if (!fitsPhase2Ceiling(spec.capUsd)) {
+    return { skipped: `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this run's cap ${spec.capUsd.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner` };
+  }
+  const roots = spec.shortRoots === true ? makeShortRoots() : makeRoots();
+  const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n' });
+  await onboardRunRepoWithIndexes(roots, repo, 'answer');
+  commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'), liveBrief(spec.model));
+  // The user's checkout is dirty in the three ways S-20 names; the run must leave every one of them as it is.
+  writeFileSync(join(repo.path, 'NOTES.md'), 'notes, edited by the user and not committed\n');
+  writeFileSync(join(repo.path, 'draft.txt'), 'an untracked file of the user\n');
+  writeFileSync(join(repo.path, 'ignored.log'), 'an ignored file of the user\n');
+  spec.beforeStart?.(roots, repo);
+
+  const realClaude = liveClaudeBin();
+  const version = claudeVersion(realClaude);
+  const marker = join(roots.base, 'host-started.marker');
+  let wrapperBin: string;
+  if (spec.wrapperScript !== undefined) {
+    wrapperBin = join(roots.base, 'claude-wrapper');
+    writeFileSync(wrapperBin, spec.wrapperScript(realClaude, roots.base, marker));
+    chmodSync(wrapperBin, 0o755);
+  } else {
+    wrapperBin = makeLaunchMarkerWrapper(roots.base, realClaude, version).bin;
+  }
+
+  const before = { tree: treeDigest(repo.path), refs: refsDigest(repo.path), status: gitOut(repo.path, ['status', '--porcelain', '--ignored']) };
+  const started = Date.now();
+  const lease = spec.leaseTtlMs ?? 30_000;
+  const budgets = [
+    `costUsdPerInvocation=${spec.perInvocationUsd ?? spec.capUsd}`,
+    `costUsdPerRun=${spec.capUsd}`,
+    ...(spec.invocations !== undefined ? [`invocations=${spec.invocations}`] : []),
+    ...(spec.wallClockMinutes !== undefined ? [`wallClockMinutes=${spec.wallClockMinutes}`] : []),
+    ...(spec.budgets ?? []),
+  ].flatMap((b) => ['--budget', b]);
+  const baseEnv: Record<string, string | undefined> = { AVARICE_CLAUDE_BIN: wrapperBin, AVARICE_LEASE_TTL_MS: String(lease) };
+  const cliOptions = { roots, entry: PRODUCTION_ENTRY_FILE, timeoutMs: 25 * 60_000 };
+  const start = runCli(['start', '--brief', briefPath, '--policy', 'routine', '--wait', ...budgets], {
+    ...cliOptions,
+    cwd: repo.path,
+    env: { ...baseEnv, ...(spec.startEnv?.(roots) ?? {}), ...(spec.fault !== undefined ? { AVARICE_FAULT: spec.fault } : {}) },
+  });
+  const runId = /^run (run_[0-9A-Z]{26})\b/m.exec(start.stdout)?.[1] ?? '';
+
+  let interruptedStatus: Record<string, unknown> | undefined;
+  let interruptedRun: Record<string, unknown> | undefined;
+  let interruptedStatusText = '';
+  let resume: CliResult | undefined;
+  let hostProcessesBeforeResume: string[] = [];
+  let hostProcessesAfterResume: string[] = [];
+  const runDir = `/run/${runId}/`;
+  if ((spec.fault !== undefined || spec.resumeAfterKill === true) && runId !== '') {
+    hostProcessesBeforeResume = processesMentioning(runDir);
+    interruptedStatusText = runCli(['status'], { ...cliOptions, timeoutMs: 60_000, env: baseEnv }).stdout;
+    const status = runCli(['status', '--json'], { ...cliOptions, timeoutMs: 60_000, env: baseEnv });
+    for (const project of JSON.parse(status.stdout || '[]') as Array<{ runs?: Array<Record<string, unknown>> }>) {
+      const found = project.runs?.find((r) => r['runId'] === runId);
+      if (found !== undefined) {
+        interruptedRun = found;
+        interruptedStatus = found['interrupted'] as Record<string, unknown> | undefined;
+      }
+    }
+    // The killed supervisor's lease must lapse before another one may take the run.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, lease + 3_000);
+    resume = runCli(['resume', runId, '--wait'], { ...cliOptions, env: baseEnv });
+    hostProcessesAfterResume = processesMentioning(runDir);
+  }
+
+  const dataRoot = roots.AVARICE_DATA_ROOT;
+  const hostStarted = existsSync(marker);
+  const [run] = ledgerRows<{ state: string; reason: string | null; workspace_path: string | null; base_revision: string }>(dataRoot, 'SELECT state, reason, workspace_path, base_revision FROM runs WHERE run_id = ?', runId);
+  const attempts = ledgerRows<{ attempt_id: string; ordinal: number; outcome: string | null }>(dataRoot, 'SELECT attempt_id, ordinal, outcome FROM attempts WHERE run_id = ? ORDER BY ordinal', runId).map((a) => ({ attemptId: a.attempt_id, ordinal: a.ordinal, outcome: a.outcome }));
+  const steps = ledgerRows<{ step: string; status: string; attempt: number; result_json: string }>(dataRoot, 'SELECT step, status, attempt, result_json FROM run_steps WHERE run_id = ? ORDER BY rowid', runId).map((s) => ({ step: s.step, status: s.status, attempt: s.attempt, result: JSON.parse(s.result_json) as Record<string, unknown> }));
+  const pack = steps.find((s) => s.step === 'context:pack');
+  const packSources = Array.isArray(pack?.result['items']) ? (pack?.result['items'] as Array<Record<string, unknown>>).map((i) => String(i['source'])) : [];
+  const budgetsSpent = ledgerRows<{ used: number }>(dataRoot, "SELECT used FROM budgets WHERE run_id = ? AND name = 'costUsd'", runId)[0]?.used ?? 0;
+  const store = new LocalArtifactStore(dataRoot);
+  let transcript = '';
+  for (const artifact of ledgerRows<{ digest: string }>(dataRoot, "SELECT digest FROM artifacts WHERE kind = 'transcript' ORDER BY rowid")) {
+    const bytes = store.get(artifact.digest);
+    if (bytes.ok) transcript += `${new TextDecoder().decode(bytes.value)}\n`;
+  }
+  writeFileSync(join(roots.base, 'transcript.jsonl'), transcript);
+  const parsed = parseTranscript(transcript);
+  assertHostIsRealVersion(parsed, version);
+  const toolNames: Record<string, number> = {};
+  for (const call of parsed.trace) toolNames[call.tool] = (toolNames[call.tool] ?? 0) + 1;
+  const hooks = ledgerRows<{ data_json: string }>(dataRoot, "SELECT data_json FROM events WHERE type = 'hook.decision' ORDER BY seq").map((r) => {
+    const raw = JSON.parse(r.data_json) as Record<string, unknown>;
+    return { decision: String(raw['decision']), rule: String(raw['rule']), tool: String(raw['tool'] ?? raw['toolName'] ?? '?'), raw } satisfies HookEvent;
+  });
+  const hookDenyRules: Record<string, number> = {};
+  for (const h of hooks) if (h.decision === 'deny') hookDenyRules[h.rule] = (hookDenyRules[h.rule] ?? 0) + 1;
+  const branch = `avarice/${runId}`;
+  let handoffCommit: string | undefined;
+  let handoffSubject: string | undefined;
+  let handoffChangedFiles: string[] = [];
+  try {
+    handoffCommit = gitOut(repo.path, ['rev-parse', `refs/heads/${branch}`]).trim();
+    handoffSubject = gitOut(repo.path, ['log', '-1', '--format=%s', handoffCommit]).trim();
+    handoffChangedFiles = gitOut(repo.path, ['diff', '--name-only', run?.base_revision ?? 'HEAD', handoffCommit]).split('\n').filter((l) => l !== '');
+  } catch {
+    // no hand-off
+  }
+  const clone = run?.workspace_path ?? undefined;
+  const quickFiles = clone === undefined || !existsSync(clone) ? [] : walkFiles(clone).filter((f) => f.startsWith('.planning/quick/'));
+  const verificationFile = quickFiles.find((f) => /VERIFICATION\.md$/.test(f));
+  const verificationStatus = clone === undefined || verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((l) => /^\W*status\W*:/i.test(l.trim()));
+  const invocationEvents = ledgerEvents(dataRoot).map((e) => ({ type: e.type, data: e.data }));
+  const costUsd = hostStarted ? budgetsSpent : 0;
+  if (hostStarted) recordPhase2Spend({ plan: LIVE_RUN_PLAN, case: spec.name, costUsd, claudeVersion: versionNumber(version) });
+
+  return {
+    name: spec.name,
+    roots,
+    repo,
+    runId,
+    start,
+    interruptedStatus,
+    interruptedRun,
+    interruptedStatusText,
+    hostProcessesBeforeResume,
+    hostProcessesAfterResume,
+    resume,
+    state: run?.state ?? 'none',
+    reason: run?.reason ?? null,
+    attempts,
+    steps,
+    packSources,
+    gates: ledgerRows<{ gate: string; passed: number }>(dataRoot, 'SELECT gate, passed FROM gate_results WHERE run_id = ? ORDER BY rowid', runId).map((g) => ({ gate: g.gate, passed: g.passed === 1 })),
+    evidence: ledgerRows<{ kind: string; name: string; status: string }>(dataRoot, 'SELECT e.kind, e.name, e.status FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? ORDER BY e.rowid', runId),
+    transcript,
+    parsed,
+    toolNames,
+    askUserQuestions: parsed.trace.filter((t) => t.tool === 'AskUserQuestion').length,
+    hookDenyRules,
+    readThenEdit: readThenEditOf(parsed, hooks),
+    invocationEvents,
+    sourceTreeBefore: before.tree,
+    sourceTreeAfter: treeDigest(repo.path),
+    sourceRefsBefore: before.refs,
+    sourceRefsAfter: refsDigest(repo.path),
+    sourceStatusBefore: before.status,
+    sourceStatusAfter: gitOut(repo.path, ['status', '--porcelain', '--ignored']),
+    handoffBranch: handoffCommit === undefined ? undefined : branch,
+    handoffCommit,
+    handoffSubject,
+    handoffChangedFiles,
+    clone,
+    quickFiles,
+    verificationStatus,
+    costUsd,
+    hostStarted,
+    claudeVersion: version,
+    evidenceDir: roots.base,
     durationMs: Date.now() - started,
     dispose: () => {
       rmSync(roots.base, { recursive: true, force: true });

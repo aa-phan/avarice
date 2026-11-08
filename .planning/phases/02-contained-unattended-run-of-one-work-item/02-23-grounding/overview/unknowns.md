@@ -1,0 +1,2 @@
+- Whether `claude` itself, when driven by the contained host, contacts a network service: checked `src/cli/composition.ts` and the sandboxed executor (network denied there), and the footprint test; the host's own network behavior was not read, so the overview says only that AVARICE's own code opens connections in one place.
+- Whether `README.md` of `docs/system/` and `coverage.md` carry the new counts (ten commands, eleven ports): not in this packet; routed in seams.md.

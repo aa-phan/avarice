@@ -1,0 +1,15 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/run-contract.test.ts\"",
+  "exitCode": 1,
+  "reason": "compileRunContract (Task 1) copies the preset and grants whatever the brief and conventions name: it exports neither BUDGET_OVERRIDE_NAMES nor checkG0Static, so test/unit/run-contract.test.ts fails to load (SyntaxError on the missing named exports) and no case runs. The cases the new tests cover and Task 1 cannot satisfy: write-set containment and protected-path refusals (brief.write, conventions.paths.write, files.write), lower-only budget overrides (budget.<name>) and the cost clamp record, the refused agent command words (execution.commands), the brief model override, the G0 static failures (field g0) and the input checks (runId, projectId, baseRevision, policy, brief.baseRevision, brief.acceptance).",
+  "failingFiles": [
+    "test/unit/run-contract.test.ts"
+  ],
+  "failingTests": {},
+  "summary": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1
+  },
+  "outputHead": "TAP version 13\n# file:///Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/run-contract.test.ts:11\n#   BUDGET_OVERRIDE_NAMES,\n#   ^^^^^^^^^^^^^^^^^^^^^\n# SyntaxError: The requested module '../../src/domain/run-contract.ts' does not provide an export named 'BUDGET_OVERRIDE_NAMES'\n#     at \\#asyncInstantiate (node:internal/modules/esm/module_job:463:21)\n#     at async ModuleJob.run (node:internal/modules/esm/module_job:561:5)\n#     at async node:internal/modules/esm/loader:650:26\n#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n# Node.js v26.9.0\n# Subtest: test/unit/run-contract.test.ts\nnot ok 1 - test/unit/run-contract.test.ts\n  ---\n  duration_ms: 104.731583\n  type: 'test'\n  location: '/Users/aphan/avarice/.claude/worktrees/phase-02-discuss/test/unit/run-contract.test.ts:1:1'\n  failureType: 'testCodeFailure'\n  exitCode: 1\n  signal: ~\n  error: 'test failed'\n  code: 'ERR_TEST_FAILURE'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 109.785417\n"
+}

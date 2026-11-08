@@ -1,0 +1,10 @@
+{
+  "command": "node --test test/integration/install-host.test.ts",
+  "ranAgainst": "the Task 2 commit eb6c64a (git archive extracted to /tmp/avarice-15/base3) plus the new install-host.test.ts",
+  "exitCode": 1,
+  "reason": "at the Task 2 commit there is no install-host command, no avarice-run skill text and no skill installer: the test file fails to load with ERR_MODULE_NOT_FOUND for src/adapters/host-claude/avarice-run-skill.ts, so none of its 16 tests runs",
+  "failingFiles": ["test/integration/install-host.test.ts"],
+  "failingTests": ["install-host.test.ts (file did not load: Cannot find module src/adapters/host-claude/avarice-run-skill.ts)"],
+  "passingAtBase": [],
+  "summary": "1 failure at load; 16 tests defined, 0 run at the base"
+}

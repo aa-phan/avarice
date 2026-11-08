@@ -46,8 +46,15 @@ function sourceFiles(dir: string): string[] {
     .map((e) => join(e.parentPath, e.name));
 }
 
+// The one source file allowed to import node:http and node:net and to listen (plan 02-06, D-11): the allowlisting proxy
+// that gives a supervisor step a registry-only path. Every other file is still scanned; the proxy is held to its own rules below.
+const ALLOWLIST_PROXY = join(REPO_ROOT, 'src', 'adapters', 'exec', 'allowlist-proxy.ts');
+// The one source file allowed to detach a child on purpose (plan 02-12, D-18): `start` spawns the run's supervisor so that closing the
+// shell leaves it running. It is held to its own rules below: one detached spawn, streams ignored, unref'd, started only by `start`.
+const SUPERVISOR_SPAWN = join(REPO_ROOT, 'src', 'cli', 'spawn-supervisor.ts');
+
 describe('no source file reaches the network or starts a background process', () => {
-  const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY];
+  const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== ALLOWLIST_PROXY);
 
   it('imports no network module', () => {
     assert.ok(files.length > 20, 'the scan found the source tree');
@@ -62,7 +69,7 @@ describe('no source file reaches the network or starts a background process', ()
     // sandboxed executor and the contained Claude Code host. Each must kill that group when its process ends; the
     // executor and claude-host tests prove nothing is left behind.
     const groupLeaders = [join(REPO_ROOT, 'src', 'adapters', 'exec', 'sandboxed-executor.ts'), join(REPO_ROOT, 'src', 'adapters', 'host-claude', 'claude-host.ts')];
-    const offenders = files.filter((f) => !groupLeaders.includes(f) && banned.test(readFileSync(f, 'utf8')));
+    const offenders = files.filter((f) => !groupLeaders.includes(f) && f !== SUPERVISOR_SPAWN && banned.test(readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, []);
     const executor = readFileSync(groupLeaders[0] as string, 'utf8');
     assert.match(executor, /process\.kill\(-pid, signal\)/, 'the executor kills the process group it creates');
@@ -72,6 +79,73 @@ describe('no source file reaches the network or starts a background process', ()
     assert.match(host, /process\.kill\(-pid, sig\)/, 'the host adapter kills the process group it creates');
     assert.match(host, /killGroup\('SIGKILL'\);\n\s*if \(killTimer/, 'and sweeps what is left when the host process ends');
     assert.equal(/\.unref\s*\(/.test(host), false, 'and never detaches a child from its own lifetime');
+  });
+});
+
+describe('the supervisor spawn is the one deliberate detached process and it is held to its rules', () => {
+  const source = readFileSync(SUPERVISOR_SPAWN, 'utf8');
+
+  it('detaches exactly one child, ignores its streams, unrefs it and opens no listener or network call', () => {
+    assert.equal((source.match(/detached\s*:\s*true/g) ?? []).length, 1);
+    assert.equal((source.match(/\bspawn\(/g) ?? []).length, 1, 'one spawn call');
+    assert.match(source, /stdio:\s*'ignore'/);
+    assert.match(source, /child\.unref\(\)/);
+    assert.equal(/\bfetch\s*\(|\.listen\s*\(|\bnew\s+WebSocket\b/.test(source), false);
+  });
+
+  it('runs only the `supervise` command of this program: the arguments are fixed and the run ID is the only variable', () => {
+    assert.match(source, /\[\.\.\.process\.execArgv, request\.entry, 'supervise', request\.runId\]/);
+  });
+
+  it('is imported by the start and resume commands and nothing else (resume continues a run with the same detached supervisor, plan 02-17)', () => {
+    const importers = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => f !== SUPERVISOR_SPAWN && /spawn-supervisor\.ts['"]/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(importers.map((f) => basename(f)).sort(), ['resume.ts', 'start.ts']);
+  });
+});
+
+describe('the allowlist proxy is the only listener and it stays on the loopback', () => {
+  const source = readFileSync(ALLOWLIST_PROXY, 'utf8');
+
+  // node:dns/promises is the resolver that vets an address before a tunnel is opened (R-WR-02).
+  it('imports node:dns/promises, node:http and node:net and no other network module', () => {
+    const imported = [...new Set([...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1] as string))];
+    const network = imported.filter((m) => /^(?:node:)?(?:net|http|https|http2|dgram|tls|dns|dns\/promises|cluster|inspector)$/.test(m));
+    assert.deepEqual(network.sort(), ['node:dns/promises', 'node:http', 'node:net']);
+    assert.deepEqual(imported.filter((m) => !m.startsWith('node:') && !m.startsWith('.')), [], 'no package import');
+  });
+
+  it('listens only on 127.0.0.1, calls no fetch and detaches no child', () => {
+    const listens = [...source.matchAll(/\.listen\s*\(([^)]*)\)/g)].map((m) => m[1] as string);
+    assert.equal(listens.length, 1);
+    assert.match(listens[0] as string, /^0,\s*'127\.0\.0\.1'/);
+    assert.equal(/\bfetch\s*\(|detached\s*:\s*true|\.unref\s*\(/.test(source), false);
+  });
+});
+
+// The resolver option disables the address check, so only tests may pass it; a production call site or a forwarding change fails here.
+describe("the proxy's resolver seam stays out of production", () => {
+  const proxySource = readFileSync(ALLOWLIST_PROXY, 'utf8');
+  const classStart = proxySource.indexOf('class AllowlistEgressProxy');
+  const classBody = classStart === -1 ? '' : proxySource.slice(classStart);
+
+  it('no production file other than the proxy module names startAllowlistProxy (resolver seam, call sites)', () => {
+    const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== ALLOWLIST_PROXY);
+    assert.ok(files.length > 20, 'the scan found the source tree');
+    assert.deepEqual(files.filter((f) => /\bstartAllowlistProxy\b/.test(readFileSync(f, 'utf8'))), []);
+  });
+
+  it('names startAllowlistProxy twice in the proxy module: its exported definition and one call in the composed proxy (resolver seam, one call)', () => {
+    assert.ok(classStart > -1, 'the composed proxy class is still there');
+    assert.equal((proxySource.match(/\bstartAllowlistProxy\b/g) ?? []).length, 2);
+    assert.match(proxySource, /export async function startAllowlistProxy\b/);
+    assert.equal((classBody.match(/\bstartAllowlistProxy\b/g) ?? []).length, 1, 'the call sits in the class body');
+  });
+
+  it('the composed proxy forwards allow and onAttempt by name: no resolver token, no spread or rest, the input not handed over whole (resolver seam, forwarding)', () => {
+    assert.ok(classStart > -1, 'the composed proxy class is still there');
+    assert.equal(/resolve/i.test(classBody), false, 'no resolver token in the class body');
+    assert.equal(classBody.includes('...'), false, 'no spread or rest in the class body');
+    assert.equal(/startAllowlistProxy\s*\(\s*input\b/.test(classBody), false, 'the input object is not passed to the call whole');
   });
 });
 

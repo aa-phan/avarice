@@ -1,0 +1,26 @@
+{
+  "command": "node --test test/fault/run-discard-retry.test.ts",
+  "ranAgainst": "the plan base f323895 (src unchanged) plus the new test/fault/run-discard-retry.test.ts and the extended test/helpers/fake-run-host.ts (crash, timeoutMs, denyLoop, toolCallFlood, observe, perAttempt)",
+  "exitCode": 1,
+  "reason": "at the plan base a crashed or timed-out unit ends the run in blocked_on_decision (decision) after one attempt: there is no discard-attempt checkpoint, no discard step, no `discarded` attempt outcome, no `con16-retry` attempt and no second invocation; an invocations budget that is spent is not named",
+  "failingFiles": ["test/fault/run-discard-retry.test.ts"],
+  "failingTests": [
+    "the retry reaches ready_for_review: attempt 1 is `discarded`, attempt 2 is the retry and is handed off",
+    "the discard step names what was restored and what was removed, with `sideEffect: none` and the basis for it",
+    "the retry begins from the snapshot content: the changed file has its bytes again, the added file is gone, what was there before is untouched",
+    "commits only the retry's fix, and the crashed unit's extra file is in no commit and not in the clone",
+    "orders the checkpoints classify, discard-attempt, launch:run, and records the discard before the retry launches (ordering edge)",
+    "charges both invocations to the budget and ends attempt 1 with an attempt.ended event",
+    "attempt 1 classifies inconclusive with timedOut set, is discarded, and the retry reaches ready_for_review",
+    "charges the killed invocation its reservation (a kill's cost is not known) and keeps it charged",
+    "ends blocked_on_decision (decision) with one repeated_failure decision naming both attempts and their outcome kinds",
+    "keeps the budgets already charged: 2 invocations and the cost both attempts reported",
+    "an invocations budget with no room left for a second invocation blocks (budget_exhausted) without discarding anything",
+    "notes.txt is byte-identical when the retry starts and when the run ends"
+  ],
+  "passingAtBase": [
+    "a crash after the clone HEAD moved is not discarded: blocked (enforcement_failure), one attempt, no discard step",
+    "a unit that made no progress, a paused one and a host error each end in a decision after one attempt"
+  ],
+  "summary": "14 tests, 2 pass, 12 fail at the base; the two passing ones pin behaviour that must not change (a moved HEAD and a unit that made no progress, paused or hit a host error are never retried)"
+}

@@ -1,0 +1,24 @@
+{
+  "command": "node --test test/integration/run-status.test.ts test/unit/render.test.ts",
+  "ranAgainst": "the Task 1 commit bab0b9f (git archive extracted to /tmp/avarice-15/base2) plus the Task 2 tests added to run-status.test.ts and render.test.ts",
+  "exitCode": 1,
+  "reason": "at the Task 1 commit there is no `inbox` command (it is not in COMMANDS, so the dispatcher answers `not available in this build`) and renderInbox printed the issue as a table column that the width cut to a few characters; the interrupted and blocked status behaviour already existed from Task 1 (interruptedOf, orderRuns), so those tests pin it and pass",
+  "failingFiles": ["test/integration/run-status.test.ts", "test/unit/render.test.ts"],
+  "failingTests": [
+    "inbox lists the decision with its class, urgency and issue, and the ready run under reviews",
+    "inbox --json gives { decisions, reviews }",
+    "an issue with an escape sequence is printed without it, and a long one is cut to the terminal width",
+    "prints `inbox: 0 open decisions, 0 reviews` and exits 0",
+    "refuses an argument it does not take, with exit 64 and nothing written",
+    "prints a decision row and its issue on one line cut to the width, with line breaks made spaces",
+    "strips control characters from an issue"
+  ],
+  "passingAtBase": [
+    "killed at mid-verify: paused (verification interrupted), at verify:checks",
+    "killed at after-checkpoint:launch:run: paused (supervisor interrupted), at launch:run",
+    "a run whose lease is still live is not shown as interrupted",
+    "status lists the blocked run first, with its reason and the open decision",
+    "the run detail and run list unit tests (interrupted wording, blocked decisions, ordering, control characters)"
+  ],
+  "summary": "60 tests, 53 pass, 7 fail at the Task 1 commit"
+}

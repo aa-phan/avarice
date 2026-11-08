@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/evidence.test.ts\" \"test/unit/gates.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/evidence.ts and src/domain/gates.ts do not exist yet",
+  "failingFiles": ["test/unit/evidence.test.ts", "test/unit/gates.test.ts"],
+  "failingTests": [],
+  "summary": "Both test files fail to load with ERR_MODULE_NOT_FOUND on the missing domain modules (not ok 1, not ok 2).",
+  "outputHead": "TAP version 13\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/domain/evidence.ts' imported from .../test/unit/evidence.test.ts\n# Subtest: test/unit/evidence.test.ts\nnot ok 1 - test/unit/evidence.test.ts\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/domain/gates.ts' imported from .../test/unit/gates.test.ts\nnot ok 2 - test/unit/gates.test.ts"
+}

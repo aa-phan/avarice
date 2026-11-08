@@ -1,0 +1,44 @@
+{
+  "command": "node --test \"test/integration/run-ledger.test.ts\"",
+  "exitCode": 1,
+  "reason": "The Ledger port and SqliteLedger have no recordRunAttempt, endRunAttempt, listRunAttempts, recordEvidence, listEvidence, recordGateResult, listGateResults, upsertWorkItem, transitionWorkItem, listWorkItems, openDecision, listDecisions, recordCheckValidation, getCheckValidations or listHookReads yet, so each call throws TypeError (not a function). tests 51, pass 28 (Tasks 1 and 2), fail 23.",
+  "failingSuites": {
+    "run attempts": [
+      "gives att_ IDs with ordinals 1 and 2, records an event with run and attempt, and ends an attempt exactly once",
+      "refuses an unknown run, an unknown attempt, an empty reason or outcome, and an onboarding carrier"
+    ],
+    "evidence": [
+      "records every field of the schema and reads it back through the run, oldest first, with an ev_ ID",
+      "stores optional fields as null, and a dirty tree as clean false",
+      "accepts each of the six statuses and refuses any other as invalid",
+      "refuses an independence outside deterministic, external, model-review, and accepts those three",
+      "refuses an unknown attempt, an attempt of an onboarding carrier, a non-boolean clean and a non-object environment",
+      "is insert-only: an interrupted check is marked by a new inconclusive row, and the database refuses an UPDATE or DELETE (T-02-06)",
+      "keeps evidence of different runs apart"
+    ],
+    "gate results": [
+      "round trips failures_json, passed and the revision, oldest first, and records an event with the run",
+      "refuses an empty gate name, a non-boolean passed and an unknown run, and is insert-only"
+    ],
+    "work items": [
+      "upserts an item at ready, keeps its state on a second upsert, and lists them",
+      "applies assertItemTransition, appends a work_item.transition event with the run, and counts delegations as attempts",
+      "refuses an invalid edge as invalid, a stale fence as conflict and an unknown item or run as not_found, writing nothing",
+      "lets any non-done item move to blocked_on_decision and back to ready, and nothing leave done",
+      "refuses a malformed item: empty ID, unknown type, unknown run"
+    ],
+    "decisions": [
+      "opens a decision in state open with a dec_ ID, an event with the run, and filters by run and state",
+      "accepts exactly the eight documented classes and the two urgencies, and refuses anything else",
+      "refuses a filter state outside open, answered, stale, withdrawn"
+    ],
+    "check validations": [
+      "round trips one row per check name and filters by project, revision and spec digest",
+      "never overwrites a verdict: a second record for the same key is a conflict that leaves the first",
+      "refuses an empty name or verdict"
+    ],
+    "hook reads": [
+      "lists the rows the hook wrote with its own SQL, by seq, for one invocation"
+    ]
+  }
+}

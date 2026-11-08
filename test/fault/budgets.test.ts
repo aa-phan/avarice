@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { reserveInvocation, settleInvocation } from '../../src/app/budget.ts';
 import { completeInvocation, prepareInvocation } from '../../src/app/invocation.ts';
@@ -380,7 +381,7 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     headBefore: 'a'.repeat(40),
     headAfter: 'a'.repeat(40),
     ...over,
-    details: { exitCode: null, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, ...over.details },
+    details: { exitCode: null, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: false, ...over.details },
   });
 
   // Prepares one more map invocation on a finished onboarding and returns it with the run's id.
@@ -492,9 +493,42 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     await inProcess(roots, repo, {}, (deps, onboardingId) => {
       const { prepared, runId } = prepare(deps, onboardingId);
       const before = costUsed(deps, runId);
-      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.12 }))).ok);
+      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.12, details: { exitCode: 0, resultSeen: true } }))).ok);
       assert.ok(Math.abs(costUsed(deps, runId) - (before + 0.12)) < 1e-9);
     });
+  });
+
+  // WR-04: a host that ends without a result event reports no cost, so what it cost is unknown, as for a kill: it is charged its reservation.
+  it('charges the reservation when the host ended without a result event, whether it exited non-zero or exited 0 (R-WR-04)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      for (const exitCode of [1, 0]) {
+        const { prepared, runId } = prepare(deps, onboardingId);
+        const before = costUsed(deps, runId);
+        const done = completeInvocation(deps, prepared, ok(outcomeOf({ costUsd: 0, details: { exitCode, signal: null, timedOut: false, resultSeen: false } })));
+        assert.ok(done.ok);
+        assert.ok(Math.abs(costUsed(deps, runId) - (before + 3)) < 1e-9, `exit ${exitCode} charged ${costUsed(deps, runId) - before}`);
+      }
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 2").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    for (const data of finished) {
+      assert.equal(data['costUsd'], 0, 'the reported cost stays visible');
+      assert.equal(data['costChargedUsd'], 3);
+      assert.equal(data['costBasis'], 'reservation');
+    }
+  });
+
+  it('charges the reported cost, with basis reported, when the host sent a result event and exited 0 (R-WR-04)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const { prepared, runId } = prepare(deps, onboardingId);
+      const before = costUsed(deps, runId);
+      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.4, details: { exitCode: 0, resultSeen: true } }))).ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 0.4)) < 1e-9);
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 1").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    assert.equal(finished[0]?.['costChargedUsd'], 0.4);
+    assert.equal(finished[0]?.['costBasis'], 'reported');
   });
 
   it('charges the reservation when the host error says the process may have run (a timeout or an unknown cancel), and nothing when it never started', async () => {
@@ -558,6 +592,131 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
       assert.ok(second.ok);
       assert.ok(Math.abs(costUsed(deps, runId) - (before + 1.5)) < 1e-9);
       assert.deepEqual(second.value, { granted: false, budget: 'costUsd' });
+    });
+  });
+});
+
+// WR-05: the charges of one settlement, and of one orphan conversion with its warning event, are written together. A failure injected at the
+// cost write (a trigger on the store, added through a second connection) must leave every budget row and the event log as they were.
+describe('budget charges are one transaction (R-WR-05)', () => {
+  const dbPath = (roots: CliRoots): string => join(roots.AVARICE_DATA_ROOT, 'state.db');
+
+  // Runs `fn` with every UPDATE of the costUsd budget row aborting, and drops the trigger afterwards.
+  function withCostWriteFailing<T>(roots: CliRoots, fn: () => T): T {
+    const side = new DatabaseSync(dbPath(roots));
+    side.exec("CREATE TRIGGER inject_cost_failure BEFORE UPDATE ON budgets WHEN NEW.name = 'costUsd' BEGIN SELECT RAISE(ABORT, 'injected'); END");
+    try {
+      return fn();
+    } finally {
+      side.exec('DROP TRIGGER inject_cost_failure');
+      side.close();
+    }
+  }
+
+  const budgetsOfRun = (deps: AppDeps, runId: string): BudgetRow[] => {
+    const found = deps.ledger.getBudgets(runId);
+    assert.ok(found.ok);
+    return found.value;
+  };
+  const named = (all: BudgetRow[], name: string): BudgetRow => all.find((b) => b.name === name) as BudgetRow;
+  const orphanEvents = (roots: CliRoots): number => rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'invocation.orphan-charged'")[0]?.n ?? 0;
+
+  it('a failure at the cost write leaves a settlement uncharged as a whole, and a retry charges each amount once', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      assert.ok(row.ok);
+      const reserved = reserveInvocation(deps, row.value, 'map');
+      assert.ok(reserved.ok && reserved.value.granted);
+      const { reservation } = reserved.value;
+      const runId = reservation.runId;
+      const before = budgetsOfRun(deps, runId);
+
+      const failed = withCostWriteFailing(roots, () => settleInvocation(deps, reservation, { durationMs: 1234, costUsd: 0.4 }));
+      assert.equal(failed.ok, false, 'the injected failure is reported');
+      assert.deepEqual(budgetsOfRun(deps, runId), before, 'no budget row moved: not the invocation, not the wall clock, not the cost');
+
+      const retried = settleInvocation(deps, reservation, { durationMs: 1234, costUsd: 0.4 });
+      assert.ok(retried.ok);
+      const after = budgetsOfRun(deps, runId);
+      assert.equal(named(after, 'invocations').used, named(before, 'invocations').used + 1);
+      assert.equal(named(after, 'invocations').reserved, named(before, 'invocations').reserved - 1);
+      assert.equal(named(after, 'wallClockMs').used, named(before, 'wallClockMs').used + 1234);
+      assert.ok(Math.abs(named(after, 'costUsd').used - (named(before, 'costUsd').used + 0.4)) < 1e-9);
+    });
+  });
+
+  it('a failure at the cost write leaves an orphan conversion and its event unwritten, and a retry charges the orphan once', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const row = deps.ledger.getOnboarding(onboardingId);
+      assert.ok(row.ok);
+      // The first holder never settles: its reservation is the orphan the next reservation converts.
+      const orphan = reserveInvocation(deps, row.value, 'map');
+      assert.ok(orphan.ok && orphan.value.granted);
+      const runId = orphan.value.reservation.runId;
+      const before = budgetsOfRun(deps, runId);
+      assert.equal(named(before, 'invocations').reserved, 1);
+      const eventsBefore = orphanEvents(roots);
+
+      const failed = withCostWriteFailing(roots, () => reserveInvocation(deps, row.value, 'map'));
+      assert.equal(failed.ok, false, 'the injected failure is reported');
+      assert.deepEqual(budgetsOfRun(deps, runId), before, 'the orphan is still reserved and nothing was charged');
+      assert.equal(orphanEvents(roots), eventsBefore, 'no orphan-charged event was written');
+
+      const retried = reserveInvocation(deps, row.value, 'map');
+      assert.ok(retried.ok && retried.value.granted);
+      const after = budgetsOfRun(deps, runId);
+      assert.equal(named(after, 'invocations').used, named(before, 'invocations').used + 1, 'one invocation charged for the orphan');
+      assert.ok(Math.abs(named(after, 'costUsd').used - (named(before, 'costUsd').used + 3)) < 1e-9, 'the orphan reservation cost charged once');
+      assert.equal(orphanEvents(roots), eventsBefore + 1, 'one event');
+    });
+  });
+
+  it('settleBudgets commits two charges and an event together', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const before = budgetsOfRun(deps, runId);
+      const eventsBefore = rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n ?? 0;
+      const settled = deps.ledger.settleBudgets(
+        runId,
+        [
+          { name: 'toolCalls', amount: 5, fromReserved: false },
+          { name: 'costUsd', amount: 0.5, fromReserved: false },
+        ],
+        { type: 'budget.test-settled', runId, data: { toolCalls: 5 }, nowMs: 1 },
+      );
+      assert.ok(settled.ok);
+      assert.equal(named(settled.value, 'toolCalls').used, named(before, 'toolCalls').used + 5);
+      assert.ok(Math.abs(named(settled.value, 'costUsd').used - (named(before, 'costUsd').used + 0.5)) < 1e-9);
+      assert.deepEqual(settled.value, budgetsOfRun(deps, runId), 'the returned rows are the stored ones');
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n, eventsBefore + 1);
+    });
+  });
+
+  it('settleBudgets rolls back every charge and the event when a reserved charge is larger than `reserved`', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const contract = deps.ledger.getContract(onboardingId);
+      assert.ok(contract.ok && contract.value !== null);
+      const runId = contract.value.runId;
+      const before = budgetsOfRun(deps, runId);
+      assert.equal(named(before, 'invocations').reserved, 0, 'nothing is reserved');
+      const failed = deps.ledger.settleBudgets(
+        runId,
+        [
+          { name: 'toolCalls', amount: 5, fromReserved: false },
+          { name: 'invocations', amount: 1, fromReserved: true },
+        ],
+        { type: 'budget.test-settled', runId, data: {}, nowMs: 1 },
+      );
+      assert.equal(failed.ok, false);
+      if (!failed.ok) assert.equal(failed.error.kind, 'conflict');
+      assert.deepEqual(budgetsOfRun(deps, runId), before, 'the direct charge made before the conflict is rolled back');
+      assert.equal(rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'budget.test-settled'")[0]?.n, 0);
     });
   });
 });

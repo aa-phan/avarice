@@ -150,7 +150,7 @@ export class SandboxedExecutor implements CommandExecutor {
     } catch {
       return invalid('cwd', 'cannot be resolved');
     }
-    const profile = buildSeatbeltProfile({ writePaths: cmd.writePaths, denyReadPaths: cmd.denyReadPaths, protectedPaths: [cwdReal] });
+    const profile = buildSeatbeltProfile({ writePaths: cmd.writePaths, denyReadPaths: cmd.denyReadPaths, ...(cmd.allowReadPaths === undefined ? {} : { allowReadPaths: cmd.allowReadPaths }), protectedPaths: [cwdReal], ...(cmd.allowLoopbackPorts === undefined ? {} : { allowLoopbackPorts: cmd.allowLoopbackPorts }) });
     if (!profile.ok) return Promise.resolve(profile);
     return this.#spawn(cmd, profile.value, signal);
   }

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: the 26-document specification package was ingested on 2026-11-01; Phase 1 (contained onboarding of one repository) completed on 2026-11-05, and Phase 2 (contained unattended run of one work item) is next.
+AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: the 26-document specification package was ingested on 2026-11-01; Phase 1 (contained onboarding of one repository) completed on 2026-11-05, Phase 2 (contained unattended run of one work item) completed on 2026-11-08, and Phase 3 (decisions, independent work and amendments) is next.
 
 ## Core Value
 
@@ -15,12 +15,12 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 ### Validated
 
 - ✓ Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (ONB-1/2/3/4/5/7/8/9/12/13/14, FR-20, SEC-5, NFR-2) — Phase 1 (verified 2026-11-04: `~/aa-phan-portfolio-v2` active with 1010 code and 24 document nodes; UAT complete 2026-11-05, 160 of 163 passed, the knowledge-pass gap G-01-154 closed by plans 01-25 and 01-26, tests 10 and 13 deferred to backlog 999.2 and 999.1)
+- ✓ A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (RC-1..5, CON-1/2/3/5/6/7/8/9/13/14/16, AUT-7..9, FR-1/2/4/5/6/7/11/27, NFR-1/3/5/6/9, OPS-2/7, ONB-10) — Phase 2 (35 plans; re-verified 2026-11-08 after gap-closure round 02-27..02-35, 8/8 success criteria; gaps G-02-H2 and G-02-H4 closed; security 122 threats, 0 open; UAT complete 2026-11-08, tests 4 and 5 deferred to backlog 999.4 and 999.5)
 
 ### Active
 
 Milestone v1.0 Contained Kernel (Phases 1-3, first milestone, slices 0-2):
 
-- [ ] A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (Phase 2: RC-1..5, CON, AUT-7..9, FR-1/2/4/5/6/7/11, NFR, OPS-2, ONB-10)
 - [ ] Decision records, independent work around an open decision, validated answers, contract amendments, local notification (Phase 3: AUT-1..6/10/12/16, RC-6..8, CON-15)
 
 Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
@@ -98,9 +98,14 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Shell `grep` is not an admitted read command; contained agents search through the host Grep tool, whose path the hook judges | Modelling grep options failed twice (P-3); the verdict must not depend on which grep binary the Bash tool runs | Phase 1 quick task 261104-l3t, 2026-11-04 |
 | Knowledge coverage is judged per manifest document on the merged graph; below half the documents covered is validation-failed, and the record states documentsExpected and dropped.unread | A live run lost most documents while reporting dropped 0 (UAT G-01-154); chunk shape is not evidence of coverage | Phase 1 plan 01-25, 2026-11-05 |
 | The knowledge agent gets absolute readPath and writePath as data and uses them verbatim; the live exit gate requires zero unread documents | The model composing paths dropped the .avarice-knowledge/ segment in 2 of 4 live runs | Phase 1 plans 01-25 and 01-26, 2026-11-05 |
+| The hook also matches the path part of a git object name (`<rev>:<path>`, `:<path>`, `:N:<path>`) lexically against the secret globs; `git show <rev>:.env` is denied even when that revision stores a symlink there (deliberate over-deny) | Git reads object names from the tree or index, not the working copy, so a working-copy symlink hid a secret from history (G-02-H2) | Phase 2 plan 02-27, 2026-11-08 |
+| One shared credential deny list (12 home-relative locations) feeds all five sandbox deny sites; check output is redacted before storage; no allow-list inversion | The sandboxes denied only `~/.ssh`, `~/.aws` and `~/.config/gh`; node and npm need too many system paths for an allow list | Phase 2 plan 02-33, 2026-11-08 |
+| Registry hosts that can only mean a local target are refused in the conventions, and the install proxy resolves each host, refuses any non-public address and dials the vetted address; private-network registries are unsupported | The proxy dialled loopback, private and metadata hosts named in conventions (R-WR-02); dialling the vetted address also closes DNS rebinding | Phase 2 plan 02-34, 2026-11-08 (owner confirmation deferred to backlog 999.5) |
+| Budget settlement and orphan conversion each write in one ledger transaction; an invocation that ends with no result event is charged at least its reservation | Separate writes lost cost on a kill between them (R-WR-05); a crash with no result was charged 0 (R-WR-04); the zero-spend fast-failure case is deferred to backlog 999.4 | Phase 2 plan 02-32, 2026-11-08 |
+| A supervisor that loses its run lease aborts the unit's host; an operator SIGTERM does not (accepted threat T-02-108) | A lost lease left the unit running and spending until the new holder reaped it (R-IN-06); a SIGTERM abort needs its own design | Phase 2 plan 02-30, 2026-11-08 |
 
 ---
-*Last updated: 2026-11-05 after Phase 1 transition*
+*Last updated: 2026-11-08 after Phase 2 transition*
 
 ## Evolution
 

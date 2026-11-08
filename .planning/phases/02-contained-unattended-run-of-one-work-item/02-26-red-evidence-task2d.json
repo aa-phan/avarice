@@ -1,0 +1,17 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "commit 31220ff plus `git show \":^src/a.ts\"` and `git show \":^\"` in the unresolvable-colon-words unit test, and the form `git show :^src/a.ts` in the refused-forms-are-real-leaks describe",
+  "exitCode": 1,
+  "reason": "Found by the fresh documentation review (round 5): `:^` is pathspec negation in git, a synonym of `:!`. checkGitObjects refused a path part starting with `/`, `!` or `(` and judged `^src/a.ts` as a plain path, so `git show :^src/a.ts` was admitted; git reads it as an exclude pathspec and shows HEAD's patch for every other path. Run: 198 tests, 196 pass, 2 fail (the unit test and the integration leak test; the hook assertion fails first in both).",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object",
+    "refused git forms are real leaks > git show :^src/a.ts: denied shell-git-object, and git does print the sentinel"
+  ],
+  "passingAtBase": ["all 196 other tests of the two files"],
+  "semanticAssessment": "Both failures are on the planned assertion for the intended reason: the hook allows a form the plan refuses. The tests executed on the sentinel-bearing repository; no failure is a syntax, import or fixture fault. Whether real git prints the sentinel for the form is asserted in the leak test after the hook assertion and is observed in the GREEN run.",
+  "summary": "198 tests, 196 pass, 2 fail."
+}

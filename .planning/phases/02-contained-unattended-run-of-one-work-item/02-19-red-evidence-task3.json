@@ -1,0 +1,17 @@
+{
+  "command": "SHELL_TEST_WAIT_MS=3000 node --test test/integration/shell-tty.test.ts test/unit/shell.test.ts",
+  "ranAgainst": "the task 2 commit 1a8aa14 (a command line without Tab completion, without history and without src/cli/shell/history.ts) plus the new completion and history cases of test/unit/shell.test.ts, the new test/integration/shell-tty.test.ts and test/helpers/pty-drive.py",
+  "exitCode": 1,
+  "reason": "test/unit/shell.test.ts imports src/cli/shell/history.ts and completeCommand from line-editor.ts, which do not exist at the base, so the file fails to load; on a real pseudo-terminal the driven session reaches the command-line prompt, types `stat` and Tab, and the line stays `stat` because Tab is not handled",
+  "failingFiles": ["test/unit/shell.test.ts", "test/integration/shell-tty.test.ts"],
+  "failingTests": [
+    "every case of test/unit/shell.test.ts (the file does not load), including the completion cases, the history file cases (0600, cap of 1000, control characters) and the up-arrow recall across two shells",
+    "takes real key bytes: a number runs status, `:` opens the command line, Tab completes, Enter runs, Ctrl-C cancels, and `q` alone ends it with 0"
+  ],
+  "passingAtBase": [
+    "under `script`: opens on a terminal, draws the home view on the alternate screen, and exits 0 with the screen restored",
+    "the same entry without a pseudo-terminal prints usage and exits 64",
+    "driven terminal: Enter on the Quit item leaves too, and a number that is not an item changes nothing"
+  ],
+  "summary": "integration file: 4 tests, 3 pass, 1 fails at the Tab step; unit file fails to load. Finding recorded in the SUMMARY: macOS script cannot deliver timed keystrokes (it reads its input file at once and sends end-of-file), so the plan's script harness only proves open and clean exit; the key handling is proven on the python3 pty driver"
+}

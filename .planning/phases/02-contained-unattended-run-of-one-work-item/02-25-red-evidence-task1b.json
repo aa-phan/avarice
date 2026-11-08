@@ -1,0 +1,22 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/live-attended-verdicts.test.ts",
+  "ranAgainst": "commit df524e3 plus the new unit cases for an owner-invalidated record, the old-build signals and the session environment, and a skeleton in test/helpers/live-attended.ts: the AttendedRecord and InvalidationMarker types, effectiveLines that only drops markers, oldBuildSignals that returns [], and a sessionEnv that is unchanged",
+  "exitCode": 1,
+  "reason": "Six leaf tests fail on their assertions: effectiveLines keeps the line a marker names; caseSkipReason still says a judged FAIL is never re-run after the owner's invalidation marker; behaviorVerdicts still reads the invalidated FAIL as a FAIL; the forecast still counts the invalidated case as run; oldBuildSignals returns no signal for the schema-version conflict text; the session environment does not set SHELL=/bin/bash.",
+  "failingFiles": [
+    "test/unit/live-attended-verdicts.test.ts"
+  ],
+  "failingTests": [
+    "an invalidated record > stops counting: effectiveLines drops the line the marker names and keeps the others",
+    "an invalidated record > lets the case run once more: the no-second-spend skip honors the marker",
+    "an invalidated record > is not a verdict: behaviorVerdicts reads the case as not run until the re-run, then by the new line",
+    "oldBuildSignals > lists the result text of a call that shows the store is newer than the build that ran",
+    "the session environment > runs the host with SHELL=/bin/bash, so its Bash tool never loads the owner shell aliases",
+    "the spend gate and the forecast > keeps an invalidated session in the recorded spend and the mean, and counts its case as still to run"
+  ],
+  "passingAtBase": [
+    "65 of 71 tests pass: the 60 earlier cases plus the cases that hold without the feature (a marker for another time or case drops nothing; a judged FAIL after a marker is never re-run; oldBuildSignals lists nothing for an ordinary result)"
+  ],
+  "semanticAssessment": "The target tests executed and the file loaded (71 tests discovered). Each of the six failures is an assertion on the planned behavior (a record kept that the owner invalidated, a missing signal, a missing environment variable), not a load or fixture fault. The passing new cases are the negative cases that the skeleton satisfies by construction and are not evidence of the feature.",
+  "summary": "Skeleton run: 71 tests, 65 pass, 6 fail on assertions."
+}

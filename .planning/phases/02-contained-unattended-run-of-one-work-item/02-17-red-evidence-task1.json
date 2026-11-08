@@ -1,0 +1,22 @@
+{
+  "command": "node --test test/integration/run-resume.test.ts",
+  "ranAgainst": "the plan base 5c50c9f (src behaviour unchanged; RunWorkspace.headTrailers added) plus the new test/integration/run-resume.test.ts and the run helpers of test/helpers/fault-run.ts and test/helpers/fake-run-host.ts",
+  "exitCode": 1,
+  "reason": "at the plan base `avarice resume run_...` takes the Phase 1 path and looks the ID up as an onboarding (`not found: onboarding run_...`, exit 64): no supervisor is spawned, no prelude runs, the verifying run stays verifying with no paused transition and no inconclusive evidence, and nothing is re-verified or handed off",
+  "failingFiles": ["test/integration/run-resume.test.ts"],
+  "failingTests": [
+    "refuses while another supervisor holds a live lease: exit 3, `lease must expire first`, nothing changed",
+    "resume prints where it continues from and the interrupted attempt, then the run is ready_for_review (exit 0)",
+    "the ledger moves verifying -> paused (verification interrupted) -> verifying -> ready_for_review",
+    "inserts an inconclusive row for the check that had no completed row, none for the one that had, then re-verifies both at the same commit",
+    "hands off the commit that was verified, once, and the run shows as ready with its final evidence passed",
+    "a run in a stop state is reported without taking the lease"
+  ],
+  "passingAtBase": [
+    "`start --wait` reports the interrupted run and the way to continue, and the ledger holds the interrupted attempt",
+    "status shows it as paused (verification interrupted), never as ready_for_review",
+    "an unknown run ID is a usage error (exit 64)",
+    "an onb_ ID keeps its Phase 1 behaviour: an unknown onboarding is a usage error from the onboarding path"
+  ],
+  "summary": "10 tests, 4 pass, 6 fail at the base; the passing ones pin behaviour that must not change (plan 02-15's interrupted status, and the Phase 1 onboarding path)"
+}

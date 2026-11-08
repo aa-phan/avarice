@@ -1,0 +1,5 @@
+- Whether the validation sandbox (no read re-allowance, `src/app/check-validation.ts:90`) denies a check its own clone under the default roots: read the seatbelt profile builder and the executor call; did not execute a validation.
+- Whether installers other than npm honour `npm_config_ignore_scripts`, and whether an install argument can override it: checked only the environment set in `src/app/checks.ts:364`; no installer was run.
+- Which parts of `src/app/run-stages/item.ts` were not read: covered in part. Read the gate, commit and routing-entry portions (lines 145-195, 236-263, 535-563, 685-871); the launch, prompt, classification internals, discard and retry portions were not read (owned by runs.md).
+- `src/adapters/git/run-workspace.ts` is covered in part: read in full, but only the revision, status, snapshot, diff and read behavior is documented; clone, discard, commit and fetch behavior belongs to runs.md.
+- Whether the repository ignores the GSD configuration file in a real run, which decides whether baseline rows carry `git:` or `tree:` revisions: not checked at runtime.

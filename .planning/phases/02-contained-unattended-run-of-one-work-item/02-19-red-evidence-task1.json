@@ -1,0 +1,12 @@
+{
+  "command": "node --test test/unit/shell.test.ts test/unit/cli-args.test.ts",
+  "ranAgainst": "the plan base a3d388d (no src/cli/shell/ directory, main.ts without the no-argument shell branch) plus the new test/unit/shell.test.ts, test/helpers/shell-streams.ts and the added cases of test/unit/cli-args.test.ts",
+  "exitCode": 1,
+  "reason": "test/unit/shell.test.ts imports src/cli/shell/home-view.ts, line-editor.ts and shell.ts, none of which exist at the base, so the file fails to load with ERR_MODULE_NOT_FOUND and none of its cases (home view, refusal cases, command line, TERM=dumb, NO_COLOR, resize, unavailable store, renderHome, line editor) can run",
+  "failingFiles": ["test/unit/shell.test.ts"],
+  "failingTests": ["every case of test/unit/shell.test.ts (the file does not load)"],
+  "passingAtBase": [
+    "the two added cases of test/unit/cli-args.test.ts: bare `avarice` without terminals already prints usage and exits 64, and `avarice <command>` and `--help` are one-shot; they guard the refusal path the shell branch must keep and so have no red run"
+  ],
+  "summary": "30 tests reported, 29 pass (the existing cli-args cases and the two added guards), 1 file fails to load"
+}

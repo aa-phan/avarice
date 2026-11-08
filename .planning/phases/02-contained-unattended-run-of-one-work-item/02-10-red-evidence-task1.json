@@ -1,0 +1,13 @@
+{
+  "command": "node --test --test-reporter=tap \"test/integration/run-start.test.ts\"",
+  "exitCode": 1,
+  "reason": "`avarice start` does not exist: the dispatcher answers \"unknown command 'start'\" (exit 64) before any run is stored, and the CLI command list is init, repo, onboard, status, resume, context",
+  "failingFiles": ["test/integration/run-start.test.ts"],
+  "failingTests": [
+    "prints the summary, stores run, contract, budgets and work item, and writes the contract 0600",
+    "does not touch the repository, and a subdirectory of it resolves the same project",
+    "is authorization by running the command: no stdin read, no prompt (RC-3)"
+  ],
+  "summary": "the fixture (scratch GSD repository onboarded to active through the test CLI with the fake host, conventions committed after the pin) works; every test fails at the start invocation with exit 64 unknown command",
+  "outputHead": "avarice: unknown command 'start'\nusage: avarice <command> [options]\n\ncommands:\n  init\n  repo\n  onboard\n  status\n  resume\n  context\n\n64 !== 0"
+}

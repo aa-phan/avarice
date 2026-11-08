@@ -1,0 +1,16 @@
+{
+  "command": "node --test test/fault/run-discard-stale-fence.test.ts",
+  "ranAgainst": "the Task 2 GREEN commit 6d6b2bf plus the new `superseded after the checkpoint, then resumed` describe (the first run of that describe)",
+  "exitCode": 0,
+  "reason": "passingAtBase: this is a characterization of the documented unfenced-writes rule plus convergence, so no RED is expected and none occurred. A supervisor superseded after its `discard-attempt` checkpoint (the takeover fires inside the workspace restore call) restores the clone, its work item transition is refused on the fence (lease fence 1 vs 2), the run row's state and version, the item state (`delegated`) and the other holder's lease row are unchanged, and the only rows written after the takeover are: one `discard` run step, the attempt's end columns (ended_at, outcome) and one `attempt.ended` event. No row was written after the refused transition. After the other holder released its lease, a resume reached ready_for_review with attempts `discarded`, `handed-off` (no third attempt) and a normalized result equal to the uninterrupted crash-and-retry run.",
+  "failingFiles": [],
+  "failingTests": [],
+  "passingAtBase": [
+    "superseded after the checkpoint, then resumed > commits the checkpoint and restores the clone: the pin bytes are back and the crashed unit's extra file is gone",
+    "superseded after the checkpoint, then resumed > refuses the work item transition on the fence, and leaves the run, the item and the other holder's lease as they were",
+    "superseded after the checkpoint, then resumed > writes, after the takeover, only the unfenced rows the documented rule allows: the `discard` step, the attempt's end and its event",
+    "superseded after the checkpoint, then resumed > converges: once the other holder lets go, a resume reaches ready_for_review as an uninterrupted crash-and-retry run does (final discard lists are reported)"
+  ],
+  "semanticAssessment": "Not a RED: the plan expected green here. The assertions executed (the diff names the three tables and the exact rows), so a further unfenced write by the superseded supervisor would fail the test. Observation worth recording: the resumed supervisor repeats the discard under the same attempt ordinal, and the run step is keyed by (run, step, attempt), so its record replaces the stale supervisor's. The final `discard` step therefore lists restored [], removed [], ignoredLeft []: the paths the stale supervisor restored are no longer in the step record (the attempt's end and its event keep the fact that the attempt was discarded).",
+  "summary": "21 tests in the file, 21 pass on the first run of the new describe. Final discard step lists after convergence: restored [], removed [], ignoredLeft []."
+}

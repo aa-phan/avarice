@@ -13,10 +13,14 @@ import type { Db } from '../adapters/sqlite/db.ts';
 import { migrate, pendingMigrations } from '../adapters/sqlite/migrate.ts';
 import type { Migration } from '../adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../adapters/sqlite/migrations/0001-initial.ts';
+import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
 import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
+import { GitRunSource } from '../adapters/git/run-source.ts';
+import { CloneRunWorkspace } from '../adapters/git/run-workspace.ts';
+import { AllowlistEgressProxy } from '../adapters/exec/allowlist-proxy.ts';
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
 import { GsdGraphContext } from '../adapters/context/gsd-graph.ts';
 import { GsdIntelContext } from '../adapters/context/gsd-intel.ts';
@@ -33,11 +37,12 @@ import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
+import type { EgressProxy } from '../ports/egress-proxy.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { AppDeps, Clock, GsdProblem, IdSource } from '../app/deps.ts';
 
-export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001];
+export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002];
 export const EXIT_INTERNAL = 70;
 
 export interface DepsOverrides {
@@ -49,6 +54,9 @@ export interface DepsOverrides {
   // Replaces the sandboxed executor. Only test entries pass this (a test that already runs inside a sandbox,
   // where `sandbox-exec` cannot nest); bin/avarice.ts never does, so production always runs SandboxedExecutor.
   executor?: CommandExecutor;
+  // Replaces the allowlisting egress proxy. Only test entries pass this (a test whose registry is a local server on a port the conventions
+  // cannot name); bin/avarice.ts never does, so production always runs the in-repo allowlist proxy.
+  egress?: EgressProxy;
 }
 
 export interface CreateDepsOptions {
@@ -67,7 +75,7 @@ export interface Composition {
 export type CompositionResult = { ok: true; value: Composition } | { ok: false; code: number; message: string };
 
 function failure(what: string, message: string): CompositionResult {
-  return { ok: false, code: EXIT_INTERNAL, message: `avarice: ${what}: ${message}` };
+  return { ok: false, code: EXIT_INTERNAL, message: `${what}: ${message}` };
 }
 
 export function systemClock(): Clock {
@@ -238,6 +246,10 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
   }
   const staging = createStagingWorkspace(STAGING_STRATEGY);
+  // The run ports. Building them executes nothing and records nothing.
+  const runSource = new GitRunSource();
+  const runWorkspace = new CloneRunWorkspace();
+  const egress = overrides.egress ?? new AllowlistEgressProxy();
   const artifacts = new LocalArtifactStore(profile.dataRoot);
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =
@@ -262,7 +274,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
       close: () => {
         try {
           store.close();

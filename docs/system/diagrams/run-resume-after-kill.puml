@@ -1,0 +1,77 @@
+@startuml
+title Kill during the unit, then resume a run
+
+actor Operator
+participant "avarice CLI" as CLI
+participant Supervisor
+database Ledger
+participant "Run clone" as Clone
+participant "Claude Code host" as Host
+participant "PreToolUse hook" as Hook
+
+== Before the kill ==
+Supervisor -> Ledger : item delegated, snapshot step, launch step started (session ID)
+note over Ledger : one invocation unit reserved
+Supervisor -> Host : launch (detached process group)
+Host -> Hook : tool calls
+Hook -> Ledger : charge tool calls and subagents
+Host -> Clone : edit files
+Operator ->x Supervisor : kill (no cleanup)
+note over Ledger : run stays running, item stays delegated,\nlaunch row stays started, reservation stays,\nlease stays recorded until it expires
+note over Host, Hook : the host keeps running and the hook keeps charging the run budget
+note over CLI : status presents the run as paused (supervisor interrupted)\nonce the lease has lapsed; the ledger state is unchanged.\nstart --wait then prints "interrupted" with the resume command, exit 3
+
+== The resume command ==
+Operator -> CLI : resume RUN_ID
+CLI -> Ledger : read the run
+alt stop state, or a state resume does not continue
+  CLI --> Operator : report the state, no lease (exit 0 at ready_for_review, else 3)
+else lease still live (up to 180 s after the last renewal)
+  CLI --> Operator : refused, the lease must expire first (exit 3), nothing changed
+else lease free or expired
+  CLI -> Ledger : read the latest checkpoint and the open attempt
+  CLI --> Operator : resuming from running, interrupted attempt and step
+  CLI -> Supervisor : spawn a detached supervisor
+  CLI -> Ledger : step supervisor:resume
+end
+
+== Prelude under the lease ==
+Supervisor -> Ledger : take the lease (fence raised: a late write from the dead holder is refused)
+Supervisor -> Ledger : read launch rows left started
+Supervisor -> Host : for each launch that can be reaped:\nfind the process by session ID, end its group
+alt the reap fails, or a started launch cannot be reaped\n(no session ID recorded, or the host cannot reap)
+  Supervisor -> Ledger : step resume:reconcile failed, every row stays started
+  CLI --> Operator : with --wait: could not be resumed (exit 70)
+else ended or none found
+  Supervisor -> Ledger : warning event if a process was ended
+  Supervisor -> Ledger : launch rows marked interrupted, one event per invocation
+end
+Supervisor -> Ledger : spend the orphaned reservation at its cost cap\n(no wall clock charged, nothing refunded)
+
+== Reconcile the item ==
+Supervisor -> Ledger : run running to paused (reason interrupted)
+Supervisor -> Clone : read HEAD, compare with the attempt's snapshot
+alt HEAD moved under a delegated item
+  Supervisor -> Ledger : containment finding, decision record,\nrun blocked_on_decision (enforcement failure), no discard
+else the launch step names the attempt (the unit ran)
+  Supervisor -> Ledger : classify step: inconclusive (interrupted), unless already classified
+  alt the interrupted attempt was already the retry
+    Supervisor -> Ledger : decision record (repeated failure), run blocked_on_decision
+  else the invocations budget cannot cover another unit
+    Supervisor -> Ledger : decision record, run blocked_on_decision (budget exhausted)
+  else the one retry is still available
+    Supervisor -> Ledger : checkpoint discard-attempt
+    Supervisor -> Clone : restore the snapshot (paths the unit changed only)
+    Supervisor -> Ledger : discard step, attempt discarded, item delegated to ready
+    Supervisor -> Ledger : run paused to running (next: context pack)
+  end
+else no launch step (killed before the launch)
+  Supervisor -> Clone : restore the snapshot when one exists (nothing to undo)
+  Supervisor -> Ledger : item back to ready, the retry is not used
+  Supervisor -> Ledger : run paused to running
+end
+
+== The loop continues ==
+Supervisor -> Ledger : a retry attempt is opened, then as in the run to ready flow
+note over Supervisor, Ledger : a kill inside the retry blocks the run with a decision\nnaming both attempts and how each ended
+@enduml

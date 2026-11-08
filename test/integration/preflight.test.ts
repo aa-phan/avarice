@@ -220,6 +220,7 @@ describe('avarice repo add (ONB-3, ONB-6)', () => {
 
     const result = cli(roots, ['repo', 'add', repo.path]);
     assert.equal(result.code, 0, result.stderr + result.stdout);
+    assert.match(result.stdout.split('\n')[0] ?? '', /^project proj_[0-9A-Z]{26}: registered$/);
     assert.match(result.stdout, /project proj_[0-9A-Z]{26}/);
     assert.match(result.stdout, /onboarding onb_[0-9A-Z]{26}: discovered/);
     assert.ok(result.stdout.includes(pin), 'prints the pin');
@@ -295,9 +296,15 @@ describe('avarice repo add (ONB-3, ONB-6)', () => {
     const notRepo = cli(roots, ['repo', 'add', realpathSync(plain)]);
     assert.equal(notRepo.code, 64);
     assert.match(notRepo.stderr, /as a git repository/);
+    // OPS-7: the error line is prefixed with the command and subcommand, and one line names the command that inspects the problem.
+    const errorLines = notRepo.stderr.split('\n');
+    assert.match(errorLines[0] ?? '', /^avarice repo add: .*as a git repository/);
+    assert.equal(errorLines[1], `run: git -C ${realpathSync(plain)} rev-parse --show-toplevel`);
+    assert.equal(errorLines[2], '', 'exactly one resolving line');
     for (const argv of [['repo', 'add'], ['repo', 'frobnicate', plain], ['repo']]) {
       const usage = cli(roots, argv);
       assert.equal(usage.code, 64, argv.join(' '));
+      assert.match(usage.stderr, /^avarice repo: /, 'a usage error is prefixed with the command and followed by the usage text');
       assert.match(usage.stderr, /usage: avarice repo add <path>/);
     }
     assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 0);
@@ -316,6 +323,10 @@ describe('ONB-6 refusals through the CLI', () => {
       assert.equal(refused.code, 3, refused.stderr + refused.stdout);
       assert.match(refused.stderr, /existing_state_conflict/);
     }
+    // OPS-7: a refusal by `repo add` is prefixed with the command and subcommand and followed by the command that shows the state.
+    const refusedAdd = cli(roots, ['repo', 'add', repo.path]);
+    assert.match(refusedAdd.stderr.split('\n')[0] ?? '', /^avarice repo add: refused: /);
+    assert.equal(refusedAdd.stderr.split('\n')[1], 'run: avarice status');
     assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 1);
     assert.equal(rows(roots, 'SELECT 1 FROM project_records').length, 1);
   });

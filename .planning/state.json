@@ -5,44 +5,49 @@
   "phases": [
     {
       "number": "1",
-      "name": "Contained unattended run of one work item",
+      "name": "Contained onboarding of one repository",
       "status": "complete"
     },
     {
       "number": "2",
+      "name": "Contained unattended run of one work item",
+      "status": "complete"
+    },
+    {
+      "number": "3",
       "name": "Decisions, independent work and amendments",
       "status": "pending"
     },
     {
-      "number": "3",
+      "number": "4",
       "name": "Profiles, retrieval budgets, restricted mode and the portability proof",
       "status": "pending"
     },
     {
-      "number": "4",
+      "number": "5",
       "name": "Delivery, test strength, review feedback and data safety",
       "status": "pending"
     },
     {
-      "number": "5",
+      "number": "6",
       "name": "GSD capability bridge, phased work, plugin and push notifiers",
       "status": "pending"
     },
     {
-      "number": "6",
+      "number": "7",
       "name": "Personal infrastructure",
       "status": "pending"
     },
     {
-      "number": "7",
+      "number": "8",
       "name": "Cross-repository runs and project groups",
       "status": "pending"
     }
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (plan phase 2)",
-    "reason": "Phase 2 of 8 — needs a plan"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 8 — needs a plan"
   },
-  "updated_at": "2026-11-05T08:47:56.681Z"
+  "updated_at": "2026-11-08T08:35:32.476Z"
 }

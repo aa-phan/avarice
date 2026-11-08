@@ -1,0 +1,18 @@
+{
+  "command": "node --test --test-reporter=tap test/fault/budgets.test.ts",
+  "ranAgainst": "the plan base 5d55ec5 (src unchanged) plus the new describe `budget charges are one transaction (R-WR-05)` in test/fault/budgets.test.ts holding the settlement and orphan-conversion cases",
+  "exitCode": 1,
+  "reason": "At base settleInvocation and chargeOrphans each make separate ledger writes. With a trigger aborting every UPDATE of the costUsd budget row, settleInvocation returns the error only after the invocations row has moved reserved to used and the wallClockMs row has been charged (expected invocations used 2 / reserved 1 / wallClockMs 15, actual used 3 / reserved 0 / wallClockMs 1249). reserveInvocation, which converts the orphan, returns the error after the invocations row has moved from reserved to used, so the orphan reservation is gone and its cost is lost (expected reserved 1 / used 2, actual reserved 0 / used 3).",
+  "failingFiles": [
+    "test/fault/budgets.test.ts"
+  ],
+  "failingTests": [
+    "budget charges are one transaction (R-WR-05) > a failure at the cost write leaves a settlement uncharged as a whole, and a retry charges each amount once",
+    "budget charges are one transaction (R-WR-05) > a failure at the cost write leaves an orphan conversion and its event unwritten, and a retry charges the orphan once"
+  ],
+  "passingAtBase": [
+    "every other case of test/fault/budgets.test.ts (21 pass)"
+  ],
+  "semanticAssessment": "The target tests executed (23 tests reported, none skipped) and failed on the planned assertion for the intended reason: a failure at the cost write leaves earlier writes committed. The failure is injected through a second node:sqlite connection on the store file, so the real ledger and the real settleInvocation and reserveInvocation run unchanged. No import, syntax, fixture or setup fault is involved. The orphan case drives the conversion through reserveInvocation, which calls the same chargeOrphans that chargeRunOrphans calls; chargeRunOrphans itself needs a full run contract and is covered by the run kill-point suites.",
+  "summary": "Run at the base: 23 tests reported, 21 pass, 2 fail (the settlement case and the orphan conversion case)."
+}

@@ -190,10 +190,32 @@ The contract is stored in the ledger and in the data root, never in the worktree
     }
   },
   "delivery": { "endpoint": "ready_for_review", "pushBranch": true, "draftPr": true, "remote": "origin" },
-  "escalation": { "consecutiveDenials": 3, "noProgressInvocations": 2, "contradictoryEvidence": "escalate" },
+  "escalation": { "consecutiveDenials": 3, "consecutiveSearches": 25, "noProgressInvocations": 2, "contradictoryEvidence": "escalate" },
   "notify": { "reviewReady": ["local", "ntfy:me"], "blocking": ["local", "ntfy:me"], "digest": ["12:30", "17:30"] }
 }
 ```
+
+### The `routine` preset in Phase 2
+
+The Phase 2 values of the `routine` preset are the constant `ROUTINE_PRESET` in `src/domain/run-contract.ts`; `policyRevision` is the digest of that constant, so changing any value changes it. The contract's `budgets` start from these values, and `--budget name=value` can only lower them (a higher value is refused, and a per-invocation cost above the per-run cost is lowered to it with a recorded adjustment).
+
+| Setting | Value | Derivation or note |
+|---|---|---|
+| Wall clock | 60 minutes per run | D-13 |
+| Cost | 2.00 USD per invocation, 5.00 USD per run, exactness `estimated` | D-13; a killed or orphaned invocation stays charged |
+| Tool calls | 400 | D-13 |
+| Invocations | 3 | 1 unit invocation + 1 CON-16 retry + 1 interruption relaunch (recorded in `invocationsDerivation`) |
+| Subagents | 10 in total, 2 concurrent | (1 planner + 2 plan-checker + 1 executor + 1 verifier = 5 per quick unit) x 2 rounds (the unit and one CON-16 retry); recorded in `subagentsDerivation` |
+| Repair attempts per check | 0 | no repair work items exist in Phase 2: a failing required check ends the run |
+| Retry | 1 | the one CON-16 discard-and-retry of a crashed or killed unit |
+| Model by size | `small` Haiku, `medium` Sonnet, `large` Opus; default size `medium` | D-14; a brief's `model` overrides |
+| Escalation | 3 consecutive denials, 25 searches with no read or edit, 2 no-progress invocations | the first two are the hook's loop limits (CON-14) |
+| Delivery | endpoint `ready_for_review`, hand-off `local-branch`, no push, no draft PR | the supervisor fetches `avarice/run_<id>` into the source (D-02) |
+| Protected paths | `.avarice/**`, `.github/**`, `.claude/**`, `.git/**`, `package.json`, `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `.gitignore`, `CLAUDE.md` | a brief or conventions glob that reaches one is refused |
+| Run artifacts | `.planning/quick/**`, `.planning/STATE.md`, `.planning/config.json` | GSD bookkeeping, archived and kept off the review branch (D-17) |
+| Verification | GSD verifier `required-passed`, baseline `delta`, required checks after each item, integrity gates `no-new-overrides`, `no-test-deletion`, `no-skip-markers`, `scope-conformance`, `prune-is-decision` | baseline rule: G4 above |
+
+The compiler only narrows. A brief glob must sit inside a conventions write glob and off the protected paths; check and agent commands that start with `git`, `avarice`, `claude`, `gh`, `curl`, `wget`, `ssh`, `scp` or `sudo` are refused; static G0 failures are reported together.
 
 ### Contract amendments
 
@@ -677,7 +699,11 @@ Model-based review evidence never satisfies a `deterministic` requirement. The G
 | G1 plan | After GSD planning inside a unit (Stage 2 at `plan:post`; Stage 1 by reading the PLAN file after the invocation) | Plan files list only paths inside `files.write` and `files.create`; no `checkpoint:decision` that lacks `auto_select` is silently resolved; plan references the contract's acceptance IDs |
 | G2 work item | After each unit | Outcome `progressed`; scope conformance: every changed path inside write, create or artifact globs, and no deletions outside `delete`; no new VERIFICATION `overrides` entries; no node-repair `PRUNE` entries (each becomes a decision); test inventory has no removed tests and no new skip markers in protected test paths; GSD VERIFICATION `passed`; the required checks pass on the item's revision, and a newly failing check is charged to the item (AUT-16); when `symbolScope` is set, the item's symbol diff stays inside its specification and adds no import outside declared dependencies or across components without a declared edge in `.avarice/architecture.json` (AUT-17, FR-25) |
 | G3 repair | After a failed required check | Repair attempts below limit; the failing test still exists and is unchanged unless an amendment authorized the change |
-| G4 ready for review | Final revision | Every required check `passed` on one clean revision in the declared environment; every acceptance criterion maps to at least one `passed` deterministic evidence item; no evidence `stale` or `inconclusive` among required items; diff gate clean; the `architecture-model` check `passed` when the repository declares it (FR-25); when the mutation gate is enabled, every mechanical mutant on changed lines `KILLED` or accepted as equivalent by a decision; all decisions closed; budgets not exceeded |
+| G4 ready for review | Final revision | Every required check `passed` on one clean revision in the declared environment, except that a required check that failed at the base revision and still fails is reported as pre-existing and does not block unless the brief targets it (D-12); a check that passed at base must pass, and every check the brief targets must pass; every acceptance criterion maps to at least one `passed` deterministic evidence item; no evidence `stale` or `inconclusive` among required items; diff gate clean; the `architecture-model` check `passed` when the repository declares it (FR-25); when the mutation gate is enabled, every mechanical mutant on changed lines `KILLED` or accepted as equivalent by a decision; all decisions closed; budgets not exceeded |
+
+Amended 2026-11-06 (Phase 2 decision D-12): the G4 row said every required check must pass, which fails a run on a repository whose check was already red at the pinned revision. The required checks now run once at `baseRevision` and the results are recorded; G4 judges the final revision against that baseline. A check that fails at base and fails at the final revision is a pre-existing failure. It stays a `failed` row, carries the flag `preExisting: true` in its `environment` object (there is no sixth status), is named in the `ready_for_review` transition and in `status`, and does not stop the run. A brief that targets the check ends the run at G2 or G4 with a decision instead, so a run cannot be declared done on the one failure it was asked to fix. AUT-9 still holds: a check the run disabled, deleted or weakened to pass is refused by the integrity gates, not excused as pre-existing.
+
+Evidence for AUT-8: every check result is one of `passed`, `failed`, `skipped`, `unavailable` or `inconclusive` (plus `stale` after a revision change), and each row carries the revision and the environment it ran in. A pre-existing failure is not a new status: it is a `failed` row whose `environment.preExisting` is `true`, set only when the same check measured `failed` at the base revision and is not a brief target. The baseline rows and the final rows of one run are separate evidence rows on different revisions.
 
 Gate results are rows in the `gate_results` table ([persisted entities](#persisted-entities)).
 
@@ -864,7 +890,8 @@ Configuration is JSON, because Node parses it without a dependency and GSD uses 
 ```
 
 ```jsonc
-// Proposal: <repo>/.avarice/config.json  (committed; contains no secrets or absolute paths)
+// Proposal: <repo>/.avarice/config.json  (committed; contains no secrets or absolute paths). The `context` key below is not
+// part of schema 1 as built in Phase 2, and the parser refuses it; see "Repository conventions, schema 1".
 {
   "schema": 1,
   "checks": [
@@ -877,3 +904,20 @@ Configuration is JSON, because Node parses it without a dependency and GSD uses 
 ```
 
 When a repository has no `.avarice/config.json`, `verify` falls back to GSD's `workflow.test_command` from `.planning/config.json` if set, and otherwise refuses with "no checks declared".
+
+### Repository conventions, schema 1
+
+`src/domain/conventions.ts` parses the file as untrusted data (RC-2): the text is at most 256 KiB, unknown keys are refused at every level, and nothing in it is an instruction to AVARICE. `start` reads it from git objects at a descendant commit of the pin whose diff against the pin touches only `.avarice/**` (D-16), never from the working tree, so an uncommitted edit cannot change a contract. A symbolic link at that path is not a config file.
+
+| Field | Meaning and limits |
+|---|---|
+| `schema` | Must be `1` |
+| `checks[]` | At most 32. Each has `name` (`[a-z][a-z0-9:_-]{0,63}`, unique), `argv` (1 to 64 non-empty words), `timeoutSec` (integer 1 to 3600, default 600), `required` (default `true`), `env` and `writes` |
+| `checks[].env` | At most 32 non-secret variables, names `[A-Z_][A-Z0-9_]*`. Reserved names are refused: `PATH`, `HOME`, `TMPDIR`, `TMP`, `TEMP`, `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `BASH_ENV`, `ENV`, `SHELL`, `IFS`, and any name starting with `DYLD_`, `LD_` or `npm_config_` (compared without regard to case) |
+| `checks[].writes` | Globs of paths the check writes besides the write set (build output, caches). Active validation rejects a check that writes anywhere else; the paths become run artifacts |
+| `paths` | `write`, `protected` and `artifacts` glob lists, each at most 128 globs. A glob is repository-relative, at most 512 characters, with no absolute or `~` form, no `.`, `..` or empty segment and no backslash |
+| `testInventory` | `globs` (required) of the test files AVARICE lists after each invocation, and an optional `argv` that lists test IDs. The inventory is measured by AVARICE, never read from the agent's output. The list command runs in the sandbox and may write the scratch directory and the paths the `writes` of the declared checks name (a tool that makes its cache directories while it loads its configuration needs them), nothing else |
+| `dependencies` | `install` (argv the supervisor runs in the clone before the first invocation; the portfolio declares `npm ci --ignore-scripts`), `lockfile` (a path, not a glob) and `registryHosts` (at most 16 bare host names, lower-cased). The registry hosts are the install step's proxy allowlist ([containment.md](containment.md#checks-and-probes-run-sandboxed)) |
+| `agentCommands[]` | At most 64 commands the agent may run, each at most 256 characters, words separated by single spaces. The characters semicolon, ampersand, pipe, dollar, backtick and backslash are refused, and so is any angle bracket except a single trailing `<paths>` |
+
+Agent commands may never start with `git`, `avarice`, `claude`, `gh`, `curl`, `wget`, `ssh`, `scp` or `sudo`; the word is judged by its last path segment without regard to case, so `/usr/bin/git` and `GIT` are refused too. The same words are refused for check commands by the contract compiler. A declared check is repository code: it is validated in a scratch clone before it can be evidence (ONB-10), and its verdict is cached per project, pin and that check's own spec.

@@ -1,0 +1,4 @@
+- The five PlantUML sources were not rendered or syntax-checked. Checked: no render command in package.json or scripts/, and `which plantuml` finds nothing (java exists). Not determined: whether the sources parse.
+- The 24-point run fault suite was read, not run. Checked: its list and expected states in test/helpers/fault-run.ts and test/fault/run-killpoints.test.ts. Not determined: that every point passes at this HEAD.
+- Onboarding flow steps were rechecked against the diff of shared modules (invocation, budget, hook, host adapter, composition), not re-traced through every onboarding stage file. Checked: those stage files and src/app/resume.ts are absent from the `git diff e725db6..HEAD --stat -- src` listing. Not determined: behavior of unchanged files beyond that.
+- Resume of a run with a refusing host was not traced. Checked: run reconcile code only, and no run test was read for it. The hand-off bullet on this describes onboarding and is carried over unchanged.

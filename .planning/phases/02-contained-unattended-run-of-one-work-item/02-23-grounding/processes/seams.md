@@ -1,0 +1,5 @@
+- data-model.md: carry the run step names (`start:preflight`, `supervisor:spawn`, `supervisor:resume`, `resume:reconcile`, `discard`) and the event `invocation.interrupted`, which no document in docs/system lists (grep finds it nowhere).
+- README.md: the processes.md row says "The onboard flow and the kill-then-resume flow"; it must now name five flows (two onboarding, three run).
+- coverage.md: the processes.md row must say five flows and five diagram sources, still not rendered.
+- cli-reference.md: processes.md links it for `start` and `supervise` without anchors because those sections are not in it yet; add them and anchor the links.
+- checks-and-evidence.md: processes.md links it (no anchors) for install, validation, baseline and gates G2 and G4.

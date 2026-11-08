@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RootRefusedError, normalizedAbsoluteRoot, trimTrailingSlashes } from '../../src/domain/normalized-root.ts';
+import { RootRefusedError, lexicalAbsolute, normalizedAbsoluteRoot, trimTrailingSlashes } from '../../src/domain/normalized-root.ts';
 import { computeInvocationScope } from '../../src/domain/invocation-scope.ts';
 import { planExtractionChunks } from '../../src/domain/knowledge-extraction.ts';
 
@@ -42,5 +42,26 @@ describe('normalizedAbsoluteRoot', () => {
     const manifest = { entries: [] } as never;
     assert.throws(() => planExtractionChunks(manifest, {}, 'relative'), (e: unknown) => e instanceof RootRefusedError && /^planExtractionChunks: corpusRoot must be/.test((e as Error).message));
     assert.throws(() => computeInvocationScope({ workRoot: 'relative' } as never), (e: unknown) => e instanceof RootRefusedError && /^computeInvocationScope: workRoot must be/.test((e as Error).message));
+  });
+});
+
+// lexicalAbsolute: the lexical normal form of an absolute path, with no file system consulted (G-02-H2).
+describe('lexicalAbsolute', () => {
+  it('removes `.` and empty segments and a trailing slash', () => {
+    assert.equal(lexicalAbsolute('/a/./b//c/'), '/a/b/c');
+    assert.equal(lexicalAbsolute('/'), '/');
+  });
+
+  it('applies `..` on the string, without following a symlink', () => {
+    assert.equal(lexicalAbsolute('/a/b/../c'), '/a/c');
+    assert.equal(lexicalAbsolute('/a/..'), '/');
+    assert.equal(lexicalAbsolute('/a/b/../../c/d'), '/c/d');
+  });
+
+  it('gives null for a path that climbs above `/` and for a relative path', () => {
+    assert.equal(lexicalAbsolute('/..'), null);
+    assert.equal(lexicalAbsolute('/a/../..'), null);
+    assert.equal(lexicalAbsolute('a/b'), null);
+    assert.equal(lexicalAbsolute(''), null);
   });
 });

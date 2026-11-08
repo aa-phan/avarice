@@ -1,0 +1,7 @@
+- runs.md: its stated default for the contract file, `~/.local/share/avarice/runs/<runId>/`, lacks the profile segment; the code uses `~/.local/share/avarice/personal-local/runs/<runId>/`.
+- containment.md: carry the read-before-edit rule that uses hook_reads, the loop.limit event and the hook's per-invocation event counts; data-model only states the table and events.
+- checks-and-evidence.md: carry what the evidence kinds check, test-inventory, gsd-verdict and diff mean, their statuses, the check verdicts active, rejected and unavailable, and the gates G0, G2 and G4.
+- runs.md: carry the run next-action values, the seven blocked reasons, the work item moves, and what each of the 17 run steps records (data-model lists them without meaning).
+- interactive-shell.md: carry when the shell adds a history entry and how it is recalled; data-model records only the file.
+- findings.md and coverage.md: refresh the moved line numbers listed in this package's findings and the table count, which changes from 20 to 23.
+- overview.md and README.md: any statement that the ledger has 20 tables, one migration or 12 event kinds is now false.

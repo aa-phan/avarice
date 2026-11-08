@@ -39,7 +39,8 @@ export function faultPoint(name: string): void {
   if (hits === Number(counted[2])) process.kill(process.pid, 'SIGKILL');
 }
 
-function leaseTtlMs(): number {
+// The lease length: AVARICE_LEASE_TTL_MS (test-only shortening) or the default. Shared with the run supervisor.
+export function leaseTtlMs(): number {
   const raw = Number(process.env['AVARICE_LEASE_TTL_MS']);
   return Number.isSafeInteger(raw) && raw > 0 ? raw : DEFAULT_LEASE_TTL_MS;
 }

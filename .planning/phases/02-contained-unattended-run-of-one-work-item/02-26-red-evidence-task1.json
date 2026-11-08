@@ -1,0 +1,28 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "the plan base f382d91 (src unchanged) plus the new describe `git object reads and output forms (CR-01)` in test/unit/hook-decision.test.ts, the new file test/integration/hook-git-secret-reads.test.ts and the gitRun helper in test/helpers/scratch-repo.ts",
+  "exitCode": 1,
+  "reason": "The hook judges the operand `HEAD:.env` as the path `<clone>/HEAD:.env`, which no secret glob matches. Run at base: 143 tests, 136 pass, 7 fail. Tracer: the real hook entry prints nothing (allow) for `git show HEAD:.env` and `git show :.env` where `deny-secret-read` is expected (actual 'allow'). Unit: `git show :0:.env` is [allow, shell-identity] where [deny, deny-secret-read] is expected (the first form of the more-object-forms loop to fail); `git show HEAD:.env` and `git show :.env` fail the repro test under the map policy; the adjacency loop fails on `.env` (git show HEAD:.env allows where `cat .env` denies); the encoding test fails on `git show \"HEAD:.env\"`; the unresolvable test fails on `git show \"HEAD@{0}:.env\"` (allow where shell-git-object is expected).",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "tracer: git show of a secret path through the real hook > refuses git show HEAD:.env with deny-secret-read, and real git does print the secret (the refusal is not vacuous)",
+    "tracer: git show of a secret path through the real hook > refuses git show :.env the same way",
+    "git object reads and output forms (CR-01) > repro: git show HEAD:.env and git show :.env are denied deny-secret-read under the map and the run policy, as cat .env is",
+    "git object reads and output forms (CR-01) > more object forms: a stage number, an ancestor, a nested path, a pem file and git rev-parse deny deny-secret-read",
+    "git object reads and output forms (CR-01) > adjacency: git show of an object path is decided like cat of the same path, for every stage spelling",
+    "git object reads and output forms (CR-01) > encoding: a dot segment, a quoted operand, an empty quote pair and a subdirectory cwd do not hide the secret path",
+    "git object reads and output forms (CR-01) > unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object"
+  ],
+  "passingAtBase": [
+    "tracer > allows git show HEAD:src/a.ts, which git prints as the file text",
+    "git object reads and output forms (CR-01) > allowed object paths: a tracked source file, the root tree, an example file and git rev-parse stay shell-identity",
+    "forms that already deny at base by accident (a slash in the word lets the glob match the whole word), asserted inside the failing tests above: HEAD:certs/server.pem, main:config/.env, HEAD:./.env, HEAD:sub/../.env, and, from the subdirectory cwd, HEAD:../.env and HEAD:../../../../home/u/repo/.env (outside-read-set)",
+    "the git-leak assertions of the tracer (real git prints the sentinel for `git show HEAD:.env` and `git show :.env`) are in the failing tests but sit after the deny assertion and were not reached; the passing tracer case shows real git prints the file text for src/a.ts",
+    "all 136 earlier tests of the unit file and the other describes"
+  ],
+  "semanticAssessment": "Each failure is on the planned assertion for the intended reason: the target tests executed, the repository fixture was built (the passing allow case ran real git on it), and the actual value is the hook allowing a colon operand that names a secret path (or an unresolvable colon word), where the plan expects deny-secret-read or shell-git-object. No failure is a syntax, import or fixture fault. The slash-bearing forms that deny at base do so by accident of the whole-word glob match and are recorded above; they are not evidence the control works.",
+  "summary": "Run of the two files at the base: 143 tests, 136 pass, 7 fail (2 tracer tests, 5 unit tests). The real hook prints nothing for `git show HEAD:.env` and `git show :.env` on a repository where real git prints the secret sentinel."
+}

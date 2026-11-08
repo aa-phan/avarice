@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "checks": [
+    { "name": "typecheck", "argv": ["npm", "run", "typecheck"], "timeoutSec": 600, "required": true, "writes": ["node_modules/.tmp/**"] },
+    { "name": "lint", "argv": ["npm", "run", "lint"], "timeoutSec": 300, "required": true },
+    { "name": "format:check", "argv": ["npm", "run", "format:check"], "timeoutSec": 300, "required": true },
+    { "name": "test", "argv": ["npm", "run", "test"], "timeoutSec": 900, "required": true, "writes": ["node_modules/.vite/**", "node_modules/.vite-temp/**", "node_modules/.vitest/**", "node_modules/.vitest-cache/**", "node_modules/.cache/**"] },
+    { "name": "check:case", "argv": ["npm", "run", "check:case"], "timeoutSec": 300, "required": true },
+    { "name": "check:colors", "argv": ["npm", "run", "check:colors"], "timeoutSec": 300, "required": true },
+    { "name": "check:contrast", "argv": ["npm", "run", "check:contrast"], "timeoutSec": 300, "required": true },
+    { "name": "build", "argv": ["npm", "run", "build"], "timeoutSec": 900, "required": true, "env": { "VITE_SITE_ORIGIN": "https://aa-phan.github.io" }, "writes": ["dist/**", "node_modules/.tmp/**", "node_modules/.vite/**", "node_modules/.vite-temp/**", "node_modules/.cache/**"] },
+    { "name": "check:meta", "argv": ["npm", "run", "check:meta"], "timeoutSec": 300, "required": true, "env": { "VITE_SITE_ORIGIN": "https://aa-phan.github.io" } },
+    { "name": "check:budget", "argv": ["npm", "run", "check:budget"], "timeoutSec": 300, "required": true },
+    { "name": "check:no-phone", "argv": ["npm", "run", "check:no-phone"], "timeoutSec": 300, "required": true },
+    { "name": "check:images", "argv": ["npm", "run", "check:images"], "timeoutSec": 300, "required": true },
+    { "name": "test:e2e", "argv": ["npm", "run", "test:e2e"], "timeoutSec": 1800, "required": false, "writes": ["dist/**", "test-results/**", "playwright-report/**", "node_modules/.tmp/**", "node_modules/.vite/**", "node_modules/.vite-temp/**", "node_modules/.cache/**"] }
+  ],
+  "paths": {
+    "write": ["src/**", "tests/unit/**", "docs/**"],
+    "protected": ["scripts/**", "tests/e2e/**", "tests/fixtures/**", "tests/setup.ts", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tsconfig.json", "tsconfig.app.json", "tsconfig.node.json", "tsconfig.scripts.json", "tsconfig.test.json", ".oxlintrc.json", ".oxlintignore", "prettier.config.mjs", ".prettierignore"],
+    "artifacts": ["dist/**", "node_modules/.tmp/**", "node_modules/.vite/**", "node_modules/.vite-temp/**", "node_modules/.vitest/**", "node_modules/.vitest-cache/**", "node_modules/.cache/**"]
+  },
+  "testInventory": { "argv": ["npx", "vitest", "list"], "globs": ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"] },
+  "dependencies": { "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], "lockfile": "package-lock.json", "registryHosts": ["registry.npmjs.org"] },
+  "agentCommands": ["npm run typecheck", "npm run lint", "npm run format:check", "npm run test", "npx vitest run <paths>", "npx prettier --check <paths>", "npx prettier --write <paths>", "npx oxlint <paths>"]
+}

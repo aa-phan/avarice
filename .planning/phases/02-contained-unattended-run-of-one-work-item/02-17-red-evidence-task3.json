@@ -1,0 +1,13 @@
+{
+  "command": "node --test --test-name-pattern=\"mid-verify|mid-commit|covers every action\" test/fault/run-killpoints.test.ts",
+  "ranAgainst": "a copy of the plan base 5c50c9f source (git archive, in a scratch directory outside the repository) plus the new test/fault/run-killpoints.test.ts and run-budgets.test.ts and the final test/helpers",
+  "exitCode": 1,
+  "reason": "at the plan base `avarice resume run_...` is looked up as an onboarding (exit 64), so the supervisor is never continued: the kill at mid-verify and at mid-commit cannot reach ready_for_review and resume identifies nothing",
+  "failingFiles": ["test/fault/run-killpoints.test.ts"],
+  "failingTests": ["mid-commit", "mid-verify"],
+  "passingAtBase": [
+    "RUN_KILL_POINTS covers every action and transition of a run (a unit test of the catalog)",
+    "the uninterrupted reference run ended ready_for_review (the reference run needs no resume)"
+  ],
+  "summary": "4 tests selected, 2 pass, 2 fail at the base; every kill point fails the same way without Tasks 1 and 2"
+}

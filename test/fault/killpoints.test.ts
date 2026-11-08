@@ -249,7 +249,8 @@ describe('kill, then resume, reaches the record of an uninterrupted run', () => 
       const text = statusCli(roots);
       assert.equal(text.code, 0, text.stderr);
       assert.ok(text.stdout.includes(`avarice resume ${id}`), text.stdout);
-      assert.match(text.stdout, /interrupted in /);
+      assert.ok(text.stdout.includes(`${EXPECTED_AT_KILL[point].state} (interrupted)`), text.stdout);
+      assert.ok(text.stdout.includes(EXPECTED_AT_KILL[point].nextAction), text.stdout);
       assert.ok(!/: active/.test(text.stdout), `an interrupted onboarding is never shown as active:\n${text.stdout}`);
       const [entry] = JSON.parse(statusCli(roots, '--json').stdout) as StatusEntry[];
       assert.ok(entry);

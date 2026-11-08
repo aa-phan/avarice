@@ -1,0 +1,27 @@
+{
+  "command": "node --test test/fault/run-discard-stale-fence.test.ts test/integration/run-ledger.test.ts",
+  "ranAgainst": "the plan base 7b9e23b (Task 1 commit; src unchanged from plan base 15f8035) plus the new resume-path, taken-and-released and expired-not-taken describes in test/fault/run-discard-stale-fence.test.ts and the two guarded recordRunStep tests in test/integration/run-ledger.test.ts",
+  "exitCode": 1,
+  "reason": "Resume path: a supervisor superseded just before the `discard-attempt` checkpoint is refused with the right conflict (lease fence 2 vs 3), no checkpoint and no restore, and the clone is unchanged, but the store dump differs from the dump at the takeover by exactly one row: run_steps rowid 13, step `resume:reconcile`, attempt 1, status `failed`, result {\"detail\":\"\",\"error\":\"conflict\"}. It was written by the supervisor's own reconcile prelude after the fence refused it: src/app/run-resume.ts:309 (reconcileRun, deps.ledger.recordRunStep with no fence). No other table differs. Ledger contract: the guarded recordRunStep test fails because the third parameter does not exist yet, so a step recorded with a stale fence is accepted (`the call must be refused`).",
+  "failingFiles": [
+    "test/fault/run-discard-stale-fence.test.ts",
+    "test/integration/run-ledger.test.ts"
+  ],
+  "failingTests": [
+    "stale fence on the resume path > leaves every table of the store row for row as it was at the takeover",
+    "run steps > records a step under a fence guard only while that fence is current (G-02-10)"
+  ],
+  "passingAtBase": [
+    "stale fence on the crash path (5 tests)",
+    "stale fence on the resume path > refuses the supervisor at the checkpoint with a conflict naming both fences",
+    "stale fence on the resume path > commits no `discard-attempt` checkpoint and never calls the workspace restore",
+    "stale fence on the resume path > leaves the clone as it was at the takeover: HEAD, index, the crashed unit's edits and its extra file",
+    "stale fence on the resume path > leaves the other holder's lease row untouched, and the source checkout unchanged",
+    "taken and released on the crash path (5 tests)",
+    "expired, not taken > accepts the checkpoint, discards once and reaches ready_for_review with attempts `discarded`, `handed-off`",
+    "no takeover (control)",
+    "run steps > records a step with no guard as before, whoever holds the lease (G-02-10)"
+  ],
+  "semanticAssessment": "Both failures are on the planned assertions and for the intended reason: the target tests executed, the fixture reached the interception point (the other assertions of the same describe passed), and the failure names the one extra row and the line that wrote it. The plan expected the dump to fail on the resume path only and name `resume:reconcile`; no other row differed. The taken-and-released and expired-not-taken edges pass at base: they pin existing behaviour (the fence stays bumped on release; expiry alone does not refuse a checkpoint).",
+  "summary": "Run of the two files at the base: 70 tests, 68 pass, 2 fail. The resume-path dump differs by the single failed `resume:reconcile` step row; the guarded recordRunStep contract test fails because the guard parameter does not exist."
+}

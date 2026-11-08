@@ -1,6 +1,9 @@
 // buildInvocationEnv: the invocation environment is rebuilt from an allowlist (SEC-5, CON-3, S0-C, S0-E).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 
@@ -135,5 +138,53 @@ describe('buildInvocationEnv', () => {
     assert.deepEqual(parent, PARENT);
     env['HOME'] = 'changed';
     assert.equal(parent.HOME, '/home/u');
+  });
+});
+
+describe('buildInvocationEnv for a contained run (plan 02-08)', () => {
+  const RUN = { ...OPTIONS, marker: 'run_X', scratchDir: '/w/run_X/scratch' };
+
+  it('sets AVARICE_RUN to the run, TMPDIR and the npm cache inside the scratch directory, and the update notifier off', () => {
+    const env = buildInvocationEnv(PARENT, RUN);
+    assert.equal(env['AVARICE_RUN'], 'run_X');
+    assert.equal(env['TMPDIR'], '/w/run_X/scratch/tmp');
+    assert.equal(env['npm_config_cache'], '/w/run_X/scratch/npm-cache');
+    assert.equal(env['npm_config_update_notifier'], 'false');
+  });
+
+  it('adds only npm_config_cache and npm_config_update_notifier to the Phase 1 allowlist and still blocks every hostile name', () => {
+    const phase1 = new Set(Object.keys(buildInvocationEnv(PARENT, OPTIONS)));
+    const added = Object.keys(buildInvocationEnv(PARENT, RUN)).filter((name) => !phase1.has(name));
+    assert.deepEqual(added.sort(), ['npm_config_cache', 'npm_config_update_notifier']);
+    const env = buildInvocationEnv(PARENT, RUN);
+    for (const name of Object.keys(HOSTILE)) if (name !== 'AVARICE_RUN') assert.equal(env[name], undefined, name);
+  });
+
+  it('keeps AVARICE_RUN equal to the onboarding ID without a marker, and sets no scratch variable without a scratch directory', () => {
+    assert.equal(buildInvocationEnv(PARENT, OPTIONS)['AVARICE_RUN'], OPTIONS.onboardingId);
+    const env = buildInvocationEnv(PARENT, { ...OPTIONS, marker: 'run_X' });
+    assert.equal(env['AVARICE_RUN'], 'run_X');
+    assert.equal(env['TMPDIR'], PARENT.TMPDIR);
+    assert.equal(env['npm_config_cache'], undefined);
+  });
+
+  it('hands the model the realpath form of the scratch directory (macOS /var is a symlink of /private/var)', () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-env-')));
+    try {
+      mkdirSync(join(base, 'real', 'scratch'), { recursive: true });
+      symlinkSync(join(base, 'real'), join(base, 'alias'));
+      const env = buildInvocationEnv(PARENT, { ...OPTIONS, marker: 'run_X', scratchDir: join(base, 'alias', 'scratch') });
+      assert.equal(env['TMPDIR'], join(base, 'real', 'scratch', 'tmp'));
+      assert.equal(env['npm_config_cache'], join(base, 'real', 'scratch', 'npm-cache'));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let a parent value of the npm names through', () => {
+    const env = buildInvocationEnv({ ...PARENT, npm_config_cache: '/evil', npm_config_update_notifier: 'true' }, RUN);
+    assert.equal(env['npm_config_cache'], '/w/run_X/scratch/npm-cache');
+    assert.equal(env['npm_config_update_notifier'], 'false');
+    assert.equal(buildInvocationEnv({ ...PARENT, npm_config_cache: '/evil' }, OPTIONS)['npm_config_cache'], undefined);
   });
 });

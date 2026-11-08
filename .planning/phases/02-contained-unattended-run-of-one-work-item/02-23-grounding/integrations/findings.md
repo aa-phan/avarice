@@ -1,0 +1,16 @@
+- `src/cli/composition.ts:27`: `findGraphifyBinary` is imported but unused in this file
+- `src/adapters/host-claude/env.ts:19`: the `extraPath` option (graphify directory for the knowledge pass) is never passed by any caller, so the knowledge pass runs without graphify on PATH (dormant; intent unknown)
+- `src/adapters/gsd/locate.ts:60`: gsd-core discovery runs `gsd-tools.cjs runtime-identity` with spawnSync, unsandboxed, on every non-read-only command, while every other gsd-tools verb is sandboxed (intent unknown)
+- `src/adapters/graph/graphify.ts:95`: the descriptor hard-codes version '0.9'; the version printed by graphify is recorded but never compared with 0.9.x
+- `src/adapters/host-claude/launch-preflight.ts:111`: the version and sandbox probes use a fixed PATH; a `claude` launcher that needs an interpreter elsewhere (a version-managed node) would read as host-unavailable (not verified)
+- `src/adapters/host-claude/claude-host.ts:378`: reaping matches `pgrep -f -- "--session-id <uuid>"` against every process on the machine, not only AVARICE-started hosts
+- `src/adapters/host-claude/claude-host.ts:239`: transcript redaction runs after the 20 MiB cap was applied while reading, so a secret split by the truncation boundary is not matched (not verified)
+- `src/adapters/host-claude/claude-host.ts:100`: the startup descriptor is cached once per adapter while every launch re-probes, so the descriptor can read `enforced` while a later launch is refused
+- `docs/existing-tooling-assessment.md:24`: records Claude Code 2.1.312 and 2.1.316 only; code admits 2.1.312, 2.1.316, 2.1.317 and 2.1.318 (spec contradiction)
+- `docs/existing-tooling-assessment.md:193`: proposes the `gh` CLI as covering MVP needs, and line 103 lists `gh pr create`; code never spawns gh and denies it to the host (spec contradiction)
+- `src/adapters/exec/sandboxed-executor.ts:129`: the executor descriptor says `offline: true` although a command may be given loopback ports (intent unknown)
+- `src/adapters/host-claude/avarice-run-skill.ts:37`: the installed skill names `avarice contract amend` and `avarice budget`, which are not in the CLI command list at `src/cli/main.ts:12` (intent unknown)
+- `src/cli/spawn-supervisor.ts:47`: the detached supervisor inherits the whole parent environment, unlike the host and every sandboxed command (intent unknown)
+- `src/adapters/git/run-workspace.ts:412`: the hand-off fetch writes the objects of the run branch into the user's repository, while the port header says it creates exactly one ref and nothing else (intent unknown)
+- `src/adapters/git/run-source.ts:39`: the conventions walk is capped at the newest 500 first-parent commits above the pin, so an older conventions-only commit is skipped in favor of the pin's file (intent unknown)
+- `src/adapters/exec/allowlist-proxy.ts:95`: the proxy connects to the allowlisted name without checking the address it resolves to (intent unknown)

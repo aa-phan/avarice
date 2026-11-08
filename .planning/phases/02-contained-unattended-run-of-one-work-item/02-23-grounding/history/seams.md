@@ -1,0 +1,2 @@
+- runs.md: the history links to it for run behavior; it exists at HEAD.
+- coverage.md: should carry the 412 and 114 commit counts with the commands recorded in this package's coverage file.

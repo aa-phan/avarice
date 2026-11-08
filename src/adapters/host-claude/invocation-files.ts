@@ -1,6 +1,7 @@
 // Generates the five inputs one contained invocation launches with, in its own directory under the data root:
 //
-//   {dataRoot}/onboard/{onb}/{purpose}-{inv}/
+//   {dataRoot}/onboard/{onb}/{purpose}-{inv}/        (a run's invocation: {dataRoot}/run/{runId}/run-{inv}/, chosen by the host
+//                                                     adapter from the request's owner; this module writes into the directory it is given)
 //     host-settings.json   the permission and sandbox settings and the hook entries (renderClaudeSettings)
 //     hook-policy.json     what the hook decides against (writeHookPolicy), with the GSD preamble fingerprint
 //     agents.json          the agents the invocation may start (buildAgentsJson)

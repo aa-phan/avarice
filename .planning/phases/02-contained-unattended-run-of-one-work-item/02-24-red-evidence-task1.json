@@ -1,0 +1,24 @@
+{
+  "command": "node --test test/fault/run-discard-stale-fence.test.ts",
+  "ranAgainst": "scratch copies of HEAD 15f8035 (git archive into an empty directory outside the repository) plus the new test file; the working tree was never mutated. Mutation A: in src/app/run-stages/discard.ts the workspace restore moved above the `discard-attempt` checkpoint. Mutation B (a second scratch copy): the `this.checkFence(row, guard.fence)` line removed from SqliteLedger.recordRunCheckpoint.",
+  "exitCode": 1,
+  "reason": "The property already holds at the plan base, so there is no RED at base (the working-tree run is 6 pass, 0 fail). The evidence that the test discriminates is the mutation run. Mutation A (restore before checkpoint): the restore runs and the clone changes before the stale checkpoint is refused, so the discard-call and clone assertions fail; the store-dump assertion still passes because the restore itself writes no ledger row and the refused checkpoint writes none. Mutation B (checkpoint fence not checked): the stale checkpoint is committed, the restore runs, so the discard-call, clone and store-dump assertions all fail. Together the two mutations show each of the three assertions can fail.",
+  "failingFiles": ["test/fault/run-discard-stale-fence.test.ts"],
+  "failingTests": [
+    "mutation A: commits no `discard-attempt` checkpoint and never calls the workspace restore",
+    "mutation A: leaves the clone as it was at the takeover: HEAD, index, the crashed unit's edits and its extra file",
+    "mutation B: commits no `discard-attempt` checkpoint and never calls the workspace restore",
+    "mutation B: leaves the clone as it was at the takeover: HEAD, index, the crashed unit's edits and its extra file",
+    "mutation B: leaves every table of the store row for row as it was at the takeover"
+  ],
+  "passingAtBase": [
+    "refuses the supervisor at the checkpoint with a conflict naming both fences",
+    "commits no `discard-attempt` checkpoint and never calls the workspace restore",
+    "leaves the clone as it was at the takeover: HEAD, index, the crashed unit's edits and its extra file",
+    "leaves every table of the store row for row as it was at the takeover",
+    "leaves the other holder's lease row untouched, and the source checkout unchanged",
+    "reaches ready_for_review: the checkpoint is committed once, the restore runs once, attempt 1 is `discarded` and attempt 2 is handed off"
+  ],
+  "semanticAssessment": "Characterization of existing behaviour, not a defect fix: the plan states the property is expected to hold. Both mutation runs failed on the planned assertions (restore called, clone changed, ledger rows added) and not on setup, import or fixture faults: the control describe and the conflict assertion stayed green in mutation A, which shows the fixture reaches the interception point. Under mutation A the 'refuses the supervisor' test passed, as it should: the checkpoint is still refused, only later.",
+  "summary": "Working tree: 6 tests, 6 pass. Mutation A: 6 tests, 4 pass, 2 fail (discard-call, clone). Mutation B: 6 tests, 3 pass, 3 fail (discard-call, clone, store dump). The plan expected the dump assertion to fail under mutation A; it does not, because that mutation writes no ledger row, and mutation B was run to show the dump assertion discriminates."
+}

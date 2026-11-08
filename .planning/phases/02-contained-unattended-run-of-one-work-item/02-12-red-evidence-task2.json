@@ -1,0 +1,11 @@
+{
+  "command": "node --test test/integration/run-invocation.test.ts",
+  "exitCode": 1,
+  "reason": "src/app/invocation.ts exports no completeRunInvocation or prepareRunInvocation and src/app/budget.ts exports no reserveRunInvocation, so the run-invocation test file fails to link: grant, refusal at the fourth, orphan charge, killed charge and the event correlation IDs cannot pass",
+  "failingFiles": ["test/integration/run-invocation.test.ts"],
+  "failingTests": [
+    "test/integration/run-invocation.test.ts (SyntaxError: the requested module '../../src/app/invocation.ts' does not provide an export named 'completeRunInvocation')"
+  ],
+  "summary": "1 file, 0 tests run, 1 fail: the file cannot load",
+  "outputHead": "SyntaxError: The requested module '../../src/app/invocation.ts' does not provide an export named 'completeRunInvocation'\n✖ test/integration/run-invocation.test.ts"
+}

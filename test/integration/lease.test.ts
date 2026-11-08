@@ -157,7 +157,8 @@ describe('status after an interrupted run', () => {
     sleepSync(EXPIRY_WAIT_MS);
     const text = statusCli(roots);
     assert.equal(text.code, 0, text.stderr);
-    assert.match(text.stdout, new RegExp(`interrupted in mapping \\(next: launch:map\\)`));
+    assert.match(text.stdout, /\binterrupted\s+mapping\s+launch:map\b/);
+    assert.match(text.stdout, new RegExp(`continue with: avarice resume ${id}\\n`));
     assert.ok(text.stdout.includes(`avarice resume ${id}`), text.stdout);
     assert.ok(!/: active/.test(text.stdout), 'an interrupted onboarding is never shown as active');
 

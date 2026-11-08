@@ -1,0 +1,22 @@
+{
+  "command": "node --test test/integration/run-outcomes.test.ts test/integration/run-source-untouched.test.ts",
+  "ranAgainst": "the plan base f323895 (git archive extracted to /tmp/avarice-16/base) plus the new test files and the extended test/helpers/fake-run-host.ts; the loop-limit routing, the discard and the retry are not in that source",
+  "exitCode": 1,
+  "reason": "at the plan base a unit the hook stopped at a loop limit is classified by its own facts (denied, or progressed and then gated), with no loop-limit decision and no `loopLimit` key on the classify step; and a crashed unit is not discarded or retried, so the clone `git restore` of the discard never runs",
+  "failingFiles": ["test/integration/run-outcomes.test.ts", "test/integration/run-source-untouched.test.ts"],
+  "failingTests": [
+    "three denied calls in a row: the hook stops the invocation, and the run is blocked (decision) as repeated_failure naming the limit",
+    "a unit that loops after doing its work is still escalated: it classified progressed, and nothing was committed",
+    "two denials in a row do not stop the unit (boundary): it is judged as before",
+    "(b) a crash and a retry: the discard restores in the clone, never in the source, and the run branch is the only new ref"
+  ],
+  "passingAtBase": [
+    "a moved clone HEAD is still the enforcement failure, whatever else the unit did",
+    "toolCalls=5 and six calls: kind budget_exhausted, blocked (budget_exhausted), class permission naming toolCalls, the limit unchanged",
+    "a unit that spends its budget on the way to a long run of denials is a budget decision, not a loop-limit one",
+    "(a) a run whose fix fails its gate: blocked, and the source is as it was",
+    "(c) a run a loop limit stops: blocked, and the source is as it was",
+    "the shim sees the clone's git calls too, so an empty list for the source is a fact and not a blind spot"
+  ],
+  "summary": "10 tests, 6 pass, 4 fail at the base. The budget decision (S-15) and the untouched source for a failed run and a blocked run already held at the base (the 02-13 routing and the 02-07 clone design); those tests pin them, and the S-20 shim proves the claim by what git actually ran."
+}

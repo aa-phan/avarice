@@ -14,13 +14,21 @@ import type { Db } from '../../src/adapters/sqlite/db.ts';
 import { migrate, pendingMigrations } from '../../src/adapters/sqlite/migrate.ts';
 import type { Migration } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
+import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 
 const FIXTURE = join(REPO_ROOT, 'test', 'fixtures', 'db', 'schema-v1.sqlite');
 const TABLES = ['projects', 'onboardings', 'checkpoints', 'events', 'contracts', 'project_records', 'artifacts', 'onboarding_steps', 'schema_migrations', 'adapter_configs', 'meta'] as const;
-const SHIPPED: readonly Migration[] = [MIGRATION_0001];
+// What the committed fixture recorded for migration 0001 when it was generated. Migration 0001 is never edited (NFR-9).
+const V1_CHECKSUM = '56c469d8a0cfb0c661908b75cf745c02892e3512d6fe0f6a5305132479f5e2cf';
+const SHIPPED: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002];
+const V1_ONLY: readonly Migration[] = [MIGRATION_0001];
+// Tables whose row count the upgrade must not change, plus the three that 0002 adds (empty after it).
+const V1_RUN_TABLES = ['runs', 'attempts', 'evidence', 'gate_results', 'decisions', 'work_items', 'budgets'] as const;
+const NEW_TABLES = ['run_steps', 'hook_reads', 'check_validations'] as const;
+const NEW_RUNS_COLUMNS = ['reason', 'workspace_path', 'branch', 'base_revision'] as const;
 const NOW = Date.UTC(2026, 5, 1, 12, 0, 0);
 
 const MIGRATION_2_OK: Migration = { version: 2, sql: 'CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT NOT NULL);' };
@@ -88,17 +96,17 @@ describe('the committed v1 fixture database', () => {
     }
   });
 
-  it('opens, migrates as a no-op, writes no backup, and keeps its row counts', () => {
+  it('still migrates as a no-op when only migration 0001 is shipped, and writes no backup', () => {
     const { dir, path } = fixtureCopy();
     const db = open(path);
     try {
       const before = counts(db);
       const namesBefore = schemaNames(db);
       const backupDir = join(dir, 'backups');
-      const pending = pendingMigrations(db, SHIPPED);
+      const pending = pendingMigrations(db, V1_ONLY);
       assert.ok(pending.ok);
       assert.deepEqual(pending.value, []);
-      const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
+      const migrated = migrate(db, V1_ONLY, { nowMs: NOW, backupDir });
       assert.ok(migrated.ok, migrated.ok ? '' : describeError(migrated.error));
       assert.deepEqual(migrated.value, { from: 1, to: 1, applied: [] });
       assert.deepEqual(counts(db), before);
@@ -107,6 +115,131 @@ describe('the committed v1 fixture database', () => {
       assert.equal(integrity(db), 'ok');
     } finally {
       db.close();
+    }
+  });
+
+  it('records migration 0001 under the checksum of the text that shipped (0001 is never edited)', () => {
+    const raw = new DatabaseSync(FIXTURE, { readOnly: true });
+    try {
+      const row = raw.prepare('SELECT checksum FROM schema_migrations WHERE version = 1').get() as { checksum: string };
+      assert.equal(row.checksum, V1_CHECKSUM);
+    } finally {
+      raw.close();
+    }
+    assert.equal(sha256Hex(MIGRATION_0001.sql), V1_CHECKSUM);
+  });
+
+  it('migrates to version 2: backup written first, every v1 row count kept, four runs columns and three tables added (NFR-9)', () => {
+    const { dir, path } = fixtureCopy();
+    const db = open(path);
+    try {
+      const before = counts(db);
+      const runTablesBefore = Object.fromEntries(V1_RUN_TABLES.map((t) => [t, Number((db.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n)]));
+      const backupDir = join(dir, 'backups');
+      const pending = pendingMigrations(db, SHIPPED);
+      assert.ok(pending.ok);
+      assert.deepEqual(pending.value.map((m) => m.version), [2]);
+      const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
+      assert.ok(migrated.ok, migrated.ok ? '' : describeError(migrated.error));
+      assert.deepEqual(migrated.value, { from: 1, to: 2, applied: [2] });
+
+      const backups = readdirSync(backupDir);
+      assert.equal(backups.length, 1, 'a pre-migration backup was written');
+      assert.match(backups[0] as string, /^pre-migration-.+\.db$/);
+      const backup = new DatabaseSync(join(backupDir, backups[0] as string), { readOnly: true });
+      try {
+        assert.deepEqual(counts(backup), before, 'the backup is the v1 store');
+        assert.ok(!schemaNames(backup).includes('table:run_steps'), 'taken before 0002 ran');
+      } finally {
+        backup.close();
+      }
+
+      assert.deepEqual({ ...counts(db), schema_migrations: before['schema_migrations'] }, before, 'no v1 row changed or vanished');
+      assert.equal(counts(db)['schema_migrations'], 2);
+      for (const table of V1_RUN_TABLES) {
+        assert.equal(Number((db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n), runTablesBefore[table], table);
+      }
+      const names = schemaNames(db);
+      for (const table of NEW_TABLES) {
+        assert.ok(names.includes(`table:${table}`), table);
+        assert.equal(Number((db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n), 0, `${table} starts empty`);
+      }
+      assert.ok(names.includes('index:evidence_attempt'));
+      assert.ok(names.includes('index:events_run'));
+      for (const trigger of ['evidence_no_update', 'evidence_no_delete', 'gate_results_no_update', 'gate_results_no_delete']) {
+        assert.ok(names.includes(`trigger:${trigger}`), trigger);
+      }
+      const columns = (db.prepare('PRAGMA table_info(runs)').all() as Array<{ name: string }>).map((c) => c.name);
+      for (const column of NEW_RUNS_COLUMNS) assert.ok(columns.includes(column), `runs.${column}`);
+      assert.deepEqual({ ...(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '2' });
+      assert.equal(
+        (db.prepare('SELECT checksum FROM schema_migrations WHERE version = 1').get() as { checksum: string }).checksum,
+        V1_CHECKSUM,
+        'the 0001 row is untouched',
+      );
+      assert.equal(integrity(db), 'ok');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('is a no-op once migrated: a second migrate applies nothing and writes no second backup', () => {
+    const { dir, path } = fixtureCopy();
+    const db = open(path);
+    try {
+      const backupDir = join(dir, 'backups');
+      assert.ok(migrate(db, SHIPPED, { nowMs: NOW, backupDir }).ok);
+      const again = migrate(db, SHIPPED, { nowMs: NOW + 1000, backupDir });
+      assert.ok(again.ok);
+      assert.deepEqual(again.value, { from: 2, to: 2, applied: [] });
+      assert.equal(readdirSync(backupDir).length, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates a fresh store at version 2 in one run and writes no backup (nothing to protect)', () => {
+    const dir = scratchDir();
+    const db = open(join(dir, 'state.db'));
+    try {
+      const backupDir = join(dir, 'backups');
+      const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
+      assert.ok(migrated.ok);
+      assert.deepEqual(migrated.value, { from: 0, to: 2, applied: [1, 2] });
+      assert.equal(existsSync(backupDir), false);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('refuses a store whose migration 0002 is recorded under a different checksum, naming version 2', () => {
+    const { path } = fixtureCopy();
+    const db = open(path);
+    try {
+      assert.ok(migrate(db, SHIPPED, { nowMs: NOW }).ok);
+      db.prepare("UPDATE schema_migrations SET checksum = ? WHERE version = 2").run('e'.repeat(64));
+      const result = migrate(db, SHIPPED, { nowMs: NOW + 1000 });
+      assert.ok(!result.ok);
+      assert.equal(result.error.kind, 'conflict');
+      const message = describeError(result.error);
+      assert.match(message, /store schema v2 checksum mismatch: refusing to start/);
+      assert.ok(message.includes('e'.repeat(64)));
+      assert.ok(message.includes(sha256Hex(MIGRATION_0002.sql)));
+    } finally {
+      db.close();
+    }
+  });
+
+  it('is applied by `status` to a v1 store: the CLI path upgrades it to version 2 and keeps the v1 rows', () => {
+    const roots = rootsWithStore(fixtureCopy().path);
+    const r = runCli(['status', '--json'], { roots });
+    assert.equal(r.code, 0, r.stderr);
+    const raw = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+    try {
+      assert.deepEqual({ ...(raw.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '2' });
+      assert.equal(readdirSync(join(roots.AVARICE_DATA_ROOT, 'backups')).length, 1);
+    } finally {
+      raw.close();
     }
   });
 
@@ -177,7 +310,7 @@ describe('checksum refusal', () => {
   it('refuses a store written by a newer build (a recorded version this build does not ship)', () => {
     const { path } = fixtureCopy();
     const raw = new DatabaseSync(path);
-    raw.prepare("INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (2, '2026-01-01T00:00:00.000Z', ?)").run('a'.repeat(64));
+    raw.prepare("INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (3, '2026-01-01T00:00:00.000Z', ?)").run('a'.repeat(64));
     raw.close();
     const db = open(path);
     try {
@@ -298,7 +431,7 @@ describe('pre-migration backup', () => {
     const db = open(join(dir, 'state.db'));
     try {
       const backupDir = join(dir, 'backups');
-      const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
+      const migrated = migrate(db, V1_ONLY, { nowMs: NOW, backupDir });
       assert.ok(migrated.ok);
       assert.deepEqual(migrated.value, { from: 0, to: 1, applied: [1] });
       assert.equal(existsSync(backupDir), false);

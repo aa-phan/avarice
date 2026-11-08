@@ -1,0 +1,15 @@
+{
+  "command": "node --test --test-reporter=tap \"test/integration/run-workspace.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/adapters/git/run-workspace.ts does not exist yet: the whole test file fails to load before any test runs",
+  "failingFiles": ["test/integration/run-workspace.test.ts"],
+  "failingTests": [
+    "CloneRunWorkspace.prepare (D-01)",
+    "CloneRunWorkspace.describe, status, readText and ensureDir",
+    "CloneRunWorkspace.commit (D-03)",
+    "CloneRunWorkspace.fetchIntoSource (D-02)",
+    "runGit option allowlists and fixed options (plan 02-07)"
+  ],
+  "summary": "RED by missing module (ERR_MODULE_NOT_FOUND for src/adapters/git/run-workspace.ts), the same shape as a new-adapter RED. The checkout-digest --allow-run-refs option was added to scripts/checkout-digest.ts in the same step as its unit test, so that one test has no separate RED; its first run failed on an assertion of mine (counts.refsAllowed differs by one by design), fixed in the test.",
+  "outputHead": "# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/adapters/git/run-workspace.ts' imported from .../test/integration/run-workspace.test.ts\nnot ok 1 - test/integration/run-workspace.test.ts"
+}

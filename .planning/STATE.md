@@ -2,44 +2,44 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 2
-current_phase_name: Contained unattended run of one work item
+current_phase: 3
+current_phase_name: Decisions, independent work and amendments
 status: planning
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-11-05T08:47:56.670Z"
-last_activity: 2026-11-05
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 98897a7e4da42ceb32e935c3c446a67fefc52151
+stopped_at: Phase 02 complete, ready to plan Phase 3
+last_updated: "2026-11-08T08:35:32.463Z"
+last_activity: 2026-11-08
+last_activity_desc: Phase 02 complete, transitioned to Phase 3
+state_head: 13b24bf7ef98fa339891ac5e70619c6f6e3d6e29
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 26
-  completed_plans: 26
-  percent: 14
+  completed_phases: 2
+  total_plans: 61
+  completed_plans: 61
+  percent: 25
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-05)
+See: .planning/PROJECT.md (updated 2026-11-08)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 2 — Contained unattended run of one work item
+**Current focus:** Phase 03 — Decisions, independent work and amendments
 
 ## Current Position
 
-Phase: 2 — Contained unattended run of one work item
+Phase: 3 — Decisions, independent work and amendments
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-11-05 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-11-08 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26
+- Total plans completed: 61
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -48,6 +48,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 26 | - | - |
+| 02 | 35 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -84,6 +85,39 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 01 P24 | 15 min | 2 tasks | 8 files |
 | Phase 01 P25 | 45 min | 2 tasks | 11 files |
 | Phase 01 P26 | 10 min | 2 tasks | 5 files |
+| Phase 02 P01 | 55 min | 2 tasks | 13 files |
+| Phase 02 P02 | 18 min | 2 tasks | 21 files |
+| Phase 02 P03 | 19 min | 3 tasks | 14 files |
+| Phase 02 P04 | 30 min | 3 tasks | 9 files |
+| Phase 02 P05 | 25 min | 3 tasks | 11 files |
+| Phase 02 P06 | 8 min | 3 tasks | 12 files |
+| Phase 02 P07 | 45 min | 3 tasks | 14 files |
+| Phase 02 P08 | 25 min | 3 tasks | 21 files |
+| Phase 02 P10 | 17 min | 2 tasks | 20 files |
+| Phase 02 P09 | 85 min | 2 tasks | 13 files |
+| Phase 02 P12 | 25 min | 3 tasks | 19 files |
+| Phase 02 P11 | 23 min | 2 tasks | 17 files |
+| Phase 02 P13 | 38 min | 3 tasks | 23 files |
+| Phase 02 P14 | 85 min | 3 tasks | 21 files |
+| Phase 02 P15 | 19 min | 3 tasks | 20 files |
+| Phase 02 P16 | 29 min | 2 tasks | 10 files |
+| Phase 02 P17 | 120min | 3 tasks | 19 files |
+| Phase 02 P18 | 27 min | 2 tasks | 8 files |
+| Phase 02 P19 | 100 min | 3 tasks | 20 files |
+| Phase 02 P20 | 70 min | 3 tasks | 8 files |
+| Phase 02 P21 | 3 sessions | 3 tasks | 17 files |
+| Phase 02 P22 | 50min | 2 tasks | 5 files |
+| Phase 02 P23 | one long session | 7 tasks | 94 files |
+| Phase 02 P26 | 127 min | 3 tasks | 14 files |
+| Phase 02 P27 | 18 min | 3 tasks | 9 files |
+| Phase 02 P28 | 40 min | 2 tasks | 9 files |
+| Phase 02 P29 | 55 min | 3 tasks | 12 files |
+| Phase 02 P30 | 60 min | 3 tasks | 13 files |
+| Phase 02 P31 | 45 min | 3 tasks | 11 files |
+| Phase 02 P32 | 55min | 3 tasks | 11 files |
+| Phase 02 P33 | 50 min | 3 tasks | 17 files |
+| Phase 02 P34 | 21 min | 3 tasks | 9 files |
+| Phase 02 P35 | 2h10m | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -167,6 +201,56 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 01]: 01-25: knowledge coverage is judged per manifest document on the merged graph; below half (KNOWLEDGE_LIMITS.documentShare 0.5) is validation-failed, otherwise the record states documentsExpected and dropped.unread
 - [Phase 01]: 01-25: .chunks.json carries absolute readPath and writePath (corpus root = knowledge invocation cwd); AssembledExtraction.usedFiles removed so coverage is never derived from chunk shape
 - [Phase 01]: Plan 01-26: the live gate checks zero unread documents (stricter than the stage's at-least-half admission share), and an absent documentsExpected or dropped.unread stays null so a pre-01-25 record fails
+- [Phase 02]: 02-01: Phase 2 live spend is one ledger (test/containment/live-spend-phase2.jsonl) with a 25 USD ceiling that AVARICE_PHASE2_CEILING_USD can only lower; fitsCap also requires fitsPhase2Ceiling and a corrupt ledger throws — D-15 as a mechanical guard; 0.2122 USD spent after plan 02-01
+- [Phase 02]: 02-01: Claude Code 2.1.318 admitted on 22 live T3 tests with 0 containment failures (0.1596 USD); the case 19 knowledge-pass denial is a /var vs /private/var path-form refusal by the host, deferred, and Phase 2 run purposes must give the model symlink-resolved paths — CON-3: admit only on a recorded live run on that exact version
+- [Phase 02]: 02-02: the status table is PROJECT, REPOSITORY, ACTIVITY, STATE, NEXT with the onboarding ID, resume line and record line below it; an interrupted onboarding shows ACTIVITY interrupted and a plain ledger word in STATE; NEXT is cut last, subject columns never
+- [Phase 02]: 02-02: Phase 1 --json shapes are frozen by normalized snapshots committed before the renderer change (AVARICE_SNAPSHOT_WRITE=1 regenerates); every renderer string passes stripControl; composition failures are prefixed by the dispatcher, not hand-built
+- [Phase 02]: 02-03: migration 0002 also carries insert-only triggers for evidence and gate_results (T-02-06); the run lifecycle and work item tables are pure tables in src/domain/run-lifecycle.ts and a Phase 1 carrier row (state onboarding) is invisible to every run method — The plan marks T-02-06 mitigate, and a schema trigger keeps the property for every later writer, as events already have
+- [Phase 02]: 02-03: transitionRun writes state, checkpoint (seq max+1 per run) and a run.transition event in one transaction under the version and fence guard; work item blocked_on_decision may return to ready; entering delegated counts one attempt — Phase 3 decide needs a way to release a blocked item, and the discard-and-retry shows as two attempts
+- [Phase 02]: 02-04: the routine contract compiler only narrows: a brief glob must sit inside a conventions write glob and off protected paths, budgets only lower (budget.<name>), check and agent commands starting with git, avarice, claude, gh, curl, wget, ssh, scp or sudo are refused, and G0 static failures are reported together under field g0 — RC-5 is enforced at the one place every later stage trusts; subagentsTotal 10 and invocations 3 carry recorded derivations (one CON-16 retry of a full quick unit fits), and policyRevision is digestOf(ROUTINE_PRESET)
+- [Phase 02]: 02-05: G2 judges protected globs before write, create and artifact globs; a head failure is pre-existing only when the base failure was measured; pauseSignal is a structural fact and detectPause reads the numbered-choice text shape only as a last resort — AUT-9 and AUT-7: gates fail closed, model text can block but never pass or satisfy acceptance
+- [Phase 02]: 02-06: S2-C confirmed A1 (npm 11.19.1 honours npm_config_https_proxy for CONNECT): a supervisor step gets one loopback port via CommandSpec.allowLoopbackPorts and an in-repo node:http/node:net allowlist proxy admits only registry.npmjs.org:443; the footprint test exempts exactly that one file and holds it to loopback-only, built-ins-only rules — D-11 needs no *:443 widening and no offline-cache fallback; plan 02-14 builds the install step on this
+- [Phase 02]: 02-07: fetchIntoSource is create-only and fsck-checked with gc.auto and maintenance.auto off, commit uses literal pathspecs and add-then-commit-only-paths, and discard restores from a snapshot tree (user pre-run edits kept) unlinking added paths without following symlinks, so the source checkout is byte-identical and a crashed attempt is undone exactly to its checkpoint — D-02, D-03 and CON-16: the only write to the user's repository is one new refs/heads/avarice/run_* ref; discard names only paths from a tree difference and never uses reset, clean or checkout; conventions (D-16) and staleness (D-04) are read from git objects and no working-tree file
+- [Phase 02]: 02-08: the run purpose's scratch directory is a scope field beside writeRoots, a missing ancestor listing is refused, and a contract command is matched before the denied prefixes only after the scope dropped every prefix that must stay denied — CON-2 and RC-5: writeRoots holds exactly the clone roots (empty for an empty write set), computeRunScope throws rather than leave a directory above a write root unlisted, protected globs (plus .git and GSD config) win over write globs, npm and npx leave the denied prefixes only for a contract-listed form, and git, avarice, claude and curl stay denied for every purpose
+- [Phase 02]: 02-08: everything handed to the model for a run is in realpath form and runUnitPrompt cuts only the context pack to fit 32 KiB, refusing a brief that does not fit — 02-01 carried finding: the host refuses writes addressed through /var when the rules name /private/var, so TMPDIR, the npm cache, the host cwd and every rule path are canonical; cutting an acceptance criterion would let a run pass against a shorter brief than the owner wrote
+- [Phase 02]: 02-10: start exits 3 for a preflight refusal and 64 for an invalid brief, budget override, G0 failure or missing flag; every rule is judged from repository objects before any write, in the order revision, descent, commits, age, conventions, planning (25 commits and 14 days outside .avarice/ and .planning/) — D-04, D-16 and RC-1: a refusal or an invalid request creates no row and no file, and an uncommitted edit of .avarice/config.json cannot change a contract
+- [Phase 02]: 02-10: createRunWithContract stores the run with its base revision and branch, contract version 1 with five budget rows, the work items and their events in one transaction; the 0600 contract file in the data root is written after it by temp, fsync and rename — RC-1 and T-02-33: a killed start leaves nothing or a whole run, and a run without its file is rewritten from the ledger by the supervisor (plan 02-12)
+- [Phase 02]: 02-09: A2 confirmed on round 2 of the live S2-B spike (planner, plan-checker, executor and verifier ran, verifier passed, HEAD unmoved, no write outside the write set, 0.8996 USD, 4 subagents); the model drove the unit with Read and its own agent prompts and issued no gsd_run verb, so the admitted verbs query config-get, loop render-hooks and init.quick --validate are pinned by unit tests only — a unit is judged from the quick directory, the VERIFICATION status line, the clone diff and HEAD, never the host outcome kind (both rounds ended denied on improvised shell lines); git.quick_branch_template removed from RUN_GSD_SETTINGS
+- [Phase 02]: 02-12: start spawns a detached avarice supervise <runId> (own process group, stdio ignored, cwd the data root, unref'd); the supervisor takes the run lease, rewrites a missing contract file and runs the checkpointed stage for the committed state through the one faultPoint; verify-enforcement records G0 and blocks with enforcement_failure unless the host reports enforced, before any invocation; run invocations reserve and settle through the onboarding reservation and settle code, charging killed and orphaned ones — D-18, CON-3, CON-13 and FR-2: closing the shell leaves the supervisor running, a second supervisor is refused on a live lease, a dead one is reported as interrupted only when its PID is gone and its lease has lapsed, and the footprint test allows exactly one detached spawn (src/cli/spawn-supervisor.ts)
+- [Phase 02]: 02-11: read-before-edit (SHA-256 recorded at PostToolUse in hook_reads, rules edit-without-read and file-changed-since-read) and loop limits (3 consecutive denials, 25 searches with no read: continue false plus a loop.limit event, search limit ROUTINE_PRESET.escalation.consecutiveSearches) are policy-gated denials set only by computeRunScope, so the onboarding purposes' hook decisions are unchanged — CON-7, CON-14 and NFR-5: stale edits fail, a stuck agent stops itself, every error path exits 2; the count is read by event seq inside the deny's own transaction; hook p95 about 94 ms with read recording on
+- [Phase 02]: 02-13: a unit is judged from the clone, the quick records and measured facts, never the host outcome kind; G2 runs the required checks only when every other rule passes and stops a failing check before the commit, G4 re-proves them at the clean commit, and every other ending is one decision with a reason through blockRun - AUT-7 and FR-6: the run reaches ready_for_review only after a passed G4 row for exactly the handed-off commit, the GSD records and config.json are archived then restored or removed so the clone is clean, and a hand-off conflict leaves the user ref alone
+- [Phase 02]: 02-13: start refuses with exit 3 and creates nothing when no admitted GSD is found; gate.result and decision.opened events carry the attempt ID; an item found delegated when the running stage starts is an error left to resume (02-16, 02-17) - RC-1 and OPS-2
+- [Phase 02]: 02-14: a declared check is repository code, validated in a scratch clone (undeclared writes, network by proxy or error text) and cached per project, pin and that one check's spec before it can be evidence; the baseline is measured at the pin and the unit is judged against it, a failure at base and head is a preExisting flag on a failed row; the install is the only network step, through a registry-only proxy; the test inventory is measured by AVARICE after the invocation, and G2 holds the checks delta so a failing target stops at G2 - ONB-10, AUT-8, AUT-9, CON-8, D-11, D-12
+- [Phase 02]: 02-15: status gains one optional runs key (last key of a project entry) built from ledger rows only; lastCheckpoint skips the closing none checkpoint; a resumable run with no live lease is shown paused (verification interrupted or supervisor interrupted) with its open attempt and step; inbox prints each issue on its own width-cut line; install-host refuses under AVARICE_RUN before the profile resolves and refuses symlinks and files without the marker line - FR-11, OPS-7, D-19, CS-11, RC-5, CON-6 — The Phase 1 JSON stays byte-identical (four snapshots unchanged); a refusal writes nothing
+- [Phase 02]: 02-16: a crashed or wall-clock-killed unit with no moved HEAD is discarded to its snapshot and retried once; a second failure is a repeated_failure decision naming both attempts; a spent invocations budget blocks before the discard — CON-16 and FR-4: one retry, no competing loop, budgets charged stay charged
+- [Phase 02]: 02-16: routeOutcome order is moved HEAD, spent budget, hook loop limit, then paused, denied, no_progress, discard-and-retry — A spent budget denies every later call, so the budget is the cause when a long unit also reaches three denials
+- [Phase 02]: 02-17: an interrupted invocation is reconciled as inconclusive (discard to its snapshot, one CON-16 retry); the mid-handoff kill point sits between the fetch and its record so resume repeats the idempotent fetch
+- [Phase 02]: 02-17: resume spends a killed invocation's orphaned reservation as soon as it has reaped it (CON-13), and an attempt that never launched a unit does not use the item's retry
+- [Phase 02]: 02-18: S2-D measured that an in-sandbox git commit needs eight writable entries under the clone's .git (objects, refs/heads/avarice, logs/HEAD, logs/refs/heads/avarice, index, index.lock, COMMIT_EDITMSG, HEAD.lock) and fails with only objects and the run ref; limitation 8 is resolved and the supervisor still commits (D-03) — CON-1 and D-03: no agent gets any of those entries; docs/containment.md has ten run-purpose matrix rows and test/unit/containment-matrix.test.ts fails on an empty cell, a misordered mechanism or an untracked test file
+- [Phase 02]: 02-19: the interactive shell is one session engine with two input modes (raw keys on a terminal, whole lines for TERM=dumb); it holds no ledger connection and strips all output once — ADR-013 decisions 3 and 6; one Consumer interface keeps the menu, prompts and live views single-sourced
+- [Phase 02]: 02-19: Ledger.listRunEvents added as the only port change, a read-only latest-events query for the watch view; macOS script cannot type after the screen is up, so key handling is proven on a python3 pty driver (test tooling only) — the Ledger port had no event read; script sends end-of-file at once and drops a completed line at the raw-mode switch
+- [Phase 02]: 02-20: prepareRunInvocation creates the host TMPDIR (scratch/tmp) and scratch/npm-cache before launch; without it every sandboxed Bash call of a real unit failed to initialize the sandbox
+- [Phase 02]: 02-20: attempts a real model declines in words (credential reads, settings, contract and budget writes) are made by a probe script run through the declared npm test, so the sandbox layer answers; the hook layer is judged by the model-driven forms it does attempt
+- [Phase 02]: 02-20: cs7-other-profile-sandbox was recorded FAIL (the sandbox denyRead did not list another profile root) and is now fixed by owner decision: every run sandbox (host settings and the SandboxedExecutor paths of checks, validation, baseline and npm ci) denies the default parents ~/.local/share/avarice, ~/.config/avarice and ~/.local/share/avarice-work and re-allows only the run own clone and scratch; roots placed by AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME are a documented limit; live re-run PASS
+- [Phase 02]: 02-21: the portfolio conventions draft adds node_modules/.tmp/** and node_modules/.vite-temp/** to test:e2e writes (found by ONB-10 validation); the owner committed it as 9f63d91 in ~/aa-phan-portfolio-v2 with checks digest sha256:43b374ff... (the plan's uncorrected text digests to sha256:efe24475...)
+- [Phase 02]: 02-21: owner approved the three R1 briefs (parseBrief digests recorded) and the exit spend at 5.00 USD per run, 2.00 per invocation; 5.7565 of the 25 USD Phase 2 ceiling spent so far (D-15)
+- [Phase 02]: 02-22: the exit passed: three owner-approved R1 briefs each reached ready_for_review unattended on the real portfolio (one attempt each, 3.5286 USD), owner checkout unchanged but for three avarice/run_* branches; Phase 2 spend 9.2851 of 25 USD
+- [Phase 02]: 02-23: runs.md was not re-grounded after its review; the hook-rule and event-kind denominators are reproducible commands now (33 rule IDs, 28 event kinds)
+- [Phase 02]: 02-26: the hook judges the path part of git object names and allow-lists log and status options; show takes only object-by-path operands (CR-01)
+- [Phase 02]: 02-26: the contract-command sandbox residual is named in containment.md and findings.md for owner acceptance (T-02-91)
+- [Phase 02]: 02-27: a git object name is matched against the secret globs lexically (as written) from the working copy root and the shell's directory, then judged again by the canonical read rules; git show <rev>:.env is refused even when the revision stores a symlink there — Git reads the name from the tree or the index, not the working copy, so a working-copy symlink must not stand in for a secret name (G-02-H2)
+- [Phase 02]: 02-28: usage lines of onboard and resume print through errorLine; the soft hyphen stays out of the stripped invisible-format class
+- [Phase 02]: 02-29: COMMIT_SHA narrowed to 40 hex and a SHA-256 HEAD refused at the first read naming the object format (R-WR-06)
+- [Phase 02]: 02-29: review suggestion refsAllowed <= 1 not added; the exit evidence tool already fails any new ref other than refs/heads/avarice/<runId> (R-IN-09, for plan 02-35)
+- [Phase 02]: 02-30: no SIGTERM abort of the unit; an operator stop still ends the supervisor at once and the next resume reaps the host (owner decision needed to change)
+- [Phase 02]: 02-30: a gated commit is the supervisor's own only with matching trailers and a single parent equal to the snapshot head
+- [Phase 02]: 02-31: cleanupAttended takes optional home and tmp roots so offline tests never name the real home; redactHome matches wherever the next character cannot continue a path component
+- [Phase 02]: 02-32: settleBudgets writes a settlement and an orphan conversion in one ledger transaction; an invocation that ended without a result (resultSeen false) is charged its cost reservation
+- [Phase 02]: 02-33: allow-list inversion of the command sandbox not done (node and npm need many system paths); the credential denial stays a list of known locations, documented in containment.md limits
+- [Phase 02]: 02-33: CREDENTIAL_PATHS (twelve home-relative locations, adds .git-credentials and .pgpass) is the single list for all five deny sites; check output is redacted before storage
+- [Phase 02]: 02-34: the install proxy vets every resolved address (isPublicAddress) and dials the vetted address; the conventions refuse localhost, single-label and IP-spelled registry hosts; private-network registries are unsupported — R-WR-02 needs both layers, since a syntactic refusal cannot cover a public name that resolves to a private address; the test-only resolve option is pinned out of production by a footprint scan
+- [Phase 02]: 02-35: containment.md owns the egress proxy rules and the private-network limit; other docs/system documents link to it — Fresh reviewers flagged one fact stated in three documents
+- [Phase 02]: UAT 2026-11-08: owner accepted 02-35-REVIEW WR-01..WR-03 as built (proxy dials the first vetted address; any failed lease renewal aborts the unit; current invisible-character set); deferred WR-04, IN-01..IN-06 and the open owner decisions to backlog 999.4 and 999.5
 
 ### Pending Todos
 
@@ -196,6 +280,9 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - [Phase 1, backlog 999.1]: A real `avarice onboard --mode fast` reaching `active` with completeness `partial` is unchecked live (UAT test 13, deferred)
 - [Phase 1, backlog 999.2]: The local-mount refusal (`local` flag heuristic, A6) is unverified against a real smbfs or nfs mount (UAT test 10, deferred)
+- [Phase 2, backlog 999.4]: A host that ends with no result event is charged its full reservation even when it spent nothing (02-35-REVIEW WR-04); IN-01..IN-06 untriaged (UAT test 4, deferred)
+- [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
+- [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 
 ### Quick Tasks Completed
 
@@ -216,6 +303,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T08:50:00Z
-Stopped at: Phase 01 complete, ready to plan Phase 2
+Last session: 2026-11-08
+Stopped at: Phase 02 complete, ready to plan Phase 3
 Resume file: None

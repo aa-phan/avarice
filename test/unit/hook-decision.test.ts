@@ -6,9 +6,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { sha256Hex } from '../../src/domain/digest.ts';
-import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
-import type { HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
-import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
+import { GIT_OUTPUT_FORMS, SHORT_VALUE_OPTIONS, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
+import type { GitOutputForm, HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
+import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS, credentialPaths } from '../../src/domain/invocation-scope.ts';
 
 const STAGING = '/work/onb-1/staging';
 const WRITE_ROOT = `${STAGING}/.planning/codebase`;
@@ -672,5 +672,687 @@ describe('the knowledge purpose policy: no shell, confined reads, one output dir
       assert.equal(parseHookPolicy(bad).ok, false);
     }
     assert.equal(parseHookPolicy({ ...good, readConfine: [] }).ok, true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The run purpose (plan 02-08): contract commands, no human prompts, no background shell, glob writes.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('the run purpose: agent commands, prompts and background shells (RC-4, RC-5, CON-5)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const runPolicy = (overrides: Partial<HookPolicy> = {}, commands: Partial<HookPolicy['commands']> = {}): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['src/hooks/useSwipeStep.ts', 'tests/unit/*.test.ts', '.planning/quick/**'],
+        protectedGlobs: ['package.json', '.github/**', '.git/**'],
+        agentCommands: [
+          { words: ['npm', 'run', 'typecheck'], paths: false },
+          { words: ['npm', 'test'], paths: false },
+          { words: ['npx', 'vitest', 'run'], paths: true },
+        ],
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+        ...overrides,
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED, ...commands },
+    );
+  const run = (command: string, over: Partial<HookPolicy> = {}) => decide(shell(command), runPolicy(over));
+  const denied = (command: string, rule: string, over: Partial<HookPolicy> = {}) => {
+    const d = run(command, over);
+    assert.equal(d.decision, 'deny', command);
+    assert.equal(d.rule, rule, command);
+  };
+
+  it('denies a Read of a credential file and of a file under a credential directory with deny-read (R-WR-03)', () => {
+    const over = { denyRead: [REPO, DATA, ...credentialPaths('/home/u')] };
+    for (const path of ['/home/u/.netrc', '/home/u/Library/Keychains/x', '/home/u/.gnupg/pubring.kbx', '/home/u/.git-credentials']) {
+      const d = decide(read(path), runPolicy(over));
+      assert.deepEqual([d.decision, d.rule], ['deny', 'deny-read'], path);
+    }
+    denied('cat /home/u/.netrc', 'deny-read', over);
+    // A sibling that only shares the prefix of a credential file is not under it: it is refused as outside the read set, not as a denied root.
+    assert.equal(decide(read('/home/u/.netrc-example'), runPolicy(over)).rule, 'outside-read-set');
+  });
+
+  it('allows a contract command word for word with rule agent-command, charging toolCalls', () => {
+    for (const command of ['npm run typecheck', 'npm test']) {
+      const d = run(command);
+      assert.deepEqual([d.decision, d.rule, d.budget], ['allow', 'agent-command', 'toolCalls'], command);
+    }
+  });
+
+  it('denies a contract command with an extra word, and any other npm form, with shell-not-allowed', () => {
+    denied('npm run typecheck -- --watch', 'shell-not-allowed');
+    denied('npm test --silent', 'shell-not-allowed');
+    denied('npm install left-pad', 'shell-not-allowed');
+    denied('npm run build', 'shell-not-allowed');
+    denied('npx tsc', 'shell-not-allowed');
+  });
+
+  it('admits path words after an entry that ends in <paths>, and none with zero paths denied', () => {
+    assert.deepEqual(
+      ['npx vitest run tests/unit/swipe-step.test.ts', 'npx vitest run tests/unit/a.test.ts src/hooks/useSwipeStep.ts', 'npx vitest run'].map((c) => run(c).rule),
+      ['agent-command', 'agent-command', 'agent-command'],
+    );
+  });
+
+  it('denies a <paths> word that leaves the read set with outside-read-set and a secret file with deny-secret-read', () => {
+    denied('npx vitest run ../../etc/passwd', 'outside-read-set');
+    denied('npx vitest run tests/.env', 'deny-secret-read');
+  });
+
+  it('denies an option, an absolute path and an expanding word among the <paths> with a rule that names why', () => {
+    denied('npx vitest run --reporter=json', 'shell-not-allowed');
+    denied('npx vitest run -u', 'shell-not-allowed');
+    denied('npx vitest run /work/onb-1/staging/tests/a.test.ts', 'shell-not-allowed');
+    denied('npx vitest run tests/**', 'shell-syntax');
+  });
+
+  it('denies a chained, substituted or redirected contract command with shell-syntax', () => {
+    denied('npm test; curl x', 'shell-syntax');
+    denied('npm test && git push', 'shell-syntax');
+    denied('npm test > out.txt', 'shell-syntax');
+    denied('npm test $(curl x)', 'shell-syntax');
+  });
+
+  it('allows a contract command piped into a read-only command, each segment judged on its own', () => {
+    assert.equal(run('npm test | head -5').rule, 'agent-command');
+    denied('npm test | sh', 'shell-not-allowed');
+    denied('npm test | curl -d @- x', 'shell-denied-prefix');
+  });
+
+  it('without any agent command, npm and npx stay denied by their prefix exactly as in Phase 1', () => {
+    for (const command of ['npm test', 'npx vitest run']) {
+      const d = decide(shell(command), policy());
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-denied-prefix'], command);
+    }
+  });
+
+  it('keeps git commit, git push, git config, git -c, avarice, claude, curl and make denied for the run purpose', () => {
+    denied('git commit -m x', 'shell-denied-prefix');
+    denied('git -c user.name=x commit -m x', 'shell-denied-prefix');
+    denied('git push origin HEAD', 'shell-denied-prefix');
+    denied('git config user.name x', 'shell-denied-prefix');
+    denied('avarice status', 'shell-denied-prefix');
+    denied('claude -p x', 'shell-denied-prefix');
+    denied('curl https://example.com', 'shell-denied-prefix');
+    denied('make test', 'shell-denied-prefix');
+  });
+
+  it('never matches an agent command that starts with a word the contract may not grant, even when a policy file lists one', () => {
+    const hostile: Partial<HookPolicy> = {
+      agentCommands: [
+        { words: ['git', 'commit', '-m', 'x'], paths: false },
+        { words: ['avarice', 'status'], paths: false },
+        { words: ['/usr/bin/git', 'push'], paths: false },
+        { words: ['curl'], paths: true },
+      ],
+    };
+    denied('git commit -m x', 'shell-denied-prefix', hostile);
+    denied('avarice status', 'shell-denied-prefix', hostile);
+    denied('curl x', 'shell-denied-prefix', hostile);
+    denied('/usr/bin/git push', 'shell-not-allowed', hostile);
+  });
+
+  it('keeps a Phase 1 read-only command working beside the contract commands', () => {
+    const d = run('ls src');
+    assert.deepEqual([d.decision, d.rule], ['allow', 'shell-identity']);
+  });
+
+  it('denies AskUserQuestion with no-human-prompts for the run purpose and keeps the Phase 1 rule for the others', () => {
+    const call: NormalizedToolCall = { kind: 'other', tool: 'AskUserQuestion' };
+    assert.deepEqual(decide(call, runPolicy()), { decision: 'deny', rule: 'no-human-prompts' });
+    assert.deepEqual(decide(call, policy()), { decision: 'deny', rule: 'unknown-tool' });
+    const normalized = normalizeToolCall('AskUserQuestion', { questions: [] }, STAGING);
+    assert.ok(normalized.ok);
+    assert.deepEqual(decide(normalized.call, runPolicy()), { decision: 'deny', rule: 'no-human-prompts' });
+  });
+
+  it('denies a tool the policy lists by name whatever its kind', () => {
+    assert.deepEqual(decide({ kind: 'meta', tool: 'TodoWrite' }, runPolicy({ deniedTools: ['TodoWrite'] })), { decision: 'deny', rule: 'no-human-prompts' });
+    assert.equal(decide({ kind: 'meta', tool: 'TodoWrite' }, runPolicy()).decision, 'allow');
+  });
+
+  it('denies a background shell call with background-shell, an allowed command included, and charges nothing', () => {
+    const background = (command: string): NormalizedToolCall => ({ kind: 'shell', command, background: true, cwd: STAGING });
+    for (const command of ['npm test', 'ls', 'npm run typecheck']) assert.deepEqual(decide(background(command), runPolicy()), { decision: 'deny', rule: 'background-shell' }, command);
+    // Phase 1 purposes handle a background shell as before.
+    const onboarding = decide(background('ls'), policy());
+    assert.deepEqual([onboarding.decision, onboarding.rule], ['allow', 'shell-identity']);
+    assert.equal(decide(shell('ls'), runPolicy()).decision, 'allow');
+  });
+
+  it('judges a contract command after the GSD preamble line like any other line', () => {
+    const d = decide(shell(`${PREAMBLE}\nnpm test`), runPolicy());
+    assert.deepEqual([d.decision, d.rule], ['allow', 'agent-command']);
+    assert.equal(decide(shell(`${PREAMBLE}\nnpm test -- --watch`), runPolicy()).rule, 'shell-not-allowed');
+  });
+
+  // Plan 02-09 (spike S2-B): the GSD verbs of the quick workflow, each admitted in the one form quick.md issues it, with a refused neighbour.
+  describe('the GSD verbs of the quick workflow (CON-2; plan 02-09)', () => {
+    const gsd = (line: string): HookDecision => decide(shell(`${PREAMBLE}\n${line}`), runPolicy());
+    const gsdAllowed = (line: string): void => {
+      const d = gsd(line);
+      assert.deepEqual([d.decision, d.rule, d.budget], ['allow', 'shell-identity', 'toolCalls'], line);
+    };
+    const gsdDenied = (line: string, rule: string): void => {
+      const d = gsd(line);
+      assert.deepEqual([d.decision, d.rule], ['deny', rule], line);
+    };
+
+    it('admits query init.quick with the one flag quick.md line 125 passes in validate mode, and refuses any other flag', () => {
+      gsdAllowed('INIT=$(gsd_run query init.quick "Collapse repeated dashes")');
+      gsdAllowed('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --validate)');
+      gsdDenied('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --full)', 'shell-gsd-option');
+      gsdDenied('INIT=$(gsd_run query init.quick "Collapse repeated dashes" --ws=other)', 'shell-gsd-option');
+      gsdDenied('INIT=$(gsd_run query init.quick "x" --cwd /etc)', 'shell-gsd-option');
+    });
+
+    it('admits query config-get only for the keys quick.md and the gsd-executor agent read, with --default as its one value option', () => {
+      for (const key of ['response_language', 'workflow.use_worktrees', 'runtime', 'workflow._auto_chain_active', 'workflow.auto_advance', 'workflow.human_verify_mode', 'commit_docs']) {
+        gsdAllowed(`gsd_run query config-get ${key} --raw`);
+      }
+      gsdAllowed('HUMAN_VERIFY_MODE=$(gsd_run query config-get workflow.human_verify_mode --default end-of-phase --raw)');
+      gsdAllowed('RESPONSE_LANGUAGE=$(gsd_run query config-get response_language --raw --default "")');
+      // The refused neighbours: another key, no key, two keys, another option, a redirection.
+      gsdDenied('gsd_run query config-get brave_search --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get commit_docs runtime --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run query config-get commit_docs --pick x', 'shell-gsd-option');
+      gsdDenied('RESPONSE_LANGUAGE=$(gsd_run query config-get response_language --raw --default "" 2>/dev/null || echo "")', 'shell-syntax');
+    });
+
+    it('admits loop render-hooks only for the two points quick.md renders', () => {
+      gsdAllowed('PLAN_PRE_HOOKS_JSON=$(gsd_run loop render-hooks plan:pre --raw)');
+      gsdAllowed('EXECUTE_POST_HOOKS_JSON=$(gsd_run loop render-hooks execute:post --raw)');
+      gsdDenied('gsd_run loop render-hooks verify:post --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run loop render-hooks --raw', 'shell-gsd-operand');
+      gsdDenied('gsd_run loop run-step plan:pre', 'shell-gsd-verb');
+    });
+
+    it('keeps every GSD verb that writes denied: config-set, query commit and quick-tasks-append', () => {
+      gsdDenied('gsd_run config-set workflow.text_mode false', 'shell-gsd-verb');
+      gsdDenied('gsd_run query commit "docs: x" --files a', 'shell-gsd-verb');
+      gsdDenied('gsd_run quick-tasks-append --quick-id 1 --slug x --task y', 'shell-gsd-verb');
+    });
+
+    it('keeps the git shapes of quick.md denied by design: commit, add, push, checkout -b, fetch and worktree', () => {
+      for (const command of ['git commit -m x', 'git push origin HEAD']) denied(command, 'shell-denied-prefix');
+      for (const command of ['git add src/slug.ts', 'git checkout -b quick/x', 'git fetch origin main', 'git worktree add ../x']) denied(command, 'shell-not-allowed');
+    });
+  });
+});
+
+describe('the run purpose: glob writes (CON-2)', () => {
+  const runPolicy = (): HookPolicy =>
+    policy({
+      purpose: 'run',
+      writeRoots: ['/work/scratch'],
+      writeGlobs: ['src/hooks/useSwipeStep.ts', 'tests/unit/*.test.ts', '.planning/quick/**'],
+      protectedGlobs: ['package.json', '.github/**', '.git/**', '.planning/config.json'],
+    });
+  const writeRule = (path: string, c = canon) => decide(write(path), runPolicy(), c);
+
+  it('allows a path that matches a write glob with rule write-set', () => {
+    for (const path of [`${STAGING}/src/hooks/useSwipeStep.ts`, `${STAGING}/tests/unit/a.test.ts`, `${STAGING}/.planning/quick/1/PLAN.md`, `${STAGING}/.planning/quick`]) {
+      assert.deepEqual(writeRule(path), { decision: 'allow', rule: 'write-set', budget: 'toolCalls' }, path);
+    }
+  });
+
+  it('denies a path outside every glob with outside-write-set, sibling names sharing a prefix included', () => {
+    for (const path of [`${STAGING}/src/lib/x.ts`, `${STAGING}/src/hooks/useSwipeStep.tsx`, `${STAGING}/tests/unit/deep/a.test.ts`, `${STAGING}-evil/src/hooks/useSwipeStep.ts`, '/work/onb-1/staging2/x', '/etc/passwd']) {
+      assert.deepEqual(writeRule(path), { decision: 'deny', rule: 'outside-write-set' }, path);
+    }
+  });
+
+  it('denies a protected path with protected-path before it asks the write globs, and the clone itself with outside-write-set', () => {
+    assert.deepEqual(writeRule(`${STAGING}/package.json`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.github/workflows/ci.yml`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.git/config`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/config.json`), { decision: 'deny', rule: 'protected-path' });
+    assert.deepEqual(writeRule(STAGING), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('lets a protected glob win over a write glob that also matches', () => {
+    const both = policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['src/secret/**'], writeRoots: [] });
+    assert.equal(decide(write(`${STAGING}/src/a.ts`), both, canon).decision, 'allow');
+    assert.deepEqual(decide(write(`${STAGING}/src/secret/k.ts`), both, canon), { decision: 'deny', rule: 'protected-path' });
+  });
+
+  it('allows the scratch directory, a write root outside the clone, and nothing beside it', () => {
+    assert.equal(writeRule('/work/scratch/tmp/x.txt').decision, 'allow');
+    assert.deepEqual(writeRule('/work/scratch-evil/x'), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('judges the canonical path: a symlink out of the clone and a .. that leaves it are outside', () => {
+    const links = makeCanon({ [`${STAGING}/.planning/quick/out`]: '/elsewhere' });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/quick/out/x.ts`, links), { decision: 'deny', rule: 'outside-write-set' });
+    assert.deepEqual(writeRule(`${STAGING}/src/hooks/../../../x.ts`), { decision: 'deny', rule: 'outside-write-set' });
+    // A symlink that points inside the clone at a protected path is judged by where it lands.
+    const toProtected = makeCanon({ [`${STAGING}/.planning/quick/p`]: `${STAGING}/package.json` });
+    assert.deepEqual(writeRule(`${STAGING}/.planning/quick/p`, toProtected), { decision: 'deny', rule: 'protected-path' });
+  });
+
+  it('keeps the Phase 1 rule when the policy has no writeGlobs: a path under a write root', () => {
+    assert.equal(decide(write(`${WRITE_ROOT}/STACK.md`), policy(), canon).rule, 'write-set');
+    assert.deepEqual(decide(write(`${STAGING}/src/a.ts`), policy(), canon), { decision: 'deny', rule: 'outside-write-set' });
+  });
+
+  it('applies the glob rule to MultiEdit and NotebookEdit like Edit and Write', () => {
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+      const n = normalizeToolCall(tool, tool === 'NotebookEdit' ? { notebook_path: `${STAGING}/package.json` } : { file_path: `${STAGING}/package.json` }, STAGING);
+      assert.ok(n.ok, tool);
+      assert.deepEqual(decide(n.call, runPolicy(), canon), { decision: 'deny', rule: 'protected-path' }, tool);
+    }
+  });
+});
+
+describe('parseHookPolicy for the run purpose', () => {
+  const base = (): HookPolicy => ({
+    ...policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['package.json'], agentCommands: [{ words: ['npm', 'test'], paths: false }], deniedTools: ['AskUserQuestion'], denyBackgroundShell: true }),
+  });
+
+  it('accepts a run policy with every new field and round-trips it', () => {
+    const good = base();
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+  });
+
+  it('refuses malformed run fields and writeGlobs without protectedGlobs', () => {
+    const good = base();
+    const { protectedGlobs: _p, ...noProtected } = good;
+    for (const bad of [
+      noProtected,
+      { ...good, writeGlobs: 'src/**' },
+      { ...good, protectedGlobs: [1] },
+      { ...good, deniedTools: 'AskUserQuestion' },
+      { ...good, denyBackgroundShell: 'yes' },
+      { ...good, agentCommands: 'npm test' },
+      { ...good, agentCommands: [{ words: [], paths: false }] },
+      { ...good, agentCommands: [{ words: ['npm'], paths: 'no' }] },
+      { ...good, agentCommands: [{ words: [4], paths: false }] },
+      { ...good, purpose: 'bogus' },
+    ]) {
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad).slice(0, 80));
+    }
+  });
+});
+
+describe('decideReadBeforeEdit (CON-7)', () => {
+  it('denies an Edit with no recorded read, naming the corrective step', () => {
+    const d = decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: undefined, current: 'a' });
+    assert.equal(d?.decision, 'deny');
+    assert.equal(d?.rule, 'edit-without-read');
+    assert.match(d?.reason ?? '', /read the file again|Read the file/i);
+  });
+
+  it('has no objection when the recorded digest equals the current one', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: 'a', current: 'a' }), null);
+  });
+
+  it('denies a changed file with file-changed-since-read', () => {
+    const d = decideReadBeforeEdit({ tool: 'Edit', exists: true, recorded: 'a', current: 'b' });
+    assert.deepEqual([d?.decision, d?.rule], ['deny', 'file-changed-since-read']);
+  });
+
+  it('lets a Write of a new file through, and denies a Write of an existing file that was never read', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: false, recorded: undefined, current: undefined }), null);
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: true, recorded: undefined, current: 'a' })?.rule, 'edit-without-read');
+    assert.equal(decideReadBeforeEdit({ tool: 'Write', exists: true, recorded: 'a', current: 'b' })?.rule, 'file-changed-since-read');
+  });
+
+  it('treats MultiEdit and NotebookEdit like Edit, and an Edit of a file deleted since the read as changed', () => {
+    for (const tool of ['MultiEdit', 'NotebookEdit']) {
+      assert.equal(decideReadBeforeEdit({ tool, exists: true, recorded: undefined, current: 'a' })?.rule, 'edit-without-read', tool);
+    }
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: false, recorded: 'a', current: undefined })?.rule, 'file-changed-since-read');
+    assert.equal(decideReadBeforeEdit({ tool: 'Edit', exists: false, recorded: undefined, current: undefined })?.rule, 'edit-without-read');
+  });
+
+  it('has no opinion on a tool that is not an edit', () => {
+    assert.equal(decideReadBeforeEdit({ tool: 'Read', exists: true, recorded: undefined, current: 'a' }), null);
+  });
+});
+
+describe('loopLimitOf (CON-14)', () => {
+  const limits = { consecutiveDenials: 3, consecutiveSearches: 25 };
+
+  it('stops at the third consecutive denial and not at the second (boundary edge)', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 2 }, limits), null);
+    assert.deepEqual(loopLimitOf({ consecutiveDenials: 3 }, limits), { stop: true, reason: 'consecutive-denials', count: 3 });
+  });
+
+  it('never stops an invocation with zero denials (empty edge)', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 0 }, limits), null);
+    assert.equal(loopLimitOf({}, limits), null);
+  });
+
+  it('denies the next search after 25 searches in a row and not after 24', () => {
+    assert.equal(loopLimitOf({ consecutiveSearches: 24 }, limits), null);
+    assert.deepEqual(loopLimitOf({ consecutiveSearches: 25 }, limits), { stop: true, reason: 'ineffective-search', count: 25 });
+  });
+
+  it('reads the counts as integers: a non-integer count is no count', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 2.9999999 }, limits), null);
+    assert.equal(loopLimitOf({ consecutiveDenials: Number.NaN }, limits), null);
+  });
+
+  it('a limit of zero leaves that control off', () => {
+    assert.equal(loopLimitOf({ consecutiveDenials: 50, consecutiveSearches: 50 }, { consecutiveDenials: 0, consecutiveSearches: 0 }), null);
+  });
+});
+
+describe('parseHookPolicy for readBeforeEdit and loopLimits', () => {
+  const base = (): HookPolicy => policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['package.json'], readBeforeEdit: true, loopLimits: { consecutiveDenials: 3, consecutiveSearches: 25 } });
+
+  it('accepts both fields and round-trips them', () => {
+    const good = base();
+    assert.deepEqual(parseHookPolicy(JSON.parse(JSON.stringify(good))), { ok: true, policy: JSON.parse(JSON.stringify(good)) });
+  });
+
+  it('refuses a malformed readBeforeEdit or loopLimits', () => {
+    const good = base();
+    for (const bad of [
+      { ...good, readBeforeEdit: 'yes' },
+      { ...good, loopLimits: 3 },
+      { ...good, loopLimits: { consecutiveDenials: -1, consecutiveSearches: 25 } },
+      { ...good, loopLimits: { consecutiveDenials: 3 } },
+      { ...good, loopLimits: { consecutiveDenials: 3.5, consecutiveSearches: 25 } },
+    ]) {
+      assert.equal(parseHookPolicy(bad).ok, false, JSON.stringify(bad));
+    }
+  });
+
+  it('leaves the decision of an onboarding policy unchanged: no read-before-edit field, no objection', () => {
+    const p = policy();
+    assert.equal(p.readBeforeEdit, undefined);
+    assert.equal(parseHookPolicy(JSON.parse(JSON.stringify(p))).ok, true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// CR-01: an admitted git command prints tracked or staged content of a secret path (object names and output forms).
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('git object reads and output forms (CR-01)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const runPolicy = (): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['tests/unit/*.test.ts'],
+        protectedGlobs: ['package.json', '.git/**'],
+        agentCommands: [{ words: ['npm', 'test'], paths: false }],
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED },
+    );
+  const verdict = (command: string, p: HookPolicy = policy(), cwd = STAGING): [string, string | undefined] => {
+    const d = decide(shell(command, cwd), p);
+    return [d.decision, d.rule];
+  };
+
+  it('repro: git show HEAD:.env and git show :.env are denied deny-secret-read under the map and the run policy, as cat .env is', () => {
+    for (const p of [policy(), runPolicy()]) {
+      for (const command of ['git show HEAD:.env', 'git show :.env', 'cat .env']) {
+        assert.deepEqual(verdict(command, p), ['deny', 'deny-secret-read'], `${p.purpose}: ${command}`);
+      }
+    }
+  });
+
+  it('more object forms: a stage number, an ancestor, a nested path, a pem file and git rev-parse deny deny-secret-read', () => {
+    for (const command of ['git show :0:.env', 'git show :2:.env', 'git show HEAD~1:.env', 'git show main:config/.env', 'git show HEAD:certs/server.pem', 'git rev-parse HEAD:.env']) {
+      assert.deepEqual(verdict(command), ['deny', 'deny-secret-read'], command);
+    }
+  });
+
+  it('allowed object paths: a tracked source file, the root tree, an example file and git rev-parse stay shell-identity', () => {
+    for (const command of ['git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:', 'git show HEAD:.env.example', 'git show HEAD:.envrc', 'git rev-parse HEAD:src/a.ts']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('adjacency: git show of an object path is decided like cat of the same path, for every stage spelling', () => {
+    for (const path of ['.env', 'config/.env', 'certs/server.pem', '.env.example', '.envrc', 'src/a.ts']) {
+      const expected = verdict(`cat ${path}`);
+      for (const command of [`git show HEAD:${path}`, `git show :${path}`, `git show :0:${path}`]) {
+        assert.deepEqual(verdict(command), expected, command);
+      }
+    }
+    assert.deepEqual(verdict('git show HEAD:.env.example'), ['allow', 'shell-identity']);
+    assert.deepEqual(verdict('git show HEAD:.envrc'), ['allow', 'shell-identity']);
+  });
+
+  it('encoding: a dot segment, a quoted operand, an empty quote pair and a subdirectory cwd do not hide the secret path', () => {
+    for (const command of ['git show HEAD:./.env', 'git show HEAD:sub/../.env', 'git show "HEAD:.env"', 'git show HEAD:.e""nv']) {
+      assert.deepEqual(verdict(command), ['deny', 'deny-secret-read'], command);
+    }
+    const sub = `${STAGING}/sub`;
+    assert.deepEqual(verdict('git show HEAD:../.env', policy(), sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git show HEAD:.env', policy(), sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git show HEAD:../../../../home/u/repo/.env', policy(), sub), ['deny', 'outside-read-set']);
+  });
+
+  it('unresolvable colon words: a brace, a leading slash, bang or parenthesis, and an absolute path part deny shell-git-object', () => {
+    for (const command of ['git show "HEAD@{0}:.env"', 'git show "HEAD@{10:00}:.env"', 'git show ":/fix"', 'git show ":!x"', 'git ls-files ":(exclude)src"', 'git show HEAD:/etc/passwd', 'git show ":^src/a.ts"', 'git show ":^"', 'git show ":*"', 'git show ":.env*"', 'git show ":?env"', 'git show ":[.]env"']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
+    }
+  });
+
+  it('git show operands: no operand, a bare revision or a hash is shell-git-object; any option is shell-git-output; object paths are allowed', () => {
+    for (const command of ['git show', 'git show HEAD', 'git show HEAD~1', 'git show main', 'git show 0123abcd']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-object'], command);
+    }
+    for (const command of ['git show -s HEAD', 'git show --stat HEAD', 'git show --no-patch HEAD', 'git show --format=%s HEAD', 'git show HEAD:src/a.ts --stat', 'git show -- HEAD:src/a.ts']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    assert.deepEqual(verdict('git show HEAD:src/a.ts HEAD:README.md'), ['allow', 'shell-identity']);
+  });
+
+  it('git log options: patch, diff, line log, pickaxe, abbreviation and bare value options are shell-git-output', () => {
+    const refused = [
+      '-p', '--patch', '-u', '-U3', '--unified=3', '-c', '--cc', '-m', '--raw', '--word-diff', '--color-words', '-W', '--function-context', '--binary',
+      '--patch-with-stat', '-L1,1:.env', '-S TOKEN', '-G TOKEN', '--find-object=0123abcd', '--pat', '--show-signature', '--notes', '--format', '--author', '--format=',
+    ];
+    for (const option of refused) {
+      assert.deepEqual(verdict(`git log ${option}`), ['deny', 'shell-git-output'], `git log ${option}`);
+    }
+  });
+
+  it('git log options: the listed options print no file content and stay shell-identity', () => {
+    const allowed = [
+      '', '--oneline', '-5 --oneline', '--oneline -5', '--format=%H -1', '-n 3', '-n3', '--max-count=3', '-1 --stat', '--stat --format=%h', '--stat -5', '--name-status -2',
+      '--name-only -1', '--shortstat -1', '--all --graph --oneline --decorate', '--since=2.weeks --author=a --grep=fix', 'main..HEAD --oneline', '--oneline -- src',
+      '--follow --oneline -- src/a.ts', '--date=short --format=%ad', '--no-merges --first-parent --reverse --oneline', '-s --oneline', '--no-patch -1',
+    ];
+    for (const option of allowed) {
+      const command = `git log ${option}`.trim();
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('git status options: verbose output (a patch of staged changes) is shell-git-output; the short and porcelain forms stay allowed', () => {
+    for (const option of ['-v', '-vv', '--verbose', '-sv', '--verb']) {
+      assert.deepEqual(verdict(`git status ${option}`), ['deny', 'shell-git-output'], `git status ${option}`);
+    }
+    for (const option of ['', '--short', '-s', '-sb', '-uall', '--porcelain', '--porcelain=v2', '--branch', '--short --branch', '-z']) {
+      const command = `git status ${option}`.trim();
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('git status -u takes its mode attached only, so the word after it is judged as an option (review round 1)', () => {
+    for (const command of ['git status -u -v', 'git status -u -vv', 'git status -uall -v', 'git status -v -u', 'git status -u --verbose']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    for (const command of ['git status -u', 'git status -uno', 'git status -u -s', 'git status -sb -uall']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+    // The word after a bare -u is an operand for git, so a colon word there is judged as an object name (review round 2).
+    assert.deepEqual(verdict('git status -u ":(top)x"'), ['deny', 'shell-git-object']);
+    assert.deepEqual(verdict('git status -u HEAD:.env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status ":(top)x" -u'), ['deny', 'shell-git-object']);
+  });
+
+  it('ordering: an option position never changes a decision; a git global option before the subcommand is not admitted', () => {
+    for (const command of ['git log -p --oneline', 'git log --oneline -p', 'git log -p | head']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-output'], command);
+    }
+    for (const command of ['git log -1 --oneline', 'git log --oneline -1', 'git log --oneline | head -5']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+    assert.deepEqual(verdict('git --no-pager log -p'), ['deny', 'shell-not-allowed']);
+    assert.deepEqual(verdict('git -C . show HEAD:.env'), ['deny', 'shell-not-allowed']);
+    assert.deepEqual(verdict('git -c x=y show HEAD:.env'), ['deny', 'shell-denied-prefix']);
+  });
+
+  it('earlier git rules keep their names, and git ls-files and git rev-parse stay allowed', () => {
+    for (const command of ['git show --textconv HEAD:a', 'git show --ext-diff HEAD', 'git log --output=out.txt']) {
+      assert.deepEqual(verdict(command), ['deny', 'shell-git-option'], command);
+    }
+    assert.deepEqual(verdict('git log -pO/home/u/.ssh/id_rsa'), ['deny', 'deny-read']);
+    assert.deepEqual(verdict('git log -O/home/u/.netrc'), ['deny', 'outside-read-set']);
+    assert.deepEqual(verdict('git log -- *.ts'), ['deny', 'shell-syntax']);
+    for (const command of ['git ls-files', 'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse --show-toplevel']) {
+      assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  // S-WR-02: the two option tables must not disagree about which words are operands.
+  it('table pin: the value letters of SHORT_VALUE_OPTIONS cover the valued letters of GIT_OUTPUT_FORMS and never a flag or attached letter', () => {
+    for (const entry of ['git log', 'git status', 'git show']) {
+      const form = GIT_OUTPUT_FORMS[entry] as GitOutputForm;
+      const letters = SHORT_VALUE_OPTIONS[entry] ?? '';
+      const command = entry.slice('git '.length);
+      for (const letter of form.shortValued) assert.ok(letters.includes(letter), `${entry}: -${letter} takes a value in the output form but not in SHORT_VALUE_OPTIONS`);
+      for (const letter of form.shortFlags + form.shortAttached) assert.ok(!letters.includes(letter), `${entry}: -${letter} takes no separate value but is a value letter in SHORT_VALUE_OPTIONS`);
+      const admitted = form.shortFlags + form.shortValued + form.shortAttached;
+      for (const letter of letters) {
+        if (admitted.includes(letter)) continue;
+        assert.equal(verdict(`git ${command} -${letter} HEAD:.env`)[0], 'deny', `git ${command} -${letter} HEAD:.env`);
+        assert.deepEqual(verdict(`git ${command} -${letter} HEAD:src/a.ts`), ['deny', 'shell-git-output'], `git ${command} -${letter} HEAD:src/a.ts`);
+      }
+    }
+  });
+
+  it('table pin: git takes the value of -M of git status only attached, so the word after it is an operand and is judged as an object name', () => {
+    assert.deepEqual(verdict('git status -M HEAD:.env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status -M .env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status -M x'), ['deny', 'shell-git-output']);
+    assert.equal(SHORT_VALUE_OPTIONS['git status'] ?? '', '');
+  });
+
+  it('operand grammar: every word git takes as an operand is returned, whatever the value letters of SHORT_VALUE_OPTIONS say', async () => {
+    const { gitArgs } = await import('../../src/domain/hook-decision.ts');
+    const status = GIT_OUTPUT_FORMS['git status'] as GitOutputForm;
+    const log = GIT_OUTPUT_FORMS['git log'] as GitOutputForm;
+    const show = GIT_OUTPUT_FORMS['git show'] as GitOutputForm;
+    // A test-local form whose attached letter `M` is also a value letter somewhere else: the word after `-M` is still an operand.
+    const attachedM: GitOutputForm = { ...status, shortAttached: 'uM' };
+    assert.deepEqual(gitArgs(attachedM, ['-M', 'HEAD:.env']), { operands: ['HEAD:.env'], refused: false });
+    assert.deepEqual(gitArgs(status, ['-uall', 'HEAD:.env', '-s']), { operands: ['HEAD:.env'], refused: false });
+    // The word after a valued letter that ends its cluster is the value, never an operand; an attached value is part of the cluster.
+    assert.deepEqual(gitArgs(log, ['-n', '3', 'HEAD:a']), { operands: ['HEAD:a'], refused: false });
+    assert.deepEqual(gitArgs(log, ['-n3', '--max-count=2', '--oneline', 'HEAD:a']), { operands: ['HEAD:a'], refused: false });
+    // After a bare `--` every word is an operand, an option-looking one included; a lone `-` is no operand.
+    assert.deepEqual(gitArgs(log, ['--oneline', '--', '-x', 'HEAD:a']), { operands: ['-x', 'HEAD:a'], refused: false });
+    assert.deepEqual(gitArgs(log, ['-', '-1']), { operands: [], refused: false });
+    // An option outside the grammar is refused; `git show` refuses every option, a bare `--` included.
+    assert.equal(gitArgs(log, ['--oneline', '-p']).refused, true);
+    assert.equal(gitArgs(log, ['--format']).refused, true);
+    assert.equal(gitArgs(status, ['-1']).refused, true);
+    assert.deepEqual(gitArgs(show, ['HEAD:a', 'HEAD:b']), { operands: ['HEAD:a', 'HEAD:b'], refused: false });
+    assert.equal(gitArgs(show, ['-s', 'HEAD:a']).refused, true);
+    assert.equal(gitArgs(show, ['--', 'HEAD:a']).refused, true);
+  });
+
+  it('corrective reasons: a shell-git-output and a shell-git-object denial tell the model the admitted spelling; other rules carry none', () => {
+    const output = decide(shell('git log -p'));
+    assert.deepEqual([output.decision, output.rule], ['deny', 'shell-git-output']);
+    assert.ok(output.reason !== undefined && output.reason.includes('=') && output.reason.includes('git log -1 --stat'), String(output.reason));
+    const object = decide(shell('git show HEAD'));
+    assert.deepEqual([object.decision, object.rule], ['deny', 'shell-git-object']);
+    assert.ok(object.reason !== undefined && object.reason.includes('<revision>:<path>'), String(object.reason));
+    for (const command of ['cat .env', 'git show HEAD:.env', 'curl x', 'git log -- *.ts']) assert.equal(decide(shell(command)).reason, undefined, command);
+  });
+});
+
+// commandWords: the words the hook's lexer makes of a single-segment line, a test aid so a suite can run a tool on exactly the words judged.
+describe('commandWords', () => {
+  it('gives the words of one segment with the quotes resolved', async () => {
+    const { commandWords } = await import('../../src/domain/hook-decision.ts');
+    assert.deepEqual(commandWords('git show "HEAD:.e""nv"'), ['git', 'show', 'HEAD:.env']);
+    assert.deepEqual(commandWords("git log --format='%h %s' -1"), ['git', 'log', '--format=%h %s', '-1']);
+  });
+
+  it('gives null for more than one segment and for a line the lexer refuses', async () => {
+    const { commandWords } = await import('../../src/domain/hook-decision.ts');
+    assert.equal(commandWords('git log | head'), null);
+    assert.equal(commandWords('git show "HEAD:.env'), null);
+    assert.equal(commandWords('git show $(x)'), null);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// G-02-H2: git reads `<rev>:<path>`, `:<path>` and `:N:<path>` by the literal name from the revision tree or the index,
+// so a working-copy symlink must not stand in for a secret name.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('symlink at a secret object name (G-02-H2)', () => {
+  const GLOBS = ['**/.env', '**/*.pem', '**/secrets/**'];
+  const globPolicy = (): HookPolicy => policy({ denyReadGlobs: GLOBS });
+  const verdictWith = (links: Readonly<Record<string, string>>, command: string, cwd = STAGING): [string, string | undefined] => {
+    const d = decide(shell(command, cwd), globPolicy(), makeCanon(links));
+    return [d.decision, d.rule];
+  };
+  const FILE_LINK = { [`${STAGING}/.env`]: `${STAGING}/config/dev.env` };
+  const DANGLING = { [`${STAGING}/.env`]: `${STAGING}/nowhere.txt` };
+  const DIR_LINK = { [`${STAGING}/secrets`]: `${STAGING}/vault` };
+  const OBJECT_FORMS = ['git show HEAD~1:.env', 'git show HEAD:.env', 'git show :.env', 'git show :0:.env'];
+
+  it('a symlink at .env does not hide the name: every object form is denied deny-secret-read', () => {
+    for (const command of OBJECT_FORMS) assert.deepEqual(verdictWith(FILE_LINK, command), ['deny', 'deny-secret-read'], command);
+  });
+
+  it('cat of the same symlink still judges the resolved target, so cat .env stays allowed', () => {
+    assert.deepEqual(verdictWith(FILE_LINK, 'cat .env'), ['allow', 'shell-identity']);
+  });
+
+  it('a dangling symlink at .env does not hide the name either', () => {
+    for (const command of OBJECT_FORMS) assert.deepEqual(verdictWith(DANGLING, command), ['deny', 'deny-secret-read'], command);
+  });
+
+  it('a symlinked parent directory does not hide a directory-anchored secret glob, while cat of the resolved file stays allowed', () => {
+    assert.deepEqual(verdictWith(DIR_LINK, 'git show HEAD~1:secrets/key.txt'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(DIR_LINK, 'cat secrets/key.txt'), ['allow', 'shell-identity']);
+  });
+
+  it('from a subdirectory the ./ and ../ spellings and the plain name are all denied', () => {
+    const sub = `${STAGING}/sub`;
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:../.env', sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:.env', sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:./../.env', sub), ['deny', 'deny-secret-read']);
+  });
+
+  it('a name that climbs above the filesystem root is outside-read-set', () => {
+    assert.deepEqual(verdictWith({}, 'git show HEAD:../../../../../../x'), ['deny', 'outside-read-set']);
+  });
+
+  it('unchanged: ordinary names, an example file and the root tree stay allowed with the glob set in force', () => {
+    for (const command of ['git show HEAD:src/a.ts', 'git show HEAD:.env.example', 'git show HEAD:']) {
+      assert.deepEqual(verdictWith(FILE_LINK, command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('unchanged: a symlink that points AT a secret is still denied for git and for cat', () => {
+    const toSecret = { [`${STAGING}/link.txt`]: `${STAGING}/.env` };
+    assert.deepEqual(verdictWith(toSecret, 'git show HEAD:link.txt'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(toSecret, 'cat link.txt'), ['deny', 'deny-secret-read']);
   });
 });

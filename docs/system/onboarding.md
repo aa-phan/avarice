@@ -2,7 +2,7 @@
 
 This document describes the onboarding flow implemented by the onboarding service, its stages, the resume and reconcile logic, the supporting domain modules (lifecycle, preflight, mapping, onboarding contract, validation, project record) and the git staging adapters (`src/app/onboarding-service.ts`, `src/app/stages/`, `src/app/resume.ts`, `src/domain/`, `src/adapters/git/`).
 
-Onboarding takes one existing git repository to one immutable project record, in a fixed pipeline: register and preflight, compile a contract, stage a clone, map with GSD in a contained host, validate, build indexes, activate. Nothing is written to the user's repository or to its `.planning/`. Every stage commits a checkpoint before its side effect and a transition after it, so a killed run resumes from the committed state. The sibling documents own what this one leaves out: [containment.md](containment.md) (hook and sandbox), [data-model.md](data-model.md) (tables), [indexes-and-context.md](indexes-and-context.md) (index internals), [cli-reference.md](cli-reference.md) (flags).
+Onboarding takes one existing git repository to one immutable project record, in a fixed pipeline: register and preflight, compile a contract, stage a clone, map with GSD in a contained host, validate, build indexes, activate. Nothing is written to the user's repository or to its `.planning/`. Every stage commits a checkpoint before its side effect and a transition after it, so a killed run resumes from the committed state. The sibling documents own what this one leaves out. They are [containment.md](containment.md) (hook and sandbox), [data-model.md](data-model.md) (tables), [indexes-and-context.md](indexes-and-context.md) (index internals) and [cli-reference.md](cli-reference.md) (flags). [runs.md](runs.md) covers the unattended run of one work item, which starts from the active record this pipeline produces.
 
 ## Entry points
 
@@ -40,7 +40,7 @@ Every pre-activation state (discovered through planning_ready) may move to `bloc
 Which states the code reaches:
 
 - Reached by the stage loop: discovered, contract_proposed, mapping, validating, validation_failed, planning_ready, active, blocked, incompatible.
-- `paused` is entered only by the resume prelude, which also leaves it. The map stage has a `paused` branch for an invocation outcome, but the outcome classifier never produces it.
+- `paused` is entered only by the resume prelude, which also leaves it. The map stage has a `paused` branch for an invocation outcome. The outcome classifier returns `paused` only when a caller passes it a structural pause signal, and no onboarding stage does, so that branch is not reached.
 - Never entered by any stage, command or adapter: `planning`, `stale`, `deactivated`. Their edges exist in the table only.
 - The edges out of `blocked` and `incompatible` (back to `contract_proposed`) and out of `deactivated` are never driven. A blocked or incompatible onboarding is final in practice: resume reports it and changes nothing, and a new `onboard` creates a fresh onboarding for the same project.
 
@@ -52,7 +52,7 @@ The loop reads the committed state, runs the one stage for it, and repeats until
 
 A run holds a lease on its onboarding. Taking it succeeds only when the lease is free or its expiry has passed, and every take bumps a fence number. The default lifetime is 180 seconds (an environment variable overrides it in the fault tests). The holder renews every third of the lifetime from a background timer, so a stage that waits on the host for a long time keeps the lease. Every transition, checkpoint and activation carries the fence, so a previous holder that wakes up after a takeover is refused at its next write. A failed renewal ends the loop at its next check. The lease is released on the way out.
 
-Consequence: two processes racing for an expired lease produce exactly one runner; the loser reports a conflict and changes nothing. A live lease also blocks `resume`; `status` shows a pre-activation onboarding as interrupted when its lease is absent or expired.
+Consequence: two processes racing for an expired lease produce exactly one runner; the loser reports a conflict and changes nothing. A live lease also blocks `resume`; `status` shows a pre-activation onboarding as interrupted when its lease is absent or expired. The unattended run takes its lease on its own row by the same rules; [runs.md](runs.md) describes that supervisor.
 
 ## Preflight and refusals
 
@@ -70,7 +70,7 @@ What preflight records, as names and classifications only: default branch, uncom
 
 ### Existing planning state and the promotion rule
 
-The existing `.planning/codebase/` map is classified as one of: none, stamped-complete (all seven files stamped), stamped-partial, unstamped, unknown-format (a file that is not one of GSD's seven), user-edited (a commit touched a file after the commit that wrote its stamp, or uncommitted changes sit under `.planning/`). Classes are tested in this order: none (no map files and no uncommitted change under `.planning/codebase/`); unknown-format; user-edited; unstamped; then stamped-complete or stamped-partial. Unknown-format therefore outranks user-edited.
+The existing `.planning/codebase/` map is classified as one of: none, stamped-complete (all seven files stamped), stamped-partial, unstamped, unknown-format (a file that is not one of GSD's seven), user-edited (a commit touched a file after the commit that wrote its stamp, or uncommitted changes sit under `.planning/`). Classes are tested in this order. First is none (no map files and no uncommitted change under `.planning/codebase/`). Then come unknown-format, user-edited and unstamped, and last stamped-complete or stamped-partial. Unknown-format therefore outranks user-edited.
 
 The class never changes the outcome. Every class ends in the same recorded outcome, isolated regeneration: the map is rebuilt in staging and the user's `.planning/` is never touched. A stamped-complete map is flagged as adoption deferred. Mapping modes `adopt` and `paths` exist in the type but are not available (see mapping).
 
@@ -110,7 +110,7 @@ Budget rows live in the ledger and survive kills. An invocation is reserved befo
 
 Staging is a local clone of the user's repository, made with hardlinks disabled and no checkout, detached at the pin and switched to a branch named for the onboarding, under the profile work root. The clone keeps its own git directory, so the sandbox can deny that directory entirely and the user's repository stays byte-identical: no worktree metadata, no branch ref, no object written. The clone starts without the user's repository configuration, so the user's filter drivers and file-monitor settings do not exist in staging.
 
-The clone is built in a partial directory and renamed into place only when it sits on the branch at the pin, so a staging directory is either complete or absent. Re-preparing is idempotent: an existing staging directory is reused only if it is its own repository, cloned from this repository, on the staging branch, at the pin; anything else is a conflict and is left alone. A leftover partial directory from a crash is removed only if it is demonstrably this adapter's own; otherwise it is a conflict.
+The clone is built in a partial directory and renamed into place only when it sits on the branch at the pin, so a staging directory is either complete or absent. Re-preparing is idempotent. An existing staging directory is reused only if it is its own repository, cloned from this repository, on the staging branch, at the pin; anything else is a conflict and is left alone. A leftover partial directory from a crash is removed only if it is demonstrably this adapter's own; otherwise it is a conflict.
 
 The worktree adapter is dormant. It is a complete implementation behind the same port, selected only by the strategy constant, and the constant is fixed to the clone. The composition root builds the workspace from that constant; no configuration, flag or environment variable changes it. Only tests construct the worktree adapter. It differs in that it would write worktree metadata and a branch ref into the user's `.git`.
 
@@ -135,7 +135,7 @@ The CLI only offers full and fast, so `paths` and `adopt` are reachable only thr
 
 Completeness is derived from the mode, never from what the documents say.
 
-The map stage runs one contained host invocation in staging: the full or fast map command. `skip` runs no invocation and moves straight to validation. The existing-map answer is always appended to the prompt, because staging holds an empty map directory even for a repository with no map (AVARICE creates it before launch) and GSD reads an existing directory as an existing map and asks; a headless session cannot answer.
+The map stage runs one contained host invocation in staging: the full or fast map command. `skip` runs no invocation and moves straight to validation. The existing-map answer is always appended to the prompt. Staging holds an empty map directory even for a repository with no map, because AVARICE creates it before launch. GSD reads an existing directory as an existing map and asks, and a headless session cannot answer.
 
 The invocation's outcome is classified from measured facts, not from what the model wrote, in this order:
 
@@ -200,18 +200,20 @@ The record version is previous plus one, but preflight refuses an onboarding whi
 
 ## Checkpoints and kill points
 
-Every checkpoint and transition runs through helpers that also fire fault points, so no stage carries fault code. Setting an environment variable to a point name makes the process kill itself with SIGKILL, with no cleanup, the first time that point is reached; `name#N` fires on the Nth time. Points are `after-transition:<state>` and `after-checkpoint:<action>`. The integration test set kills at 17 points: the transitions to discovered, contract_proposed, mapping, validating and planning_ready; the checkpoints at prepare-workspace, configure-gsd, verify-enforcement, validate, each index step and activate; the second firing of the first index checkpoint (see below); and mid-invocation for map, intel and knowledge. After each kill, resume reaches the same normalized record as an uninterrupted run, with an intact store and no half-activated record.
+Every checkpoint and transition runs through helpers that also fire fault points, so no stage carries fault code. Setting an environment variable to a point name makes the process kill itself with SIGKILL, with no cleanup, the first time that point is reached; `name#N` fires on the Nth time. Points are `after-transition:<state>` and `after-checkpoint:<action>`. The integration test set kills at 17 points. They are the transitions to discovered, contract_proposed, mapping, validating and planning_ready. They also include the checkpoints at prepare-workspace, configure-gsd, verify-enforcement, validate, each index step and activate, and the second firing of the first index checkpoint (see below). The last are the mid-invocation points for map, intel and knowledge. After each kill, resume reaches the same normalized record as an uninterrupted run, with an intact store and no half-activated record.
 
 One checkpoint fires twice: the first index checkpoint is committed once with the planning_ready transition and once by the index stage before the step; `#2` targets the gap between them.
 
 ## Resume, reconcile and reaping
+
+This section describes the resume of an onboarding. The resume of an unattended run is in [runs.md](runs.md).
 
 `resume` on a stop state reports where it ended and takes no lease. Otherwise it takes over the lease (only once expired) and runs a prelude before the stage loop.
 
 The prelude, in order:
 
 1. Reap every interrupted launch. Every launch step left `started` by the previous holder belongs to a host process that is detached in its own process group and may still be writing. The host is found by a process-table search for the session ID recorded at launch. It is ended with a terminate signal, then killed after a grace period; if it survives the kill, resume fails. A host that cannot be searched for or ended stops the resume: no stage and no relaunch runs beside a survivor. All reaps complete before any launch row is marked `interrupted`, so a failed reap leaves every row `started` and the next resume retries. A reap that ended at least one process appends a warning event. A launch row without a session ID is skipped silently, and so is the whole reap when the host has no reap capability (the refusing host used when no contained host is available).
-2. Reconcile the map invocation. This applies to an onboarding in `mapping` or `paused`. A `mapping` row is first moved to `paused`. If the previous holder launched an invocation that no validation has yet followed (more launches than validations), the staging map files decide. If every required file is present, the launch row is marked reconciled, a reconciled event is appended, the map is stamped by AVARICE for fast and full, and the onboarding goes straight to `validating` without a second launch. Otherwise the launch row is marked interrupted and the onboarding returns to `mapping`, where the map stage launches again, charged against the invocation budget.
+2. Reconcile the map invocation. This applies to an onboarding in `mapping` or `paused`. A `mapping` row is first moved to `paused`. If the previous holder launched an invocation that no validation has yet followed (more launches than validations), the staging map files decide. If every required file is present, the launch row is marked reconciled and a reconciled event is appended. AVARICE stamps the map for fast and full, and the onboarding goes straight to `validating` without a second launch. Otherwise the launch row is marked interrupted and the onboarding returns to `mapping`, where the map stage launches again, charged against the invocation budget.
 
 Every other stage is idempotent and simply runs again from the committed state. In particular the workspace stage repeats its whole probe, plan and configure block after a kill.
 
@@ -223,5 +225,5 @@ Every other stage is idempotent and simply runs again from the committed state. 
 - The mapping modes `paths` and `adopt` are accepted by the contract compiler and by the mode type, then block with `scope_unavailable` at the workspace stage.
 - A README-only repository takes mode `skip` regardless of the requested mode, and ends active with an empty codebase list and completeness none.
 - An inconclusive map ending is not a failure; a denied one is never retried.
-- A resume costs budget: the interrupted invocation's reservation is charged as spent at the next reservation attempt (the relaunch, or the intel invocation when reconciliation accepts the files), for invocations and cost but not wall clock, and a relaunch is a new invocation. The prelude itself charges nothing.
+- A resume costs budget. The interrupted invocation's reservation is charged as spent at the next reservation attempt (the relaunch, or the intel invocation when reconciliation accepts the files). The charge covers invocations and cost but not wall clock, and a relaunch is a new invocation. The prelude itself charges nothing.
 - The staging path is recorded in the active record, and the record's artifacts location is staging: the staged map documents live there as well as in the artifact store.

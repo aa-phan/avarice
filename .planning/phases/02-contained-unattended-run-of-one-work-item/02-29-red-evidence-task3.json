@@ -1,0 +1,18 @@
+{
+  "command": "node --test test/unit/checkout-digest.test.ts",
+  "ranAgainst": "the commit 808467b (src and scripts unchanged since: RUN_REF_GLOB 'refs/heads/avarice/run_*' still in place) plus the new case `--allow-run-refs does not hide a nested ref under the run prefix, and --allow-ref keeps its glob meaning across a slash (R-IN-09, T-02-104)` in test/unit/checkout-digest.test.ts",
+  "exitCode": 1,
+  "reason": "With --allow-run-refs, adding the branch avarice/run_Y/extra (no avarice/run_Y ref exists) leaves refsDigest equal to the digest taken before it, because the glob's `*` becomes `.*` and crosses `/`; the assertion `a ref below a run segment still counts` (notEqual) fails.",
+  "failingFiles": [
+    "test/unit/checkout-digest.test.ts"
+  ],
+  "failingTests": [
+    "scripts/checkout-digest.ts > --allow-run-refs does not hide a nested ref under the run prefix, and --allow-ref keeps its glob meaning across a slash (R-IN-09, T-02-104)"
+  ],
+  "passingAtBase": [
+    "the other 47 tests of the file, including the existing --allow-run-refs test for one run branch",
+    "the first assertion of the new case (one run segment is left out) and the control for --allow-ref glob across a slash pass at base before the nested-ref assertion fails"
+  ],
+  "semanticAssessment": "The target test executed through the real script on a scratch repository and failed on the planned assertion for the intended reason: the nested ref is hidden by the base glob. The earlier assertions of the same test (a single run branch is left out) held, so the fixture and the flag work; no setup or load fault is involved.",
+  "summary": "Run at the base: 48 tests reported, 47 pass, 1 fail (the nested-ref assertion)."
+}

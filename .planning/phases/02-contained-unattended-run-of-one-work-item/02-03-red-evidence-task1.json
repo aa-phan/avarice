@@ -1,0 +1,35 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/run-lifecycle.test.ts\" \"test/fault/migrations.test.ts\" \"test/integration/run-ledger.test.ts\"",
+  "exitCode": 1,
+  "reason": "src/domain/run-lifecycle.ts and src/adapters/sqlite/migrations/0002-run.ts do not exist yet, so each of the three files fails to load (ERR_MODULE_NOT_FOUND): tap reports 'not ok 1 - test/fault/migrations.test.ts', 'not ok 2 - test/integration/run-ledger.test.ts', 'not ok 3 - test/unit/run-lifecycle.test.ts'; tests 3, pass 0, fail 3.",
+  "failingFiles": [
+    "test/unit/run-lifecycle.test.ts",
+    "test/fault/migrations.test.ts",
+    "test/integration/run-ledger.test.ts"
+  ],
+  "failingTests": {
+    "test/unit/run-lifecycle.test.ts": [
+      "run transition table: has the eleven states of the diagram",
+      "run transition table: accepts every edge of the diagram",
+      "run transition table: accepts exactly the expected edges among all 121 ordered pairs and refuses the rest as invalid on field state",
+      "run transition table: refuses the named examples, among them the adjacency edge contract_ready -> ready_for_review",
+      "run transition table: allows running -> running and refuses every other self-edge",
+      "run transition table: lets nothing leave failed, cancelled or closed",
+      "run state classes: treats ready_for_review, blocked_on_decision, failed, cancelled and closed as stop states",
+      "run next actions: lists the actions of each resumable state in execution order",
+      "work item transition table: accepts exactly ready -> delegated -> implemented -> gated -> done, the discard-and-retry edge and the blocked edges"
+    ],
+    "test/fault/migrations.test.ts": [
+      "the committed v1 fixture database: migrates to version 2: backup written first, every v1 row count kept, four runs columns and three tables added (NFR-9)",
+      "the committed v1 fixture database: refuses a store whose migration 0002 is recorded under a different checksum, naming version 2",
+      "the committed v1 fixture database: is applied by `status` to a v1 store: the CLI path upgrades it to version 2 and keeps the v1 rows"
+    ],
+    "test/integration/run-ledger.test.ts": [
+      "createRun, transitionRun and the checkpoint round trip (tracer): starts a run in contract_ready at version 1 with no checkpoint and no lease",
+      "createRun, transitionRun and the checkpoint round trip (tracer): moves contract_ready -> running: version 2, checkpoint seq 1 from contract_ready, one run.transition event with run_id",
+      "createRun, transitionRun and the checkpoint round trip (tracer): refuses a stale version and a stale fence as conflict, writing nothing",
+      "createRun, transitionRun and the checkpoint round trip (tracer): requires a reason from the documented set to enter blocked_on_decision, records it, and clears it on leaving",
+      "createRun, transitionRun and the checkpoint round trip (tracer): keeps the checkpoint sequence continuous per run across transitions, starting at 1"
+    ]
+  }
+}

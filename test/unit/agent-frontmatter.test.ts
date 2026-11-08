@@ -7,7 +7,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseAgentFile } from '../../src/adapters/gsd/agent-frontmatter.ts';
-import { buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
+import { AVARICE_EXECUTOR_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
 import { PURPOSE_EXTENSIONS, buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
 
 const MAPPER = `---
@@ -191,6 +191,22 @@ describe('buildAgentsJson', () => {
       assert.ok(!r.ok && r.error.kind === 'invalid', `${name}: ${JSON.stringify(r)}`);
       assert.ok(!existsSync(out), `${name}: no file may be written`);
     }
+  });
+
+  it('appends the AVARICE no-commit addendum to gsd-executor and to no other agent (D-03; plan 02-09)', () => {
+    const dir = join(root, 'agents-g');
+    const EXECUTOR = INTEL.replace('gsd-intel-updater', 'gsd-executor').replace(/\n$/, '\nYou are a GSD executor.\n');
+    writeAgents(dir, { 'gsd-executor': EXECUTOR, 'gsd-planner': INTEL.replace('gsd-intel-updater', 'gsd-planner'), 'gsd-codebase-mapper': MAPPER });
+    const out = join(root, 'out-g.json');
+    const r = buildAgentsJson(dir, ['gsd-executor', 'gsd-planner', 'gsd-codebase-mapper'], out);
+    assert.ok(r.ok, JSON.stringify(r));
+    const json = JSON.parse(readFileSync(out, 'utf8'));
+    const sentence = 'AVARICE run: edit files only; the supervisor commits after the run\'s gates pass. Never run git add or git commit; report the task done with the files changed.';
+    assert.equal(AVARICE_EXECUTOR_ADDENDUM, sentence);
+    assert.match(json['gsd-executor'].prompt, /You are a GSD executor\./);
+    assert.equal(json['gsd-executor'].prompt.endsWith(`\n\n${sentence}\n`), true);
+    assert.equal(json['gsd-executor'].prompt.split(sentence).length, 2, 'the addendum appears once');
+    for (const other of ['gsd-planner', 'gsd-codebase-mapper']) assert.equal(json[other].prompt.includes('AVARICE run'), false, `${other} gets no addendum`);
   });
 
   it('refuses names that are not plain file names', () => {

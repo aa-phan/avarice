@@ -1,0 +1,2 @@
+- `src/cli/spawn-supervisor.ts:3`: the comment says the application layer may not start processes; the import lint (`scripts/check-boundaries.ts:10`) enforces no such rule for it, only the absence of adapters and cli imports. Intent unknown (convention only, or a rule meant for the lint).
+- `scripts/check-boundaries.ts:340`: the default lint run covers domain, ports and app only; adapters, cli and the hook entry are not linted, and the hook imports adapters (`src/hook/pre-tool-use.ts:18`). Intent unknown.

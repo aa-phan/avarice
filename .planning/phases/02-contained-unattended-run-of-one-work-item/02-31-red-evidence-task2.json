@@ -1,0 +1,28 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/live-harness-hygiene.test.ts",
+  "ranAgainst": "the Task 1 commit 8807d4a (cleanupAttended and attendedSettings unchanged from the plan base) plus the new cleanupAttended and attendedSettings cases in test/unit/live-harness-hygiene.test.ts. The forged fixtures use only temp directories: cleanupAttended takes the home and the temporary directory as a second argument, and the tests pass two temp directories, so the real home is never named (the plan's idea of using the real home as the forged evidenceDir would have deleted it at this base, since the base trusts the fixture).",
+  "exitCode": 1,
+  "reason": "At base cleanupAttended trusts the fixture: for a profile directory outside the default parents, a link out of its parent, an evidence directory outside the temporary directory and the temporary directory itself it removes the directory and does not throw (assert.throws: 'Missing expected exception.'). For a profile directory without the fixture tag and for a created parent that is not a default parent it fails before the intended check, on rmSync(parent, { recursive: false }) raising EISDIR, so the expected refusal message is not produced. The full removal case also fails on that EISDIR: the base cannot remove a created parent at all (rmSync on a directory without recursive always raises EISDIR). attendedSettings still allows `Bash(cat:*)`, `Bash(head:*)`, `Bash(git log:*)`, `Bash(git diff:*)` and `Bash(git show:*)`, so the exact-git assertion and the no-write-rule assertion fail.",
+  "failingFiles": [
+    "test/unit/live-harness-hygiene.test.ts"
+  ],
+  "failingTests": [
+    "cleanupAttended (R-WR-09) > throws and deletes nothing for a profile directory that is not under a default parent",
+    "cleanupAttended (R-WR-09) > throws and deletes nothing for a profile directory that does not carry the fixture tag",
+    "cleanupAttended (R-WR-09) > throws and deletes nothing for a profile directory that is a link out of its parent",
+    "cleanupAttended (R-WR-09) > throws and deletes nothing for a created parent that is not one of the three default parents",
+    "cleanupAttended (R-WR-09) > throws and deletes nothing for an evidence directory outside the temporary directory",
+    "cleanupAttended (R-WR-09) > throws for an evidence directory that is the temporary directory itself",
+    "cleanupAttended (R-WR-09) > removes its own profile directories, the parents it created, the evidence directory, and disposes the repository",
+    "attendedSettings allow list (R-WR-08) > allows git only as the exact commands git status and git log --oneline",
+    "attendedSettings allow list (R-WR-08) > holds no rule for cat, head, git diff or git show, and no git prefix rule"
+  ],
+  "passingAtBase": [
+    "the six Task 1 redaction and recorder cases",
+    "cleanupAttended (R-WR-09) > removes the evidence directory and disposes the repository for a fixture with no profile directories or created parents",
+    "cleanupAttended (R-WR-09) > skips a profile directory that is already gone",
+    "attendedSettings allow list (R-WR-08) > keeps the rules the sessions need"
+  ],
+  "semanticAssessment": "The target test executed (18 tests discovered, none skipped) and failed on the planned assertion: cleanupAttended did not throw for a forged fixture and removed what it pointed at. No import, syntax or fixture fault: the three setup-only cases pass and the failing cases ran their forged fixture in temp directories. The classifier (gsd-tools check tdd-red-evidence) could not parse the full TAP report, because the base's SystemError messages carry blank lines inside the TAP YAML blocks (invalid_record, 'Non-TAP data'); a rerun of the same file with --test-name-pattern limited to the cases whose failure text is single-line (5 tests: 5 fail, 0 pass) returned RED_EVIDENCE_OK (target_test_failed) for the first target. The EISDIR on created-parent removal is a second real defect at base that the GREEN step fixes (rmdirSync, tolerating a parent that is not empty).",
+  "summary": "Run at the base: 18 tests reported, 9 pass, 9 fail (7 cleanupAttended cases, 2 attendedSettings cases)."
+}

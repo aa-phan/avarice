@@ -1,0 +1,14 @@
+{
+  "command": "node --test --test-reporter=tap \"test/containment/executor.test.ts\"",
+  "exitCode": 1,
+  "reason": "allowLoopbackPorts is not implemented: buildSeatbeltProfile ignores it and SandboxedExecutor does not pass it through",
+  "failingFiles": ["test/containment/executor.test.ts"],
+  "failingTests": [
+    "buildSeatbeltProfile: allows outbound connections to the named loopback ports only, one line each, after (deny network*)",
+    "buildSeatbeltProfile: refuses a loopback port that is not an integer from 1 to 65535",
+    "SandboxedExecutor allowLoopbackPorts: reaches the named port and no other loopback port",
+    "SandboxedExecutor allowLoopbackPorts: refuses a malformed port with an invalid result naming the field and spawns nothing"
+  ],
+  "summary": "4 new tests fail on assertion (pass 22, fail 4); the 'without the field the command reaches neither port' test passes already because the Phase 1 profile is unchanged.",
+  "outputHead": "not ok 3 - allows outbound connections to the named loopback ports only, one line each, after (deny network*)\nnot ok 4 - refuses a loopback port that is not an integer from 1 to 65535\nnot ok 1 - reaches the named port and no other loopback port\nnot ok 3 - refuses a malformed port with an invalid result naming the field and spawns nothing"
+}

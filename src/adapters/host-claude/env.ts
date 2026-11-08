@@ -8,6 +8,7 @@
 // has one (login), and the two switches that keep instruction files and auto memory out (S0-E).
 import { GSD_ENV_PASSTHROUGH } from '../gsd/gsd-tools.ts';
 import { SAFE_GIT_ENV } from '../git/safe-git.ts';
+import { canonicalPath } from './settings.ts';
 
 export interface InvocationEnvOptions {
   // The gsd-core `bin` directory (holds `gsd_run`).
@@ -16,6 +17,11 @@ export interface InvocationEnvOptions {
   onboardingId: string;
   // Directories appended after the system ones: the graphify directory, for the knowledge pass only (S0-G).
   extraPath?: readonly string[];
+  // A contained run (plan 02-08): the run ID recorded as AVARICE_RUN instead of the onboarding ID, and the run's scratch directory.
+  // With a scratch directory TMPDIR and the npm cache live inside it (the sandbox lets the run write nowhere else outside the clone)
+  // and npm's update notifier, which would reach for the network, is off. Nothing else is added to the allowlist.
+  marker?: string;
+  scratchDir?: string;
 }
 
 const SYSTEM_PATH: readonly string[] = ['/usr/bin', '/bin', '/opt/homebrew/bin'];
@@ -35,6 +41,14 @@ export function buildInvocationEnv(parent: NodeJS.ProcessEnv, options: Invocatio
   }
   env['PATH'] = [options.gsdCoreBin, ...SYSTEM_PATH, ...(options.extraPath ?? [])].join(':');
   Object.assign(env, FIXED);
-  env['AVARICE_RUN'] = options.onboardingId;
+  env['AVARICE_RUN'] = options.marker ?? options.onboardingId;
+  if (options.scratchDir !== undefined) {
+    // The realpath form, the one the generated allow rules name: on macOS /var is a symlink of /private/var, and a path the model
+    // addresses through the symlink is refused by the host (phase deferred-items, 02-01 case 19).
+    const scratch = canonicalPath(options.scratchDir);
+    env['TMPDIR'] = `${scratch}/tmp`;
+    env['npm_config_cache'] = `${scratch}/npm-cache`;
+    env['npm_config_update_notifier'] = 'false';
+  }
   return env;
 }

@@ -1,0 +1,26 @@
+{
+  "command": "node --test test/unit/exit-drafts.test.ts",
+  "ranAgainst": "the plan base 8e3fd11 plus the new test file only (the four draft files and the exit scripts absent)",
+  "exitCode": 1,
+  "reason": "test/benchmark/portfolio/avarice-config.json and the three test/benchmark/r1 briefs do not exist, so every test that reads a draft fails with ENOENT; the two tests that only read the portfolio at the pin (the verify chain is the twelve required checks in order; the swipeDirection, monthYear and Content model anchors exist) pass at the base and are recorded as pinning",
+  "failingFiles": ["test/unit/exit-drafts.test.ts"],
+  "failingTests": [
+    "parses with the real parser and declares twelve required checks and one optional, test:e2e",
+    "gives the build and check:meta the public site origin, and the caches each tool writes as declared writes (Pitfall 8)",
+    "installs with npm ci --ignore-scripts through the registry host only, and measures the test inventory with vitest list",
+    "protects the check configuration, the e2e specs and the fixtures, and keeps them out of the write set",
+    "grants the agent no command that starts with git, avarice, claude or a network tool (parser refusal) and names the checks it may run",
+    "every check names a script that exists in the portfolio package.json at the pin",
+    "there is one brief per class: a bug fix with a failing test, a small refactor, docs plus code",
+    "each of the three briefs: parses, names the pin, expects no decisions and maps every criterion to a deterministic check (3 tests)",
+    "each of the three briefs: compiles against the draft conventions without a G0 failure (3 tests)",
+    "each of the three briefs: writes only files that exist at the pin, and every check it names is declared (3 tests)",
+    "the refactor brief keeps tests/unit/copy.test.ts unchanged by writing only src/lib/copy.ts, and the copy test exists at the pin",
+    "the checks digest is stable across a parse of the same text"
+  ],
+  "passingAtBase": [
+    "the package scripts the verify chain runs are exactly the twelve required checks, in order",
+    "the bug brief names a swipeDirection describe block that exists at the pin, and the docs brief a \"Content model\" section"
+  ],
+  "summary": "20 tests, 2 pass, 18 fail at the base"
+}
