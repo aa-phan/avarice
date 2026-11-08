@@ -8,7 +8,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
-import { decideToolCall } from '../../src/domain/hook-decision.ts';
+import { commandWords, decideToolCall } from '../../src/domain/hook-decision.ts';
 import { makeHookFixture, runHook } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 import { git, gitRun, makeScratchRepo } from '../helpers/scratch-repo.ts';
@@ -74,14 +74,20 @@ function hookVerdict(rig: Rig, command: string): string {
   return separator === -1 ? text : text.slice(0, separator);
 }
 
-// What real git prints (stdout and stderr) for the words of a corpus line; the corpus uses no quoted words.
+// What real git prints (stdout and stderr) for a corpus line, run on exactly the words the hook's lexer made of it, so a quoted word
+// reaches git as the hook judged it.
 function gitOutput({ repo }: Rig, command: string): string {
-  const out = gitRun(repo.path, command.split(' ').slice(1));
+  const words = commandWords(command);
+  assert.ok(words !== null && words[0] === 'git', `${command} is not a single git command line`);
+  const out = gitRun(repo.path, words.slice(1));
   return out.stdout + out.stderr;
 }
 
 describe('tracer: git show of a secret path through the real hook', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
 
   it('refuses git show HEAD:.env with deny-secret-read, and real git does print the secret (the refusal is not vacuous)', () => {
     assert.equal(hookVerdict(r, 'git show HEAD:.env'), 'deny-secret-read');
@@ -99,18 +105,27 @@ describe('tracer: git show of a secret path through the real hook', () => {
   });
 });
 
+// A corpus line may name the blob hash of `.env` at HEAD as `<blob>`; the repository exists only once the tests run.
+const withBlob = (command: string, { blob }: Rig): string => command.replace('<blob>', blob);
+
 describe('admitted git forms print no secret content', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
   const admitted = [
     'git log', 'git log --oneline', 'git log -1 --stat', 'git log --stat --format=%h', 'git log --name-status -2', 'git log --all --graph --oneline --decorate',
-    'git log -n 1 --format=%H', `git log -1 --stat ${r.blob}`, 'git log --follow --oneline -- src/a.ts', 'git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:',
+    'git log -n 1 --format=%H', 'git log -1 --stat <blob>', 'git log --follow --oneline -- src/a.ts', 'git show HEAD:src/a.ts', 'git show :src/a.ts', 'git show HEAD:',
     'git show HEAD:.env.example', 'git show HEAD:sub', 'git status', 'git status --short', 'git status -sb', 'git status -uall', 'git status --porcelain=v2',
     'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse HEAD:src/a.ts',
     // git takes the word after -n as its count, so a patch option there is refused by git itself and prints nothing.
     'git log -n -p', 'git status -u', 'git status -u -s', 'git status -uno',
+    // The index form naming a directory: git prints the tree listing of `sub`, not the files below it.
+    'git show :sub',
   ];
-  for (const command of admitted) {
-    it(`${command}: allowed by the hook, and git prints no sentinel`, () => {
+  for (const template of admitted) {
+    it(`${template}: allowed by the hook, and git prints no sentinel`, () => {
+      const command = withBlob(template, r);
       const d = decide(r, command);
       assert.deepEqual([d.decision, d.rule], ['allow', 'shell-identity'], command);
       assert.ok(!gitOutput(r, command).includes(SENTINEL), `${command} printed the sentinel`);
@@ -119,7 +134,10 @@ describe('admitted git forms print no secret content', () => {
 });
 
 describe('refused git forms are real leaks', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
   const leaks: Array<[string, string]> = [
     ['git show HEAD:.env', 'deny-secret-read'],
     ['git show :.env', 'deny-secret-read'],
@@ -129,17 +147,23 @@ describe('refused git forms are real leaks', () => {
     ['git show HEAD:certs/server.pem', 'deny-secret-read'],
     ['git show', 'shell-git-object'],
     ['git show HEAD', 'shell-git-object'],
-    [`git show ${r.blob}`, 'shell-git-object'],
-    [`git show -s ${r.blob}`, 'shell-git-output'],
+    ['git show <blob>', 'shell-git-object'],
+    ['git show -s <blob>', 'shell-git-output'],
     ['git log -p', 'shell-git-output'],
     ['git log -L1,1:.env', 'shell-git-output'],
     ['git status -v', 'shell-git-output'],
     ['git status -u -v', 'shell-git-output'],
     // `:^` is pathspec negation, like `:!`: git reads the word as an exclude pathspec and shows HEAD's patch for every other path.
     ['git show :^src/a.ts', 'shell-git-object'],
+    // A quoted wildcard after a leading colon is a pathspec for git (review round 6).
+    ['git show ":*"', 'shell-git-object'],
+    ['git show ":.env*"', 'shell-git-object'],
+    ['git show ":?env"', 'shell-git-object'],
+    ['git show ":[.]env"', 'shell-git-object'],
   ];
-  for (const [command, rule] of leaks) {
-    it(`${command}: denied ${rule}, and git does print the sentinel`, () => {
+  for (const [template, rule] of leaks) {
+    it(`${template}: denied ${rule}, and git does print the sentinel`, () => {
+      const command = withBlob(template, r);
       const d = decide(r, command);
       assert.deepEqual([d.decision, d.rule], ['deny', rule], command);
       assert.ok(gitOutput(r, command).includes(SENTINEL), `${command} printed no sentinel: the refusal would be vacuous`);
@@ -147,20 +171,11 @@ describe('refused git forms are real leaks', () => {
   }
 });
 
-describe('a quoted wildcard after a leading colon is a pathspec for git (review round 6)', () => {
-  const r = rig();
-  for (const word of [':*', ':.env*', ':?env', ':[.]env']) {
-    it(`git show "${word}": denied shell-git-object, and git does print the sentinel`, () => {
-      const d = decide(r, `git show "${word}"`);
-      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-git-object'], word);
-      const out = gitRun(r.repo.path, ['show', word]);
-      assert.ok((out.stdout + out.stderr).includes(SENTINEL), `${word} printed no sentinel: the refusal would be vacuous`);
-    });
-  }
-});
-
 describe('refused forms, git output reported', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
   const hookOnly: Array<[string, string]> = [
     ['git log --cc', 'shell-git-output'],
     ['git log --word-diff', 'shell-git-output'],
@@ -178,19 +193,11 @@ describe('refused forms, git output reported', () => {
   }
 });
 
-describe('index form naming a directory (reported, not asserted)', () => {
-  const r = rig();
-
-  it('reports whether git show :sub prints the patch of HEAD for the files below sub, and what the hook decides', (t) => {
-    const out = gitRun(r.repo.path, ['show', ':sub']);
-    const printed = (out.stdout + out.stderr).includes(`${SENTINEL}-sub`);
-    const d = decide(r, 'git show :sub');
-    t.diagnostic(`git show :sub printed the sentinel of sub/.env: ${printed ? 'yes' : 'no'}; hook: ${d.decision} ${d.rule}`);
-  });
-});
-
 describe('case variant of a secret path', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
 
   it('git show HEAD:.ENV prints no sentinel from real git, or the hook denies it', (t) => {
     const printed = gitOutput(r, 'git show HEAD:.ENV').includes(SENTINEL);
@@ -201,7 +208,10 @@ describe('case variant of a secret path', () => {
 
 // S-IN-02: a refused git form tells the model the admitted spelling, which the real hook prints after the rule.
 describe('corrective reasons through the real hook', () => {
-  const r = rig();
+  let r: Rig;
+  before(() => {
+    r = rig();
+  });
 
   it('git log --max-count 5 is refused shell-git-output and the reason names the =value form', () => {
     const reason = hookReason(r, 'git log --max-count 5');

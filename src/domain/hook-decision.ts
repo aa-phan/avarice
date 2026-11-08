@@ -332,6 +332,13 @@ function lex(line: string): Segment[] | null {
   return (segments[segments.length - 1] as Segment).words.length === 0 ? null : segments;
 }
 
+// The words of a single-segment line as the lexer makes them, or null for a line of several segments or one the lexer refuses.
+// A test aid (no production caller): a suite runs a tool on exactly the words the hook judged.
+export function commandWords(command: string): string[] | null {
+  const segments = lex(command);
+  return segments === null || segments.length !== 1 ? null : (segments[0] as Segment).words;
+}
+
 const startsWithWords = (words: readonly string[], prefix: readonly string[]): boolean => prefix.length > 0 && prefix.every((word, i) => words[i] === word);
 const splitWords = (text: string): string[] => text.split(' ').filter((w) => w !== '');
 
