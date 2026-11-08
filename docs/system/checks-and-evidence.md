@@ -87,7 +87,7 @@ The checks that run for evidence are the active declared checks that are require
 | G2 | The clone's working tree after the unit, before the commit | `g2` |
 | Final | The committed revision | `final` |
 
-Each check run produces one insert-only evidence row, one `check-output` artifact and one `check.finished` event. The artifact holds the command line and the standard output and error as the check printed them, or a "not run" line with the cause when no sandbox was available. Secret-shaped strings in that text are replaced by `[REDACTED:{kind}]` before the artifact is stored, as in a transcript. The artifact is kept for the life of the run. The event carries the run and attempt, the check name, the pass label, the status, the exit code, the duration, the evidence ID and, when set, the pre-existing flag.
+Each check run produces one insert-only evidence row, one `check-output` artifact and one `check.finished` event. The artifact holds the command line and the standard output and error as the check printed them, or a "not run" line with the cause when no sandbox was available. Secret-shaped strings in that text are replaced by `[REDACTED:{kind}]` before the artifact is stored, as in a transcript (see [containment.md](containment.md#secret-redaction)). The artifact is kept for the life of the run. The event carries the run and attempt, the check name, the pass label, the status, the exit code, the duration, the evidence ID and, when set, the pre-existing flag.
 
 A command result maps to an evidence status as follows. A pass is `passed`, a non-zero exit is `failed`, a command that could not spawn or had no sandbox is `unavailable`, and a timeout or a cancel is `inconclusive`. Any other value is `inconclusive` and never `passed`.
 
@@ -236,7 +236,7 @@ The steps, events, artifacts and gate rows named above are listed once here. The
 - Network detection in validation includes text matching. A check that merely prints `ECONNREFUSED` or `getaddrinfo`, for instance a test of connection errors, is rejected as `network`.
 - The validation run is given the read deny list and no read re-allowance, unlike every other command here. Whether that stops a check from reading its own clone under the default roots was not run.
 - A check that leaves un-ignored files in the clone during the final proof makes the tree dirty after the checks ran. G4 then fails `revision-clean`, and the check rows, stored under the clean commit, no longer match the final revision.
-- The check output is redacted only by the secret patterns. A secret that does not match one of them (a password with no recognizable shape, for example) that a check prints from its environment is written into the run's artifact store.
+- The check output is redacted only by the secret patterns. A check that prints a secret from its environment writes it into the run's artifact store when the secret matches no pattern, such as a password with no recognizable shape.
 - The evidence statuses `skipped` and `stale`, the kinds `mutation`, `ci`, `review` and `manual`, and the independence `external` are accepted by the types or the ledger and are never written by a run.
 - `no-stale-or-inconclusive` and `checks-delta` overlap for an `inconclusive` required check, which fails both. `stale` is never written, so the rule fires only for `inconclusive`.
 - The inventory comparison ignores the measurement status. A failed list command after the unit reads as every test removed.

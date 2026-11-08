@@ -76,7 +76,7 @@ The command-line action takes one line in the one-shot grammar without the progr
 
 Line mode lists the same menu, including the command-line item. A line that is not a menu key (`1` to `6`, `:` or `q`, case-insensitive) is also taken as a command-line entry directly, without the prompt. A blank line redraws the menu.
 
-Everything printed from a command, a ledger row or a model is stripped of escape sequences and of control characters other than newline and tab before it is drawn. A recorded title that carries an escape sequence cannot rewrite the terminal. The strip prevents it at the display; it does not change what is stored.
+Everything printed from a command, a ledger row or a model is stripped of the characters listed under [output style](cli-reference.md#output-style) before it is drawn. A recorded title that carries an escape sequence cannot rewrite the terminal. The strip prevents it at the display; it does not change what is stored.
 
 ## Line editing and completion
 

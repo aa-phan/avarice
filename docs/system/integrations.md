@@ -141,7 +141,7 @@ The generated settings register AVARICE's hook command as the Node binary that i
 
 ### Reaping by session ID
 
-On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--session-id <uuid>"` (10 second timeout) and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead, with every launch row still `started`, because that host may still be running and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains that exact flag and UUID is terminated.
+On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--session-id <uuid>"` (10 second timeout) and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains that exact flag and UUID is terminated.
 
 ### The unavailable-host fallback
 
@@ -183,10 +183,10 @@ The proxy listens on `127.0.0.1` on an ephemeral port, for one step, and is clos
 | `CONNECT` to any other `host:port` | `403` | refused |
 | `CONNECT` with a target that is not `host:port`, or a request line the parser rejects | `400` | refused, host `invalid`, port 0 |
 | Any other method (a plain HTTP request) | `405` with `Allow: CONNECT` | refused, with the host and port named by the absolute URL or the `Host` header |
-| Allowlisted target whose name resolves to a loopback, unspecified, private, shared, link-local, multicast or reserved address (any one of its addresses) | `403` | refused |
-| Allowlisted target that cannot be reached, or whose name does not resolve | `502` | allowed |
+| Allowlisted target whose name resolves to any address that is not public (the ranges are in [containment.md](containment.md#the-egress-proxy)), or to no address | `403` | refused |
+| Allowlisted target that cannot be reached, or whose name fails to resolve | `502` | allowed |
 
-Every attempt is recorded in order with host, port, verdict and time, never a path or header, and handed to an optional observer; an observer failure never changes what the proxy admits. The proxy resolves an allowlisted host name itself, outside the sandbox, and checks every address the name resolves to; an IPv4 address inside an IPv6 address is judged as the IPv4 address. It then connects to the checked address rather than to the name, so the name is resolved once. A plain HTTP registry cannot work, because only `CONNECT` is accepted.
+Every attempt is recorded in order with host, port, verdict and time, never a path or header, and handed to an optional observer; an observer failure never changes what the proxy admits. The proxy resolves an allowlisted host name itself, outside the sandbox, and connects to an address it checked rather than to the name ([containment.md](containment.md#the-egress-proxy) has the rules). A plain HTTP registry cannot work, because only `CONNECT` is accepted.
 
 ### Dependency install
 
@@ -210,7 +210,7 @@ The agents directory is derived as the sibling `agents` directory of the located
 
 ### Verbs driven
 
-Every other GSD call goes through the command executor, sandboxed with the network denied, as `node <gsd-core>/bin/gsd-tools.cjs <verb> ...`. The environment is rebuilt (safe-git variables, the pass-through names, gsd-core `bin` first on `PATH`). The default timeout is 15 seconds and the output limit 16 MiB. The data root and the credential locations (listed in [containment.md](containment.md)) are denied for reading, and the staging directory is the working directory. A verb that writes may write only the staging `.planning` directory, or the single subdirectory it targets for the snapshot verbs. These verbs run during onboarding. A run's unit reaches GSD through the host and its shim, not through these verbs.
+Every other GSD call goes through the command executor, sandboxed with the network denied, as `node <gsd-core>/bin/gsd-tools.cjs <verb> ...`. The environment is rebuilt (safe-git variables, the pass-through names, gsd-core `bin` first on `PATH`). The default timeout is 15 seconds and the output limit 16 MiB. The data root and the credential locations (listed in [containment.md](containment.md#generated-settings-in-effect)) are denied for reading, and the staging directory is the working directory. A verb that writes may write only the staging `.planning` directory, or the single subdirectory it targets for the snapshot verbs. These verbs run during onboarding. A run's unit reaches GSD through the host and its shim, not through these verbs.
 
 | Verb | Use | Writes |
 |---|---|---|
@@ -259,7 +259,7 @@ A caller can also ask for a fixed commit identity (name, email and signing off),
 
 ### Staging and run clones
 
-Onboarding staging and the run's clone are built by the same rules. The clone copies the user's repository into the work root with no hardlinks, so the user's checkout is not shared with the contained host. An existing target directory is reused only if it is its own repository, a clone of this repository, on the expected branch (or detached when no branch is expected), at the pin. Anything else is a conflict and is left untouched. An interrupted clone leaves a `.partial` directory, which is replaced only when it is provably this repository's own leftover. The pin is a full commit id of 40 lowercase hexadecimal digits, validated before use. A repository with SHA-256 object names is refused at the first read that names a commit: onboarding preparation refuses its 64-digit pin as not a valid commit id before it builds a clone, and run start refuses it with a message that names the object format. The run's clone is on a branch named after the run. The scratch clone used to validate declared checks is detached at the pin with no branch.
+Onboarding staging and the run's clone are built by the same rules. The clone copies the user's repository into the work root with no hardlinks, so the user's checkout is not shared with the contained host. An existing target directory is reused only if it is its own repository, a clone of this repository, on the expected branch (or detached when no branch is expected), at the pin. Anything else is a conflict and is left untouched. An interrupted clone leaves a `.partial` directory, which is replaced only when it is provably this repository's own leftover. The pin is a full commit id of 40 lowercase hexadecimal digits, validated before use. Onboarding refuses the 64-digit pin of a repository with SHA-256 object names as invalid when it prepares the staging clone, after the project, the onboarding and its contract are recorded. Run start refuses it too (see [Run source](#run-source)). The run's clone is on a branch named after the run. The scratch clone used to validate declared checks is detached at the pin with no branch.
 
 ### Run workspace
 
@@ -268,7 +268,7 @@ The run workspace is the git side of one run. Everything in it runs in the super
 - Snapshot, status and change detection: the tree of the clone's tracked and untracked non-ignored content is computed through a temporary index file beside the clone, so the clone's own index is never touched. Ignored entries are listed (at most 10,000) but are never part of the tree.
 - Discard: puts every path the run changed since a snapshot back to its snapshot content and deletes the paths the snapshot did not have. It restores in batches of 200 literal paths, never as a reset or a clean. It removes no directory except an empty one standing where a snapshot file belongs, never writes through a symbolic link, and leaves ignored entries alone. It refuses with a conflict, changing nothing, when HEAD is no longer the snapshot's HEAD.
 - Restore and remove: put named tracked files back to their content at HEAD, or delete named untracked files and the directories they leave empty. An untracked path given to restore, or a tracked path given to remove, is a conflict and nothing is changed.
-- Commit: the supervisor commits exactly the given clone-relative paths under the fixed identity `AVARICE <avarice@localhost.invalid>`, unsigned, with `--no-verify`. Trailers are appended after a blank line, and each must be a single `Key: value` line. An empty list, an absolute path, a `..` segment, a `.git` segment, a leading dash, an empty message or a message with a NUL is refused. A path is split into segments at a slash only, so a backslash is part of a file name and `a\b` is one name, not `a/b`. A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit, and only a line of exactly that form counts, so message text cannot pose as a trailer.
+- Commit: the supervisor commits exactly the given clone-relative paths under the fixed identity `AVARICE <avarice@localhost.invalid>`, unsigned, with `--no-verify`. Trailers are appended after a blank line, and each must be a single `Key: value` line. An empty list, an absolute path, a `..` segment, a `.git` segment, a leading dash, an empty message or a message with a NUL is refused. A path is split into segments at a slash only, so a backslash is part of a file name and `a\b` is one name, not `a/b`. A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
 - Read: a clone file as UTF-8 under a size limit, refusing traversal, absolute paths and symbolic links that leave the clone.
 
 ### Fetch into the source repository
@@ -290,7 +290,7 @@ The run source answers four questions about the source repository from git objec
 - Staleness: whether HEAD is the pin or descends from it, how many commits since the pin touch a path outside `.avarice/` and `.planning/`, and the committer time of the oldest. When HEAD does not descend, the counts are zero and null.
 - File presence: whether a revision holds a regular file at a literal path (a link or a directory is not a file).
 
-Pin and HEAD must be commit ids of 40 lowercase hexadecimal digits that exist in the repository. A repository with SHA-256 object names is refused when HEAD is read, with an invalid error that names the object format, so run start stops with its internal error before it creates any row or file. The conventions walk looks at the newest 500 first-parent commits above the pin and then the pin.
+Pin and HEAD must be commit ids of 40 lowercase hexadecimal digits that exist in the repository. A repository with SHA-256 object names is refused when HEAD is read, with an error that names the object format. Run start therefore exits 70 before it creates any row or file. The conventions walk looks at the newest 500 first-parent commits above the pin and then the pin.
 
 ## Detached supervisor
 
@@ -335,7 +335,7 @@ Preparing the profile runs `mount` with no arguments (first of `/sbin/mount`, `/
 
 ## gh
 
-AVARICE never spawns the GitHub CLI. The name `gh` appears in three places. It is a denied Bash command prefix for the contained host, a command word that a repository's declared agent commands may not use, and one of the read-denied credential locations (`~/.config/gh`, among those listed in [containment.md](containment.md)) in the sandbox profiles. AVARICE has no pull request, push or GitHub API path. The run hand-off produces a local branch in the source repository, and nothing pushes it.
+AVARICE never spawns the GitHub CLI. The name `gh` appears in three places. It is a denied Bash command prefix for the contained host, a command word that a repository's declared agent commands may not use, and a read-denied credential location (`~/.config/gh`) in the sandbox profiles. The other credential locations are listed in [containment.md](containment.md#generated-settings-in-effect). AVARICE has no pull request, push or GitHub API path. The run hand-off produces a local branch in the source repository, and nothing pushes it.
 
 ## Node.js and node:sqlite
 
@@ -358,7 +358,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | `mount` unusable or data root non-local | profile preparation fails; nothing runs |
 | Bundled SQLite lacks the fix | ledger refuses to open |
 | git cannot run or times out | the calling step returns an error |
-| An install that reaches any target the proxy refuses, an address that is not public included | the install step fails with a permission decision; the proxy has already refused the connection |
+| An install that reaches any target the proxy refuses, including a name that resolves to a non-public address | the install step fails with a permission decision; the proxy has already refused the connection |
 | Egress proxy cannot start | the install fails with `enforcement_failure`; a check validation runs with no network instead |
 | Run branch already in the source at another commit | the hand-off is a conflict and nothing is fetched |
 | Supervisor cannot be spawned | the command exits 70; the run stays stored |
@@ -370,7 +370,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 - The executor descriptor reports offline, although a supervisor step can be given one loopback port. The flag describes the adapter, not a particular command.
 - The three run ports (run source, run workspace, egress proxy) are built on every composition, read-only ones included. Only the executor, graph, GSD and host descriptors are recorded, so the run ports leave no record of which adapter a profile ran with.
 - The registry allowlist can only name port 443. A registry on another port works only through the test entry point's override.
-- A registry that is reachable only on a private network is unsupported: the conventions refuse an IP spelling, `localhost` and a single-label name, and the proxy refuses a public-looking name that resolves to a private address (split-horizon DNS included). The local registry in the tests reaches the proxy only through a test-only resolver that production never passes.
+- A registry that is reachable only on a private network is unsupported (see [containment.md](containment.md#limits-of-containment)). In the tests, the proxy reaches the local registry only through a test-only resolver that skips the address check; production never passes it.
 - A refused proxy attempt fails the install even when the install command exited 0 and finished its work.
 - The supervisor inherits the user's whole environment, unlike the host and every sandboxed command.
 - The hand-off writes objects as well as one ref into the user's repository. A failed fetch can leave unreferenced objects there.

@@ -38,11 +38,11 @@ end
 == Prelude under the lease ==
 Supervisor -> Ledger : take the lease (fence raised: a late write from the dead holder is refused)
 Supervisor -> Ledger : read launch rows left started
-Supervisor -> Host : find the process by session ID, end its group
-alt the reap fails
+Supervisor -> Host : for each launch that can be reaped:\nfind the process by session ID, end its group
+alt the reap fails, or a started launch cannot be reaped\n(no session ID recorded, or the host cannot reap)
   Supervisor -> Ledger : step resume:reconcile failed, every row stays started
   CLI --> Operator : with --wait: could not be resumed (exit 70)
-else ended, none found, or the host cannot reap
+else ended or none found
   Supervisor -> Ledger : warning event if a process was ended
   Supervisor -> Ledger : launch rows marked interrupted, one event per invocation
 end
