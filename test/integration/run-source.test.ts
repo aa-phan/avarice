@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, afterEach, describe, it } from 'node:test';
 
-import { GitRunSource } from '../../src/adapters/git/run-source.ts';
+import { GitRunSource, oldestCommitTime } from '../../src/adapters/git/run-source.ts';
 import { COMMIT_SHA } from '../../src/adapters/git/staging-base.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { git, gitRun, makeScratchRepo } from '../helpers/scratch-repo.ts';
@@ -220,6 +220,21 @@ describe('GitRunSource.hasFile (D-04: the pin tree has a roadmap)', () => {
     for (const bad of ['', '/etc/passwd', '../README.md', 'a//b', './README.md']) {
       assert.equal(mustFail(source.hasFile(repo.path, repo.head, bad)).kind, 'invalid', bad);
     }
+  });
+});
+
+describe('oldestCommitTime (R-WR-07)', () => {
+  it('150000 times return the minimum times 1000 without throwing', () => {
+    const times = Array.from({ length: 150_000 }, (_, i) => 1_700_000_000 + ((i * 7919) % 150_000));
+    times[123_456] = 1000;
+    assert.equal(oldestCommitTime(times.join('\n') + '\n'), 1_000_000);
+  });
+
+  it('no lines is null and non-numeric lines are ignored', () => {
+    assert.equal(oldestCommitTime(''), null);
+    assert.equal(oldestCommitTime('\n\n'), null);
+    assert.equal(oldestCommitTime('abc\n-5\n12x\n'), null);
+    assert.equal(oldestCommitTime('300\nabc\n200\n\n400\n'), 200_000);
   });
 });
 

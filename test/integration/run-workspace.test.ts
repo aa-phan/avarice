@@ -12,6 +12,7 @@ import { afterEach, describe, it } from 'node:test';
 import { checkoutDigest, RUN_REF_GLOB } from '../../scripts/checkout-digest.ts';
 import { AVARICE_COMMIT_IDENTITY, CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
 import { runGit } from '../../src/adapters/git/safe-git.ts';
+import { checkRelative } from '../../src/adapters/git/staging-base.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { RunWorkspaceInfo } from '../../src/ports/run-workspace.ts';
 import { git, makeScratchRepo, treeDigest, writeExecutable } from '../helpers/scratch-repo.ts';
@@ -194,6 +195,16 @@ describe('CloneRunWorkspace.describe, status, readText and ensureDir', () => {
     assert.equal(mustFail(ws.readText(info.path, 'src/a.ts', 3)).kind, 'invalid');
     must(ws.ensureDir(info.path, 'out/deep'));
     assert.equal(statSync(join(info.path, 'out', 'deep')).isDirectory(), true);
+  });
+});
+
+describe('checkRelative splits on a slash only (R-IN-04)', () => {
+  it('a backslash is an ordinary file-name character; a slash separates; .. is still refused', () => {
+    assert.deepEqual(must(checkRelative('a\\b')), ['a\\b']);
+    assert.deepEqual(must(checkRelative('a/b')), ['a', 'b']);
+    assert.deepEqual(must(checkRelative('dir/a\\b/c')), ['dir', 'a\\b', 'c']);
+    assert.equal(mustFail(checkRelative('a/../b')).kind, 'denied');
+    assert.equal(mustFail(checkRelative('../b')).kind, 'denied');
   });
 });
 
@@ -480,6 +491,23 @@ describe('snapshot, changedSince and discard (CON-16, CON-9)', () => {
     assert.deepEqual(must(ws.changedSince(info.path, snap)), []);
     assert.deepEqual(readFileSync(join(info.path, '.git', 'index')), indexBefore, 'discard never touched the clone index');
     assert.equal(must(ws.head(info.path)), repo.head);
+  });
+
+  it('a run-added file named a\\b is read, listed and discarded as that one file and a tracked a/b is untouched (R-IN-04, T-02-103)', () => {
+    const repo = scratch({ files: { ...BASE_FILES, 'a/b': 'tracked a/b\n' } });
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    const snap = must(ws.snapshot(info.path));
+
+    write(info.path, 'a\\b', 'run added backslash file\n');
+    assert.equal(must(ws.readText(info.path, 'a\\b', 1024)), 'run added backslash file\n', 'readText reads the backslash file, not a/b');
+    assert.equal(must(ws.readText(info.path, 'a/b', 1024)), 'tracked a/b\n');
+    assert.deepEqual(must(ws.changedSince(info.path, snap)), [{ path: 'a\\b', status: 'added' }]);
+
+    const result = must(ws.discard(info.path, snap));
+    assert.deepEqual(result.removed, ['a\\b']);
+    assert.equal(existsSync(join(info.path, 'a\\b')), false, 'the backslash file is gone');
+    assert.equal(read(info.path, 'a/b'), 'tracked a/b\n', 'the tracked a/b keeps its content');
+    assert.deepEqual(must(ws.changedSince(info.path, snap)), []);
   });
 
   it('discard with nothing changed is a no-op success, and a second discard after a first lists no paths and leaves the same tree', () => {

@@ -1,0 +1,21 @@
+{
+  "command": "node --test test/integration/run-source.test.ts test/integration/run-workspace.test.ts",
+  "ranAgainst": "the commit 8cefde8 (R-WR-06 green; oldestCommitTime not yet exported, checkRelative still splitting on [\\\\/]) plus the new describes `oldestCommitTime (R-WR-07)` in test/integration/run-source.test.ts and `checkRelative splits on a slash only (R-IN-04)` and the discard case `a run-added file named a\\b ...` in test/integration/run-workspace.test.ts",
+  "exitCode": 1,
+  "reason": "oldestCommitTime does not exist: test/integration/run-source.test.ts fails to link (SyntaxError: the module does not provide an export named 'oldestCommitTime'), so the 150000-line case cannot run; this is a link-time failure recorded for completeness and is not RED authority. The RED authority is run-workspace: checkRelative('a\\\\b') returns the two segments ['a','b'] instead of the one segment 'a\\\\b', and in a clone whose pin tracks a/b with a run-added file named a\\\\b, readText('a\\\\b') returns the content of the tracked a/b ('tracked a/b') instead of 'run added backslash file', which is the same wrong-path resolution that makes discard act on a/b.",
+  "failingFiles": [
+    "test/integration/run-source.test.ts",
+    "test/integration/run-workspace.test.ts"
+  ],
+  "failingTests": [
+    "checkRelative splits on a slash only (R-IN-04) > a backslash is an ordinary file-name character; a slash separates; .. is still refused",
+    "snapshot, changedSince and discard (CON-16, CON-9) > a run-added file named a\\b is read, listed and discarded as that one file and a tracked a/b is untouched (R-IN-04, T-02-103)",
+    "test/integration/run-source.test.ts (file-level link failure: oldestCommitTime is not exported yet; the 150000-line and no-line cases cannot run at base)"
+  ],
+  "passingAtBase": [
+    "all earlier tests of test/integration/run-workspace.test.ts",
+    "all earlier tests of test/integration/run-source.test.ts pass at the previous commit; they cannot run at base with the new import (link failure)"
+  ],
+  "semanticAssessment": "The two run-workspace targets executed and failed on the planned assertions: the segment array holds two segments instead of one, and the read of the backslash file resolved to the tracked a/b. The discard half of the case is not reached at base because the readText assertion fails first; it is asserted by the same test after the fix. The oldestCommitTime failure is a link failure and is not used as RED authority.",
+  "summary": "Run at the base: 35 tests reported, 32 pass, 3 fail (two run-workspace assertion failures, one run-source file-level link failure)."
+}
