@@ -7,8 +7,9 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { sandboxSetup } from '../../src/app/checks.ts';
@@ -53,13 +54,13 @@ before(() => {
 });
 after(() => rmSync(base, { recursive: true, force: true }));
 
-function command(argv: readonly string[], cwd: string = own.clone): CommandSpec {
+function command(argv: readonly string[], cwd: string = own.clone, env: Record<string, string> = {}): CommandSpec {
   const sandbox = sandboxSetup(deps, run, cwd);
   assert.ok(sandbox.ok, JSON.stringify(sandbox));
   return {
     argv,
     cwd,
-    env: { ...sandbox.value.env, PATH: TEST_PATH },
+    env: { ...sandbox.value.env, PATH: TEST_PATH, ...env },
     timeoutMs: 20_000,
     invocationId: 'test',
     writePaths: [sandbox.value.scratch],
@@ -68,8 +69,8 @@ function command(argv: readonly string[], cwd: string = own.clone): CommandSpec 
   };
 }
 
-async function exec(argv: readonly string[], cwd?: string): Promise<CommandResult> {
-  const result = await new SandboxedExecutor().run(command(argv, cwd));
+async function exec(argv: readonly string[], cwd?: string, env?: Record<string, string>): Promise<CommandResult> {
+  const result = await new SandboxedExecutor().run(command(argv, cwd, env));
   assert.ok(result.ok, JSON.stringify(result));
   return result.value;
 }
@@ -161,5 +162,59 @@ describe('the sandbox of a run command denies the default AVARICE parents (cs7-o
     const result = await new SandboxedExecutor().run({ ...command(['/bin/cat', join(outside, 'other-profile-custom-data')]), denyReadPaths: sandbox.value.denyReadPaths, allowReadPaths: sandbox.value.allowReadPaths, cwd: join(outside, 'custom-work/run_A/clone') });
     assert.ok(result.ok);
     assert.equal(result.value.exitCode, 0, 'outside the default parents and the own roots: readable, as documented');
+  });
+});
+
+// Plan 02-33 finding R-WR-03: the command sandbox denied three credential directories and allowed every other read. The review reproduced a read
+// of .gnupg, .netrc, .npmrc, .docker/config.json, .kube/config, .config/gcloud and Library/Keychains, and a copy of ~/.netrc into scratch.
+const CREDENTIAL_SENTINELS: readonly string[] = [
+  '.ssh/id_rsa',
+  '.aws/credentials',
+  '.config/gh/hosts.yml',
+  '.gnupg/secring',
+  '.netrc',
+  '.npmrc',
+  '.docker/config.json',
+  '.kube/config',
+  '.config/gcloud/credentials.db',
+  'Library/Keychains/login.keychain-db',
+  '.git-credentials',
+  '.pgpass',
+];
+const SENTINEL_TEXT = 'SENTINEL-CREDENTIAL-CONTENT';
+const NPM_AVAILABLE = TEST_PATH.split(':').some((dir) => existsSync(join(dir, 'npm')));
+
+describe('credential locations are unreadable to run commands (R-WR-03)', { skip: !SANDBOX_AVAILABLE }, () => {
+  before(() => {
+    for (const rel of CREDENTIAL_SENTINELS) {
+      mkdirSync(dirname(join(home, rel)), { recursive: true });
+      writeFileSync(join(home, rel), SENTINEL_TEXT);
+    }
+  });
+
+  for (const rel of CREDENTIAL_SENTINELS) {
+    it(`cannot read ~/${rel}`, async () => {
+      const result = await exec(['/bin/cat', join(home, rel)]);
+      assert.equal(result.stdout.includes(SENTINEL_TEXT), false, `~/${rel} printed its content`);
+      assert.notEqual(result.exitCode, 0, `~/${rel} was read`);
+    });
+  }
+
+  it('cannot copy ~/.netrc into the scratch directory, where the next invocation could read it', async () => {
+    const stolen = join(own.scratch, 'stolen');
+    const result = await exec(['/bin/cp', join(home, '.netrc'), stolen]);
+    assert.notEqual(result.exitCode, 0, 'the copy succeeded');
+    assert.equal(existsSync(stolen), false);
+  });
+
+  it('npm still runs with its .npmrc read-denied: `npm config get registry` exits 0 with HOME set to the home', { skip: !NPM_AVAILABLE && 'npm is not on the test PATH' }, async () => {
+    const result = await exec(['npm', 'config', 'get', 'registry'], own.clone, { HOME: home });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout, /^https?:\/\//);
+  });
+
+  it('the sentinel at ~/.npmrc is readable outside the sandbox, so the denial above is the sandbox and not the file mode', () => {
+    const plain = spawnSync('/bin/cat', [join(home, '.npmrc')], { encoding: 'utf8' });
+    assert.equal(plain.stdout, SENTINEL_TEXT);
   });
 });

@@ -342,3 +342,31 @@ describe('a run-time check may write only its declared paths and the scratch dir
     assert.equal(existsSync(join(clone, 'out', 'x.txt')), false);
   });
 });
+
+describe('a secret printed by a check is stored redacted (R-WR-03, T-02-115)', () => {
+  const FAKE_KEY = 'AKIAABCDEFGHIJKLMNOP';
+  const f = fixture(conventionsOf(node('leaky', 'print-secret.mjs', [FAKE_KEY], { required: true })), {
+    ...CHECK_SCRIPTS,
+    'scripts/print-secret.mjs': "console.log('token ' + process.argv[2]);\nconsole.error('again ' + process.argv[2]);\n",
+  });
+  const result = start(f, RUN_BRIEF);
+  const runId = runIdOf(result.stdout);
+
+  it('stores the check output with a redaction marker and without the key id', () => {
+    const digests = ledgerRows<{ artifact_digest: string }>(f.roots, "SELECT e.artifact_digest FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.name = 'leaky' ORDER BY e.rowid", runId);
+    assert.ok(digests.length > 0, `the leaky check ran and left evidence: ${result.stderr}${result.stdout}`);
+    const composed = createDeps(profileEnv(f.roots), {}, { readOnly: true });
+    assert.ok(composed.ok);
+    try {
+      for (const { artifact_digest: digest } of digests) {
+        const bytes = composed.value.deps.artifacts.get(digest);
+        assert.ok(bytes.ok);
+        const text = new TextDecoder().decode(bytes.value);
+        assert.match(text, /\[REDACTED:/);
+        assert.equal(text.includes(FAKE_KEY), false, 'the key id is stored raw');
+      }
+    } finally {
+      composed.value.close();
+    }
+  });
+});
