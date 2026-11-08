@@ -84,12 +84,13 @@ export function resolveStagingTarget(input: PrepareInput): Result<StagingTarget>
   return ok({ workRoot, onboardingDir, staging, branch: `avarice/onboard-${input.onboardingId}` });
 }
 
-// Lexical check shared by read and ensureDir: relative, no `..` segment, no NUL.
+// Lexical check shared by read and ensureDir: relative, no `..` segment, no NUL. The separator is a slash only: the supported platform
+// is macOS, where a backslash is an ordinary file-name character, so `a\b` is one segment and never the path `a/b`.
 export function checkRelative(relPath: string): Result<string[]> {
   if (typeof relPath !== 'string' || relPath.length === 0) return invalid('relPath', 'a relative path is required');
   if (relPath.includes('\0')) return invalid('relPath', 'path contains a NUL byte');
   if (isAbsolute(relPath)) return denied('staging-paths-are-relative');
-  const segments = relPath.split(/[\\/]/).filter((segment) => segment.length > 0 && segment !== '.');
+  const segments = relPath.split('/').filter((segment) => segment.length > 0 && segment !== '.');
   if (segments.includes('..')) return denied('staging-paths-stay-inside-staging');
   if (segments.length === 0) return invalid('relPath', 'a relative path is required');
   return ok(segments);

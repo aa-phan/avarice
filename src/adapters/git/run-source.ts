@@ -17,6 +17,18 @@ const MAX_CONFIG_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 500;
 const LIST_TIMEOUT_MS = 60_000;
 
+// The smallest committer time in `git log --format=%ct` output, in milliseconds, or null when no line is a time. A single pass, not
+// a spread of the times into Math.min: more than about 125000 arguments throw a RangeError, and a history can be longer than that.
+export function oldestCommitTime(stdout: string): number | null {
+  let oldest: number | null = null;
+  for (const line of stdout.split('\n')) {
+    if (!/^\d+$/.test(line)) continue;
+    const seconds = Number(line);
+    if (oldest === null || seconds < oldest) oldest = seconds;
+  }
+  return oldest === null ? null : oldest * 1000;
+}
+
 interface Resolved {
   root: string;
 }
@@ -73,9 +85,8 @@ export class GitRunSource implements RunSource {
     // no literal-pathspec mode here; both are constants).
     const listed = runGit(['log', '--format=%ct', `${pin}..${head}`, '--', '.', ':(exclude).avarice', ':(exclude).planning'], { cwd: root, timeoutMs: LIST_TIMEOUT_MS });
     if (!listed.ok) return failure(listed.error);
-    const times = listed.value.stdout.split('\n').filter((line) => /^\d+$/.test(line)).map(Number);
-    if (times.length === 0) return ok({ descendant: true, commitsOutside: 0, oldestOutsideCommittedAtMs: null });
-    return ok({ descendant: true, commitsOutside: times.length, oldestOutsideCommittedAtMs: Math.min(...times) * 1000 });
+    const commitsOutside = listed.value.stdout.split('\n').filter((line) => /^\d+$/.test(line)).length;
+    return ok({ descendant: true, commitsOutside, oldestOutsideCommittedAtMs: oldestCommitTime(listed.value.stdout) });
   }
 
   hasFile(repoPath: string, revision: string, relPath: string): Result<boolean> {
