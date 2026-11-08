@@ -2,6 +2,7 @@
 // the OPS-7 table: result line, tables, states, errors, numbers, colour and escapes; then status through them.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { colourEnabled, duration, errorLine, localTime, outcomeLines, resultLine, stateWord, stripControl, usd } from '../../src/cli/render/style.ts';
 import { renderTable, terminalWidth } from '../../src/cli/render/table.ts';
 import { renderStatus } from '../../src/cli/render/status-view.ts';
@@ -120,6 +121,43 @@ describe('colour and escapes (OPS-7 row 6)', () => {
     assert.equal(stripControl('a\x9b31mb\x85c'), 'abc');
     assert.equal(stripControl('a\x1bPdcs\x1b\\b'), 'ab');
     assert.equal(stripControl('plain text, 100% ünïcode ✔'), 'plain text, 100% ünïcode ✔');
+  });
+});
+
+describe('invisible formatting characters (R-IN-03, T-02-100)', () => {
+  const removed: ReadonlyArray<readonly [string, number]> = [
+    ['ARABIC LETTER MARK', 0x061c],
+    ['ZERO WIDTH SPACE', 0x200b],
+    ['ZERO WIDTH NON-JOINER', 0x200c],
+    ['ZERO WIDTH JOINER', 0x200d],
+    ['LEFT-TO-RIGHT MARK', 0x200e],
+    ['RIGHT-TO-LEFT MARK', 0x200f],
+    ['LEFT-TO-RIGHT EMBEDDING', 0x202a],
+    ['RIGHT-TO-LEFT EMBEDDING', 0x202b],
+    ['POP DIRECTIONAL FORMATTING', 0x202c],
+    ['LEFT-TO-RIGHT OVERRIDE', 0x202d],
+    ['RIGHT-TO-LEFT OVERRIDE', 0x202e],
+    ['WORD JOINER', 0x2060],
+    ['LEFT-TO-RIGHT ISOLATE', 0x2066],
+    ['RIGHT-TO-LEFT ISOLATE', 0x2067],
+    ['FIRST STRONG ISOLATE', 0x2068],
+    ['POP DIRECTIONAL ISOLATE', 0x2069],
+    ['BYTE ORDER MARK', 0xfeff],
+  ];
+  for (const [name, codePoint] of removed) {
+    it(`removes U+${codePoint.toString(16).toUpperCase().padStart(4, '0')} ${name}`, () => {
+      assert.equal(stripControl(`a${String.fromCodePoint(codePoint)}b`), 'ab');
+    });
+  }
+
+  it('keeps the soft hyphen, ASCII, accented letters and a CJK character', () => {
+    for (const text of ['a­b', 'plain ~ text', 'café ü', '漢字']) assert.equal(stripControl(text), text);
+  });
+
+  it('holds only ASCII in the code lines of the source, so no invisible character can sit in an expression', () => {
+    const source = readFileSync(new URL('../../src/cli/render/style.ts', import.meta.url), 'utf8');
+    const offending = source.split('\n').flatMap((line, index) => (/[^\x00-\x7e]/.test(line) && !/^\s*\/\//.test(line) ? [`${index + 1}: ${JSON.stringify(line)}`] : []));
+    assert.deepEqual(offending, []);
   });
 });
 
