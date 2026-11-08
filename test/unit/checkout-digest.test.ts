@@ -135,6 +135,25 @@ describe('scripts/checkout-digest.ts', () => {
     assert.notEqual(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest, 'so does any other branch');
   });
 
+  it('--allow-run-refs does not hide a nested ref under the run prefix, and --allow-ref keeps its glob meaning across a slash (R-IN-09, T-02-104)', () => {
+    const repo = scratch();
+    const before = digestOf(repo.path, '--allow-run-refs').json;
+
+    git(repo.path, ['branch', 'avarice/run_01TESTRUN']);
+    assert.equal(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest, 'one run segment is left out');
+
+    git(repo.path, ['branch', 'avarice/run_Y/extra']);
+    const nested = digestOf(repo.path, '--allow-run-refs');
+    assert.equal(nested.code, 0, nested.stderr);
+    assert.notEqual(nested.json.refsDigest, before.refsDigest, 'a ref below a run segment still counts');
+    git(repo.path, ['branch', '-D', 'avarice/run_Y/extra']);
+    assert.equal(digestOf(repo.path, '--allow-run-refs').json.refsDigest, before.refsDigest);
+
+    const plain = digestOf(repo.path, '--allow-ref', 'refs/heads/x/*').json;
+    git(repo.path, ['branch', 'x/deep/er']);
+    assert.equal(digestOf(repo.path, '--allow-ref', 'refs/heads/x/*').json.refsDigest, plain.refsDigest, 'a glob star still crosses a slash');
+  });
+
   it('never prints file contents', () => {
     const repo = scratch();
     const r = digestOf(repo.path);
