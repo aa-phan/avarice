@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 26/26 plans executed (14 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01)
+**Plans:** 26/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
 
 Plans:
 **Wave 1**
@@ -177,6 +177,25 @@ Plans:
 
 **Wave 14** *(gap closure, blocked on Wave 13 completion)*
 - [x] 02-26-PLAN.md — CR-01: git object reads and content-printing git output refused by the hook (proven against real git), the sandbox residual named, docs/system updated and reviewed fresh
+
+**Wave 15** *(gap closure G-02-H2, G-02-H4, blocked on Wave 14 completion)*
+- [ ] 02-27-PLAN.md — G-02-H2: git object names matched lexically as well as resolved (working-copy symlink bypass, real git); one git operand grammar with the option tables pinned; corrective reasons; integration-suite hygiene (scoped review CR-01, WR-01, WR-02, IN-01..IN-04)
+- [ ] 02-28-PLAN.md — Terminal text: onboard and resume lines through the shared control stripping; bidi and zero-width class with \u escapes (WR-01, IN-03)
+- [ ] 02-29-PLAN.md — Git adapters and git evidence: SHA-256 repositories refused at the first read, no Math.min spread, paths split on `/` only, anchored run-ref allowance (WR-06, WR-07, IN-04, IN-09)
+- [ ] 02-30-PLAN.md — Resume, lease and gated commit: a lost lease aborts the unit's host, an unreapable launch stops the resume, the gated commit's parent checked (IN-05, IN-06, IN-08)
+- [ ] 02-31-PLAN.md — Harness and evidence hygiene: home path redacted in recorders and four evidence files, cleanupAttended containment checks, narrowed attended allow list (WR-08, WR-09, IN-01)
+
+**Wave 16** *(blocked on 02-27: docs/system/containment.md)*
+- [ ] 02-32-PLAN.md — Budget settlement: settlement and orphan charges in one ledger transaction; an invocation with no result charged its reservation (WR-04, WR-05)
+
+**Wave 17** *(blocked on 02-29 and 02-32: integrations.md, containment.md)*
+- [ ] 02-33-PLAN.md — Credential locations: one extended list at all five sandbox and scope sites, check output redacted, proven on the real sandbox (WR-03)
+
+**Wave 18** *(blocked on 02-33: containment.md, integrations.md)*
+- [ ] 02-34-PLAN.md — Egress: the install proxy refuses non-public resolved addresses and dials the vetted address; conventions refuse local-only registry hosts (WR-02)
+
+**Wave 19** *(blocked on 02-27 to 02-34)*
+- [ ] 02-35-PLAN.md — Documentation pass and dispositions: docs/system current, README, coverage and findings updated, fresh reviews under the round budget, every finding of 02-REVIEW.md and 02-26-REVIEW.md recorded fixed, skipped or deferred
 
 **Notes**: Suits `/gsd-mvp-phase`. Builds on the Phase 1 kernel: run worktree, contract compilation and G0, run-scoped GSD configuration, outcome classification, checks and test inventory, gates G2 and G4, `status`, `inbox`, `resume`, `install-host`. Resolves host limitation 8 (commits inside the sandbox). ONB-10 covers declared check commands only. Answering decisions from the shell arrives with `decide` in Phase 3. Excluded: several work items, answering decisions, amendments, presets other than `routine` and `onboarding`, push and PR delivery, Stage 2 capability.
 
