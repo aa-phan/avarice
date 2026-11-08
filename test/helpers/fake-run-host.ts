@@ -81,6 +81,10 @@ export interface FakeRunOptions {
   // Plan 02-19. The unit waits this many milliseconds (asynchronously, so the supervisor's timers keep running) before it touches the clone: a run an
   // observer can watch in `running`, with the `launch:run` checkpoint committed, while its supervisor is still working.
   delayMs?: number;
+  // Plan 02-30 (R-IN-06). After its edits the unit starts a sleeper in its own process group (its command line carries the session ID), calls `onStart`,
+  // and then hangs: until its abort signal fires (it ends the group, records `abortedAtMs`, and reports a SIGTERM end with no result), or until `maxMs`
+  // passes (it ends the group and finishes normally). The host's own process group is what a real host's abort ends.
+  hangUntilAbort?: { maxMs: number; onStart?: (request: InvocationRequest) => void };
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
@@ -116,12 +120,16 @@ export class FakeRunHost implements AgentHost {
   };
   readonly options: FakeRunOptions;
   readonly calls: InvocationRequest[] = [];
+  // `hangUntilAbort`: the sleeper's PID (its process group ID), when the abort was observed, and when the sleeper was started.
+  sleeperPid: number | undefined;
+  abortedAtMs: number | undefined;
+  hangStartedAtMs: number | undefined;
 
   constructor(options: FakeRunOptions = {}) {
     this.options = options;
   }
 
-  async invoke(req: InvocationRequest, _signal: AbortSignal): Promise<Result<InvocationOutcome>> {
+  async invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     this.calls.push(req);
     if (req.purpose !== 'run') return err({ kind: 'unsupported', capability: `fake-run-host:${req.purpose}` });
     const o: FakeRunOptions = { ...this.options, ...(this.options.perAttempt?.[this.calls.length - 1] ?? {}) };
@@ -265,9 +273,81 @@ export class FakeRunHost implements AgentHost {
     }
 
     const headAfter = gitHead(cwd);
+    let abortedByCaller = false;
+    if (o.hangUntilAbort !== undefined) {
+      const hang = o.hangUntilAbort;
+      // stdio must be `ignore` (see killInUnit above); detached makes the sleeper the leader of its own process group.
+      const sleeper = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1800000)', '--', '--session-id', req.sessionId ?? ''], { detached: true, stdio: 'ignore' });
+      sleeper.unref();
+      this.sleeperPid = sleeper.pid;
+      // Start-up margin: the process must exist before the unit starts to hang.
+      await new Promise<void>((resolve) => setTimeout(resolve, 200));
+      this.hangStartedAtMs = Date.now();
+      hang.onStart?.(req);
+      abortedByCaller = await new Promise<boolean>((resolve) => {
+        if (signal.aborted) return resolve(true);
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(false);
+        }, hang.maxMs);
+        const onAbort = (): void => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+      if (abortedByCaller) this.abortedAtMs = Date.now();
+      // SIGTERM to the group, then SIGKILL after a short grace, as the real adapter does.
+      if (sleeper.pid !== undefined) {
+        const groupAlive = (): boolean => {
+          try {
+            process.kill(-(sleeper.pid as number), 0);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        try {
+          process.kill(-sleeper.pid, 'SIGTERM');
+        } catch {
+          // already gone
+        }
+        const deadline = Date.now() + 500;
+        while (groupAlive() && Date.now() < deadline) await new Promise<void>((resolve) => setTimeout(resolve, 25));
+        if (groupAlive()) {
+          try {
+            process.kill(-sleeper.pid, 'SIGKILL');
+          } catch {
+            // already gone
+          }
+        }
+      }
+    }
     // A killed unit: the host waits out the clock, then ends the process group.
     if (o.timeoutMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.timeoutMs));
     const elapsed = Math.max(Date.now() - startedMs, o.timeoutMs ?? 0);
+    if (abortedByCaller) {
+      return ok({
+        sessionId: `fake-run-session-${this.calls.length}`,
+        kind: 'inconclusive',
+        permissionDenials: [],
+        costUsd: 0,
+        durationMs: elapsed,
+        headBefore: head,
+        headAfter,
+        details: {
+          exitCode: null,
+          signal: 'SIGTERM',
+          timedOut: false,
+          headMoved: head !== headAfter,
+          transcriptBytes: 0,
+          hookDenies: denies,
+          hookBudgetDenies: 0,
+          numTurns: 1,
+          resultSeen: false,
+        },
+      });
+    }
     return ok({
       sessionId: `fake-run-session-${this.calls.length}`,
       kind: crashed ? 'inconclusive' : denies > 0 && !wroteEdits ? 'denied' : 'progressed',
