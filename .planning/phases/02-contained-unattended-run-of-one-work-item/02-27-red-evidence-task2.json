@@ -1,0 +1,24 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "Task 1's commit 0b35653 (src unchanged since) plus the new tests: three tests in the CR-01 describe of test/unit/hook-decision.test.ts (table pin, operand grammar, corrective reasons) and the describe `corrective reasons through the real hook` in test/integration/hook-git-secret-reads.test.ts",
+  "exitCode": 1,
+  "reason": "No `gitArgs` export exists (the dynamic import yields undefined, so the operand-grammar test fails with 'gitArgs is not a function'); `M` is still a value letter of the git status row of SHORT_VALUE_OPTIONS, so `git status -M HEAD:.env` is refused shell-git-output where the operand judgement gives deny-secret-read; and no denial carries a reason (decision.reason is undefined, and the real hook prints `avarice: shell-git-output` with nothing after the rule). Unit file: 159 tests, 156 pass, 3 fail. Integration file: 65 tests, 63 pass, 2 fail.",
+  "classifier": "gsd-tools check tdd-red-evidence on the TAP report of test/unit/hook-decision.test.ts (target: the operand grammar test) returned RED_EVIDENCE_OK, reason target_test_failed: 159 tests, 156 pass, 3 fail.",
+  "failingFiles": [
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "git object reads and output forms (CR-01) > table pin: git takes the value of -M of git status only attached, so the word after it is an operand and is judged as an object name (git status -M HEAD:.env is [deny, shell-git-output], expected deny-secret-read; SHORT_VALUE_OPTIONS['git status'] is 'M')",
+    "git object reads and output forms (CR-01) > operand grammar: every word git takes as an operand is returned, whatever the value letters of SHORT_VALUE_OPTIONS say (gitArgs is not a function)",
+    "git object reads and output forms (CR-01) > corrective reasons: a shell-git-output and a shell-git-object denial tell the model the admitted spelling; other rules carry none (reason is undefined)",
+    "corrective reasons through the real hook > git log --max-count 5 is refused shell-git-output and the reason names the =value form",
+    "corrective reasons through the real hook > git show HEAD is refused shell-git-object and the reason names the <revision>:<path> form"
+  ],
+  "passingAtBase": [
+    "git object reads and output forms (CR-01) > table pin: the value letters of SHORT_VALUE_OPTIONS cover the valued letters of GIT_OUTPUT_FORMS and never a flag or attached letter. The plan expected this test to fail on `M`; it passes at base because checkGitOutput already refuses `-M` (not a letter of the git status form), so every unadmitted value letter is already denied. It is kept as a guard of the tables, and the `-M` operand behavior is covered by the failing -M test above.",
+    "all 156 other unit tests, including the whole earlier CR-01 describe and the G-02-H2 describe, and 63 of 65 integration tests"
+  ],
+  "semanticAssessment": "Each failing test executed and failed on the planned assertion for the intended reason: a missing export where the plan adds one, a decision that has no reason where the plan adds one, and an operand after `-M` that the value-letter table consumes where the plan makes it an object-checked operand. No failure is a syntax, import, fixture or collection fault (gitArgs is reached through a dynamic import inside the test, so the file still loads at base). The table-pin test passing at base is recorded above rather than hidden.",
+  "summary": "Unit file at Task 1's commit: 159 tests, 156 pass, 3 fail. Integration file: 65 tests, 63 pass, 2 fail (both reason tests)."
+}

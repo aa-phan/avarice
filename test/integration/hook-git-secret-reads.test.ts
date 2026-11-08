@@ -65,6 +65,14 @@ function hookVerdict({ repo, fx }: Rig, command: string): string {
   return reason.replace(/^avarice: /, '');
 }
 
+// The permissionDecisionReason the real hook prints for a Bash command, or null when it prints nothing.
+function hookReason({ repo, fx }: Rig, command: string): string | null {
+  const result = runHook(fx, 'pre', { cwd: repo.path, tool_name: 'Bash', tool_input: { command } });
+  assert.equal(result.code, 0, result.stderr);
+  if (result.stdout === '') return null;
+  return (JSON.parse(result.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } }).hookSpecificOutput.permissionDecisionReason;
+}
+
 // What real git prints (stdout and stderr) for the words of a corpus line; the corpus uses no quoted words.
 function gitOutput({ repo }: Rig, command: string): string {
   const out = gitRun(repo.path, command.split(' ').slice(1));
@@ -187,6 +195,23 @@ describe('case variant of a secret path', () => {
     const printed = gitOutput(r, 'git show HEAD:.ENV').includes(SENTINEL);
     t.diagnostic(`git show HEAD:.ENV printed the sentinel: ${printed ? 'yes' : 'no'}`);
     if (printed) assert.equal(decide(r, 'git show HEAD:.ENV').decision, 'deny');
+  });
+});
+
+// S-IN-02: a refused git form tells the model the admitted spelling, which the real hook prints after the rule.
+describe('corrective reasons through the real hook', () => {
+  const r = rig();
+
+  it('git log --max-count 5 is refused shell-git-output and the reason names the =value form', () => {
+    const reason = hookReason(r, 'git log --max-count 5');
+    assert.ok(reason !== null && reason.startsWith('avarice: shell-git-output: '), String(reason));
+    assert.ok(reason.includes('--max-count=5'), reason);
+  });
+
+  it('git show HEAD is refused shell-git-object and the reason names the <revision>:<path> form', () => {
+    const reason = hookReason(r, 'git show HEAD');
+    assert.ok(reason !== null && reason.startsWith('avarice: shell-git-object: '), String(reason));
+    assert.ok(reason.includes('<revision>:<path>'), reason);
   });
 });
 

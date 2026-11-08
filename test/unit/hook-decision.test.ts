@@ -6,8 +6,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { sha256Hex } from '../../src/domain/digest.ts';
-import { decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
-import type { HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
+import { GIT_OUTPUT_FORMS, SHORT_VALUE_OPTIONS, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
+import type { GitOutputForm, HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
 import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 
 const STAGING = '/work/onb-1/staging';
@@ -1211,6 +1211,64 @@ describe('git object reads and output forms (CR-01)', () => {
     for (const command of ['git ls-files', 'git ls-files -s', 'git rev-parse HEAD', 'git rev-parse --show-toplevel']) {
       assert.deepEqual(verdict(command), ['allow', 'shell-identity'], command);
     }
+  });
+
+  // S-WR-02: the two option tables must not disagree about which words are operands.
+  it('table pin: the value letters of SHORT_VALUE_OPTIONS cover the valued letters of GIT_OUTPUT_FORMS and never a flag or attached letter', () => {
+    for (const entry of ['git log', 'git status', 'git show']) {
+      const form = GIT_OUTPUT_FORMS[entry] as GitOutputForm;
+      const letters = SHORT_VALUE_OPTIONS[entry] ?? '';
+      const command = entry.slice('git '.length);
+      for (const letter of form.shortValued) assert.ok(letters.includes(letter), `${entry}: -${letter} takes a value in the output form but not in SHORT_VALUE_OPTIONS`);
+      for (const letter of form.shortFlags + form.shortAttached) assert.ok(!letters.includes(letter), `${entry}: -${letter} takes no separate value but is a value letter in SHORT_VALUE_OPTIONS`);
+      const admitted = form.shortFlags + form.shortValued + form.shortAttached;
+      for (const letter of letters) {
+        if (admitted.includes(letter)) continue;
+        assert.equal(verdict(`git ${command} -${letter} HEAD:.env`)[0], 'deny', `git ${command} -${letter} HEAD:.env`);
+        assert.deepEqual(verdict(`git ${command} -${letter} HEAD:src/a.ts`), ['deny', 'shell-git-output'], `git ${command} -${letter} HEAD:src/a.ts`);
+      }
+    }
+  });
+
+  it('table pin: git takes the value of -M of git status only attached, so the word after it is an operand and is judged as an object name', () => {
+    assert.deepEqual(verdict('git status -M HEAD:.env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status -M .env'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdict('git status -M x'), ['deny', 'shell-git-output']);
+    assert.equal(SHORT_VALUE_OPTIONS['git status'] ?? '', '');
+  });
+
+  it('operand grammar: every word git takes as an operand is returned, whatever the value letters of SHORT_VALUE_OPTIONS say', async () => {
+    const { gitArgs } = await import('../../src/domain/hook-decision.ts');
+    const status = GIT_OUTPUT_FORMS['git status'] as GitOutputForm;
+    const log = GIT_OUTPUT_FORMS['git log'] as GitOutputForm;
+    const show = GIT_OUTPUT_FORMS['git show'] as GitOutputForm;
+    // A test-local form whose attached letter `M` is also a value letter somewhere else: the word after `-M` is still an operand.
+    const attachedM: GitOutputForm = { ...status, shortAttached: 'uM' };
+    assert.deepEqual(gitArgs(attachedM, ['-M', 'HEAD:.env']), { operands: ['HEAD:.env'], refused: false });
+    assert.deepEqual(gitArgs(status, ['-uall', 'HEAD:.env', '-s']), { operands: ['HEAD:.env'], refused: false });
+    // The word after a valued letter that ends its cluster is the value, never an operand; an attached value is part of the cluster.
+    assert.deepEqual(gitArgs(log, ['-n', '3', 'HEAD:a']), { operands: ['HEAD:a'], refused: false });
+    assert.deepEqual(gitArgs(log, ['-n3', '--max-count=2', '--oneline', 'HEAD:a']), { operands: ['HEAD:a'], refused: false });
+    // After a bare `--` every word is an operand, an option-looking one included; a lone `-` is no operand.
+    assert.deepEqual(gitArgs(log, ['--oneline', '--', '-x', 'HEAD:a']), { operands: ['-x', 'HEAD:a'], refused: false });
+    assert.deepEqual(gitArgs(log, ['-', '-1']), { operands: [], refused: false });
+    // An option outside the grammar is refused; `git show` refuses every option, a bare `--` included.
+    assert.equal(gitArgs(log, ['--oneline', '-p']).refused, true);
+    assert.equal(gitArgs(log, ['--format']).refused, true);
+    assert.equal(gitArgs(status, ['-1']).refused, true);
+    assert.deepEqual(gitArgs(show, ['HEAD:a', 'HEAD:b']), { operands: ['HEAD:a', 'HEAD:b'], refused: false });
+    assert.equal(gitArgs(show, ['-s', 'HEAD:a']).refused, true);
+    assert.equal(gitArgs(show, ['--', 'HEAD:a']).refused, true);
+  });
+
+  it('corrective reasons: a shell-git-output and a shell-git-object denial tell the model the admitted spelling; other rules carry none', () => {
+    const output = decide(shell('git log -p'));
+    assert.deepEqual([output.decision, output.rule], ['deny', 'shell-git-output']);
+    assert.ok(output.reason !== undefined && output.reason.includes('=') && output.reason.includes('git log -1 --stat'), String(output.reason));
+    const object = decide(shell('git show HEAD'));
+    assert.deepEqual([object.decision, object.rule], ['deny', 'shell-git-object']);
+    assert.ok(object.reason !== undefined && object.reason.includes('<revision>:<path>'), String(object.reason));
+    for (const command of ['cat .env', 'git show HEAD:.env', 'curl x', 'git log -- *.ts']) assert.equal(decide(shell(command)).reason, undefined, command);
   });
 });
 
