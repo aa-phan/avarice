@@ -29,6 +29,12 @@ export function resultLine(subject: string, state: string, reason?: string | nul
   return `${stripControl(subject)}: ${stateWord(state, reason)}`;
 }
 
+// The one printer of a command's outcome, shared by onboard, resume and supervise: the result line, then the stripped note when there is one.
+export function outcomeLines(subject: string, state: string, reason: string | null, message: string | null): string[] {
+  const line = resultLine(subject, state, reason);
+  return message === null ? [line] : [line, stripControl(message)];
+}
+
 // `avarice <command>: <message>`, or `avarice: <message>` before a command is chosen. The command may carry its
 // subcommand (`repo add`). The message may span lines, for example a usage text.
 export function errorLine(command: string | undefined, message: string): string {

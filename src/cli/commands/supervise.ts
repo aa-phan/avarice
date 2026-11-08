@@ -8,7 +8,7 @@ import { reconcileRun } from '../../app/run-resume.ts';
 import { runSupervisor } from '../../app/run-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
-import { errorLine, resultLine, stripControl } from '../render/style.ts';
+import { errorLine, outcomeLines } from '../render/style.ts';
 
 const EXIT_NOT_READY = 3;
 const EXIT_USAGE = 64;
@@ -47,7 +47,6 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     return EXIT_INTERNAL;
   }
   const { state, reason, message } = outcome.value;
-  io.out(`${resultLine(`run ${runId}`, state, reason)}\n`);
-  if (message !== null) io.out(`${stripControl(message)}\n`);
+  for (const line of outcomeLines(`run ${runId}`, state, reason, message)) io.out(`${line}\n`);
   return state === 'ready_for_review' ? 0 : EXIT_NOT_READY;
 }

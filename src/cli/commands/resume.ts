@@ -13,7 +13,7 @@ import { resumeOnboarding } from '../../app/resume.ts';
 import { RECONCILE_STEP, resumeRun } from '../../app/run-resume.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
-import { errorLine, resultLine, stripControl } from '../render/style.ts';
+import { errorLine, outcomeLines, resultLine, stripControl } from '../render/style.ts';
 import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import { renderWait } from './start.ts';
 
@@ -26,7 +26,7 @@ const WAIT_MAX_MS = 24 * 60 * 60_000;
 export const booleanFlags: readonly string[] = ['wait'];
 
 function usage(io: Io, message: string): number {
-  io.err(`avarice resume: ${message}\nusage: avarice resume <onboardingId | runId> [--wait]\n`);
+  io.err(`${errorLine('resume', message)}\nusage: avarice resume <onboardingId | runId> [--wait]\n`);
   return EXIT_USAGE;
 }
 
@@ -42,19 +42,18 @@ async function resumeOnboardingCommand(deps: AppDeps, io: Io, onboardingId: stri
   if (!outcome.ok) {
     const e = outcome.error;
     if (e.kind === 'not_found') {
-      io.err(`avarice resume: ${describeError(e)}\n`);
+      io.err(`${errorLine('resume', describeError(e))}\n`);
       return EXIT_USAGE;
     }
     if (e.kind === 'conflict') {
-      io.err(`avarice resume: onboarding ${onboardingId} is held by another process; its lease must expire first (${describeError(e)})\n`);
+      io.err(`${errorLine('resume', `onboarding ${onboardingId} is held by another process; its lease must expire first (${describeError(e)})`)}\n`);
       return EXIT_NOT_ACTIVE;
     }
-    io.err(`avarice resume: onboarding ${onboardingId} did not finish: ${describeError(e)}\n`);
+    io.err(`${errorLine('resume', `onboarding ${onboardingId} did not finish: ${describeError(e)}`)}\n`);
     return EXIT_INTERNAL;
   }
   const { state, reason, message } = outcome.value;
-  io.out(`onboarding ${onboardingId}: ${state}${reason !== null ? ` (${reason})` : ''}\n`);
-  if (message !== null) io.out(`${message}\n`);
+  for (const line of outcomeLines(`onboarding ${onboardingId}`, state, reason, message)) io.out(`${line}\n`);
   return state === 'active' ? 0 : EXIT_NOT_ACTIVE;
 }
 
