@@ -11,6 +11,7 @@ import {
   PURPOSE_EXTENSIONS,
   PURPOSE_SUBAGENT_TYPES,
   computeRunScope,
+  credentialPaths,
   runScopeDirs,
 } from '../../src/domain/invocation-scope.ts';
 import type { RunScopeInput, RunWorkspaceShape } from '../../src/domain/invocation-scope.ts';
@@ -120,9 +121,7 @@ describe('computeRunScope: write roots and files from the contract globs (CON-2)
         `${CLONE}/src/lib`,
         `${CLONE}/tests/e2e`,
         `${CLONE}/tests/unit/dates.test.ts`,
-        `${HOME}/.aws`,
-        `${HOME}/.config/gh`,
-        `${HOME}/.ssh`,
+        ...credentialPaths(HOME),
         DATA,
       ].sort(),
     );
@@ -162,7 +161,7 @@ describe('computeRunScope: write roots and files from the contract globs (CON-2)
 describe('computeRunScope: reads, subagents and commands', () => {
   it('keeps the repository, data root, credentials and work root out of reach, with the own clone and scratch re-allowed', () => {
     const scope = computeRunScope(input());
-    assert.deepEqual(scope.denyRead, [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`, WORK, ...DEFAULT_PARENTS]);
+    assert.deepEqual(scope.denyRead, [REPO, DATA, ...credentialPaths(HOME), WORK, ...DEFAULT_PARENTS]);
     assert.deepEqual(scope.allowRead, [CLONE, SCRATCH]);
     assert.deepEqual(scope.denyReadGlobs, ['**/.env', '**/*.pem']);
     assert.deepEqual(scope.readRoots, ['/gsd/core', '/gsd/agents']);

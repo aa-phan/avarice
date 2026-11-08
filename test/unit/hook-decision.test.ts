@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import { GIT_OUTPUT_FORMS, SHORT_VALUE_OPTIONS, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
 import type { GitOutputForm, HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
-import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
+import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS, credentialPaths } from '../../src/domain/invocation-scope.ts';
 
 const STAGING = '/work/onb-1/staging';
 const WRITE_ROOT = `${STAGING}/.planning/codebase`;
@@ -706,6 +706,17 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     assert.equal(d.decision, 'deny', command);
     assert.equal(d.rule, rule, command);
   };
+
+  it('denies a Read of a credential file and of a file under a credential directory with deny-read (R-WR-03)', () => {
+    const over = { denyRead: [REPO, DATA, ...credentialPaths('/home/u')] };
+    for (const path of ['/home/u/.netrc', '/home/u/Library/Keychains/x', '/home/u/.gnupg/pubring.kbx', '/home/u/.git-credentials']) {
+      const d = decide(read(path), runPolicy(over));
+      assert.deepEqual([d.decision, d.rule], ['deny', 'deny-read'], path);
+    }
+    denied('cat /home/u/.netrc', 'deny-read', over);
+    // A sibling that only shares the prefix of a credential file is not under it: it is refused as outside the read set, not as a denied root.
+    assert.equal(decide(read('/home/u/.netrc-example'), runPolicy(over)).rule, 'outside-read-set');
+  });
 
   it('allows a contract command word for word with rule agent-command, charging toolCalls', () => {
     for (const command of ['npm run typecheck', 'npm test']) {

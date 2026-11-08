@@ -1,0 +1,28 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/invocation-scope.test.ts test/unit/run-scope.test.ts test/unit/claude-settings.test.ts test/unit/hook-decision.test.ts",
+  "ranAgainst": "the Task 1 commit fa82c9e (credentialPaths exported, but computeInvocationScope and computeRunScope still built their own three-entry lists) plus the changed and added cases in the four unit files",
+  "exitCode": 1,
+  "reason": "The onboarding scope's denyRead and the run scope's denyRead and denyWrite hold only ~/.ssh, ~/.aws and ~/.config/gh. The expected lists (credentialPaths(HOME) in place of the three) show the nine other entries missing: the onboarding denyRead (expected [repo, data, twelve credential locations, work root], actual with three), the run scope's denyRead and its sorted denyWrite, and, through them, the generated host settings for map, intel and run (sandbox.filesystem.denyRead, sandbox.filesystem.denyWrite and the Read deny rules).",
+  "failingFiles": [
+    "test/unit/invocation-scope.test.ts",
+    "test/unit/run-scope.test.ts",
+    "test/unit/claude-settings.test.ts"
+  ],
+  "failingTests": [
+    "computeInvocationScope: reads > always denies the checkout, the data root and the credential locations",
+    "computeInvocationScope: reads > puts the credential locations after the data root and before the work root, as the three directories were",
+    "the work root (CR-02, D-GAP-01) > denies the work root after the checkout, the data root and the credential locations and re-allows only the staging path",
+    "computeRunScope: write roots and files from the contract globs (CON-2) > turns the first example into file roots, directory roots and the full denyWrite list",
+    "computeRunScope: reads, subagents and commands > keeps the repository, data root, credentials and work root out of reach, with the own clone and scratch re-allowed",
+    "renderClaudeSettings snapshots > map",
+    "renderClaudeSettings snapshots > intel: no Skill (--agent form) and no Agent tool (no subagents)",
+    "renderClaudeSettings with a work root (CR-02, D-GAP-01) > denies the work root to the sandbox, re-allows only the staging, and keeps the work root out of the Read permission denies",
+    "the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08) > lists every credential location in the sandbox denyRead and as a Read deny rule, and in denyWrite (R-WR-03)"
+  ],
+  "passingAtBase": [
+    "the hook case (a Read of ~/.netrc and ~/Library/Keychains/x under the run policy is denied deny-read): the hook decides from the policy's denyRead list, so it already denies whatever the policy lists; the scope that computes that list is covered by the failing cases above",
+    "every other case of the four files (253 pass)"
+  ],
+  "semanticAssessment": "The target tests executed (262 reported, none skipped) and failed on the planned assertions for the intended reason: the scopes hold three credential entries where the shared list has twelve. Each failure is a deepEqual or includes check against credentialPaths(HOME) or credentialPaths(home); no import, syntax or fixture fault is involved (the same files pass every case that does not name the list).",
+  "summary": "Run at the base: 262 tests reported, 253 pass, 9 fail (all on the nine added credential entries)."
+}

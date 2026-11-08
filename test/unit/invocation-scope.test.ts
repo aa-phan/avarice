@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  CREDENTIAL_PATHS,
   DENIED_COMMAND_PREFIXES,
   FIND_DENIED_ACTIONS,
   GSD_READ_VERBS,
@@ -13,6 +14,7 @@ import {
   PURPOSE_SUBAGENT_TYPES,
   READ_ONLY_COMMANDS,
   computeInvocationScope,
+  credentialPaths,
 } from '../../src/domain/invocation-scope.ts';
 import type { InvocationPurpose, ScopeInput, WorkspaceShape } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
@@ -175,13 +177,27 @@ describe('computeInvocationScope: intel and knowledge', () => {
 });
 
 describe('computeInvocationScope: reads', () => {
-  it('always denies the checkout, the data root and the credential directories', () => {
+  it('always denies the checkout, the data root and the credential locations', () => {
     for (const purpose of ['map', 'intel', 'knowledge'] as const) {
       const { denyRead } = scopeFor(purpose);
-      for (const path of [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`]) {
+      for (const path of [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`, ...credentialPaths(HOME)]) {
         assert.ok(denyRead.includes(path), `${purpose}: denyRead must list ${path}`);
       }
     }
+  });
+
+  it('names twelve credential locations, home-relative, each once (R-WR-03)', () => {
+    assert.deepEqual(
+      [...CREDENTIAL_PATHS],
+      ['.ssh', '.aws', '.config/gh', '.gnupg', '.netrc', '.npmrc', '.docker', '.kube', '.config/gcloud', 'Library/Keychains', '.git-credentials', '.pgpass'],
+    );
+    assert.equal(credentialPaths('/home/u/').length, 12);
+    assert.deepEqual(credentialPaths('/home/u/').slice(0, 2), ['/home/u/.ssh', '/home/u/.aws']);
+  });
+
+  it('puts the credential locations after the data root and before the work root, as the three directories were', () => {
+    const { denyRead } = scopeFor('map', { workRoot: '/work' });
+    assert.deepEqual(denyRead, [REPO, DATA, ...credentialPaths(HOME), '/work']);
   });
 
   it('re-allows only what the staging strategy lists, and the invocation staging (WR-03)', () => {
@@ -275,12 +291,12 @@ describe('computeInvocationScope: commands and budgets', () => {
 });
 
 describe('the work root (CR-02, D-GAP-01)', () => {
-  const FIVE = [REPO, DATA, `${HOME}/.ssh`, `${HOME}/.aws`, `${HOME}/.config/gh`];
+  const BEFORE_WORK = [REPO, DATA, ...credentialPaths(HOME)];
 
-  it('denies the work root after the five existing entries and re-allows only the staging path', () => {
+  it('denies the work root after the checkout, the data root and the credential locations and re-allows only the staging path', () => {
     for (const purpose of ['map', 'intel', 'knowledge'] as const) {
       const scope = scopeFor(purpose, { workRoot: '/work' });
-      assert.deepEqual(scope.denyRead, [...FIVE, '/work'], `${purpose}: work root last`);
+      assert.deepEqual(scope.denyRead, [...BEFORE_WORK, '/work'], `${purpose}: work root last`);
       assert.deepEqual(scope.allowRead, [STAGING], `${purpose}: staging only`);
     }
   });

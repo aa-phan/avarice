@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { computeInvocationScope, computeRunScope } from '../../src/domain/invocation-scope.ts';
+import { computeInvocationScope, computeRunScope, credentialPaths } from '../../src/domain/invocation-scope.ts';
 import type { BashStrategy, InvocationPurpose, InvocationScope } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
 import type { OnboardingContract } from '../../src/domain/onboarding-contract.ts';
@@ -122,9 +122,7 @@ function expectedSettings(over: {
         `Read(${slash(repo)}/**)`,
         `Read(${slash(data)}/**)`,
         `Edit(${slash(data)}/**)`,
-        `Read(${slash(home)}/.ssh/**)`,
-        `Read(${slash(home)}/.aws/**)`,
-        `Read(${slash(home)}/.config/gh/**)`,
+        ...credentialPaths(home).map((path) => `Read(${slash(path)}/**)`),
         `Read(${slash(staging)}/**/*.key)`,
         `Read(${slash(staging)}/**/*.pem)`,
         `Read(${slash(staging)}/**/.env)`,
@@ -148,7 +146,7 @@ function expectedSettings(over: {
         allowWrite: [slash(over.writeRoot)],
         denyWrite: over.denyWrite.map(slash),
         // WR-03: every scope denies the work root (last) and re-allows only its own staging.
-        denyRead: [repo, data, join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh'), join(root, 'work')].map(slash),
+        denyRead: [repo, data, ...credentialPaths(home), join(root, 'work')].map(slash),
         allowRead: [slash(staging)],
       },
       network: { allowedDomains: [], strictAllowlist: true },
@@ -233,13 +231,13 @@ describe('renderClaudeSettings with a work root (CR-02, D-GAP-01)', () => {
     for (const purpose of ['map', 'intel', 'knowledge'] as const) {
       const settings = render(scope(purpose, { workRoot: workRoot() })) as Record<string, any>;
       const fs = settings.sandbox.filesystem;
-      assert.deepEqual(fs.denyRead, [repo, data, join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh'), workRoot()].map(slash), `${purpose}: work root last`);
+      assert.deepEqual(fs.denyRead, [repo, data, ...credentialPaths(home), workRoot()].map(slash), `${purpose}: work root last`);
       assert.deepEqual(fs.allowRead, [slash(staging)], `${purpose}: only the staging is re-allowed`);
       // The secret-glob denies below the staging also start with the work root's path, so the rule is matched whole.
       assert.equal(settings.permissions.deny.includes(`Read(${slash(workRoot())}/**)`), false, `${purpose}: no Read deny names the work root`);
       assert.equal(settings.permissions.deny.includes(`Read(${slash(join(workRoot(), 'onb-1'))}/**)`), false, purpose);
       // The other generic denies stay.
-      for (const dir of [join(home, '.ssh'), join(home, '.aws'), join(home, '.config', 'gh')]) assert.ok(settings.permissions.deny.includes(`Read(${slash(dir)}/**)`), `${purpose}: ${dir}`);
+      for (const dir of credentialPaths(home)) assert.ok(settings.permissions.deny.includes(`Read(${slash(dir)}/**)`), `${purpose}: ${dir}`);
     }
   });
 
@@ -492,6 +490,18 @@ describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () 
     const deny: string[] = settings().permissions.deny;
     assert.ok(deny.includes(`Read(${slash(join(home, '.local/share/avarice'))}/**)`));
     assert.ok(deny.includes(`Read(${slash(join(home, '.config/avarice'))}/**)`));
+  });
+
+  it('lists every credential location in the sandbox denyRead and as a Read deny rule, and in denyWrite (R-WR-03)', () => {
+    const s = settings();
+    const fs = s.sandbox.filesystem;
+    const deny: string[] = s.permissions.deny;
+    for (const path of credentialPaths(home)) {
+      assert.ok(fs.denyRead.includes(slash(path)), `denyRead: ${path}`);
+      assert.ok(fs.denyWrite.includes(slash(path)), `denyWrite: ${path}`);
+      assert.ok(deny.includes(`Read(${slash(path)}/**)`), `Read deny: ${path}`);
+    }
+    assert.equal(credentialPaths(home).length, 12);
   });
 
   it('allows no network domain and keeps the sandbox required', () => {
