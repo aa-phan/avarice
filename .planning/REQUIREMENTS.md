@@ -19,7 +19,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-4** [MVP]: Planning, phase decomposition and implementation are delegated to GSD through supported commands; AVARICE keeps no competing plan, task list or retry loop for the same work.
 - [ ] **FR-5** [MVP]: Verification runs the repository's own check commands as deterministic subprocesses and records exit status, duration, command and the verified workspace state.
 - [ ] **FR-6** [MVP]: Completion evidence names the exact revision verified (commit SHA plus clean-tree flag, or a content digest of the dirty tree); model-written text is never completion evidence.
-- [ ] **FR-7** [MVP]: A checkpoint is written at every state transition; resume rebuilds the next action from checkpoints, GSD state files and live git state, without chat history.
+- [x] **FR-7** [MVP]: A checkpoint is written at every state transition; resume rebuilds the next action from checkpoints, GSD state files and live git state, without chat history.
 - [ ] **FR-8** [MVP]: On resume, every external reference in the context pack is refreshed or marked stale before the run continues.
 - [ ] **FR-9** [MVP summary, Contract PR]: Change preparation produces a change summary from recorded evidence; PR creation is a privileged action (FR-12).
 - [ ] **FR-10** [Contract]: Review and CI feedback enter as new evidence attached to a new attempt and never overwrite an earlier attempt's evidence.
@@ -71,7 +71,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
 - [ ] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
 - [ ] **CON-12** [MVP]: Caches record source version, freshness and access scope and are not reused after access is revoked or across profiles.
-- [ ] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
+- [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
 - [ ] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
 - [ ] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
 - [ ] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
@@ -219,7 +219,7 @@ Each v1 requirement maps to exactly one phase.
 | FR-4 | Phase 2 | Gaps Found |
 | FR-5 | Phase 2 | Gaps Found |
 | FR-6 | Phase 2 | Gaps Found |
-| FR-7 | Phase 2 | Gaps Found |
+| FR-7 | Phase 2 | Complete |
 | FR-8 | Phase 4 | Pending |
 | FR-9 | Phase 5 | Pending |
 | FR-10 | Phase 5 | Pending |
@@ -259,7 +259,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-10 | Phase 4 | Pending |
 | CON-11 | Phase 4 | Pending |
 | CON-12 | Phase 4 | Pending |
-| CON-13 | Phase 2 | Gaps Found |
+| CON-13 | Phase 2 | Complete |
 | CON-14 | Phase 2 | Gaps Found |
 | CON-15 | Phase 3 | Pending |
 | CON-16 | Phase 2 | Gaps Found |

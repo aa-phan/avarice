@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-29-PLAN.md
-last_updated: "2026-11-08T02:15:46.156Z"
+stopped_at: Completed 02-30-PLAN.md
+last_updated: "2026-11-08T02:44:38.485Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: 2e0bda14c3d9116df65e02efa878ee09d9a5c7d0
+state_head: 91c9750dedc4cc29ac03e558afffb0e7a2491a9c
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 61
-  completed_plans: 55
+  completed_plans: 56
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 4 of 35
+Plan: 5 of 35
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 02 execution started
 
@@ -110,6 +110,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P27 | 18 min | 3 tasks | 9 files |
 | Phase 02 P28 | 40 min | 2 tasks | 9 files |
 | Phase 02 P29 | 55 min | 3 tasks | 12 files |
+| Phase 02 P30 | 60 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -234,6 +235,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-28: usage lines of onboard and resume print through errorLine; the soft hyphen stays out of the stripped invisible-format class
 - [Phase 02]: 02-29: COMMIT_SHA narrowed to 40 hex and a SHA-256 HEAD refused at the first read naming the object format (R-WR-06)
 - [Phase 02]: 02-29: review suggestion refsAllowed <= 1 not added; the exit evidence tool already fails any new ref other than refs/heads/avarice/<runId> (R-IN-09, for plan 02-35)
+- [Phase 02]: 02-30: no SIGTERM abort of the unit; an operator stop still ends the supervisor at once and the next resume reaps the host (owner decision needed to change)
+- [Phase 02]: 02-30: a gated commit is the supervisor's own only with matching trailers and a single parent equal to the snapshot head
 
 ### Pending Todos
 
@@ -283,6 +286,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T02:15:46.006Z
-Stopped at: Completed 02-29-PLAN.md
+Last session: 2026-11-08T02:44:38.333Z
+Stopped at: Completed 02-30-PLAN.md
 Resume file: None
