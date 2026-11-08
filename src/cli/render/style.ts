@@ -6,16 +6,19 @@
 // Escape sequences and control characters that could rewrite the terminal from a recorded string (T-02-03).
 // Order matters: strings introduced by OSC, DCS, SOS, PM and APC run to their terminator; then CSI, in its
 // 7-bit and 8-bit forms; then any other ESC sequence; then every remaining C0, DEL and C1 control character except
-// newline and tab, and the bidirectional overrides that make text read in a different order than it is stored.
+// newline and tab, and the invisible formatting characters: bidirectional overrides, embeddings, isolates and marks, the Arabic
+// letter mark, zero-width characters, the word joiner and the byte order mark, which make text read differently from how it is
+// stored or hide part of it. The soft hyphen stays: it neither reorders nor hides text. The class is written with escapes so
+// that no invisible character sits in the source.
 const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g;
 const STRING_INTRODUCERS = /\x1b[PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?/g;
 const CSI = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]/g;
 const OTHER_ESCAPE = /\x1b[ -/]*[0-~]/g;
 const CONTROL = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
-const BIDI = /[‪-‮⁦-⁩]/g;
+const INVISIBLE_FORMAT = /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
 
 export function stripControl(text: string): string {
-  return text.replace(OSC, '').replace(STRING_INTRODUCERS, '').replace(CSI, '').replace(OTHER_ESCAPE, '').replace(CONTROL, '').replace(BIDI, '');
+  return text.replace(OSC, '').replace(STRING_INTRODUCERS, '').replace(CSI, '').replace(OTHER_ESCAPE, '').replace(CONTROL, '').replace(INVISIBLE_FORMAT, '');
 }
 
 // The ledger's own word, then its reason in parentheses where one exists: `blocked (enforcement_failure)`.
