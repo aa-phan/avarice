@@ -648,11 +648,12 @@ describe('the read allow-list through the real hook entry (CR-02, D-GAP-01)', ()
     assert.ok(parseHookPolicy(onDisk).ok);
   });
 
-  it('denies a shell read of a credential file and a Read of an unlisted path, naming outside-read-set', () => {
+  it('denies a shell read of a credential file naming deny-read, and a Read of an unlisted path naming outside-read-set', () => {
     const { fx, policyPath } = allowListFixture();
     const netrc = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: `cat ${join(fx.dir, 'home', '.netrc')}` } }, policyPath);
     assert.equal(netrc.code, 0, netrc.stderr);
-    assert.match(parsed(netrc.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
+    // R-WR-03: ~/.netrc is a named credential location, so it is a denied root (it was refused only as outside the read set).
+    assert.match(parsed(netrc.stdout).hookSpecificOutput.permissionDecisionReason, /deny-read/);
     const elsewhere = runHook(fx, 'pre', { tool_name: 'Read', tool_input: { file_path: join(fx.dir, 'elsewhere', 'x') } }, policyPath);
     assert.match(parsed(elsewhere.stdout).hookSpecificOutput.permissionDecisionReason, /outside-read-set/);
     const grep = runHook(fx, 'pre', { tool_name: 'Grep', tool_input: { pattern: 'x', path: fx.dir } }, policyPath);
@@ -681,7 +682,7 @@ describe('the read allow-list through the real hook entry (CR-02, D-GAP-01)', ()
     assert.equal(all.includes('.netrc'), false);
     assert.equal(all.includes('elsewhere'), false);
     assert.equal(all.includes('PRIVATE-MARKER'), false);
-    assert.deepEqual(rows.map((r) => (JSON.parse(r.data_json) as { rule: string }).rule), ['outside-read-set', 'outside-read-set']);
+    assert.deepEqual(rows.map((r) => (JSON.parse(r.data_json) as { rule: string }).rule), ['deny-read', 'outside-read-set']);
   });
 });
 
