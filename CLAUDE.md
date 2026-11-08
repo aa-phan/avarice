@@ -11,3 +11,12 @@ These rules apply only where `docs/system/` exists in your checkout. If your bra
 - When code and a proposal disagree, the code and `docs/system/` describe what is; add one line with `file:line` to `docs/system/findings.md` for the owner to decide which side moves.
 - Every phase ends with a documentation plan, planned as the phase's last plan and depending on all others. It compares the phase's diff with `docs/system/`, writes or updates the documents for whatever the phase built (grounded in the code, per the `technical-writer:documenting-legacy-codebases` skill), updates the two tables in `docs/system/README.md`, `coverage.md` and `findings.md`, and has each new or changed document reviewed by a fresh `technical-writer:prose-reviewer` before it is marked reviewed in `coverage.md`. The phase's success criteria include this, so verification checks it.
 - Load the `technical-writer:technical-writing` skill for any documentation prose here. `docs/system/` documents name their modules once in the opening and keep file paths, function names and delivery history (phase numbers, plan IDs, threat IDs) out of the prose.
+
+## Merging into main
+
+Work reaches `main` only through a pull request merged with a merge commit.
+
+- Do the work on a branch, push the branch, and open a pull request into `main`.
+- Merge the pull request with the merge-commit method (`gh pr merge --merge`). Do not squash, rebase or fast-forward. The merge commit marks where the branch landed and lets `git revert -m 1` undo it as one unit. It also keeps every commit hash that plan summaries and review dispositions cite.
+- Do not commit or push directly to `main`, and do not merge locally (for example with `git merge` or `git fetch . HEAD:main`) and then push.
+- After the merge, delete the branch on the remote and locally.
