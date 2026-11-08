@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-32-PLAN.md
-last_updated: "2026-11-08T03:32:17.661Z"
+stopped_at: Completed 02-33-PLAN.md
+last_updated: "2026-11-08T03:54:19.754Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: 4320b5c20d1c7ae95b0d185733a0e269eadc75cb
+state_head: d19325f1be19ca14cdd3f9c55db692dcdb48d262
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 61
-  completed_plans: 58
+  completed_plans: 59
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 7 of 35
+Plan: 8 of 35
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 02 execution started
 
@@ -113,6 +113,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P30 | 60 min | 3 tasks | 13 files |
 | Phase 02 P31 | 45 min | 3 tasks | 11 files |
 | Phase 02 P32 | 55min | 3 tasks | 11 files |
+| Phase 02 P33 | 50 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-30: a gated commit is the supervisor's own only with matching trailers and a single parent equal to the snapshot head
 - [Phase 02]: 02-31: cleanupAttended takes optional home and tmp roots so offline tests never name the real home; redactHome matches wherever the next character cannot continue a path component
 - [Phase 02]: 02-32: settleBudgets writes a settlement and an orphan conversion in one ledger transaction; an invocation that ended without a result (resultSeen false) is charged its cost reservation
+- [Phase 02]: 02-33: allow-list inversion of the command sandbox not done (node and npm need many system paths); the credential denial stays a list of known locations, documented in containment.md limits
+- [Phase 02]: 02-33: CREDENTIAL_PATHS (twelve home-relative locations, adds .git-credentials and .pgpass) is the single list for all five deny sites; check output is redacted before storage
 
 ### Pending Todos
 
@@ -290,6 +293,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T03:32:17.499Z
-Stopped at: Completed 02-32-PLAN.md
+Last session: 2026-11-08T03:54:19.593Z
+Stopped at: Completed 02-33-PLAN.md
 Resume file: None
