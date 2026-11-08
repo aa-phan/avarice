@@ -290,7 +290,8 @@ describe('computeRunScope: the work root check of Phase 1 (WR-01) applies', () =
 
   it('trims trailing slashes', () => {
     const scope = computeRunScope(input({ workRoot: `${WORK}/` }));
-    assert.deepEqual(scope.denyRead[5], WORK);
+    // After the repository, the data root and the credential locations.
+    assert.deepEqual(scope.denyRead[2 + credentialPaths(HOME).length], WORK);
   });
 });
 

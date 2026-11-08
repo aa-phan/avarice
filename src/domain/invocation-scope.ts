@@ -288,7 +288,7 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
   // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
-  const denyRead = [...new Set([repo, dataRoot, join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), workRoot])];
+  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
   const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
@@ -508,7 +508,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
   const home = trimTrailingSlashes(input.home);
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
-  const credentialDirs = [join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh')];
+  const credentialDirs = credentialPaths(home);
   // The Phase 1 data-root and credential denials, as write denials too.
   deny.add(dataRoot);
   for (const path of credentialDirs) deny.add(path);
