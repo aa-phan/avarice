@@ -381,6 +381,29 @@ export function defaultAvariceParents(home: string): string[] {
   const root = trimTrailingSlashes(home);
   return [join(root, '.local/share/avarice'), join(root, '.config/avarice'), join(root, '.local/share/avarice-work')];
 }
+
+// The credential stores of common tools, home-relative. Every sandboxed command, the model's host sandbox and the hook deny them. It is a
+// deny list over reads that are otherwise allowed, so a credential stored elsewhere under the home is not covered (R-WR-03).
+export const CREDENTIAL_PATHS: readonly string[] = [
+  '.ssh',
+  '.aws',
+  '.config/gh',
+  '.gnupg',
+  '.netrc',
+  '.npmrc',
+  '.docker',
+  '.kube',
+  '.config/gcloud',
+  'Library/Keychains',
+  '.git-credentials',
+  '.pgpass',
+];
+
+// CREDENTIAL_PATHS under `home` (the symlink-resolved home the other roots use), in list order.
+export function credentialPaths(home: string): string[] {
+  const root = trimTrailingSlashes(home);
+  return CREDENTIAL_PATHS.map((rel) => join(root, rel));
+}
 const isUsableGlob = (glob: string): boolean => glob !== '' && !glob.startsWith('/') && !glob.split('/').some((segment) => segment === '' || segment === '.' || segment === '..');
 
 // The static prefix of a glob: the segments before the first one holding a wildcard. A glob with no wildcard names one path (a file root).

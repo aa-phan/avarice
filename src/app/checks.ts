@@ -21,11 +21,12 @@ import { digestOf, sha256Hex } from '../domain/digest.ts';
 import { evidenceStatusOf, revisionOf } from '../domain/evidence.ts';
 import type { CheckOutcome, CommandResultStatus, EvidenceStatus } from '../domain/evidence.ts';
 import { matchesAny } from '../domain/glob.ts';
-import { defaultAvariceParents } from '../domain/invocation-scope.ts';
+import { credentialPaths, defaultAvariceParents } from '../domain/invocation-scope.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { RunBlockedReason } from '../domain/run-lifecycle.ts';
+import { redactSecrets } from '../domain/secret-patterns.ts';
 import { scanMarkers } from '../domain/test-inventory.ts';
 import type { InventorySnapshot } from '../domain/test-inventory.ts';
 import type { RunRow } from '../ports/ledger.ts';
@@ -117,7 +118,7 @@ export function sandboxSetup(deps: AppDeps, run: RunRow, cwd: string): Result<Sa
   return ok({
     scratch: scratchReal,
     env: { PATH: path, HOME: scratchReal, TMPDIR: scratchReal, npm_config_cache: join(scratchReal, 'npm-cache'), CI: '1', LANG: 'C' },
-    denyReadPaths: [join(home, '.ssh'), join(home, '.aws'), join(home, '.config/gh'), canonical(deps.profile.dataRoot), ...defaultAvariceParents(home)],
+    denyReadPaths: [...credentialPaths(home), canonical(deps.profile.dataRoot), ...defaultAvariceParents(home)],
     allowReadPaths: [canonical(cwd), scratchReal],
   });
 }
@@ -223,7 +224,8 @@ export async function runRequiredChecks(deps: AppDeps, run: RunRow, contract: Ru
       return ran;
     }
 
-    const stored = deps.artifacts.put(new TextEncoder().encode(output), { kind: OUTPUT_KIND, runId: run.runId });
+    // A check's output is repository-controlled text that the owner reads: secret-shaped strings are redacted before it is stored, as transcripts are.
+    const stored = deps.artifacts.put(new TextEncoder().encode(redactSecrets(output)), { kind: OUTPUT_KIND, runId: run.runId });
     if (!stored.ok) return stored;
     const recorded = deps.ledger.recordArtifact({ digest: stored.value.digest, size: stored.value.size, kind: OUTPUT_KIND, runId: run.runId, retention: RUN_RETENTION, store: STORE, nowMs: deps.clock.nowMs() });
     if (!recorded.ok) return recorded;
