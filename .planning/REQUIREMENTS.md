@@ -49,21 +49,21 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 ### Run contract (RC-1 to RC-8)
 
 - [ ] **RC-1** [MVP]: Every run executes under a durable, versioned run contract stating intended behavior, acceptance criteria, exclusions, requirement references, workspace, readable, writable and protected paths, creation and deletion rules, permitted commands, tools and endpoints, delegated decision classes, budgets, required evidence, escalation rules and notification preferences.
-- [ ] **RC-2** [MVP]: A contract is assembled from a reusable policy preset, repository conventions and the brief; `avarice start --brief <file> --policy <preset>` is sufficient for a routine task.
+- [x] **RC-2** [MVP]: A contract is assembled from a reusable policy preset, repository conventions and the brief; `avarice start --brief <file> --policy <preset>` is sufficient for a routine task.
 - [ ] **RC-3** [MVP]: The user's authorization comes from the brief, the selected preset or an explicit instruction; AVARICE adds no confirmation step for authority already granted.
 - [ ] **RC-4** [MVP]: Within the contract, routine actions and phase transitions proceed without human prompts.
-- [ ] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
+- [x] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
 - [ ] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
 - [ ] **RC-7** [MVP]: Each work item carries a size (`small`, `medium`, `large`) and a specification (files it may change, public symbols it adds or changes, configuration keys it touches, documents it cites); when the brief omits them the compiler derives them from the brief, the indexes and the GSD plan and records which were derived.
 - [ ] **RC-8** [MVP]: The model for each work item's invocation comes from its size through the preset's size-to-model map, unless the contract overrides it for that item.
 
 ### Containment (CON-1 to CON-16)
 
-- [ ] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
-- [ ] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
+- [x] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
+- [x] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
 - [ ] **CON-3** [MVP]: Required enforcement fails closed: missing configuration, invalid policy, enforcement timeout or crash blocks the protected operation.
 - [ ] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
-- [ ] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
+- [x] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
 - [ ] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
 - [ ] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
 - [ ] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
@@ -72,7 +72,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
 - [ ] **CON-12** [MVP]: Caches record source version, freshness and access scope and are not reused after access is revoked or across profiles.
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
-- [ ] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
+- [x] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
 - [ ] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
 - [x] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
 
@@ -145,7 +145,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
 - [ ] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
 - [ ] **OPS-6** [MVP]: Upgrading GSD, the agent host or AVARICE is detectable by `doctor`; incompatible versions fail with an actionable message, not partial behavior.
-- [ ] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
+- [x] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
 
 ## v2 Requirements (Deferred)
 
@@ -240,18 +240,18 @@ Each v1 requirement maps to exactly one phase.
 | FR-26 | Phase 5 | Pending |
 | FR-27 | Phase 2 | Gaps Found |
 | RC-1 | Phase 2 | Gaps Found |
-| RC-2 | Phase 2 | Gaps Found |
+| RC-2 | Phase 2 | Complete |
 | RC-3 | Phase 2 | Gaps Found |
 | RC-4 | Phase 2 | Gaps Found |
-| RC-5 | Phase 2 | Gaps Found |
+| RC-5 | Phase 2 | Complete |
 | RC-6 | Phase 3 | Pending |
 | RC-7 | Phase 3 | Pending |
 | RC-8 | Phase 3 | Pending |
-| CON-1 | Phase 2 | Gaps Found |
-| CON-2 | Phase 2 | Gaps Found |
+| CON-1 | Phase 2 | Complete |
+| CON-2 | Phase 2 | Complete |
 | CON-3 | Phase 2 | Gaps Found |
 | CON-4 | Phase 4 | Pending |
-| CON-5 | Phase 2 | Gaps Found |
+| CON-5 | Phase 2 | Complete |
 | CON-6 | Phase 2 | Gaps Found |
 | CON-7 | Phase 2 | Gaps Found |
 | CON-8 | Phase 2 | Gaps Found |
@@ -260,7 +260,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-11 | Phase 4 | Pending |
 | CON-12 | Phase 4 | Pending |
 | CON-13 | Phase 2 | Complete |
-| CON-14 | Phase 2 | Gaps Found |
+| CON-14 | Phase 2 | Complete |
 | CON-15 | Phase 3 | Pending |
 | CON-16 | Phase 2 | Complete |
 | AUT-1 | Phase 3 | Pending |
@@ -318,7 +318,7 @@ Each v1 requirement maps to exactly one phase.
 | OPS-4 | Phase 5 | Pending |
 | OPS-5 | Phase 4 | Pending |
 | OPS-6 | Phase 4 | Pending |
-| OPS-7 | Phase 2 | Gaps Found |
+| OPS-7 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 106 total (107 normative minus FR-23 deferred)
