@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-30-PLAN.md
-last_updated: "2026-11-08T02:44:38.485Z"
+stopped_at: Completed 02-31-PLAN.md
+last_updated: "2026-11-08T03:00:22.383Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: 91c9750dedc4cc29ac03e558afffb0e7a2491a9c
+state_head: d7239d261c5bef4779d4f9b21c29c92e66a5674a
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 61
-  completed_plans: 56
+  completed_plans: 57
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 5 of 35
+Plan: 6 of 35
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 02 execution started
 
@@ -111,6 +111,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P28 | 40 min | 2 tasks | 9 files |
 | Phase 02 P29 | 55 min | 3 tasks | 12 files |
 | Phase 02 P30 | 60 min | 3 tasks | 13 files |
+| Phase 02 P31 | 45 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-29: review suggestion refsAllowed <= 1 not added; the exit evidence tool already fails any new ref other than refs/heads/avarice/<runId> (R-IN-09, for plan 02-35)
 - [Phase 02]: 02-30: no SIGTERM abort of the unit; an operator stop still ends the supervisor at once and the next resume reaps the host (owner decision needed to change)
 - [Phase 02]: 02-30: a gated commit is the supervisor's own only with matching trailers and a single parent equal to the snapshot head
+- [Phase 02]: 02-31: cleanupAttended takes optional home and tmp roots so offline tests never name the real home; redactHome matches wherever the next character cannot continue a path component
 
 ### Pending Todos
 
@@ -286,6 +288,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T02:44:38.333Z
-Stopped at: Completed 02-30-PLAN.md
+Last session: 2026-11-08T03:00:22.187Z
+Stopped at: Completed 02-31-PLAN.md
 Resume file: None
