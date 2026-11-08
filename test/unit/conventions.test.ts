@@ -202,7 +202,27 @@ describe('parseConventions: paths, inventory, dependencies and agent commands', 
     for (const host of ['host/path', 'host:443', 'HTTP://x', 'bad host', '', '-x.example', '*.example']) {
       assert.equal(refusedField(parse(deps({ registryHosts: [host] }))), 'conventions.dependencies.registryHosts', host);
     }
-    assert.deepEqual(unwrap(parse(deps({ registryHosts: ['127.0.0.1', 'a.b-c.example'] }))).dependencies?.registryHosts, ['127.0.0.1', 'a.b-c.example']);
+    assert.deepEqual(unwrap(parse(deps({ registryHosts: ['registry.avarice.test', 'a.b-c.example'] }))).dependencies?.registryHosts, ['registry.avarice.test', 'a.b-c.example']);
+  });
+
+  // R-WR-02: an IP spelling or a local name can only reach this machine or its network, so the conventions refuse it; the proxy also checks every resolved address.
+  it('refuses a registry host that can only mean a local target: localhost, a name under it, a single label, an IP spelling in any form', () => {
+    const deps = (hosts: string[]): Obj => ({ schema: 1, dependencies: { install: ['npm', 'ci'], lockfile: 'package-lock.json', registryHosts: hosts } });
+    const local = ['localhost', 'LOCALHOST', 'a.localhost', 'intranet', '127.0.0.1', '127.1', '0x7f.1', '2130706433', '0x7f000001', '10.0.0.5', '169.254.169.254', '192.168.1.1'];
+    assert.deepEqual(local.filter((host) => parse(deps([host])).ok), [], 'hosts the conventions accepted');
+    for (const host of local) assert.equal(refusedField(parse(deps([host]))), 'conventions.dependencies.registryHosts', host);
+  });
+
+  it('accepts a public DNS name as a registry host', () => {
+    const deps = (hosts: string[]): Obj => ({ schema: 1, dependencies: { install: ['npm', 'ci'], lockfile: 'package-lock.json', registryHosts: hosts } });
+    for (const host of ['registry.npmjs.org', 'a.b-c.example', 'registry.avarice.test', 'npm.pkg.github.com']) {
+      assert.deepEqual(unwrap(parse(deps([host]))).dependencies?.registryHosts, [host], host);
+    }
+  });
+
+  it('keeps accepting metadata.google.internal: it is a syntactically public name, and the proxy refuses it when it resolves to a non-public address', () => {
+    const parsed = unwrap(parse({ schema: 1, dependencies: { install: ['npm', 'ci'], lockfile: 'package-lock.json', registryHosts: ['metadata.google.internal'] } }));
+    assert.deepEqual(parsed.dependencies?.registryHosts, ['metadata.google.internal']);
   });
 
   it('refuses an agent command whose first word is git, avarice, claude, gh, curl, wget, ssh, scp or sudo', () => {
