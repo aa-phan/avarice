@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Contained unattended run of one work item",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -46,8 +46,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 2 of 8 · executing"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 8 — needs a plan"
   },
-  "updated_at": "2026-11-08T06:28:09.679Z"
+  "updated_at": "2026-11-08T08:35:32.476Z"
 }

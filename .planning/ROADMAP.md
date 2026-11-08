@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **v1.0 Contained Kernel**
 
 - [x] **Phase 1: Contained onboarding of one repository** - `avarice onboard` takes one existing repository to an active project record with GSD as the mapper, source read-only (completed 2026-11-05)
-- [ ] **Phase 2: Contained unattended run of one work item** - `avarice start` takes one work item to `ready_for_review` or `blocked_on_decision` inside enforced containment
+- [x] **Phase 2: Contained unattended run of one work item** - `avarice start` takes one work item to `ready_for_review` or `blocked_on_decision` inside enforced containment (completed 2026-11-08)
 - [ ] **Phase 3: Decisions, independent work and amendments** - Runs continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish
 
 **v1.1 MVP Completion**
@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 35/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
+**Plans:** 35/35 plans complete (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
 
 Plans:
 **Wave 1**
@@ -306,7 +306,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 35/35 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |

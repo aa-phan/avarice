@@ -2,43 +2,44 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 02
-current_phase_name: Contained unattended run of one work item
-status: executing
-stopped_at: Completed 02-35-PLAN.md
-last_updated: "2026-11-08T06:28:19.015Z"
-last_activity: 2026-11-07
-last_activity_desc: Phase 02 execution started
-state_head: 009a8c490eb8840b0f7f554149a37a3e207d02e4
+current_phase: 3
+current_phase_name: Decisions, independent work and amendments
+status: planning
+stopped_at: Phase 02 complete, ready to plan Phase 3
+last_updated: "2026-11-08T08:35:32.463Z"
+last_activity: 2026-11-08
+last_activity_desc: Phase 02 complete, transitioned to Phase 3
+state_head: 13b24bf7ef98fa339891ac5e70619c6f6e3d6e29
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 61
   completed_plans: 61
+  percent: 25
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-05)
+See: .planning/PROJECT.md (updated 2026-11-08)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 02 — Contained unattended run of one work item
+**Current focus:** Phase 03 — Decisions, independent work and amendments
 
 ## Current Position
 
-Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 35 of 35
-Status: Gap-closure plans 02-27..02-35 executed; awaiting phase verification
-Last activity: 2026-11-08 — gap closure round (02-27..02-35) complete, full suite green
+Phase: 3 — Decisions, independent work and amendments
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-08 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26
+- Total plans completed: 61
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -47,6 +48,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 26 | - | - |
+| 02 | 35 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -248,6 +250,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-33: CREDENTIAL_PATHS (twelve home-relative locations, adds .git-credentials and .pgpass) is the single list for all five deny sites; check output is redacted before storage
 - [Phase 02]: 02-34: the install proxy vets every resolved address (isPublicAddress) and dials the vetted address; the conventions refuse localhost, single-label and IP-spelled registry hosts; private-network registries are unsupported — R-WR-02 needs both layers, since a syntactic refusal cannot cover a public name that resolves to a private address; the test-only resolve option is pinned out of production by a footprint scan
 - [Phase 02]: 02-35: containment.md owns the egress proxy rules and the private-network limit; other docs/system documents link to it — Fresh reviewers flagged one fact stated in three documents
+- [Phase 02]: UAT 2026-11-08: owner accepted 02-35-REVIEW WR-01..WR-03 as built (proxy dials the first vetted address; any failed lease renewal aborts the unit; current invisible-character set); deferred WR-04, IN-01..IN-06 and the open owner decisions to backlog 999.4 and 999.5
 
 ### Pending Todos
 
@@ -277,6 +280,9 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
 - [Phase 1, backlog 999.1]: A real `avarice onboard --mode fast` reaching `active` with completeness `partial` is unchecked live (UAT test 13, deferred)
 - [Phase 1, backlog 999.2]: The local-mount refusal (`local` flag heuristic, A6) is unverified against a real smbfs or nfs mount (UAT test 10, deferred)
+- [Phase 2, backlog 999.4]: A host that ends with no result event is charged its full reservation even when it spent nothing (02-35-REVIEW WR-04); IN-01..IN-06 untriaged (UAT test 4, deferred)
+- [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
+- [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 
 ### Quick Tasks Completed
 
@@ -297,6 +303,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T06:28:18.851Z
-Stopped at: Completed 02-35-PLAN.md
+Last session: 2026-11-08
+Stopped at: Phase 02 complete, ready to plan Phase 3
 Resume file: None
