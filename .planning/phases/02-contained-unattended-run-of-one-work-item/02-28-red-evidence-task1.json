@@ -1,0 +1,20 @@
+{
+  "command": "node --test test/unit/render.test.ts test/integration/cli-terminal-text.test.ts",
+  "ranAgainst": "the plan base be2268f (src unchanged) plus the new tests: the describe `outcome lines (R-WR-01, T-02-03)` in test/unit/render.test.ts and the new file test/integration/cli-terminal-text.test.ts",
+  "exitCode": 1,
+  "reason": "onboard and the onboarding branch of resume print their error lines with io.err and no control stripping. At base `avarice resume onb_X<ESC>[31mY` exits 64 and prints `avarice resume: not found: onboarding onb_X<ESC>[31mY` on stderr, and `avarice onboard --policy onboarding <dir named x<ESC>[2Jy>` exits 64 and echoes the path with the ESC byte in `invalid repoPath: cannot inspect ...`. outcomeLines does not exist yet, so test/unit/render.test.ts does not link.",
+  "failingFiles": [
+    "test/unit/render.test.ts",
+    "test/integration/cli-terminal-text.test.ts"
+  ],
+  "failingTests": [
+    "terminal text through the real CLI (R-WR-01) > resume echoes an unknown onboarding ID with the escape sequence removed (stderr holds 0x1b)",
+    "terminal text through the real CLI (R-WR-01) > onboard echoes a repository path with the escape sequence removed (stderr holds 0x1b; exit 64 asserted equal to base first and held)",
+    "test/unit/render.test.ts (file-level: `outcomeLines` is not exported yet, so the module does not link; the three outcomeLines cases cannot run at base)"
+  ],
+  "passingAtBase": [
+    "all earlier tests of test/unit/render.test.ts cannot run at base with the new import (link failure); they pass at the commit before the new tests"
+  ],
+  "semanticAssessment": "Both CLI cases executed through the real binary on an initialized isolated profile, reached the intended exit code (64, the base exit code, asserted before the ESC assertion) and failed on the ESC-byte assertion with the escape sequence visible in the printed stderr, which is the planned reason. The outcomeLines failure is a link-time failure (named export missing), recorded for completeness and not used as RED authority; the CLI failures are the RED authority.",
+  "summary": "Run at the base: 3 tests reported, 0 pass, 3 fail (two CLI assertion failures on the ESC byte, one file-level link failure of the unit file)."
+}

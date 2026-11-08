@@ -2,7 +2,7 @@
 // the OPS-7 table: result line, tables, states, errors, numbers, colour and escapes; then status through them.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { colourEnabled, duration, errorLine, localTime, resultLine, stateWord, stripControl, usd } from '../../src/cli/render/style.ts';
+import { colourEnabled, duration, errorLine, localTime, outcomeLines, resultLine, stateWord, stripControl, usd } from '../../src/cli/render/style.ts';
 import { renderTable, terminalWidth } from '../../src/cli/render/table.ts';
 import { renderStatus } from '../../src/cli/render/status-view.ts';
 import { renderInbox, renderRunDetails, renderRuns, runStateWord } from '../../src/cli/render/run-view.ts';
@@ -44,6 +44,22 @@ describe('errors (OPS-7 row 4)', () => {
 
   it('removes escape sequences from the message', () => {
     assert.equal(errorLine('repo add', 'path \x1b]0;title\x07x'), 'avarice repo add: path x');
+  });
+});
+
+describe('outcome lines (R-WR-01, T-02-03)', () => {
+  it('prints the outcome line, then the note', () => {
+    assert.deepEqual(outcomeLines('onboarding onb_1', 'blocked', 'decision', 'note'), ['onboarding onb_1: blocked (decision)', 'note']);
+  });
+
+  it('prints one line when there is no note, and no parentheses when there is no reason', () => {
+    assert.deepEqual(outcomeLines('onboarding onb_1', 'active', null, null), ['onboarding onb_1: active']);
+    assert.deepEqual(outcomeLines('run run_1', 'blocked', 'decision', null), ['run run_1: blocked (decision)']);
+  });
+
+  it('strips an OSC title, a CSI colour and a bidi override from the subject, the reason and the note', () => {
+    const lines = outcomeLines('onboarding \x1b]0;t\x07onb_1', 'blocked', 'de\x1b[31mcision', 'no‮te\x1b[2J');
+    assert.deepEqual(lines, ['onboarding onb_1: blocked (decision)', 'note']);
   });
 });
 
