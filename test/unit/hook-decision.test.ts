@@ -1272,6 +1272,22 @@ describe('git object reads and output forms (CR-01)', () => {
   });
 });
 
+// commandWords: the words the hook's lexer makes of a single-segment line, a test aid so a suite can run a tool on exactly the words judged.
+describe('commandWords', () => {
+  it('gives the words of one segment with the quotes resolved', async () => {
+    const { commandWords } = await import('../../src/domain/hook-decision.ts');
+    assert.deepEqual(commandWords('git show "HEAD:.e""nv"'), ['git', 'show', 'HEAD:.env']);
+    assert.deepEqual(commandWords("git log --format='%h %s' -1"), ['git', 'log', '--format=%h %s', '-1']);
+  });
+
+  it('gives null for more than one segment and for a line the lexer refuses', async () => {
+    const { commandWords } = await import('../../src/domain/hook-decision.ts');
+    assert.equal(commandWords('git log | head'), null);
+    assert.equal(commandWords('git show "HEAD:.env'), null);
+    assert.equal(commandWords('git show $(x)'), null);
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // G-02-H2: git reads `<rev>:<path>`, `:<path>` and `:N:<path>` by the literal name from the revision tree or the index,
 // so a working-copy symlink must not stand in for a secret name.
