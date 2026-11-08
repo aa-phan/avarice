@@ -4,6 +4,7 @@
 // edits `.planning/codebase/*.md` itself (ONB-2): the only writes this adapter causes are `config-set` and
 // `stamp-codebase-map`, both GSD's own, and (plan 01-14) `graphify build snapshot`, which writes the diff snapshot
 // of the graph AVARICE installed into `.planning/graphs`.
+import { credentialPaths } from '../../domain/invocation-scope.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
@@ -102,7 +103,7 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
   constructor(located: LocatedGsd, options: GsdAdapterOptions) {
     this.located = located;
     this.#executor = options.executor;
-    this.#denyRead = [options.dataRoot, join(options.home, '.ssh'), join(options.home, '.aws'), join(options.home, '.config', 'gh')];
+    this.#denyRead = [options.dataRoot, ...credentialPaths(options.home)];
     this.descriptor = {
       port: 'gsd-onboarding',
       adapter: 'gsd-onboarding',

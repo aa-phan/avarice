@@ -209,7 +209,7 @@ The agents directory is derived as the sibling `agents` directory of the located
 
 ### Verbs driven
 
-Every other GSD call goes through the command executor, sandboxed with the network denied, as `node <gsd-core>/bin/gsd-tools.cjs <verb> ...`. The environment is rebuilt (safe-git variables, the pass-through names, gsd-core `bin` first on `PATH`). The default timeout is 15 seconds and the output limit 16 MiB. The data root, `~/.ssh`, `~/.aws` and `~/.config/gh` are denied for reading, and the staging directory is the working directory. A verb that writes may write only the staging `.planning` directory, or the single subdirectory it targets for the snapshot verbs. These verbs run during onboarding. A run's unit reaches GSD through the host and its shim, not through these verbs.
+Every other GSD call goes through the command executor, sandboxed with the network denied, as `node <gsd-core>/bin/gsd-tools.cjs <verb> ...`. The environment is rebuilt (safe-git variables, the pass-through names, gsd-core `bin` first on `PATH`). The default timeout is 15 seconds and the output limit 16 MiB. The data root and the credential locations (listed in [containment.md](containment.md)) are denied for reading, and the staging directory is the working directory. A verb that writes may write only the staging `.planning` directory, or the single subdirectory it targets for the snapshot verbs. These verbs run during onboarding. A run's unit reaches GSD through the host and its shim, not through these verbs.
 
 | Verb | Use | Writes |
 |---|---|---|
@@ -334,7 +334,7 @@ Preparing the profile runs `mount` with no arguments (first of `/sbin/mount`, `/
 
 ## gh
 
-AVARICE never spawns the GitHub CLI. The name `gh` appears in three places. It is a denied Bash command prefix for the contained host, a command word that a repository's declared agent commands may not use, and the read-denied credential directory `~/.config/gh` in the sandbox profiles. AVARICE has no pull request, push or GitHub API path. The run hand-off produces a local branch in the source repository, and nothing pushes it.
+AVARICE never spawns the GitHub CLI. The name `gh` appears in three places. It is a denied Bash command prefix for the contained host, a command word that a repository's declared agent commands may not use, and one of the read-denied credential locations (`~/.config/gh`, among those listed in [containment.md](containment.md)) in the sandbox profiles. AVARICE has no pull request, push or GitHub API path. The run hand-off produces a local branch in the source repository, and nothing pushes it.
 
 ## Node.js and node:sqlite
 
