@@ -105,7 +105,7 @@ const GIT_DENIED_OPTIONS: readonly string[] = ['--output', '--ext-diff', '--text
 // GSD's own follow-up to `INIT=$(gsd_run query init.*)` when the result is large (the file holds GSD's output).
 const GSD_INIT_FILE_LINE = 'if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi';
 
-const deny = (rule: string): HookDecision => ({ decision: 'deny', rule });
+const deny = (rule: string, reason?: string): HookDecision => ({ decision: 'deny', rule, ...(reason !== undefined ? { reason } : {}) });
 
 // ---------------------------------------------------------------------------------------------------------
 // Normalization
@@ -343,8 +343,8 @@ export const SHORT_VALUE_OPTIONS: Readonly<Record<string, string>> = {
   'git log': 'nSGOLUMCBl',
   'git show': 'nSGOLUMCBl',
   'git ls-files': 'xX',
-  // `-u` of `git status` takes its mode only attached (`-uall`), so the next word is an operand, not a value.
-  'git status': 'M',
+  // Git takes the value of both `-u` and `-M` of `git status` only attached (`-uall`), so the next word is an operand, not a value.
+  'git status': '',
 };
 
 // Options of a `gsd_run` read verb. GSD consumes `--cwd`, `--project-dir`, `--ws`, `--pick` and its other global options from any
@@ -539,6 +539,9 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
 // because some git commands accept an unambiguous abbreviation of a long option (`git status --verb` is `--verbose`) and several spellings imply a patch. A
 // `--format` placeholder names commit fields only, never a blob. `git show` takes no option: a commit prints its patch, and a blob or
 // a tag pointing at one prints its content even with `-s`, which the hook cannot tell from a commit by the hash.
+// `git rev-parse` and `git ls-files` have no entry, so they take any option outside GIT_DENIED_OPTIONS. No option of either prints blob
+// content on git 2.39.5. The probes were `git rev-parse HEAD:.env` (path check), `git ls-files -s .env` (path check) and
+// `git ls-files --with-tree=HEAD` (names only). A new git version is a reason to re-check.
 export interface GitOutputForm {
   shortFlags: string;
   shortValued: string;
@@ -579,27 +582,55 @@ export const GIT_OUTPUT_FORMS: Readonly<Record<string, GitOutputForm>> = {
 
 const GIT_OUTPUT_RULE = 'shell-git-output';
 
-// An option outside the allow-list is shell-git-output; `git show` also needs an object-by-path operand (shell-git-object otherwise).
-function checkGitOutput(entryKey: string, args: readonly string[], operands: readonly string[]): string | null {
-  const form = GIT_OUTPUT_FORMS[entryKey];
-  if (form === undefined) return null;
-  if (form.objectOperandsOnly) {
-    if (args.some((arg) => arg.startsWith('-'))) return GIT_OUTPUT_RULE;
-    return operands.length === 0 || operands.some((operand) => !operand.includes(':')) ? GIT_OBJECT_RULE : null;
-  }
+// What the model is told with a refusal of one of the two git rules: the admitted spelling, so a refused form is not retried unchanged
+// until the consecutive-denials limit stops the invocation (CON-14).
+const GIT_RULE_REASONS: Readonly<Record<string, string>> = {
+  [GIT_OUTPUT_RULE]:
+    'git log and git status take only listed options that print no file content, written whole with any value after = (for example --max-count=5); git show takes no option; for the files a commit changed use git log -1 --stat <revision>',
+  [GIT_OBJECT_RULE]:
+    'name a file as <revision>:<path> or :<path>; git show needs one such operand per file and refuses a revision alone, an object hash, braces and pathspec magic',
+};
+
+// The words git takes as operands under the GitOutputForm grammar, and whether any option falls outside it. `-` alone is skipped;
+// `-<digits>` is admitted when the form counts; `--name` must be in flags and `--name=value` in valued with a non-empty value; a short
+// cluster is read per character (a shortAttached letter takes the rest of the cluster, a shortValued letter the rest or, at the end of
+// the cluster, the next word, which is never an operand; any other letter must be a shortFlags letter). Every word that does not start
+// with `-` and every word after a bare `--` is an operand. For an objectOperandsOnly form every word starting with `-` (a bare `--`
+// included) is refused and every other word is an operand. This is the one walk both the object check and the output check use, so
+// SHORT_VALUE_OPTIONS (which only decides which option values are path candidates) cannot hide an operand.
+export function gitArgs(form: GitOutputForm, args: readonly string[]): { operands: string[]; refused: boolean } {
+  const operands: string[] = [];
+  const refuse = { operands, refused: true };
+  let operandsOnly = false;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] as string;
-    if (arg === '--') break;
+    if (form.objectOperandsOnly) {
+      if (arg.startsWith('-')) return refuse;
+      operands.push(arg);
+      continue;
+    }
+    if (operandsOnly) {
+      operands.push(arg);
+      continue;
+    }
     // `-` alone is standard input; a word that is not an option is an operand.
-    if (arg === '-' || !arg.startsWith('-')) continue;
+    if (arg === '-') continue;
+    if (!arg.startsWith('-')) {
+      operands.push(arg);
+      continue;
+    }
+    if (arg === '--') {
+      operandsOnly = true;
+      continue;
+    }
     if (/^-[0-9]+$/.test(arg)) {
       if (form.counts) continue;
-      return GIT_OUTPUT_RULE;
+      return refuse;
     }
     if (arg.startsWith('--')) {
       const equals = arg.indexOf('=');
       if (equals === -1 ? form.flags.includes(arg) : form.valued.includes(arg.slice(0, equals)) && equals < arg.length - 1) continue;
-      return GIT_OUTPUT_RULE;
+      return refuse;
     }
     for (let k = 1; k < arg.length; k += 1) {
       const char = arg[k] as string;
@@ -608,9 +639,19 @@ function checkGitOutput(entryKey: string, args: readonly string[], operands: rea
         if (k === arg.length - 1) i += 1;
         break;
       }
-      if (!form.shortFlags.includes(char)) return GIT_OUTPUT_RULE;
+      if (!form.shortFlags.includes(char)) return refuse;
     }
   }
+  return { operands, refused: false };
+}
+
+// An option outside the allow-list is shell-git-output; `git show` also needs an object-by-path operand (shell-git-object otherwise).
+function checkGitOutput(entryKey: string, args: readonly string[]): string | null {
+  const form = GIT_OUTPUT_FORMS[entryKey];
+  if (form === undefined) return null;
+  const walked = gitArgs(form, args);
+  if (walked.refused) return GIT_OUTPUT_RULE;
+  if (form.objectOperandsOnly && (walked.operands.length === 0 || walked.operands.some((operand) => !operand.includes(':')))) return GIT_OBJECT_RULE;
   return null;
 }
 
@@ -651,7 +692,11 @@ function checkSegment({ words, expands }: Segment, preamble: boolean, call: Extr
   const named = checkRead([...parsed.positional, ...parsed.values].map((arg) => absolutize(cwd, arg)), policy, canon);
   if (named !== null) return named;
   if (words[0] !== 'git') return null;
-  return checkGitObjects(parsed.positional, call, policy, canon) ?? checkGitOutput(entry.join(' '), args, parsed.positional);
+  // Every word git takes as an operand may be an object name, whatever SHORT_VALUE_OPTIONS made of it: the walker of the output form
+  // names them, and they join the operands the read parser found.
+  const form = GIT_OUTPUT_FORMS[entry.join(' ')];
+  const operands = [...new Set([...parsed.positional, ...(form === undefined ? [] : gitArgs(form, args).operands)])];
+  return checkGitObjects(operands, call, policy, canon) ?? checkGitOutput(entry.join(' '), args);
 }
 
 function checkLine(line: string, preamble: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon, seen: LineSeen): string | null {
@@ -696,7 +741,7 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
   const seen: LineSeen = { agentCommand: false };
   for (const line of lines) {
     const rule = checkLine(line, preamble, call, policy, canon, seen);
-    if (rule !== null) return deny(rule);
+    if (rule !== null) return deny(rule, GIT_RULE_REASONS[rule]);
   }
   return { decision: 'allow', rule: seen.agentCommand ? 'agent-command' : 'shell-identity', budget: 'toolCalls', ...(policy.commands.strategy === 'hook-allow' ? { explicit: true } : {}) };
 }

@@ -56,21 +56,22 @@ function decide({ repo, fx }: Rig, command: string): { decision: string; rule?: 
   return decideToolCall({ kind: 'shell', command, background: false, cwd: repo.path }, fx.policy, canonicalAbsolute);
 }
 
-// The real hook entry's verdict: the denial rule, or 'allow' when the hook prints nothing.
-function hookVerdict({ repo, fx }: Rig, command: string): string {
-  const result = runHook(fx, 'pre', { cwd: repo.path, tool_name: 'Bash', tool_input: { command } });
-  assert.equal(result.code, 0, result.stderr);
-  if (result.stdout === '') return 'allow';
-  const reason = (JSON.parse(result.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } }).hookSpecificOutput.permissionDecisionReason;
-  return reason.replace(/^avarice: /, '');
-}
-
 // The permissionDecisionReason the real hook prints for a Bash command, or null when it prints nothing.
 function hookReason({ repo, fx }: Rig, command: string): string | null {
   const result = runHook(fx, 'pre', { cwd: repo.path, tool_name: 'Bash', tool_input: { command } });
   assert.equal(result.code, 0, result.stderr);
   if (result.stdout === '') return null;
   return (JSON.parse(result.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } }).hookSpecificOutput.permissionDecisionReason;
+}
+
+// The real hook entry's verdict: the denial rule (the text after `avarice: ` up to the next `: `, which starts the corrective reason),
+// or 'allow' when the hook prints nothing.
+function hookVerdict(rig: Rig, command: string): string {
+  const reason = hookReason(rig, command);
+  if (reason === null) return 'allow';
+  const text = reason.replace(/^avarice: /, '');
+  const separator = text.indexOf(': ');
+  return separator === -1 ? text : text.slice(0, separator);
 }
 
 // What real git prints (stdout and stderr) for the words of a corpus line; the corpus uses no quoted words.
