@@ -133,7 +133,7 @@ Reserved check environment names are refused at parse. `PATH`, `HOME`, `TMPDIR`,
 |---|---|---|---|
 | `install` | yes | 1 to 64 non-empty strings of at most 1024 characters, no NUL. | The install command, run in the clone. |
 | `lockfile` | yes | A repository-relative path that obeys the glob rules and holds no `*`, `?`, `[`, `]`, `{` or `}`. | Its digest is recorded; a missing lockfile at the onboarded revision blocks the run. |
-| `registryHosts` | no (empty) | At most 16 bare host names (no scheme, no port), lower-cased, at most 253 characters, labels of letters, digits and inner hyphens. | The only hosts the install may reach, on port 443. |
+| `registryHosts` | no (empty) | At most 16 bare host names (no scheme, no port), lower-cased, at most 253 characters, labels of letters, digits and inner hyphens. `localhost`, any name under `localhost`, a single-label name, and a name whose last label is all digits or a `0x` form are refused, so no spelling of an IP address is accepted. | The only hosts the install may reach, on port 443. The proxy also refuses a name that resolves to a non-public address, so a registry on a private network cannot be used. |
 
 Each `agentCommands` entry is a string with these rules.
 

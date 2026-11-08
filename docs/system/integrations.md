@@ -183,9 +183,10 @@ The proxy listens on `127.0.0.1` on an ephemeral port, for one step, and is clos
 | `CONNECT` to any other `host:port` | `403` | refused |
 | `CONNECT` with a target that is not `host:port`, or a request line the parser rejects | `400` | refused, host `invalid`, port 0 |
 | Any other method (a plain HTTP request) | `405` with `Allow: CONNECT` | refused, with the host and port named by the absolute URL or the `Host` header |
-| Allowlisted target that cannot be reached | `502` | allowed |
+| Allowlisted target whose name resolves to a loopback, unspecified, private, shared, link-local, multicast or reserved address (any one of its addresses) | `403` | refused |
+| Allowlisted target that cannot be reached, or whose name does not resolve | `502` | allowed |
 
-Every attempt is recorded in order with host, port, verdict and time, never a path or header, and handed to an optional observer; an observer failure never changes what the proxy admits. The proxy resolves the host name itself, outside the sandbox, and applies no check to the address it resolves. A plain HTTP registry cannot work, because only `CONNECT` is accepted.
+Every attempt is recorded in order with host, port, verdict and time, never a path or header, and handed to an optional observer; an observer failure never changes what the proxy admits. The proxy resolves an allowlisted host name itself, outside the sandbox, and checks every address the name resolves to; an IPv4 address inside an IPv6 address is judged as the IPv4 address. It then connects to the checked address rather than to the name, so the name is resolved once. A plain HTTP registry cannot work, because only `CONNECT` is accepted.
 
 ### Dependency install
 
@@ -357,7 +358,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | `mount` unusable or data root non-local | profile preparation fails; nothing runs |
 | Bundled SQLite lacks the fix | ledger refuses to open |
 | git cannot run or times out | the calling step returns an error |
-| An install that reaches any target the proxy refuses | the install step fails with a permission decision; the proxy has already refused the connection |
+| An install that reaches any target the proxy refuses, an address that is not public included | the install step fails with a permission decision; the proxy has already refused the connection |
 | Egress proxy cannot start | the install fails with `enforcement_failure`; a check validation runs with no network instead |
 | Run branch already in the source at another commit | the hand-off is a conflict and nothing is fetched |
 | Supervisor cannot be spawned | the command exits 70; the run stays stored |
@@ -369,6 +370,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 - The executor descriptor reports offline, although a supervisor step can be given one loopback port. The flag describes the adapter, not a particular command.
 - The three run ports (run source, run workspace, egress proxy) are built on every composition, read-only ones included. Only the executor, graph, GSD and host descriptors are recorded, so the run ports leave no record of which adapter a profile ran with.
 - The registry allowlist can only name port 443. A registry on another port works only through the test entry point's override.
+- A registry that is reachable only on a private network is unsupported: the conventions refuse an IP spelling, `localhost` and a single-label name, and the proxy refuses a public-looking name that resolves to a private address (split-horizon DNS included). The local registry in the tests reaches the proxy only through a test-only resolver that production never passes.
 - A refused proxy attempt fails the install even when the install command exited 0 and finished its work.
 - The supervisor inherits the user's whole environment, unlike the host and every sandboxed command.
 - The hand-off writes objects as well as one ref into the user's repository. A failed fetch can leave unreferenced objects there.
