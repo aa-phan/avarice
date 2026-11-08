@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 33/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
+**Plans:** 34/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
 
 Plans:
 **Wave 1**
@@ -192,7 +192,7 @@ Plans:
 - [x] 02-33-PLAN.md — Credential locations: one extended list at all five sandbox and scope sites, check output redacted, proven on the real sandbox (WR-03)
 
 **Wave 18** *(blocked on 02-33: containment.md, integrations.md)*
-- [ ] 02-34-PLAN.md — Egress: the install proxy refuses non-public resolved addresses and dials the vetted address; conventions refuse local-only registry hosts (WR-02)
+- [x] 02-34-PLAN.md — Egress: the install proxy refuses non-public resolved addresses and dials the vetted address; conventions refuse local-only registry hosts (WR-02)
 
 **Wave 19** *(blocked on 02-27 to 02-34)*
 - [ ] 02-35-PLAN.md — Documentation pass and dispositions: docs/system current, README, coverage and findings updated, fresh reviews under the round budget, every finding of 02-REVIEW.md and 02-26-REVIEW.md recorded fixed, skipped or deferred
@@ -306,7 +306,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 33/35 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 34/35 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
