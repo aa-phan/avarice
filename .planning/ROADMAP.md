@@ -343,3 +343,19 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 - [ ] Settle every open line in `docs/system/findings.md` (code changed, specification superseded, or accepted as a deliberate difference) and close the tree's outstanding reviews in `coverage.md`
 - [ ] Update every cross-link, the README document map and source-of-truth section, `CLAUDE.md`'s documentation rule, and `docs/gsd-ingest-manifest.yaml` to the new paths
 - [ ] Run a final regrounding of the tree against the code at the release commit
+
+### Phase 999.4: Follow-up — Phase 02 deferred UAT follow-up: Test 4 (BACKLOG)
+
+**Goal:** Resolve the UAT checkpoint deferred during Phase 02 verification
+**Source phase:** 02
+**Deferred at:** 2026-11-08 during /gsd-verify-work 02 session completion
+**Follow-ups:**
+- [ ] Test 4: 02-35-REVIEW WR-04 charge policy for a host that ends with no result event, and triage of IN-01..IN-06 (recorded deferred in 02-35-REVIEW-DISPOSITION.md) (deferred 2026-11-08)
+
+### Phase 999.5: Follow-up — Phase 02 deferred UAT follow-up: Test 5 (BACKLOG)
+
+**Goal:** Resolve the UAT checkpoint deferred during Phase 02 verification
+**Source phase:** 02
+**Deferred at:** 2026-11-08 during /gsd-verify-work 02 session completion
+**Follow-ups:**
+- [ ] Test 5: Open owner decisions: private-network registries unsupported; test:<text> substring acceptance (IN-07); home-path residue before public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; live redirect-through-prefix-rule question (deferred 2026-11-08)
