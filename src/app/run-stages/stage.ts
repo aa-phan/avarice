@@ -24,6 +24,8 @@ export interface RunStageContext {
   runId: string;
   // Lease fence this supervisor holds; every checkpoint and transition presents it.
   fence: number;
+  // Aborted when this supervisor loses the run lease, so a unit in flight is ended rather than waited out.
+  signal: AbortSignal;
   // Commit a checkpoint naming the action about to run, before its side effect.
   checkpoint(nextAction: string, extra?: { revision?: string; itemId?: string; attemptId?: string }): Result<RunCheckpointRow>;
   // Commit a lifecycle transition (state, checkpoint and event in one transaction).

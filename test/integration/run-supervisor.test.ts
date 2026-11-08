@@ -293,6 +293,7 @@ describe('supervise: the stage loop under the run lease', () => {
         deps,
         runId,
         fence,
+        signal: new AbortController().signal,
         checkpoint: (nextAction, extra) => deps.ledger.recordRunCheckpoint(runId, { fence }, { nextAction, nowMs: Date.now(), ...(extra ?? {}) }),
         transition: (row, to, nextAction, options = {}) => deps.ledger.transitionRun(runId, { version: row.version, fence }, { to, nextAction, nowMs: Date.now(), ...options }),
         note: () => undefined,

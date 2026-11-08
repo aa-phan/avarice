@@ -508,10 +508,13 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
     return blocked.ok ? ok(undefined) : blocked;
   }
 
-  const outcome = await deps.host.invoke(prepared.value.prepared.request, new AbortController().signal);
+  const outcome = await deps.host.invoke(prepared.value.prepared.request, ctx.signal);
   const completed = completeRunInvocation(deps, prepared.value.prepared, outcome);
   // The host's own error comes back unchanged and is judged below; any other failure is the bookkeeping's and stops the stage.
   if (!completed.ok && completed !== outcome) return completed;
+  // The lease was lost during the unit: its host was ended and the invocation stays charged, but nothing is classified, discarded or retried under a
+  // lease this supervisor no longer holds. The holder that took it over reconciles the attempt on its resume.
+  if (ctx.signal.aborted) return err({ kind: 'conflict', expected: `the run lease held by this supervisor (fence ${ctx.fence})`, actual: 'the run lease was lost during the unit' });
 
   const classifying = ctx.checkpoint('classify', { attemptId, itemId: unit.item.itemId, revision: snapshot.value.head });
   if (!classifying.ok) return classifying;

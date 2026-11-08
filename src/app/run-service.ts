@@ -42,11 +42,12 @@ registerRunStage('contract_ready', contractReadyStage);
 registerRunStage('running', runningStage);
 registerRunStage('verifying', verifyingStage);
 
-function makeContext(deps: AppDeps, runId: string, fence: number, notes: string[]): RunStageContext {
+function makeContext(deps: AppDeps, runId: string, fence: number, notes: string[], signal: AbortSignal): RunStageContext {
   return {
     deps,
     runId,
     fence,
+    signal,
     checkpoint(nextAction, extra) {
       const checkpoint = deps.ledger.recordRunCheckpoint(runId, { fence }, { nextAction, nowMs: deps.clock.nowMs(), ...(extra ?? {}) });
       if (checkpoint.ok) faultPoint('after-checkpoint:' + nextAction);
@@ -121,7 +122,10 @@ export async function runSupervisor(deps: AppDeps, runId: string, options: RunSu
   if (!grant.ok) return grant;
   const fence = grant.value.fence;
   const notes: string[] = [];
-  const ctx = makeContext(deps, runId, fence, notes);
+  // Aborted when a renewal fails, so the host of a unit in flight is ended at once instead of running out its wall clock under a lease this
+  // supervisor no longer holds. The finally block leaves it alone: a unit has returned by then.
+  const lost = new AbortController();
+  const ctx = makeContext(deps, runId, fence, notes, lost.signal);
 
   // A stage that waits on the host does not return to the loop, so a timer keeps the lease alive; it is unref'd, so it never keeps
   // the process alive by itself. A failed renewal means another process took over, and the loop stops at its next check.
@@ -131,6 +135,7 @@ export async function runSupervisor(deps: AppDeps, runId: string, options: RunSu
     if (!renewed.ok) {
       lease.lost = renewed.error;
       clearInterval(timer);
+      lost.abort();
     }
   }, Math.max(1, Math.floor(ttl / 3)));
   timer.unref();
@@ -152,7 +157,10 @@ export async function runSupervisor(deps: AppDeps, runId: string, options: RunSu
       if (stage === undefined) return ok(outcomeOf(row, notes.at(-1) ?? `no stage for ${row.state}`));
 
       const renewed = deps.ledger.renewRunLease(runId, holder, fence, ttl, deps.clock.nowMs());
-      if (!renewed.ok) return renewed;
+      if (!renewed.ok) {
+        lost.abort();
+        return renewed;
+      }
       const ran = await stage(ctx, row);
       if (!ran.ok) return ran;
 
