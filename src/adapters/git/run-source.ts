@@ -24,7 +24,11 @@ interface Resolved {
 export class GitRunSource implements RunSource {
   head(repoPath: string): Result<string> {
     const head = runGit(['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: repoPath });
-    return head.ok ? ok(head.value.stdout.trim()) : failure(head.error);
+    if (!head.ok) return failure(head.error);
+    const commit = head.value.stdout.trim();
+    if (COMMIT_SHA.test(commit)) return ok(commit);
+    if (/^[0-9a-f]{64}$/.test(commit)) return invalid('head', 'the repository uses SHA-256 object names; only SHA-1 repositories are supported');
+    return invalid('head', 'a full lowercase commit SHA is required');
   }
 
   conventionsAt(repoPath: string, pin: string, head: string): Result<ConventionsAt> {

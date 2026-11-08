@@ -19,7 +19,9 @@ import type {
 import { collectRepoFacts, parseStatus } from './repo-facts.ts';
 import { runGit } from './safe-git.ts';
 
-export const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+// SHA-1 repositories only: the evidence, the gates and the onboarding records all name 40-digit commits, so an adapter that
+// accepted a 64-digit id would hand the domain a value it refuses later.
+export const COMMIT_SHA = /^[0-9a-f]{40}$/;
 export const ONBOARDING_ID = /^[A-Za-z0-9_]{1,64}$/;
 
 // Limits of the ignore-rule reader (see ignoredByCommittedRules).

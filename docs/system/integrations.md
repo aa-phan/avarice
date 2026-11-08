@@ -258,7 +258,7 @@ A caller can also ask for a fixed commit identity (name, email and signing off),
 
 ### Staging and run clones
 
-Onboarding staging and the run's clone are built by the same rules. The clone copies the user's repository into the work root with no hardlinks, so the user's checkout is not shared with the contained host. An existing target directory is reused only if it is its own repository, a clone of this repository, on the expected branch (or detached when no branch is expected), at the pin. Anything else is a conflict and is left untouched. An interrupted clone leaves a `.partial` directory, which is replaced only when it is provably this repository's own leftover. The pin is a full commit SHA, validated before use. The run's clone is on a branch named after the run. The scratch clone used to validate declared checks is detached at the pin with no branch.
+Onboarding staging and the run's clone are built by the same rules. The clone copies the user's repository into the work root with no hardlinks, so the user's checkout is not shared with the contained host. An existing target directory is reused only if it is its own repository, a clone of this repository, on the expected branch (or detached when no branch is expected), at the pin. Anything else is a conflict and is left untouched. An interrupted clone leaves a `.partial` directory, which is replaced only when it is provably this repository's own leftover. The pin is a full commit id of 40 lowercase hexadecimal digits, validated before use. A repository with SHA-256 object names is refused at the first read that names a commit: onboarding preparation refuses its 64-digit pin as not a valid commit id before it builds a clone, and run start refuses it with a message that names the object format. The run's clone is on a branch named after the run. The scratch clone used to validate declared checks is detached at the pin with no branch.
 
 ### Run workspace
 
@@ -289,7 +289,7 @@ The run source answers four questions about the source repository from git objec
 - Staleness: whether HEAD is the pin or descends from it, how many commits since the pin touch a path outside `.avarice/` and `.planning/`, and the committer time of the oldest. When HEAD does not descend, the counts are zero and null.
 - File presence: whether a revision holds a regular file at a literal path (a link or a directory is not a file).
 
-Pin and HEAD must be full lowercase SHAs that exist in the repository. The conventions walk looks at the newest 500 first-parent commits above the pin and then the pin.
+Pin and HEAD must be commit ids of 40 lowercase hexadecimal digits that exist in the repository. A repository with SHA-256 object names is refused when HEAD is read, with an invalid error that names the object format, so run start stops with its internal error before it creates any row or file. The conventions walk looks at the newest 500 first-parent commits above the pin and then the pin.
 
 ## Detached supervisor
 
