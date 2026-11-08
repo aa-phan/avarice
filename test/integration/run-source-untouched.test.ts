@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkoutDigest, RUN_REF_GLOB } from '../../scripts/checkout-digest.ts';
+import { checkoutDigest, RUN_REF_PATTERN } from '../../scripts/checkout-digest.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
@@ -75,7 +75,7 @@ function userState(repo: ScratchRepo): Record<string, unknown> {
   const bytes = createHash('sha256');
   for (const rel of ignored) bytes.update(rel).update('\0').update(readFileSync(join(repo.path, rel))).update('\0');
   // `counts.refsAllowed` is how many run branches the source has, which is the one thing a handed-off run is allowed to change.
-  const { counts, ...digest } = checkoutDigest(repo.path, [RUN_REF_GLOB]);
+  const { counts, ...digest } = checkoutDigest(repo.path, [RUN_REF_PATTERN]);
   return {
     digest,
     counts: { tracked: counts.tracked, untracked: counts.untracked, statusEntries: counts.statusEntries, refs: counts.refs },

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 
-import { checkoutDigest, RUN_REF_GLOB } from '../../scripts/checkout-digest.ts';
+import { checkoutDigest, RUN_REF_PATTERN } from '../../scripts/checkout-digest.ts';
 import { AVARICE_COMMIT_IDENTITY, CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
 import { runGit } from '../../src/adapters/git/safe-git.ts';
 import { checkRelative } from '../../src/adapters/git/staging-base.ts';
@@ -65,7 +65,7 @@ const sha256 = (data: string | Buffer): string => createHash('sha256').update(da
 // index and config bytes, HEAD, and every ref outside the one new run ref.
 function sourceState(repo: ScratchRepo): Record<string, unknown> {
   const gitDir = join(repo.path, '.git');
-  const digest = checkoutDigest(repo.path, [RUN_REF_GLOB]);
+  const digest = checkoutDigest(repo.path, [RUN_REF_PATTERN]);
   return {
     // refsAllowed counts the run refs left out of the refs digest, which is the one thing that is meant to change.
     digest: { ...digest, counts: { ...digest.counts, refsAllowed: 0 } },

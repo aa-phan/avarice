@@ -31,7 +31,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFile
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { checkoutDigest, RUN_REF_GLOB } from './checkout-digest.ts';
+import { checkoutDigest, RUN_REF_PATTERN } from './checkout-digest.ts';
 import { fitsPhase2Ceiling, phase2Ceiling, phase2LedgerPath, phase2Spent } from '../test/helpers/live-harness.ts';
 import { getRunStatuses } from '../src/app/run-status.ts';
 import { GitRunSource } from '../src/adapters/git/run-source.ts';
@@ -613,7 +613,7 @@ interface RefLine {
 }
 
 function snapshot(repo: string): Json {
-  const digest = checkoutDigest(repo, [RUN_REF_GLOB]);
+  const digest = checkoutDigest(repo, [RUN_REF_PATTERN]);
   const stage = mustGit(repo, ['ls-files', '--stage', '-z']);
   const refs: RefLine[] = mustGit(repo, ['for-each-ref', '--format=%(refname) %(objectname)'])
     .split('\n')
