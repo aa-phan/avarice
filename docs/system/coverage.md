@@ -4,7 +4,7 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `ac520c1` on 2026-11-07. The commands for the hook rules, source lines, test files, event kinds, tables, migrations, ports, `AVARICE_*` names and the import-boundary lint were re-run at `9383cb8`. The two that depend on the last code change (hook rules, source lines) were re-run at `ac520c1`. The other counts rest on sources that did not change since `fdc29c6`. The only code changed after it is the hook's git rules and one comment in the invocation scope.
+Counted at commit `40adc1f` on 2026-11-08. Every command below was re-run at that commit. Since the previous count the code changed in the hook's git rules, the settlement of budgets, the credential locations, the egress proxy, the run supervisor's lease handling and three git adapters; of the counted surfaces only the source lines and the test files moved.
 
 | Surface | Count | Command |
 |---|---|---|
@@ -25,8 +25,8 @@ Counted at commit `ac520c1` on 2026-11-07. The commands for the hook rules, sour
 | External systems | 13 (12 used, `gh` proven unused) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
 | Hook rules | 35 distinct rule IDs (6 allow, 30 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
-| Source lines | 26,261 | `git ls-files src \| xargs wc -l` |
-| Test files | 117 | `git ls-files test \| grep -c '\.test\.ts$'` |
+| Source lines | 26,576 | `git ls-files src \| xargs wc -l` |
+| Test files | 120 | `git ls-files test \| grep -c '\.test\.ts$'` |
 | Import-boundary lint | passes (79 files) | `node scripts/check-boundaries.ts` |
 
 ## Documented counts
@@ -51,7 +51,7 @@ Counted at commit `ac520c1` on 2026-11-07. The commands for the hook rules, sour
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
 | Tables, event kinds, artifact kinds, ID prefixes, migrations | 23 of 23, 28 of 28, 7 of 7, 8 of 8, 2 of 2 | data-model.md |
-| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 13 of 13, 4 of 4, 4 of 4, 5 of 5 | integrations.md |
+| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 13 of 13, 4 of 4, 4 of 4, 6 of 6 | integrations.md |
 | Flows traced, diagram sources | 5 of 5, 5 of 5 | processes.md |
 
 ## Per-document status
