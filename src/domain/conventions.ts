@@ -231,6 +231,12 @@ function readHosts(field: string, raw: unknown): Result<string[]> {
     if (host === '' || host.length > 253 || !host.split('.').every((label) => HOST_LABEL.test(label))) {
       return invalid(field, `${JSON.stringify(entry)} is not a bare host name`);
     }
+    // An IP spelling or a local name can only reach this machine or its network, and the proxy also checks every resolved address.
+    // String operations only: src/domain imports neither node:net nor node:path.
+    const lastLabel = host.slice(host.lastIndexOf('.') + 1);
+    if (host === 'localhost' || host.endsWith('.localhost') || !host.includes('.') || /^[0-9]+$/.test(lastLabel) || /^0x[0-9a-f]+$/.test(lastLabel)) {
+      return invalid(field, `${JSON.stringify(entry)} is not a public DNS name: the registry host must be a public DNS name, not localhost, a single-label name or an IP address`);
+    }
     out.push(host);
   }
   return ok(out);

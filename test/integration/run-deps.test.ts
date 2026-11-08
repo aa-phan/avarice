@@ -13,6 +13,7 @@ import { startAllowlistProxy } from '../../src/adapters/exec/allowlist-proxy.ts'
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { err, ok } from '../../src/domain/result.ts';
+import type { Result } from '../../src/domain/result.ts';
 import type { CommandExecutor } from '../../src/ports/command-executor.ts';
 import type { EgressProxy } from '../../src/ports/egress-proxy.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
@@ -40,10 +41,13 @@ async function registry(): Promise<number> {
   return (server.address() as { port: number }).port;
 }
 
-// The real allowlisting proxy, plus the local registry's port: the production code asks for `127.0.0.1:443`.
+// The real allowlisting proxy, plus the local registry's port: the production code asks for `registry.avarice.test:443`.
 // The test resolver (R-WR-02) is the only way this suite reaches its loopback registry: the production proxy refuses a non-public address.
+// It maps the test registry's name to 127.0.0.1 and refuses any other host.
+const TEST_REGISTRY = 'registry.avarice.test';
 function proxyAlso(extra: readonly string[]): EgressProxy {
-  return { start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra], resolve: () => Promise.resolve(ok('127.0.0.1')) }) };
+  const resolve = (host: string): Promise<Result<string>> => Promise.resolve(host === TEST_REGISTRY ? ok('127.0.0.1') : err({ kind: 'invalid', field: 'host', reason: `${host} is not the test registry` }));
+  return { start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra], resolve }) };
 }
 
 interface Fixture {
@@ -65,7 +69,7 @@ function fixture(dependencies: Record<string, unknown> | undefined): Fixture {
 const install = (target: string, ...more: string[]): Record<string, unknown> => ({
   install: ['node', 'scripts/fake-install.mjs', target, ...more],
   lockfile: 'package-lock.json',
-  registryHosts: ['127.0.0.1'],
+  registryHosts: ['registry.avarice.test'],
 });
 
 const FIX = { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' as const };
@@ -81,8 +85,8 @@ const stepNamed = (f: Fixture, runId: string, name: string): StepDb | undefined 
 
 describe('the install runs through the proxy, before the first invocation, and records what it did (D-11)', async () => {
   const port = await registry();
-  const f = fixture(install(`127.0.0.1:${port}`));
-  const ran: InProcessRun = await runInProcess(f.roots, f.repo, f.brief, FIX, { egress: proxyAlso([`127.0.0.1:${port}`]) });
+  const f = fixture(install(`registry.avarice.test:${port}`));
+  const ran: InProcessRun = await runInProcess(f.roots, f.repo, f.brief, FIX, { egress: proxyAlso([`registry.avarice.test:${port}`]) });
 
   it('completes the step with the lockfile digest, the exit, the duration and the proxy attempt by host', () => {
     assert.equal(ran.state, 'ready_for_review');
@@ -92,7 +96,7 @@ describe('the install runs through the proxy, before the first invocation, and r
     assert.equal(step?.result['lockfileDigest'], `sha256:${createHash('sha256').update(LOCKFILE).digest('hex')}`);
     assert.equal(step?.result['exitCode'], 0);
     assert.equal(typeof step?.result['durationMs'], 'number');
-    assert.deepEqual(step?.result['attempts'], [{ host: '127.0.0.1', port, allowed: true, count: 1 }]);
+    assert.deepEqual(step?.result['attempts'], [{ host: 'registry.avarice.test', port, allowed: true, count: 1 }]);
   });
 
   it('leaves node_modules in the run clone, and the step comes before validation, the baseline and the unit', () => {
@@ -108,7 +112,7 @@ describe('the install runs through the proxy, before the first invocation, and r
     const validation = stepNamed(f, ran.runId, 'checks:validate');
     const summary = validation?.result['install'] as Record<string, unknown> | undefined;
     assert.equal(summary?.['outcome'], 'installed');
-    assert.deepEqual(summary?.['attempts'], [{ host: '127.0.0.1', port, allowed: true, count: 1 }]);
+    assert.deepEqual(summary?.['attempts'], [{ host: 'registry.avarice.test', port, allowed: true, count: 1 }]);
   });
 
   it('gives the unit invocation no proxy variable and no network scope, whatever the supervisor process has', () => {
@@ -153,7 +157,7 @@ describe('an install that goes wrong is a decision or an enforcement failure, ne
   });
 
   it('a failing install (exit 3) is blocked (decision) with a repeated_failure decision', async () => {
-    const f = fixture(install('127.0.0.1:1', 'fail'));
+    const f = fixture(install('registry.avarice.test:1', 'fail'));
     const ran = await runInProcess(f.roots, f.repo, f.brief, FIX);
     assert.deepEqual([ran.state, ran.reason], ['blocked_on_decision', 'decision']);
     const decision = ledgerRows<{ class: string; issue: string }>(f.roots, 'SELECT class, issue FROM decisions WHERE run_id = ?', ran.runId);
@@ -165,12 +169,12 @@ describe('an install that goes wrong is a decision or an enforcement failure, ne
   it('no sandbox for the install is an enforcement failure, and so is a proxy that cannot start', async () => {
     const real = new SandboxedExecutor();
     const noInstall: CommandExecutor = { descriptor: real.descriptor, run: (cmd, signal) => (cmd.argv[1] === 'scripts/fake-install.mjs' ? Promise.resolve(err({ kind: 'unavailable', cause: 'forced' })) : real.run(cmd, signal)) };
-    const f = fixture(install('127.0.0.1:1'));
+    const f = fixture(install('registry.avarice.test:1'));
     const first = await runInProcess(f.roots, f.repo, f.brief, FIX, { executor: noInstall });
     assert.deepEqual([first.state, first.reason], ['blocked_on_decision', 'enforcement_failure']);
     assert.equal(stepNamed(f, first.runId, 'deps:install')?.status, 'failed');
 
-    const g = fixture(install('127.0.0.1:1'));
+    const g = fixture(install('registry.avarice.test:1'));
     const noProxy: EgressProxy = { start: () => Promise.resolve(err({ kind: 'unavailable', cause: 'forced' })) };
     const second = await runInProcess(g.roots, g.repo, g.brief, FIX, { egress: noProxy });
     assert.deepEqual([second.state, second.reason], ['blocked_on_decision', 'enforcement_failure']);
