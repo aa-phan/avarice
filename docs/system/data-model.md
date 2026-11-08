@@ -202,6 +202,7 @@ Budget rows are created from the contract inside the contract-storing transactio
 
 - Reserving adds to the reserved amount only while used plus reserved plus the amount stays within the limit; otherwise nothing changes and the caller is told it was not granted.
 - Charging adds to used. From a reservation, the amount moves out of reserved first and the call fails if the reservation is too small. Charged directly (an estimated cost after the fact), it may pass the limit.
+- The charges of one invocation settlement, or of one orphan conversion with its `invocation.orphan-charged` event, change their rows together in one transaction: if any charge fails, no row changes and no event is written.
 - The hook charges one unit per allowed call with the same conditional update. A missing row for a charged budget is treated as a broken ledger and fails closed; a row at its limit produces a `budget_exhausted` deny.
 - An invocation reserves one unit of `invocations` and a cost amount before it launches. When the holder dies before settling, the next reservation, or a run resume that has ended the host, turns the reservation into spent budget and writes `invocation.orphan-charged`.
 - Nothing refunds, resets or deletes. A limit is fixed at creation.
