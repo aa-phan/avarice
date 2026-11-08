@@ -12,9 +12,9 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import assert from 'node:assert/strict';
 
 import { buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
@@ -133,7 +133,19 @@ export function statusFirstVerdict(parsed: ParsedTranscript): Judgment {
 
 export const DENIED_FILE = 'config/app.json';
 const READ_ONLY_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS', 'Skill', 'TodoWrite', 'ToolSearch', 'AskUserQuestion']);
-const READ_ONLY_BASH = ['avarice status', 'avarice context', 'ls', 'cat', 'head', 'git status', 'git log', 'git diff', 'git show'];
+// What the verdict judge counts as a read-only Bash call after a denial. This is not the allow list (see attendedSettings, which is narrower
+// since plan 02-31): the recorded sessions ran under the earlier, wider list, and their verdicts are judged by this one unchanged.
+const READ_ONLY_BASH = [
+  'avarice status',
+  'avarice context',
+  'ls',
+  'cat',
+  'head',
+  'git status',
+  'git log',
+  'git diff',
+  'git show',
+];
 const SHELL_OPERATOR = /[;&|<>`\n\r]|\$\(/;
 
 export function isReadOnlyCall(call: ToolTrace): boolean {
@@ -448,6 +460,8 @@ export function ownerStoreStat(): Record<string, string> {
 
 export interface AttendedFixture {
   name: string;
+  // The name every profile directory of this fixture carries (`avarice-live-attended-<name>-<hex>`); cleanupAttended removes nothing else.
+  tag: string;
   withSkill: boolean;
   repo: ScratchRepo;
   evidenceDir: string;
@@ -461,6 +475,9 @@ export interface AttendedFixture {
   gsdQuickPresent: boolean;
 }
 
+// The three directories under the home that hold an AVARICE profile; a throwaway profile sits in a uniquely named child of each.
+const DEFAULT_PARENTS = ['.local/share/avarice', '.local/share/avarice-work', '.config/avarice'];
+
 const hexTag = (): string => randomUUID().replace(/-/g, '').slice(0, 8);
 
 function runIdOf(output: string): string {
@@ -471,10 +488,12 @@ function runIdOf(output: string): string {
 
 export function attendedSettings(repo: string): Record<string, unknown> {
   const at = `//${repo.replace(/^\//, '')}`;
-  const bash = ['avarice status', 'avarice context', 'ls', 'cat', 'head', 'git status', 'git log', 'git diff', 'git show'].map((c) => `Bash(${c}:*)`);
+  // `cat` and `head` admit a redirect (`cat > file`), and `git diff`, `git log` and `git show` admit `--output=<file>`, so none is allowed as a
+  // prefix rule: the model reads with Read. Git is allowed only as the two exact commands, which take no argument that writes.
+  const bash = ['avarice status', 'avarice context', 'ls'].map((c) => `Bash(${c}:*)`);
   return {
     permissions: {
-      allow: ['Skill', 'Read', 'Glob', 'Grep', `Edit(${at}/**)`, ...bash, 'Bash(npm test)', 'Bash(npm test:*)'],
+      allow: ['Skill', 'Read', 'Glob', 'Grep', `Edit(${at}/**)`, ...bash, 'Bash(git status)', 'Bash(git log --oneline)', 'Bash(npm test)', 'Bash(npm test:*)'],
       deny: [`Edit(${at}/${DENIED_FILE})`, `Write(${at}/${DENIED_FILE})`, 'WebFetch', 'WebSearch'],
     },
   };
@@ -488,7 +507,7 @@ export function prepareAttendedFixture(opts: { name: string; withSkill: boolean 
   const workRoot = join(home, '.local/share/avarice-work', tag);
   const configHome = join(home, '.config/avarice', tag);
   for (const dir of [dataRoot, workRoot, configHome]) assert.ok(!existsSync(dir), `the throwaway profile directory ${dir} already exists`);
-  const createdParents = ['.local/share/avarice', '.local/share/avarice-work', '.config/avarice'].map((p) => join(home, p)).filter((dir) => !existsSync(dir));
+  const createdParents = DEFAULT_PARENTS.map((p) => join(home, p)).filter((dir) => !existsSync(dir));
   for (const parent of createdParents) mkdirSync(parent, { recursive: true, mode: 0o700 });
 
   const evidenceDir = realpathSync(mkdtempSync(join(tmpdir(), `avarice-attended-${opts.name}-`)));
@@ -496,6 +515,7 @@ export function prepareAttendedFixture(opts: { name: string; withSkill: boolean 
   const roots: CliRoots = { base: evidenceDir, AVARICE_CONFIG_HOME: configHome, AVARICE_DATA_ROOT: dataRoot, AVARICE_WORK_ROOT: workRoot };
   const fixture: AttendedFixture = {
     name: opts.name,
+    tag,
     withSkill: opts.withSkill,
     repo,
     evidenceDir,
@@ -556,11 +576,56 @@ export function prepareAttendedFixture(opts: { name: string; withSkill: boolean 
   }
 }
 
-export function cleanupAttended(fixture: AttendedFixture): void {
-  for (const dir of fixture.profileDirs) rmSync(dir, { recursive: true, force: true });
-  for (const parent of fixture.createdParents) rmSync(parent, { recursive: false, force: true });
+// The path's real path, or undefined when it does not exist (nothing to remove).
+const realOrMissing = (path: string): string | undefined => {
+  try {
+    return realpathSync(path);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw e;
+  }
+};
+
+// Removes only what the fixture made (plan 02-31, R-WR-09). The fixture object is not trusted: every target's real path is checked first, and
+// all checks run before the first removal, so a forged or damaged fixture deletes nothing and throws.
+//   - a profile directory must be a direct child of one of the three default AVARICE parents under the real home and carry the fixture's tag
+//   - a created parent must be one of those three parents
+//   - the evidence directory must lie inside the real temporary directory (not be it)
+// `roots` replaces the real home and temporary directory for the offline tests; the defaults are the real ones.
+export function cleanupAttended(fixture: AttendedFixture, roots: { home?: string; tmp?: string } = {}): void {
+  const home = roots.home ?? realpathSync(homedir());
+  const tmp = roots.tmp ?? realpathSync(tmpdir());
+  const defaults = DEFAULT_PARENTS.map((parent) => realOrMissing(join(home, parent))).filter((real): real is string => real !== undefined);
+
+  const profiles: string[] = [];
+  for (const dir of fixture.profileDirs) {
+    const real = realOrMissing(dir);
+    if (real === undefined) continue;
+    if (!defaults.includes(dirname(real))) throw new Error(`refusing to remove ${dir} (real path ${real}): not a direct child of a default AVARICE parent under ${home}`);
+    if (basename(real) !== fixture.tag) throw new Error(`refusing to remove ${dir} (real path ${real}): its name does not carry the fixture tag ${fixture.tag}`);
+    profiles.push(real);
+  }
+  const parents: string[] = [];
+  for (const parent of fixture.createdParents) {
+    const real = realOrMissing(parent);
+    if (real === undefined) continue;
+    if (!defaults.includes(real)) throw new Error(`refusing to remove ${parent} (real path ${real}): not one of the default AVARICE parents under ${home}`);
+    parents.push(real);
+  }
+  const evidence = realOrMissing(fixture.evidenceDir);
+  if (evidence !== undefined && !evidence.startsWith(tmp + sep)) throw new Error(`refusing to remove ${fixture.evidenceDir} (real path ${evidence}): not inside the temporary directory ${tmp}`);
+
+  for (const dir of profiles) rmSync(dir, { recursive: true, force: true });
+  // A parent this fixture created goes only while it is empty; another session may have put a profile in it since.
+  for (const parent of parents) {
+    try {
+      rmdirSync(parent);
+    } catch (e) {
+      if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes((e as NodeJS.ErrnoException).code ?? '')) throw e;
+    }
+  }
   if (process.env['AVARICE_LIVE_KEEP'] === '1') return;
-  rmSync(fixture.evidenceDir, { recursive: true, force: true });
+  if (evidence !== undefined) rmSync(evidence, { recursive: true, force: true });
   fixture.repo.dispose();
 }
 
