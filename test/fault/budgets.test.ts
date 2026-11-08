@@ -493,9 +493,42 @@ describe('a killed or interrupted invocation is charged its cost reservation', (
     await inProcess(roots, repo, {}, (deps, onboardingId) => {
       const { prepared, runId } = prepare(deps, onboardingId);
       const before = costUsed(deps, runId);
-      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.12 }))).ok);
+      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.12, details: { exitCode: 0, resultSeen: true } }))).ok);
       assert.ok(Math.abs(costUsed(deps, runId) - (before + 0.12)) < 1e-9);
     });
+  });
+
+  // WR-04: a host that ends without a result event reports no cost, so what it cost is unknown, as for a kill: it is charged its reservation.
+  it('charges the reservation when the host ended without a result event, whether it exited non-zero or exited 0 (R-WR-04)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      for (const exitCode of [1, 0]) {
+        const { prepared, runId } = prepare(deps, onboardingId);
+        const before = costUsed(deps, runId);
+        const done = completeInvocation(deps, prepared, ok(outcomeOf({ costUsd: 0, details: { exitCode, signal: null, timedOut: false, resultSeen: false } })));
+        assert.ok(done.ok);
+        assert.ok(Math.abs(costUsed(deps, runId) - (before + 3)) < 1e-9, `exit ${exitCode} charged ${costUsed(deps, runId) - before}`);
+      }
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 2").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    for (const data of finished) {
+      assert.equal(data['costUsd'], 0, 'the reported cost stays visible');
+      assert.equal(data['costChargedUsd'], 3);
+      assert.equal(data['costBasis'], 'reservation');
+    }
+  });
+
+  it('charges the reported cost, with basis reported, when the host sent a result event and exited 0 (R-WR-04)', async () => {
+    const { roots, repo } = fixture();
+    await inProcess(roots, repo, {}, (deps, onboardingId) => {
+      const { prepared, runId } = prepare(deps, onboardingId);
+      const before = costUsed(deps, runId);
+      assert.ok(completeInvocation(deps, prepared, ok(outcomeOf({ kind: 'progressed', costUsd: 0.4, details: { exitCode: 0, resultSeen: true } }))).ok);
+      assert.ok(Math.abs(costUsed(deps, runId) - (before + 0.4)) < 1e-9);
+    });
+    const finished = rows<{ data_json: string }>(roots, "SELECT data_json FROM events WHERE type = 'invocation.finished' ORDER BY seq DESC LIMIT 1").map((r) => JSON.parse(r.data_json) as Record<string, unknown>);
+    assert.equal(finished[0]?.['costChargedUsd'], 0.4);
+    assert.equal(finished[0]?.['costBasis'], 'reported');
   });
 
   it('charges the reservation when the host error says the process may have run (a timeout or an unknown cancel), and nothing when it never started', async () => {
