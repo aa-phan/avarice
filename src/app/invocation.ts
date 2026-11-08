@@ -148,14 +148,15 @@ const clip = (text: string): string => (text.length <= MAX_RULE_CHARS ? text : t
 
 // Whether the invocation was killed or interrupted, so what it cost is not known: the host's process ended by a signal or by our
 // wall clock, or the host adapter reports a timeout or a cancel that may have left the process running. An error that says
-// nothing ran (it never started) is not a kill.
+// nothing ran (it never started) is not a kill. An ending with no result event (a crash: a non-zero exit, or an exit 0 that printed no
+// result) reports no cost, so what it cost is unknown, as for a kill, and it is charged its reservation too.
 function wasKilled(outcome: Result<InvocationOutcome>): boolean {
   if (!outcome.ok) {
     const e = outcome.error;
     return (e.kind === 'timeout' || e.kind === 'cancelled') && e.sideEffect === 'unknown';
   }
   const d = outcome.value.details;
-  return d !== undefined && (d.timedOut || d.signal !== null);
+  return d !== undefined && (d.timedOut || d.signal !== null || d.resultSeen === false);
 }
 
 // What differs between an onboarding's invocation and a run's when it ends: where the step is written, how long the transcript is

@@ -197,9 +197,10 @@ describe('a second failure is a decision, not a second retry (FR-4: no competing
     assert.equal(stepsNamed(f, runId, 'discard').length, 1, 'the second failure was not discarded');
   });
 
-  it('keeps the budgets already charged: 2 invocations and the cost both attempts reported', () => {
+  it('keeps the budgets already charged: 2 invocations and, for the two crashes that sent no result, the cost reservation of each (R-WR-04)', () => {
     assert.equal(budgetOf(f, runId, 'invocations').used, 2);
-    assert.ok(Math.abs(budgetOf(f, runId, 'costUsd').used - 0.02) < 1e-9, `costUsd ${budgetOf(f, runId, 'costUsd').used}`);
+    // Each crashed attempt reported 0.01 but ended without a result, so it is charged its reservation: the routine preset's per-invocation cap of 2.
+    assert.ok(Math.abs(budgetOf(f, runId, 'costUsd').used - 4) < 1e-9, `costUsd ${budgetOf(f, runId, 'costUsd').used}`);
     assert.deepEqual(checkoutSnapshot(f.repo.path), f.before);
   });
 });
