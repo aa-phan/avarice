@@ -1,0 +1,31 @@
+{
+  "command": "node --test --test-reporter=tap test/integration/allowlist-proxy.test.ts test/unit/footprint.test.ts",
+  "ranAgainst": "the plan base 65061d8 (src unchanged) plus the new and changed cases in test/integration/allowlist-proxy.test.ts and test/unit/footprint.test.ts. Without an isPublicAddress export the proxy test file does not load (a missing named export), so the run used an uncommitted placeholder `export function isPublicAddress(_ip) { return true; }` appended to src/adapters/exec/allowlist-proxy.ts so every case executes; the placeholder was reverted before the commit.",
+  "exitCode": 1,
+  "reason": "At base the proxy dials whatever an allowlisted name holds and ignores any resolver. A CONNECT to localhost:<echo port> got `HTTP/1.1 200 Connection Established` where 403 was expected, so the production proxy tunnels to the loopback echo server (the same for 127.0.0.1:<echo port>, for 169.254.169.254:80 and 10.0.0.5:443 literals, and through AllowlistEgressProxy with a smuggled resolve property). With a resolve that returns 127.0.0.1 for registry.avarice.test the proxy ignores it and answers 502 (it dials the name), and a resolver that refuses the host is not honored (no 403). isPublicAddress, as a placeholder that always answers true, fails the refused-address list and the non-IP list. In the footprint file, the proxy's network imports do not include node:dns/promises, and resolver seam check (3) fails because the composed proxy hands its whole input object to the call (`startAllowlistProxy(input)` matched: true !== false).",
+  "failingFiles": [
+    "test/integration/allowlist-proxy.test.ts",
+    "test/unit/footprint.test.ts"
+  ],
+  "failingTests": [
+    "isPublicAddress (R-WR-02) > refuses loopback, unspecified, private, shared, link-local, multicast and reserved addresses, IPv4 and IPv6, mapped forms included",
+    "isPublicAddress (R-WR-02) > refuses a string that is not an IP address",
+    "the production proxy refuses an allowlisted host that is not public (R-WR-02, T-02-117) > refuses localhost:<port> with 403, records the attempt as refused and the live server accepts no connection",
+    "the production proxy refuses an allowlisted host that is not public (R-WR-02, T-02-117) > refuses the IP literal 127.0.0.1:<port> the same way",
+    "the production proxy refuses an allowlisted host that is not public (R-WR-02, T-02-117) > refuses an allowlisted private and link-local literal without opening a connection",
+    "the production proxy refuses an allowlisted host that is not public (R-WR-02, T-02-117) > AllowlistEgressProxy refuses 127.0.0.1:<port> even when its input carries a resolve property",
+    "the proxy connects to the address its resolver vetted, never to the name (R-WR-02, T-02-118) > opens the tunnel to the address resolve returned for an allowed name",
+    "the proxy connects to the address its resolver vetted, never to the name (R-WR-02, T-02-118) > answers 403 and records a refusal when the resolver refuses the host, with no connection made",
+    "the allowlist proxy is the only listener and it stays on the loopback > imports node:dns/promises, node:http and node:net and no other network module",
+    "the proxy's resolver seam stays out of production > the composed proxy forwards allow and onAttempt by name: no resolver token, no spread or rest, the input not handed over whole (resolver seam, forwarding)"
+  ],
+  "passingAtBase": [
+    "isPublicAddress > accepts a public address, a public mapped address and the edges of the private ranges (the placeholder answers true)",
+    "the proxy connects to the address its resolver vetted > answers 502 and records the attempt as allowed when the resolver is unavailable (registry.avarice.test does not resolve at base either, so 502 with allowed true)",
+    "the proxy connects to the address its resolver vetted > does not resolve a target that is not on the allowlist",
+    "resolver seam checks (1) and (2): no production file other than the proxy module names startAllowlistProxy, and the proxy module names it twice with one call in the class",
+    "every other startAllowlistProxy and AllowlistEgressProxy case (tunnel, 403, 400, 405, close, observer, bind) with the loopback test resolver"
+  ],
+  "semanticAssessment": "The target tests executed (43 reported, none skipped) and failed on the planned assertions for the intended reason: an allowlisted name that is, or resolves to, loopback is tunnelled to, and the composed proxy forwards its whole input. No import, syntax or fixture fault is involved once the placeholder export exists; the same file's tunnel, 403, 400, 405 and close cases pass in the same run, which shows the echo servers and the raw-request helper work. The two accidental passes (502 for an unresolvable name, no resolution of a non-allowlisted target) are listed above and describe behavior that must stay after GREEN.",
+  "summary": "Run at the base with the placeholder: 43 tests reported, 33 pass, 10 fail (isPublicAddress x2, production refusal x4, vetted-address cases x2, the dns import pin, resolver seam check 3)."
+}

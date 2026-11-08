@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { startAllowlistProxy } from '../../src/adapters/exec/allowlist-proxy.ts';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
-import { err } from '../../src/domain/result.ts';
+import { err, ok } from '../../src/domain/result.ts';
 import type { CommandExecutor } from '../../src/ports/command-executor.ts';
 import type { EgressProxy } from '../../src/ports/egress-proxy.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
@@ -41,8 +41,9 @@ async function registry(): Promise<number> {
 }
 
 // The real allowlisting proxy, plus the local registry's port: the production code asks for `127.0.0.1:443`.
+// The test resolver (R-WR-02) is the only way this suite reaches its loopback registry: the production proxy refuses a non-public address.
 function proxyAlso(extra: readonly string[]): EgressProxy {
-  return { start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra] }) };
+  return { start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra], resolve: () => Promise.resolve(ok('127.0.0.1')) }) };
 }
 
 interface Fixture {
