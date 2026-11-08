@@ -1,0 +1,21 @@
+{
+  "command": "node --test test/integration/run-source.test.ts",
+  "ranAgainst": "the plan base a6cff1a (src unchanged) plus the new describe `a SHA-256 repository is refused at the first read (R-WR-06)` in test/integration/run-source.test.ts, on a real repository made with `git init --object-format=sha256` (git 2.39.5)",
+  "exitCode": 1,
+  "reason": "At base GitRunSource.head on a SHA-256 repository returns ok with the 64-hex HEAD, so the refusal assertion fails (`expected an error result`, true !== false). staleness and conventionsAt given the 64-hex HEAD are accepted because COMMIT_SHA allows 64 hex digits, so the invalid-result assertion fails. COMMIT_SHA.test('a'.repeat(64)) is true at base, so the 40-only pattern assertion fails.",
+  "failingFiles": [
+    "test/integration/run-source.test.ts"
+  ],
+  "failingTests": [
+    "a SHA-256 repository is refused at the first read (R-WR-06) > head is invalid on the head field and the reason names SHA-256",
+    "a SHA-256 repository is refused at the first read (R-WR-06) > staleness and conventionsAt given its 64-hex HEAD are invalid",
+    "a SHA-256 repository is refused at the first read (R-WR-06) > the shared commit pattern accepts 40 lowercase hex digits and refuses 64"
+  ],
+  "passingAtBase": [
+    "the fixture really is a SHA-256 repository (64-hex HEAD confirmed, so the fixture is genuine)",
+    "on an ordinary repository head still returns the 40-hex commit",
+    "all 18 earlier tests of the file"
+  ],
+  "semanticAssessment": "The target tests executed (23 tests discovered, none skipped: this git supports --object-format) against a genuine SHA-256 repository whose HEAD is 64 hex digits, and failed on the planned assertions: head is ok instead of invalid, staleness/conventionsAt are ok instead of invalid, and the pattern accepts 64 hex. No setup, import or fixture fault is involved; the control tests on the same fixture and on an ordinary repository pass.",
+  "summary": "Run at the base: 23 tests reported, 20 pass, 3 fail (the three planned assertions)."
+}

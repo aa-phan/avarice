@@ -1,14 +1,15 @@
 // RunSource adapter (plan 02-07; D-04, D-16, RC-2): conventions and staleness from git objects alone, on scratch repositories.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, it } from 'node:test';
+import { after, afterEach, describe, it } from 'node:test';
 
 import { GitRunSource } from '../../src/adapters/git/run-source.ts';
+import { COMMIT_SHA } from '../../src/adapters/git/staging-base.ts';
 import type { Result } from '../../src/domain/result.ts';
-import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
+import { git, gitRun, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanups: Array<() => void> = [];
@@ -219,5 +220,51 @@ describe('GitRunSource.hasFile (D-04: the pin tree has a roadmap)', () => {
     for (const bad of ['', '/etc/passwd', '../README.md', 'a//b', './README.md']) {
       assert.equal(mustFail(source.hasFile(repo.path, repo.head, bad)).kind, 'invalid', bad);
     }
+  });
+});
+
+describe('a SHA-256 repository is refused at the first read (R-WR-06)', () => {
+  const probe = mkdtempSync(join(tmpdir(), 'avarice-sha256-'));
+  const repoPath = join(probe, 'repo');
+  mkdirSync(repoPath);
+  const init = gitRun(repoPath, ['init', '-q', '--object-format=sha256', '-b', 'main']);
+  const supported = init.status === 0;
+  let sha256Head = '';
+  if (supported) {
+    writeFileSync(join(repoPath, 'README.md'), '# sha256\n');
+    gitRun(repoPath, ['add', '-A']);
+    gitRun(repoPath, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'root']);
+    sha256Head = gitRun(repoPath, ['rev-parse', 'HEAD']).stdout.trim();
+  }
+  after(() => rmSync(probe, { recursive: true, force: true }));
+
+  const skip = supported ? false : 'the installed git rejects --object-format (git older than 2.29)';
+
+  it('the fixture really is a SHA-256 repository', { skip }, () => {
+    assert.match(sha256Head, /^[0-9a-f]{64}$/);
+  });
+
+  it('head is invalid on the head field and the reason names SHA-256', { skip }, () => {
+    const refused = mustFail(source.head(repoPath));
+    assert.equal(refused.kind, 'invalid');
+    assert.equal(refused['field'], 'head');
+    assert.match(String(refused['reason']), /SHA-256/);
+  });
+
+  it('staleness and conventionsAt given its 64-hex HEAD are invalid', { skip }, () => {
+    assert.equal(mustFail(source.staleness(repoPath, sha256Head, sha256Head)).kind, 'invalid');
+    assert.equal(mustFail(source.conventionsAt(repoPath, sha256Head, sha256Head)).kind, 'invalid');
+  });
+
+  it('the shared commit pattern accepts 40 lowercase hex digits and refuses 64', () => {
+    assert.equal(COMMIT_SHA.test('a'.repeat(40)), true);
+    assert.equal(COMMIT_SHA.test('a'.repeat(64)), false);
+    assert.equal(COMMIT_SHA.test('A'.repeat(40)), false);
+  });
+
+  it('on an ordinary repository head still returns the 40-hex commit', () => {
+    const repo = scratch();
+    assert.equal(must(source.head(repo.path)), repo.head);
+    assert.match(repo.head, /^[0-9a-f]{40}$/);
   });
 });
