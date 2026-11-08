@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-27-PLAN.md
-last_updated: "2026-11-08T01:41:35.286Z"
+stopped_at: Completed 02-28-PLAN.md
+last_updated: "2026-11-08T01:57:47.320Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: 5ab37659c8d6865f0ee36077c40571c359f67048
+state_head: 9d49afebaa4e438229499ee3ef47dd71748fb27b
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 61
-  completed_plans: 53
+  completed_plans: 54
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 2 of 35
+Plan: 3 of 35
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 02 execution started
 
@@ -108,6 +108,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P23 | one long session | 7 tasks | 94 files |
 | Phase 02 P26 | 127 min | 3 tasks | 14 files |
 | Phase 02 P27 | 18 min | 3 tasks | 9 files |
+| Phase 02 P28 | 40 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-26: the hook judges the path part of git object names and allow-lists log and status options; show takes only object-by-path operands (CR-01)
 - [Phase 02]: 02-26: the contract-command sandbox residual is named in containment.md and findings.md for owner acceptance (T-02-91)
 - [Phase 02]: 02-27: a git object name is matched against the secret globs lexically (as written) from the working copy root and the shell's directory, then judged again by the canonical read rules; git show <rev>:.env is refused even when the revision stores a symlink there — Git reads the name from the tree or the index, not the working copy, so a working-copy symlink must not stand in for a secret name (G-02-H2)
+- [Phase 02]: 02-28: usage lines of onboard and resume print through errorLine; the soft hyphen stays out of the stripped invisible-format class
 
 ### Pending Todos
 
@@ -278,6 +280,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T01:41:35.089Z
-Stopped at: Completed 02-27-PLAN.md
+Last session: 2026-11-08T01:57:47.171Z
+Stopped at: Completed 02-28-PLAN.md
 Resume file: None
