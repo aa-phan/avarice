@@ -8,11 +8,12 @@ asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
 created: "2026-11-07"
+updated: "2026-11-08"
 ---
 
 # Phase 02 — Security
 
-> Per-phase security contract: threat register, accepted risks, and audit trail. Register built from the `<threat_model>` blocks of plans 02-01..02-25 plus SUMMARY threat flags; mitigations verified read-only by gsd-security-auditor on 2026-11-07.
+> Per-phase security contract: threat register, accepted risks, and audit trail. Register built from the `<threat_model>` blocks of plans 02-01..02-25 plus SUMMARY threat flags; mitigations verified read-only by gsd-security-auditor on 2026-11-07. Extended on 2026-11-08 with the registers of plans 02-26..02-35 (T-02-88..T-02-121, review-fix and gap-closure rounds); those mitigations verified read-only (ASVS L1, grep depth) against the code at HEAD 76585fe.
 
 ---
 
@@ -34,6 +35,11 @@ created: "2026-11-07"
 | Contained runs and dry run → owner's real portfolio repository | First real write is one fetched branch per run; otherwise read-only | Git reads, one create-only ref, `.env` |
 | Evidence files, code comments, agents → `docs/system` | What a grounder copies becomes committed documentation | Evidence content, containment claims |
 | Attended session (owner login, no sandbox) and tests → owner's real Claude config and AVARICE profile | The model acts with the owner's user rights | Config directory, profile roots, transcripts |
+| Contained model → admitted git commands → clone history, index and object store | Git reads object names from the tree or index, not the working copy; working-copy symlinks are repo-controlled | Object names, git options, printed content |
+| Repository code (checks, install, agent-written tests) → home directory, scratch, artifact store | Runs under a sandbox that allows reads by default | Credential files, check output |
+| Allowlist proxy (outside the sandbox) → DNS → loopback, link-local, LAN | The proxy dials what a repo-configured name resolves to | Registry host names, resolved addresses |
+| Supervisor (killable, may lose its lease) → ledger budget rows, detached host, clone HEAD | A kill can fall between writes; a host can outlive its supervisor | Budget charges, session IDs, commit parents |
+| Live harness → owner's real home; committed evidence → repository readers | Fixtures create and delete under the real home; recorded lines can carry local paths | Fixture paths, evidence lines |
 
 ---
 
@@ -128,23 +134,59 @@ created: "2026-11-07"
 | T-02-85 | Repudiation | Verdicts from model's words | medium | mitigate | Structural verdicts; `live-attended-verdicts.test.ts` | closed |
 | T-02-86 | EoP | Attended session acting outside scratch repo | medium | mitigate | dontAsk, allow list, web tools denied, edits only in scratch — see residual W-3 | closed |
 | T-02-87 | Info disclosure | Transcripts committed | low | mitigate | Truncation + `redactSecrets`; 0 secret hits in committed jsonl — see residual W-4 | closed |
-| T-02-SC | Tampering | Package installs (all 25 plans) | high | mitigate | devDependencies only; package files unchanged since Phase 1; `footprint.test.ts` | closed |
+| T-02-88 | Info disclosure | `git show <rev>:<path>` / `:<path>` / `:<stage>:<path>` reading a committed or staged secret | high | mitigate | `checkGitObjects` judges the path part with the read rules; braces, `:/`, `:!`, `:(`, absolute refused `shell-git-object` (`hook-decision.ts`); `hook-decision.test.ts` | closed |
+| T-02-89 | Info disclosure | Content-printing `git log`/`git show`/verbose `git status` forms | high | mitigate | `GIT_OUTPUT_FORMS` allow-list compared whole, `shell-git-output`; `git show` takes only object-by-path operands; `hook-decision.test.ts` | closed |
+| T-02-90 | Info disclosure | Colon words git splits differently (brace reflog/date, message search, pathspec magic) | medium | mitigate | Refused `shell-git-object` before any path judgement (`hook-decision.ts`); quoted-brace unit cases | closed |
+| T-02-91 | Info disclosure | Contract-command code reading a tracked secret file in the clone | medium | accept | See Accepted Risks R-05 | closed |
+| T-02-92 | DoS | Narrowed git forms counting toward the 3-denial loop limit | low | accept | See Accepted Risks R-06 | closed |
+| T-02-93 | Repudiation | docs/system claiming a broader git control than built | low | mitigate | Residual stated in `docs/system/containment.md` rule 12 and Limits; fresh prose reviews (02-26, 02-35) | closed |
+| T-02-94 | Info disclosure | Object name whose path is a working-copy symlink at a secret-glob name | high | mitigate | `lexicalObjectRule` matches the name as written from staging and `canon(cwd)` before the canonical check (`hook-decision.ts:515`); unit and real-git cases | closed |
+| T-02-95 | Info disclosure | A word an option table consumes as a value while git takes it as an operand | medium | mitigate | Object check over every operand from `gitArgs`; table-pin test; `M` dropped from status value letters; `hook-decision.test.ts` | closed |
+| T-02-96 | DoS | Uninformative git refusals retried to the loop limit | low | mitigate | `GIT_RULE_REASONS` corrective reasons for both git rules (`hook-decision.ts`) | closed |
+| T-02-97 | Info disclosure | Object path resolved from a nested repository's top below staging | low | accept | See Accepted Risks R-07 | closed |
+| T-02-98 | Info disclosure | A `git rev-parse` / `git ls-files` option printing blob content | low | accept | See Accepted Risks R-08 | closed |
+| T-02-99 | Tampering | onboard/resume outcome and error lines printed unstripped | medium | mitigate | Shared `outcomeLines`/`errorLine` (`render/style.ts`) used by onboard, resume, supervise and `main.ts`; `render.test.ts` | closed |
+| T-02-100 | Spoofing | Bidi marks and zero-width characters kept in printed text | low | mitigate | `INVISIBLE_FORMAT` class with `\u` escapes (`render/style.ts:18`); per-code-point tests | closed |
+| T-02-101 | DoS | SHA-256 repository accepted at start, failing later | low | mitigate | 40-hex `COMMIT_SHA` (`staging-base.ts`); `head()` refuses with object format named (`run-source.ts:42`) | closed |
+| T-02-102 | DoS | Start crashing on >125000-commit history | low | mitigate | `oldestCommitTime` without a spread (`run-source.ts:22`); 150000-line test in `run-source.test.ts` | closed |
+| T-02-103 | Tampering | File named `a\b` acted on as `a/b` | medium | mitigate | Split on `/` only (`staging-base.ts:88`); `run-workspace.test.ts` discard case leaves tracked `a/b` untouched | closed |
+| T-02-104 | Repudiation | Extra refs under the run prefix hidden from the exit digest | low | mitigate | Anchored single-segment `RUN_REF_PATTERN` (`scripts/checkout-digest.ts:39`); nested-ref test | closed |
+| T-02-105 | Tampering | Resume reading the clone beside an unreaped host | low | mitigate | `reapStartedLaunches` stops with rows `started` when no session ID or no reap (`run-resume.ts:72`) | closed |
+| T-02-106 | DoS | Lost-lease supervisor leaving its host running to the wall clock | medium | mitigate | Stage signal aborted on lease loss; unit stops before classifying (`item.ts:526-532`, `run-service.ts`); fault test | closed |
+| T-02-107 | Tampering | Commit with this attempt's trailers but another parent | low | mitigate | Single parent equal to snapshot head required (`item.ts:436`) | closed |
+| T-02-108 | DoS | Operator SIGTERM leaving the unit's host running until next resume | low | accept | See Accepted Risks R-09 | closed |
+| T-02-109 | Tampering | Attended allow rules admitting writes (`cat >`, `git ... --output`) | low | mitigate | `attendedSettings` drops `cat`/`head` and git prefixes; two exact git commands (`test/helpers/live-attended.ts:488`) | closed |
+| T-02-110 | Tampering | `cleanupAttended` deleting outside its fixture | medium | mitigate | Real-path containment checks before removal (`live-attended.ts:593-616`); forged-fixture tests in `live-harness-hygiene.test.ts` | closed |
+| T-02-111 | Info disclosure | Owner's home path in committed evidence | low | mitigate | `redactHome` in every live recorder; live jsonl files hold no home path — wider residue deferred, see F-02-31 | closed |
+| T-02-112 | Repudiation | Settlement and orphan conversion in separate transactions | medium | mitigate | `Ledger.settleBudgets` one transaction for both paths (`sqlite/ledger.ts:679`, `budget.ts`); `test/fault/budgets.test.ts` | closed |
+| T-02-113 | Repudiation | Crashed host (no result event) charged 0 | medium | mitigate | `wasKilled` counts `resultSeen === false` (`invocation.ts:153-159`) | closed |
+| T-02-114 | Info disclosure | Repository code reading `.gnupg`, `.netrc`, `.npmrc`, `.docker`, `.kube`, gcloud, Keychains, `.git-credentials`, `.pgpass` | high | mitigate | One `CREDENTIAL_PATHS` list (`invocation-scope.ts:387`) used at every deny site (`checks.ts`, `graphify.ts`, `gsd-onboarding.ts`, invocation scope, hook); real-sandbox tests | closed |
+| T-02-115 | Info disclosure | Secret printed by a check stored unredacted | medium | mitigate | `redactSecrets` before `artifacts.put` (`checks.ts:228`); integration test | closed |
+| T-02-116 | Info disclosure | Credential stored at a location the list does not name | medium | accept | See Accepted Risks R-10 | closed |
+| T-02-117 | EoP | SSRF from the sandboxed install to loopback / metadata / LAN | high | mitigate | Proxy refuses non-public resolved addresses (`isPublicAddress`, `allowlist-proxy.ts:91-120`); conventions refuse IP spellings, localhost, single labels (`conventions.ts:237`); `allowlist-proxy.test.ts` | closed |
+| T-02-118 | Spoofing | DNS rebinding between check and connect | medium | mitigate | Every address vetted, connection made to the vetted address (`allowlist-proxy.ts:180-196`) | closed |
+| T-02-119 | EoP | Test resolver seam reaching production | medium | mitigate | `AllowlistEgressProxy` forwards only `allow`/`onAttempt`; smuggled-resolve runtime test; footprint pin of `startAllowlistProxy` call sites (`footprint.test.ts:128-141`) | closed |
+| T-02-120 | Repudiation | docs/system broader or narrower than built after the round | low | mitigate | 02-35 worklist grounded in the code; fresh review groups (`02-35-reviews`) | closed |
+| T-02-121 | Repudiation | Review finding without a recorded outcome | low | mitigate | `02-REVIEW-DISPOSITION.md` and `02-26-REVIEW-DISPOSITION.md` both `open: 0` | closed |
+| T-02-SC | Tampering | Package installs (all 35 plans) | high | mitigate | devDependencies only; `package.json`/`package-lock.json` unchanged since Phase 1 (last change 01-01); `footprint.test.ts` | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
 *Disposition: mitigate (implementation required) · accept (documented risk) · transfer (third-party)*
 
-Totals: 88 threats (43 high, 35 medium, 10 low) — 84 mitigate, 4 accept, 0 transfer; 88 closed, 0 open.
+Totals: 122 threats (48 high, 48 medium, 26 low) — 112 mitigate, 10 accept, 0 transfer; 122 closed, 0 open.
 
 ### Residual observations (unregistered, non-blocking)
 
 | ID | Severity | Observation | Suggested fix |
 |----|----------|-------------|---------------|
 | F-02-20 | warning | SUMMARY 02-20 flag `sandbox-read-gap (narrowed)`: a profile whose roots are placed outside the default parents via `AVARICE_DATA_ROOT` / `AVARICE_WORK_ROOT` / `AVARICE_CONFIG_HOME` is readable by a declared check command; the hook still refuses the model's own reads. Closed for default-placed profiles (live cs7 PASS); documented in `docs/system/containment.md` | Documented residual; no action this phase |
-| W-1 | medium | Phase 1 one-shot onboarding output prints the last `ctx.note` without `stripControl` (`src/cli/commands/onboard.ts:55`, `src/cli/commands/resume.ts:57`); notes can carry repository-derived paths. Outside T-02-03/T-02-49's scope but the same terminal-escape vector | Wrap `message` in `stripControl` at both sites; add a render test |
-| W-2 | info | T-02-66 says "asserted by paths under $TMPDIR"; scratch roots come from `mkdtemp` but nothing asserts it explicitly | Add a realpath-under-tmp assertion in `makeShortRoots` / `makeScratchRepo` |
-| W-3 | info | `Bash(cat:*)` in the attended allow list permits `cat > file` (test harness only; protected file asserted byte-identical; disclosed in 02-25-SUMMARY and LIVE-CASES) | Drop `cat` from the allow list or use Read |
-| W-4 | info | One line of committed `live-attended-phase2.jsonl` contains a home path in a truncated error reason (not a secret) | Path-redact the record writer |
+| W-1 | medium | Phase 1 one-shot onboarding output printed the last `ctx.note` without `stripControl`. **Resolved by 02-28 (T-02-99):** onboard and resume now print through `outcomeLines` (`src/cli/commands/onboard.ts:55`, `src/cli/commands/resume.ts:56`) | None |
+| W-2 | info | T-02-66 says "asserted by paths under $TMPDIR"; scratch roots come from `realpathSync(mkdtempSync(join(tmpdir(), ...)))` but nothing asserts it explicitly | Add a realpath-under-tmp assertion in `makeShortRoots` / `makeScratchRepo` |
+| W-3 | info | `Bash(cat:*)` in the attended allow list permitted `cat > file`. **Resolved by 02-31 (T-02-109):** `cat`, `head` and git prefixes dropped | None |
+| W-4 | info | A committed live jsonl line carried a home path. **Resolved by 02-31 (T-02-111):** `redactHome` in every recorder; `test/containment` holds no home path | None |
+| F-02-31 | info | T-02-111 wider residue deferred to the owner (public-release decision) per 02-31-SUMMARY: spike evidence, one spike script, one proposal document and `.planning` files (including several `02-*-red-evidence-*.json`, `02-21-dry-run.json`, `02-22-evidence-exit.json`) still hold the owner's home path; not secrets | Owner decision before any public release |
+| F-02-26 | info | T-02-91 is recorded as an open owner decision in `docs/system/findings.md` (sandbox read deny of the clone's secret paths vs accept); accepted for this phase as R-05 | Owner decision; no action this phase |
 
 ---
 
@@ -156,6 +198,12 @@ Totals: 88 threats (43 high, 35 medium, 10 low) — 84 mitigate, 4 accept, 0 tra
 | R-02 | T-02-17 | The allowlist proxy binds 127.0.0.1, lives for one step and admits only the registry; other local processes reaching it gain only registry access | Plan 02-06 threat model (owner) | 2026-11-05 |
 | R-03 | T-02-37 | Bash writes bypass read-before-edit by design; the sandbox confines where Bash writes land and a later Edit sees the changed digest | Plan 02-11 threat model (owner) | 2026-11-05 |
 | R-04 | T-02-79 | Documenting known bypasses and detect-only limits: local single-user tool, limits already in the proposal containment document, docs state behavior not exploit steps | Plan 02-23 threat model (owner) | 2026-11-05 |
+| R-05 | T-02-91 | Code a contract command runs can read a tracked secret file in the clone (sandbox denies reads by root only). Closing it needs a sandbox read deny of the clone's secret paths, which can break checks that load them; clone holds tracked files only; transcripts and check output are redacted. Named in `docs/system/containment.md` Limits and `findings.md` as an owner decision | Plan 02-26 threat model (owner) | 2026-11-08 |
+| R-06 | T-02-92 | A legitimate read refused by the narrowed git forms counts toward the 3-denial limit; admitted alternatives (`git log -1 --stat <rev>`, `git show <rev>:<path>`) carry the same information and corrective reasons name them | Plan 02-26 threat model (owner) | 2026-11-08 |
+| R-07 | T-02-97 | Object path resolved from a nested repository's top below staging: the model has no admitted `cd`, `git -C` or `git -c`; documented in containment.md rule 12 | Plan 02-27 threat model (owner) | 2026-11-08 |
+| R-08 | T-02-98 | No option of `git rev-parse` / `git ls-files` prints blob content on git 2.39.5 (probed); reason recorded beside `GIT_OUTPUT_FORMS` (`hook-decision.ts:549`), re-check on a new git version | Plan 02-27 threat model (owner) | 2026-11-08 |
+| R-09 | T-02-108 | An operator SIGTERM ends the supervisor without aborting the unit in flight; the host runs until it exits or the next resume reaps it by session ID. Changing SIGTERM semantics needs an owner decision; documented in `docs/system/runs.md` | Plan 02-30 threat model (owner) | 2026-11-08 |
+| R-10 | T-02-116 | The credential denial is a list of known locations over reads allowed by default; an allow-list inversion would break node and npm. Named in containment.md Limits ("Credentials stored elsewhere") | Plan 02-33 threat model (owner) | 2026-11-08 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -166,6 +214,7 @@ Totals: 88 threats (43 high, 35 medium, 10 low) — 84 mitigate, 4 accept, 0 tra
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-11-07 | 88 | 88 | 0 | gsd-security-auditor (ASVS L1, block_on high) |
+| 2026-11-08 | 122 | 122 | 0 | secure-phase orchestrator, L1 grep-depth short-circuit at HEAD 76585fe (ASVS L1, block_on high) |
 
 ---
 
@@ -176,4 +225,12 @@ Totals: 88 threats (43 high, 35 medium, 10 low) — 84 mitigate, 4 accept, 0 tra
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-11-07
+**Approval:** verified 2026-11-07; re-verified 2026-11-08 after plans 02-26..02-35
+
+## Security Audit 2026-11-08
+
+| Metric | Count |
+|---|---|
+| Threats found | 122 |
+| Closed | 122 |
+| Open | 0 |
