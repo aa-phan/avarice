@@ -7,7 +7,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-05"
-validated: "2026-11-07"
+validated: "2026-11-08"
 ---
 
 # Phase 02 — Validation Strategy
@@ -43,7 +43,7 @@ Never pass a bare directory to `node --test`; use quoted globs. Tiers as Phase 1
 
 ## Per-Task Verification Map
 
-Built from the 25 PLAN.md and SUMMARY.md files at the 2026-11-07 audit. Threat refs are per plan. "Recorded" rows need `AVARICE_LIVE=1` (or `AVARICE_NET=1`) and skip offline; their status is the recorded evidence in `test/containment/LIVE-CASES.md` and the phase evidence files. Three test files named in the `02-RESEARCH.md` test map were never created; their behavior is covered elsewhere: `run-selfamend` by `hook-decision.test.ts` plus live CS cases, `checks-writes` by `check-validation.test.ts`, `run-handoff` by `run-workspace.test.ts`.
+Built from the 35 PLAN.md and SUMMARY.md files (rows 02-26..02-35 added at the 2026-11-08 audit). Threat refs are per plan. "Recorded" rows need `AVARICE_LIVE=1` (or `AVARICE_NET=1`) and skip offline; their status is the recorded evidence in `test/containment/LIVE-CASES.md` and the phase evidence files. Three test files named in the `02-RESEARCH.md` test map were never created; their behavior is covered elsewhere: `run-selfamend` by `hook-decision.test.ts` plus live CS cases, `checks-writes` by `check-validation.test.ts`, `run-handoff` by `run-workspace.test.ts`.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
@@ -112,6 +112,33 @@ Built from the 25 PLAN.md and SUMMARY.md files at the 2026-11-07 audit. Threat r
 | 02-25-T1 | 25 | 13 | RC-5 | T-02-83..87 | Attended verdict functions; owner config unchanged | unit + live | `node --test "test/unit/live-attended-verdicts.test.ts" "test/containment/live-attended-skill.test.ts"` | ✅ | ✅ green |
 | 02-25-T2 | 25 | 13 | RC-5 | T-02-83..87 | Stop-on-denial and routable-question verdicts | unit + live | `node --test "test/unit/live-attended-verdicts.test.ts"` | ✅ | ✅ green |
 | 02-25-T3 | 25 | 13 | RC-5 | T-02-83..87 | LIVE-CASES record and spend total | grep/evidence | grep in `test/containment/LIVE-CASES.md` plus spend-total check | ✅ | ✅ green |
+| 02-26-T1 | 26 | 14 | RC-5, CON-1 | T-02-88..93 | `git show HEAD:.env` and `:.env` denied deny-secret-read through the real hook; real git prints the secret | integ/unit | `node --test "test/integration/hook-git-secret-reads.test.ts" "test/unit/hook-decision.test.ts"` | ✅ | ✅ green |
+| 02-26-T2 | 26 | 14 | RC-5, CON-1 | T-02-88..93 | git show operands, git log and git status option allow-lists; real-git corpus | unit/integ/mutation | `node --test "test/unit/hook-decision.test.ts" "test/integration/hook-git-secret-reads.test.ts" "test/integration/hook.test.ts" "test/mutation/fail-closed.test.ts"` | ✅ | ✅ green |
+| 02-26-T3 | 26 | 14 | (docs) | T-02-88..93 | docs/system git rules, rule count, findings | grep/git checks | checks in the plan | ✅ | ✅ green |
+| 02-27-T1 | 27 | 15 | CON-1, RC-5 | T-02-94..98 | Git object name judged lexically: `git show HEAD~1:.env` denied when `.env` is a live or dangling symlink, or under a symlinked parent (G-02-H2) | integ/unit | `node --test "test/integration/hook-git-secret-reads.test.ts" "test/unit/normalized-root.test.ts"` | ✅ | ✅ green |
+| 02-27-T2 | 27 | 15 | CON-1, CON-14 | T-02-91, T-02-94..98 | One shared git operand walker for the object check (operand grammar and table pins), `commandWords`, corrective reasons (S-WR-02, S-IN-02/03) | unit/mutation | `node --test "test/unit/hook-decision.test.ts" "test/mutation/fail-closed.test.ts"` | ✅ | ✅ green |
+| 02-27-T3 | 27 | 15 | CON-1 | T-02-94..98 | Integration-suite hygiene; docs/system git object rules | integ | `node --test "test/integration/hook.test.ts" "test/integration/hook-git-secret-reads.test.ts"` | ✅ | ✅ green |
+| 02-28-T1 | 28 | 15 | OPS-7 | T-02-03, T-02-99..100 | Terminal-text stripping: an ESC sequence in a resume ID or onboard path never reaches the terminal through the real CLI (R-WR-01) | integ/unit | `node --test "test/integration/cli-terminal-text.test.ts" "test/unit/render.test.ts"` | ✅ | ✅ green |
+| 02-28-T2 | 28 | 15 | OPS-7 | T-02-99..100 | Full invisible-format class (bidi, zero-width) stripped (R-IN-03) | unit/mutation | `node --test "test/unit/render.test.ts" "test/mutation/fail-closed.test.ts"` | ✅ | ✅ green |
+| 02-29-T1 | 29 | 15 | RC-2, CON-2 | T-02-101..104 | A SHA-256 repository refused at the first commit read, object format named (R-WR-06) | integ | `node --test "test/integration/run-source.test.ts" "test/integration/run-start.test.ts"` | ✅ | ✅ green |
+| 02-29-T2 | 29 | 15 | RC-2, CON-16 | T-02-101..104 | `oldestCommitTime` with no spread (R-WR-07); confined paths split on `/` only (R-IN-04) | integ | `node --test "test/integration/run-source.test.ts" "test/integration/run-workspace.test.ts"` | ✅ | ✅ green |
+| 02-29-T3 | 29 | 15 | CON-16 | T-02-104 | Anchored run-ref pattern in the checkout digest: nested ref under the run prefix not hidden (R-IN-09) | unit/integ | `node --test "test/unit/checkout-digest.test.ts" "test/integration/run-source-untouched.test.ts"` | ✅ | ✅ green |
+| 02-30-T1 | 30 | 15 | FR-7, CON-13 | T-02-105..108 | Lease lost during the unit aborts the host end to end (R-IN-06) | fault | `node --test "test/fault/run-lease-loss.test.ts"` | ✅ | ✅ green |
+| 02-30-T2 | 30 | 15 | FR-7 | T-02-56..57, T-02-105..108 | Unreapable launch stops resume with an error (R-IN-05); gated commit must have the snapshot as parent (R-IN-08) | integ/fault | `node --test "test/integration/run-resume.test.ts" "test/integration/resume-reap.test.ts" "test/fault/run-discard-retry.test.ts" "test/fault/run-discard-stale-fence.test.ts"` | ✅ | ✅ green |
+| 02-30-T3 | 30 | 15 | (docs) | T-02-105..108 | runs.md lease loss, unreapable launches, gated-commit parent | grep/git checks | checks in the plan | ✅ | ✅ green |
+| 02-31-T1 | 31 | 15 | CON-1 | T-02-109..111 | Recorder lines land on disk with the home path as `~` (R-IN-01) | unit | `node --test "test/unit/live-harness-hygiene.test.ts"` | ✅ | ✅ green |
+| 02-31-T2 | 31 | 15 | CON-1 | T-02-109..111 | `cleanupAttended` containment checks: throws and deletes nothing outside its own dirs (R-WR-09); narrowed attended allow list (R-WR-08) | unit | `node --test "test/unit/live-harness-hygiene.test.ts" "test/unit/live-attended-verdicts.test.ts"` | ✅ | ✅ green |
+| 02-31-T3 | 31 | 15 | CON-1 | T-02-109..111 | Home path rewritten in the four evidence files | grep | grep for the home path in the evidence files | ✅ | ✅ green |
+| 02-32-T1 | 32 | 16 | CON-13, CON-16 | T-02-112..113 | Settlement in one transaction: a cost-write failure leaves settlement and orphan conversion uncharged as a whole (R-WR-05) | fault/mutation | `node --test "test/fault/budgets.test.ts" "test/mutation/fail-closed.test.ts"` | ✅ | ✅ green |
+| 02-32-T2 | 32 | 16 | CON-13 | T-02-112..113 | An invocation with no result is charged its reservation (R-WR-04) | fault/integ | `node --test "test/fault/budgets.test.ts" "test/fault/run-discard-retry.test.ts" "test/fault/run-budgets.test.ts" "test/integration/claude-host.test.ts"` | ✅ | ✅ green |
+| 02-32-T3 | 32 | 16 | (docs) | T-02-112..113 | docs/system settlement and no-result charge | grep/git checks | checks in the plan | ✅ | ✅ green |
+| 02-33-T1 | 33 | 17 | RC-5, CON-5, CON-1 | T-02-114..116 | Check command cannot read any credential location; npm still runs; check output stored redacted (R-WR-03) | integ | `node --test "test/integration/check-validation.test.ts"` | ✅ | ✅ green |
+| 02-33-T2 | 33 | 17 | CON-1, RC-5 | T-02-114..116 | Onboarding and run scopes use the shared credential list (host sandbox and hook) | unit/integ | `node --test "test/unit/claude-settings.test.ts" "test/unit/invocation-scope.test.ts" "test/unit/run-scope.test.ts" "test/unit/hook-decision.test.ts" "test/integration/hook.test.ts" "test/integration/claude-host.test.ts"` | ✅ | ✅ green |
+| 02-33-T3 | 33 | 17 | CON-1 | T-02-114..116 | Graphify and GSD tool sandboxes use the shared list | integ | `node --test "test/integration/run-sandbox-other-profiles.test.ts" "test/integration/graphify-tool.test.ts" "test/integration/gsd-adapter.test.ts"` | ✅ | ✅ green |
+| 02-34-T1 | 34 | 18 | CON-5, CON-1 | T-02-117..119 | Proxy address vetting: an allowlisted host resolving to loopback is refused; connects only to vetted addresses (R-WR-02) | integ/unit | `node --test "test/integration/allowlist-proxy.test.ts" "test/unit/footprint.test.ts"` | ✅ | ✅ green |
+| 02-34-T2 | 34 | 18 | RC-5, CON-5 | T-02-117..119 | Conventions refuse local-only registry hosts | unit/integ | `node --test "test/unit/conventions.test.ts" "test/integration/run-deps.test.ts"` | ✅ | ✅ green |
+| 02-34-T3 | 34 | 18 | (docs) | T-02-117..119 | docs/system proxy address check and registry host rules | grep/git checks | checks in the plan | ✅ | ✅ green |
+| 02-35-T1..T3 | 35 | 19 | (docs) | T-02-120..121 | Round's docs/system pass, dispositions, fresh reviews | grep/git checks | worklist, README and coverage checks in the plan | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -153,6 +180,8 @@ Built from the 25 PLAN.md and SUMMARY.md files at the 2026-11-07 audit. Threat r
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** validated 2026-11-07. Offline suite: 2398 tests, 2343 pass, 0 fail, 55 skipped (live-gated); `tsc` and `check-boundaries` clean. Node 22.22.3 matrix not re-run at this audit.
+
+**Re-validated 2026-11-08** after the gap-closure round 02-26..02-35. Every behavior of the round maps to an existing automated test: git object-name lexical check, shared operand walker and `commandWords` (02-26/27); terminal-text stripping and the invisible-format class (02-28); SHA-256 refusal, `oldestCommitTime`, slash-only split, anchored run-ref (02-29); lease-loss abort, unreapable-launch resume error, gated-commit parent (02-30); home redaction, `cleanupAttended` containment, narrowed allow list (02-31); one-transaction settlement, no-result charge (02-32); shared credential list, redacted check output (02-33); proxy address vetting, local-only registry hosts refused (02-34). No new tests were needed. Full offline suite at HEAD: 2629 tests, 2574 pass, 0 fail, 55 skipped (live-gated); the round's test files were re-run green at this audit. Wider home-path residue in `.planning` and spike evidence stays deferred to the owner per the 02-31 SUMMARY (not a test gap).
 
 ## Validation Audit 2026-11-07
 
