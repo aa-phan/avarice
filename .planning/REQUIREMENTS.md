@@ -74,7 +74,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
 - [ ] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
 - [ ] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
-- [ ] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
+- [x] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
 
 ### Autonomy and human involvement (AUT-1 to AUT-17)
 
@@ -262,7 +262,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-13 | Phase 2 | Complete |
 | CON-14 | Phase 2 | Gaps Found |
 | CON-15 | Phase 3 | Pending |
-| CON-16 | Phase 2 | Gaps Found |
+| CON-16 | Phase 2 | Complete |
 | AUT-1 | Phase 3 | Pending |
 | AUT-2 | Phase 3 | Pending |
 | AUT-3 | Phase 3 | Pending |

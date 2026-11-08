@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 31/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
+**Plans:** 32/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
 
 Plans:
 **Wave 1**
@@ -186,7 +186,7 @@ Plans:
 - [x] 02-31-PLAN.md — Harness and evidence hygiene: home path redacted in recorders and four evidence files, cleanupAttended containment checks, narrowed attended allow list (WR-08, WR-09, IN-01)
 
 **Wave 16** *(blocked on 02-27: docs/system/containment.md)*
-- [ ] 02-32-PLAN.md — Budget settlement: settlement and orphan charges in one ledger transaction; an invocation with no result charged its reservation (WR-04, WR-05)
+- [x] 02-32-PLAN.md — Budget settlement: settlement and orphan charges in one ledger transaction; an invocation with no result charged its reservation (WR-04, WR-05)
 
 **Wave 17** *(blocked on 02-29 and 02-32: integrations.md, containment.md)*
 - [ ] 02-33-PLAN.md — Credential locations: one extended list at all five sandbox and scope sites, check output redacted, proven on the real sandbox (WR-03)
@@ -306,7 +306,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 31/35 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 32/35 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |

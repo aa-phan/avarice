@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 02
 current_phase_name: Contained unattended run of one work item
 status: executing
-stopped_at: Completed 02-31-PLAN.md
-last_updated: "2026-11-08T03:00:22.383Z"
+stopped_at: Completed 02-32-PLAN.md
+last_updated: "2026-11-08T03:32:17.661Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 02 execution started
-state_head: d7239d261c5bef4779d4f9b21c29c92e66a5674a
+state_head: 4320b5c20d1c7ae95b0d185733a0e269eadc75cb
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 61
-  completed_plans: 57
+  completed_plans: 58
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 02 (Contained unattended run of one work item) — EXECUTING
-Plan: 6 of 35
+Plan: 7 of 35
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 02 execution started
 
@@ -112,6 +112,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 02 P29 | 55 min | 3 tasks | 12 files |
 | Phase 02 P30 | 60 min | 3 tasks | 13 files |
 | Phase 02 P31 | 45 min | 3 tasks | 11 files |
+| Phase 02 P32 | 55min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -239,6 +240,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-30: no SIGTERM abort of the unit; an operator stop still ends the supervisor at once and the next resume reaps the host (owner decision needed to change)
 - [Phase 02]: 02-30: a gated commit is the supervisor's own only with matching trailers and a single parent equal to the snapshot head
 - [Phase 02]: 02-31: cleanupAttended takes optional home and tmp roots so offline tests never name the real home; redactHome matches wherever the next character cannot continue a path component
+- [Phase 02]: 02-32: settleBudgets writes a settlement and an orphan conversion in one ledger transaction; an invocation that ended without a result (resultSeen false) is charged its cost reservation
 
 ### Pending Todos
 
@@ -288,6 +290,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T03:00:22.187Z
-Stopped at: Completed 02-31-PLAN.md
+Last session: 2026-11-08T03:32:17.499Z
+Stopped at: Completed 02-32-PLAN.md
 Resume file: None
