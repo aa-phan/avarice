@@ -121,7 +121,7 @@ Plans:
   7. `status`, `start`, `resume` and the shell render human-readable output in the one style of OPS-7, and every `--json` shape is unchanged
   8. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 26/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
+**Plans:** 27/35 plans executed (19 waves; 02-24 and 02-25 close UAT gaps G-02-10 and G-02-9; 02-26 closes verification gap CR-01; 02-27 to 02-35 close owner UAT gaps G-02-H2 and G-02-H4)
 
 Plans:
 **Wave 1**
@@ -179,7 +179,7 @@ Plans:
 - [x] 02-26-PLAN.md — CR-01: git object reads and content-printing git output refused by the hook (proven against real git), the sandbox residual named, docs/system updated and reviewed fresh
 
 **Wave 15** *(gap closure G-02-H2, G-02-H4, blocked on Wave 14 completion)*
-- [ ] 02-27-PLAN.md — G-02-H2: git object names matched lexically as well as resolved (working-copy symlink bypass, real git); one git operand grammar with the option tables pinned; corrective reasons; integration-suite hygiene (scoped review CR-01, WR-01, WR-02, IN-01..IN-04)
+- [x] 02-27-PLAN.md — G-02-H2: git object names matched lexically as well as resolved (working-copy symlink bypass, real git); one git operand grammar with the option tables pinned; corrective reasons; integration-suite hygiene (scoped review CR-01, WR-01, WR-02, IN-01..IN-04)
 - [ ] 02-28-PLAN.md — Terminal text: onboard and resume lines through the shared control stripping; bidi and zero-width class with \u escapes (WR-01, IN-03)
 - [ ] 02-29-PLAN.md — Git adapters and git evidence: SHA-256 repositories refused at the first read, no Math.min spread, paths split on `/` only, anchored run-ref allowance (WR-06, WR-07, IN-04, IN-09)
 - [ ] 02-30-PLAN.md — Resume, lease and gated commit: a lost lease aborts the unit's host, an unreapable launch stops the resume, the gated commit's parent checked (IN-05, IN-06, IN-08)
@@ -306,7 +306,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
-| 2. Contained unattended run of one work item | v1.0 | 26/26 | In Progress | - |
+| 2. Contained unattended run of one work item | v1.0 | 27/35 | In Progress | - |
 | 3. Decisions, independent work and amendments | v1.0 | 0/TBD | Not started | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
