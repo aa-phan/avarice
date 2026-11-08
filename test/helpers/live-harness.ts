@@ -147,6 +147,23 @@ export function capUsd(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, AUTHORIZED_CAP_USD) : AUTHORIZED_CAP_USD;
 }
 
+// The owner's home directory as `~` (plan 02-31, R-IN-01). Every live recorder writes through this so committed evidence holds no local
+// path. Both spellings of the home are replaced (the real path and the homedir() form), but only where the next character cannot continue a
+// path component, so a sibling such as `<home>2/x` or `<home>-backup` is kept.
+export function redactHome(text: string): string {
+  const real = (() => {
+    try {
+      return realpathSync(homedir());
+    } catch {
+      return homedir();
+    }
+  })();
+  const homes = [...new Set([real, homedir()])].filter((home) => home !== '' && home !== '/').sort((a, b) => b.length - a.length);
+  if (homes.length === 0) return text;
+  const escaped = homes.map((home) => home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return text.replace(new RegExp(`(?:${escaped.join('|')})(?![A-Za-z0-9._@+-])`, 'g'), '~');
+}
+
 export interface SpendEntry {
   case: string;
   costUsd: number;

@@ -21,7 +21,7 @@ import { buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
 import { AVARICE_RUN_SKILL } from '../../src/adapters/host-claude/avarice-run-skill.ts';
 import { detectPause } from '../../src/domain/outcome.ts';
 import { redactSecrets } from '../../src/domain/secret-patterns.ts';
-import { claudeVersion, fitsPhase2Ceiling, liveClaudeBin, parseTranscript, phase2Ceiling, phase2Spent, phase2SpentByPlan, recordPhase2Spend, treeDigest } from './live-harness.ts';
+import { claudeVersion, fitsPhase2Ceiling, liveClaudeBin, parseTranscript, phase2Ceiling, phase2Spent, phase2SpentByPlan, recordPhase2Spend, redactHome, treeDigest } from './live-harness.ts';
 import type { ParsedTranscript, ToolTrace } from './live-harness.ts';
 import { PRODUCTION_ENTRY, REPO_ROOT, runCli } from './run-cli.ts';
 import type { CliRoots } from './run-cli.ts';
@@ -249,7 +249,7 @@ export function oldBuildSignals(parsed: ParsedTranscript): string[] {
 }
 
 export function appendAttendedResult(line: AttendedLine): void {
-  appendFileSync(attendedResultsPath(), JSON.stringify(line) + '\n');
+  appendFileSync(attendedResultsPath(), redactHome(JSON.stringify(line)) + '\n');
 }
 
 export const linesOf = (lines: readonly AttendedLine[], name: string): AttendedLine[] => lines.filter((line) => line.case === name);

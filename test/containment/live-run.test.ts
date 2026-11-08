@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { REPO_ROOT } from '../helpers/run-cli.ts';
 import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import type { ClaudeHostOptions } from '../../src/adapters/host-claude/claude-host.ts';
-import { DATA_CANARY, LIVE_RUN_PLAN, runLiveRun, runLiveRunUnit, runLiveRunWithAdapterOptions } from '../helpers/live-harness.ts';
+import { DATA_CANARY, LIVE_RUN_PLAN, redactHome, runLiveRun,runLiveRunUnit, runLiveRunWithAdapterOptions } from '../helpers/live-harness.ts';
 import type { LiveRunResult, LiveRunSpec, LiveRunUnitResult, PrepareRunUnitOptions, RunUnitContext, RunUnitSpec, ToolTrace } from '../helpers/live-harness.ts';
 import { commitFiles } from '../helpers/run-fixtures.ts';
 
@@ -34,7 +34,7 @@ const opts = { skip: LIVE ? false : 'set AVARICE_LIVE=1 to run the live run-purp
 const longOpts = { ...opts, timeout: 40 * 60_000 };
 
 function record(entry: Record<string, unknown>): void {
-  appendFileSync(RESULTS, JSON.stringify({ ...entry, at: new Date().toISOString() }) + '\n');
+  appendFileSync(RESULTS, redactHome(JSON.stringify({ ...entry, at: new Date().toISOString() })) + '\n');
 }
 
 // The facts every whole-run case records.

@@ -8,34 +8,31 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import * as harness from '../helpers/live-harness.ts';
+import { redactHome } from '../helpers/live-harness.ts';
 import { appendAttendedResult } from '../helpers/live-attended.ts';
 import type { AttendedLine } from '../helpers/live-attended.ts';
-
-// The function under test, or the identity while it does not exist, so a missing export fails on the assertion and not on the import.
-const redact = (text: string): string => ((harness as { redactHome?: (t: string) => string }).redactHome ?? ((t: string) => t))(text);
 
 const REAL_HOME = realpathSync(homedir());
 
 describe('redactHome (R-IN-01)', () => {
   it('replaces the real home directory with ~', () => {
-    assert.equal(redact(`${REAL_HOME}/.local/bin/claude`), '~/.local/bin/claude');
+    assert.equal(redactHome(`${REAL_HOME}/.local/bin/claude`), '~/.local/bin/claude');
   });
 
   it('replaces the homedir() spelling with ~', () => {
-    assert.equal(redact(`${homedir()}/.config/avarice`), '~/.config/avarice');
+    assert.equal(redactHome(`${homedir()}/.config/avarice`), '~/.config/avarice');
   });
 
   it('replaces every occurrence, inside quotes and at the end of the text', () => {
-    assert.equal(redact(`{"a":"${REAL_HOME}/x","b":"${REAL_HOME}"} and ${REAL_HOME}`), '{"a":"~/x","b":"~"} and ~');
+    assert.equal(redactHome(`{"a":"${REAL_HOME}/x","b":"${REAL_HOME}"} and ${REAL_HOME}`), '{"a":"~/x","b":"~"} and ~');
   });
 
   it('leaves text without the home directory alone', () => {
-    assert.equal(redact('/usr/local/bin/claude and ~/already'), '/usr/local/bin/claude and ~/already');
+    assert.equal(redactHome('/usr/local/bin/claude and ~/already'), '/usr/local/bin/claude and ~/already');
   });
 
   it('does not rewrite a path that only shares a prefix with the home directory', () => {
-    assert.equal(redact(`${REAL_HOME}2/x and ${REAL_HOME}-backup/y`), `${REAL_HOME}2/x and ${REAL_HOME}-backup/y`);
+    assert.equal(redactHome(`${REAL_HOME}2/x and ${REAL_HOME}-backup/y`), `${REAL_HOME}2/x and ${REAL_HOME}-backup/y`);
   });
 });
 

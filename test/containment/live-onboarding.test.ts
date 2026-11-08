@@ -16,7 +16,7 @@ import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync, statSync
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { DATA_CANARY, ENV_CANARY, FAST_MAP_CAP_USD, capUsd, gsdPreambleLine, hookDecisions, ledgerRows, recordedSpend, runLiveCase, runLiveFastOnboarding, toolCompleted } from '../helpers/live-harness.ts';
+import { DATA_CANARY, ENV_CANARY, FAST_MAP_CAP_USD, capUsd, gsdPreambleLine, hookDecisions, ledgerRows, recordedSpend, redactHome, runLiveCase, runLiveFastOnboarding, toolCompleted } from '../helpers/live-harness.ts';
 import type { LiveCaseResult, LiveCaseSpec, LiveOnboardingResult, ToolTrace } from '../helpers/live-harness.ts';
 
 const LIVE = process.env['AVARICE_LIVE'] === '1';
@@ -32,7 +32,7 @@ const FRAME =
 // ---------------------------------------------------------------------------------------------------------------
 
 function record(entry: Record<string, unknown>): void {
-  appendFileSync(RESULTS, JSON.stringify({ ...entry, at: new Date().toISOString() }) + '\n');
+  appendFileSync(RESULTS, redactHome(JSON.stringify({ ...entry, at: new Date().toISOString() })) + '\n');
 }
 
 function summarize(r: LiveCaseResult): Record<string, unknown> {
