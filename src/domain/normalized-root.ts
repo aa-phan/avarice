@@ -7,6 +7,22 @@ export class RootRefusedError extends TypeError {}
 
 export const trimTrailingSlashes = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, '') : path);
 
+// The lexical normal form of an absolute path: empty and `.` segments removed and each `..` applied to the segment before it, on the
+// string alone (no file system is consulted, so a symlink is not followed). Null for a relative path and for one that climbs above `/`.
+export function lexicalAbsolute(path: string): string | null {
+  if (!path.startsWith('/')) return null;
+  const kept: string[] = [];
+  for (const segment of path.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      if (kept.pop() === undefined) return null;
+    } else {
+      kept.push(segment);
+    }
+  }
+  return `/${kept.join('/')}`;
+}
+
 // Judges the trimmed value (`//` trims to ''), returns it, and throws a RootRefusedError, `{label} must be a normalized absolute path
 // below '/', got ...`, for anything that is not an absolute path made of non-empty, non-`.`, non-`..` segments.
 export function normalizedAbsoluteRoot(value: unknown, label: string): string {

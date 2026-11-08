@@ -12,6 +12,7 @@ import { isRefusedAgentCommand } from './conventions.ts';
 import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
+import { lexicalAbsolute } from './normalized-root.ts';
 import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation-scope.ts';
 
 export type NormalizedToolCall =
@@ -497,7 +498,24 @@ function checkGsdArgs(verb: string, rest: readonly string[], cwd: string, policy
 
 // Git names an object by path in an operand (`<rev>:<path>`, `:<path>`, `:<stage>:<path>`), so the path part is a read like any other.
 // A word git would split differently from this plain split (a brace, an index form that is a search or a pathspec) is refused.
+// Git reads the object name from the tree or the index, not the working copy, so the name is matched against the secret globs as written
+// as well as after resolution. A symlink in the working copy therefore cannot stand in for a secret path.
 const GIT_OBJECT_RULE = 'shell-git-object';
+
+// The lexical judgement of one object path against the secret globs, from each base git or the shell may resolve it from: the working
+// copy root (git's resolution) and the shell's directory (`./` and `../` forms). Null is no objection; a name that climbs above `/` is
+// outside the read set. A result outside the working copy is left to the canonical check that follows.
+function lexicalObjectRule(path: string, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
+  const staging = trimSlashes(policy.stagingPath);
+  const cwd = canon(shellCwd(call, policy));
+  if (cwd === null) return 'unresolvable-path';
+  for (const base of [staging, trimSlashes(cwd)]) {
+    const name = lexicalAbsolute(`${base}/${path}`);
+    if (name === null) return 'outside-read-set';
+    if (under(name, staging) && name !== staging && matchesAny(name.slice(staging.length + 1), policy.denyReadGlobs)) return 'deny-secret-read';
+  }
+  return null;
+}
 
 function checkGitObjects(operands: readonly string[], call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null {
   for (const operand of operands) {
@@ -506,6 +524,8 @@ function checkGitObjects(operands: readonly string[], call: Extract<NormalizedTo
     const path = operand.startsWith(':') ? (/^:[0-3]:/.test(operand) ? operand.slice(3) : operand.slice(1)) : operand.slice(operand.indexOf(':') + 1);
     // A wildcard or a backslash (a quoted word the lexer kept) makes git read an index form as a pathspec that matches more than the path judged.
     if (/^[/!(^]/.test(path) || /[*?[\\]/.test(path)) return GIT_OBJECT_RULE;
+    const lexical = lexicalObjectRule(path, call, policy, canon);
+    if (lexical !== null) return lexical;
     // Git resolves the path from the top of the working copy; `./` and `../` forms resolve from the shell's directory. Both must pass.
     const rule = checkRead([absolutize(policy.stagingPath, path), absolutize(shellCwd(call, policy), path)], policy, canon);
     if (rule !== null) return rule;
