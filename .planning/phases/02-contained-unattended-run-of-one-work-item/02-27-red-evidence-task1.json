@@ -1,0 +1,32 @@
+{
+  "command": "node --test test/unit/normalized-root.test.ts test/unit/hook-decision.test.ts test/integration/hook-git-secret-reads.test.ts",
+  "ranAgainst": "the plan base 2ac2b63 (src unchanged) plus the new tests: the `lexicalAbsolute` describe in test/unit/normalized-root.test.ts, the describe `symlink at a secret object name (G-02-H2)` in test/unit/hook-decision.test.ts and the describe of the same name in test/integration/hook-git-secret-reads.test.ts",
+  "exitCode": 1,
+  "reason": "checkGitObjects judges the path part of a git object name only through checkRead, which resolves working-copy symlinks and matches the secret globs on the resolved target. With `.env` a symlink to `config/dev.env` (live or dangling) the hook returns [allow, shell-identity] for `git show HEAD~1:.env`, `git show :.env` and `git show :0:.env` where [deny, deny-secret-read] is expected; with `secrets` a symlink to `vault` it allows `git show HEAD~1:secrets/key.txt`. Run at base: 219 tests, 210 pass, 9 fail (the count includes the file-level load failure of test/unit/normalized-root.test.ts).",
+  "classifier": "gsd-tools check tdd-red-evidence on the TAP report of test/unit/hook-decision.test.ts (target: 'a symlink at .env does not hide the name: every object form is denied deny-secret-read') returned RED_EVIDENCE_OK, reason target_test_failed: 155 tests, 152 pass, 3 fail.",
+  "failingFiles": [
+    "test/unit/normalized-root.test.ts",
+    "test/unit/hook-decision.test.ts",
+    "test/integration/hook-git-secret-reads.test.ts"
+  ],
+  "failingTests": [
+    "test/unit/normalized-root.test.ts (file-level: `lexicalAbsolute` is not exported yet, so the module does not link; the three `lexicalAbsolute` cases cannot run at base)",
+    "symlink at a secret object name (G-02-H2) [unit] > a symlink at .env does not hide the name: every object form is denied deny-secret-read (git show HEAD~1:.env is [allow, shell-identity])",
+    "symlink at a secret object name (G-02-H2) [unit] > a dangling symlink at .env does not hide the name either",
+    "symlink at a secret object name (G-02-H2) [unit] > a symlinked parent directory does not hide a directory-anchored secret glob, while cat of the resolved file stays allowed (git show HEAD~1:secrets/key.txt)",
+    "symlink at a secret object name (G-02-H2) [integration] > a live symlink at .env, with a different .env staged in the index > git show HEAD~1:.env: denied deny-secret-read, and real git does print the secret (hook verdict 'allow')",
+    "symlink at a secret object name (G-02-H2) [integration] > a live symlink at .env, with a different .env staged in the index > git show :.env: ... (hook verdict 'allow')",
+    "symlink at a secret object name (G-02-H2) [integration] > a live symlink at .env, with a different .env staged in the index > git show :0:.env: ... (hook verdict 'allow')",
+    "symlink at a secret object name (G-02-H2) [integration] > a dangling symlink at .env > git show HEAD~1:.env: ... (hook verdict 'allow')",
+    "symlink at a secret object name (G-02-H2) [integration] > a symlinked parent directory under a directory-anchored glob > git show HEAD~1:secrets/key.txt: ... (hook verdict 'allow')"
+  ],
+  "passingAtBase": [
+    "integration > a live symlink at .env ... > cat .env judges the resolved target and stays allowed",
+    "integration > a symlinked parent directory ... > cat secrets/other.txt judges the resolved file and stays allowed",
+    "unit > cat .env stays allowed with the symlink at .env; subdirectory-cwd cases; a name that climbs above the root; unchanged ordinary names; a symlink that points at a secret is denied for git and for cat",
+    "the sub-directory cwd cases and the dot-segment spellings deny at base only by accident (checkSegment path-checks the whole operand first and the last segment `.env` matches the glob); they are kept as regression guards",
+    "all earlier tests of the three files, including the whole CR-01 suites"
+  ],
+  "semanticAssessment": "Each failing target test executed and failed on the planned assertion for the intended reason: the repositories and fixtures were built (the `cat` cases that share them passed), and the observed value is the real hook, or the pure decision with a symlink in the canon, allowing a git object name whose path part is a working-copy symlink at a secret-glob name. The git-leak assertion (real git prints the sentinel) sits after the deny assertion in each integration test and was not reached at base; the diagnosis in .planning/debug/git-object-name-symlink-secret-bypass.md reproduced that git prints the secret for the same three repository shapes. The normalized-root failure is a link-time failure (named export missing), recorded for completeness and not used as RED authority.",
+  "summary": "Run of the three files at the base: 219 tests, 210 pass, 9 fail. The real hook prints nothing (allow) for `git show HEAD~1:.env`, `git show :.env`, `git show :0:.env`, the dangling-link form and `git show HEAD~1:secrets/key.txt` on repositories whose working copy holds a symlink at the secret name."
+}

@@ -1,10 +1,11 @@
 // CR-01: the secret-glob read denial must hold for the admitted git read commands. This file runs the real hook entry and
 // real git on scratch repositories under the temp directory, never on the AVARICE checkout: each form is judged by the hook,
 // and the same words are run by git to show what the refusal protects (no refusal here is vacuous).
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
 import { decideToolCall } from '../../src/domain/hook-decision.ts';
@@ -186,5 +187,90 @@ describe('case variant of a secret path', () => {
     const printed = gitOutput(r, 'git show HEAD:.ENV').includes(SENTINEL);
     t.diagnostic(`git show HEAD:.ENV printed the sentinel: ${printed ? 'yes' : 'no'}`);
     if (printed) assert.equal(decide(r, 'git show HEAD:.ENV').decision, 'deny');
+  });
+});
+
+// G-02-H2: git reads the object name from history or the index, not from the working copy, so a working-copy symlink at a secret
+// name (live, dangling, or a symlinked parent directory) must not make the hook judge another path than the one git reads.
+describe('symlink at a secret object name (G-02-H2)', () => {
+  const GLOBS = ['**/.env', '**/*.pem', '**/secrets/**'];
+  const SYMLINK_COMMIT = ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'symlink'];
+
+  // A repository from makeScratchRepo plus a hook fixture whose policy has the symlink-test glob set and points at the repository.
+  function symlinkRig(files: Record<string, string>): Rig {
+    const repo = makeScratchRepo({ files });
+    const fx = makeHookFixture({ policy: { stagingPath: repo.path, denyReadGlobs: GLOBS } });
+    cleanup.push(
+      () => repo.dispose(),
+      () => rmSync(fx.dir, { recursive: true, force: true }),
+    );
+    return { repo, fx, blob: '' };
+  }
+
+  // Replaces a tracked path with a symlink to `target` and commits it, so history holds the real content and the working copy holds the link.
+  function replaceWithLink({ repo }: Rig, name: string, target: string): void {
+    rmSync(join(repo.path, name), { recursive: true, force: true });
+    symlinkSync(target, join(repo.path, name));
+    git(repo.path, ['add', '-A']);
+    git(repo.path, SYMLINK_COMMIT);
+  }
+
+  describe('a live symlink at .env, with a different .env staged in the index', () => {
+    let r: Rig;
+    before(() => {
+      r = symlinkRig({ '.env': `TOKEN=${SENTINEL}-hist\n`, 'config/dev.env': 'DEV=1\n' });
+      replaceWithLink(r, '.env', 'config/dev.env');
+      // Stage a real `.env` behind the link: the index entry is a blob, the working copy and HEAD hold a symlink.
+      const staged = join(r.repo.base, 'staged-env.txt');
+      writeFileSync(staged, `TOKEN=${SENTINEL}-idx\n`);
+      const blob = git(r.repo.path, ['hash-object', '-w', staged]).trim();
+      git(r.repo.path, ['update-index', '--add', '--cacheinfo', `100644,${blob},.env`]);
+    });
+
+    for (const [command, marker] of [
+      ['git show HEAD~1:.env', `${SENTINEL}-hist`],
+      ['git show :.env', `${SENTINEL}-idx`],
+      ['git show :0:.env', `${SENTINEL}-idx`],
+    ] as const) {
+      it(`${command}: denied deny-secret-read, and real git does print the secret`, () => {
+        assert.equal(hookVerdict(r, command), 'deny-secret-read');
+        assert.ok(gitOutput(r, command).includes(marker), `${command} printed no sentinel: the refusal would be vacuous`);
+      });
+    }
+
+    it('cat .env judges the resolved target and stays allowed', () => {
+      assert.equal(hookVerdict(r, 'cat .env'), 'allow');
+    });
+  });
+
+  describe('a dangling symlink at .env', () => {
+    let r: Rig;
+    before(() => {
+      r = symlinkRig({ '.env': `TOKEN=${SENTINEL}-hist\n`, 'README.md': 'x\n' });
+      replaceWithLink(r, '.env', 'nowhere.txt');
+    });
+
+    it('git show HEAD~1:.env: denied deny-secret-read, and real git does print the secret', () => {
+      assert.equal(hookVerdict(r, 'git show HEAD~1:.env'), 'deny-secret-read');
+      assert.ok(gitOutput(r, 'git show HEAD~1:.env').includes(SENTINEL));
+    });
+  });
+
+  describe('a symlinked parent directory under a directory-anchored glob', () => {
+    let r: Rig;
+    before(() => {
+      r = symlinkRig({ 'secrets/key.txt': `KEY=${SENTINEL}-key\n`, 'vault/other.txt': 'other\n' });
+      mkdirSync(join(r.repo.path, 'vault'), { recursive: true });
+      replaceWithLink(r, 'secrets', 'vault');
+    });
+
+    it('git show HEAD~1:secrets/key.txt: denied deny-secret-read, and real git does print the secret', () => {
+      assert.equal(hookVerdict(r, 'git show HEAD~1:secrets/key.txt'), 'deny-secret-read');
+      assert.ok(gitOutput(r, 'git show HEAD~1:secrets/key.txt').includes(SENTINEL));
+    });
+
+    it('cat secrets/other.txt judges the resolved file and stays allowed', () => {
+      assert.equal(hookVerdict(r, 'cat secrets/other.txt'), 'allow');
+    });
   });
 });

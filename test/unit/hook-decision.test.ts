@@ -1213,3 +1213,61 @@ describe('git object reads and output forms (CR-01)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// G-02-H2: git reads `<rev>:<path>`, `:<path>` and `:N:<path>` by the literal name from the revision tree or the index,
+// so a working-copy symlink must not stand in for a secret name.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('symlink at a secret object name (G-02-H2)', () => {
+  const GLOBS = ['**/.env', '**/*.pem', '**/secrets/**'];
+  const globPolicy = (): HookPolicy => policy({ denyReadGlobs: GLOBS });
+  const verdictWith = (links: Readonly<Record<string, string>>, command: string, cwd = STAGING): [string, string | undefined] => {
+    const d = decide(shell(command, cwd), globPolicy(), makeCanon(links));
+    return [d.decision, d.rule];
+  };
+  const FILE_LINK = { [`${STAGING}/.env`]: `${STAGING}/config/dev.env` };
+  const DANGLING = { [`${STAGING}/.env`]: `${STAGING}/nowhere.txt` };
+  const DIR_LINK = { [`${STAGING}/secrets`]: `${STAGING}/vault` };
+  const OBJECT_FORMS = ['git show HEAD~1:.env', 'git show HEAD:.env', 'git show :.env', 'git show :0:.env'];
+
+  it('a symlink at .env does not hide the name: every object form is denied deny-secret-read', () => {
+    for (const command of OBJECT_FORMS) assert.deepEqual(verdictWith(FILE_LINK, command), ['deny', 'deny-secret-read'], command);
+  });
+
+  it('cat of the same symlink still judges the resolved target, so cat .env stays allowed', () => {
+    assert.deepEqual(verdictWith(FILE_LINK, 'cat .env'), ['allow', 'shell-identity']);
+  });
+
+  it('a dangling symlink at .env does not hide the name either', () => {
+    for (const command of OBJECT_FORMS) assert.deepEqual(verdictWith(DANGLING, command), ['deny', 'deny-secret-read'], command);
+  });
+
+  it('a symlinked parent directory does not hide a directory-anchored secret glob, while cat of the resolved file stays allowed', () => {
+    assert.deepEqual(verdictWith(DIR_LINK, 'git show HEAD~1:secrets/key.txt'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(DIR_LINK, 'cat secrets/key.txt'), ['allow', 'shell-identity']);
+  });
+
+  it('from a subdirectory the ./ and ../ spellings and the plain name are all denied', () => {
+    const sub = `${STAGING}/sub`;
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:../.env', sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:.env', sub), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(FILE_LINK, 'git show HEAD:./../.env', sub), ['deny', 'deny-secret-read']);
+  });
+
+  it('a name that climbs above the filesystem root is outside-read-set', () => {
+    assert.deepEqual(verdictWith({}, 'git show HEAD:../../../../../../x'), ['deny', 'outside-read-set']);
+  });
+
+  it('unchanged: ordinary names, an example file and the root tree stay allowed with the glob set in force', () => {
+    for (const command of ['git show HEAD:src/a.ts', 'git show HEAD:.env.example', 'git show HEAD:']) {
+      assert.deepEqual(verdictWith(FILE_LINK, command), ['allow', 'shell-identity'], command);
+    }
+  });
+
+  it('unchanged: a symlink that points AT a secret is still denied for git and for cat', () => {
+    const toSecret = { [`${STAGING}/link.txt`]: `${STAGING}/.env` };
+    assert.deepEqual(verdictWith(toSecret, 'git show HEAD:link.txt'), ['deny', 'deny-secret-read']);
+    assert.deepEqual(verdictWith(toSecret, 'cat link.txt'), ['deny', 'deny-secret-read']);
+  });
+});
