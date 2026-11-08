@@ -1,0 +1,22 @@
+{
+  "command": "node --test test/integration/run-resume.test.ts",
+  "ranAgainst": "the plan base plus the Task 1 GREEN commit ce09fa9 (run-resume.ts, run-workspace port and adapter, and reconcileGated unchanged) plus four new describes in test/integration/run-resume.test.ts, each on its own killed run",
+  "exitCode": 1,
+  "reason": "At base a started launch with no session ID, or a host with no reap, is skipped by a `continue` in the reap prelude: `resume --wait` re-launches, discards and finishes (exit 0, ready_for_review) instead of exiting 70, and reconcileRun with a host that has no reap returns ok. A commit that repeats the supervisor's message and trailers on top of the supervisor's commit is accepted as the item's commit (exit 0, ready_for_review) instead of blocking with enforcement_failure (exit 3), because reconcileGated checks trailers alone. HeadTrailers has no `parents` field, so both parents assertions see undefined.",
+  "failingFiles": [
+    "test/integration/run-resume.test.ts"
+  ],
+  "failingTests": [
+    "a started launch the resume cannot reap stops the resume with every row still started (R-IN-05, T-02-105) > a launch row with no session ID: `resume --wait` exits 70, the row stays started, none is marked interrupted, and the failed step names the missing session ID (0 !== 70)",
+    "a host composed without reap cannot end a started launch: the reconcile returns an error before it marks any row (R-IN-05, T-02-105) > reconcileRun fails, the launch row stays started, no row is marked interrupted, and the failed reconcile step is recorded (reconciled.ok true !== false)",
+    "a commit that carries this attempt's trailers but sits on another parent is not the item's commit (R-IN-08, T-02-57) > a second commit repeating the first one's message and trailers: the run blocks with enforcement_failure, records no commit step and hands nothing off (0 !== 3)",
+    "the HEAD commit of a clone names its parents (R-IN-08) > an ordinary commit has one parent: the commit before it (parents undefined)",
+    "the HEAD commit of a clone names its parents (R-IN-08) > a merge has two parents, first parent first (parents undefined)"
+  ],
+  "passingAtBase": [
+    "the 25 earlier tests of the file, including the trailer-recognition case (a single commit on the snapshot is still recorded and reaches ready_for_review) and the failed-reap case",
+    "the fixture tests of the new describes (the host is alive, the launch row is started, the second commit sits on the supervisor's commit)"
+  ],
+  "semanticAssessment": "The target tests executed (31 tests discovered, none skipped) and failed on the planned assertions for the intended reasons: the unreapable launch is walked past instead of stopping the resume, the same-trailer commit on a foreign parent is accepted as the item's commit, and headTrailers returns no parents. No import, syntax or fixture fault is involved; each describe builds its own real killed run, so the cases do not contaminate each other. One further failure, `with the session ID restored the next resume reaps the host`, is a knock-on of the session-ID case at base (that case already re-ran and marked the rows interrupted, so there is nothing left to reap); it is expected to pass once the session-ID case stops the resume.",
+  "summary": "Run at the base: 31 tests reported, 25 pass, 6 fail (5 target assertions and one dependent restore case)."
+}

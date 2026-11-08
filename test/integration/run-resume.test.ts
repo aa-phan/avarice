@@ -6,7 +6,11 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
+import { reconcileRun } from '../../src/app/run-resume.ts';
+import type { RunStageContext } from '../../src/app/run-stages/stage.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import type { AgentHost } from '../../src/ports/agent-host.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -15,6 +19,7 @@ import {
   RUN_EXPIRY_WAIT_MS,
   ledgerInterruption,
   normalizeRunResult,
+  openRaw,
   resumeRunCli,
   rows,
   runRunWithFault,
@@ -430,6 +435,154 @@ describe('a commit on the clone that the supervisor did not make for the open at
     assert.deepEqual(rows(f.roots, 'SELECT class FROM decisions WHERE run_id = ?', runId), [{ class: 'permission' }]);
     assert.equal(rows<{ n: number }>(f.roots, "SELECT count(*) AS n FROM events WHERE run_id = ? AND type = 'containment.finding'", runId)[0]?.n, 1);
     assert.equal(git(f.repo.path, ['branch', '--list', `avarice/${runId}`]).trim(), '', 'no ref was handed to the source');
+  });
+});
+
+describe('a commit that carries this attempt\'s trailers but sits on another parent is not the item\'s commit (R-IN-08, T-02-57)', () => {
+  const f = fixture(ONE_CHECK);
+  const killed = runRunWithFault(f.roots, f.repo, f.brief, 'mid-commit', FIX);
+  const { runId } = killed;
+  const clone = cloneOf(f, runId);
+  const supervisorsCommit = git(clone, ['rev-parse', 'HEAD']).trim();
+
+  it('a second commit repeating the first one\'s message and trailers: the run blocks with enforcement_failure, records no commit step and hands nothing off', () => {
+    git(clone, ['-c', 'user.name=Bypass', '-c', 'user.email=bypass@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-q', '-C', 'HEAD']);
+    assert.equal(git(clone, ['rev-parse', 'HEAD~1']).trim(), supervisorsCommit, 'the fixture: the copy sits on the supervisor\'s commit');
+    sleepSync(RUN_EXPIRY_WAIT_MS);
+    const resumed = resumeRunCli(f.roots, runId, {});
+    assert.equal(resumed.code, 3, resumed.stdout + resumed.stderr);
+    assert.equal(lines(resumed.stdout).at(-1), `run ${runId}: blocked_on_decision (enforcement_failure)`);
+    assert.deepEqual(stepsNamed(f, runId, 'commit'), []);
+    assert.equal(stepsNamed(f, runId, 'handoff:fetch').length, 0);
+    assert.equal(runRow(f, runId).reason, 'enforcement_failure');
+    assert.deepEqual(rows(f.roots, 'SELECT class FROM decisions WHERE run_id = ?', runId), [{ class: 'permission' }]);
+    assert.equal(git(f.repo.path, ['branch', '--list', `avarice/${runId}`]).trim(), '', 'no ref was handed to the source');
+  });
+});
+
+describe('the HEAD commit of a clone names its parents (R-IN-08)', () => {
+  const repo = makeRunRepo();
+  cleanup.push(repo.base);
+  const workspace = new CloneRunWorkspace();
+  const identity = ['-c', 'user.name=Parents', '-c', 'user.email=parents@example.invalid', '-c', 'commit.gpgsign=false'];
+
+  it('an ordinary commit has one parent: the commit before it', () => {
+    const root = git(repo.path, ['rev-parse', 'HEAD']).trim();
+    git(repo.path, [...identity, 'commit', '--allow-empty', '-q', '-m', 'ordinary']);
+    const trailers = workspace.headTrailers(repo.path);
+    assert.ok(trailers.ok, JSON.stringify(trailers));
+    assert.deepEqual(trailers.value.parents, [root]);
+  });
+
+  it('a merge has two parents, first parent first', () => {
+    const first = git(repo.path, ['rev-parse', 'HEAD']).trim();
+    git(repo.path, ['checkout', '-q', '-b', 'side', 'HEAD~1']);
+    git(repo.path, [...identity, 'commit', '--allow-empty', '-q', '-m', 'side']);
+    const side = git(repo.path, ['rev-parse', 'HEAD']).trim();
+    git(repo.path, ['checkout', '-q', '-']);
+    git(repo.path, [...identity, 'merge', '--no-ff', '-q', '-m', 'merge', 'side']);
+    const trailers = workspace.headTrailers(repo.path);
+    assert.ok(trailers.ok, JSON.stringify(trailers));
+    assert.deepEqual(trailers.value.parents, [first, side]);
+  });
+});
+
+describe('a host composed without reap cannot end a started launch: the reconcile returns an error before it marks any row (R-IN-05, T-02-105)', () => {
+  const f = fixture(ONE_CHECK);
+  const killed = runRunWithFault(f.roots, f.repo, f.brief, 'mid-invocation:run', FIX);
+  const { runId } = killed;
+  const survivor = Number(readFileSync(runSurvivorPidFile(f.roots), 'utf8').trim());
+  survivors.push(survivor);
+
+  it('reconcileRun fails, the launch row stays started, no row is marked interrupted, and the failed reconcile step is recorded', async () => {
+    sleepSync(RUN_EXPIRY_WAIT_MS);
+    const fake = new FakeRunHost({});
+    const noReap: AgentHost = { descriptor: fake.descriptor, invoke: (request, signal) => fake.invoke(request, signal) };
+    const composed = createDeps(profileEnv(f.roots), { host: noReap });
+    assert.ok(composed.ok, 'composition');
+    let holderFence: number | undefined;
+    try {
+      const { deps } = composed.value;
+      const lease = deps.ledger.acquireRunLease(runId, 'test-holder', 60_000, Date.now());
+      assert.ok(lease.ok, JSON.stringify(lease));
+      const fence = lease.value.fence;
+      holderFence = fence;
+      const ctx: RunStageContext = {
+        deps,
+        runId,
+        fence,
+        signal: new AbortController().signal,
+        checkpoint: (nextAction, extra) => deps.ledger.recordRunCheckpoint(runId, { fence }, { nextAction, nowMs: Date.now(), ...(extra ?? {}) }),
+        transition: (row, to, nextAction, options = {}) => deps.ledger.transitionRun(runId, { version: row.version, fence }, { to, nextAction, nowMs: Date.now(), ...options }),
+        note: () => undefined,
+      };
+      const reconciled = await reconcileRun(ctx);
+      assert.equal(reconciled.ok, false, 'a launch that cannot be reaped stops the reconcile');
+    } finally {
+      if (holderFence !== undefined) composed.value.deps.ledger.releaseRunLease(runId, 'test-holder', holderFence);
+      composed.value.close();
+    }
+    assert.deepEqual(stepsNamed(f, runId, 'launch:run').map((s) => [s.attempt, s.status]), [[1, 'started']], 'every row is still started');
+    assert.equal(stepsNamed(f, runId, 'resume:reconcile').filter((s) => s.status === 'failed').length, 1, 'the failed reconcile step is recorded');
+    assert.ok(isAlive(survivor), 'the host was not touched');
+  });
+});
+
+describe('a started launch the resume cannot reap stops the resume with every row still started (R-IN-05, T-02-105)', () => {
+  const f = fixture(ONE_CHECK);
+  const killed = runRunWithFault(f.roots, f.repo, f.brief, 'mid-invocation:run', FIX);
+  const { runId } = killed;
+  const clone = cloneOf(f, runId);
+  const survivor = Number(readFileSync(runSurvivorPidFile(f.roots), 'utf8').trim());
+  survivors.push(survivor);
+  const launched = stepsNamed(f, runId, 'launch:run')[0]?.result ?? {};
+  const sessionId = launched['sessionId'];
+
+  const setLaunchResult = (body: Record<string, unknown>): void => {
+    const db = openRaw(f.roots, false);
+    try {
+      db.prepare("UPDATE run_steps SET result_json = ? WHERE run_id = ? AND step = 'launch:run' AND attempt = 1").run(JSON.stringify(body), runId);
+    } finally {
+      db.close();
+    }
+  };
+  const interruptedRows = (): number => stepsNamed(f, runId, 'launch:run').filter((s) => s.status === 'interrupted').length;
+  const failedReconcile = (): StepDb[] => stepsNamed(f, runId, 'resume:reconcile').filter((s) => s.status === 'failed');
+
+  it('the fixture: the host is alive and its started launch row records a session ID', () => {
+    assert.equal(typeof sessionId, 'string');
+    assert.ok(isAlive(survivor), 'the host outlived its supervisor');
+    assert.deepEqual(stepsNamed(f, runId, 'launch:run').map((s) => [s.attempt, s.status]), [[1, 'started']]);
+  });
+
+  it('a launch row with no session ID: `resume --wait` exits 70, the row stays started, none is marked interrupted, and the failed step names the missing session ID', () => {
+    const { sessionId: _removed, ...withoutSession } = launched;
+    setLaunchResult(withoutSession);
+    sleepSync(RUN_EXPIRY_WAIT_MS);
+    const before = runRow(f, runId);
+    const resumed = resumeRunCli(f.roots, runId, FIX);
+    assert.equal(resumed.code, 70, resumed.stdout + resumed.stderr);
+    assert.match(resumed.stderr, /could not be resumed/);
+    assert.match(resumed.stderr, /session ID/);
+    assert.deepEqual(stepsNamed(f, runId, 'launch:run').map((s) => [s.attempt, s.status]), [[1, 'started']], 'every row is still started');
+    assert.equal(interruptedRows(), 0);
+    assert.match(String(failedReconcile().at(-1)?.result['detail']), /session ID/, 'the failed reconcile step names the missing session ID');
+    assert.deepEqual(runRow(f, runId), before, 'the run did not move');
+    assert.ok(isAlive(survivor), 'the host was not touched');
+    assert.equal(attemptsOf(f, runId).length, 1, 'no second attempt');
+    assert.equal(git(clone, ['rev-parse', 'HEAD']).trim(), f.pin, 'nothing was committed');
+  });
+
+  it('with the session ID restored the next resume reaps the host and finishes as the failed-reap case does', () => {
+    setLaunchResult(launched);
+    const resumed = resumeRunCli(f.roots, runId, FIX);
+    assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+    assert.equal(lines(resumed.stdout).at(-1), `run ${runId}: ready_for_review`);
+    assert.equal(isAlive(survivor), false, 'the host was ended');
+    assert.deepEqual(stepsNamed(f, runId, 'launch:run').map((s) => [s.attempt, s.status]), [
+      [1, 'interrupted'],
+      [2, 'completed'],
+    ]);
   });
 });
 
