@@ -393,6 +393,19 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.equal(step?.result['sessionId'], sessionId, 'the session ID is recorded in the ledger, so a resume can find the process');
   });
 
+  it('keeps the final result text out of every ledger row: events and step results carry counts and codes, never the model text (AUT-1)', () => {
+    const marker = 'ZQX-RESULT-TEXT-MARK';
+    const s = setup({ transcript: 'success', mapFiles: 'all', resultText: `Done.\nWhich ${marker}?\n1. A\n2. B` });
+    assert.equal(onboard(s).code, 0);
+    const events = rows<{ data_json: string }>(s.roots, 'SELECT data_json FROM events');
+    const steps = rows<{ result_json: string }>(s.roots, 'SELECT result_json FROM onboarding_steps');
+    assert.ok(events.length > 0 && steps.length > 0, 'the ledger has rows to search');
+    assert.ok(events.some((e) => e.data_json.includes('"outcome"')), 'an invocation.finished event is among them');
+    assert.equal(events.filter((e) => e.data_json.includes(marker)).length, 0, 'no event holds the result text');
+    assert.equal(steps.filter((r) => r.result_json.includes(marker)).length, 0, 'no step result holds the result text');
+    assert.equal(steps.filter((r) => r.result_json.includes('Which')).length, 0);
+  });
+
   it('starts the host with the allowlisted environment and no credential from the parent', () => {
     const s = setup({ transcript: 'success', mapFiles: 'all' });
     assert.equal(onboard(s).code, 0);
@@ -968,6 +981,29 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
       assert.deepEqual(refused.ok ? null : refused.error, { kind: 'invalid', field: 'resumeSessionId', reason: 'a session ID must be a UUID' }, bad);
     }
     assert.equal(s.fake.started(), false);
+  });
+
+  it('returns the tail of the final result text as outcome.question, and nowhere else in the outcome', async () => {
+    const asked = 'I need a decision.\nWhich wording ZQX-QUESTION-MARK?\n1. A\n2. B';
+    const s = setupRun({ transcript: 'success', resultText: asked });
+    const launched = await s.adapter.invoke(requestFor(s), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    assert.equal(launched.value.question, asked);
+    const { question, ...rest } = launched.value;
+    assert.equal(question, asked);
+    assert.ok(!JSON.stringify(rest).includes('ZQX-QUESTION-MARK'), 'the details and every other field carry no result text');
+
+    const long = setupRun({ transcript: 'success', resultText: `${'a'.repeat(9000)}${asked}` });
+    const cut = await long.adapter.invoke(requestFor(long), new AbortController().signal);
+    assert.ok(cut.ok);
+    assert.equal(cut.value.question?.length, 2000);
+    assert.ok(cut.value.question?.endsWith(asked));
+
+    const silent = setupRun({ transcript: null });
+    const none = await silent.adapter.invoke(requestFor(silent), new AbortController().signal);
+    assert.ok(none.ok);
+    assert.equal(none.value.question, undefined);
+    assert.equal('question' in none.value, false);
   });
 
   it('lets the resumed session win when the request also names a session, so the launch line never carries both flags', async () => {

@@ -20,6 +20,8 @@ export interface FakeClaudeScript {
   stamp?: string | false;
   writes?: Readonly<Record<string, string>>;
   extraLines?: readonly string[];
+  // Replaces the `result` text of the transcript's final result line (a pause question, for example).
+  resultText?: string;
   sleepMs?: number;
   sleepFirstOnly?: boolean;
   chunkBytes?: number;
