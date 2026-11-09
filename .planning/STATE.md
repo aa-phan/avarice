@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-26-PLAN.md
-last_updated: "2026-11-09T14:42:58.625Z"
+stopped_at: Halted 03-27 at the tracer gate (s17-s51 failed twice, item A haiku); needs a fix plan or owner decision
+last_updated: "2026-11-09T15:35:31.467Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 9fad6628dc4d8bb9e25832b437690e692d90c91e
+state_head: 16715f5a590f0d13f5612eb7c0175cd8d1811c32
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 87
+  completed_plans: 88
 ---
 
 # Project State
@@ -321,6 +321,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-26: a blocked_on_decision run that isBlockedRunContinuable is resumable, and resume --wait lets the supervisor take it up — decide starts no supervisor under a live lease, so an answer written under a killed supervisor's lease waited for nobody; found by the race suite (kill at the block), fixed RED-first
 - [Phase 03]: 03-26: RECONCILE_KILL_POINTS names the paused stage's reconcile checkpoint with its own suite (run-reconcile); the kill-point lists stay separate and the coverage test checks their union and that each has its own suite
 - [Phase 03]: 03-26: the test CLI holds a process at an armed fault point (AVARICE_TEST_HOLD) and logs exit codes (AVARICE_TEST_EXIT_LOG), test-only, so a test writes in the window between two writes of a detached supervisor
+- [Phase 03]: 03-27: the tracer gate halted the plan after its one re-run; no expansion case was started — s17-s51 failed twice on the same item (A, haiku), a real verdict, so the executor protocol forbids expanding and the orchestrator's rule forbids a second re-run
+- [Phase 03]: 03-27: no requirement marked complete — CON-15, AUT-3, AUT-4, AUT-10, AUT-16, RC-7 and RC-8 are each declared by other incomplete plans and the live evidence for them is incomplete or negative
 
 ### Pending Todos
 
@@ -353,6 +355,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.4]: A host that ends with no result event is charged its full reservation even when it spent nothing (02-35-REVIEW WR-04); IN-01..IN-06 untriaged (UAT test 4, deferred)
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
+- Plan 03-27 halted at its tracer gate: s17-s51 failed twice live because item A (small, so haiku) did not complete; S-50, S-18, S-21, S-52, CS-5, CS-15 not started; 3.4561 USD of the plan's 6.00 spent (Phase 3: 4.5488 of 25). A fix plan or an owner decision on haiku for small items is needed before plans that depend on 03-27 run.
 
 ### Quick Tasks Completed
 
@@ -373,6 +376,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T14:42:58.417Z
-Stopped at: Completed 03-26-PLAN.md
+Last session: 2026-11-09T15:35:31.257Z
+Stopped at: Halted 03-27 at the tracer gate (s17-s51 failed twice, item A haiku); needs a fix plan or owner decision
 Resume file: None
