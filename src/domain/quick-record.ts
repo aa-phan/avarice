@@ -78,3 +78,21 @@ export function storedText(text: string, max: number): string {
   const clean = text.replace(CONTROL, '');
   return clean.length <= max ? clean : clean.slice(0, max);
 }
+
+// The quick PLAN a unit wrote (plan 03-06; D-07 stage 2). Model-written text read for the paths it names, the decision checkpoints it
+// declares and the acceptance IDs it cites. Stub: filled in with the G1 tracer.
+export interface QuickPlanCheckpoint {
+  hasAutoSelect: boolean;
+  optionIds: string[];
+}
+
+export interface QuickPlan {
+  filesModified: string[];
+  taskFiles: string[];
+  decisionCheckpoints: QuickPlanCheckpoint[];
+  acceptanceRefs: string[];
+}
+
+export function parseQuickPlan(_text: string | null): QuickPlan | null {
+  return null;
+}

@@ -4,6 +4,7 @@
 // a deep-equal verdict whatever order they arrive in.
 import type { AcceptanceMapping, DeltaBlocking, EvidenceStatus } from './evidence.ts';
 import { matchesAny } from './glob.ts';
+import type { QuickPlan } from './quick-record.ts';
 import type { InventoryFailure } from './test-inventory.ts';
 
 export interface GateFailure {
@@ -182,4 +183,26 @@ export function evaluateG4(facts: G4Facts): GateVerdict {
     fail('budgets-within', `budgets exceeded: ${sorted(facts.budgetsExceeded).join(', ')}`);
   }
   return { passed: failures.length === 0, failures };
+}
+
+export const G1_RULES = [
+  'plan-present',
+  'plan-within-write-scope',
+  'plan-within-spec',
+  'decision-checkpoint-unresolved',
+  'owner-choice-unasked',
+  'plan-cites-acceptance',
+] as const;
+
+export interface G1Facts {
+  plan: QuickPlan | null;
+  globs: { write: readonly string[]; create: readonly string[]; protected: readonly string[] };
+  itemSpec: { files: readonly string[]; derived: readonly string[] };
+  outcome: string;
+  ownerChoices: ReadonlyArray<{ acceptanceId: string; key: string; answered: boolean }>;
+  itemAcceptance: readonly string[];
+}
+
+export function evaluateG1(_facts: G1Facts): GateVerdict {
+  return { passed: true, failures: [] };
 }
