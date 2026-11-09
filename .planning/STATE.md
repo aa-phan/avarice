@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-34-PLAN.md
-last_updated: "2026-11-09T17:36:43.521Z"
+stopped_at: Completed 03-35-PLAN.md
+last_updated: "2026-11-09T18:34:55.080Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 152e5b0ee0052e5f38da97ae7dca29ab1cb3c485
+state_head: 6a39c74868c9c47ee2b9d47c8a9db8ebb3b9a438
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 97
-  completed_plans: 89
+  completed_plans: 90
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 28 of 36 (03-27 halted; gap plans 03-34..03-36 ready, then 03-28..03-33)
-Status: Ready to execute (gap closure first: /gsd-execute-phase 3 --gaps-only)
-Last activity: 2026-11-09 — gap-closure plans 03-34..03-36 created and verified for the 03-27 halt
+Plan: 03-36 next (03-27 halted; gap plans 03-34 and 03-35 complete; then 03-28..03-33)
+Status: Ready to execute (gap closure: /gsd-execute-phase 3 --gaps-only runs 03-36 next)
+Last activity: 2026-11-09 — plan 03-35 complete: owner chose proceed-haiku after two probe-small-1 runs (0.1838 USD; group 3.6399 of 10.00, Phase 3 4.7326 of 25)
 
 Progress: [███░░░░░░░] 25%
 
@@ -144,6 +144,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P25 | 25 min | 2 tasks | 11 files |
 | Phase 03 P26 | 70 min | 3 tasks | 14 files |
 | Phase 03 P34 | 75 min | 3 tasks | 12 files |
+| Phase 03 P35 | 45 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -328,6 +329,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-09: plan 03-27's live spend cap rises from 6.00 to 10.00 USD for its resumed cases (3.4561 USD already spent); the Phase 3 ceiling stays 25 USD
 - [Phase 03]: 03-27 run 2 raised one invocation's cost cap from 1.60 to 2.00 USD (inside the plan and phase caps) against the orchestrator's no-raise instruction; recorded so the gap plan sets explicit per-case caps
 - [Phase 03]: Plan 03-34: the small-unit failure is fixed in the prompt, the shell refusal reasons and the run agents' note; modelBySize, the loop limit and every containment list are unchanged — Owner decision 1 of 2026-11-09 forbids the quick fixes; the cause is a self-contradicting prompt, unstated shell rules and bare refusals, proven offline, live proof is plan 03-35
+- [Phase 03]: Owner decision (plan 03-35 Task 3, 2026-11-09): proceed-haiku. Small items stay on haiku (D-10, RC-8 map unchanged) and plan 03-36 runs as planned; probe-small-2 and -3 not run — Both probe-small-1 runs completed the whole quick workflow on haiku for 0.0819 and 0.1019 USD with no refusal loop or decision; the only failed fact is an extra test/slug.test.ts edit attributed to the probe brief's fixed Behavior text and inside the write set. Plan 03-36's itemsBriefText cases carry the same sentence
 
 ### Pending Todos
 
@@ -381,6 +383,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T17:36:42.963Z
-Stopped at: Completed 03-34-PLAN.md
+Last session: 2026-11-09T18:34:54.883Z
+Stopped at: Completed 03-35-PLAN.md
 Resume file: None
