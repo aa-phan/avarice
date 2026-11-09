@@ -7,11 +7,16 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { AppDeps } from '../../src/app/deps.ts';
+import { reconcileRun } from '../../src/app/run-resume.ts';
+import { runSupervisor } from '../../src/app/run-service.ts';
 import { RUN_ANSWER_DATA_LINE } from '../../src/app/run-gsd-config.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import { main } from '../../src/cli/main.ts';
 import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
 import { ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
+import { FakeRunHost, itemOfPrompt } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -40,9 +45,9 @@ interface Blocked {
 }
 
 // `start --brief ... --wait` through the test CLI: the detached supervisor runs the scenario and stops with B blocked on its question.
-function startBlocked(host: FakeRunOptions = s17Host()): Blocked {
+function startBlocked(host: FakeRunOptions = s17Host(), extraArgs: readonly string[] = []): Blocked {
   const f = s17Fixture(cleanup);
-  const result = runCli(['start', '--brief', f.brief, '--policy', 'routine', '--wait'], {
+  const result = runCli(['start', '--brief', f.brief, '--policy', 'routine', ...extraArgs, '--wait'], {
     roots: f.roots,
     cwd: f.repo.path,
     entry: TEST_CLI,
@@ -188,5 +193,162 @@ describe('SC3 offline: decide answers, the supervisor unparks B and resumes B\'s
       ],
     );
     assert.equal(parkRefOf(clone, runId, 'B'), null, 'the park ref was dropped after the commit');
+  });
+});
+
+// ---- the fallbacks, in this process -----------------------------------------------------------------------------------------------------------
+// The ledger and the host of a profile in this process, so a test answers the decision itself and reads every call the host got.
+
+function inProcess(roots: CliRoots, run: FakeRunOptions): { host: FakeRunHost; deps: AppDeps; close: () => void } {
+  const host = new FakeRunHost(run);
+  const composed = createDeps(profileEnv(roots), { host });
+  assert.ok(composed.ok, 'composition');
+  return { host, deps: composed.value.deps, close: composed.value.close };
+}
+
+function answer(deps: AppDeps, runId: string, decisionId: string, text: string): void {
+  const answered = deps.ledger.answerDecision({ runId, decisionId, answer: text, answeredBy: 'owner', channel: 'terminal', expectContractVersion: 1, nowMs: Date.now() });
+  assert.ok(answered.ok, JSON.stringify(answered));
+}
+
+// Answers the open decision with option 2 and runs a supervisor on the blocked run in this process; returns the calls the host got and where the run ended.
+async function answerAndRun(b: Blocked, host: FakeRunOptions): Promise<{ calls: FakeRunHost['calls']; state: string; reason: string | null }> {
+  const live = inProcess(b.f.roots, host);
+  try {
+    answer(live.deps, b.runId, b.decisionId, '2');
+    const outcome = await runSupervisor(live.deps, b.runId, { prelude: reconcileRun });
+    assert.ok(outcome.ok, JSON.stringify(outcome));
+    return { calls: [...live.host.calls], state: outcome.value.state, reason: outcome.value.reason ?? null };
+  } finally {
+    live.close();
+  }
+}
+
+const callsOfB = (calls: FakeRunHost['calls']): FakeRunHost['calls'] => calls.filter((c) => itemOfPrompt(c.prompt) === 'B');
+
+const stepResults = (roots: CliRoots, runId: string, step: string): Array<Record<string, unknown>> =>
+  ledgerRows<{ result_json: string }>(roots, 'SELECT result_json FROM run_steps WHERE run_id = ? AND step = ? ORDER BY rowid', runId, step).map((r) => JSON.parse(r.result_json) as Record<string, unknown>);
+
+const gsdSessionOfB = (roots: CliRoots, runId: string): string =>
+  (ledgerRows<{ gsd_session: string }>(roots, "SELECT gsd_session FROM work_items WHERE run_id = ? AND item_id = 'B'", runId)[0] as { gsd_session: string }).gsd_session;
+
+const invocationsUsed = (roots: CliRoots, runId: string): number | undefined => ledgerRows<{ used: number }>(roots, "SELECT used FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0]?.used;
+
+const eventsOf = (roots: CliRoots, runId: string, type: string): Array<Record<string, unknown>> =>
+  ledgerRows<{ data_json: string }>(roots, 'SELECT data_json FROM events WHERE run_id = ? AND type = ? ORDER BY seq', runId, type).map((e) => JSON.parse(e.data_json) as Record<string, unknown>);
+
+const attemptRows = (roots: CliRoots, runId: string): Array<[string | null, string, string | null]> => attemptsOfRun(roots, runId).map((a) => [a.item_id, a.reason, a.outcome]);
+
+// B's fresh call after a fallback: the first unit's file and records were parked and then taken out of the tree again, so it writes them anew.
+const FRESH_B: FakeRunOptions = unitOf('B');
+const STATUS_410 = 'export const status = 410;\n';
+
+// The attempts of a run whose resume fell back: B's resume is discarded and the fresh unit that follows is an `answer` attempt.
+const FALLBACK_ATTEMPTS: Array<[string, string, string]> = [
+  ['A', 'initial', 'committed'],
+  ['B', 'initial', 'blocked:decision'],
+  ['C', 'initial', 'committed'],
+  ['B', 'resume', 'discarded'],
+  ['B', 'answer', 'committed'],
+  ['D', 'initial', 'committed'],
+];
+
+describe('a session the host does not know: the item falls back to a fresh unit with the answer (spike S3-A)', () => {
+  const b = startBlocked();
+
+  it('ends the resumed call with the host\'s error result, discards to the item base, runs a fresh unit that carries the question and the answer, and finishes the run', async () => {
+    const host: FakeRunOptions = { perItem: { A: unitOf('A'), B: { ...FRESH_B, resume: { missingSession: true } }, C: unitOf('C'), D: unitOf('D') } };
+    const ran = await answerAndRun(b, host);
+    assert.equal(ran.state, 'ready_for_review');
+
+    const calls = callsOfB(ran.calls);
+    assert.equal(calls.length, 2, 'the resumed call and the fresh one');
+    assert.equal(calls[0]?.resumeSessionId, b.firstSession, 'the first call resumed the session of B');
+    assert.equal(calls[1]?.resumeSessionId, undefined, 'the second is a fresh unit');
+    assert.ok(calls[1]?.prompt.includes('Which status code?'), 'the fresh unit is told the question it asked');
+    assert.ok(calls[1]?.prompt.includes('2. 410'), "and the owner's answer");
+    assert.deepEqual(attemptRows(b.f.roots, b.runId), FALLBACK_ATTEMPTS);
+    const fresh = gsdSessionOfB(b.f.roots, b.runId);
+    assert.notEqual(fresh, b.firstSession, 'the work item carries the session of the fresh unit now');
+    assert.equal(fresh, calls[1]?.sessionId);
+    assert.deepEqual(
+      stepResults(b.f.roots, b.runId, 'resume:fallback').map((r) => [r['itemId'], r['reason']]),
+      [['B', 'session-gone']],
+    );
+    assert.equal(invocationsUsed(b.f.roots, b.runId), 6, 'both calls of B are charged: A, B, C, the resume, the fresh unit and D');
+    const clone = runRowOf(b.f.roots, b.runId).workspace_path;
+    assert.equal(parkRefOf(clone, b.runId, 'B'), null);
+    assert.equal(git(clone, ['show', 'HEAD:src/status.ts']), STATUS_410);
+  });
+});
+
+describe('a resumed unit that crashes with no moved HEAD: the same fallback, and nothing the crash wrote stays', () => {
+  const b = startBlocked();
+
+  it("discards the unparked delta and the crash's partial write, runs a fresh unit, and charges both calls", async () => {
+    const host: FakeRunOptions = { perItem: { A: unitOf('A'), B: { ...FRESH_B, resume: { crash: { afterFiles: ['src/status.ts'], costUsd: 0.05 } } }, C: unitOf('C'), D: unitOf('D') } };
+    const ran = await answerAndRun(b, host);
+    assert.equal(ran.state, 'ready_for_review');
+    assert.equal(callsOfB(ran.calls).length, 2);
+    assert.deepEqual(attemptRows(b.f.roots, b.runId), FALLBACK_ATTEMPTS);
+    assert.deepEqual(
+      stepResults(b.f.roots, b.runId, 'resume:fallback').map((r) => r['reason']),
+      ['crashed'],
+    );
+    assert.equal(invocationsUsed(b.f.roots, b.runId), 6);
+    const clone = runRowOf(b.f.roots, b.runId).workspace_path;
+    assert.equal(git(clone, ['show', 'HEAD:src/status.ts']), STATUS_410, 'the partial write of the crashed unit is not in the commit');
+    assert.deepEqual(
+      commitsOfRun(clone, b.f.pin).map((c) => c.subject),
+      ['Collapse repeated dashes', 'Add a helper module', 'Map a status code', 'Cover the status mapper with a test'],
+    );
+  });
+});
+
+describe('another item committed a change to a path B parked: the delta is never written over it (T-03-43)', () => {
+  // C commits its own file and also creates src/status.ts, the path B parked.
+  const taken = 'export const status = 404;\n';
+  const c: FakeRunOptions = { ...unitOf('C'), edits: { 'src/helper.ts': 'export const helper = 1;\n', 'src/status.ts': taken } };
+  const b = startBlocked({ perItem: { ...s17Host().perItem, C: c } });
+
+  it("records item.unpark_conflict with the count of paths, keeps the other item's content, runs B as a fresh unit from the current HEAD and drops the park ref", async () => {
+    const clone = runRowOf(b.f.roots, b.runId).workspace_path;
+    assert.equal(git(clone, ['show', 'HEAD:src/status.ts']), taken, 'C committed src/status.ts before the answer');
+    const host: FakeRunOptions = {
+      perItem: { A: unitOf('A'), B: { edits: { 'src/status-b.ts': 'export const statusB = 410;\n' }, summary: true, verification: 'passed' }, C: unitOf('C'), D: unitOf('D') },
+    };
+    const ran = await answerAndRun(b, host);
+    assert.equal(ran.state, 'ready_for_review');
+
+    assert.deepEqual(eventsOf(b.f.roots, b.runId, 'item.unpark_conflict'), [{ runId: b.runId, itemId: 'B', paths: 1 }]);
+    const calls = callsOfB(ran.calls);
+    assert.equal(calls.length, 1, 'no call resumed the session: the conflict was found before the host was called');
+    assert.equal(calls[0]?.resumeSessionId, undefined);
+    assert.ok(calls[0]?.prompt.includes('2. 410'), 'the fresh unit carries the answer');
+    assert.deepEqual(attemptRows(b.f.roots, b.runId), FALLBACK_ATTEMPTS);
+    assert.equal(git(clone, ['show', 'HEAD:src/status.ts']), taken, "the other item's file is as it was committed: nothing was overwritten");
+    assert.equal(git(clone, ['show', 'HEAD:src/status-b.ts']), 'export const statusB = 410;\n');
+    assert.equal(parkRefOf(clone, b.runId, 'B'), null, 'the park ref was dropped');
+    assert.deepEqual(
+      stepResults(b.f.roots, b.runId, 'resume:fallback').map((r) => r['reason']),
+      ['unpark-conflict'],
+    );
+    assert.equal(invocationsUsed(b.f.roots, b.runId), 5, 'only the fresh unit was charged for B');
+  });
+});
+
+describe('the invocations budget spent before the fallback: the item blocks with a budget decision naming invocations', () => {
+  // Four items allow 9 invocations; 4 leaves exactly A, B, C and the resume.
+  const b = startBlocked(s17Host(), ['--budget', 'invocations=4']);
+
+  it('does not run a fresh unit, and the run is blocked on a budget decision that names invocations', async () => {
+    const host: FakeRunOptions = { perItem: { A: unitOf('A'), B: { ...FRESH_B, resume: { missingSession: true } }, C: unitOf('C'), D: unitOf('D') } };
+    const ran = await answerAndRun(b, host);
+    assert.deepEqual([ran.state, ran.reason], ['blocked_on_decision', 'budget_exhausted']);
+    assert.equal(callsOfB(ran.calls).length, 1, 'only the resumed call ran');
+    const open = decisionsOf(b.f.roots, b.runId).filter((d) => d.state === 'open');
+    assert.equal(open.length, 1);
+    assert.equal(open[0]?.class, 'budget');
+    assert.match(open[0]?.issue ?? '', /invocations/);
   });
 });

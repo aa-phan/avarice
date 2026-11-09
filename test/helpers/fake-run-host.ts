@@ -93,9 +93,9 @@ export interface FakeRunOptions {
   // stay JSON-serializable: the options travel to the supervisor as AVARICE_FAKE_HOST.
   perItem?: Readonly<Record<string, FakeRunOptions>>;
   resume?: FakeRunOptions;
-  // A resumed call (one that carries `resumeSessionId`) ends as the real CLI ends for a session it does not know: exit 1, no result event, nothing
-  // written to the clone, kind `failed`. Only a resumed call is affected, so it belongs in a `resume` entry; a fresh call ignores it. It lets a test
-  // reach the fresh-unit fallback.
+  // A resumed call (one that carries `resumeSessionId`) ends as the real CLI ends for a session it does not know (spike S3-A, plan 03-13): a result event of
+  // subtype `error_during_execution` with `is_error` true, no turns, no cost and exit 1, nothing written to the clone, kind `failed`. Only a resumed call is
+  // affected, so it belongs in a `resume` entry; a fresh call ignores it. It lets a test reach the fresh-unit fallback.
   missingSession?: boolean;
   // The unit makes this many Agent calls through the real hook, before its edits, each with its own tool_use_id and a completion after it (so each is
   // charged to subagentsTotal and none stays in flight). The outcome reports how many the hook admitted as `details.subagentsSpawned`.
@@ -201,7 +201,8 @@ export class FakeRunHost implements AgentHost {
     if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
 
-    // A session the CLI does not know: it prints an error and exits 1 with no result event, before it touches anything.
+    // A session the CLI does not know: spike S3-A measured that it prints a result event (`error_during_execution`, an error, no turns, no cost) and exits 1,
+    // before it touches anything. The adapter reports it as kind `failed` and drops the host's own message.
     if (req.resumeSessionId !== undefined && o.missingSession === true) {
       return ok({
         sessionId,
@@ -211,7 +212,7 @@ export class FakeRunHost implements AgentHost {
         durationMs: Date.now() - startedMs,
         headBefore: head,
         headAfter: head,
-        details: { exitCode: 1, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: false },
+        details: { exitCode: 1, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: true, isError: true, subtype: 'error_during_execution' },
       });
     }
 

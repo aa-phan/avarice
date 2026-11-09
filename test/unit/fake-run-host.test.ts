@@ -201,14 +201,18 @@ describe('FakeRunHost records a resumed invocation (D-08)', () => {
 });
 
 describe('FakeRunHost: a missing session (D-08)', () => {
-  it('a resumed call with missingSession ends as the CLI does for an unknown session: exit 1, no result, kind failed, nothing written', async () => {
+  it('a resumed call with missingSession ends as the CLI does for an unknown session (spike S3-A): exit 1, an error_during_execution result, no turns, kind failed, nothing written', async () => {
     const { req, clone } = bareRequest({ prompt: resumePrompt('B'), resumeSessionId: SESSION });
     const host = new fake.FakeRunHost({ edits: { 'src/a.ts': 'changed\n' }, resume: { missingSession: true } });
     const out = await host.invoke(req, new AbortController().signal);
     assert.ok(out.ok, JSON.stringify(out));
     assert.equal(out.value.kind, 'failed');
     assert.equal(out.value.details?.exitCode, 1);
-    assert.equal(out.value.details?.resultSeen, false);
+    assert.equal(out.value.details?.resultSeen, true);
+    assert.equal(out.value.details?.isError, true);
+    assert.equal(out.value.details?.subtype, 'error_during_execution');
+    assert.equal(out.value.details?.numTurns, 0);
+    assert.equal(out.value.costUsd, 0);
     assert.equal(out.value.question, undefined);
     assert.equal(out.value.headBefore, out.value.headAfter);
     assert.equal(readFileSync(join(clone, 'src/a.ts'), 'utf8'), 'a\n', 'the clone is untouched');
