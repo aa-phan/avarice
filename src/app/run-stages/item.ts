@@ -955,7 +955,15 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
   if (!completed.ok && completed !== outcome) return completed;
   // The lease was lost during the unit: its host was ended and the invocation stays charged, but nothing is classified, discarded or retried under a
   // lease this supervisor no longer holds. The holder that took it over reconciles the attempt on its resume.
-  if (ctx.signal.aborted) return err({ kind: 'conflict', expected: `the run lease held by this supervisor (fence ${ctx.fence})`, actual: 'the run lease was lost during the unit' });
+  if (ctx.signal.aborted) {
+    // The abort was the owner's cancel (plan 03-24; AUT-12), not a lost lease: the attempt ends `cancelled`, nothing is classified, discarded, retried or routed,
+    // and the invocation stays charged (it was settled above). The supervisor's loop sees the request and finishes the cancel.
+    if (ctx.cancelRequested?.() === true) {
+      const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'cancelled', nowMs: deps.clock.nowMs() });
+      return ended.ok || ended.error.kind === 'conflict' ? ok(undefined) : ended;
+    }
+    return err({ kind: 'conflict', expected: `the run lease held by this supervisor (fence ${ctx.fence})`, actual: 'the run lease was lost during the unit' });
+  }
 
   const classifying = ctx.checkpoint('classify', { attemptId, itemId: unit.item.itemId, revision: snapshot.value.head });
   if (!classifying.ok) return classifying;

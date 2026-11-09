@@ -217,7 +217,8 @@ describe('cancel with a live supervisor in the middle of a unit: the unit is abo
     assert.equal(ledgerRows<{ n: number }>(s.roots, "SELECT count(*) AS n FROM run_steps WHERE run_id = ? AND step = 'launch:run'", runId)[0]?.n, 1, 'exactly one launch:run step for the item');
     const budget = ledgerRows<{ used: number; reserved: number }>(s.roots, "SELECT used, reserved FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0];
     assert.deepEqual([budget?.used, budget?.reserved], [1, 0], 'one invocation, settled as used');
-    assert.equal(ledgerRows(s.roots, 'SELECT 1 FROM gate_results WHERE run_id = ?', runId).length, 0, 'no gate judged the unit');
+    // G0 is the enforcement check before any unit; G1 to G3 judge a unit and G4 the whole run.
+    assert.equal(ledgerRows(s.roots, "SELECT 1 FROM gate_results WHERE run_id = ? AND gate <> 'G0'", runId).length, 0, 'no gate judged the unit');
   });
 
   it('`cancel` again exits 3 and writes nothing', async () => {
