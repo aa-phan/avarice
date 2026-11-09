@@ -89,6 +89,8 @@ interface Ran {
   code: number;
   out: string;
   err: string;
+  // The questions the command asked through the io, in order.
+  questions: string[];
 }
 
 interface DecideOptions {
@@ -97,6 +99,8 @@ interface DecideOptions {
   env?: NodeJS.ProcessEnv;
   ancestry?: () => Result<ProcessEntry[]>;
   columns?: number;
+  // The answers to the questions the command asks (the prompt and the amendment confirmation), in order. An exhausted list answers end of input.
+  answers?: string[];
 }
 
 // `avarice decide <argv>` in this process, on a terminal.
@@ -104,14 +108,24 @@ async function decide(roots: CliRoots, argv: readonly string[], options: DecideO
   const term = fakeTerminal({ inputIsTty: options.stdinIsTty ?? true, outputIsTty: options.stdoutIsTty ?? true, ...(options.columns !== undefined ? { columns: options.columns } : {}) });
   const out: string[] = [];
   const err: string[] = [];
+  const questions: string[] = [];
+  const answers = [...(options.answers ?? [])];
   const code = await main(['decide', ...argv], {
     env: { ...profileEnv(roots), ...options.env },
     io: { out: (t) => void out.push(t), err: (t) => void err.push(t) },
     stdin: term.stdin,
     stdout: term.stdout,
     ancestry: options.ancestry ?? CALM_CHAIN,
+    ...(options.answers !== undefined
+      ? {
+          ask: (question: string): Promise<string | undefined> => {
+            questions.push(question);
+            return Promise.resolve(answers.shift());
+          },
+        }
+      : {}),
   });
-  return { code, out: out.join(''), err: err.join('') };
+  return { code, out: out.join(''), err: err.join(''), questions };
 }
 
 interface DecisionOut {
@@ -609,6 +623,166 @@ describe('renderDecision: a pure view of one decision row', () => {
     for (const line of text.split('\n')) assert.ok(Array.from(line).length <= 30, line);
     assert.match(text, /^ {2}withdraw: withdraw$/m);
     assert.doesNotMatch(text, /^ {2}1: /m);
+  });
+});
+
+// ---- the prompt after the record, and the chain into amend (plan 03-25; D-13, D-17) ---------------------------------------------------------
+// On a terminal `decide <id>` with no answer prints the record and asks. Whatever is typed goes through the same engine as the one-line form, so the
+// outcome, the events and the pickup are the ones `decide <id> <answer>` gives. `amend` on a record that carries an amend command chains into the
+// `contract amend` diff and confirmation, so one `y` writes contract version n+1 and answers the decision in the same transaction.
+const PROMPT = /^answer \(1, 2(, withdraw)?; empty leaves it open\): $/;
+
+describe('decide <id> on a terminal shows the record and prompts for the answer (D-13)', () => {
+  const s = startBlocked();
+  const { f, runId, decisionId } = s;
+  holdLease(f.roots, runId);
+
+  it('an empty answer leaves the decision open: the record, `left open`, exit 0, and not one ledger row changed', async () => {
+    const before = { digest: ledgerDigest(f.roots), events: eventCount(f.roots) };
+    const r = await decide(f.roots, [decisionId], { answers: [''] });
+    assert.equal(r.code, 0, r.err + r.out);
+    assert.equal(r.questions.length, 1);
+    assert.match(r.questions[0] as string, PROMPT);
+    const lines = r.out.split('\n');
+    assert.ok(lines.includes(`decision ${decisionId} (open)`), 'the record is printed first');
+    assert.ok(lines.includes('  1: 404'), r.out);
+    assert.ok(lines.includes('left open'), r.out);
+    assert.equal(ledgerDigest(f.roots), before.digest);
+    assert.equal(eventCount(f.roots), before.events);
+    assert.equal(decisionRow(f.roots, decisionId).state, 'open');
+  });
+
+  it('end of input at the prompt leaves it open the same way', async () => {
+    const r = await decide(f.roots, [decisionId], { answers: [] });
+    assert.equal(r.code, 0, r.err + r.out);
+    assert.ok(r.out.split('\n').includes('left open'), r.out);
+    assert.equal(decisionRow(f.roots, decisionId).state, 'open');
+  });
+
+  it('a key the record does not list is refused as the one-line form refuses it: exit 64 and decision.rejected', async () => {
+    const r = await decide(f.roots, [decisionId], { answers: ['9'] });
+    assert.equal(r.code, 64, r.err + r.out);
+    assert.match(r.err, /"9" is not one of the options \(1, 2\)/);
+    assert.deepEqual(eventsOf(f.roots, runId, 'decision.rejected').at(-1), { runId, decisionId, check: 'option-not-listed' });
+    assert.equal(decisionRow(f.roots, decisionId).state, 'open');
+  });
+
+  it('free text is taken where the record allows it and its prompt offers text', async () => {
+    const textId = seedDecision(f.roots, runId, { class: 'acceptance', options: TEXT_OPTION, affectedItems: ['C'] });
+    const r = await decide(f.roots, [textId], { answers: ['use the util name'] });
+    assert.equal(r.code, 0, r.err + r.out);
+    assert.match(r.questions[0] as string, /^answer \(text; empty leaves it open\): $/);
+    assert.ok(r.out.includes(`decision ${textId} answered (text)`), r.out);
+    const row = decisionRow(f.roots, textId);
+    assert.deepEqual([row.state, row.answer, row.answered_by, row.answer_channel], ['answered', 'use the util name', `owner:${userInfo().username}`, 'terminal']);
+  });
+
+  it('an option key is applied: the record, then `answered (2)` and the pickup of `decide <id> 2`', async () => {
+    const r = await decide(f.roots, [decisionId], { answers: ['2'] });
+    assert.equal(r.code, 0, r.err + r.out);
+    const lines = r.out.split('\n');
+    assert.ok(lines.indexOf(`decision ${decisionId} (open)`) >= 0 && lines.indexOf(`decision ${decisionId} (open)`) < lines.indexOf(`decision ${decisionId} answered (2)`), r.out);
+    assert.ok(lines.includes(`run ${runId}: a running supervisor takes item B next`), r.out);
+    const row = decisionRow(f.roots, decisionId);
+    assert.deepEqual([row.state, row.answer, row.answered_by, row.answer_channel], ['answered', '2', `owner:${userInfo().username}`, 'terminal']);
+    assert.equal(stepsOf(f.roots, runId, 'supervisor:decide').length, 0, 'a live lease holder takes the item; nothing was started');
+  });
+
+  it('with no way to ask (no io.ask, standard input not a terminal) it keeps the record and exit 64 of the one-line form', async () => {
+    const other = seedDecision(f.roots, runId, { class: 'acceptance', options: OPTIONS_12, affectedItems: ['C'] });
+    const r = await decide(f.roots, [other]);
+    assert.equal(r.code, 64, r.err + r.out);
+    assert.match(r.err, /give an option key or --text/);
+    assert.deepEqual(r.questions, []);
+  });
+});
+
+describe('decide <id> on a non-pause decision: amend chains into the contract amend confirmation (D-17)', () => {
+  const amendRecord = (runId: string): { options: unknown; consequences: unknown } => ({
+    options: WITHDRAW_ONLY,
+    consequences: {
+      withdraw: 'the decision closes',
+      amend: {
+        command: `avarice contract amend ${runId} --decision <decision-id> --reason "<why>" --add-write 'src/extra.ts'`,
+        request: { addWrite: ['src/extra.ts'] },
+      },
+    },
+  });
+
+  // The question of B is taken back, and a scope_expansion decision that asks to write src/extra.ts takes its place on B and D.
+  function blockedOnScope(): Started & { wide: string } {
+    const started = startBlocked();
+    withDeps(started.f.roots, (deps) => {
+      const done = deps.ledger.withdrawDecision({ runId: started.runId, decisionId: started.decisionId, reason: 'owner', nowMs: Date.now() });
+      assert.ok(done.ok, JSON.stringify(done));
+    });
+    const wide = seedDecision(started.f.roots, started.runId, { class: 'scope_expansion', ...amendRecord(started.runId), affectedItems: ['B', 'D'] });
+    return { ...started, wide };
+  }
+
+  it('`n` at the confirmation records the request, writes no contract version and leaves the decision open', async () => {
+    const t = blockedOnScope();
+    const before = contractVersions(t.f.roots, t.runId);
+    const r = await decide(t.f.roots, [t.wide], { answers: ['amend', 'n'] });
+    assert.equal(r.code, 0, r.err + r.out);
+    assert.ok(r.out.split('\n').includes('not amended'), r.out);
+    assert.ok(r.out.split('\n').includes(`decision ${t.wide} left open`), r.out);
+    assert.deepEqual(contractVersions(t.f.roots, t.runId), before);
+    assert.deepEqual(eventsOf(t.f.roots, t.runId, 'amendment.requested'), [{ runId: t.runId, decisionId: t.wide }]);
+    assert.equal(decisionRow(t.f.roots, t.wide).state, 'open');
+    assert.equal(stepsOf(t.f.roots, t.runId, 'supervisor:decide').length, 0);
+  });
+
+  it('`amend` is not offered, and is refused, on a pause decision that carries no amend command', async () => {
+    const t = startBlocked();
+    const r = await decide(t.f.roots, [t.decisionId], { answers: ['amend'] });
+    assert.match(r.questions[0] as string, PROMPT);
+    assert.equal(r.code, 64, r.err + r.out);
+    assert.deepEqual(contractVersions(t.f.roots, t.runId), [1]);
+    assert.equal(decisionRow(t.f.roots, t.decisionId).state, 'open');
+  });
+
+  it('a record whose amend command carries no measured request says so and points at the command; nothing is written', async () => {
+    const t = startBlocked();
+    const bare = seedDecision(t.f.roots, t.runId, {
+      class: 'budget',
+      options: WITHDRAW_ONLY,
+      consequences: { amend: { command: `avarice contract amend ${t.runId} --decision <decision-id> --reason "<why>" --budget costUsdPerRun=<value>`, request: {} } },
+      affectedItems: ['C'],
+    });
+    const r = await decide(t.f.roots, [bare], { answers: ['amend'] });
+    assert.equal(r.code, 3, r.err + r.out);
+    assert.ok(r.out.includes(`avarice contract amend ${t.runId} --decision ${bare} --reason "<why>" --budget costUsdPerRun=<value>`), r.out);
+    assert.deepEqual(contractVersions(t.f.roots, t.runId), [1]);
+    assert.equal(decisionRow(t.f.roots, bare).state, 'open');
+  });
+
+  it('the prompt offers withdraw and amend; `amend` then `y` writes contract v2 and answers the decision in one transaction, then the supervisor continues the run (tracer)', async () => {
+    const t = blockedOnScope();
+    assert.deepEqual(contractVersions(t.f.roots, t.runId), [1]);
+    const r = await withSupervisorEntry(s17Host({ question: undefined }), () => decide(t.f.roots, [t.wide, '--wait'], { answers: ['amend', 'y'] }));
+    assert.equal(r.code, 0, r.err + r.out);
+    assert.equal(r.questions.length, 2);
+    assert.match(r.questions[0] as string, /^answer \(withdraw, amend; empty leaves it open\): $/);
+    assert.equal(r.questions[1], 'apply contract v2? [y/N] ');
+
+    const lines = r.out.split('\n');
+    assert.ok(lines.includes(`decision ${t.wide} (open)`), 'the record is printed first');
+    assert.ok(lines.some((l) => l.startsWith('files.write:') && l.includes('src/extra.ts')), `the diff names files.write and the suggested path:\n${r.out}`);
+    assert.ok(lines.includes('contract v2 recorded'), r.out);
+    assert.ok(lines.includes(`decision ${t.wide} answered amended:v2`), r.out);
+    assert.ok(lines.includes(`run ${t.runId}: supervisor started`), r.out);
+
+    assert.deepEqual(contractVersions(t.f.roots, t.runId), [1, 2]);
+    const row = decisionRow(t.f.roots, t.wide);
+    assert.deepEqual([row.state, row.answer, row.answered_by, row.answer_channel], ['answered', 'amended:v2', `owner:${userInfo().username}`, 'terminal']);
+    assert.deepEqual(eventsOf(t.f.roots, t.runId, 'amendment.requested'), [{ runId: t.runId, decisionId: t.wide }]);
+    const amended = eventsOf(t.f.roots, t.runId, 'contract.amended');
+    assert.equal(amended.length, 1);
+    assert.equal(amended[0]?.['version'], 2);
+    assert.equal(amended[0]?.['resolvedDecisionId'], t.wide, 'the one contract.amended event names the decision it answered: both were written together');
+    assert.equal(runRowOf(t.f.roots, t.runId).state, 'ready_for_review');
+    assert.equal(stepsOf(t.f.roots, t.runId, 'supervisor:decide').length, 1);
   });
 });
 
