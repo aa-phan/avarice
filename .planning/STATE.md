@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-15-PLAN.md
-last_updated: "2026-11-09T05:34:31.636Z"
+stopped_at: Completed 03-17-PLAN.md
+last_updated: "2026-11-09T06:00:48.519Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: badf28d8a7f6e514b1302c01247a09904c719f1f
+state_head: f75a4821926fdef4b9d6a89636d324a148909c48
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 77
+  completed_plans: 78
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 17 of 33
+Plan: 18 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -133,6 +133,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P14 | 40 min | 2 tasks | 10 files |
 | Phase 03 P16 | 11 min | 3 tasks | 14 files |
 | Phase 03 P15 | 32 min | 3 tasks | 16 files |
+| Phase 03 P17 | 50min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -289,6 +290,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-16: readProfileNotify opens the profile config with O_NOFOLLOW and reads at most 64 KiB from the open descriptor — Closes the check-then-read window of lstat and keeps a planted link or huge file from steering a notification
 - [Phase 03]: 03-15: contract amend refuses inside a run, off a terminal and from a run's process tree in usage(), before the profile is resolved, exiting 64 and creating nothing — CS-11 and D-18: the run must never reach the amend path; ps failure counts as inside the tree (fail closed); only main.ts names the ancestry test seam (footprint pin)
 - [Phase 03]: 03-15: a command's confirmation goes through Io.ask; the shell passes its own prompt, the one-shot CLI reads one line from stdin; declining exits 0, a moved contract version, an ended run or a closed decision exits 3 — D-18: the amend confirmation uses the shell prompt, with no amend menu action; the ledger transaction under expectVersion makes a racing amendment a conflict
+- [Phase 03]: 03-17: a stale index answer is used when its cited path is still at HEAD; the start summary prints one marked line per work item instead of one model line — Start always runs after the conventions commit, so every index built at the pin is stale by commit identity; a fresh-only rule would never use an index. Marking derived fields shows what the compiler filled in before the run starts (S-50).
 
 ### Pending Todos
 
@@ -341,6 +343,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T05:34:31.459Z
-Stopped at: Completed 03-15-PLAN.md
+Last session: 2026-11-09T06:00:48.337Z
+Stopped at: Completed 03-17-PLAN.md
 Resume file: None
