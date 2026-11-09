@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-11-09T00:01:07.241Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-11-09T00:26:03.994Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 09f363baed7c3860536409cadbfb38c638621444
+state_head: 49280dde973fec3c0ffe4281de05c5aeb6e1cc71
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 61
+  completed_plans: 62
 ---
 
 # Project State
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 1 of 33
-Status: Executing Phase 03
+Plan: 2 of 33
+Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
 Progress: [███░░░░░░░] 25%
@@ -117,6 +117,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 02 P33 | 50 min | 3 tasks | 17 files |
 | Phase 02 P34 | 21 min | 3 tasks | 9 files |
 | Phase 02 P35 | 2h10m | 3 tasks | 25 files |
+| Phase 03 P01 | 35 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-34: the install proxy vets every resolved address (isPublicAddress) and dials the vetted address; the conventions refuse localhost, single-label and IP-spelled registry hosts; private-network registries are unsupported — R-WR-02 needs both layers, since a syntactic refusal cannot cover a public name that resolves to a private address; the test-only resolve option is pinned out of production by a footprint scan
 - [Phase 02]: 02-35: containment.md owns the egress proxy rules and the private-network limit; other docs/system documents link to it — Fresh reviewers flagged one fact stated in three documents
 - [Phase 02]: UAT 2026-11-08: owner accepted 02-35-REVIEW WR-01..WR-03 as built (proxy dials the first vetted address; any failed lease renewal aborts the unit; current invisible-character set); deferred WR-04, IN-01..IN-06 and the open owner decisions to backlog 999.4 and 999.5
+- [Phase 03]: Phase 3 live spend is one ledger (live-spend-phase3.jsonl) with a lower-only 25 USD ceiling (D-05) — Mirrors Phase 2 D-15; guard enforced by the harness
+- [Phase 03]: Claude Code 2.1.319 admitted on a 22-test live containment run, 0 containment failures, 0.1515 USD — CON-3: admission only on recorded live evidence
 
 ### Pending Todos
 
@@ -302,6 +305,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T22:04:34.078Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-decisions-independent-work-and-amendments/03-CONTEXT.md
+Last session: 2026-11-09T00:26:03.860Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
