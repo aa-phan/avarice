@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-21-PLAN.md
-last_updated: "2026-11-09T09:37:45.614Z"
+stopped_at: Completed 03-22-PLAN.md
+last_updated: "2026-11-09T11:26:25.593Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 22c702acf5f131bdd562aaf7a7cdd9899f84bb1f
+state_head: 83f7801a7601579407d9f7e473328cd2f77712b6
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 82
+  completed_plans: 83
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 22 of 33
+Plan: 23 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -138,6 +138,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P19 | 75 min | 3 tasks | 29 files |
 | Phase 03 P20 | 30 min | 3 tasks | 10 files |
 | Phase 03 P21 | 40 min | 2 tasks | 12 files |
+| Phase 03 P22 | 45 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -303,6 +304,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-20: a refusal on identity is not recorded; a refusal about the decision is decision.rejected with the run, the decision and the check name only — An identity refusal says nothing about the decision; the run's own attempt is on record by the hook's deny event (D-14, CS-11)
 - [Phase 03]: 03-20: decide withdraws through withdrawDecision, never answerDecision with the text withdraw; an option key on a withdraw-only record that carries an amend command records amendment.requested and applies nothing — answerDecision would release the items to ready; a Phase 2 record (options []) answered by a key stays an unlisted option (D-17, owner decision 2)
 - [Phase 03]: 03-21: RunStatus items, decisions and notifications are optional keys in the type (the read model always fills them); an inbox decision with several banner rows shows the worst state (failed over held, pending, delivered)
+- [Phase 03]: 03-22: an answered item resumes its own session only with a completed park record and a gsd_session that is a UUID; every other answered item runs a fresh unit with the answer — The session ID comes from the ledger and is checked again before it reaches a launch line (T-03-42); a stored value the host would refuse must not stop the item, so the fresh unit of plan 03-18 stays the road for it.
+- [Phase 03]: 03-22: a resume never retries as a resume: an unknown session, a crash, an interrupted resume and an unparkable delta all discard to the item base and run a fresh unit with the answer (reason answer); an unpark conflict opens no new decision — The owner's answer still applies when the session or the delta is gone, so the item keeps the answered question answered; the fresh unit has its own CON-16 retry, nothing is written over another item's change, and item.unpark_conflict records the count of paths (T-03-43).
+- [Phase 03]: 03-22: the resumed unit is classified against the item base taken before the unpark, and the park ref is dropped when the host is launched, not after the commit — A snapshot taken after the unpark would not see the parked records or the parked in-scope change, so a unit that only finishes the item would read as no_progress; a ref that outlives the launch would meet the next park of an item that asks again.
 
 ### Pending Todos
 
@@ -355,6 +359,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T09:37:45.410Z
-Stopped at: Completed 03-21-PLAN.md
+Last session: 2026-11-09T11:26:20.255Z
+Stopped at: Completed 03-22-PLAN.md
 Resume file: None
