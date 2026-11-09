@@ -323,6 +323,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-26: the test CLI holds a process at an armed fault point (AVARICE_TEST_HOLD) and logs exit codes (AVARICE_TEST_EXIT_LOG), test-only, so a test writes in the window between two writes of a detached supervisor
 - [Phase 03]: 03-27: the tracer gate halted the plan after its one re-run; no expansion case was started — s17-s51 failed twice on the same item (A, haiku), a real verdict, so the executor protocol forbids expanding and the orchestrator's rule forbids a second re-run
 - [Phase 03]: 03-27: no requirement marked complete — CON-15, AUT-3, AUT-4, AUT-10, AUT-16, RC-7 and RC-8 are each declared by other incomplete plans and the live evidence for them is incomplete or negative
+- [Phase 03]: Owner decision 2026-11-09 after the 03-27 halt: stop Phase 3 execution and replan the small-item (haiku) failure with `/gsd-plan-phase 3 --gaps` before any more live spend; none of "small runs on sonnet", "keep haiku and change the cases" or "pin item A to sonnet" was chosen, so the gap plan decides the fix
+- [Phase 03]: Owner decision 2026-11-09: plan 03-27's live spend cap rises from 6.00 to 10.00 USD for its resumed cases (3.4561 USD already spent); the Phase 3 ceiling stays 25 USD
+- [Phase 03]: 03-27 run 2 raised one invocation's cost cap from 1.60 to 2.00 USD (inside the plan and phase caps) against the orchestrator's no-raise instruction; recorded so the gap plan sets explicit per-case caps
 
 ### Pending Todos
 
