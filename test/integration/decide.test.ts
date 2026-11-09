@@ -12,6 +12,8 @@ import type { AppDeps } from '../../src/app/deps.ts';
 import { stateDigestOf } from '../../src/app/run-stages/blocked.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { main } from '../../src/cli/main.ts';
+import { renderDecision } from '../../src/cli/render/decision-view.ts';
+import type { DecisionRow } from '../../src/ports/ledger.ts';
 import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
 import { err as portErr, ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
@@ -486,6 +488,114 @@ describe('decide: a withdrawal that makes the blocked run continuable starts the
     assert.deepEqual([end.from, end.to], ['running', 'failed']);
     assert.deepEqual(end.undelivered, ['B', 'D']);
     assert.deepEqual([...(end.withdrawn ?? [])].sort(), [decisionId, wide].sort());
+  });
+});
+
+// The record as the owner reads it before answering (OPS-7). Model-derived text (the issue, the labels) is data: control characters and escapes are
+// stripped, every line is cut to the terminal width and the issue to 1000 characters.
+describe('decide <id> without an answer prints the record and writes nothing', () => {
+  const s = startBlocked();
+  const { f, runId, decisionId } = s;
+
+  it('prints the run, the items, the class, the question as data, each option, the consequences and the way to answer, then exits 64 with the store untouched', async () => {
+    const before = { digest: storeDigest(f.roots), events: eventCount(f.roots) };
+    const r = await decide(f.roots, [decisionId]);
+    assert.equal(r.code, 64, r.err + r.out);
+    const lines = r.out.split('\n');
+    assert.ok(lines.includes(`decision ${decisionId} (open) of run ${runId}`), r.out);
+    assert.ok(lines.includes('class: acceptance'), r.out);
+    assert.ok(lines.includes('item: B (also affects D)'), r.out);
+    assert.ok(lines.includes('question from the unit (data):'), r.out);
+    assert.ok(lines.includes('  Which status code?'), r.out);
+    assert.ok(lines.includes('options:'), r.out);
+    assert.ok(lines.includes('  1: 404'), r.out);
+    assert.ok(lines.includes('  2: 410'), r.out);
+    assert.ok(lines.includes('consequences:'), r.out);
+    assert.ok(lines.includes('  1: item B resumes with this answer'), r.out);
+    assert.match(r.err, /give an option key or --text/);
+    assert.equal(storeDigest(f.roots), before.digest, 'the store file is untouched');
+    assert.equal(eventCount(f.roots), before.events, 'no event was appended');
+    assert.equal(decisionRow(f.roots, decisionId).state, 'open');
+  });
+
+  it('prints the amend command of a record answered by an amendment, with its own ID, and no way to answer with an option', async () => {
+    const wide = seedDecision(f.roots, runId, {
+      class: 'scope_expansion',
+      options: WITHDRAW_ONLY,
+      consequences: { withdraw: 'the decision closes', amend: { command: `avarice contract amend ${runId} --decision <decision-id> --reason "<why>" --add-write 'src/extra.ts'`, request: {} } },
+      affectedItems: ['C'],
+    });
+    const r = await decide(f.roots, [wide]);
+    assert.equal(r.code, 64);
+    assert.ok(r.out.includes(`amend: avarice contract amend ${runId} --decision ${wide} --reason "<why>" --add-write 'src/extra.ts'`), r.out);
+    assert.ok(r.out.split('\n').includes('  withdraw: withdraw'));
+  });
+
+  it('strips control characters and escape sequences from the issue and the labels, cuts every line to the width (80 when unknown) and the issue to 1000 characters', async () => {
+    const hostile = seedDecision(f.roots, runId, {
+      class: 'acceptance',
+      issue: `\u001b[31mred\u001b[0m\u0007 bell\u001b]0;owned\u0007\n${'y'.repeat(1500)}`,
+      options: [
+        { key: '1', label: `\u001b[2Jwipe ${'z'.repeat(150)}`, kind: 'choice' },
+        { key: '2', label: 'fine', kind: 'choice' },
+      ],
+      affectedItems: ['C'],
+    });
+    const r = await decide(f.roots, [hostile]);
+    assert.equal(r.code, 64);
+    assert.doesNotMatch(r.out, /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/, 'no control character reaches the terminal');
+    assert.equal(r.out.includes('owned'), false, 'the OSC string is removed with its text');
+    assert.ok(r.out.includes('red bell'), 'the readable text stays');
+    for (const line of r.out.split('\n')) assert.ok(Array.from(line).length <= 80, `a line is cut to 80: ${line.length}`);
+    const issueChars = (r.out.match(/y/g) ?? []).length;
+    assert.ok(issueChars > 0 && issueChars <= 1000, `the issue is cut to 1000 characters (${issueChars})`);
+  });
+
+  it('exits 64 naming the ID of a decision that does not exist, with or without an answer', async () => {
+    for (const argv of [['dec_01NOSUCHDECISION'], ['dec_01NOSUCHDECISION', '1']]) {
+      const r = await decide(f.roots, argv);
+      assert.equal(r.code, 64, r.err + r.out);
+      assert.ok(r.err.includes('dec_01NOSUCHDECISION'), r.err);
+    }
+  });
+});
+
+describe('renderDecision: a pure view of one decision row', () => {
+  const row = (over: Partial<DecisionRow>): DecisionRow => ({
+    decisionId: 'dec_01AAAA',
+    runId: 'run_01BBBB',
+    contractVersion: 1,
+    class: 'acceptance',
+    issue: 'Which?',
+    recommendation: 'the unit recommended option 2',
+    options: OPTIONS_12,
+    consequences: { '1': 'one', '2': 'two' },
+    evidenceRefs: [],
+    affectedItems: ['B'],
+    authorizedDefault: null,
+    stateDigest: 'sha256:x',
+    urgency: 'blocking',
+    state: 'open',
+    openedAt: '2026-11-09T00:00:00.000Z',
+    answeredAt: null,
+    answeredBy: null,
+    answer: null,
+    answerChannel: null,
+    supersedes: null,
+    ...over,
+  });
+
+  it('shows the recommendation as the unit’s data, and a successor’s predecessor', () => {
+    const text = renderDecision(row({ supersedes: 'dec_01OLD' }), 80);
+    assert.match(text, /^recommendation: the unit recommended option 2$/m);
+    assert.match(text, /^re-opens: dec_01OLD$/m);
+  });
+
+  it('cuts to a narrow width and reads a record with no options (Phase 2) as withdraw only', () => {
+    const text = renderDecision(row({ options: [], issue: 'a'.repeat(200) }), 30);
+    for (const line of text.split('\n')) assert.ok(Array.from(line).length <= 30, line);
+    assert.match(text, /^ {2}withdraw: withdraw$/m);
+    assert.doesNotMatch(text, /^ {2}1: /m);
   });
 });
 
