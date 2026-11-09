@@ -105,6 +105,12 @@ function planLines(plan: AmendmentPlan): string[] {
   return lines.map(stripControl);
 }
 
+// What the owner reads before confirming: the field diff, what it invalidates and the decision it answers, one line each, newline-terminated and with
+// control characters removed. `contract amend` and the amend chain of `decide` show the same text.
+export function renderAmendmentPreview(plan: AmendmentPlan): string {
+  return planLines(plan).map((line) => `${line}\n`).join('');
+}
+
 // A regular file of at most 64 KiB, decoded as strict UTF-8: the acceptance criteria an owner file adds to a contract (T-03 trust boundary).
 function readAcceptanceFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
   let fd: number;
@@ -135,7 +141,7 @@ function readAcceptanceFile(path: string): { ok: true; text: string } | { ok: fa
 }
 
 // One line from standard input, for a command run with no one to ask for it (the one-shot CLI). undefined at end of input.
-function askStdin(question: string): Promise<string | undefined> {
+export function askStdin(question: string): Promise<string | undefined> {
   return new Promise((resolveAnswer) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     let answered = false;
@@ -191,20 +197,30 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   const planned = planAmendment(deps, runId, request);
   if (!planned.ok) return fail(io, planned.error);
   const plan = planned.value;
-  for (const line of planLines(plan)) io.out(`${line}\n`);
+  io.out(renderAmendmentPreview(plan));
+  const confirmed = await confirmAndCommit(deps, io, plan, `owner:${responderName()}`);
+  return confirmed.kind === 'failed' ? confirmed.code : 0;
+}
 
+// How an amendment ended: written (`recorded`), declined at the question (nothing written), or refused by the ledger (`failed`, with the exit code
+// of the message already printed).
+export type AmendConfirmation = { kind: 'recorded'; version: number } | { kind: 'declined' } | { kind: 'failed'; code: number };
+
+// The question and the write of an amendment the owner has just been shown: asks `apply contract v<n+1>? [y/N]` (through the io, or one line of standard
+// input), and on y or yes writes it in the ledger's one transaction (version, limits, stale rows and the decision it answers) and then the contract file.
+// Shared by `contract amend` and the amend chain of `decide`, so both ask the same question and write the same rows.
+export async function confirmAndCommit(deps: AppDeps, io: Io, plan: AmendmentPlan, authorizedBy: string): Promise<AmendConfirmation> {
   const ask = io.ask ?? askStdin;
   const answer = await ask(`apply contract v${plan.version}? [y/N] `);
   if (answer === undefined || !/^(y|yes)$/i.test(answer.trim())) {
     io.out('not amended\n');
-    return 0;
+    return { kind: 'declined' };
   }
-
-  const committed = commitAmendment(deps, plan, `owner:${responderName()}`, deps.clock.nowMs());
-  if (!committed.ok) return fail(io, committed.error);
+  const committed = commitAmendment(deps, plan, authorizedBy, deps.clock.nowMs());
+  if (!committed.ok) return { kind: 'failed', code: fail(io, committed.error) };
   const { value } = committed;
   io.out(`contract v${value.version} recorded\n`);
   if (value.staleEvidence > 0 || value.staleGates > 0) io.out(`appended ${value.staleEvidence} stale evidence row(s) and ${value.staleGates} stale gate row(s)\n`);
   if (value.resolvedDecisionId !== null) io.out(`decision ${value.resolvedDecisionId} answered amended:v${value.version}\n`);
-  return 0;
+  return { kind: 'recorded', version: value.version };
 }

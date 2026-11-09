@@ -726,7 +726,7 @@ describe('decide <id> on a non-pause decision: amend chains into the contract am
     const r = await decide(t.f.roots, [t.wide], { answers: ['amend', 'n'] });
     assert.equal(r.code, 0, r.err + r.out);
     assert.ok(r.out.split('\n').includes('not amended'), r.out);
-    assert.ok(r.out.split('\n').includes(`decision ${t.wide} left open`), r.out);
+    assert.ok(r.out.split('\n').includes('left open'), r.out);
     assert.deepEqual(contractVersions(t.f.roots, t.runId), before);
     assert.deepEqual(eventsOf(t.f.roots, t.runId, 'amendment.requested'), [{ runId: t.runId, decisionId: t.wide }]);
     assert.equal(decisionRow(t.f.roots, t.wide).state, 'open');

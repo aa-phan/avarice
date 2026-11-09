@@ -16,7 +16,7 @@
 // After the write the outcome says who picks the run up: `spawn` when the run is blocked, an answer made it continuable and nobody holds its lease (the
 // command starts the detached supervisor through the single spawn path), `live-supervisor` when a supervisor holds the lease and its scheduler takes the
 // answered item next, `none` otherwise (D-16). The shared rule is isBlockedRunContinuable.
-import { amendCommandOf, isAmendOnly, optionsOf } from '../domain/decision-policy.ts';
+import { amendCommandOf, amendRequestOf, isAmendOnly, optionsOf } from '../domain/decision-policy.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { isRunStopState } from '../domain/run-lifecycle.ts';
@@ -70,7 +70,7 @@ export function findDecision(deps: AppDeps, decisionId: string): Result<Decision
 const leaseIsLive = (run: RunRow, nowMs: number): boolean => run.leaseHolder !== null && run.leaseExpiresAt !== null && Date.parse(run.leaseExpiresAt) >= nowMs;
 
 // Who continues the run now that the decision is closed (D-16).
-function pickupOf(deps: AppDeps, runId: string, nowMs: number): Result<Pickup> {
+export function pickupOf(deps: AppDeps, runId: string, nowMs: number): Result<Pickup> {
   const read = deps.ledger.getRun(runId);
   if (!read.ok) return read;
   const run = read.value;
@@ -213,4 +213,27 @@ export function decide(deps: AppDeps, request: DecideRequest): Result<DecideOutc
     if (!found.ok) return found;
   }
   return err({ kind: 'conflict', expected: `decision ${request.decisionId} unchanged while it was answered`, actual: 'it changed twice while it was answered' });
+}
+
+export interface AmendmentRequested {
+  decision: DecisionRow;
+  // The amend command the record carries, with the decision's own ID in it.
+  command: string;
+  // What the record measured to pre-fill the amendment with (the paths the unit named, the value a budget reached); empty when it measured nothing.
+  request: { addWrite?: string[]; budgets?: Record<string, number> };
+}
+
+// The owner chose `amend` at the prompt of a decision that is answered by an amendment (D-17). Records amendment.requested and returns the amend command
+// and the request the record carries; it writes no contract version and does not answer the decision: that is the amendment's own confirmed transaction,
+// which names the decision. A record with no amend command (a pause) is refused, and so is a decision that is no longer open.
+export function requestAmendment(deps: AppDeps, decisionId: string, nowMs: number): Result<AmendmentRequested> {
+  const found = findDecision(deps, decisionId);
+  if (!found.ok) return found;
+  const decision = found.value;
+  if (decision.state !== 'open') return err({ kind: 'conflict', expected: 'an open decision', actual: `${decisionId} is ${decision.state}` });
+  const command = amendCommandOf(decision.consequences, decisionId);
+  if (command === null) return err({ kind: 'invalid', field: 'answer', reason: `decision ${decisionId} is not answered by an amendment` });
+  const recorded = recordEvent(deps, 'amendment.requested', decision, nowMs);
+  if (!recorded.ok) return recorded;
+  return ok({ decision, command, request: amendRequestOf(decision.consequences) ?? {} });
 }

@@ -374,6 +374,31 @@ export function amendCommandOf(stored: unknown, decisionId: string): string | nu
   return SAFE_ID.test(decisionId) ? command.split(DECISION_ID_PLACEHOLDER).join(decisionId) : command;
 }
 
+// The request an amend chain pre-fills from a stored decision (`consequences.amend.request`, written by amendCommandFor): the write paths the signal
+// named and the budget values it measured, and nothing else. Stored text is data, so every field is read defensively and one that is not the expected
+// shape is left out. An object with neither field is a record that measured nothing to pre-fill; null is a record with no amend request at all.
+export function amendRequestOf(stored: unknown): { addWrite?: string[]; budgets?: Record<string, number> } | null {
+  if (typeof stored !== 'object' || stored === null) return null;
+  const amend = (stored as Record<string, unknown>)['amend'];
+  if (typeof amend !== 'object' || amend === null) return null;
+  const request = (amend as Record<string, unknown>)['request'];
+  if (typeof request !== 'object' || request === null || Array.isArray(request)) return null;
+  const { addWrite, budgets } = request as Record<string, unknown>;
+  const out: { addWrite?: string[]; budgets?: Record<string, number> } = {};
+  if (Array.isArray(addWrite)) {
+    const paths = addWrite.filter((p): p is string => typeof p === 'string' && p !== '');
+    if (paths.length > 0) out.addWrite = paths;
+  }
+  if (typeof budgets === 'object' && budgets !== null && !Array.isArray(budgets)) {
+    const named: Record<string, number> = {};
+    for (const [name, value] of Object.entries(budgets)) {
+      if (BUDGET_NAME.test(name) && typeof value === 'number' && Number.isFinite(value) && value > 0) named[name] = value;
+    }
+    if (Object.keys(named).length > 0) out.budgets = named;
+  }
+  return out;
+}
+
 // A Phase 3 record that is answered by an amendment: it lists options and every one of them is withdraw. A Phase 2 record stored no options at all
 // (`[]`), so it is never this: an answer to it is an unlisted option, not a request to amend.
 export function isAmendOnly(stored: unknown): boolean {

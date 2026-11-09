@@ -3,7 +3,7 @@
 // authority, and what a record holds for the owner to read.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { amendCommandFor, blockScope, buildDecisionRecord, classifyDecision, optionsOf, parseNumberedOptions } from '../../src/domain/decision-policy.ts';
+import { amendCommandFor, amendRequestOf, blockScope, buildDecisionRecord, classifyDecision, optionsOf, parseNumberedOptions } from '../../src/domain/decision-policy.ts';
 import type { AmendConsequence, DecisionClassification, DecisionSignal } from '../../src/domain/decision-policy.ts';
 import { RUN_BLOCKED_REASONS } from '../../src/domain/run-lifecycle.ts';
 import type { RunContract } from '../../src/domain/run-contract.ts';
@@ -428,6 +428,26 @@ describe('optionsOf', () => {
       { key: '1', label: 'a', kind: 'choice' },
       { key: 'text', label: 'free text', kind: 'text' },
     ]);
+  });
+});
+
+describe('amendRequestOf (the request an amend chain pre-fills)', () => {
+  it('reads the paths and the measured budget values of a stored record, and nothing else', () => {
+    const stored = { amend: { command: 'x', request: { addWrite: ['src/a.ts', 'src/b.ts'], budgets: { costUsdPerRun: 12 }, reason: 'ignored', decisionId: 'ignored' } } };
+    assert.deepEqual(amendRequestOf(stored), { addWrite: ['src/a.ts', 'src/b.ts'], budgets: { costUsdPerRun: 12 } });
+  });
+
+  it('is an empty request for a record that measured nothing, and null for a record with no amend request', () => {
+    assert.deepEqual(amendRequestOf({ amend: { command: 'x', request: {} } }), {});
+    for (const stored of [null, undefined, 'x', 7, [], {}, { amend: null }, { amend: { command: 'x' } }, { amend: { request: 'x' } }, { amend: { request: [] } }]) {
+      assert.equal(amendRequestOf(stored), null, JSON.stringify(stored));
+    }
+  });
+
+  it('drops a stored value that is not the expected shape: a non-string or empty path, a budget that is not a positive finite number or has an unsafe name', () => {
+    const stored = { amend: { request: { addWrite: ['src/a.ts', '', 3, null], budgets: { good: 1, zero: 0, negative: -2, nan: Number.NaN, text: '5', __proto__x: 1, 'bad name': 3 } } } };
+    assert.deepEqual(amendRequestOf(stored), { addWrite: ['src/a.ts'], budgets: { good: 1 } });
+    assert.deepEqual(amendRequestOf({ amend: { request: { addWrite: 'src/a.ts', budgets: [1] } } }), {});
   });
 });
 

@@ -5,22 +5,32 @@
 // when nobody holds its lease; when a supervisor holds it, nothing starts and its scheduler takes the answered item next (D-16). `decide` changes no
 // contract field, budget or scope (D-17): the way to do that is `avarice contract amend`.
 //
+// With no answer on a terminal the command prints the record and asks `answer (<keys>; empty leaves it open): `: a key, `withdraw`, free text where the
+// record allows it, all through the same engine as the one-line form (D-13), or an empty line, which changes nothing and exits 0 with `left open`. On a
+// record that carries an amend command, `amend` records the request and chains into the `contract amend` diff and confirmation, pre-filled from the
+// record's measured request with the decision set, so one `y` records contract version n+1 and answers the decision in one transaction (D-17).
+//
 // It refuses inside a run (AVARICE_RUN), without a terminal on standard input and output, and from the process tree of a run, before the profile is
 // resolved, so a refusal creates nothing (CS-11), and then for a profile that is not the user's own. Exit 0 answered, withdrawn or an identical answer
 // ignored; 3 an answer that was not applied for the state of the decision or the run (closed, stale, answered differently, to be made by an amendment);
 // 64 a usage error, an unknown decision, an option or text the record does not allow, a refusal; 70 an internal failure. `--wait` follows a supervisor
 // this command started to where the run stops.
 import { describeError } from '../../adapters/sqlite/db.ts';
-import { decide, findDecision } from '../../app/decide.ts';
-import type { DecideOutcome } from '../../app/decide.ts';
+import { planAmendment } from '../../app/amend.ts';
+import { decide, findDecision, pickupOf, requestAmendment } from '../../app/decide.ts';
+import type { DecideOutcome, Pickup } from '../../app/decide.ts';
 import type { AppDeps } from '../../app/deps.ts';
+import { amendCommandOf, optionsOf } from '../../domain/decision-policy.ts';
+import type { DecisionOption } from '../../domain/decision-policy.ts';
 import type { PortError } from '../../domain/result.ts';
+import type { DecisionRow } from '../../ports/ledger.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { ownsProfile, refuseOutsideTerminal, responderName } from '../identity.ts';
 import type { IdentityContext } from '../identity.ts';
 import { renderDecision } from '../render/decision-view.ts';
 import { errorLine, stripControl } from '../render/style.ts';
 import { isProcessAlive, spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
+import { askStdin, confirmAndCommit, renderAmendmentPreview } from './contract.ts';
 import { renderWait } from './start.ts';
 
 const EXIT_NOT_APPLIED = 3;
@@ -108,6 +118,73 @@ async function startSupervisor(deps: AppDeps, io: Io, runId: string, wait: boole
   return result.kind === 'final' && result.run.state === 'ready_for_review' ? 0 : EXIT_NOT_APPLIED;
 }
 
+// Who continues the run after an answer, an amendment or a withdrawal (D-16): a live supervisor takes the answered item next, or this command starts the
+// detached one through the one spawn path, or nothing happens.
+async function reportPickup(deps: AppDeps, args: ParsedArgs, io: Io, pickup: Pickup, decision: DecisionRow, withdrawn: boolean): Promise<number> {
+  const runId = decision.runId;
+  if (pickup === 'live-supervisor') {
+    const item = decision.affectedItems[0];
+    io.out(`${withdrawn || item === undefined ? `run ${runId}: a running supervisor continues the run` : `run ${runId}: a running supervisor takes item ${stripControl(item)} next`}\n`);
+    return 0;
+  }
+  if (pickup === 'spawn') return startSupervisor(deps, io, runId, args.flags['wait'] === true);
+  return 0;
+}
+
+// The question of the prompt: what can be typed for this record. A key of an option, `withdraw` when the record lists it, `text` when it takes free
+// text, and `amend` when it carries an amend command.
+function promptOf(options: readonly DecisionOption[], amendable: boolean): string {
+  const parts = options.filter((o) => o.kind === 'choice').map((o) => stripControl(o.key));
+  if (options.some((o) => o.kind === 'withdraw')) parts.push('withdraw');
+  if (options.some((o) => o.kind === 'text')) parts.push('text');
+  if (amendable) parts.push('amend');
+  return `answer (${parts.length === 0 ? '' : `${parts.join(', ')}; `}empty leaves it open): `;
+}
+
+// `amend` at the prompt of a decision that is answered by an amendment (D-17): the request is recorded, the amendment the record suggests is planned
+// with --decision set and shown, and one confirmation writes contract version n+1 and answers the decision in the same transaction. This command
+// never widens anything itself: what it shows is the diff of `contract amend`, and nothing is written without the `y`.
+async function amendChain(deps: AppDeps, args: ParsedArgs, io: Io, decisionId: string): Promise<number> {
+  const requested = requestAmendment(deps, decisionId, deps.clock.nowMs());
+  if (!requested.ok) return fail(io, requested.error);
+  const { decision, command, request } = requested.value;
+  if (request.addWrite === undefined && request.budgets === undefined) {
+    // The record measured nothing to pre-fill, so there is nothing to confirm here: the owner amends with the command, naming the value.
+    io.out(`decision ${decisionId} is answered by an amendment, and the record has no measured request to pre-fill\n`);
+    io.out(`amend with: ${stripControl(command)}\n`);
+    return EXIT_NOT_APPLIED;
+  }
+  const planned = planAmendment(deps, decision.runId, { reason: `answer to ${decisionId}`, ...request, decisionId });
+  if (!planned.ok) return fail(io, planned.error);
+  io.out(renderAmendmentPreview(planned.value));
+  const confirmed = await confirmAndCommit(deps, io, planned.value, `owner:${responderName()}`);
+  if (confirmed.kind === 'failed') return confirmed.code;
+  if (confirmed.kind === 'declined') {
+    io.out('left open\n');
+    return 0;
+  }
+  const pickup = pickupOf(deps, decision.runId, deps.clock.nowMs());
+  if (!pickup.ok) return fail(io, pickup.error);
+  return reportPickup(deps, args, io, pickup.value, decision, false);
+}
+
+// No answer on the command line: the record, then (when someone can answer) the question. What is typed goes through the same engine as the one-line
+// form. An empty line or end of input leaves the decision as it is.
+async function promptForAnswer(deps: AppDeps, args: ParsedArgs, io: Io, decision: DecisionRow): Promise<number> {
+  const options = optionsOf(decision.options);
+  const amendable = amendCommandOf(decision.consequences, decision.decisionId) !== null;
+  const answer = await (io.ask as NonNullable<Io['ask']>)(promptOf(options, amendable));
+  const entry = answer === undefined ? '' : answer.trim();
+  if (entry === '') {
+    io.out('left open\n');
+    return 0;
+  }
+  const listed = options.some((o) => o.kind !== 'text' && o.key === entry);
+  if (entry === 'amend' && !listed && amendable) return amendChain(deps, args, io, decision.decisionId);
+  if (listed || !options.some((o) => o.kind === 'text')) return answerWith(deps, args, io, decision.decisionId, { key: entry.slice(0, KEY_MAX_CHARS) });
+  return answerWith(deps, args, io, decision.decisionId, { text: entry });
+}
+
 export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<number> {
   const decisionId = args.positionals[0] as string;
   const key = args.positionals[1];
@@ -118,26 +195,37 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     io.err(`${errorLine('decide', 'only the user who owns the profile answers a decision')}\n`);
     return EXIT_USAGE;
   }
-  // No answer given: print the record and say how to answer. Nothing is written.
+  // No answer given: print the record, then ask when an open decision can be answered here (D-13). The question goes to whoever supplied the io (the
+  // shell's prompt, a test) or, on a real terminal, to standard input. With no way to ask, or for a decision that is not open, the record and the way
+  // to answer are printed and nothing is written.
   if (key === undefined && typeof text !== 'string') {
     const found = findDecision(deps, decisionId);
     if (!found.ok) return fail(io, found.error);
     io.out(renderDecision(found.value, terminalWidth()));
-    io.err(`${errorLine('decide', 'give an option key or --text')}\n${USAGE}\n`);
-    return EXIT_USAGE;
+    const ask = io.ask ?? (process.stdin.isTTY === true && process.stdout.isTTY === true ? askStdin : undefined);
+    if (ask === undefined || found.value.state !== 'open') {
+      io.err(`${errorLine('decide', 'give an option key or --text')}\n${USAGE}\n`);
+      return EXIT_USAGE;
+    }
+    return promptForAnswer(deps, args, { ...io, ask }, found.value);
   }
+  return answerWith(deps, args, io, decisionId, key !== undefined ? { key } : { text: text as string });
+}
 
+// One answer, from the command line or the prompt, through the engine: validated in the order of D-15, applied or refused and recorded, and the run
+// picked up.
+async function answerWith(deps: AppDeps, args: ParsedArgs, io: Io, decisionId: string, answer: { key: string } | { text: string }): Promise<number> {
+  const key = 'key' in answer ? answer.key : undefined;
   // usage() has already refused AVARICE_RUN, a pipe and a run's process tree, and the profile was just shown to be the user's own.
   const result = decide(deps, {
     decisionId,
-    answer: key !== undefined ? { key } : { text: text as string },
+    answer,
     identity: { interactive: true, underRun: false, inRunTree: false, ownsProfile: true },
     responder: responderName(),
     nowMs: deps.clock.nowMs(),
   });
   if (!result.ok) return fail(io, result.error);
   const outcome = result.value;
-  const runId = outcome.decision.runId;
 
   switch (outcome.kind) {
     case 'rejected':
@@ -164,11 +252,5 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   }
 
   io.out(`${outcome.kind === 'withdrawn' ? `decision ${decisionId} withdrawn` : `decision ${decisionId} answered (${stripControl(key ?? 'text')})`}\n`);
-  if (outcome.pickup === 'live-supervisor') {
-    const item = outcome.decision.affectedItems[0];
-    io.out(`${outcome.kind === 'withdrawn' || item === undefined ? `run ${runId}: a running supervisor continues the run` : `run ${runId}: a running supervisor takes item ${stripControl(item)} next`}\n`);
-    return 0;
-  }
-  if (outcome.pickup === 'spawn') return startSupervisor(deps, io, runId, args.flags['wait'] === true);
-  return 0;
+  return reportPickup(deps, args, io, outcome.pickup, outcome.decision, outcome.kind === 'withdrawn');
 }
