@@ -235,3 +235,22 @@ export function bannerText(input: BannerInput): { title: string; body: string } 
   }
   return { title: 'AVARICE', body: `${head}${tail}` };
 }
+
+// Stubs: the timing rules land in the next commit.
+export const BACKOFF_DELAYS_MS: readonly number[] = [];
+
+export function inQuietHours(_minuteOfDay: number, _quiet: ProfileNotify['quietHours']): boolean {
+  return false;
+}
+
+export function batchDue(_firstPendingAtMs: number, _nowMs: number, _windowMinutes: number): boolean {
+  return false;
+}
+
+export function nextAttemptAt(_attempts: number, _lastAttemptAtMs: number): number | null {
+  return null;
+}
+
+export function nextDigestAt(_minuteOfDay: number, _times: readonly string[]): { minute: number; nextDay: boolean } | null {
+  return null;
+}

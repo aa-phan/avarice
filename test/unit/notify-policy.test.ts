@@ -2,7 +2,7 @@
 // independently of the domain module: the defaults, the field paths of refusals, the subset rule and the banner words.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { bannerText, effectiveDestinations, parseProfileNotify } from '../../src/domain/notify-policy.ts';
+import { BACKOFF_DELAYS_MS, bannerText, batchDue, effectiveDestinations, inQuietHours, nextAttemptAt, nextDigestAt, parseProfileNotify } from '../../src/domain/notify-policy.ts';
 import type { ProfileNotify } from '../../src/domain/notify-policy.ts';
 
 const DEFAULTS: ProfileNotify = {
@@ -199,5 +199,124 @@ describe('bannerText', () => {
   it('treats a count that is not a whole non-negative number as 0', () => {
     assert.equal(bannerText({ kind: 'decisions', runId: 'run_01', count: -3 }).body, 'run_01: 0 decisions waiting. Run: avarice inbox');
     assert.equal(bannerText({ kind: 'decisions', runId: 'run_01', count: Number.NaN }).body, 'run_01: 0 decisions waiting. Run: avarice inbox');
+  });
+});
+
+describe('inQuietHours', () => {
+  const overnight = { start: 1320, end: 480 };
+  const daytime = { start: 60, end: 120 };
+
+  it('holds a banner at 22:00 and at 07:59 and releases it at 08:00 (overnight range)', () => {
+    assert.equal(inQuietHours(1320, overnight), true);
+    assert.equal(inQuietHours(479, overnight), true);
+    assert.equal(inQuietHours(480, overnight), false);
+    assert.equal(inQuietHours(1319, overnight), false);
+  });
+
+  it('holds across midnight and stays open outside the range', () => {
+    assert.equal(inQuietHours(0, overnight), true);
+    assert.equal(inQuietHours(1439, overnight), true);
+    assert.equal(inQuietHours(481, overnight), false);
+    assert.equal(inQuietHours(720, overnight), false);
+  });
+
+  it('is a half-open range for a range inside one day', () => {
+    assert.equal(inQuietHours(59, daytime), false);
+    assert.equal(inQuietHours(60, daytime), true);
+    assert.equal(inQuietHours(119, daytime), true);
+    assert.equal(inQuietHours(120, daytime), false);
+  });
+
+  it('never rounds a fractional minute across the end', () => {
+    assert.equal(inQuietHours(479.999, overnight), true);
+    assert.equal(inQuietHours(119.999, daytime), true);
+  });
+
+  it('is never in quiet hours when they are off', () => {
+    for (const minute of [0, 60, 480, 1320, 1439]) assert.equal(inQuietHours(minute, null), false);
+  });
+});
+
+describe('batchDue', () => {
+  it('is due once the oldest pending notification is a whole window old', () => {
+    assert.equal(batchDue(1_000, 1_000 + 599_999, 10), false);
+    assert.equal(batchDue(1_000, 1_000 + 600_000, 10), true);
+    assert.equal(batchDue(1_000, 1_000 + 600_001, 10), true);
+  });
+
+  it('measures in whole minutes at the edges of the allowed window', () => {
+    assert.equal(batchDue(0, 59_999, 1), false);
+    assert.equal(batchDue(0, 60_000, 1), true);
+    assert.equal(batchDue(0, 7_199_999, 120), false);
+    assert.equal(batchDue(0, 7_200_000, 120), true);
+  });
+
+  it('is not due when the clock reads earlier than the first notification', () => {
+    assert.equal(batchDue(5_000, 1_000, 10), false);
+  });
+});
+
+describe('retry backoff', () => {
+  it('waits 0 s, 10 s and 60 s between the three in-process attempts', () => {
+    assert.deepEqual([...BACKOFF_DELAYS_MS], [0, 10_000, 60_000]);
+  });
+
+  it('schedules the next attempt from the last one and stops after the third', () => {
+    assert.equal(nextAttemptAt(0, 5_000), 5_000);
+    assert.equal(nextAttemptAt(1, 5_000), 15_000);
+    assert.equal(nextAttemptAt(2, 5_000), 65_000);
+    assert.equal(nextAttemptAt(3, 5_000), null);
+    assert.equal(nextAttemptAt(4, 5_000), null);
+  });
+
+  it('schedules no attempt for a count that is not a whole non-negative number', () => {
+    assert.equal(nextAttemptAt(-1, 5_000), null);
+    assert.equal(nextAttemptAt(1.5, 5_000), null);
+    assert.equal(nextAttemptAt(Number.NaN, 5_000), null);
+  });
+});
+
+describe('nextDigestAt', () => {
+  const times = ['12:30', '17:30'];
+
+  it('is the first digest time after the given minute, on the same day', () => {
+    assert.deepEqual(nextDigestAt(750, times), { minute: 1050, nextDay: false });
+    assert.deepEqual(nextDigestAt(749, times), { minute: 750, nextDay: false });
+    assert.deepEqual(nextDigestAt(0, times), { minute: 750, nextDay: false });
+    assert.deepEqual(nextDigestAt(1049, times), { minute: 1050, nextDay: false });
+  });
+
+  it('rolls to the first time of the next day once the last one has passed', () => {
+    assert.deepEqual(nextDigestAt(1050, times), { minute: 750, nextDay: true });
+    assert.deepEqual(nextDigestAt(1051, times), { minute: 750, nextDay: true });
+    assert.deepEqual(nextDigestAt(1439, times), { minute: 750, nextDay: true });
+  });
+
+  it('works with one time and with times given out of order', () => {
+    assert.deepEqual(nextDigestAt(0, ['00:00']), { minute: 0, nextDay: true });
+    assert.deepEqual(nextDigestAt(100, ['17:30', '12:30']), { minute: 750, nextDay: false });
+  });
+
+  it('has no next time when no digest time is set', () => {
+    assert.equal(nextDigestAt(750, []), null);
+  });
+});
+
+describe('the module cannot answer a decision (AUT-4)', () => {
+  it('exports parsers, rules and text only: no function approves, answers or decides', async () => {
+    const names = Object.keys(await import('../../src/domain/notify-policy.ts')).sort();
+    assert.deepEqual(names, [
+      'BACKOFF_DELAYS_MS',
+      'KNOWN_DESTINATIONS',
+      'NOTIFY_DEFAULTS',
+      'NOTIFY_LIMITS',
+      'bannerText',
+      'batchDue',
+      'effectiveDestinations',
+      'inQuietHours',
+      'nextAttemptAt',
+      'nextDigestAt',
+      'parseProfileNotify',
+    ]);
   });
 });
