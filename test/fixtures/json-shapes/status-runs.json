@@ -128,7 +128,25 @@
             "id": ".avarice/config.json",
             "revision": "<sha1>"
           }
-        ]
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "done",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          }
+        ],
+        "decisions": [],
+        "notifications": {
+          "delivered": 1,
+          "pending": 0,
+          "held": 0,
+          "failed": 0,
+          "lastError": null
+        }
       }
     ]
   }
