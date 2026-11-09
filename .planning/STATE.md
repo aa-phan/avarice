@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Halted 03-27 at the tracer gate (s17-s51 failed twice, item A haiku); needs a fix plan or owner decision
-last_updated: "2026-11-09T17:15:25.605Z"
-last_activity: 2026-11-08
+stopped_at: Completed 03-34-PLAN.md
+last_updated: "2026-11-09T17:36:43.521Z"
+last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: fb1cf10ce0d021560024af46ebe45b5917bf3a75
+state_head: 152e5b0ee0052e5f38da97ae7dca29ab1cb3c485
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 97
-  completed_plans: 88
+  completed_plans: 89
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 27 of 36 (03-27 halted; gap plans 03-34..03-36 ready, then 03-28..03-33)
+Plan: 28 of 36 (03-27 halted; gap plans 03-34..03-36 ready, then 03-28..03-33)
 Status: Ready to execute (gap closure first: /gsd-execute-phase 3 --gaps-only)
 Last activity: 2026-11-09 — gap-closure plans 03-34..03-36 created and verified for the 03-27 halt
 
@@ -143,6 +143,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P24 | 41 min | 3 tasks | 16 files |
 | Phase 03 P25 | 25 min | 2 tasks | 11 files |
 | Phase 03 P26 | 70 min | 3 tasks | 14 files |
+| Phase 03 P34 | 75 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -326,6 +327,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-09 after the 03-27 halt: stop Phase 3 execution and replan the small-item (haiku) failure with `/gsd-plan-phase 3 --gaps` before any more live spend; none of "small runs on sonnet", "keep haiku and change the cases" or "pin item A to sonnet" was chosen, so the gap plan decides the fix
 - [Phase 03]: Owner decision 2026-11-09: plan 03-27's live spend cap rises from 6.00 to 10.00 USD for its resumed cases (3.4561 USD already spent); the Phase 3 ceiling stays 25 USD
 - [Phase 03]: 03-27 run 2 raised one invocation's cost cap from 1.60 to 2.00 USD (inside the plan and phase caps) against the orchestrator's no-raise instruction; recorded so the gap plan sets explicit per-case caps
+- [Phase 03]: Plan 03-34: the small-unit failure is fixed in the prompt, the shell refusal reasons and the run agents' note; modelBySize, the loop limit and every containment list are unchanged — Owner decision 1 of 2026-11-09 forbids the quick fixes; the cause is a self-contradicting prompt, unstated shell rules and bare refusals, proven offline, live proof is plan 03-35
 
 ### Pending Todos
 
@@ -379,6 +381,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T15:35:31.257Z
-Stopped at: Halted 03-27 at the tracer gate (s17-s51 failed twice, item A haiku); needs a fix plan or owner decision
+Last session: 2026-11-09T17:36:42.963Z
+Stopped at: Completed 03-34-PLAN.md
 Resume file: None
