@@ -18,6 +18,7 @@ import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import {
+  REPAIR_SCENARIO_POINTS,
   RUN_EXPIRY_WAIT_MS,
   RUN_KILL_POINTS,
   ledgerInterruption,
@@ -33,6 +34,7 @@ import {
   statusCli,
 } from '../helpers/fault-run.ts';
 import type { RunKillPoint, RunResult } from '../helpers/fault-run.ts';
+import { s52PlanHost, scenario } from '../helpers/repair-scenarios.ts';
 import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, makeRunRepo, onboardRunRepo, startWithFakeRunHost, writeBrief } from '../helpers/run-fixtures.ts';
 import { checkoutSnapshot } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -83,6 +85,12 @@ function fixture(): Fixture {
   return { roots, repo, brief: writeBrief(join(roots.base, 'briefs')), before: checkoutSnapshot(repo.path) };
 }
 
+// The repair scenario (plan 03-19, S-52): item A adds a test, item B's first unit breaks it, one repair fixes it. Three units, three attempts, two commits.
+function repairFixture(): Fixture {
+  const s = scenario(cleanup);
+  return { roots: s.roots, repo: s.repo, brief: s.brief, before: checkoutSnapshot(s.repo.path) };
+}
+
 const lines = (stdout: string): string[] => stdout.trim().split('\n');
 
 // The state and the next action `status` must report right after the kill. A transition commits the checkpoint of the action that follows it, so
@@ -102,7 +110,10 @@ const EXPECTED_AT_KILL: Readonly<Record<RunKillPoint, { state: RunState; nextAct
   'mid-invocation:run': { state: 'running', nextAction: 'launch:run' },
   'after-checkpoint:classify': { state: 'running', nextAction: 'classify' },
   'after-checkpoint:discard-attempt': { state: 'running', nextAction: 'discard-attempt' },
+  'after-checkpoint:gate:g1': { state: 'running', nextAction: 'gate:g1' },
   'after-checkpoint:gate:g2': { state: 'running', nextAction: 'gate:g2' },
+  'after-checkpoint:repair': { state: 'running', nextAction: 'repair' },
+  'after-checkpoint:gate:g3': { state: 'running', nextAction: 'gate:g3' },
   'after-checkpoint:commit': { state: 'running', nextAction: 'commit' },
   'mid-commit': { state: 'running', nextAction: 'commit' },
   'after-transition:verifying': { state: 'verifying', nextAction: 'verify:checks' },
@@ -125,10 +136,13 @@ const SECOND_INVOCATION: ReadonlySet<RunKillPoint> = new Set<RunKillPoint>(['mid
 function hostsFor(point: RunKillPoint): { kill: FakeRunOptions; resume: FakeRunOptions } {
   // The CON-16 recovery path is reached by a unit that crashed, so its first attempt crashes after writing two files; the retry does the work.
   if (point === 'after-checkpoint:discard-attempt') return { kill: { perAttempt: [{ crash: { afterFiles: ['src/slug.ts', 'src/extra.ts'] } }, FIX] }, resume: FIX };
+  // The repair scenario: a process that resumes at the repair has the repair as its first call of item B; one that resumes earlier calls B twice, as the first process did.
+  if (REPAIR_SCENARIO_POINTS.has(point)) return { kill: s52PlanHost(), resume: s52PlanHost(point === 'after-checkpoint:repair') };
   return { kill: FIX, resume: FIX };
 }
 
 let reference: RunResult;
+let repairReference: RunResult;
 let referenceRunId = '';
 let total = 0;
 let identified = 0;
@@ -139,6 +153,11 @@ before(() => {
   assert.equal(ran.code, 0, ran.stdout + ran.stderr);
   referenceRunId = runIdFromOutput(ran.stdout);
   reference = normalizeRunResult(f.roots, referenceRunId);
+
+  const r = repairFixture();
+  const repaired = startWithFakeRunHost(r.roots, r.repo, r.brief, s52PlanHost() as Record<string, unknown>);
+  assert.equal(repaired.code, 0, repaired.stdout + repaired.stderr);
+  repairReference = normalizeRunResult(r.roots, runIdFromOutput(repaired.stdout));
 });
 
 describe('RUN_KILL_POINTS covers every action and transition of a run', () => {
@@ -160,6 +179,7 @@ describe('RUN_KILL_POINTS covers every action and transition of a run', () => {
     assert.deepEqual(reference.changedFiles, ['src/slug.ts']);
     assert.deepEqual(reference.gates, [
       ['G0', true],
+      ['G1', true],
       ['G2', true],
       ['G4', true],
     ]);
@@ -168,12 +188,26 @@ describe('RUN_KILL_POINTS covers every action and transition of a run', () => {
       ['check:lint:passed', 'check:test:passed', 'gsd-verdict:gsd-verification:passed'],
     );
   });
+
+  it('the uninterrupted reference run of the repair scenario ended ready_for_review with two commits, the repair judged by G3, and every gate passed', () => {
+    assert.equal(repairReference.state, 'ready_for_review');
+    assert.equal(repairReference.commitCount, 2);
+    assert.deepEqual(repairReference.changedFiles, ['src/a-helper.ts', 'src/b-first.ts', 'src/b-repair.ts', 'test/slug.test.ts']);
+    assert.deepEqual(repairReference.gates, [
+      ['G0', true],
+      ['G1', true],
+      ['G2', true],
+      ['G3', true],
+      ['G4', true],
+    ]);
+  });
 });
 
 describe('kill, then resume, reaches the result of an uninterrupted run, and resume names what was interrupted (AC-3)', () => {
   for (const point of RUN_KILL_POINTS) {
     it(point, () => {
-      const f = fixture();
+      const repairing = REPAIR_SCENARIO_POINTS.has(point);
+      const f = repairing ? repairFixture() : fixture();
       const hosts = hostsFor(point);
       total += 1;
       const killed = runRunWithFault(f.roots, f.repo, f.brief, point, hosts.kill);
@@ -234,7 +268,7 @@ describe('kill, then resume, reaches the result of an uninterrupted run, and res
 
       // The resumed run equals the uninterrupted one: the committed tree and file list, the evidence statuses and the gate verdicts.
       const result = normalizeRunResult(f.roots, runId);
-      assert.deepEqual(result, reference, 'the resumed run has the same committed tree, commit, evidence statuses and gate verdicts as an uninterrupted run');
+      assert.deepEqual(result, repairing ? repairReference : reference, 'the resumed run has the same committed tree, commit, evidence statuses and gate verdicts as an uninterrupted run');
       assert.deepEqual(checkoutSnapshot(f.repo.path), f.before, 'the user checkout is byte-identical');
 
       // Nothing is left in flight, the run became ready_for_review exactly once, and the budgets count what was spent.
@@ -242,9 +276,10 @@ describe('kill, then resume, reaches the result of an uninterrupted run, and res
       const ready = rows<{ data_json: string }>(f.roots, "SELECT data_json FROM events WHERE run_id = ? AND type = 'run.transition'", runId).filter((e) => (JSON.parse(e.data_json) as { to: string }).to === 'ready_for_review');
       assert.equal(ready.length, 1, 'ready_for_review once');
       const attempts = rows<{ outcome: string | null }>(f.roots, 'SELECT outcome FROM attempts WHERE run_id = ? ORDER BY ordinal', runId);
-      assert.equal(attempts.length, RETRIED.has(point) ? 2 : 1, 'one attempt, or two when the interrupted unit was retried');
+      // The repair scenario has three units whatever the kill (item A, item B, and B's one repair), and none of its kill points interrupts a unit in flight.
+      assert.equal(attempts.length, repairing ? 3 : RETRIED.has(point) ? 2 : 1, 'one attempt, or two when the interrupted unit was retried');
       assert.equal(attempts.at(-1)?.outcome, 'handed-off');
-      assert.equal(rows<{ used: number }>(f.roots, "SELECT used FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0]?.used, SECOND_INVOCATION.has(point) ? 2 : 1, 'invocations used');
+      assert.equal(rows<{ used: number }>(f.roots, "SELECT used FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0]?.used, repairing ? 3 : SECOND_INVOCATION.has(point) ? 2 : 1, 'invocations used');
       assert.equal(rows<{ reserved: number }>(f.roots, "SELECT reserved FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0]?.reserved, 0, 'no reservation is left');
 
       if (survivor !== undefined) {

@@ -214,7 +214,12 @@ export const RUN_KILL_POINTS = [
   'mid-invocation:run',
   'after-checkpoint:classify',
   'after-checkpoint:discard-attempt',
+  // Plan 03-19: gate G1 judges every unit's plan; the repair and gate G3 exist only for an item whose check a unit broke, so these three are reached by the
+  // repair scenario (REPAIR_SCENARIO_POINTS), whose reference run is the one of S-52.
+  'after-checkpoint:gate:g1',
   'after-checkpoint:gate:g2',
+  'after-checkpoint:repair',
+  'after-checkpoint:gate:g3',
   'after-checkpoint:commit',
   'mid-commit',
   // verifying: RUN_NEXT_ACTIONS.verifying; the commit's transition commits `verify:checks`, then the stage commits it again.
@@ -229,6 +234,10 @@ export const RUN_KILL_POINTS = [
   'mid-handoff#2',
 ] as const;
 export type RunKillPoint = (typeof RUN_KILL_POINTS)[number];
+
+// The points the kill suite runs against the repair scenario (S-52: item B breaks a test item A added, and one repair fixes it) instead of the single-item
+// reference: the repair and gate G3 are reached only there, and gate G1 is killed at the first item's gate, with a second item and a repair still to come.
+export const REPAIR_SCENARIO_POINTS: ReadonlySet<RunKillPoint> = new Set<RunKillPoint>(['after-checkpoint:gate:g1', 'after-checkpoint:repair', 'after-checkpoint:gate:g3']);
 
 // The kill points inside an item-local block (plan 03-18), reached only by a run whose item asks (test/fault/run-park.test.ts): right after the `park`
 // checkpoint (the delta is still in the tree), between the park step and the decision, and after the supervisor released its lease on a blocked run.

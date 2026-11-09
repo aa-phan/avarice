@@ -66,6 +66,16 @@ export function s52Host(extra: { b?: FakeRunOptions; repair?: FakeRunOptions } =
   return { perItem: { A: A_UNIT, B: { ...B_FIRST, ...(extra.b ?? {}), perAttempt: [{}, { ...B_REPAIR, ...(extra.repair ?? {}) }] } } };
 }
 
+// The S-52 host with a quick PLAN for each unit that names the paths the unit changes (all inside the write set), which is what the kill-point suite runs: gate G1
+// reads each plan. `repairOnly` is the script of a process that resumes at the repair: its first call of B is the repair.
+const plan = (...paths: string[]): string => `---\nfiles_modified: [${paths.join(', ')}]\n---\n# Plan\n\nChange ${paths.join(' and ')}.\n`;
+export function s52PlanHost(repairOnly = false): FakeRunOptions {
+  const a: FakeRunOptions = { ...A_UNIT, planText: plan('test/slug.test.ts', 'src/a-helper.ts') };
+  const first: FakeRunOptions = { ...B_FIRST, planText: plan('src/slug.ts', 'src/b-first.ts') };
+  const repair: FakeRunOptions = { ...B_REPAIR, planText: plan('src/slug.ts', 'src/b-repair.ts') };
+  return { perItem: { A: a, B: repairOnly ? repair : { ...first, perAttempt: [{}, repair] } } };
+}
+
 // ---- S-21: one item, a test inventory, a unit that breaks a test the repository already had ----------------------------------------------------------
 
 // The name of the test the first unit breaks, and the ID the inventory lists it under (the list script prints `<file> > <name>`).
