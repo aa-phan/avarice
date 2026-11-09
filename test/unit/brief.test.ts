@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { Result } from '../../src/domain/result.ts';
-import { parseBrief } from '../../src/domain/brief.ts';
+import { parseAcceptanceSection, parseBrief } from '../../src/domain/brief.ts';
 import type { Brief } from '../../src/domain/brief.ts';
 
 const SOURCE = { kind: 'file', id: 'briefs/slug.md' } as const;
@@ -434,5 +434,38 @@ describe('parseBrief: the decision: verifiedBy form (D-02)', () => {
       assert.equal(refusedField(parse(ac(`decision:${key}`))), 'brief.acceptance.verifiedBy', key);
     }
     unwrap(parse(ac(`decision:${'a'.repeat(40)}`)));
+  });
+});
+
+describe('parseAcceptanceSection: the acceptance line parser (RC-6)', () => {
+  it('gives the criteria parseBrief reads from the acceptance section', () => {
+    const lines = [
+      '- AC1: Repeated dashes collapse to one | verifiedBy: check:test, test:slug.collapse',
+      '- AC2: Other slugs are unchanged | verifiedBy: check:test',
+      '',
+    ];
+    const parsed = parseAcceptanceSection(lines);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) assert.deepEqual(parsed.value, unwrap(parse(FULL)).acceptance);
+  });
+
+  it('refuses what parseBrief refuses, with the same fields', () => {
+    const cases: Array<[string[], string]> = [
+      [['- AC1: one', '- AC1: two'], 'brief.acceptance.id'],
+      [['- X1: one'], 'brief.acceptance.id'],
+      [['- AC1: one | verifiedBy: bogus'], 'brief.acceptance.verifiedBy'],
+      [['- AC1:'], 'brief.acceptance'],
+      [['not a bullet'], 'brief.acceptance'],
+    ];
+    for (const [lines, field] of cases) {
+      const r = parseAcceptanceSection(lines);
+      assert.equal(r.ok, false, lines.join('|'));
+      if (!r.ok && r.error.kind === 'invalid') assert.equal(r.error.field, field, lines.join('|'));
+    }
+  });
+
+  it('reads an empty section as no criteria', () => {
+    const r = parseAcceptanceSection([]);
+    assert.deepEqual(r.ok && r.value, []);
   });
 });

@@ -102,6 +102,10 @@ function bullets(field: string, lines: readonly string[]): Result<string[]> {
   return ok(items);
 }
 
+export function parseAcceptanceSection(_lines: readonly string[]): Result<BriefAcceptance[]> {
+  return invalid('brief.acceptance', 'parseAcceptanceSection is not implemented');
+}
+
 function readAcceptance(lines: readonly string[]): Result<BriefAcceptance[]> {
   const items = bullets('brief.acceptance', lines);
   if (!items.ok) return items;

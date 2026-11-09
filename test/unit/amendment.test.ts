@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyAmendment, budgetRowChanges } from '../../src/domain/amendment.ts';
+import { applyAmendment, budgetRowChanges, classifyInvalidation, staleTargets } from '../../src/domain/amendment.ts';
 import type { AmendmentContext, AmendmentRequest } from '../../src/domain/amendment.ts';
 import { parseBrief } from '../../src/domain/brief.ts';
 import { parseConventions } from '../../src/domain/conventions.ts';
@@ -63,9 +63,9 @@ const TWO_ITEM_BRIEF = [
   '',
 ].join('\n');
 
-function compile(briefText: string): RunContract {
+function compile(briefText: string, conventionsObject: unknown = CONVENTIONS_OBJECT): RunContract {
   const brief = unwrap(parseBrief(briefText, { kind: 'file', id: 'briefs/slug.md' }));
-  const conventions = unwrap(parseConventions(JSON.stringify(CONVENTIONS_OBJECT)));
+  const conventions = unwrap(parseConventions(JSON.stringify(conventionsObject)));
   return unwrap(
     compileRunContract({
       runId: 'run_01JC8Z3V7QABCDEFGHJKMNPQRS',
@@ -211,5 +211,317 @@ describe('applyAmendment tracer: a budget raise produces contract version 2 (RC-
     const { contract } = unwrap(amend(v1, { budgets: { costUsdPerRun: 12 } }));
     assert.equal(contract.compiledAt, NOW);
     assert.equal(v1.compiledAt, '2026-11-05T12:00:00.000Z');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Scope, checks and acceptance amendments with their D-20 invalidation classes.
+// ---------------------------------------------------------------------------------------------------------------------
+const TWO_REQUIRED_CONVENTIONS = {
+  ...CONVENTIONS_OBJECT,
+  checks: [
+    { name: 'test', argv: ['npm', 'test'] },
+    { name: 'lint', argv: ['npm', 'run', 'lint'] },
+    { name: 'build', argv: ['npm', 'run', 'build'], required: false },
+  ],
+};
+
+describe('applyAmendment: --add-write (D-20 scope, T-03-16)', () => {
+  it('adds a glob inside the conventions write set to files.write and files.create and invalidates scope-conformance', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { addWrite: ['tests/unit/date-copy.test.ts'] }));
+    assert.deepEqual(r.contract.files.write, [...v1.files.write, 'tests/unit/date-copy.test.ts']);
+    assert.deepEqual(r.contract.files.create, [...v1.files.create, 'tests/unit/date-copy.test.ts']);
+    assert.deepEqual(r.diff, [
+      { path: 'files.write', added: ['tests/unit/date-copy.test.ts'] },
+      { path: 'files.create', added: ['tests/unit/date-copy.test.ts'] },
+    ]);
+    assert.deepEqual(r.invalidates, ['scope-conformance']);
+    assert.deepEqual(r.contract.files.protected, v1.files.protected);
+  });
+
+  it('refuses a glob outside the conventions write set, naming add-write', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    for (const glob of ['scripts/x.ts', 'src-evil/**', '**', 'tests/**']) {
+      const r = refusal(v1, { addWrite: [glob] });
+      assert.equal(r.field, 'add-write', glob);
+      assert.match(r.reason, /write set/);
+    }
+  });
+
+  it('refuses a protected path, whether the conventions or the preset protect it', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const fromConventions = refusal(v1, { addWrite: ['src/vendor/lib.ts'] });
+    assert.equal(fromConventions.field, 'add-write');
+    assert.match(fromConventions.reason, /protected/);
+    const wide = applyAmendment(v1, { addWrite: ['.github/workflows/ci.yml'], reason: 'r' }, { conventionsWrite: ['**'], nowIso: NOW });
+    assert.equal(wide.ok, false);
+    if (!wide.ok && wide.error.kind === 'invalid') {
+      assert.equal(wide.error.field, 'add-write');
+      assert.match(wide.error.reason, /protected/);
+    }
+  });
+
+  it('refuses a malformed glob and a list that is not strings', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    for (const glob of ['/etc/passwd', '../x', 'src/../x', '', 'src\\x']) {
+      assert.equal(refusal(v1, { addWrite: [glob] }).field, 'add-write', glob);
+    }
+    assert.equal(refusal(v1, { addWrite: [5 as unknown as string] }).field, 'add-write');
+    assert.equal(refusal(v1, { addWrite: 'src/x.ts' as unknown as string[] }).field, 'add-write');
+  });
+
+  it('skips a glob the contract already holds, and refuses a request that adds nothing new', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    assert.match(refusal(v1, { addWrite: ['src/**'] }).reason, /nothing to amend/);
+    const r = unwrap(amend(v1, { addWrite: ['src/**', 'tests/unit/a.test.ts', 'tests/unit/a.test.ts'] }));
+    assert.deepEqual(r.diff, [
+      { path: 'files.write', added: ['tests/unit/a.test.ts'] },
+      { path: 'files.create', added: ['tests/unit/a.test.ts'] },
+    ]);
+  });
+});
+
+describe('applyAmendment: --check +name / -name (D-20 required checks, AUT-16)', () => {
+  it('makes a declared check required and invalidates all check evidence', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    assert.deepEqual(v1.verification.requiredChecks, ['test']);
+    const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }] }));
+    assert.deepEqual(r.contract.verification.requiredChecks, ['test', 'build']);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'] }]);
+    assert.deepEqual(r.invalidates, ['check-evidence']);
+  });
+
+  it('makes a required check not required, keeping the declaration', () => {
+    const v1 = compile(ONE_ITEM_BRIEF, TWO_REQUIRED_CONVENTIONS);
+    assert.deepEqual(v1.verification.requiredChecks, ['test', 'lint']);
+    const r = unwrap(amend(v1, { checks: [{ op: '-', name: 'test' }] }));
+    assert.deepEqual(r.contract.verification.requiredChecks, ['lint']);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', removed: ['test'] }]);
+    assert.deepEqual(r.invalidates, ['check-evidence']);
+    assert.equal(r.contract.execution.checks.some((c) => c.name === 'test'), true);
+  });
+
+  it('applies an add and a remove together, in one diff entry', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }, { op: '-', name: 'test' }] }));
+    assert.deepEqual(r.contract.verification.requiredChecks, ['build']);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'], removed: ['test'] }]);
+  });
+
+  it('refuses removing the only required check, naming check', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const r = refusal(v1, { checks: [{ op: '-', name: 'test' }] });
+    assert.equal(r.field, 'check');
+    assert.match(r.reason, /required/);
+  });
+
+  it('refuses an undeclared check, a conflicting pair and a malformed entry', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    assert.equal(refusal(v1, { checks: [{ op: '+', name: 'nope' }] }).field, 'check');
+    assert.equal(refusal(v1, { checks: [{ op: '-', name: 'nope' }] }).field, 'check');
+    assert.equal(refusal(v1, { checks: [{ op: '+', name: 'build' }, { op: '-', name: 'build' }] }).field, 'check');
+    assert.equal(refusal(v1, { checks: [{ op: '*' as '+', name: 'build' }] }).field, 'check');
+    assert.equal(refusal(v1, { checks: [{ op: '+', name: 'Build!' }] }).field, 'check');
+  });
+
+  it('leaves the contract as it is when the check is already in the asked state, so the request changes nothing', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    assert.match(refusal(v1, { checks: [{ op: '+', name: 'test' }] }).reason, /nothing to amend/);
+    assert.match(refusal(v1, { checks: [{ op: '-', name: 'lint' }] }).reason, /nothing to amend/);
+  });
+});
+
+describe('applyAmendment: --acceptance (D-20 acceptance, G0)', () => {
+  it('changes an existing criterion on its own item and invalidates gates, mappings and checks', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { acceptance: { text: '- AC2: new wording | verifiedBy: check:test' } }));
+    assert.equal(r.contract.intent.acceptance.find((c) => c.id === 'AC2')?.text, 'new wording');
+    assert.deepEqual(r.contract.intent.workItems.map((w) => w.acceptance), [['AC1'], ['AC2']]);
+    assert.deepEqual(r.diff, [{ path: 'intent.acceptance.AC2.text', from: 'second', to: 'new wording' }]);
+    assert.deepEqual(r.invalidates, ['gates', 'acceptance-mappings', 'checks-rerun']);
+  });
+
+  it('diffs a changed verifiedBy list', () => {
+    const v1 = compile(TWO_ITEM_BRIEF, TWO_REQUIRED_CONVENTIONS);
+    const r = unwrap(amend(v1, { acceptance: { text: '- AC1: first | verifiedBy: check:test, check:lint' } }));
+    assert.deepEqual(r.diff, [{ path: 'intent.acceptance.AC1.verifiedBy', from: ['check:test'], to: ['check:test', 'check:lint'] }]);
+  });
+
+  it('adds a new criterion to the item named by item', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { acceptance: { text: '- AC9: extra | verifiedBy: check:test', item: 'B' } }));
+    assert.deepEqual(r.contract.intent.acceptance.map((c) => c.id), ['AC1', 'AC2', 'AC9']);
+    assert.deepEqual(r.contract.intent.workItems.find((w) => w.id === 'B')?.acceptance, ['AC2', 'AC9']);
+    assert.deepEqual(r.contract.intent.workItems.find((w) => w.id === 'A')?.acceptance, ['AC1']);
+    assert.deepEqual(r.diff, [
+      { path: 'intent.acceptance', added: ['AC9'] },
+      { path: 'intent.workItems[B].acceptance', added: ['AC9'] },
+    ]);
+    assert.deepEqual(r.invalidates, ['gates', 'acceptance-mappings', 'checks-rerun']);
+  });
+
+  it('ignores item for an existing ID and leaves that ID on its own item', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { acceptance: { text: '- AC1: reworded | verifiedBy: check:test', item: 'B' } }));
+    assert.deepEqual(r.contract.intent.workItems.map((w) => w.acceptance), [['AC1'], ['AC2']]);
+  });
+
+  it('requires item for a new criterion on a run with more than one item, and names item', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    const r = refusal(v1, { acceptance: { text: '- AC9: extra | verifiedBy: check:test' } });
+    assert.equal(r.field, 'item');
+    assert.equal(refusal(v1, { acceptance: { text: '- AC9: extra | verifiedBy: check:test', item: 'Z' } }).field, 'item');
+  });
+
+  it('puts a new criterion on the only item of a one-item run when item is omitted', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { acceptance: { text: '- AC2: more | verifiedBy: check:test' } }));
+    assert.deepEqual(r.contract.intent.workItems[0]?.acceptance, ['AC1', 'AC2']);
+  });
+
+  it('refuses text that is not acceptance lines, an empty file and more than 20 criteria, naming acceptance', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    assert.equal(refusal(v1, { acceptance: { text: 'prose, not a bullet' } }).field, 'acceptance');
+    assert.equal(refusal(v1, { acceptance: { text: '- AC2 no colon' } }).field, 'acceptance');
+    assert.equal(refusal(v1, { acceptance: { text: '\n  \n' } }).field, 'acceptance');
+    const many = Array.from({ length: 20 }, (_, n) => `- AC${n + 2}: c | verifiedBy: check:test`).join('\n');
+    assert.equal(refusal(v1, { acceptance: { text: many } }).field, 'acceptance');
+  });
+
+  it('refuses a result G0 rejects: an undeclared check reference or a criterion with no verifiedBy', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const undeclared = refusal(v1, { acceptance: { text: '- AC1: first | verifiedBy: check:nope' } });
+    assert.equal(undeclared.field, 'g0');
+    assert.match(undeclared.reason, /check-declared/);
+    const bare = refusal(v1, { acceptance: { text: '- AC2: no proof' } });
+    assert.equal(bare.field, 'g0');
+    assert.match(bare.reason, /acceptance-verified-by/);
+  });
+
+  it('changes nothing when the criterion is identical', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    assert.match(refusal(v1, { acceptance: { text: '- AC1: first | verifiedBy: check:test' } }).reason, /nothing to amend/);
+  });
+});
+
+describe('applyAmendment: combined requests', () => {
+  it('gives the union of the classes in the order gates, acceptance-mappings, checks-rerun, scope-conformance, check-evidence, approvals', () => {
+    const v1 = compile(TWO_ITEM_BRIEF);
+    const r = unwrap(
+      amend(v1, {
+        budgets: { toolCalls: 100 },
+        addWrite: ['tests/unit/a.test.ts'],
+        checks: [{ op: '+', name: 'build' }],
+        acceptance: { text: '- AC1: reworded | verifiedBy: check:test' },
+      }),
+    );
+    assert.deepEqual(r.invalidates, ['gates', 'acceptance-mappings', 'checks-rerun', 'scope-conformance', 'check-evidence']);
+    assert.equal(r.contract.contractVersion, 2);
+    assert.equal(r.diff.length, 5);
+  });
+
+  it('gives scope-conformance alone for a write amendment beside a budget change', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const r = unwrap(amend(v1, { budgets: { toolCalls: 100 }, addWrite: ['tests/unit/a.test.ts'] }));
+    assert.deepEqual(r.invalidates, ['scope-conformance']);
+  });
+
+  it('does not apply any part of a request that is refused in another part, and never mutates the input', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const before = structuredClone(v1);
+    const refused = amend(v1, { budgets: { toolCalls: 100 }, addWrite: ['scripts/x.ts'] });
+    assert.equal(refused.ok, false);
+    assert.deepEqual(v1, before);
+    const applied = unwrap(amend(v1, { budgets: { toolCalls: 100 }, addWrite: ['tests/unit/a.test.ts'], checks: [{ op: '+', name: 'build' }] }));
+    assert.deepEqual(v1, before);
+    assert.notEqual(applied.contract.files.write, v1.files.write);
+    assert.notEqual(applied.contract.verification.requiredChecks, v1.verification.requiredChecks);
+  });
+});
+
+describe('classifyInvalidation: the D-20 table', () => {
+  it('acceptance criteria: all gate results and acceptance mappings, and checks re-run', () => {
+    for (const path of ['intent.acceptance', 'intent.acceptance.AC1.text', 'intent.acceptance.AC1.verifiedBy', 'intent.workItems[B].acceptance']) {
+      assert.deepEqual(classifyInvalidation([{ path }]), ['gates', 'acceptance-mappings', 'checks-rerun'], path);
+    }
+  });
+
+  it('writable or protected paths: scope-conformance results', () => {
+    for (const path of ['files.write', 'files.create', 'files.protected', 'files.delete']) {
+      assert.deepEqual(classifyInvalidation([{ path }]), ['scope-conformance'], path);
+    }
+  });
+
+  it('required checks: all check evidence', () => {
+    assert.deepEqual(classifyInvalidation([{ path: 'verification.requiredChecks' }]), ['check-evidence']);
+  });
+
+  it('policy revision: gate results and approvals that cite the old revision', () => {
+    assert.deepEqual(classifyInvalidation([{ path: 'policyRevision' }]), ['gates', 'approvals']);
+  });
+
+  it('budgets, notifications and exclusions: nothing', () => {
+    for (const path of ['budgets.toolCalls', 'budgets.costUsd.perRun', 'notify.reviewReady', 'intent.exclusions']) {
+      assert.deepEqual(classifyInvalidation([{ path }]), [], path);
+    }
+  });
+
+  it('combines entries into one list in the canonical order with no repeats', () => {
+    const diff = [{ path: 'verification.requiredChecks' }, { path: 'policyRevision' }, { path: 'intent.acceptance' }, { path: 'files.write' }, { path: 'budgets.toolCalls' }];
+    assert.deepEqual(classifyInvalidation(diff), ['gates', 'acceptance-mappings', 'checks-rerun', 'scope-conformance', 'check-evidence', 'approvals']);
+  });
+});
+
+describe('staleTargets: appended rows only (T-03-17)', () => {
+  const evidence = [
+    { evidenceId: 'ev_1', kind: 'check', contractVersion: 1, status: 'passed', acceptance: ['AC1'] },
+    { evidenceId: 'ev_2', kind: 'check', contractVersion: 2, status: 'passed', acceptance: [] },
+    { evidenceId: 'ev_3', kind: 'check', contractVersion: 2, status: 'failed', acceptance: ['AC1'] },
+    { evidenceId: 'ev_4', kind: 'diff', contractVersion: 2, status: 'passed', acceptance: ['AC2'] },
+    { evidenceId: 'ev_5', kind: 'check', contractVersion: 2, status: 'stale', acceptance: ['AC1'] },
+    { evidenceId: 'ev_6', kind: 'gsd-verdict', contractVersion: 2, status: 'passed' },
+  ];
+  const gates = [
+    { gate: 'G1', passed: true },
+    { gate: 'G2', passed: true },
+    { gate: 'G4', passed: false },
+    { gate: 'G4', passed: true },
+  ];
+
+  it('check-evidence lists every check-kind evidence row at the latest contract version that is not stale yet, and no gate', () => {
+    assert.deepEqual(staleTargets(['check-evidence'], evidence, gates), { evidenceIds: ['ev_2', 'ev_3'], gates: [] });
+  });
+
+  it('scope-conformance lists gates G2 and G4 when they stand as passed', () => {
+    assert.deepEqual(staleTargets(['scope-conformance'], evidence, gates), { evidenceIds: [], gates: ['G2', 'G4'] });
+    assert.deepEqual(staleTargets(['scope-conformance'], evidence, [{ gate: 'G2', passed: true }]), { evidenceIds: [], gates: ['G2'] });
+    assert.deepEqual(staleTargets(['scope-conformance'], evidence, []), { evidenceIds: [], gates: [] });
+  });
+
+  it('judges a gate by its latest row: a gate whose latest row failed has no pass to invalidate', () => {
+    const later = [{ gate: 'G2', passed: true }, { gate: 'G2', passed: false }];
+    assert.deepEqual(staleTargets(['scope-conformance'], [], later), { evidenceIds: [], gates: [] });
+  });
+
+  it('gates lists every gate that stands as passed; acceptance-mappings lists the latest evidence that maps acceptance', () => {
+    assert.deepEqual(staleTargets(['gates'], evidence, gates), { evidenceIds: [], gates: ['G1', 'G2', 'G4'] });
+    assert.deepEqual(staleTargets(['acceptance-mappings'], evidence, gates), { evidenceIds: ['ev_3', 'ev_4'], gates: [] });
+  });
+
+  it('unions the classes, and lists nothing for no class, for a rerun or for approvals', () => {
+    assert.deepEqual(staleTargets(['check-evidence', 'gates'], evidence, gates), { evidenceIds: ['ev_2', 'ev_3'], gates: ['G1', 'G2', 'G4'] });
+    assert.deepEqual(staleTargets([], evidence, gates), { evidenceIds: [], gates: [] });
+    assert.deepEqual(staleTargets(['checks-rerun', 'approvals'], evidence, gates), { evidenceIds: [], gates: [] });
+    assert.deepEqual(staleTargets(['check-evidence'], [], gates), { evidenceIds: [], gates: [] });
+  });
+
+  it('never mutates its inputs and returns only IDs: it proposes appended rows, never an update or a delete', () => {
+    const e = structuredClone(evidence);
+    const g = structuredClone(gates);
+    const out = staleTargets(['check-evidence', 'scope-conformance'], e, g);
+    assert.deepEqual(e, evidence);
+    assert.deepEqual(g, gates);
+    assert.deepEqual(Object.keys(out).sort(), ['evidenceIds', 'gates']);
   });
 });

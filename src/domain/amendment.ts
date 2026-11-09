@@ -166,6 +166,26 @@ export function applyAmendment(contract: RunContract, request: AmendmentRequest,
   return ok({ contract: next, diff, invalidates: [] });
 }
 
+export function classifyInvalidation(_diff: ReadonlyArray<{ path: string }>): InvalidationClass[] {
+  return [];
+}
+
+export interface StaleEvidenceRow {
+  evidenceId: string;
+  kind: string;
+  contractVersion: number;
+  status: string;
+  acceptance?: readonly string[];
+}
+
+export function staleTargets(
+  _invalidates: readonly InvalidationClass[],
+  _evidence: readonly StaleEvidenceRow[],
+  _gates: ReadonlyArray<{ gate: string; passed: boolean }>,
+): { evidenceIds: string[]; gates: string[] } {
+  return { evidenceIds: [], gates: [] };
+}
+
 // The ledger budget rows whose limit the diff changes, with the new limit read from the amended contract. Only the five budgets the
 // ledger keeps appear; a contract-only cap (concurrent subagents, the per-invocation cost cap) has no row.
 export function budgetRowChanges(diff: readonly FieldDiff[], next: RunContract): BudgetRowChange[] {
