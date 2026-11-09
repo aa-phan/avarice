@@ -104,7 +104,9 @@ const NO_NEXT_ACTION = 'none';
 // any other value, so a typo cannot reach an evidence or decision row (AUT-8).
 const EVIDENCE_STATUS_SET: readonly EvidenceStatus[] = ['passed', 'failed', 'skipped', 'unavailable', 'inconclusive', 'stale'];
 const EVIDENCE_INDEPENDENCE_SET: readonly EvidenceIndependence[] = ['deterministic', 'external', 'model-review'];
-const DECISION_CLASSES: readonly string[] = ['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget'];
+// The classes of a decision that is not a pause: it offers only `withdraw`, and an amendment (or a withdrawal) is how it ends.
+const AMENDABLE_DECISION_CLASSES: readonly string[] = ['repeated_failure', 'permission', 'budget', 'scope_expansion'];
+const DECISION_CLASSES: readonly string[] =['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget'];
 const DECISION_STATES: readonly DecisionState[] = ['open', 'answered', 'stale', 'withdrawn'];
 
 function iso(ms: number): string {
@@ -949,6 +951,11 @@ export class SqliteLedger implements Ledger {
         seen.add(change.name);
         if (!Number.isFinite(change.limit) || change.limit < 0) abort({ kind: 'invalid', field: `budget.${change.name}`, reason: 'a budget limit is a finite non-negative number' });
       }
+      // A decision that is not a pause offers only `withdraw` and is cleared by an amendment (owner decision 2); a pause is answered by `decide`.
+      const resolves = input.resolvesDecisionId === undefined ? null : this.openDecisionRow(input.runId, input.resolvesDecisionId);
+      if (resolves !== null && !AMENDABLE_DECISION_CLASSES.includes(resolves.class)) {
+        abort({ kind: 'invalid', field: 'resolvesDecisionId', reason: `a ${resolves.class} decision is answered with decide, not an amendment (${AMENDABLE_DECISION_CLASSES.join(', ')})` });
+      }
       const version = latest + 1;
       const contract = this.insertContractRow(
         input.runId,
@@ -962,14 +969,86 @@ export class SqliteLedger implements Ledger {
           .run(change.limit, version, input.runId, change.name).changes;
         if (Number(changed) !== 1) abort({ kind: 'invalid', field: `budget.${change.name}`, reason: `run ${input.runId} has no budget ${change.name}` });
       }
+      const staleEvidence = this.appendStaleEvidence(input.runId, input.staleEvidenceIds ?? [], version, input.next.policyRevision, input.nowMs);
+      const staleGates = this.appendStaleGates(input.runId, input.staleGates ?? [], version, input.next.policyRevision, input.nowMs);
       this.insertEvent({
         type: 'contract.amended',
         runId: input.runId,
-        data: { runId: input.runId, version, budgets: input.budgetChanges.length },
+        data: {
+          runId: input.runId,
+          version,
+          budgets: input.budgetChanges.length,
+          staleEvidence,
+          staleGates,
+          ...(resolves !== null ? { resolvedDecisionId: resolves.decisionId } : {}),
+        },
         nowMs: input.nowMs,
       });
-      return { contract, staleEvidence: 0, staleGates: 0, resolved: null };
+      let resolved: DecisionRow | null = null;
+      if (resolves !== null) {
+        const changed = this.db
+          .prepare("UPDATE decisions SET state = 'answered', answered_at = ?, answered_by = ?, answer = ?, answer_channel = 'terminal' WHERE decision_id = ? AND state = 'open'")
+          .run(iso(input.nowMs), input.next.authorizedBy, `amended:v${version}`, resolves.decisionId).changes;
+        if (Number(changed) === 0) abort({ kind: 'conflict', expected: `decision ${resolves.decisionId} open`, actual: `decision ${resolves.decisionId} no longer open` });
+        this.releaseItems(input.runId, resolves, 'terminal', input.nowMs);
+        resolved = toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(resolves.decisionId) as Row);
+      }
+      return { contract, staleEvidence, staleGates, resolved };
     });
+  }
+
+  // Evidence is insert-only (T-02-06, D-20): an amendment invalidates a row by appending a copy with status stale under the new
+  // contract version, its environment naming the amendment and the row it supersedes. The original is never touched. The caller's
+  // transaction must be open; every named row must be evidence of this run's attempts.
+  private appendStaleEvidence(runId: string, evidenceIds: readonly string[], version: number, policyRevision: string, nowMs: number): number {
+    if (new Set(evidenceIds).size !== evidenceIds.length) abort({ kind: 'invalid', field: 'staleEvidenceIds', reason: 'an evidence row is invalidated once per amendment' });
+    for (const evidenceId of evidenceIds) {
+      const row = this.db
+        .prepare('SELECT e.* FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE e.evidence_id = ? AND a.run_id = ?')
+        .get(evidenceId, runId) as Row | undefined;
+      if (!row) abort({ kind: 'invalid', field: 'staleEvidenceIds', reason: `${evidenceId} is not an evidence row of run ${runId}` });
+      this.db
+        .prepare(
+          `INSERT INTO evidence (evidence_id, attempt_id, work_item, kind, name, revision, clean, tree_digest, environment_json, contract_version, policy_revision,
+                                 status, independence, acceptance_json, tests_json, command, exit_code, duration_ms, artifact_digest, ext_ref, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stale', ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?)`,
+        )
+        .run(
+          this.newId('ev_'),
+          row['attempt_id'] as string,
+          (row['work_item'] ?? null) as string | null,
+          row['kind'] as string,
+          row['name'] as string,
+          row['revision'] as string,
+          row['clean'] as number,
+          row['tree_digest'] as string,
+          canonicalJson({ invalidatedBy: 'amendment', supersedes: evidenceId }),
+          version,
+          policyRevision,
+          row['independence'] as string,
+          row['acceptance_json'] as string,
+          iso(nowMs),
+        );
+    }
+    return evidenceIds.length;
+  }
+
+  // Gate results are insert-only too: a gate the amendment invalidates gets a failed row under the new contract version, carrying
+  // the revision (and item) of the gate's latest row. A gate that never ran has nothing to invalidate.
+  private appendStaleGates(runId: string, gates: ReadonlyArray<{ gate: string; detail: string }>, version: number, policyRevision: string, nowMs: number): number {
+    if (new Set(gates.map((g) => g.gate)).size !== gates.length) abort({ kind: 'invalid', field: 'staleGates', reason: 'a gate is invalidated once per amendment' });
+    for (const stale of gates) {
+      if (typeof stale.gate !== 'string' || stale.gate === '') abort({ kind: 'invalid', field: 'staleGates', reason: 'a stale gate names its gate' });
+      if (typeof stale.detail !== 'string' || stale.detail === '') abort({ kind: 'invalid', field: 'staleGates', reason: `the stale ${stale.gate} row needs a detail` });
+      const latest = this.db.prepare('SELECT work_item, revision FROM gate_results WHERE run_id = ? AND gate = ? ORDER BY rowid DESC LIMIT 1').get(runId, stale.gate) as Row | undefined;
+      if (!latest) abort({ kind: 'invalid', field: 'staleGates', reason: `gate ${stale.gate} has no result in run ${runId} to invalidate` });
+      this.db
+        .prepare(
+          'INSERT INTO gate_results (run_id, gate, work_item, contract_version, policy_revision, revision, passed, failures_json, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)',
+        )
+        .run(runId, stale.gate, (latest['work_item'] ?? null) as string | null, version, policyRevision, latest['revision'] as string, boundedBodyJson([{ rule: 'stale-after-amendment', detail: stale.detail }], 'failures'), iso(nowMs));
+    }
+    return gates.length;
   }
 
   // The caller's transaction must be open and the run vetted.
@@ -1331,26 +1410,33 @@ export class SqliteLedger implements Ledger {
         .prepare("UPDATE decisions SET state = 'answered', answered_at = ?, answered_by = ?, answer = ?, answer_channel = ? WHERE decision_id = ? AND state = 'open'")
         .run(iso(input.nowMs), input.answeredBy, input.answer, input.channel, input.decisionId).changes;
       if (Number(changed) === 0) abort({ kind: 'conflict', expected: `decision ${input.decisionId} open`, actual: `decision ${input.decisionId} no longer open` });
-
-      const stillBlocked = new Set<string>();
-      for (const other of this.db.prepare("SELECT affected_items_json FROM decisions WHERE run_id = ? AND state = 'open' AND decision_id <> ?").all(input.runId, input.decisionId) as Row[]) {
-        for (const itemId of parseJson(other['affected_items_json']) as readonly string[]) stillBlocked.add(itemId);
-      }
-      const released: string[] = [];
-      for (const itemId of new Set(decision.affectedItems)) {
-        if (stillBlocked.has(itemId)) continue;
-        const item = this.db.prepare('SELECT state FROM work_items WHERE run_id = ? AND item_id = ?').get(input.runId, itemId) as Row | undefined;
-        if (item !== undefined && str(item['state']) === 'blocked_on_decision') released.push(itemId);
-      }
-      this.insertEvent({
-        type: 'decision.answered',
-        runId: input.runId,
-        data: { runId: input.runId, decisionId: input.decisionId, channel: input.channel, itemsReleased: released.length },
-        nowMs: input.nowMs,
-      });
-      for (const itemId of released) this.applyItemTransition(input.runId, itemId, { to: 'ready', nowMs: input.nowMs, data: { decisionId: input.decisionId } });
+      this.releaseItems(input.runId, decision, input.channel, input.nowMs);
       return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(input.decisionId) as Row);
     });
+  }
+
+  // After a decision of the run was marked answered: appends decision.answered and moves every affected item that is
+  // blocked_on_decision, and that no other open decision of the run lists, to ready. Shared by answerDecision and amendRunContract.
+  // The caller's transaction must be open and the run vetted. Returns the number of items released.
+  private releaseItems(runId: string, decision: DecisionRow, channel: string, nowMs: number): number {
+    const stillBlocked = new Set<string>();
+    for (const other of this.db.prepare("SELECT affected_items_json FROM decisions WHERE run_id = ? AND state = 'open' AND decision_id <> ?").all(runId, decision.decisionId) as Row[]) {
+      for (const itemId of parseJson(other['affected_items_json']) as readonly string[]) stillBlocked.add(itemId);
+    }
+    const released: string[] = [];
+    for (const itemId of new Set(decision.affectedItems)) {
+      if (stillBlocked.has(itemId)) continue;
+      const item = this.db.prepare('SELECT state FROM work_items WHERE run_id = ? AND item_id = ?').get(runId, itemId) as Row | undefined;
+      if (item !== undefined && str(item['state']) === 'blocked_on_decision') released.push(itemId);
+    }
+    this.insertEvent({
+      type: 'decision.answered',
+      runId,
+      data: { runId, decisionId: decision.decisionId, channel, itemsReleased: released.length },
+      nowMs,
+    });
+    for (const itemId of released) this.applyItemTransition(runId, itemId, { to: 'ready', nowMs, data: { decisionId: decision.decisionId } });
+    return released.length;
   }
 
   // open -> stale in one transaction (D-15): the answer that arrived on a moved state digest or contract version is kept on the old
