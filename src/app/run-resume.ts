@@ -247,7 +247,9 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   const items = deps.ledger.listWorkItems(ctx.runId);
   if (!items.ok) return items;
   // Items run one at a time, so at most one is in flight (delegated or gated): that one is reconciled. More than one is a ledger the scheduler never wrote.
-  const flying = items.value.filter((i) => i.state === 'delegated' || i.state === 'gated');
+  // An implemented item is in flight only when its gate blocked it and the supervisor died inside the block (it has a park step); the reconcile of such
+  // an item finishes the block, and any other implemented item is continued by the stage as it is.
+  const flying = items.value.filter((i) => i.state === 'delegated' || i.state === 'gated' || i.state === 'implemented');
   if (flying.length > 1) return err({ kind: 'internal', cause: `run ${ctx.runId} has ${flying.length} work items in flight (${flying.map((i) => i.itemId).join(', ')}); items run one at a time` });
   const item = flying.at(0);
 

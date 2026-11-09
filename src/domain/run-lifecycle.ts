@@ -126,7 +126,8 @@ export function isRunResumable(state: RunState): boolean {
 // Written to checkpoints.next_action; order is execution order within the state.
 export const RUN_NEXT_ACTIONS: Readonly<Partial<Record<RunState, readonly string[]>>> = {
   contract_ready: ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement'],
-  running: ['context-pack', 'launch:run', 'classify', 'discard-attempt', 'gate:g2', 'commit'],
+  // `park` follows `classify`: an item that stops to ask has its delta taken out of the tree before the run goes on (plan 03-18).
+  running: ['context-pack', 'launch:run', 'classify', 'park', 'discard-attempt', 'gate:g2', 'commit'],
   verifying: ['verify:checks', 'gate:g4', 'handoff:fetch'],
   paused: ['reconcile'],
 };

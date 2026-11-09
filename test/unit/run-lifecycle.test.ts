@@ -181,7 +181,7 @@ describe('run state classes', () => {
 describe('run next actions', () => {
   it('lists the actions of each resumable state in execution order', () => {
     assert.deepEqual(RUN_NEXT_ACTIONS.contract_ready, ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement']);
-    assert.deepEqual(RUN_NEXT_ACTIONS.running, ['context-pack', 'launch:run', 'classify', 'discard-attempt', 'gate:g2', 'commit']);
+    assert.deepEqual(RUN_NEXT_ACTIONS.running, ['context-pack', 'launch:run', 'classify', 'park', 'discard-attempt', 'gate:g2', 'commit']);
     assert.deepEqual(RUN_NEXT_ACTIONS.verifying, ['verify:checks', 'gate:g4', 'handoff:fetch']);
     assert.deepEqual(RUN_NEXT_ACTIONS.paused, ['reconcile']);
   });
