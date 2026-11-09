@@ -2,12 +2,13 @@
 // Notifier port: one ledger row per destination records what was raised and every delivery attempt, and the inbox and status stay the
 // source of truth whether or not a banner arrives. Banner text comes from `bannerText` (AVARICE-owned words only). Nothing here reads or
 // writes a decision: a banner, a retry, a hold or a failure never answers one (AUT-4).
-import { bannerText, effectiveDestinations } from '../domain/notify-policy.ts';
+import { BACKOFF_DELAYS_MS, bannerText, effectiveDestinations, inQuietHours, nextAttemptAt } from '../domain/notify-policy.ts';
 import type { BannerKind, ProfileNotify } from '../domain/notify-policy.ts';
 import { err, ok } from '../domain/result.ts';
 import type { PortError, Result } from '../domain/result.ts';
 import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
-import type { NotificationRow } from '../ports/ledger.ts';
+import type { NotificationAttemptInput, NotificationRow } from '../ports/ledger.ts';
+import type { Notifier, NotifierMessage } from '../ports/notifier.ts';
 import type { AppDeps, NotifyDeps } from './deps.ts';
 
 export type { NotifyDeps } from './deps.ts';
@@ -60,16 +61,42 @@ function describeStop(deps: AppDeps, runId: string, outcome: RunStopOutcome): Re
   return ok({ kind: 'decisions', contractDestinations: blocking, subjectIds: ids, count: ids.length });
 }
 
-function bannerFor(notice: StopNotice, runId: string): { title: string; body: string } {
+function bannerFor(notice: StopNotice, runId: string): NotifierMessage {
   return bannerText({ kind: notice.kind, runId, ...(notice.kind === 'decisions' ? { count: notice.count } : {}) });
 }
 
-// One delivery attempt, recorded on the row. The notification is `delivered` when the notifier accepted it, otherwise `failed`.
-async function deliverOnce(deps: AppDeps, notify: NotifyDeps, row: NotificationRow, message: { title: string; body: string }): Promise<Result<NotificationRow>> {
-  const sent = await notify.notifier.deliver(message);
-  const nowMs = deps.clock.nowMs();
-  if (sent.ok) return deps.ledger.recordNotificationAttempt(row.notificationId, { outcome: 'delivered', nowMs });
-  return deps.ledger.recordNotificationAttempt(row.notificationId, { outcome: 'failed', errorCode: failureCode(sent.error), nowMs });
+// The notifier is a port, but a port can still throw; a delivery that throws is a failed delivery with a generic code, never the error's text.
+async function safeDeliver(notifier: Notifier, message: NotifierMessage): Promise<Result<void>> {
+  try {
+    return await notifier.deliver(message);
+  } catch {
+    return err({ kind: 'unavailable', cause: 'notifier-error' });
+  }
+}
+
+// Delivers one banner for the rows, which are all about it: up to BACKOFF_DELAYS_MS.length attempts inside this process, each preceded by
+// its delay (0, 10 and 60 seconds). Every attempt is recorded on every row with its error code; a delivered attempt ends the loop, and after
+// the last failed one the rows are `failed` (visible in the inbox and status, and left for the next digest). Nothing here touches a decision.
+async function deliverRows(deps: AppDeps, notify: NotifyDeps, rows: readonly NotificationRow[], message: NotifierMessage): Promise<Result<{ rows: NotificationRow[]; delivered: boolean }>> {
+  let latest = [...rows];
+  for (let attempt = 0; attempt < BACKOFF_DELAYS_MS.length; attempt += 1) {
+    await notify.sleep(BACKOFF_DELAYS_MS[attempt] as number);
+    const sent = await safeDeliver(notify.notifier, message);
+    const nowMs = deps.clock.nowMs();
+    const next = sent.ok ? null : nextAttemptAt(attempt + 1, nowMs);
+    const input: NotificationAttemptInput = sent.ok
+      ? { outcome: 'delivered', nowMs }
+      : { outcome: 'failed', errorCode: failureCode(sent.error), ...(next !== null ? { nextAttemptAtMs: next } : {}), nowMs };
+    const recorded: NotificationRow[] = [];
+    for (const row of latest) {
+      const result = deps.ledger.recordNotificationAttempt(row.notificationId, input);
+      if (!result.ok) return result;
+      recorded.push(result.value);
+    }
+    latest = recorded;
+    if (sent.ok) return ok({ rows: latest, delivered: true });
+  }
+  return ok({ rows: latest, delivered: false });
 }
 
 // Raises the notification of a run that has just stopped (blocked on a decision, or ready for review). The caller ignores the result for
@@ -83,18 +110,26 @@ export async function notifyRunStop(deps: AppDeps, runId: string, outcome: RunSt
   if (notice === null) return ok(NOTHING);
   const settings: Result<ProfileNotify> = notify.settings();
   if (!settings.ok) return settings;
-  const rows: NotificationRow[] = [];
-  let delivered = true;
+  // D-24: during quiet hours no banner is posted; the row is held for the next digest and the inbox still shows the decision.
+  const quiet = inQuietHours(notify.minuteOfDay(deps.clock.nowMs()), settings.value.quietHours);
+  const notifications: NotificationRow[] = [];
+  let result: NotifyResult['result'] = 'none';
   for (const destination of effectiveDestinations(notice.contractDestinations, settings.value)) {
-    const created = deps.ledger.createNotification({ runId, kind: notice.kind, destination, subjectIds: notice.subjectIds, state: 'pending', nowMs: deps.clock.nowMs() });
+    const created = deps.ledger.createNotification({ runId, kind: notice.kind, destination, subjectIds: notice.subjectIds, state: quiet ? 'held' : 'pending', nowMs: deps.clock.nowMs() });
     if (!created.ok) return created;
-    const attempted = await deliverOnce(deps, notify, created.value, bannerFor(notice, runId));
-    if (!attempted.ok) return attempted;
-    rows.push(attempted.value);
-    if (attempted.value.state !== 'delivered') delivered = false;
+    if (quiet) {
+      notifications.push(created.value);
+      if (result !== 'failed') result = 'held';
+      continue;
+    }
+    const sent = await deliverRows(deps, notify, [created.value], bannerFor(notice, runId));
+    if (!sent.ok) return sent;
+    notifications.push(...sent.value.rows);
+    // One failed destination makes the whole result failed; a held or delivered one never hides it.
+    if (!sent.value.delivered) result = 'failed';
+    else if (result !== 'failed') result = 'delivered';
   }
-  if (rows.length === 0) return ok(NOTHING);
-  return ok({ notifications: rows, result: delivered ? 'delivered' : 'failed' });
+  return ok({ notifications, result });
 }
 
 export function queueDecisionNotice(_deps: AppDeps, _runId: string, _decisionId: string): Result<NotificationRow[]> {
