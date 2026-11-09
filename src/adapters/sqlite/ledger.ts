@@ -981,12 +981,19 @@ export class SqliteLedger implements Ledger {
     return tx(this.db, () => {
       this.lockRun(runId);
       if (input.reason === '') abort({ kind: 'invalid', field: 'reason', reason: 'an attempt needs a reason' });
+      if (input.itemId === '') abort({ kind: 'invalid', field: 'itemId', reason: 'an attempt names its work item by ID' });
       const next = this.db.prepare('SELECT COALESCE(MAX(ordinal), 0) + 1 AS next FROM attempts WHERE run_id = ?').get(runId) as { next: number };
       const attemptId = this.newId('att_');
       this.db
-        .prepare('INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at) VALUES (?, ?, ?, ?, ?)')
-        .run(attemptId, runId, Number(next.next), input.reason, iso(input.nowMs));
-      this.insertEvent({ type: 'attempt.started', runId, attemptId, data: { runId, attemptId, ordinal: Number(next.next) }, nowMs: input.nowMs });
+        .prepare('INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at, item_id) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(attemptId, runId, Number(next.next), input.reason, iso(input.nowMs), input.itemId ?? null);
+      this.insertEvent({
+        type: 'attempt.started',
+        runId,
+        attemptId,
+        data: { runId, attemptId, ordinal: Number(next.next), ...(input.itemId !== undefined ? { itemId: input.itemId } : {}) },
+        nowMs: input.nowMs,
+      });
       return toAttempt(this.db.prepare('SELECT * FROM attempts WHERE attempt_id = ?').get(attemptId) as Row);
     });
   }
@@ -1002,10 +1009,14 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  listRunAttempts(runId: string, _filter?: { itemId?: string }): Result<AttemptRow[]> {
+  // An attempt written without an item reads as item A (D-12), so a run that began before per-item attempts keeps its history.
+  listRunAttempts(runId: string, filter?: { itemId?: string }): Result<AttemptRow[]> {
     return guarded(() => {
       this.lockRun(runId);
-      return (this.db.prepare('SELECT * FROM attempts WHERE run_id = ? ORDER BY ordinal').all(runId) as Row[]).map(toAttempt);
+      const itemId = filter?.itemId;
+      if (itemId === undefined) return (this.db.prepare('SELECT * FROM attempts WHERE run_id = ? ORDER BY ordinal').all(runId) as Row[]).map(toAttempt);
+      const clause = itemId === 'A' ? 'item_id = ? OR item_id IS NULL' : 'item_id = ?';
+      return (this.db.prepare(`SELECT * FROM attempts WHERE run_id = ? AND (${clause}) ORDER BY ordinal`).all(runId, itemId) as Row[]).map(toAttempt);
     });
   }
 
@@ -1198,38 +1209,51 @@ export class SqliteLedger implements Ledger {
       if (input.issue === '') abort({ kind: 'invalid', field: 'issue', reason: 'a decision states its issue' });
       if (!Number.isInteger(input.contractVersion) || input.contractVersion < 1) abort({ kind: 'invalid', field: 'contractVersion', reason: 'a contract version is a positive integer' });
       if (input.stateDigest === '') abort({ kind: 'invalid', field: 'stateDigest', reason: 'a decision carries the digest of the state it was opened on' });
-      const decisionId = this.newId('dec_');
-      this.db
-        .prepare(
-          `INSERT INTO decisions (decision_id, run_id, contract_version, class, issue, recommendation, options_json, consequences_json, evidence_refs_json,
-                                  affected_items_json, authorized_default, state_digest, urgency, state, opened_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
-        )
-        .run(
-          decisionId,
-          input.runId,
-          input.contractVersion,
-          input.class,
-          input.issue,
-          input.recommendation ?? null,
-          boundedBodyJson(input.options, 'options'),
-          boundedBodyJson(input.consequences, 'consequences'),
-          boundedBodyJson(input.evidenceRefs, 'evidenceRefs'),
-          boundedBodyJson(input.affectedItems, 'affectedItems'),
-          input.authorizedDefault ?? null,
-          input.stateDigest,
-          input.urgency,
-          iso(input.nowMs),
-        );
-      this.insertEvent({
-        type: 'decision.opened',
-        runId: input.runId,
-        ...(input.attemptId !== undefined ? { attemptId: input.attemptId } : {}),
-        data: { runId: input.runId, decisionId, class: input.class, urgency: input.urgency, contractVersion: input.contractVersion },
-        nowMs: input.nowMs,
-      });
-      return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(decisionId) as Row);
+      return this.insertDecisionRow(input, null, input.attemptId);
     });
+  }
+
+  // The caller's transaction must be open and the run vetted. A re-open names the decision it replaces in `supersedes`.
+  private insertDecisionRow(input: DecisionInput, supersedes: string | null, attemptId: string | undefined): DecisionRow {
+    const decisionId = this.newId('dec_');
+    this.db
+      .prepare(
+        `INSERT INTO decisions (decision_id, run_id, contract_version, class, issue, recommendation, options_json, consequences_json, evidence_refs_json,
+                                affected_items_json, authorized_default, state_digest, urgency, state, opened_at, supersedes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+      )
+      .run(
+        decisionId,
+        input.runId,
+        input.contractVersion,
+        input.class,
+        input.issue,
+        input.recommendation ?? null,
+        boundedBodyJson(input.options, 'options'),
+        boundedBodyJson(input.consequences, 'consequences'),
+        boundedBodyJson(input.evidenceRefs, 'evidenceRefs'),
+        boundedBodyJson(input.affectedItems, 'affectedItems'),
+        input.authorizedDefault ?? null,
+        input.stateDigest,
+        input.urgency,
+        iso(input.nowMs),
+        supersedes,
+      );
+    this.insertEvent({
+      type: 'decision.opened',
+      runId: input.runId,
+      ...(attemptId !== undefined ? { attemptId } : {}),
+      data: {
+        runId: input.runId,
+        decisionId,
+        class: input.class,
+        urgency: input.urgency,
+        contractVersion: input.contractVersion,
+        ...(supersedes !== null ? { supersedes } : {}),
+      },
+      nowMs: input.nowMs,
+    });
+    return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(decisionId) as Row);
   }
 
   // open -> answered in one transaction under the run lock (T-03-03): the decision is still open and the run's latest contract is
@@ -1275,12 +1299,68 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  reopenStaleDecision(_input: ReopenStaleDecisionInput): Result<{ stale: DecisionRow; reopened: DecisionRow }> {
-    return err({ kind: 'invalid', field: 'reopenStaleDecision', reason: 'not implemented' });
+  // open -> stale in one transaction (D-15): the answer that arrived on a moved state digest or contract version is kept on the old
+  // row as context, and a successor opens with the same question on the new state, `supersedes` naming the old decision. The
+  // affected items keep their state: the question is still open. Events carry IDs only (T-03-04).
+  reopenStaleDecision(input: ReopenStaleDecisionInput): Result<{ stale: DecisionRow; reopened: DecisionRow }> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (input.answer === '') abort({ kind: 'invalid', field: 'answer', reason: 'an answer is not empty' });
+      if (input.answeredBy === '') abort({ kind: 'invalid', field: 'answeredBy', reason: 'an answer names who gave it' });
+      if (input.channel !== 'terminal') abort({ kind: 'invalid', field: 'channel', reason: 'an answer arrives on the terminal channel' });
+      if (input.stateDigest === '') abort({ kind: 'invalid', field: 'stateDigest', reason: 'a decision carries the digest of the state it was opened on' });
+      if (!Number.isInteger(input.contractVersion) || input.contractVersion < 1) abort({ kind: 'invalid', field: 'contractVersion', reason: 'a contract version is a positive integer' });
+      const old = this.openDecisionRow(input.runId, input.decisionId);
+      const changed = this.db
+        .prepare("UPDATE decisions SET state = 'stale', answered_at = ?, answered_by = ?, answer = ?, answer_channel = ? WHERE decision_id = ? AND state = 'open'")
+        .run(iso(input.nowMs), input.answeredBy, input.answer, input.channel, input.decisionId).changes;
+      if (Number(changed) === 0) abort({ kind: 'conflict', expected: `decision ${input.decisionId} open`, actual: `decision ${input.decisionId} no longer open` });
+      this.insertEvent({
+        type: 'decision.stale',
+        runId: input.runId,
+        data: { runId: input.runId, decisionId: input.decisionId, channel: input.channel },
+        nowMs: input.nowMs,
+      });
+      const reopened = this.insertDecisionRow(
+        {
+          runId: input.runId,
+          contractVersion: input.contractVersion,
+          class: old.class,
+          issue: old.issue,
+          ...(old.recommendation !== null ? { recommendation: old.recommendation } : {}),
+          options: old.options,
+          consequences: old.consequences,
+          evidenceRefs: input.evidenceRefs,
+          affectedItems: old.affectedItems,
+          ...(old.authorizedDefault !== null ? { authorizedDefault: old.authorizedDefault } : {}),
+          stateDigest: input.stateDigest,
+          urgency: old.urgency,
+          nowMs: input.nowMs,
+        },
+        input.decisionId,
+        undefined,
+      );
+      const stale = toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(input.decisionId) as Row);
+      return { stale, reopened };
+    });
   }
 
-  withdrawDecision(_input: WithdrawDecisionInput): Result<DecisionRow> {
-    return err({ kind: 'invalid', field: 'withdrawDecision', reason: 'not implemented' });
+  // open -> withdrawn in one transaction. The affected items keep their state: a cancelling run moves them itself (AUT-12).
+  withdrawDecision(input: WithdrawDecisionInput): Result<DecisionRow> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (input.reason !== 'owner' && input.reason !== 'cancel') abort({ kind: 'invalid', field: 'reason', reason: 'a decision is withdrawn by the owner or by a cancel' });
+      this.openDecisionRow(input.runId, input.decisionId);
+      const changed = this.db.prepare("UPDATE decisions SET state = 'withdrawn' WHERE decision_id = ? AND state = 'open'").run(input.decisionId).changes;
+      if (Number(changed) === 0) abort({ kind: 'conflict', expected: `decision ${input.decisionId} open`, actual: `decision ${input.decisionId} no longer open` });
+      this.insertEvent({
+        type: 'decision.withdrawn',
+        runId: input.runId,
+        data: { runId: input.runId, decisionId: input.decisionId, reason: input.reason },
+        nowMs: input.nowMs,
+      });
+      return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(input.decisionId) as Row);
+    });
   }
 
   // A decision of this run that is still open; a decision of another run is not found, one in any other state is a conflict.
@@ -1418,7 +1498,7 @@ function toAttempt(r: Row): AttemptRow {
     startedAt: str(r['started_at']),
     endedAt: strOrNull(r['ended_at']),
     outcome: strOrNull(r['outcome']),
-    itemId: null,
+    itemId: strOrNull(r['item_id']),
   };
 }
 
