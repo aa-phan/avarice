@@ -51,8 +51,9 @@ function fixture(): Fixture {
   return { roots, repo, pin, brief };
 }
 
+// The supervisor writes while these reads poll; wait out its write lock instead of failing on SQLITE_BUSY.
 function db(roots: CliRoots): DatabaseSync {
-  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true, timeout: 5000 });
 }
 
 function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
