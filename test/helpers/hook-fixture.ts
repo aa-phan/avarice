@@ -14,6 +14,7 @@ import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { REPO_ROOT } from './run-cli.ts';
 
 export const HOOK_ENTRY = join(REPO_ROOT, 'src', 'hook', 'pre-tool-use.ts');
@@ -48,7 +49,7 @@ export function makeHookFixture(options: FixtureOptions = {}): HookFixture {
 
   const opened = openDb(ledgerPath);
   if (!opened.ok) throw new Error('cannot open the fixture ledger');
-  const migrated = migrate(opened.value, [MIGRATION_0001, MIGRATION_0002]);
+  const migrated = migrate(opened.value, [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003]);
   if (!migrated.ok) throw new Error('cannot migrate the fixture ledger');
   if (options.noBudgets !== true) {
     const limits = { toolCalls: 300, subagentsTotal: 4, invocations: 4, ...options.limits };

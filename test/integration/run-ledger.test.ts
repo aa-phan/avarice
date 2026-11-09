@@ -11,6 +11,7 @@ import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { REPO_ROOT } from '../helpers/run-cli.ts';
@@ -46,7 +47,7 @@ function harness(options: { fromV1?: boolean } = {}): Harness {
   const path = join(dir, 'state.db');
   if (options.fromV1 === true) copyFileSync(FIXTURE, path);
   const db = must(openDb(path));
-  must(migrate(db, [MIGRATION_0001, MIGRATION_0002], { nowMs: T0 }));
+  must(migrate(db, [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003], { nowMs: T0 }));
   let n = 0;
   const ledger = new SqliteLedger(db, (prefix) => prefix + String(++n).padStart(26, '0'));
   return {

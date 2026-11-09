@@ -11,6 +11,7 @@ import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { digestOf } from '../../src/domain/digest.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -429,7 +430,7 @@ describe('createRunWithContract is one transaction (RC-1)', () => {
     const handle = openDb(join(dir, 'state.db'));
     assert.ok(handle.ok);
     const store = handle.value;
-    assert.ok(migrate(store, [MIGRATION_0001, MIGRATION_0002], { nowMs: 1 }).ok);
+    assert.ok(migrate(store, [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003], { nowMs: 1 }).ok);
     let n = 0;
     const ledger = new SqliteLedger(store, (prefix) => prefix + String(++n).padStart(26, '0'));
     const project = ledger.registerProject({ projectId: 'proj_1', rootCommit: 'r', repoPath: '/repo', remote: null, defaultBranch: 'main', nowMs: 1 });
