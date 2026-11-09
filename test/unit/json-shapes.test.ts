@@ -218,3 +218,54 @@ describe('status --json with a run adds one `runs` key and nothing else (D-19, p
     compareWithFixture('status-runs.json', JSON.stringify(parsed, null, 2) + '\n', [roots.base, repo.base]);
   });
 });
+
+// Plan 03-21 (frozen shapes rule): Phase 3 adds keys to `status --json` and never changes one that was there. The four status snapshots as Phase 2 left them are
+// kept under `phase2-baseline/` and are never regenerated (AVARICE_SNAPSHOT_WRITE writes the files above them, not these). Each current snapshot must carry every key of
+// its baseline, with the same value, in the same order, as the first keys of its object; whatever else it carries comes after them. Arrays keep their length, so a
+// run or an evidence row can neither appear nor go missing.
+export function assertFrozenPrefix(baseline: unknown, current: unknown, at = '$'): void {
+  if (Array.isArray(baseline)) {
+    assert.ok(Array.isArray(current), `${at}: the baseline is an array`);
+    assert.equal(current.length, baseline.length, `${at}: an array keeps its length`);
+    baseline.forEach((entry, index) => assertFrozenPrefix(entry, current[index], `${at}[${index}]`));
+    return;
+  }
+  if (baseline !== null && typeof baseline === 'object') {
+    assert.ok(current !== null && typeof current === 'object' && !Array.isArray(current), `${at}: the baseline is an object`);
+    const was = Object.keys(baseline);
+    assert.deepEqual(Object.keys(current).slice(0, was.length), was, `${at}: the baseline keys come first, in their order`);
+    for (const key of was) assertFrozenPrefix((baseline as Record<string, unknown>)[key], (current as Record<string, unknown>)[key], `${at}.${key}`);
+    return;
+  }
+  assert.deepEqual(current, baseline, `${at}: a value keeps what it was`);
+}
+
+describe('the Phase 2 status snapshots are a frozen prefix of the current ones (plan 03-21)', () => {
+  const read = (...parts: string[]): unknown => JSON.parse(readFileSync(join(FIXTURES, ...parts), 'utf8'));
+
+  for (const name of ['status-runs.json', 'status-active.json', 'status-interrupted.json', 'status-empty.json']) {
+    it(`${name}: every Phase 2 key keeps its name, order and value; anything new comes after`, () => {
+      assertFrozenPrefix(read('phase2-baseline', name), read(name));
+    });
+  }
+
+  it('status-runs.json carries the keys Phase 3 appended to a run, after the Phase 2 ones', () => {
+    const [entry] = read('status-runs.json') as Array<{ runs: Array<Record<string, unknown>> }>;
+    const keys = Object.keys((entry as { runs: Array<Record<string, unknown>> }).runs[0] as object);
+    assert.deepEqual(keys.slice(-3), ['items', 'decisions', 'notifications']);
+  });
+
+  describe('the check itself', () => {
+    const baseline = { a: 1, list: [{ x: 1, y: 'two' }], nested: { k: null } };
+    it('accepts a key appended to an object, at any depth', () => {
+      assertFrozenPrefix(baseline, { a: 1, list: [{ x: 1, y: 'two', z: 3 }], nested: { k: null, more: true }, extra: [] });
+    });
+    it('refuses a changed value, a reordered key, a key inserted before the old ones, a removed key and a changed array length', () => {
+      assert.throws(() => assertFrozenPrefix(baseline, { a: 2, list: [{ x: 1, y: 'two' }], nested: { k: null } }));
+      assert.throws(() => assertFrozenPrefix(baseline, { list: [{ x: 1, y: 'two' }], a: 1, nested: { k: null } }));
+      assert.throws(() => assertFrozenPrefix(baseline, { extra: 0, a: 1, list: [{ x: 1, y: 'two' }], nested: { k: null } }));
+      assert.throws(() => assertFrozenPrefix(baseline, { a: 1, list: [{ x: 1 }], nested: { k: null } }));
+      assert.throws(() => assertFrozenPrefix(baseline, { a: 1, list: [{ x: 1, y: 'two' }, {}], nested: { k: null } }));
+    });
+  });
+});

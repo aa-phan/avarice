@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { configPathFor } from '../../src/adapters/fs/profile-paths.ts';
+import type { AppDeps } from '../../src/app/deps.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import { EXPIRY_WAIT_MS, SHORT_TTL_MS, sleepSync } from '../helpers/fault-run.ts';
@@ -538,5 +539,93 @@ describe('the S-17 blocked run in status and inbox: items, the decision with its
     assert.deepEqual(view.decisions.find((d) => d.decisionId === failedId)?.notification, { state: 'failed', attempts: 1, lastError: 'osascript-failed' });
     assert.deepEqual(runOf(roots)['notifications'], { delivered: 1, pending: 0, held: 0, failed: 1, lastError: 'osascript-failed' });
     assert.match(status(roots).stdout, /^ {2}notifications: 1 delivered, 1 failed \(osascript-failed\)$/m);
+  });
+});
+
+describe('a stale decision names its successor, a withdrawn one leaves the inbox, and a cancel request is shown (AUT-12)', () => {
+  const f = fixture();
+  const blocked = startWithFakeRunHost(f.roots, f.repo, f.brief, { question: QUESTION, summary: false });
+  const runId = runIdOfOutput(blocked.stdout);
+  const first = (): string => (decisionsOf(f.roots, runId)[0] as { decision_id: string }).decision_id;
+
+  // The steps a test drives itself, through the same ledger the CLI reads.
+  function withLedger<T>(act: (deps: AppDeps) => T): T {
+    const composed = createDeps(profileEnv(f.roots), { host: new FakeRunHost({}) });
+    assert.ok(composed.ok, 'composition');
+    try {
+      return act(composed.value.deps);
+    } finally {
+      composed.value.close();
+    }
+  }
+
+  it('the run is blocked on one open decision, with no cancel request', () => {
+    assert.equal(blocked.code, 3, blocked.stderr + blocked.stdout);
+    const run = runOf(f.roots);
+    assert.equal(run.openDecisions, 1);
+    assert.equal(run['cancelRequestedAt'], undefined);
+    assert.doesNotMatch(status(f.roots).stdout, /cancel requested/);
+  });
+
+  it('a stale decision shows state stale and the successor, the successor shows what it replaces, and the inbox lists only the successor', () => {
+    const oldId = first();
+    const reopened = withLedger((deps) => {
+      const result = deps.ledger.reopenStaleDecision({
+        runId,
+        decisionId: oldId,
+        answer: '1',
+        answeredBy: 'owner',
+        channel: 'terminal',
+        stateDigest: 'a-newer-state-digest',
+        contractVersion: 1,
+        evidenceRefs: [],
+        nowMs: Date.now(),
+      });
+      assert.ok(result.ok, JSON.stringify(result));
+      return result.value.reopened;
+    });
+    const run = runOf(f.roots);
+    const decisions = run['decisions'] as Array<{ decisionId: string; state: string; supersedes: string | null; successor: string | null }>;
+    assert.deepEqual(
+      decisions.map((d) => [d.decisionId, d.state, d.supersedes, d.successor]),
+      [
+        [oldId, 'stale', null, reopened.decisionId],
+        [reopened.decisionId, 'open', oldId, null],
+      ],
+    );
+    assert.equal(run.openDecisions, 1, 'only the successor is open');
+    const human = status(f.roots).stdout;
+    assert.match(human, new RegExp(`^ {2}decision ${oldId} {2}\\S+ {2}stale {2}.*replaced by ${reopened.decisionId}$`, 'm'));
+    assert.match(human, new RegExp(`^ {2}decision ${reopened.decisionId} {2}\\S+ {2}open {2}.*replaces ${oldId}$`, 'm'));
+    const view = JSON.parse(inbox(f.roots, '--json').stdout) as InboxJson;
+    assert.deepEqual(view.decisions.map((d) => d.decisionId), [reopened.decisionId]);
+    assert.doesNotMatch(inbox(f.roots).stdout, new RegExp(oldId));
+  });
+
+  it('a withdrawn decision shows state withdrawn and is not in the inbox', () => {
+    const open = decisionsOf(f.roots, runId).find((d) => d.state === 'open') as { decision_id: string };
+    withLedger((deps) => {
+      const result = deps.ledger.withdrawDecision({ runId, decisionId: open.decision_id, reason: 'owner', nowMs: Date.now() });
+      assert.ok(result.ok, JSON.stringify(result));
+    });
+    const decisions = runOf(f.roots)['decisions'] as Array<{ decisionId: string; state: string }>;
+    assert.deepEqual(decisions.map((d) => d.state), ['stale', 'withdrawn']);
+    assert.equal(runOf(f.roots).openDecisions, 0);
+    assert.match(status(f.roots).stdout, new RegExp(`^ {2}decision ${open.decision_id} {2}\\S+ {2}withdrawn`, 'm'));
+    assert.deepEqual((JSON.parse(inbox(f.roots, '--json').stdout) as InboxJson).decisions, []);
+    assert.match(inbox(f.roots).stdout, /^inbox: 0 open decisions, 0 reviews$/m);
+  });
+
+  it('a run with a cancel request shows cancelRequestedAt, last, and `cancel requested` in the human view', () => {
+    withLedger((deps) => {
+      const result = deps.ledger.requestRunCancel(runId, { by: 'owner:test', nowMs: Date.now() });
+      assert.ok(result.ok, JSON.stringify(result));
+    });
+    const run = runOf(f.roots);
+    const keys = Object.keys(run);
+    assert.equal(keys.at(-1), 'cancelRequestedAt', 'appended after items, decisions and notifications');
+    assert.deepEqual(keys.slice(-4), ['items', 'decisions', 'notifications', 'cancelRequestedAt']);
+    assert.match(String(run['cancelRequestedAt']), /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(status(f.roots).stdout, /^ {2}cancel requested \(\d{2}:\d{2}, [^)]+\)$/m);
   });
 });
