@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 33/39 plans executed (15 waves, plus 6 gap-closure plans)
+**Plans:** 34/39 plans executed (15 waves, plus 6 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -270,7 +270,7 @@ Plans:
 - [x] 03-39-PLAN.md — After the 03-38 halt: S-21 judged on the built behaviour from the kept 03-38 run (no spend) and one findings line on the scenario-versus-code difference (owner decision); cs5, s52 and s17-s51 live on the pinned host; complete 03-27, 03-36, 03-37 and 03-38
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
+- [x] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
 
 **Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 03-29-PLAN.md — Exit part 1: run 1 block and resume to ready_for_review; run 2 started and blocked
@@ -380,7 +380,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 33/39 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 34/39 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-39-PLAN.md
-last_updated: "2026-11-09T22:46:07.904Z"
+stopped_at: Completed 03-28-PLAN.md
+last_updated: "2026-11-09T23:39:20.501Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 3d1ddce617296281460b4dccb4af67581b2388ea
+state_head: 4d5ace957bbd405d85376463115ca381e53852ef
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 100
-  completed_plans: 94
+  completed_plans: 95
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-39 complete (03-27, 03-36, 03-37 and 03-38 resumed and complete; 03-28..03-33 unblocked)
-Status: Ready to execute plan 03-28 — all eight live run-purpose cases of plan 03-27 have a PASS line under plans 03-36 to 03-39, with S-21 judged on the built behaviour
-Last activity: 2026-11-09 — plan 03-39 complete: s21 re-judged from the kept 03-38 run (PASS, no spend), cs5, s52 and s17-s51 PASS on the pinned 2.1.319 host (2.8563 USD; group 6.8812 of 10.00, Phase 3 7.9739 of 25); open item: host 2.1.321 not admitted
+Plan: 03-28 complete (exit briefs approved, 5.67 USD per-run cap, host pinned to 2.1.319; 03-29 and 03-30 next)
+Status: Ready to execute plan 03-29 — the owner authorization 03-28-exit-authorization.json is recorded; every exit start and owner-terminal decide or resume uses AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319
+Last activity: 2026-11-09 — plan 03-28 complete: three exit briefs approved as written, dry run exit 0 at 0 USD (portfolio unchanged), per-run cap 5.67 USD, Phase 3 spend 7.9739 of 25 USD
 
 Progress: [███░░░░░░░] 25%
 
@@ -148,6 +148,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P37 | 1h 10m | 1 tasks | 8 files |
 | Phase 03 P38 | 1h 15m | 1 tasks | 8 files |
 | Phase 03 P39 | 50 min | 3 tasks | 12 files |
+| Phase 03 P28 | continuation | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Plan 03-38 halted at s21: FAIL on the pinned 2.1.319 host after the per-case briefs worked (the unit reached the gates) — The harness tamper deleted a test outside the empty delete globs, so G2 failed on deletion-scope and no-new-overrides and the run blocked with a permission decision; the inventory rules removed-test and new-skip-marker run only when every other G2 rule passes, and repeated_failure follows a repair that a scope breach never reaches. Not cause (a), (b) or (c), so no re-run; owner decision needed on how S-21 is proven
 - [Phase 03]: Owner decision 2026-11-09 after the 03-38 halt: judge S-21 on the BUILT behaviour — re-judge the existing 03-38 s21 run from its kept evidence (no new spend) on the safety property the code enforces (G2 fails, each harness-made tamper is caught by a G2 rule, nothing committed, the run never reaches ready_for_review, it blocks with a decision); record the S-21 scenario-vs-code disagreement (scenario expects removed-test/new-skip-marker and repeated_failure after a repair; the built run treats a deletion as a scope breach and checks the inventory only when the other G2 rules pass) as one file:line line in docs/system/findings.md for the owner to decide which side moves; the per-rule paths stay proven offline (03-19); then run cs5, s52, s17-s51 in the same gap plan, still harness-only, pinned to 2.1.319, same caps
 - [Phase 03]: Plan 03-39: S-21 judged on the built behaviour from the kept 03-38 run; cs5, s52 and s17-s51 PASS on pinned 2.1.319; 03-27, 03-36, 03-37 and 03-38 completed — G2 failed with deletion-scope and no-new-overrides, nothing committed, never ready_for_review; the skip marker is not separately evaluated because the inventory runs only when every other G2 rule passes; one findings line records the scenario-versus-code disagreement for the owner. Spend 2.8563 USD; group 6.8812 of 10.00; Phase 3 7.9739 of 25
+- [Phase 03]: 03-28: owner approved the three exit briefs with a per-run cap of 5.67 USD (ceiling stays 25 USD)
+- [Phase 03]: 03-28: exit runs pinned to host 2.1.319; plans 03-29 and 03-30 run every avarice start, and every owner-terminal decide or resume, with AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319; ADMITTED_CLAUDE_VERSIONS and the default binary unchanged
+- [Phase 03]: 03-28: item A stays small (haiku) in all three exit briefs
 
 ### Pending Todos
 
@@ -396,6 +400,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T22:46:07.698Z
-Stopped at: Completed 03-39-PLAN.md
+Last session: 2026-11-09T23:39:20.278Z
+Stopped at: Completed 03-28-PLAN.md
 Resume file: None
