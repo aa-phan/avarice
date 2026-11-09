@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { startRun } from '../../src/app/run-start.ts';
@@ -237,6 +237,77 @@ describe('contract amend from the command line of the shell on a driven terminal
       await waitFor(() => term.screen().includes('contract v2 recorded'), 'the recorded amendment', 30_000);
       assert.deepEqual(versions(), [1, 2]);
       assert.equal(ledgerRows<{ limit_value: number }>(roots, "SELECT limit_value FROM budgets WHERE run_id = ? AND name = 'costUsd'", runId)[0]?.limit_value, 12);
+
+      term.type('q');
+      const result = await Promise.race([term.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`the shell did not leave on q; screen ${JSON.stringify(term.screen())}`)), 20_000))]);
+      assert.equal(result.code, 0);
+    } finally {
+      term.kill();
+    }
+  });
+});
+
+// The Decide action (plan 03-25; D-13, ADR-013): key 7 lists the open decisions, the choice runs `decide <id>` in the shell's process on the real
+// terminal, and the command's question is asked through the shell's own prompt. The answer is recorded as the OS user on the terminal channel.
+describe('the Decide action of the shell on a driven terminal', { skip: HAS_PYTHON ? false : 'python3 with the pty module is not available, so the driven terminal cannot be created' }, () => {
+  it('lists the open decision, asks the answer through the shell prompt and records `answered (1)` by the OS user on the terminal channel', async () => {
+    const roots = newRoots();
+    const repo = makeRunRepo();
+    cleanup.push(repo.base);
+    onboardRunRepo(roots, repo);
+    commitConventions(repo);
+    const composed = createDeps(profileEnv(roots), {});
+    assert.ok(composed.ok, 'composition');
+    let decisionId: string;
+    try {
+      const { deps } = composed.value;
+      const started = startRun(deps, { cwd: repo.path, briefPath: writeBrief(join(roots.base, 'briefs')), policy: 'routine', budgetOverrides: {} });
+      assert.ok(started.ok, JSON.stringify(started));
+      const contract = deps.ledger.getRunContract(started.value.runId);
+      assert.ok(contract.ok && contract.value !== null, 'the run has a contract');
+      const opened = deps.ledger.openDecision({
+        runId: started.value.runId,
+        contractVersion: contract.value.version,
+        class: 'acceptance',
+        issue: 'Which status code?',
+        options: [
+          { key: '1', label: '404', kind: 'choice' },
+          { key: '2', label: '410', kind: 'choice' },
+        ],
+        consequences: {},
+        evidenceRefs: [],
+        affectedItems: [],
+        stateDigest: 'sha256:test',
+        urgency: 'blocking',
+        nowMs: Date.now(),
+      });
+      assert.ok(opened.ok, JSON.stringify(opened));
+      decisionId = opened.value.decisionId;
+    } finally {
+      composed.value.close();
+    }
+    const row = (): { state: string; answer: string | null; answered_by: string | null; answer_channel: string | null } =>
+      ledgerRows<{ state: string; answer: string | null; answered_by: string | null; answer_channel: string | null }>(roots, 'SELECT state, answer, answered_by, answer_channel FROM decisions WHERE decision_id = ?', decisionId)[0] as {
+        state: string;
+        answer: string | null;
+        answered_by: string | null;
+        answer_channel: string | null;
+      };
+
+    const term = onTerminal(roots);
+    try {
+      await waitFor(() => term.screen().includes('open decisions: 1'), 'the home view with one open decision', 30_000);
+      assert.match(term.screen(), /7 {2}Decide/);
+
+      term.type('7');
+      await waitFor(() => term.screen().includes('decision to answer (number or ID): '), 'the decision prompt');
+      assert.ok(term.screen().includes(decisionId), 'the list names the decision');
+      term.type('1\r');
+      await waitFor(() => term.screen().includes('answer (1, 2'), 'the answer prompt of the decide command, asked by the shell', 30_000);
+      assert.equal(row().state, 'open', 'nothing is written before the answer');
+      term.type('1\r');
+      await waitFor(() => term.screen().includes(`decision ${decisionId} answered (1)`), 'the answered decision', 30_000);
+      assert.deepEqual(row(), { state: 'answered', answer: '1', answered_by: `owner:${userInfo().username}`, answer_channel: 'terminal' });
 
       term.type('q');
       const result = await Promise.race([term.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`the shell did not leave on q; screen ${JSON.stringify(term.screen())}`)), 20_000))]);
