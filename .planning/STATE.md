@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-11-09T00:45:55.166Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-11-09T00:58:53.264Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 88a4453e9d525f9ee1dda5323bcf8c66b8a14999
+state_head: dc5088bf0ebec18b19c90cd7567f2d9a14cfc0a8
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 63
+  completed_plans: 64
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 3 of 33
+Plan: 4 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -119,6 +119,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 02 P35 | 2h10m | 3 tasks | 25 files |
 | Phase 03 P01 | 35 min | 2 tasks | 12 files |
 | Phase 03 P02 | 55 min | 3 tasks | 14 files |
+| Phase 03 P04 | 12 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Phase 3 live spend is one ledger (live-spend-phase3.jsonl) with a lower-only 25 USD ceiling (D-05) — Mirrors Phase 2 D-15; guard enforced by the harness
 - [Phase 03]: Claude Code 2.1.319 admitted on a 22-test live containment run, 0 containment failures, 0.1515 USD — CON-3: admission only on recorded live evidence
 - [Phase 03]: 03-02: answerDecision, reopenStaleDecision and withdrawDecision are single ledger transactions under the run lock; an answer releases only items no other open decision lists, and events never carry the answer text
+- [Phase 03]: 03-04: runDisposition order is in-flight item, first ready item, all-done, blocked (open decision), undeliverable; isContinuableBlocked is true when an item is ready or no open decision remains — One pure rule shared by the running stage, the supervisor and decide; reaching undeliverable after a withdrawal instead of waiting forever
 
 ### Pending Todos
 
@@ -307,6 +309,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T00:45:55.029Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-11-09T00:58:53.123Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
