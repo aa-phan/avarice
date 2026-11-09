@@ -159,7 +159,7 @@ describe('cancel with a live supervisor in the middle of a unit: the unit is abo
   let elapsedMs = 0;
 
   it('starts a supervisor whose unit hangs, with the launch step in flight and a host process carrying the session', async () => {
-    const started = runCli(['start', '--brief', s.brief, '--policy', 'routine'], { roots: s.roots, cwd: s.repo.path, entry: TEST_CLI, env: runHostEnv(HANG), timeoutMs: 120_000 });
+    const started = runCli(['start', '--brief', s.brief, '--policy', 'routine'], { roots: s.roots, cwd: s.repo.path, entry: TEST_CLI, env: runHostEnv(HANG, { AVARICE_LEASE_TTL_MS: '3000' }), timeoutMs: 120_000 });
     assert.equal(started.code, 0, started.stdout + started.stderr);
     runId = runIdFromOutput(started.stdout);
     await waitFor(() => ledgerRows(s.roots, "SELECT 1 FROM run_steps WHERE run_id = ? AND step = 'launch:run' AND status = 'started'", runId).length > 0, 'the unit to start', 60_000);
@@ -171,7 +171,9 @@ describe('cancel with a live supervisor in the middle of a unit: the unit is abo
 
   it('`cancel --wait` records the request, says so, and follows the run to cancelled', async () => {
     const t0 = Date.now();
-    ran = await cancelCli(s.roots, [runId, '--wait']);
+    // The supervisor's lease is 3 s here, not the suite's 400 ms: the fake unit blocks its event loop for about a second at a time, and a lease that lapsed under
+    // load would send `cancel` down the no-supervisor road, which is not what this case is about. The host carries a reap for that road all the same.
+    ran = await cancelCli(s.roots, [runId, '--wait'], { overrides: { host: new FakeRunHost({}) } });
     elapsedMs = Date.now() - t0;
     assert.equal(ran.code, 0, ran.err + ran.out);
     assert.deepEqual(ran.out.trim().split('\n'), [`run ${runId}: cancel requested`, `run ${runId}: cancelled`]);

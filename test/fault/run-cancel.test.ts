@@ -60,6 +60,10 @@ after(() => {
 const HAS_PYTHON = spawnSync('python3', ['--version'], { encoding: 'utf8' }).status === 0;
 const NO_PYTHON = HAS_PYTHON ? false : 'python3 is not installed, so the pseudo-terminal harness cannot run';
 
+const LIVE_LEASE_TTL_MS = 3000;
+// The lease of a killed live supervisor has lapsed after this, with a margin for a loaded machine.
+const LIVE_LEASE_EXPIRY_WAIT_MS = LIVE_LEASE_TTL_MS + 1500;
+
 const UNIT: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' };
 
 const countOf = (roots: CliRoots, sql: string, ...params: Array<string | number>): number => (ledgerRows<{ n: number }>(roots, sql, ...params)[0] as { n: number }).n;
@@ -76,7 +80,8 @@ function startLiveS17(fault?: string): { f: ReturnType<typeof s17Fixture>; runId
     roots: f.roots,
     cwd: f.repo.path,
     entry: TEST_CLI,
-    env: runHostEnv(host, fault === undefined ? {} : { AVARICE_FAULT: fault }),
+    // A live supervisor must stay live while the fake unit blocks its event loop for about a second at a time: its lease is far longer than the suite's usual 400 ms.
+    env: runHostEnv(host, { AVARICE_LEASE_TTL_MS: String(LIVE_LEASE_TTL_MS), ...(fault === undefined ? {} : { AVARICE_FAULT: fault }) }),
     timeoutMs: 120_000,
   });
   assert.equal(started.code, 0, started.stdout + started.stderr);
@@ -271,13 +276,13 @@ describe('mid-cancel: a supervisor killed after the withdrawals and before the t
       await untilHung(f.roots, runId);
       const launchesBefore = launchSteps(f.roots, runId);
 
-      const requested = await cancelCli(f.roots, [runId]);
+      const requested = await cancelCli(f.roots, [runId], { overrides: fakeHost() });
       assert.equal(requested.code, 0, requested.err + requested.out);
       assert.equal(requested.out, `run ${runId}: cancel requested\n`);
 
       // The supervisor aborts C's unit, withdraws B's decision, and is killed at `mid-cancel`: the decision is withdrawn and the run is not yet cancelled.
       await waitFor(() => ledgerRows(f.roots, "SELECT 1 FROM decisions WHERE run_id = ? AND state = 'withdrawn'", runId).length === 1, 'the supervisor to withdraw the decision', 60_000);
-      sleepSync(RUN_EXPIRY_WAIT_MS);
+      sleepSync(LIVE_LEASE_EXPIRY_WAIT_MS);
       assert.equal(stateOf(f.roots, runId), 'running', 'the supervisor died before the transition');
       assert.equal(eventsOf(f.roots, runId, 'decision.withdrawn').length, 1);
 
