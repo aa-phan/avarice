@@ -127,6 +127,16 @@ describe('the unit prompt and the hook policy of one invocation (plan 03-34, T-0
     for (const [command, rule] of refused) {
       const decision = judge(played, command);
       assert.deepEqual([decision.decision, decision.rule], ['deny', rule], command);
+      // Plan 03-34, T-03-65: the refusal says what is admitted, without the command or a path of the machine.
+      assert.ok(decision.reason !== undefined && decision.reason !== '', `${command}: no reason`);
+      assert.equal(decision.reason.includes(command), false, `${command}: repeated in its reason`);
+      assert.equal(/(^|[\s(])\//.test(decision.reason), false, `${command}: a path rooted at / in its reason`);
     }
+  });
+
+  it("names, in the refusal of an unadmitted command, the commands of this invocation's policy and the file tools", () => {
+    const decision = judge(played, 'pwd');
+    assert.ok(decision.reason !== undefined);
+    for (const admitted of ['npm test', ...played.policy.commands.readOnly, 'Read', 'Grep', 'Glob']) assert.ok(decision.reason.includes(admitted), admitted);
   });
 });

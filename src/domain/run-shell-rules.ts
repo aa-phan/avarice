@@ -13,6 +13,35 @@ export const RUN_SHELL_RULES_SENTENCE = `Shell rules: run one plain command per 
 export const readOnlyCommandsSentence = (commands: readonly string[]): string =>
   `You may also run these read-only commands, one per call, on paths inside the repository: ${commands.join(', ')}. Read files with the Read tool and search with the Grep and Glob tools.`;
 
+// What a refused shell call is told besides its rule (plan 03-34): the admitted spelling, so a refused form is not retried unchanged until the
+// consecutive-denials limit ends the invocation (CON-14). Built from fixed text and the policy's own command names, so it never repeats the refused
+// command and never names a path. `agentCommands` are the contract's commands as the policy holds them (a `<paths>` entry ends in `<paths>`).
+export interface ShellAdmitted {
+  readOnly: readonly string[];
+  agentCommands: readonly string[];
+}
+
+const FILE_TOOLS = 'read files with the Read tool and search with the Grep and Glob tools';
+
+function admittedText({ readOnly, agentCommands }: ShellAdmitted): string {
+  const readOnlyText = `the read-only commands, one per call: ${readOnly.join(', ')}`;
+  return agentCommands.length === 0 ? readOnlyText : `the commands listed for this run, exactly as written: ${agentCommands.join(', ')}; and ${readOnlyText}`;
+}
+
+// A reason for `shell-syntax`, `shell-not-allowed` and `shell-denied-prefix`; undefined for every other rule.
+export function shellRuleReason(rule: string, lists: ShellAdmitted): string | undefined {
+  switch (rule) {
+    case 'shell-syntax':
+      return `one plain command per call, written without ${RUN_REFUSED_FORMS}; ${FILE_TOOLS}`;
+    case 'shell-not-allowed':
+      return `this command is not admitted; the admitted commands are ${admittedText(lists)}; ${FILE_TOOLS}`;
+    case 'shell-denied-prefix':
+      return `this command is never run inside an invocation unless it is listed exactly as written among the commands you may run; the admitted commands are ${admittedText(lists)}; ${FILE_TOOLS}`;
+    default:
+      return undefined;
+  }
+}
+
 // The quick workflow's own shell steps are outside the run's command list, and a unit that reads both instructions literally stops (haiku, run 2 of plan
 // 03-27). It does that work with the file tools and the agents instead, and still runs the four stages.
 export const RUN_WORKFLOW_SHELL_SENTENCE =

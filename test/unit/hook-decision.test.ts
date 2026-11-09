@@ -9,6 +9,7 @@ import { sha256Hex } from '../../src/domain/digest.ts';
 import { GIT_OUTPUT_FORMS, SHORT_VALUE_OPTIONS, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../../src/domain/hook-decision.ts';
 import type { GitOutputForm, HookDecision, HookPolicy, NormalizedToolCall } from '../../src/domain/hook-decision.ts';
 import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS, credentialPaths } from '../../src/domain/invocation-scope.ts';
+import { RUN_REFUSED_FORMS } from '../../src/domain/run-shell-rules.ts';
 
 const STAGING = '/work/onb-1/staging';
 const WRITE_ROOT = `${STAGING}/.planning/codebase`;
@@ -1279,7 +1280,13 @@ describe('git object reads and output forms (CR-01)', () => {
     const object = decide(shell('git show HEAD'));
     assert.deepEqual([object.decision, object.rule], ['deny', 'shell-git-object']);
     assert.ok(object.reason !== undefined && object.reason.includes('<revision>:<path>'), String(object.reason));
-    for (const command of ['cat .env', 'git show HEAD:.env', 'curl x', 'git log -- *.ts']) assert.equal(decide(shell(command)).reason, undefined, command);
+    for (const command of ['cat .env', 'git show HEAD:.env']) assert.equal(decide(shell(command)).reason, undefined, command);
+    // Plan 03-34: a refusal for a denied prefix or for syntax (an expanding glob) now also carries a reason; its rule is unchanged.
+    for (const [command, rule] of [['curl x', 'shell-denied-prefix'], ['git log -- *.ts', 'shell-syntax']] as const) {
+      const d = decide(shell(command));
+      assert.deepEqual([d.decision, d.rule], ['deny', rule], command);
+      assert.ok(d.reason !== undefined && d.reason !== '', command);
+    }
   });
 });
 
@@ -1354,5 +1361,97 @@ describe('symlink at a secret object name (G-02-H2)', () => {
     const toSecret = { [`${STAGING}/link.txt`]: `${STAGING}/.env` };
     assert.deepEqual(verdictWith(toSecret, 'git show HEAD:link.txt'), ['deny', 'deny-secret-read']);
     assert.deepEqual(verdictWith(toSecret, 'cat link.txt'), ['deny', 'deny-secret-read']);
+  });
+});
+
+// Plan 03-34 (T-03-65; the 03-27 small-unit diagnosis): a shell refusal for syntax, an unadmitted command or a denied prefix tells the model what is
+// admitted, so it corrects itself before the loop limit ends the unit. The decision and the rule are unchanged.
+describe('shell refusals say what is admitted instead (plan 03-34)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const runPolicy = (): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['src/**'],
+        protectedGlobs: ['package.json'],
+        agentCommands: [
+          { words: ['npm', 'test'], paths: false },
+          { words: ['npx', 'vitest', 'run'], paths: true },
+        ],
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED },
+    );
+  const verdict = (command: string, p: HookPolicy = runPolicy()): HookDecision => decide(shell(command), p);
+  // No path of the machine and no copy of the refused command in what the model is told.
+  const clean = (command: string, p: HookPolicy, reason: string | undefined): string => {
+    assert.ok(reason !== undefined && reason !== '', command);
+    assert.equal(command !== '' && reason.includes(command), false, `${command}: the refused command is repeated`);
+    for (const secret of [p.stagingPath, p.ledgerPath, ...p.denyRead]) assert.equal(reason.includes(secret), false, `${command}: names ${secret}`);
+    assert.equal(/(^|[\s(])\//.test(reason), false, `${command}: a path rooted at /`);
+    return reason;
+  };
+
+  it('a refused shape (chaining, a redirection, a home path, an expanding word, an empty or over-long command) carries the one-plain-command reason', () => {
+    const p = runPolicy();
+    for (const command of ['ls src; ls test', 'npm test 2>&1', 'ls ~', 'ls *.ts', 'cat `ls`', '', 'x'.repeat(20_000)]) {
+      const d = verdict(command, p);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-syntax'], command.slice(0, 40));
+      const reason = clean(command, p, d.reason);
+      assert.match(reason, /one plain command per call/);
+      assert.ok(reason.includes(RUN_REFUSED_FORMS), "the reason names the refused forms in the prompt's words");
+      for (const tool of ['Read', 'Grep', 'Glob']) assert.ok(reason.includes(tool), tool);
+    }
+  });
+
+  it('pwd and mkdir are shell-not-allowed with a reason that lists the contract commands, every read-only command and the file tools', () => {
+    const p = runPolicy();
+    for (const command of ['pwd', 'mkdir -p x']) {
+      const d = verdict(command, p);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-not-allowed'], command);
+      const reason = clean(command, p, d.reason);
+      for (const admitted of ['npm test', 'npx vitest run <paths>', ...p.commands.readOnly]) assert.ok(reason.includes(admitted), `${command}: ${admitted}`);
+      for (const tool of ['Read', 'Grep', 'Glob']) assert.ok(reason.includes(tool), tool);
+    }
+  });
+
+  it('lists only the read-only commands when the policy has no contract commands', () => {
+    const p = policy({}, { readOnly: ['ls', 'cat'] });
+    const d = verdict('pwd', p);
+    assert.equal(d.rule, 'shell-not-allowed');
+    const reason = clean('pwd', p, d.reason);
+    assert.ok(reason.includes('ls, cat'));
+    assert.equal(reason.includes('git log'), false, 'a command the policy does not admit is not listed');
+  });
+
+  it('a denied prefix that is not a contract command is shell-denied-prefix with a reason that says it is never run unless listed as written', () => {
+    const p = policy();
+    const d = verdict('npx tsc', p);
+    assert.deepEqual([d.decision, d.rule], ['deny', 'shell-denied-prefix']);
+    const reason = clean('npx tsc', p, d.reason);
+    assert.match(reason, /never run inside an invocation unless it is listed exactly as written/);
+  });
+
+  it('keeps the two git reasons, and gives no reason to any other rule', () => {
+    const output = verdict('git status --verb');
+    assert.deepEqual([output.rule, output.reason?.startsWith('git log and git status take only listed options')], ['shell-git-output', true]);
+    const object = verdict('git show HEAD');
+    assert.deepEqual([object.rule, object.reason?.startsWith('name a file as <revision>:<path>')], ['shell-git-object', true]);
+    for (const [command, rule] of [
+      ['find . -rm', 'shell-find-action'],
+      ['cat config/.env', 'deny-secret-read'],
+      ['gsd_run graphify status', 'shell-gsd-no-preamble'],
+      ['git log --output=x', 'shell-git-option'],
+    ] as const) {
+      const d = verdict(command);
+      assert.deepEqual([d.decision, d.rule, d.reason], ['deny', rule, undefined], command);
+    }
+  });
+
+  it('adds no reason to an allow, and changes no decision of an admitted command', () => {
+    for (const command of ['npm test', 'ls src', 'git status']) assert.equal('reason' in verdict(command), false, command);
   });
 });

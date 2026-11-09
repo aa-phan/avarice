@@ -13,6 +13,7 @@ import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
 import { lexicalAbsolute } from './normalized-root.ts';
+import { shellRuleReason } from './run-shell-rules.ts';
 import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation-scope.ts';
 
 export type NormalizedToolCall =
@@ -730,8 +731,15 @@ function checkLine(line: string, preamble: boolean, call: Extract<NormalizedTool
 function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): HookDecision {
   // No shell at all (the knowledge pass): nothing is read-only enough, and a GSD verb is not admitted either.
   if (policy.commands.strategy === 'none') return deny('shell-disabled');
+  // Plan 03-34: a refusal for syntax, an unadmitted command or a denied prefix says what this policy admits; the two git rules keep their own reasons.
+  const refuse = (rule: string): HookDecision =>
+    deny(
+      rule,
+      GIT_RULE_REASONS[rule] ??
+        shellRuleReason(rule, { readOnly: policy.commands.readOnly, agentCommands: (policy.agentCommands ?? []).map((agent) => [...agent.words, ...(agent.paths ? ['<paths>'] : [])].join(' ')) }),
+    );
   const command = call.command.trim();
-  if (command === '' || command.length > MAX_COMMAND_CHARS) return deny('shell-syntax');
+  if (command === '' || command.length > MAX_COMMAND_CHARS) return refuse('shell-syntax');
 
   let lines: string[] = [command];
   let preamble = false;
@@ -748,7 +756,7 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
   const seen: LineSeen = { agentCommand: false };
   for (const line of lines) {
     const rule = checkLine(line, preamble, call, policy, canon, seen);
-    if (rule !== null) return deny(rule, GIT_RULE_REASONS[rule]);
+    if (rule !== null) return refuse(rule);
   }
   return { decision: 'allow', rule: seen.agentCommand ? 'agent-command' : 'shell-identity', budget: 'toolCalls', ...(policy.commands.strategy === 'hook-allow' ? { explicit: true } : {}) };
 }
