@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 30/36 plans executed (15 waves, plus 3 gap-closure plans)
+**Plans:** 30/37 plans executed (15 waves, plus 4 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -264,7 +264,8 @@ Plans:
 **Gap closure after the 03-27 halt** *(run with `/gsd-execute-phase 3 --gaps-only`; 03-27's SUMMARY stays halted, blocking 03-28 to 03-33, until 03-36 resumes it)*
 - [x] 03-34-PLAN.md — Diagnose the small-unit failure from the evidence; the unit prompt, the run agents and the hook's refusals state the run's shell rules (offline)
 - [x] 03-35-PLAN.md — Plan-group spend guard (10.00 USD for 03-27's resumed cases); three live haiku probes of 03-27's item A; owner decision checkpoint only if haiku fails
-- [x] 03-36-PLAN.md — Re-run 03-27's live cases, cheap cases first and s17-s51 last (S-51 judged first), and resume 03-27's SUMMARY to complete when every case passes
+- [x] 03-36-PLAN.md — Re-run 03-27's live cases, cheap cases first and s17-s51 last (S-51 judged first), and resume 03-27's SUMMARY to complete when every case passes (halted at s21)
+- [ ] 03-37-PLAN.md — After the 03-36 halt: the harness performs the s21 tamper and cs5 asks plainly for its subagent write (owner decision); s21, cs5, s52 and s17-s51 live; complete 03-27 and 03-36
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
