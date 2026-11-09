@@ -4,13 +4,26 @@
 // test calls a real model.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
-import { runRowOf } from '../helpers/independent-work.ts';
+import { join } from 'node:path';
+import { runSupervisor } from '../../src/app/run-service.ts';
+import { startRun } from '../../src/app/run-start.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import { main } from '../../src/cli/main.ts';
 import { ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
-import { main } from '../../src/cli/main.ts';
-import { ledgerRows, profileEnv } from '../helpers/run-fixtures.ts';
+import type { InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
+import { FakeRunHost } from '../helpers/fake-run-host.ts';
+import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
+import { TEST_CLI, runHostEnv, runIdFromOutput } from '../helpers/fault-run.ts';
+import { attemptsOfRun, itemStatesOf, runRowOf, s17Fixture, s17Host } from '../helpers/independent-work.ts';
+import { makeRoots, runCli } from '../helpers/run-cli.ts';
+import type { CliRoots } from '../helpers/run-cli.ts';
+import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
+import type { ScratchRepo } from '../helpers/scratch-repo.ts';
+import { waitFor } from '../helpers/shell-streams.ts';
 import { cancelCli, checkoutState, cloneKept, eventsOf, rowsSnapshot, startBlockedS17 } from '../helpers/cancel-cli.ts';
 
 const cleanup: string[] = [];
@@ -132,5 +145,150 @@ describe('cancel refuses outside a person at a terminal, and writes nothing (CS-
     assert.match(unknown.err, /no run/);
     assert.deepEqual(rowsSnapshot(f.roots, runId), before);
     assert.equal(rowsSnapshot(f.roots, runId).state, 'blocked_on_decision', 'the run is untouched');
+  });
+});
+
+// ---- a supervisor holds the lease (plan 03-24, Task 2) -----------------------------------------------------------------------------------------------------
+
+interface Single {
+  roots: CliRoots;
+  repo: ScratchRepo;
+  brief: string;
+}
+
+// An onboarded repository with the conventions committed and the one-item brief written.
+function singleFixture(): Single {
+  const roots = makeRoots();
+  const repo = makeRunRepo();
+  cleanup.push(roots.base, repo.base);
+  onboardRunRepo(roots, repo);
+  commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
+  return { roots, repo, brief: writeBrief(join(roots.base, 'briefs')) };
+}
+
+const sessionAlive = (sessionId: string): boolean => execFileSync('ps', ['-axo', 'command'], { encoding: 'utf8' }).split('\n').some((line) => line.includes(sessionId) && !line.includes('ps -axo'));
+
+const HANG: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed', hangUntilAbort: { maxMs: 40_000 } };
+
+describe('cancel with a live supervisor in the middle of a unit: the unit is aborted, ended cancelled and never retried (AUT-12)', () => {
+  const s = singleFixture();
+  let runId = '';
+  let sessionId = '';
+  let ran: Awaited<ReturnType<typeof cancelCli>>;
+  let elapsedMs = 0;
+
+  it('starts a supervisor whose unit hangs, with the launch step in flight and a host process carrying the session', async () => {
+    const started = runCli(['start', '--brief', s.brief, '--policy', 'routine'], { roots: s.roots, cwd: s.repo.path, entry: TEST_CLI, env: runHostEnv(HANG), timeoutMs: 120_000 });
+    assert.equal(started.code, 0, started.stdout + started.stderr);
+    runId = runIdFromOutput(started.stdout);
+    await waitFor(() => ledgerRows(s.roots, "SELECT 1 FROM run_steps WHERE run_id = ? AND step = 'launch:run' AND status = 'started'", runId).length > 0, 'the unit to start', 60_000);
+    const launch = ledgerRows<{ result_json: string }>(s.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'launch:run'", runId)[0] as { result_json: string };
+    sessionId = (JSON.parse(launch.result_json) as { sessionId: string }).sessionId;
+    await waitFor(() => sessionAlive(sessionId), 'the host process of the unit', 20_000);
+    assert.notEqual(runRowOf(s.roots, runId).lease_holder, null, 'a supervisor holds the lease');
+  });
+
+  it('`cancel --wait` records the request, says so, and follows the run to cancelled', async () => {
+    const t0 = Date.now();
+    ran = await cancelCli(s.roots, [runId, '--wait']);
+    elapsedMs = Date.now() - t0;
+    assert.equal(ran.code, 0, ran.err + ran.out);
+    assert.deepEqual(ran.out.trim().split('\n'), [`run ${runId}: cancel requested`, `run ${runId}: cancelled`]);
+    assert.ok(elapsedMs < 20_000, `the unit was aborted within a few lease ticks, not at its own limit (${elapsedMs} ms)`);
+    assert.notEqual(ledgerRows<{ cancel_requested_by: string | null }>(s.roots, 'SELECT cancel_requested_by FROM runs WHERE run_id = ?', runId)[0]?.cancel_requested_by, null);
+  });
+
+  it('the run is cancelled with the lease free, its attempt ended cancelled, and no host process is left', async () => {
+    const row = runRowOf(s.roots, runId);
+    assert.deepEqual([row.state, row.reason, row.lease_holder], ['cancelled', null, null]);
+    assert.deepEqual(
+      attemptsOfRun(s.roots, runId).map((a) => [a.reason, a.outcome]),
+      [['initial', 'cancelled']],
+    );
+    await waitFor(() => !sessionAlive(sessionId), 'the host process to be gone', 15_000);
+    assert.deepEqual(ledgerRows(s.roots, "SELECT step FROM run_steps WHERE run_id = ? AND status = 'started'", runId), [], 'no step is left in flight');
+  });
+
+  it('nothing was classified, discarded or launched a second time, and the killed invocation stays charged', () => {
+    const actions = ledgerRows<{ next_action: string }>(s.roots, 'SELECT next_action FROM checkpoints WHERE run_id = ? ORDER BY seq', runId).map((r) => r.next_action);
+    assert.ok(actions.includes('launch:run'), actions.join(','));
+    assert.equal(actions.includes('classify'), false, `no classify checkpoint: ${actions.join(',')}`);
+    assert.equal(actions.includes('discard-attempt'), false, `no discard: ${actions.join(',')}`);
+    assert.equal(ledgerRows<{ n: number }>(s.roots, "SELECT count(*) AS n FROM run_steps WHERE run_id = ? AND step = 'launch:run'", runId)[0]?.n, 1, 'exactly one launch:run step for the item');
+    const budget = ledgerRows<{ used: number; reserved: number }>(s.roots, "SELECT used, reserved FROM budgets WHERE run_id = ? AND name = 'invocations'", runId)[0];
+    assert.deepEqual([budget?.used, budget?.reserved], [1, 0], 'one invocation, settled as used');
+    assert.equal(ledgerRows(s.roots, 'SELECT 1 FROM gate_results WHERE run_id = ?', runId).length, 0, 'no gate judged the unit');
+  });
+
+  it('`cancel` again exits 3 and writes nothing', async () => {
+    const before = rowsSnapshot(s.roots, runId);
+    const again = await cancelCli(s.roots, [runId]);
+    assert.equal(again.code, 3, again.err + again.out);
+    assert.match(again.err, /already cancelled/);
+    assert.deepEqual(rowsSnapshot(s.roots, runId), before);
+  });
+});
+
+// A host that plays the fake unit and then, once, asks to cancel the run, as an owner at another terminal would while the unit was finishing.
+class CancelsAfterFirstUnit extends FakeRunHost {
+  onFirst: () => void = () => undefined;
+  override async invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
+    const outcome = await super.invoke(req, signal);
+    if (this.calls.length === 1) this.onFirst();
+    return outcome;
+  }
+}
+
+describe('cancel between items and at the start of a supervisor: no further unit is launched (AUT-12)', () => {
+  it('a request that lands as item A finishes is acted on before B launches: A stays committed, nothing else ran, the run is cancelled', async () => {
+    const f = s17Fixture(cleanup);
+    const host = new CancelsAfterFirstUnit(s17Host({}));
+    const composed = createDeps(profileEnv(f.roots), { host });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const started = startRun(composed.value.deps, { cwd: f.repo.path, briefPath: f.brief, policy: 'routine', budgetOverrides: {} });
+      assert.ok(started.ok, JSON.stringify(started));
+      const { runId } = started.value;
+      host.onFirst = () => void composed.value.deps.ledger.requestRunCancel(runId, { by: 'owner', nowMs: Date.now() });
+      const outcome = await runSupervisor(composed.value.deps, runId);
+      assert.ok(outcome.ok, JSON.stringify(outcome));
+      assert.equal(outcome.value.state, 'cancelled');
+      assert.equal(host.calls.length, 1, 'only the first unit was launched');
+      assert.deepEqual(itemStatesOf(f.roots, runId), [
+        ['A', 'done'],
+        ['B', 'ready'],
+        ['C', 'ready'],
+        ['D', 'ready'],
+      ]);
+      assert.deepEqual(
+        attemptsOfRun(f.roots, runId).map((a) => [a.item_id, a.outcome]),
+        [['A', 'committed']],
+      );
+      assert.equal(runRowOf(f.roots, runId).lease_holder, null);
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('a supervisor that starts on a run with a request standing cancels it at entry: no stage runs and no unit launches', async () => {
+    const f = singleFixture();
+    const host = new FakeRunHost({ edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' });
+    const composed = createDeps(profileEnv(f.roots), { host });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const started = startRun(composed.value.deps, { cwd: f.repo.path, briefPath: f.brief, policy: 'routine', budgetOverrides: {} });
+      assert.ok(started.ok, JSON.stringify(started));
+      const { runId } = started.value;
+      assert.ok(composed.value.deps.ledger.requestRunCancel(runId, { by: 'owner', nowMs: Date.now() }).ok);
+      const outcome = await runSupervisor(composed.value.deps, runId);
+      assert.ok(outcome.ok, JSON.stringify(outcome));
+      assert.equal(outcome.value.state, 'cancelled');
+      assert.equal(host.calls.length, 0, 'no unit was launched');
+      const actions = ledgerRows<{ next_action: string }>(f.roots, 'SELECT next_action FROM checkpoints WHERE run_id = ? ORDER BY seq', runId).map((r) => r.next_action);
+      assert.equal(actions.includes('prepare-workspace'), false, `no stage ran: ${actions.join(',')}`);
+      assert.equal(runRowOf(f.roots, runId).lease_holder, null);
+    } finally {
+      composed.value.close();
+    }
   });
 });
