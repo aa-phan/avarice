@@ -11,13 +11,14 @@
 // 64 a usage error, an unknown decision, an option or text the record does not allow, a refusal; 70 an internal failure. `--wait` follows a supervisor
 // this command started to where the run stops.
 import { describeError } from '../../adapters/sqlite/db.ts';
-import { decide } from '../../app/decide.ts';
+import { decide, findDecision } from '../../app/decide.ts';
 import type { DecideOutcome } from '../../app/decide.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { PortError } from '../../domain/result.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { ownsProfile, refuseOutsideTerminal, responderName } from '../identity.ts';
 import type { IdentityContext } from '../identity.ts';
+import { renderDecision } from '../render/decision-view.ts';
 import { errorLine, stripControl } from '../render/style.ts';
 import { isProcessAlive, spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import { renderWait } from './start.ts';
@@ -29,6 +30,13 @@ const WAIT_MAX_MS = 24 * 60 * 60_000;
 const DECISION_ID = /^dec_[0-9A-Za-z]{4,64}$/;
 const KEY_MAX_CHARS = 200;
 const USAGE = 'usage: avarice decide <decisionId> [<option-key> | --text "..."] [--wait]';
+const UNKNOWN_WIDTH = 80;
+
+// The width of the terminal this process writes to, or 80 when it does not say.
+function terminalWidth(): number {
+  const columns = process.stdout.columns;
+  return Number.isInteger(columns) && columns > 0 ? columns : UNKNOWN_WIDTH;
+}
 
 export const booleanFlags: readonly string[] = ['wait'];
 
@@ -110,7 +118,11 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     io.err(`${errorLine('decide', 'only the user who owns the profile answers a decision')}\n`);
     return EXIT_USAGE;
   }
+  // No answer given: print the record and say how to answer. Nothing is written.
   if (key === undefined && typeof text !== 'string') {
+    const found = findDecision(deps, decisionId);
+    if (!found.ok) return fail(io, found.error);
+    io.out(renderDecision(found.value, terminalWidth()));
     io.err(`${errorLine('decide', 'give an option key or --text')}\n${USAGE}\n`);
     return EXIT_USAGE;
   }
