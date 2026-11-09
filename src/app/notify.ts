@@ -77,7 +77,7 @@ async function safeDeliver(notifier: Notifier, message: NotifierMessage): Promis
 // Delivers one banner for the rows, which are all about it: up to BACKOFF_DELAYS_MS.length attempts inside this process, each preceded by
 // its delay (0, 10 and 60 seconds). Every attempt is recorded on every row with its error code; a delivered attempt ends the loop, and after
 // the last failed one the rows are `failed` (visible in the inbox and status, and left for the next digest). Nothing here touches a decision.
-async function deliverRows(deps: AppDeps, notify: NotifyDeps, rows: readonly NotificationRow[], message: NotifierMessage): Promise<Result<{ rows: NotificationRow[]; delivered: boolean }>> {
+export async function deliverWithBackoff(deps: AppDeps, notify: NotifyDeps, rows: readonly NotificationRow[], message: NotifierMessage): Promise<Result<{ rows: NotificationRow[]; delivered: boolean }>> {
   let latest = [...rows];
   for (let attempt = 0; attempt < BACKOFF_DELAYS_MS.length; attempt += 1) {
     await notify.sleep(BACKOFF_DELAYS_MS[attempt] as number);
@@ -155,7 +155,7 @@ async function raise(deps: AppDeps, notify: NotifyDeps, rows: readonly Notificat
     const ids = new Set(rows.map((row) => row.notificationId));
     return ok({ notifications: latest.value.filter((row) => ids.has(row.notificationId)), result: 'held' });
   }
-  const sent = await deliverRows(deps, notify, rows, message);
+  const sent = await deliverWithBackoff(deps, notify, rows, message);
   if (!sent.ok) return sent;
   return ok({ notifications: sent.value.rows, result: sent.value.delivered ? 'delivered' : 'failed' });
 }
