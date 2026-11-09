@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-35-PLAN.md
-last_updated: "2026-11-09T18:34:55.080Z"
+stopped_at: Halted 03-36-PLAN.md at s21 (not exercised; cs5, s52, s17-s51 not run)
+last_updated: "2026-11-09T19:19:57.751Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 6a39c74868c9c47ee2b9d47c8a9db8ebb3b9a438
+state_head: 4db74dc063acefb96119cf701f428e4648f0b3d3
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 97
-  completed_plans: 90
+  completed_plans: 91
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-36 next (03-27 halted; gap plans 03-34 and 03-35 complete; then 03-28..03-33)
-Status: Ready to execute (gap closure: /gsd-execute-phase 3 --gaps-only runs 03-36 next)
-Last activity: 2026-11-09 — plan 03-35 complete: owner chose proceed-haiku after two probe-small-1 runs (0.1838 USD; group 3.6399 of 10.00, Phase 3 4.7326 of 25)
+Plan: 03-36 HALTED at s21 (03-27 stays halted; 03-28..03-33 blocked until an owner decision and a follow-up plan)
+Status: Halted — owner decision needed on how the s21 tamper and cs5 write-probe cases are exercised (the haiku unit read the script and declined to run npm test)
+Last activity: 2026-11-09 — plan 03-36 halted: s50, cs15 and s18-short PASS live, s21 NOT EXERCISED, cs5, s52 and s17-s51 not run (0.2336 USD; group 3.8735 of 10.00, Phase 3 4.9662 of 25)
 
 Progress: [███░░░░░░░] 25%
 
@@ -363,6 +363,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 - Plan 03-27 halted at its tracer gate: s17-s51 failed twice live because item A (small, so haiku) did not complete; S-50, S-18, S-21, S-52, CS-5, CS-15 not started; 3.4561 USD of the plan's 6.00 spent (Phase 3: 4.5488 of 25). A fix plan or an owner decision on haiku for small items is needed before plans that depend on 03-27 run.
+- Plan 03-36 halted at s21 (NOT EXERCISED: the haiku unit read scripts/tamper.mjs and declined to run npm test); cs5 likely the same; owner decision needed on how the tamper and write-probe cases are exercised; 03-27 stays halted, 03-28..03-33 blocked
 
 ### Quick Tasks Completed
 
@@ -383,6 +384,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T18:34:54.883Z
-Stopped at: Completed 03-35-PLAN.md
+Last session: 2026-11-09T19:19:56.766Z
+Stopped at: Halted 03-36-PLAN.md at s21 (not exercised; cs5, s52, s17-s51 not run)
 Resume file: None
