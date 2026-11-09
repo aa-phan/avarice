@@ -15,6 +15,7 @@ import { migrate, pendingMigrations } from '../../src/adapters/sqlite/migrate.ts
 import type { Migration } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -23,7 +24,9 @@ const FIXTURE = join(REPO_ROOT, 'test', 'fixtures', 'db', 'schema-v1.sqlite');
 const TABLES = ['projects', 'onboardings', 'checkpoints', 'events', 'contracts', 'project_records', 'artifacts', 'onboarding_steps', 'schema_migrations', 'adapter_configs', 'meta'] as const;
 // What the committed fixture recorded for migration 0001 when it was generated. Migration 0001 is never edited (NFR-9).
 const V1_CHECKSUM = '56c469d8a0cfb0c661908b75cf745c02892e3512d6fe0f6a5305132479f5e2cf';
-const SHIPPED: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002];
+const SHIPPED: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003];
+// The list a version 2 build shipped: the v1 to v2 cases stay about what 0002 does.
+const V2_SHIPPED: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002];
 const V1_ONLY: readonly Migration[] = [MIGRATION_0001];
 // Tables whose row count the upgrade must not change, plus the three that 0002 adds (empty after it).
 const V1_RUN_TABLES = ['runs', 'attempts', 'evidence', 'gate_results', 'decisions', 'work_items', 'budgets'] as const;
@@ -136,10 +139,10 @@ describe('the committed v1 fixture database', () => {
       const before = counts(db);
       const runTablesBefore = Object.fromEntries(V1_RUN_TABLES.map((t) => [t, Number((db.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n)]));
       const backupDir = join(dir, 'backups');
-      const pending = pendingMigrations(db, SHIPPED);
+      const pending = pendingMigrations(db, V2_SHIPPED);
       assert.ok(pending.ok);
       assert.deepEqual(pending.value.map((m) => m.version), [2]);
-      const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
+      const migrated = migrate(db, V2_SHIPPED, { nowMs: NOW, backupDir });
       assert.ok(migrated.ok, migrated.ok ? '' : describeError(migrated.error));
       assert.deepEqual(migrated.value, { from: 1, to: 2, applied: [2] });
 
@@ -183,6 +186,55 @@ describe('the committed v1 fixture database', () => {
     }
   });
 
+  it('migrates a version 2 store to version 3: backup written first, every row kept, the new columns NULL, notifications empty (NFR-9)', () => {
+    const { dir, path } = fixtureCopy();
+    const db = open(path);
+    try {
+      assert.ok(migrate(db, V2_SHIPPED, { nowMs: NOW, backupDir: join(dir, 'backups-v1') }).ok);
+      db.exec(`
+        INSERT INTO projects (project_id, root_commit, repo_path, remote, default_branch, created_at) VALUES ('proj_v2', 'rootv2', '/repo/v2', NULL, 'main', '2026-06-01T12:00:00.000Z');
+        INSERT INTO runs (run_id, project_id, state, version, title, created_at, updated_at) VALUES ('run_v2', 'proj_v2', 'running', 2, 'a v2 run', '2026-06-01T12:00:00.000Z', '2026-06-01T12:00:00.000Z');
+        INSERT INTO attempts (attempt_id, run_id, ordinal, reason, started_at) VALUES ('att_v2', 'run_v2', 1, 'first', '2026-06-01T12:00:00.000Z');
+        INSERT INTO decisions (decision_id, run_id, contract_version, class, issue, options_json, consequences_json, evidence_refs_json, affected_items_json, state_digest, urgency, state, opened_at)
+          VALUES ('dec_v2', 'run_v2', 1, 'acceptance', 'q', '[]', '{}', '[]', '["A"]', 'd', 'blocking', 'open', '2026-06-01T12:00:00.000Z');
+      `);
+      const before = counts(db);
+      const runTablesBefore = Object.fromEntries(['runs', 'attempts', 'decisions'].map((t) => [t, Number((db.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n)]));
+      const backupDir = join(dir, 'backups');
+      const pending = pendingMigrations(db, SHIPPED);
+      assert.ok(pending.ok);
+      assert.deepEqual(pending.value.map((m) => m.version), [3]);
+      const migrated = migrate(db, SHIPPED, { nowMs: NOW + 1000, backupDir });
+      assert.ok(migrated.ok, migrated.ok ? '' : describeError(migrated.error));
+      assert.deepEqual(migrated.value, { from: 2, to: 3, applied: [3] });
+      const backups = readdirSync(backupDir);
+      assert.equal(backups.length, 1, 'a pre-migration backup was written');
+      const backup = new DatabaseSync(join(backupDir, backups[0] as string), { readOnly: true });
+      try {
+        assert.deepEqual(counts(backup), before, 'the backup is the version 2 store');
+        assert.ok(!schemaNames(backup).includes('table:notifications'), 'taken before 0003 ran');
+      } finally {
+        backup.close();
+      }
+      assert.deepEqual({ ...counts(db), schema_migrations: before['schema_migrations'] }, before, 'no row changed or vanished');
+      assert.equal(counts(db)['schema_migrations'], 3);
+      for (const table of ['runs', 'attempts', 'decisions'] as const) {
+        assert.equal(Number((db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n), runTablesBefore[table], `${table} rows kept`);
+      }
+      assert.ok(schemaNames(db).includes('table:notifications'));
+      assert.ok(schemaNames(db).includes('index:attempts_item'));
+      assert.ok(schemaNames(db).includes('index:notifications_state'));
+      assert.equal(Number((db.prepare('SELECT count(*) AS n FROM notifications').get() as { n: number }).n), 0);
+      assert.deepEqual({ ...(db.prepare("SELECT item_id FROM attempts WHERE attempt_id = 'att_v2'").get() as object) }, { item_id: null });
+      assert.deepEqual({ ...(db.prepare("SELECT supersedes FROM decisions WHERE decision_id = 'dec_v2'").get() as object) }, { supersedes: null });
+      assert.deepEqual({ ...(db.prepare("SELECT cancel_requested_at, cancel_requested_by FROM runs WHERE run_id = 'run_v2'").get() as object) }, { cancel_requested_at: null, cancel_requested_by: null });
+      assert.deepEqual({ ...(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '3' });
+      assert.equal(integrity(db), 'ok');
+    } finally {
+      db.close();
+    }
+  });
+
   it('is a no-op once migrated: a second migrate applies nothing and writes no second backup', () => {
     const { dir, path } = fixtureCopy();
     const db = open(path);
@@ -191,21 +243,21 @@ describe('the committed v1 fixture database', () => {
       assert.ok(migrate(db, SHIPPED, { nowMs: NOW, backupDir }).ok);
       const again = migrate(db, SHIPPED, { nowMs: NOW + 1000, backupDir });
       assert.ok(again.ok);
-      assert.deepEqual(again.value, { from: 2, to: 2, applied: [] });
+      assert.deepEqual(again.value, { from: 3, to: 3, applied: [] });
       assert.equal(readdirSync(backupDir).length, 1);
     } finally {
       db.close();
     }
   });
 
-  it('creates a fresh store at version 2 in one run and writes no backup (nothing to protect)', () => {
+  it('creates a fresh store at version 3 in one run and writes no backup (nothing to protect)', () => {
     const dir = scratchDir();
     const db = open(join(dir, 'state.db'));
     try {
       const backupDir = join(dir, 'backups');
       const migrated = migrate(db, SHIPPED, { nowMs: NOW, backupDir });
       assert.ok(migrated.ok);
-      assert.deepEqual(migrated.value, { from: 0, to: 2, applied: [1, 2] });
+      assert.deepEqual(migrated.value, { from: 0, to: 3, applied: [1, 2, 3] });
       assert.equal(existsSync(backupDir), false);
     } finally {
       db.close();
@@ -230,13 +282,13 @@ describe('the committed v1 fixture database', () => {
     }
   });
 
-  it('is applied by `status` to a v1 store: the CLI path upgrades it to version 2 and keeps the v1 rows', () => {
+  it('is applied by `status` to a v1 store: the CLI path upgrades it to version 3 and keeps the v1 rows', () => {
     const roots = rootsWithStore(fixtureCopy().path);
     const r = runCli(['status', '--json'], { roots });
     assert.equal(r.code, 0, r.stderr);
     const raw = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
     try {
-      assert.deepEqual({ ...(raw.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '2' });
+      assert.deepEqual({ ...(raw.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as object) }, { value: '3' });
       assert.equal(readdirSync(join(roots.AVARICE_DATA_ROOT, 'backups')).length, 1);
     } finally {
       raw.close();

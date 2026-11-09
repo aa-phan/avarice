@@ -1149,22 +1149,28 @@ export class SqliteLedger implements Ledger {
     return tx(this.db, () => {
       const run = this.lockRun(runId);
       this.checkFence(run, guard.fence);
-      const item = this.readWorkItem(runId, itemId);
-      const edge = assertItemTransition(item.state, t.to);
-      if (!edge.ok) abort(edge.error);
-      if (t.attemptId !== undefined) this.checkRunAttempt(runId, t.attemptId);
-      this.db
-        .prepare('UPDATE work_items SET state = ?, attempts = attempts + ?, gsd_session = COALESCE(?, gsd_session) WHERE run_id = ? AND item_id = ?')
-        .run(t.to, t.to === 'delegated' ? 1 : 0, t.gsdSession ?? null, runId, itemId);
-      this.insertEvent({
-        type: 'work_item.transition',
-        runId,
-        ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
-        data: { ...(t.data ?? {}), runId, itemId, from: item.state, to: t.to },
-        nowMs: t.nowMs,
-      });
-      return this.readWorkItem(runId, itemId);
+      return this.applyItemTransition(runId, itemId, t);
     });
+  }
+
+  // The one place a work item changes state: validates the edge, updates the row and appends the work_item.transition event.
+  // The caller's transaction must be open and the run vetted (lock, and lease fence where the caller holds one).
+  private applyItemTransition(runId: string, itemId: string, t: WorkItemTransitionInput): WorkItemRow {
+    const item = this.readWorkItem(runId, itemId);
+    const edge = assertItemTransition(item.state, t.to);
+    if (!edge.ok) abort(edge.error);
+    if (t.attemptId !== undefined) this.checkRunAttempt(runId, t.attemptId);
+    this.db
+      .prepare('UPDATE work_items SET state = ?, attempts = attempts + ?, gsd_session = COALESCE(?, gsd_session) WHERE run_id = ? AND item_id = ?')
+      .run(t.to, t.to === 'delegated' ? 1 : 0, t.gsdSession ?? null, runId, itemId);
+    this.insertEvent({
+      type: 'work_item.transition',
+      runId,
+      ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
+      data: { ...(t.data ?? {}), runId, itemId, from: item.state, to: t.to },
+      nowMs: t.nowMs,
+    });
+    return this.readWorkItem(runId, itemId);
   }
 
   listWorkItems(runId: string): Result<WorkItemRow[]> {
@@ -1224,8 +1230,61 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  answerDecision(_input: AnswerDecisionInput): Result<DecisionRow> {
-    return err({ kind: 'invalid', field: 'answerDecision', reason: 'not implemented' });
+  // open -> answered in one transaction under the run lock (T-03-03): the decision is still open and the run's latest contract is
+  // the version the caller validated against, or nothing is written. Every affected item that no other open decision of the run
+  // lists goes blocked_on_decision -> ready. The event carries IDs, the channel and a count; the answer text stays in the row (T-03-04).
+  answerDecision(input: AnswerDecisionInput): Result<DecisionRow> {
+    return tx(this.db, () => {
+      this.lockRun(input.runId);
+      if (input.answer === '') abort({ kind: 'invalid', field: 'answer', reason: 'an answer is not empty' });
+      if (input.answeredBy === '') abort({ kind: 'invalid', field: 'answeredBy', reason: 'an answer names who gave it' });
+      if (input.channel !== 'terminal') abort({ kind: 'invalid', field: 'channel', reason: 'an answer arrives on the terminal channel' });
+      if (!Number.isInteger(input.expectContractVersion) || input.expectContractVersion < 1) {
+        abort({ kind: 'invalid', field: 'expectContractVersion', reason: 'a contract version is a positive integer' });
+      }
+      const decision = this.openDecisionRow(input.runId, input.decisionId);
+      const latest = this.latestContractVersion(input.runId);
+      if (latest !== input.expectContractVersion) {
+        abort({ kind: 'conflict', expected: `contract version ${input.expectContractVersion}`, actual: latest === 0 ? 'no contract' : `contract version ${latest}` });
+      }
+      const changed = this.db
+        .prepare("UPDATE decisions SET state = 'answered', answered_at = ?, answered_by = ?, answer = ?, answer_channel = ? WHERE decision_id = ? AND state = 'open'")
+        .run(iso(input.nowMs), input.answeredBy, input.answer, input.channel, input.decisionId).changes;
+      if (Number(changed) === 0) abort({ kind: 'conflict', expected: `decision ${input.decisionId} open`, actual: `decision ${input.decisionId} no longer open` });
+
+      const stillBlocked = new Set<string>();
+      for (const other of this.db.prepare("SELECT affected_items_json FROM decisions WHERE run_id = ? AND state = 'open' AND decision_id <> ?").all(input.runId, input.decisionId) as Row[]) {
+        for (const itemId of parseJson(other['affected_items_json']) as readonly string[]) stillBlocked.add(itemId);
+      }
+      const released: string[] = [];
+      for (const itemId of new Set(decision.affectedItems)) {
+        if (stillBlocked.has(itemId)) continue;
+        const item = this.db.prepare('SELECT state FROM work_items WHERE run_id = ? AND item_id = ?').get(input.runId, itemId) as Row | undefined;
+        if (item !== undefined && str(item['state']) === 'blocked_on_decision') released.push(itemId);
+      }
+      this.insertEvent({
+        type: 'decision.answered',
+        runId: input.runId,
+        data: { runId: input.runId, decisionId: input.decisionId, channel: input.channel, itemsReleased: released.length },
+        nowMs: input.nowMs,
+      });
+      for (const itemId of released) this.applyItemTransition(input.runId, itemId, { to: 'ready', nowMs: input.nowMs, data: { decisionId: input.decisionId } });
+      return toDecision(this.db.prepare('SELECT * FROM decisions WHERE decision_id = ?').get(input.decisionId) as Row);
+    });
+  }
+
+  // A decision of this run that is still open; a decision of another run is not found, one in any other state is a conflict.
+  private openDecisionRow(runId: string, decisionId: string): DecisionRow {
+    const row = this.db.prepare('SELECT * FROM decisions WHERE decision_id = ? AND run_id = ?').get(decisionId, runId) as Row | undefined;
+    if (!row) throw notFound(`decision ${decisionId} of ${runId}`);
+    const decision = toDecision(row);
+    if (decision.state !== 'open') abort({ kind: 'conflict', expected: `decision ${decisionId} open`, actual: `decision ${decisionId} ${decision.state}` });
+    return decision;
+  }
+
+  private latestContractVersion(runId: string): number {
+    const row = this.db.prepare('SELECT COALESCE(MAX(version), 0) AS latest FROM contracts WHERE run_id = ?').get(runId) as Row;
+    return Number(row['latest']);
   }
 
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]> {
@@ -1498,7 +1557,7 @@ function toDecision(r: Row): DecisionRow {
     answeredBy: strOrNull(r['answered_by']),
     answer: strOrNull(r['answer']),
     answerChannel: strOrNull(r['answer_channel']),
-    supersedes: null,
+    supersedes: strOrNull(r['supersedes']),
   };
 }
 
