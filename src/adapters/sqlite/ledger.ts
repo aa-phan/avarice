@@ -25,6 +25,7 @@ import type {
   BudgetRowInput,
   AttemptInput,
   AttemptRow,
+  CancelRequest,
   CheckValidationInput,
   CheckValidationRow,
   CheckpointInput,
@@ -47,9 +48,13 @@ import type {
   RunEventRow,
   Ledger,
   LeaseGrant,
+  NewNotification,
   NewOnboarding,
   NewProject,
   NewRun,
+  NotificationAttemptInput,
+  NotificationRow,
+  NotificationState,
   OnboardingRow,
   ProjectQuery,
   ProjectRow,
@@ -1537,6 +1542,35 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  createNotification(input: NewNotification): Result<NotificationRow> {
+    void input;
+    return err({ kind: 'invalid', field: 'createNotification', reason: 'not implemented' });
+  }
+
+  recordNotificationAttempt(notificationId: string, input: NotificationAttemptInput): Result<NotificationRow> {
+    void notificationId;
+    void input;
+    return err({ kind: 'invalid', field: 'recordNotificationAttempt', reason: 'not implemented' });
+  }
+
+  setNotificationState(notificationIds: readonly string[], state: 'held' | 'delivered' | 'failed', nowMs: number): Result<NotificationRow[]> {
+    void notificationIds;
+    void state;
+    void nowMs;
+    return err({ kind: 'invalid', field: 'setNotificationState', reason: 'not implemented' });
+  }
+
+  listNotifications(filter?: { states?: readonly NotificationState[]; runId?: string }): Result<NotificationRow[]> {
+    void filter;
+    return err({ kind: 'invalid', field: 'listNotifications', reason: 'not implemented' });
+  }
+
+  requestRunCancel(runId: string, input: { by: string; nowMs: number }): Result<CancelRequest> {
+    void runId;
+    void input;
+    return err({ kind: 'invalid', field: 'requestRunCancel', reason: 'not implemented' });
+  }
+
   recordCheckValidation(input: CheckValidationInput): Result<void> {
     return tx(this.db, () => {
       for (const [field, value] of [['projectId', input.projectId], ['baseRevision', input.baseRevision], ['specDigest', input.specDigest], ['name', input.name], ['verdict', input.verdict]] as const) {
@@ -1682,6 +1716,7 @@ function toRun(r: Row): RunRow {
     leaseHolder: strOrNull(r['lease_holder']),
     leaseExpiresAt: strOrNull(r['lease_expires_at']),
     leaseFence: Number(r['lease_fence']),
+    cancelRequestedAt: strOrNull(r['cancel_requested_at']),
   };
 }
 

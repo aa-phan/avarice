@@ -281,6 +281,8 @@ export interface RunRow {
   leaseHolder: string | null;
   leaseExpiresAt: string | null;
   leaseFence: number;
+  // When the owner asked to cancel the run and the supervisor has not finished it yet (AUT-12); null otherwise.
+  cancelRequestedAt: string | null;
 }
 
 export interface NewRun {
@@ -346,6 +348,51 @@ export interface CreatedRun {
   run: RunRow;
   contract: ContractRow;
   workItems: WorkItemRow[];
+}
+
+export type NotificationState = 'pending' | 'held' | 'delivered' | 'failed';
+
+export interface NewNotification {
+  // null for a digest, which is about no one run.
+  runId: string | null;
+  kind: string;
+  destination: string;
+  // The decision IDs the notification is about.
+  subjectIds: readonly string[];
+  state: 'pending' | 'held';
+  nowMs: number;
+}
+
+export interface NotificationAttemptInput {
+  outcome: 'delivered' | 'failed';
+  // A short token (at most 64 characters, a-z, 0-9 and `-`); required for a failed attempt, refused for a delivered one.
+  errorCode?: string;
+  // When the next try is due; a failed attempt without it ends the row's tries.
+  nextAttemptAtMs?: number;
+  nowMs: number;
+}
+
+export interface NotificationRow {
+  notificationId: string;
+  runId: string | null;
+  kind: string;
+  destination: string;
+  subjectIds: readonly string[];
+  state: NotificationState;
+  attempts: number;
+  nextAttemptAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deliveredAt: string | null;
+}
+
+// The cancel request recorded on a run row.
+export interface CancelRequest {
+  requestedAt: string;
+  requestedBy: string;
+  // True when an earlier request already stood and this call recorded nothing.
+  repeated: boolean;
 }
 
 export interface RunStepRow {
@@ -753,6 +800,22 @@ export interface Ledger {
   withdrawDecision(input: WithdrawDecisionInput): Result<DecisionRow>;
   // Oldest first.
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
+
+  // Notifications (AUT-6). A row moves pending -> delivered | failed | held and held -> delivered | failed; delivered and failed are
+  // final. Events carry IDs, an attempt count and an error code, never text.
+  createNotification(input: NewNotification): Result<NotificationRow>;
+  // One delivery attempt on a pending or held row: attempts + 1. A delivered attempt makes the row delivered and appends
+  // notify.delivered. A failed attempt with `nextAttemptAtMs` keeps the row's state and schedules the retry; without it the row is
+  // failed. Either way last_error is the code, and notify.failed is appended. A delivered or failed row is a `conflict`.
+  recordNotificationAttempt(notificationId: string, input: NotificationAttemptInput): Result<NotificationRow>;
+  // Moves every named row in one transaction along the allowed moves, or none: any other move is `invalid`, an unknown ID `not_found`.
+  setNotificationState(notificationIds: readonly string[], state: 'held' | 'delivered' | 'failed', nowMs: number): Result<NotificationRow[]>;
+  // Oldest first.
+  listNotifications(filter?: { states?: readonly NotificationState[]; runId?: string }): Result<NotificationRow[]>;
+
+  // The owner's request to cancel a run (AUT-12), recorded before the supervisor acts on it. The first request is kept; a repeat
+  // returns it and appends nothing. A run in failed, cancelled or closed is a `conflict`.
+  requestRunCancel(runId: string, input: { by: string; nowMs: number }): Result<CancelRequest>;
 
   // The validation verdict of one declared check (ONB-10), cached per project, base revision and spec digest.
   // A verdict is never overwritten: a second record for the same key is a conflict.
