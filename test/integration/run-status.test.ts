@@ -3,16 +3,19 @@
 // the production entry (no fake host, no claude) because `status` and `inbox` take no lease, start no model and open the store read-only.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { configPathFor } from '../../src/adapters/fs/profile-paths.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import { EXPIRY_WAIT_MS, SHORT_TTL_MS, sleepSync } from '../helpers/fault-run.ts';
-import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { TEST_CLI, offlineAvailable, runOffline } from '../helpers/offline.ts';
 import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, makeRunRepo, onboardRunRepo, profileEnv, startWithFakeRunHost, writeBrief } from '../helpers/run-fixtures.ts';
+import { decisionsOf, runIdOfOutput, s17Fixture, s17Host } from '../helpers/independent-work.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanup: string[] = [];
@@ -384,5 +387,154 @@ describe('inbox on an empty store', () => {
     const ran = runCli(['inbox', 'run_x'], { roots, entry: PRODUCTION_ENTRY });
     assert.equal(ran.code, 64);
     assert.match(ran.stderr, /^avarice inbox: inbox takes no argument/);
+  });
+});
+
+// ---- Plan 03-21 (AUT-12, AUT-4, SC2): every Phase 3 state visible offline -----------------------------------------------------------------------
+
+const FAKE_OSASCRIPT = join(REPO_ROOT, 'test', 'helpers', 'fake-osascript.mjs');
+
+// The S-17 run (plan 03-18): A done, B blocked on one decision, C done, D never started, one banner delivered through the fake osascript.
+function startS17(): { roots: CliRoots; runId: string; code: number | null } {
+  const f = s17Fixture(cleanup);
+  const logDir = mkdtempSync(join(tmpdir(), 'avarice-status-s17-'));
+  cleanup.push(logDir);
+  chmodSync(FAKE_OSASCRIPT, 0o755);
+  const config = configPathFor(f.roots.AVARICE_CONFIG_HOME, 'personal-local');
+  mkdirSync(dirname(config), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    config,
+    `${JSON.stringify({ schema: 1, profile: 'personal-local', dataRoot: f.roots.AVARICE_DATA_ROOT, workRoot: f.roots.AVARICE_WORK_ROOT, notify: { local: { osascriptPath: FAKE_OSASCRIPT } } }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  const result = runCli(['start', '--brief', f.brief, '--policy', 'routine', '--wait'], {
+    roots: f.roots,
+    cwd: f.repo.path,
+    entry: TEST_CLI,
+    env: { AVARICE_FAKE_HOST: JSON.stringify({ run: s17Host() }), AVARICE_TEST_NOTIFIER: 'local', FAKE_OSASCRIPT_LOG: join(logDir, 'osascript.log') },
+    timeoutMs: 300_000,
+  });
+  return { roots: f.roots, runId: runIdOfOutput(result.stdout), code: result.code };
+}
+
+interface ItemJson {
+  itemId: string;
+  state: string;
+  size: string;
+  model: string;
+  dependsOn: string[];
+  attempts: number;
+}
+interface InboxJson {
+  decisions: Array<Record<string, unknown> & { decisionId: string; runId: string; items: string[]; options: Array<{ key: string; label: string; kind: string }>; command: string; notification?: Record<string, unknown> }>;
+  reviews: unknown[];
+}
+
+const inbox = (roots: CliRoots, ...extra: string[]): CliResult => runCli(['inbox', ...extra], { roots, entry: PRODUCTION_ENTRY });
+const runsOf = (roots: CliRoots): Array<RunJson & Record<string, unknown>> => ((JSON.parse(status(roots, '--json').stdout) as ProjectJson[])[0]?.runs ?? []) as Array<RunJson & Record<string, unknown>>;
+const runOf = (roots: CliRoots): RunJson & Record<string, unknown> => runsOf(roots)[0] as RunJson & Record<string, unknown>;
+
+describe('the S-17 blocked run in status and inbox: items, the decision with its options and command, the banner (tracer; AUT-12, AUT-4, SC2)', () => {
+  const s = startS17();
+  const { roots, runId } = s;
+
+  it('the run is blocked on the decision of item B', () => {
+    assert.equal(s.code, 3);
+    assert.equal(decisionsOf(roots, runId).filter((d) => d.state === 'open').length, 1);
+  });
+
+  it('status --json appends items, decisions and notifications after the Phase 2 keys', () => {
+    const run = runOf(roots);
+    const keys = Object.keys(run);
+    assert.deepEqual(keys.slice(0, 13), ['runId', 'title', 'state', 'reason', 'lastCheckpoint', 'branch', 'commit', 'clean', 'evidence', 'gates', 'openDecisions', 'budgets', 'references']);
+    assert.deepEqual(keys.slice(13), ['items', 'decisions', 'notifications']);
+    const items = run['items'] as ItemJson[];
+    assert.deepEqual(
+      items.map((i) => [i.itemId, i.state, i.dependsOn, i.attempts]),
+      [
+        ['A', 'done', [], 1],
+        ['B', 'blocked_on_decision', ['A'], 1],
+        ['C', 'done', [], 1],
+        ['D', 'ready', ['B'], 0],
+      ],
+    );
+    assert.deepEqual(Object.keys(items[0] as object), ['itemId', 'state', 'size', 'model', 'dependsOn', 'attempts']);
+    for (const item of items) assert.ok(item.size !== '' && item.model !== '', 'size and model come from the ledger row');
+    const open = decisionsOf(roots, runId).find((d) => d.state === 'open') as { decision_id: string };
+    assert.deepEqual(run['decisions'], [{ decisionId: open.decision_id, class: 'acceptance', state: 'open', affectedItems: ['B', 'D'], supersedes: null, successor: null }]);
+    assert.deepEqual(run['notifications'], { delivered: 1, pending: 0, held: 0, failed: 0, lastError: null });
+    assert.equal(run['cancelRequestedAt'], undefined, 'no cancel request, no key');
+  });
+
+  it('status prints one line per item and one per decision, and the delivery state of the banner', () => {
+    const open = (decisionsOf(roots, runId).find((d) => d.state === 'open') as { decision_id: string }).decision_id;
+    const human = status(roots).stdout;
+    assert.match(human, /^ {2}item A {2}done {2}size \S+, model \S+, after none, 1 attempt$/m);
+    assert.match(human, new RegExp(`^ {2}item B {2}blocked_on_decision {2}decision ${open} {2}size \\S+, model \\S+, after A, 1 attempt$`, 'm'));
+    assert.match(human, /^ {2}item C {2}done /m);
+    assert.match(human, /^ {2}item D {2}ready {2}size \S+, model \S+, after B, 0 attempts$/m);
+    assert.match(human, new RegExp(`^ {2}decision ${open} {2}acceptance {2}open {2}items B, D$`, 'm'));
+    assert.match(human, /^ {2}notifications: 1 delivered$/m);
+  });
+
+  it('inbox --json appends items, options, command and notification to the decision', () => {
+    const view = JSON.parse(inbox(roots, '--json').stdout) as InboxJson;
+    assert.equal(view.decisions.length, 1);
+    const d = view.decisions[0] as InboxJson['decisions'][number];
+    assert.deepEqual(Object.keys(d), ['decisionId', 'runId', 'class', 'urgency', 'openedAt', 'issue', 'items', 'options', 'command', 'notification']);
+    assert.deepEqual(d.items, ['B', 'D']);
+    assert.deepEqual(d.options, [
+      { key: '1', label: '404', kind: 'choice' },
+      { key: '2', label: '410', kind: 'choice' },
+    ]);
+    assert.equal(d.command, `avarice decide ${d.decisionId} <option-key>`);
+    assert.deepEqual(d.notification, { state: 'delivered', attempts: 1 });
+  });
+
+  it('inbox prints the options, the command and the banner state under the issue', () => {
+    const d = decisionsOf(roots, runId).find((x) => x.state === 'open') as { decision_id: string };
+    const human = inbox(roots).stdout;
+    assert.match(human, /^ {2}items: B, D$/m);
+    assert.match(human, /^ {2}option 1: 404$/m);
+    assert.match(human, /^ {2}option 2: 410$/m);
+    assert.match(human, new RegExp(`^ {2}answer with: avarice decide ${d.decision_id} <option-key>$`, 'm'));
+    assert.match(human, /^ {2}banner delivered$/m);
+  });
+
+  it('a decision whose banner failed is still listed, with the error code and the line that says the list is the record', () => {
+    const composed = createDeps(profileEnv(roots), { host: new FakeRunHost({}) });
+    assert.ok(composed.ok, 'composition');
+    let failedId = '';
+    try {
+      const { ledger } = composed.value.deps;
+      const opened = ledger.openDecision({
+        runId,
+        contractVersion: 1,
+        class: 'acceptance',
+        issue: 'Which header?',
+        options: [{ key: '1', label: 'x-one', kind: 'choice' }],
+        consequences: {},
+        evidenceRefs: [],
+        affectedItems: ['D'],
+        stateDigest: 'state-digest',
+        urgency: 'blocking',
+        nowMs: Date.now(),
+      });
+      assert.ok(opened.ok, JSON.stringify(opened));
+      failedId = opened.value.decisionId;
+      const row = ledger.createNotification({ runId, kind: 'decisions', destination: 'local', subjectIds: [failedId], state: 'pending', nowMs: Date.now() });
+      assert.ok(row.ok, JSON.stringify(row));
+      const attempt = ledger.recordNotificationAttempt(row.value.notificationId, { outcome: 'failed', errorCode: 'osascript-failed', nowMs: Date.now() });
+      assert.ok(attempt.ok, JSON.stringify(attempt));
+    } finally {
+      composed.value.close();
+    }
+    const human = inbox(roots).stdout;
+    assert.match(human, /^ {2}banner not delivered \(osascript-failed\); this list is the record$/m);
+    assert.match(human, new RegExp(`^${failedId}\\s+`, 'm'), 'the decision is still listed');
+    const view = JSON.parse(inbox(roots, '--json').stdout) as InboxJson;
+    assert.deepEqual(view.decisions.find((d) => d.decisionId === failedId)?.notification, { state: 'failed', attempts: 1, lastError: 'osascript-failed' });
+    assert.deepEqual(runOf(roots)['notifications'], { delivered: 1, pending: 0, held: 0, failed: 1, lastError: 'osascript-failed' });
+    assert.match(status(roots).stdout, /^ {2}notifications: 1 delivered, 1 failed \(osascript-failed\)$/m);
   });
 });
