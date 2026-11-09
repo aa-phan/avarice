@@ -290,7 +290,7 @@ For the dependency install the proxy prevents: a connection to any host not on t
 
 | Constant | Value |
 |---|---|
-| Claude Code versions | `2.1.312`, `2.1.316`, `2.1.317`, `2.1.318`; any other reported version is refused |
+| Claude Code versions | `2.1.312`, `2.1.316`, `2.1.317`, `2.1.318`, `2.1.319`; any other reported version is refused |
 | gsd-core | package `@opengsd/gsd-core`, version matching `1.17.x` |
 | Node | `>=22.22.3` declared in the package manifest; not compared at runtime |
 | Bundled SQLite | accepted from 3.44.6 on the 3.44 line, 3.50.7 on 3.50, 3.51.3 on 3.51, and any later line; 3.45 to 3.49, older versions and unreadable version strings are refused |

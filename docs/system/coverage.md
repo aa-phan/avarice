@@ -46,12 +46,12 @@ Counted at commit `40adc1f` on 2026-11-08. Every command below was re-run at tha
 | Shell actions, command names offered by completion | 7 of 7, 10 of 10 | interactive-shell.md |
 | Read-only commands, denied prefixes, denied find actions | 11 of 11, 16 of 16, 10 of 10 | containment.md |
 | GSD verbs | map 11, intel 14, run 14 | containment.md |
-| Required settings keys, admitted host versions | 9 of 9, 4 of 4 | containment.md |
+| Required settings keys, admitted host versions | 9 of 9, 5 of 5 | containment.md |
 | Hook rule IDs | 35 of 35 | containment.md |
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
 | Tables, event kinds, artifact kinds, ID prefixes, migrations | 23 of 23, 28 of 28, 7 of 7, 8 of 8, 2 of 2 | data-model.md |
-| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 13 of 13, 4 of 4, 4 of 4, 6 of 6 | integrations.md |
+| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 11 of 11 (plus the descriptor), 13 of 13, 5 of 5, 4 of 4, 6 of 6 | integrations.md |
 | Flows traced, diagram sources | 5 of 5, 5 of 5 | processes.md |
 
 ## Per-document status

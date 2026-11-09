@@ -123,7 +123,7 @@ The wall clock is enforced by AVARICE: at the limit the process group gets SIGTE
 
 ### Admitted versions and readiness
 
-Four versions are admitted: 2.1.312, 2.1.316, 2.1.317 and 2.1.318. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. No range is accepted: 2.1.319 is refused until added.
+Five versions are admitted: 2.1.312, 2.1.316, 2.1.317, 2.1.318 and 2.1.319. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. No range is accepted: any version not on the list is refused until added.
 
 Before every launch the adapter proves each layer, and any refusal is a denial with rule `enforcement_failure:<reason>` with nothing spawned. These checks prevent a launch. None of them asks the running host which sandbox it applied.
 

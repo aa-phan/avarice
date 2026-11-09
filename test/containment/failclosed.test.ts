@@ -92,8 +92,8 @@ function refusal(result: ReturnType<typeof checkLaunchReady>): string {
 }
 
 describe('launch preflight passes only with every layer present', () => {
-  it('admits the four tested host versions', () => {
-    assert.deepEqual([...ADMITTED_CLAUDE_VERSIONS], ['2.1.312', '2.1.316', '2.1.317', '2.1.318']);
+  it('admits the five tested host versions', () => {
+    assert.deepEqual([...ADMITTED_CLAUDE_VERSIONS], ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319']);
   });
 
   it('passes with complete settings, a readable hook script, a working probe and an admitted version', () => {

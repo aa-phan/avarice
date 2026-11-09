@@ -75,7 +75,7 @@ Checks run in this order and the first failure is the only one reported. Every r
 
 The nine required settings keys are: permission mode `dontAsk`; bypass permissions mode disabled; sandbox enabled; sandbox fail-if-unavailable true; unsandboxed commands false; auto-allow-bash-if-sandboxed false; excluded commands empty; network allowed domains empty; network allowlist strict. Preflight checks these keys and the hook entries only. It does not re-check the allow and deny lists or the filesystem lists; those are trusted from the generator.
 
-The admitted host versions are a constant list of four: 2.1.312, 2.1.316, 2.1.317 and 2.1.318. A version is meant to be added only after a live containment run on it shows no containment failure; the code does not check that, it checks membership. The version probe, the sandbox probe and the hook self-test run with a minimal environment (a fixed `PATH` plus `HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR` and `CLAUDE_CONFIG_DIR` when set).
+The admitted host versions are a constant list of five: 2.1.312, 2.1.316, 2.1.317, 2.1.318 and 2.1.319. A version is meant to be added only after a live containment run on it shows no containment failure; the code does not check that, it checks membership. The version probe, the sandbox probe and the hook self-test run with a minimal environment (a fixed `PATH` plus `HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR` and `CLAUDE_CONFIG_DIR` when set).
 
 Launch argument judgment refuses:
 
