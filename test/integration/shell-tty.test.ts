@@ -15,8 +15,11 @@ import { closeSync, existsSync, mkdtempSync, openSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { startRun } from '../../src/app/run-start.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
+import { commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
 import { waitFor } from '../helpers/shell-streams.ts';
 
 const SCRIPT = '/usr/bin/script';
@@ -181,6 +184,62 @@ describe('the shell on a driven terminal', { skip: HAS_PYTHON ? false : 'python3
       await waitFor(() => /> q {2}Quit/.test(term.screen()), 'the up arrow to wrap to Quit');
       term.type('\r');
       const result = await Promise.race([term.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the shell did not leave on Enter')), 20_000))]);
+      assert.equal(result.code, 0);
+    } finally {
+      term.kill();
+    }
+  });
+});
+
+// `contract amend` from the shell's command line (plan 03-15, D-18): there is no menu action for it. The command runs in the shell's process on the
+// real terminal, so the terminal and process-ancestry checks see a person at a terminal, and its confirmation is asked through the shell's prompt.
+describe('contract amend from the command line of the shell on a driven terminal', { skip: HAS_PYTHON ? false : 'python3 with the pty module is not available, so the driven terminal cannot be created' }, () => {
+  it('shows the diff and the confirmation prompt; answering y records contract version 2 and n records nothing', async () => {
+    const roots = newRoots();
+    const repo = makeRunRepo();
+    cleanup.push(repo.base);
+    onboardRunRepo(roots, repo);
+    commitConventions(repo);
+    const composed = createDeps(profileEnv(roots), {});
+    assert.ok(composed.ok, 'composition');
+    let runId: string;
+    try {
+      const started = startRun(composed.value.deps, { cwd: repo.path, briefPath: writeBrief(join(roots.base, 'briefs')), policy: 'routine', budgetOverrides: {} });
+      assert.ok(started.ok, JSON.stringify(started));
+      runId = started.value.runId;
+    } finally {
+      composed.value.close();
+    }
+    const versions = (): number[] => ledgerRows<{ version: number }>(roots, 'SELECT version FROM contracts WHERE run_id = ? ORDER BY version', runId).map((c) => c.version);
+    const lastFrame = (term: Driven): string => plain(term.output().split('\x1b[H').at(-1) ?? '');
+
+    const term = onTerminal(roots);
+    try {
+      await waitFor(() => term.screen().includes('open decisions: 0'), 'the home view', 30_000);
+      assert.doesNotMatch(term.screen(), /amend/i, 'the menu has no amend action');
+
+      term.type(':');
+      await waitFor(() => term.screen().includes('avarice> '), 'the command-line prompt');
+      term.type(`contract amend ${runId} --budget costUsdPerRun=12 --reason 'room to resume'\r`);
+      await waitFor(() => lastFrame(term).includes('apply contract v2? [y/N] '), 'the confirmation prompt of the shell', 30_000);
+      assert.match(lastFrame(term), /budgets\.costUsd\.perRun: 10 -> 12/, 'the diff is on screen with the question');
+      assert.deepEqual(versions(), [1], 'nothing is written before the answer');
+      term.type('n\r');
+      await waitFor(() => term.screen().includes('not amended'), 'the declined amendment');
+      assert.deepEqual(versions(), [1]);
+
+      const mark = term.screen().length;
+      term.type(':');
+      await waitFor(() => term.screen().slice(mark).includes('avarice> '), 'the command-line prompt again');
+      term.type(`contract amend ${runId} --budget costUsdPerRun=12 --reason 'room to resume'\r`);
+      await waitFor(() => term.screen().slice(mark).includes('apply contract v2? [y/N] '), 'the confirmation prompt again', 30_000);
+      term.type('y\r');
+      await waitFor(() => term.screen().includes('contract v2 recorded'), 'the recorded amendment', 30_000);
+      assert.deepEqual(versions(), [1, 2]);
+      assert.equal(ledgerRows<{ limit_value: number }>(roots, "SELECT limit_value FROM budgets WHERE run_id = ? AND name = 'costUsd'", runId)[0]?.limit_value, 12);
+
+      term.type('q');
+      const result = await Promise.race([term.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`the shell did not leave on q; screen ${JSON.stringify(term.screen())}`)), 20_000))]);
       assert.equal(result.code, 0);
     } finally {
       term.kill();

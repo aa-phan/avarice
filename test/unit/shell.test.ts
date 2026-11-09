@@ -234,6 +234,79 @@ describe('the command line (ADR-013 decision 2)', () => {
   });
 });
 
+// `contract amend` asks `apply contract v2? [y/N]`. Run from the shell it asks through the shell's own prompt, not through raw standard input,
+// and the output the command printed before the question stays on screen above it (plan 03-15, D-18).
+describe('a command that asks a question uses the shell prompt', () => {
+  const QUESTION = 'apply contract v2? [y/N] ';
+  // The text of the last full redraw: the shell repaints from the home position each time.
+  const lastFrame = (term: FakeTerminal): string => withoutEscapes(term.output().split('\x1b[H').at(-1) ?? '');
+
+  function asking(): { dispatch: NonNullable<Parameters<typeof runShell>[0]['dispatch']>; answers: Array<string | undefined>; asked: string[] } {
+    const answers: Array<string | undefined> = [];
+    const asked: string[] = [];
+    return {
+      answers,
+      asked,
+      dispatch: async (_argv, overrides) => {
+        overrides.io?.out('budgets.costUsd.perRun: 10 -> 12\n');
+        asked.push(QUESTION);
+        const answer = await overrides.ask?.(QUESTION);
+        answers.push(answer);
+        overrides.io?.out(`answered ${String(answer)}\n`);
+        return 0;
+      },
+    };
+  }
+
+  it('shows the output so far above the question; the line typed there is the answer', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const { term, exited } = await openShell(terminalEnv(roots), { dispatch: s.dispatch });
+    term.type(':');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.type('contract amend run_1 --budget costUsdPerRun=12 --reason r\r');
+    await waitFor(() => lastFrame(term).includes(QUESTION), 'the question');
+    assert.match(lastFrame(term), /budgets\.costUsd\.perRun: 10 -> 12/, 'the diff is on screen with the question');
+    term.type('y\r');
+    await waitFor(() => screen(term).includes('answered y'), 'the answer reaching the command');
+    assert.deepEqual(s.answers, ['y']);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Escape at the question answers nothing: the command sees undefined', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const { term, exited } = await openShell(terminalEnv(roots), { dispatch: s.dispatch });
+    term.type(':');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.type('contract amend run_1\r');
+    await waitFor(() => lastFrame(term).includes(QUESTION), 'the question');
+    term.type('\x1b');
+    await waitFor(() => screen(term).includes('answered undefined'), 'the cancelled answer');
+    assert.deepEqual(s.answers, [undefined]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('in line mode the output so far is printed once, before the question, and the next line is the answer', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const term = fakeTerminal();
+    const exited = runShell({ stdin: term.stdin, stdout: term.stdout, env: terminalEnv(roots, { TERM: 'dumb' }), dispatch: s.dispatch });
+    await waitFor(() => term.output().includes('open decisions: 0'), 'the home view');
+    term.type('contract amend run_1\n');
+    await waitFor(() => term.output().includes(QUESTION), 'the question');
+    assert.ok(term.output().indexOf('budgets.costUsd.perRun: 10 -> 12') < term.output().indexOf(QUESTION), 'the output comes before the question');
+    term.type('y\n');
+    await waitFor(() => term.output().includes('answered y'), 'the answer reaching the command');
+    assert.equal((term.output().match(/budgets\.costUsd\.perRun: 10 -> 12/g) ?? []).length, 1, 'the diff is printed once');
+    assert.deepEqual(s.answers, ['y']);
+    term.type('q\n');
+    assert.equal(await exited, 0);
+  });
+});
+
 describe('TERM=dumb: line mode, no escape characters (ADR-013 decision 6)', () => {
   it('prints no ESC at all, never enters raw mode, and reads whole lines', async () => {
     const roots = profileWithProject();
