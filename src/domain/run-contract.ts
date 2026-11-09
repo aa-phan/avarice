@@ -130,12 +130,15 @@ export interface RunWorkItem {
   model: string;
   modelSource: 'brief' | 'modelBySize';
   dependsOn: string[];
+  // IDs of the acceptance criteria this item owns; every criterion belongs to exactly one item.
+  acceptance: string[];
   spec: { files: string[]; symbols: string[]; configKeys: string[]; references: string[]; derived: string[] };
 }
 
 export interface RunContract {
   schema: 1;
-  contractVersion: 1;
+  // A number, so an amendment can write version n+1; a compiled contract starts at 1.
+  contractVersion: number;
   runId: string;
   policyPreset: typeof ROUTINE_POLICY;
   policyRevision: string;
@@ -359,6 +362,45 @@ export function checkG0Static(contract: RunContract): G0Failure[] {
   return failures;
 }
 
+// One work item per brief item in declaration order, or the single item A that owns every criterion when the brief has no
+// items (a Phase 2 brief). A size the brief did not give is the preset default and is named in `spec.derived`; a model the
+// brief did not give is the size's `modelBySize` entry (D-10).
+function compileWorkItems(brief: Brief, write: readonly string[]): RunWorkItem[] {
+  const preset = ROUTINE_PRESET;
+  if (brief.items === undefined) {
+    const size = brief.size ?? preset.defaultSize;
+    const derived = ['files', 'symbols', 'configKeys', 'references'];
+    if (brief.size === undefined) derived.unshift('size');
+    return [
+      {
+        id: 'A',
+        task: brief.title,
+        size,
+        model: brief.model ?? preset.modelBySize[size],
+        modelSource: brief.model !== undefined ? 'brief' : 'modelBySize',
+        dependsOn: [],
+        acceptance: brief.acceptance.map((c) => c.id),
+        spec: { files: [...write], symbols: [], configKeys: [], references: [], derived },
+      },
+    ];
+  }
+  return brief.items.map((item) => {
+    const size = item.size ?? preset.defaultSize;
+    const derived = ['files', 'symbols', 'configKeys', 'references'];
+    if (item.size === undefined) derived.unshift('size');
+    return {
+      id: item.id,
+      task: item.title,
+      size,
+      model: item.model ?? preset.modelBySize[size],
+      modelSource: item.model !== undefined ? ('brief' as const) : ('modelBySize' as const),
+      dependsOn: [...item.dependsOn],
+      acceptance: [...item.acceptance],
+      spec: { files: [...write], symbols: [], configKeys: [], references: [], derived },
+    };
+  });
+}
+
 const RUN_ID = /^run_[0-9A-Za-z]{4,64}$/;
 const PROJECT_ID = /^[0-9A-Za-z_-]{1,64}$/;
 const REVISION = /^[0-9a-f]{7,64}$/;
@@ -425,8 +467,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
     }
   }
 
-  const size = brief.size ?? preset.defaultSize;
-  const model = brief.model ?? preset.modelBySize[size];
+  const workItems = compileWorkItems(brief, write);
   const contract: RunContract = {
     schema: 1,
     contractVersion: 1,
@@ -440,17 +481,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
       acceptance: brief.acceptance.map((c) => ({ id: c.id, text: c.text, verifiedBy: [...c.verifiedBy] })),
       exclusions: [...brief.exclusions],
       requirementRefs: [{ provider: 'manual', kind: 'brief', id: brief.source.id, revision: brief.digest }],
-      workItems: [
-        {
-          id: 'A',
-          task: brief.title,
-          size,
-          model,
-          modelSource: brief.model !== undefined ? 'brief' : 'modelBySize',
-          dependsOn: [],
-          spec: { files: [...write], symbols: [], configKeys: [], references: [], derived: ['files', 'symbols', 'configKeys', 'references'] },
-        },
-      ],
+      workItems,
     },
     workspace: {
       projectId: input.projectId,

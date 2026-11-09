@@ -18,6 +18,18 @@ export interface BriefAcceptance {
   verifiedBy: string[];
 }
 
+// A work item the brief declares (D-06). `acceptance` holds the IDs of the criteria this item owns; `spec` fields a brief
+// leaves out are derived by the compiler and named in the compiled item's `spec.derived`.
+export interface BriefItem {
+  id: string;
+  title: string;
+  dependsOn: string[];
+  size?: BriefSize;
+  model?: BriefModel;
+  acceptance: string[];
+  spec?: { files?: string[]; symbols?: string[]; configKeys?: string[]; references?: string[] };
+}
+
 export interface BriefSource {
   kind: 'file' | 'inline';
   id: string;
@@ -35,6 +47,8 @@ export interface Brief {
   model?: BriefModel;
   baseRevision?: string;
   expectedDecisions?: number;
+  // Absent when the brief has no `items` frontmatter: the compiler then emits the single item A.
+  items?: BriefItem[];
   source: BriefSource;
   digest: string;
 }
@@ -50,7 +64,7 @@ export const BRIEF_LIMITS = {
 
 const SIZES: readonly string[] = ['small', 'medium', 'large'];
 const MODELS: readonly string[] = ['haiku', 'sonnet', 'opus'];
-const FRONTMATTER_KEYS: readonly string[] = ['title', 'size', 'model', 'baseRevision', 'expectedDecisions'];
+const FRONTMATTER_KEYS: readonly string[] = ['title', 'size', 'model', 'baseRevision', 'expectedDecisions', 'items'];
 const SECTIONS: Readonly<Record<string, string>> = {
   behavior: 'behavior',
   'acceptance criteria': 'acceptance',
@@ -115,18 +129,50 @@ function readAcceptance(lines: readonly string[]): Result<BriefAcceptance[]> {
   return ok(out);
 }
 
+// `items` is the one key whose value is a JSON array that may continue on following lines indented by two spaces; the
+// continuation lines are joined to it with a newline. Any other indented line keeps the one-`key: value`-per-line rule.
+const CONTINUED_KEY = 'items';
+
 function readFrontmatter(lines: readonly string[]): Result<Record<string, string>> {
   const front: Record<string, string> = {};
+  let last: string | undefined;
   for (const line of lines) {
     if (line.trim() === '') continue;
+    if (last === CONTINUED_KEY && line.startsWith('  ')) {
+      front[CONTINUED_KEY] = `${front[CONTINUED_KEY] as string}\n${line.trim()}`;
+      continue;
+    }
     const match = /^([A-Za-z][A-Za-z0-9]*):[ \t]*(.*)$/.exec(line);
     if (!match) return invalid('brief.frontmatter', `expected "key: value", found ${JSON.stringify(line.slice(0, 60))}`);
     const key = match[1] as string;
     if (!FRONTMATTER_KEYS.includes(key)) return invalid(`brief.frontmatter.${key}`, 'unknown frontmatter key');
     if (Object.hasOwn(front, key)) return invalid(`brief.frontmatter.${key}`, 'repeated frontmatter key');
     front[key] = (match[2] as string).trim().replace(/^(["'])(.*)\1$/, '$2');
+    last = key;
   }
   return ok(front);
+}
+
+// The `items` frontmatter value: one JSON array of item objects (validated further by readItems).
+function parseItemsJson(raw: string): Result<unknown> {
+  try {
+    return ok(JSON.parse(raw) as unknown);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return invalid('brief.items', `is not valid JSON: ${message.slice(0, 120)}`);
+  }
+}
+
+// Plain items of the tracer: an array of objects with id, title, dependsOn and acceptance.
+function readItems(raw: unknown, acceptanceIds: readonly string[]): Result<BriefItem[]> {
+  void acceptanceIds;
+  if (!Array.isArray(raw)) return invalid('brief.items', 'must be an array of items');
+  const items: BriefItem[] = [];
+  for (const entry of raw as unknown[]) {
+    const item = entry as BriefItem;
+    items.push({ ...item });
+  }
+  return ok(items);
 }
 
 export function parseBrief(text: string, source: BriefSource): Result<Brief> {
@@ -203,6 +249,14 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
 
   const acceptance = readAcceptance(sections.get('acceptance') ?? []);
   if (!acceptance.ok) return acceptance;
+  let items: BriefItem[] | undefined;
+  if (front.items !== undefined) {
+    const json = parseItemsJson(front.items);
+    if (!json.ok) return json;
+    const read = readItems(json.value, acceptance.value.map((c) => c.id));
+    if (!read.ok) return read;
+    items = read.value;
+  }
   const exclusions = bullets('brief.exclusions', sections.get('exclusions') ?? []);
   if (!exclusions.ok) return exclusions;
   let write: string[] | undefined;
@@ -234,5 +288,7 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
   if (front.model !== undefined) content.model = front.model as BriefModel;
   if (front.baseRevision !== undefined) content.baseRevision = front.baseRevision.toLowerCase();
   if (expectedDecisions !== undefined) content.expectedDecisions = expectedDecisions;
+  // Set only when the brief has items, so the digest of a brief without them is the one it had before items existed.
+  if (items !== undefined) content.items = items;
   return ok({ ...content, source, digest: digestOf(content) });
 }
