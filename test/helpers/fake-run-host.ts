@@ -52,7 +52,7 @@ export interface FakeRunOptions {
   addTest?: { file: string; name: string; body?: string };
   editPackageJson?: boolean;
   addOverride?: boolean;
-  // Where to write {prompt, cwd, invocationId} (the supervisor is another process).
+  // Where to write {prompt, cwd, invocationId, runId, sessionId, resumeSessionId, observed} (the supervisor is another process).
   recordTo?: string;
   // Quick directory name; default `261105-fk1-fix`.
   quickId?: string;
@@ -85,6 +85,38 @@ export interface FakeRunOptions {
   // and then hangs: until its abort signal fires (it ends the group, records `abortedAtMs`, and reports a SIGTERM end with no result), or until `maxMs`
   // passes (it ends the group and finishes normally). The host's own process group is what a real host's abort ends.
   hangUntilAbort?: { maxMs: number; onStart?: (request: InvocationRequest) => void };
+  // Plan 03-11 (D-06, D-08). One host script for several work items and a resumed session. The item of an invocation is the `Work item <ID>:` line of
+  // its prompt (the line the production unit and resume prompts write); a fresh call of item B plays the base options, then `perItem.B`, then
+  // `perItem.B.perAttempt[n]` for the n-th fresh call of B (0-based; resumed calls are not counted). A call that carries `resumeSessionId` plays the
+  // base options and `perItem.B.resume`, or `resume` when B has no entry of its own: it does not replay the options that paused it. An item with no
+  // entry, and a prompt with no item line, play the base options and the base `perAttempt[n]` (Phase 2's script, unchanged). Every option here must
+  // stay JSON-serializable: the options travel to the supervisor as AVARICE_FAKE_HOST.
+  perItem?: Readonly<Record<string, FakeRunOptions>>;
+  resume?: FakeRunOptions;
+}
+
+// The item line of a unit or resume prompt: a line that starts `Work item <ID>:`, or the first line of the quoted task text. A phrase of that shape
+// in the middle of a line (a brief title) is not an item line.
+const ITEM_LINE = /(?:^|--text ")Work item ([A-Z][A-Za-z0-9_-]{0,31}):/m;
+
+export const itemOfPrompt = (prompt: string): string | undefined => ITEM_LINE.exec(prompt)?.[1];
+
+// The options without the keys that select options: what a selected layer contributes to the merged options.
+function withoutSelectors(options: FakeRunOptions | undefined): FakeRunOptions {
+  if (options === undefined) return {};
+  const { perItem: _perItem, resume: _resume, perAttempt: _perAttempt, ...rest } = options;
+  return rest;
+}
+
+// The options one invocation plays (plan 03-11): see `FakeRunOptions.perItem`. `perItemCallIndex` is the 0-based number of fresh calls of the
+// same item (or of no item) before this one. The result carries none of the selecting keys.
+export function selectFakeOptions(base: FakeRunOptions, request: Pick<InvocationRequest, 'prompt' | 'resumeSessionId'>, perItemCallIndex: number): FakeRunOptions {
+  const item = itemOfPrompt(request.prompt);
+  const entry = item !== undefined && base.perItem !== undefined && Object.hasOwn(base.perItem, item) ? base.perItem[item] : undefined;
+  const own = withoutSelectors(base);
+  if (request.resumeSessionId !== undefined) return { ...own, ...withoutSelectors(entry?.resume ?? base.resume) };
+  if (entry !== undefined) return { ...own, ...withoutSelectors(entry), ...withoutSelectors(entry.perAttempt?.[perItemCallIndex]) };
+  return { ...own, ...withoutSelectors(base.perAttempt?.[perItemCallIndex]) };
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
@@ -124,6 +156,8 @@ export class FakeRunHost implements AgentHost {
   sleeperPid: number | undefined;
   abortedAtMs: number | undefined;
   hangStartedAtMs: number | undefined;
+  // Fresh calls so far by item ID ('' for a prompt with no item line): the index `selectFakeOptions` takes.
+  private readonly freshCalls = new Map<string, number>();
 
   constructor(options: FakeRunOptions = {}) {
     this.options = options;
@@ -132,7 +166,15 @@ export class FakeRunHost implements AgentHost {
   async invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     this.calls.push(req);
     if (req.purpose !== 'run') return err({ kind: 'unsupported', capability: `fake-run-host:${req.purpose}` });
-    const o: FakeRunOptions = { ...this.options, ...(this.options.perAttempt?.[this.calls.length - 1] ?? {}) };
+    let freshIndex = 0;
+    if (req.resumeSessionId === undefined) {
+      const key = itemOfPrompt(req.prompt) ?? '';
+      freshIndex = this.freshCalls.get(key) ?? 0;
+      this.freshCalls.set(key, freshIndex + 1);
+    }
+    const o = selectFakeOptions(this.options, req, freshIndex);
+    // The session the unit runs under: a resumed session wins over a fresh one (as the real adapter does), else the caller's, else a made-up one.
+    const sessionId = req.resumeSessionId ?? req.sessionId ?? `fake-run-session-${this.calls.length}`;
     if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
     const startedMs = Date.now();
@@ -140,7 +182,10 @@ export class FakeRunHost implements AgentHost {
     if (o.recordTo !== undefined) {
       const observed: Record<string, string | null> = {};
       for (const rel of o.observe ?? []) observed[rel] = existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null;
-      writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, observed }));
+      writeFileSync(
+        o.recordTo,
+        JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, sessionId, resumeSessionId: req.resumeSessionId, observed }),
+      );
     }
     if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
@@ -328,7 +373,7 @@ export class FakeRunHost implements AgentHost {
     const elapsed = Math.max(Date.now() - startedMs, o.timeoutMs ?? 0);
     if (abortedByCaller) {
       return ok({
-        sessionId: `fake-run-session-${this.calls.length}`,
+        sessionId,
         kind: 'inconclusive',
         permissionDenials: [],
         costUsd: 0,
@@ -349,7 +394,7 @@ export class FakeRunHost implements AgentHost {
       });
     }
     return ok({
-      sessionId: `fake-run-session-${this.calls.length}`,
+      sessionId,
       kind: crashed ? 'inconclusive' : denies > 0 && !wroteEdits ? 'denied' : 'progressed',
       permissionDenials: [],
       costUsd: o.crash?.costUsd ?? 0,

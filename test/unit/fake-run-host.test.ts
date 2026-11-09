@@ -60,8 +60,8 @@ describe('selectFakeOptions: one host script, several items (plan 03-11)', () =>
 
   it('a resumed call gets the base merged with the item resume entry, and not the item question that paused it', () => {
     const out = select(BASE, resumePrompt('B'), 0, SESSION);
-    assert.deepEqual(out, { edits: { 'src/b.ts': 'resumed\n' } });
     assert.equal(out.question, undefined);
+    assert.deepEqual(out, { edits: { 'src/b.ts': 'resumed\n' } });
   });
 
   it('a resumed call for an item with no resume entry falls back to the base resume entry', () => {
