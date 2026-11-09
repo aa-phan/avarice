@@ -12,8 +12,8 @@ import { matchesGlob } from './glob.ts';
 
 export const ROUTINE_POLICY = 'routine';
 
-// How the run's invocation count is derived (D-13): one work item runs one invocation, the CON-16 discard-and-retry runs
-// a second, and one more covers a relaunch after an interruption (a killed invocation stays charged).
+// How the run's invocation count is derived (D-12): each work item runs one invocation and may run one more for a CON-16
+// retry or a repair, and one more covers a resume after an interruption (a killed invocation stays charged).
 export interface InvocationDerivation {
   units: number;
   retries: number;
@@ -23,10 +23,13 @@ export interface InvocationDerivation {
 }
 
 // How the run's subagent total is derived: one quick unit spawns a planner, up to two plan-checker passes, an executor and
-// a verifier (5 per unit), and a CON-16 retry runs the unit again. RESEARCH A7 suggested 8; 10 covers a full retry.
+// a verifier (5 per unit), and a CON-16 retry runs the unit again. RESEARCH A7 suggested 8; 10 covers a full retry. The
+// total scales with the number of work items (owner decision 1): units x rounds x per-unit subagents.
 export interface SubagentDerivation {
   perUnit: { planner: number; planChecker: number; executor: number; verifier: number; total: number };
   rounds: number;
+  // The number of work items the total is scaled by.
+  units: number;
   total: number;
   formula: string;
 }
@@ -54,21 +57,6 @@ export interface RunBudgets {
   adjustments: BudgetAdjustment[];
 }
 
-const INVOCATION_DERIVATION: InvocationDerivation = {
-  units: 1,
-  retries: 1,
-  interruptionRelaunches: 1,
-  total: 3,
-  formula: '1 unit invocation + 1 CON-16 retry + 1 interruption relaunch = 3',
-};
-
-const SUBAGENT_DERIVATION: SubagentDerivation = {
-  perUnit: { planner: 1, planChecker: 2, executor: 1, verifier: 1, total: 5 },
-  rounds: 2,
-  total: 10,
-  formula: '(1 planner + 2 plan-checker + 1 executor + 1 verifier = 5 per unit) x 2 rounds (the unit and one CON-16 retry) = 10',
-};
-
 const SECRET_GLOBS = ['**/*.key', '**/*.pem', '**/.env', '**/.env.*', '**/id_ed25519*', '**/id_rsa*'];
 
 // Preset values. Changing any value changes `policyRevision`.
@@ -94,17 +82,20 @@ export const ROUTINE_PRESET = {
   toolClasses: ['read', 'search', 'edit', 'write', 'shell', 'subagent'],
   defaultSize: 'medium',
   modelBySize: { small: 'haiku', medium: 'sonnet', large: 'opus' },
+  // Limits that grow with the item count (D-12, owner decision 1): see `scaledBudgetLimits`. The invocation count is
+  // items x perItem.invocations + invocationsFixed; subagents and tool calls are items x their per-item value. The
+  // one-item values are the Phase 2 ones, so a brief with one item keeps its subagent and tool-call limits.
   budgets: {
-    wallClockMinutes: 60,
-    invocations: 3,
-    invocationsDerivation: INVOCATION_DERIVATION,
-    toolCalls: 400,
+    wallClockMinutes: 120,
+    perItem: { invocations: 2, subagentsTotal: 10, toolCalls: 400 },
+    invocationsFixed: 1,
+    subagentsPerUnit: { planner: 1, planChecker: 2, executor: 1, verifier: 1 },
+    subagentRounds: 2,
     subagentsConcurrent: 2,
-    subagentsTotal: 10,
-    subagentsDerivation: SUBAGENT_DERIVATION,
-    costUsd: { perInvocation: 2.0, perRun: 5.0, exactness: 'estimated' },
-    repairAttemptsPerCheck: 0,
-    repairAttemptsReason: 'no repair work items exist in this phase: a failing required check ends the run rather than opening a repair item',
+    costUsd: { perInvocation: 2.0, perRun: 10.0, exactness: 'estimated' },
+    repairAttemptsPerCheck: 1,
+    repairAttemptsReason:
+      'one repair invocation per newly failing required check, then a repeated_failure decision with the smallest reproducer (D-11)',
     retry: 1,
   },
   decisions: {
@@ -206,18 +197,36 @@ export interface ScaledBudgetLimits {
   costUsd: { perInvocation: number; perRun: number };
 }
 
-// Stub: the scaled limits arrive with the green step of the plan.
+// The routine limits for a run of `itemCount` work items, each with the derivation that explains it (D-12, owner decision 1,
+// CON-15): invocations = items x 2 + 1, subagentsTotal = items x 10, toolCalls = items x 400. Wall clock and cost do not
+// scale. These are the ceilings a `--budget` override is checked against; an override can only lower them.
 export function scaledBudgetLimits(itemCount: number): ScaledBudgetLimits {
-  void itemCount;
+  if (!Number.isInteger(itemCount) || itemCount < 1) throw new RangeError('a run has at least one work item');
   const preset = ROUTINE_PRESET.budgets;
+  const unit = preset.subagentsPerUnit;
+  const perUnitTotal = unit.planner + unit.planChecker + unit.executor + unit.verifier;
+  const invocations = itemCount * preset.perItem.invocations + preset.invocationsFixed;
+  const subagentsTotal = itemCount * preset.perItem.subagentsTotal;
   return {
     wallClockMinutes: preset.wallClockMinutes,
-    invocations: preset.invocations,
-    invocationsDerivation: structuredClone(INVOCATION_DERIVATION),
-    toolCalls: preset.toolCalls,
+    invocations,
+    invocationsDerivation: {
+      units: itemCount,
+      retries: itemCount,
+      interruptionRelaunches: preset.invocationsFixed,
+      total: invocations,
+      formula: `${itemCount} item units + ${itemCount} retries or repairs + ${preset.invocationsFixed} resume = ${invocations}`,
+    },
+    toolCalls: itemCount * preset.perItem.toolCalls,
     subagentsConcurrent: preset.subagentsConcurrent,
-    subagentsTotal: preset.subagentsTotal,
-    subagentsDerivation: structuredClone(SUBAGENT_DERIVATION),
+    subagentsTotal,
+    subagentsDerivation: {
+      perUnit: { ...unit, total: perUnitTotal },
+      rounds: preset.subagentRounds,
+      units: itemCount,
+      total: subagentsTotal,
+      formula: `(${unit.planner} planner + ${unit.planChecker} plan-checker + ${unit.executor} executor + ${unit.verifier} verifier = ${perUnitTotal} per unit) x ${preset.subagentRounds} rounds (the unit and one CON-16 retry) x ${itemCount} items = ${subagentsTotal}`,
+    },
     costUsd: { perInvocation: preset.costUsd.perInvocation, perRun: preset.costUsd.perRun },
   };
 }
@@ -254,15 +263,18 @@ export const BUDGET_OVERRIDE_NAMES = [
 ] as const;
 type BudgetOverrideName = (typeof BUDGET_OVERRIDE_NAMES)[number];
 
-const OVERRIDE_LIMITS: Readonly<Record<BudgetOverrideName, { limit: number; integer: boolean }>> = {
-  wallClockMinutes: { limit: ROUTINE_PRESET.budgets.wallClockMinutes, integer: true },
-  invocations: { limit: ROUTINE_PRESET.budgets.invocations, integer: true },
-  toolCalls: { limit: ROUTINE_PRESET.budgets.toolCalls, integer: true },
-  subagentsTotal: { limit: ROUTINE_PRESET.budgets.subagentsTotal, integer: true },
-  subagentsConcurrent: { limit: ROUTINE_PRESET.budgets.subagentsConcurrent, integer: true },
-  costUsdPerInvocation: { limit: ROUTINE_PRESET.budgets.costUsd.perInvocation, integer: false },
-  costUsdPerRun: { limit: ROUTINE_PRESET.budgets.costUsd.perRun, integer: false },
-};
+// The ceiling of each override: the limits scaled for this run's item count. An override only lowers them (CON-15).
+function overrideLimits(limits: ScaledBudgetLimits): Readonly<Record<BudgetOverrideName, { limit: number; integer: boolean }>> {
+  return {
+    wallClockMinutes: { limit: limits.wallClockMinutes, integer: true },
+    invocations: { limit: limits.invocations, integer: true },
+    toolCalls: { limit: limits.toolCalls, integer: true },
+    subagentsTotal: { limit: limits.subagentsTotal, integer: true },
+    subagentsConcurrent: { limit: limits.subagentsConcurrent, integer: true },
+    costUsdPerInvocation: { limit: limits.costUsd.perInvocation, integer: false },
+    costUsdPerRun: { limit: limits.costUsd.perRun, integer: false },
+  };
+}
 
 function invalid(field: string, reason: string): Result<never> {
   return err({ kind: 'invalid', field, reason });
@@ -292,17 +304,19 @@ export function globWithin(inner: string, outer: string): boolean {
 
 const withinAny = (inner: string, outers: readonly string[]): boolean => outers.some((outer) => globWithin(inner, outer));
 
-function applyBudgetOverrides(raw: unknown): Result<RunBudgets> {
+function applyBudgetOverrides(raw: unknown, itemCount: number): Result<RunBudgets> {
   const preset = ROUTINE_PRESET.budgets;
+  const scaled = scaledBudgetLimits(itemCount);
+  const limits = overrideLimits(scaled);
   const budgets: RunBudgets = {
-    wallClockMinutes: preset.wallClockMinutes,
-    invocations: preset.invocations,
-    invocationsDerivation: structuredClone(INVOCATION_DERIVATION),
-    toolCalls: preset.toolCalls,
-    subagentsConcurrent: preset.subagentsConcurrent,
-    subagentsTotal: preset.subagentsTotal,
-    subagentsDerivation: structuredClone(SUBAGENT_DERIVATION),
-    costUsd: { ...preset.costUsd },
+    wallClockMinutes: scaled.wallClockMinutes,
+    invocations: scaled.invocations,
+    invocationsDerivation: scaled.invocationsDerivation,
+    toolCalls: scaled.toolCalls,
+    subagentsConcurrent: scaled.subagentsConcurrent,
+    subagentsTotal: scaled.subagentsTotal,
+    subagentsDerivation: scaled.subagentsDerivation,
+    costUsd: { ...scaled.costUsd, exactness: preset.costUsd.exactness },
     repairAttemptsPerCheck: preset.repairAttemptsPerCheck,
     repairAttemptsReason: preset.repairAttemptsReason,
     retry: preset.retry,
@@ -316,10 +330,12 @@ function applyBudgetOverrides(raw: unknown): Result<RunBudgets> {
     if (!(BUDGET_OVERRIDE_NAMES as readonly string[]).includes(key)) {
       return invalid(field, `unknown budget; the overridable budgets are ${BUDGET_OVERRIDE_NAMES.join(', ')}`);
     }
-    const spec = OVERRIDE_LIMITS[key as BudgetOverrideName];
+    const spec = limits[key as BudgetOverrideName];
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return invalid(field, 'must be a finite number above 0');
     if (spec.integer && !Number.isInteger(value)) return invalid(field, 'must be an integer');
-    if (value > spec.limit) return invalid(field, `budgets can only be lowered: ${value} is above the preset ${spec.limit}`);
+    if (value > spec.limit) {
+      return invalid(field, `budgets can only be lowered: ${value} is above the ${spec.limit} the preset allows for ${itemCount} work item${itemCount === 1 ? '' : 's'}`);
+    }
     switch (key as BudgetOverrideName) {
       case 'wallClockMinutes':
         budgets.wallClockMinutes = value;
@@ -400,10 +416,82 @@ export function checkG0Static(contract: RunContract): G0Failure[] {
   return failures;
 }
 
+const sortedUnique = (items: Iterable<string>): string[] => [...new Set(items)].sort();
+
+// Extensions that make a dotted word a file name, not a config key.
+const FILE_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'md', 'yml', 'yaml', 'toml', 'css', 'html', 'txt', 'sh', 'py', 'go', 'rs', 'cts', 'mts',
+]);
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const CONFIG_KEY = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
+const EDGE_PUNCTUATION = /^[`'"([{<]+|[`'"\])}>.,;:!?]+$/g;
+
+function looksLikePath(word: string): boolean {
+  if (word.includes('/')) return /^[A-Za-z0-9_.@-]+(?:\/[A-Za-z0-9_.@*-]+)+$/.test(word);
+  return /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.[A-Za-z0-9]{1,8}$/.test(word) && FILE_EXTENSIONS.has(word.slice(word.lastIndexOf('.') + 1));
+}
+
+// RC-7 stage 1: fields a brief item did not give are derived from the item's own text and the index facts. The candidates
+// are the backtick spans and the path-like words of the item title and its acceptance text. Files are the candidates the
+// index knows and the run may write (else the whole write set); symbols are the backtick identifiers the index lists for
+// those files; references are `.md` candidates inside the write set or under docs/; config keys are dotted lower-case
+// backtick spans that are not file names. Every list is sorted and de-duplicated, so the same brief and facts always give
+// the same contract digest. An explicit spec field is kept as given and is not named in `derived`.
+export function deriveItemSpec(
+  item: { title: string; acceptanceText: readonly string[]; spec?: BriefItem['spec'] },
+  writeSet: readonly string[],
+  facts?: IndexFacts,
+): RunWorkItem['spec'] {
+  const text = [item.title, ...item.acceptanceText].join('\n');
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => (m[1] as string).trim());
+  const words = text
+    .split(/\s+/)
+    .map((word) => word.replace(EDGE_PUNCTUATION, ''))
+    .filter((word) => word !== '');
+  const candidates = sortedUnique([...spans, ...words].filter(looksLikePath));
+  const known = new Set(facts?.files ?? []);
+  const named = candidates.filter((c) => known.has(c) && withinAny(c, writeSet));
+
+  const given = item.spec ?? {};
+  const derived: string[] = [];
+  const files = given.files !== undefined ? [...given.files] : named.length > 0 ? sortedUnique(named) : sortedUnique(writeSet);
+  if (given.files === undefined) derived.push('files');
+
+  let symbols: string[];
+  if (given.symbols !== undefined) {
+    symbols = [...given.symbols];
+  } else {
+    const listed = new Set(named.flatMap((file) => facts?.symbolsByFile[file] ?? []));
+    symbols = sortedUnique(spans.filter((span) => IDENTIFIER.test(span) && listed.has(span)));
+    derived.push('symbols');
+  }
+  let configKeys: string[];
+  if (given.configKeys !== undefined) {
+    configKeys = [...given.configKeys];
+  } else {
+    const isFileName = (span: string): boolean => FILE_EXTENSIONS.has(span.slice(span.lastIndexOf('.') + 1));
+    configKeys = sortedUnique(spans.filter((span) => CONFIG_KEY.test(span) && !isFileName(span)));
+    derived.push('configKeys');
+  }
+  let references: string[];
+  if (given.references !== undefined) {
+    references = [...given.references];
+  } else {
+    references = sortedUnique(candidates.filter((c) => c.endsWith('.md') && (c.startsWith('docs/') || withinAny(c, writeSet))));
+    derived.push('references');
+  }
+  return { files, symbols, configKeys, references, derived };
+}
+
 // One work item per brief item in declaration order, or the single item A that owns every criterion when the brief has no
 // items (a Phase 2 brief). A size the brief did not give is the preset default and is named in `spec.derived`; a model the
 // brief did not give is the size's `modelBySize` entry (D-10).
-function compileWorkItems(brief: Brief, write: readonly string[], protectedGlobs: readonly string[]): Result<RunWorkItem[]> {
+function compileWorkItems(
+  brief: Brief,
+  write: readonly string[],
+  protectedGlobs: readonly string[],
+  facts: IndexFacts | undefined,
+): Result<RunWorkItem[]> {
   const preset = ROUTINE_PRESET;
   // A brief without items is the single item A that owns every criterion, with the brief's own size and model.
   const items: BriefItem[] = brief.items ?? [
@@ -425,13 +513,9 @@ function compileWorkItems(brief: Brief, write: readonly string[], protectedGlobs
       if (!withinAny(glob, write)) return invalid(field, `${glob} is not inside the write set of the run`);
     }
     const size = item.size ?? preset.defaultSize;
-    const derived: string[] = item.size === undefined ? ['size'] : [];
-    const spec = item.spec ?? {};
-    const files = spec.files !== undefined ? [...spec.files] : [...write];
-    if (spec.files === undefined) derived.push('files');
-    if (spec.symbols === undefined) derived.push('symbols');
-    if (spec.configKeys === undefined) derived.push('configKeys');
-    if (spec.references === undefined) derived.push('references');
+    const acceptanceText = brief.acceptance.filter((c) => item.acceptance.includes(c.id)).map((c) => c.text);
+    const spec = deriveItemSpec({ title: item.title, acceptanceText, ...(item.spec !== undefined ? { spec: item.spec } : {}) }, write, facts);
+    if (item.size === undefined) spec.derived.unshift('size');
     out.push({
       id: item.id,
       task: item.title,
@@ -440,13 +524,7 @@ function compileWorkItems(brief: Brief, write: readonly string[], protectedGlobs
       modelSource: item.model !== undefined ? 'brief' : 'modelBySize',
       dependsOn: [...item.dependsOn],
       acceptance: [...item.acceptance],
-      spec: {
-        files,
-        symbols: [...(spec.symbols ?? [])],
-        configKeys: [...(spec.configKeys ?? [])],
-        references: [...(spec.references ?? [])],
-        derived,
-      },
+      spec,
     });
   }
   return ok(out);
@@ -479,7 +557,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
     return invalid('brief.acceptance', 'the brief has no acceptance criteria: add a "## Acceptance criteria" section');
   }
 
-  const budgets = applyBudgetOverrides(input.budgetOverrides);
+  const budgets = applyBudgetOverrides(input.budgetOverrides, brief.items?.length ?? 1);
   if (!budgets.ok) return budgets;
 
   // The protected list is the preset's and the repository's together; nothing the repository says removes a preset entry.
@@ -518,7 +596,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
     }
   }
 
-  const compiledItems = compileWorkItems(brief, write, protectedGlobs);
+  const compiledItems = compileWorkItems(brief, write, protectedGlobs, input.indexFacts);
   if (!compiledItems.ok) return compiledItems;
   const workItems = compiledItems.value;
   const contract: RunContract = {

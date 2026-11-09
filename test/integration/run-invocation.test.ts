@@ -142,14 +142,14 @@ const outcomeOf = (extra: Partial<InvocationOutcome> = {}): InvocationOutcome =>
 });
 
 describe('reserveRunInvocation: the run reserves from its own budget rows', () => {
-  it('grants a fresh run the contract wall clock (at most 60 min) and the per-invocation cost cap, and reserves one invocation', () => {
+  it('grants a fresh run the contract wall clock (120 min) and the per-invocation cost cap, and reserves one invocation', () => {
     withUnit((u) => {
       const reserved = reserveRunInvocation(u.deps, runOf(u));
       assert.ok(reserved.ok);
       assert.ok(reserved.value.granted);
       assert.equal(reserved.value.reservation.runId, u.runId);
       assert.equal(reserved.value.reservation.purpose, 'run');
-      assert.equal(reserved.value.reservation.wallClockMs, 60 * 60_000);
+      assert.equal(reserved.value.reservation.wallClockMs, 120 * 60_000);
       assert.equal(reserved.value.reservation.costCapUsd, 2);
       assert.equal(budget(u, 'invocations').reserved, 1);
       assert.equal(budget(u, 'invocations').used, 0);
@@ -159,8 +159,8 @@ describe('reserveRunInvocation: the run reserves from its own budget rows', () =
 
   it('caps the grant at what is left: the remaining wall clock and the remaining cost', () => {
     withUnit((u) => {
-      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'wallClockMs', 50 * 60_000, { fromReserved: false }).ok);
-      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'costUsd', 4.5, { fromReserved: false }).ok);
+      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'wallClockMs', 110 * 60_000, { fromReserved: false }).ok);
+      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'costUsd', 9.5, { fromReserved: false }).ok);
       const reserved = reserveRunInvocation(u.deps, runOf(u));
       assert.ok(reserved.ok && reserved.value.granted);
       assert.equal(reserved.value.reservation.wallClockMs, 10 * 60_000);
@@ -185,13 +185,13 @@ describe('reserveRunInvocation: the run reserves from its own budget rows', () =
 
   it('refuses with the wall clock budget when none is left, and with the cost budget when none is left', () => {
     withUnit((u) => {
-      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'costUsd', 5, { fromReserved: false }).ok);
+      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'costUsd', 10, { fromReserved: false }).ok);
       const noCost = reserveRunInvocation(u.deps, runOf(u));
       assert.ok(noCost.ok);
       assert.deepEqual(noCost.value, { granted: false, budget: 'costUsd' });
     });
     withUnit((u) => {
-      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'wallClockMs', 60 * 60_000, { fromReserved: false }).ok);
+      assert.ok(u.deps.ledger.chargeBudget(u.runId, 'wallClockMs', 120 * 60_000, { fromReserved: false }).ok);
       const noClock = reserveRunInvocation(u.deps, runOf(u));
       assert.ok(noClock.ok);
       assert.deepEqual(noClock.value, { granted: false, budget: 'wallClockMs' });

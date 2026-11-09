@@ -89,7 +89,7 @@
           {
             "name": "costUsd",
             "used": 0,
-            "limit": 5
+            "limit": 10
           },
           {
             "name": "invocations",
@@ -109,7 +109,7 @@
           {
             "name": "wallClockMs",
             "used": 0,
-            "limit": 3600000
+            "limit": 7200000
           }
         ],
         "references": [
