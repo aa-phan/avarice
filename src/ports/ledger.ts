@@ -801,8 +801,9 @@ export interface Ledger {
   // Oldest first.
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
 
-  // Notifications (AUT-6). A row moves pending -> delivered | failed | held and held -> delivered | failed; delivered and failed are
-  // final. Events carry IDs, an attempt count and an error code, never text.
+  // Notifications (AUT-6). A row moves pending -> delivered | failed | held, held -> delivered | failed and failed -> delivered; delivered is
+  // final, and failed is final for a delivery attempt (the one way out is setNotificationState, used when a digest covered the banner that
+  // did not arrive). Events carry IDs, an attempt count and an error code, never text.
   createNotification(input: NewNotification): Result<NotificationRow>;
   // One delivery attempt on a pending or held row: attempts + 1. A delivered attempt makes the row delivered and appends
   // notify.delivered. A failed attempt with `nextAttemptAtMs` keeps the row's state and schedules the retry; without it the row is

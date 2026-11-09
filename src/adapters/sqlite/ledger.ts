@@ -110,12 +110,14 @@ const NO_NEXT_ACTION = 'none';
 const EVIDENCE_STATUS_SET: readonly EvidenceStatus[] = ['passed', 'failed', 'skipped', 'unavailable', 'inconclusive', 'stale'];
 const EVIDENCE_INDEPENDENCE_SET: readonly EvidenceIndependence[] = ['deterministic', 'external', 'model-review'];
 const NOTIFICATION_STATES: readonly NotificationState[] = ['pending', 'held', 'delivered', 'failed'];
-// pending -> held | delivered | failed and held -> delivered | failed; delivered and failed are final (AUT-6).
+// pending -> held | delivered | failed, held -> delivered | failed and failed -> delivered; delivered is final (AUT-6). The failed -> delivered edge
+// exists only for setNotificationState, which a successful digest uses for the banners it covered (plan 03-23); recordNotificationAttempt still
+// refuses a failed row, so `failed` stays final for the delivery of a single banner.
 const NOTIFICATION_MOVES: Readonly<Record<NotificationState, readonly NotificationState[]>> = {
   pending: ['held', 'delivered', 'failed'],
   held: ['delivered', 'failed'],
   delivered: [],
-  failed: [],
+  failed: ['delivered'],
 };
 // An error code is a short token: it is the only text a notification event may carry about a failure.
 const ERROR_CODE = /^[a-z0-9-]{1,64}$/;
