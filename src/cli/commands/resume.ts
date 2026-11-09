@@ -14,7 +14,7 @@ import { RECONCILE_STEP, resumeRun } from '../../app/run-resume.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { errorLine, outcomeLines, resultLine, stripControl } from '../render/style.ts';
-import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
+import { isProcessAlive, spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import { renderWait } from './start.ts';
 
 const EXIT_NOT_ACTIVE = 3;
@@ -108,7 +108,16 @@ async function resumeRunCommand(deps: AppDeps, io: Io, runId: string, wait: bool
   }
   if (!wait) return 0;
 
-  const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs: WAIT_MAX_MS });
+  // A blocked run is already in a stop state when its supervisor starts, so the wait first lets the supervisor take it up (as `decide --wait` does).
+  const giveUpAt = Date.now() + WAIT_MAX_MS;
+  if (found.run.state === 'blocked_on_decision') {
+    for (;;) {
+      const read = deps.ledger.getRun(runId);
+      if (!read.ok || read.value.state !== 'blocked_on_decision' || !isProcessAlive(spawned.pid) || Date.now() >= giveUpAt) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs: Math.max(0, giveUpAt - Date.now()) });
   if (result.kind === 'interrupted') {
     // A supervisor that stopped on its own prelude (a reap that failed, a reconcile that could not read git) says so in a failed step: that is a failed
     // resume, not a second kill.

@@ -24,6 +24,7 @@ import type { RunRow, RunStepRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { getRunStatuses } from './run-status.ts';
 import { reconcileItem } from './run-stages/item.ts';
+import { isBlockedRunContinuable } from './run-stages/schedule.ts';
 import type { RunStageContext } from './run-stages/stage.ts';
 
 const LAUNCH_PREFIX = 'launch:';
@@ -46,7 +47,12 @@ export function resumeRun(deps: AppDeps, runId: string): Result<ResumeDecision> 
   const found = deps.ledger.getRun(runId);
   if (!found.ok) return found;
   const run = found.value;
-  if (isRunStopState(run.state) || !isRunResumable(run.state)) return ok({ kind: 'stopped', run });
+  // A run blocked at an item decision that an answer has made continuable is picked up like an interrupted one (D-16, research Pitfall 3): `decide` starts a
+  // supervisor only when no live lease is held, so an answer written under the lease of a supervisor that then died (it was killed right after it blocked the run)
+  // would otherwise wait for nobody, since nothing polls. Every other stop state, and a blocked run with nothing to continue, is only reported.
+  const continuable = run.state === 'blocked_on_decision' ? isBlockedRunContinuable(deps, run) : ok(false);
+  if (!continuable.ok) return continuable;
+  if (!continuable.value && (isRunStopState(run.state) || !isRunResumable(run.state))) return ok({ kind: 'stopped', run });
   const nowMs = deps.clock.nowMs();
   // The lease of a live supervisor is never taken: the stage loop fences it out only once it has lapsed.
   if (leaseIsLive(run, nowMs)) {
