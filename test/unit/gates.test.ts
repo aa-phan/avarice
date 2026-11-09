@@ -271,6 +271,14 @@ describe('evaluateG1 (tracer: write scope, item spec, an unasked owner choice)',
     assert.match(verdict.failures[0]?.detail ?? '', /protected/);
   });
 
+  it('treats an absolute path, a .. segment and a backslash as outside the contract whatever the globs say, and drops a leading ./', () => {
+    const wide = { write: ['**'], create: ['**'], protected: [] };
+    const bad = evaluateG1(g1({ globs: wide, plan: plan({ filesModified: ['../outside.ts', '/etc/passwd', 'src\\x.ts', 'src/../../y.ts'], taskFiles: [] }) }));
+    assert.deepEqual(bad.failures.map((f) => f.rule), ['plan-within-write-scope']);
+    for (const path of ['../outside.ts', '/etc/passwd', 'src\\x.ts', 'src/../../y.ts']) assert.ok((bad.failures[0]?.detail ?? '').includes(path), path);
+    assert.equal(evaluateG1(g1({ plan: plan({ filesModified: ['./src/lib/copy.ts'], taskFiles: [] }) })).passed, true);
+  });
+
   it('fails plan-within-spec for a path inside the write set but outside the explicit item spec files', () => {
     const verdict = evaluateG1(g1({ itemSpec: { files: ['src/lib/copy.ts'], derived: [] }, plan: plan({ filesModified: ['src/lib/dates.ts'], taskFiles: [] }) }));
     assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-within-spec']);

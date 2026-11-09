@@ -1,5 +1,5 @@
-// Gates G2 and G4 (AUT-7, AUT-9; docs/contracts-and-state.md "Phase gates"). Pure verdicts over facts AVARICE
-// measured. A GSD verifier verdict, a SUMMARY or any model-written text is never an input that can pass a gate.
+// Gates G1, G2 and G4 (AUT-7, AUT-9, D-07; docs/contracts-and-state.md "Phase gates"). Pure verdicts over facts AVARICE
+// measured. A GSD verifier verdict, a SUMMARY, a quick PLAN or any model-written text is never an input that can pass a gate.
 // Failures are listed in a fixed rule order, and every list is sorted before it is judged, so the same facts give
 // a deep-equal verdict whatever order they arrive in.
 import type { AcceptanceMapping, DeltaBlocking, EvidenceStatus } from './evidence.ts';
@@ -203,6 +203,61 @@ export interface G1Facts {
   itemAcceptance: readonly string[];
 }
 
-export function evaluateG1(_facts: G1Facts): GateVerdict {
-  return { passed: true, failures: [] };
+// A plan path is judged as written, except that a leading `./` is dropped. An absolute path, a `..` segment or a backslash can never
+// sit inside a repository-relative glob, so each one is outside the contract whatever the globs say.
+function planPathProblem(path: string): string | null {
+  if (path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.includes('\\') || path.split('/').includes('..')) return 'not a repository-relative path';
+  return null;
+}
+
+function normalizePlanPath(path: string): string {
+  return path.replace(/^(?:\.\/)+/, '');
+}
+
+// G1, in the rule order of G1_RULES. The plan is model-written text: it can fail this gate and never pass it, and a plan that is absent
+// fails closed. Every list is sorted before it is judged, so input order never changes the verdict.
+export function evaluateG1(facts: G1Facts): GateVerdict {
+  const failures: GateFailure[] = [];
+  const fail = (rule: (typeof G1_RULES)[number], detail: string): void => {
+    failures.push({ rule, detail });
+  };
+
+  if (facts.plan === null) {
+    fail('plan-present', 'the unit left no readable quick PLAN to judge');
+    return { passed: false, failures };
+  }
+
+  const writable = [...facts.globs.write].sort();
+  const creatable = [...facts.globs.create].sort();
+  const protectedGlobs = [...facts.globs.protected].sort();
+  const planPaths = [...new Set([...facts.plan.filesModified, ...facts.plan.taskFiles].map(normalizePlanPath))].sort();
+
+  const outside: string[] = [];
+  for (const path of planPaths) {
+    const problem = planPathProblem(path);
+    if (problem !== null) outside.push(`${path} (${problem})`);
+    else if (matchesAny(path, protectedGlobs)) outside.push(`${path} (protected)`);
+    else if (!matchesAny(path, writable) && !matchesAny(path, creatable)) outside.push(`${path} (outside write and create globs)`);
+  }
+  if (outside.length > 0) {
+    fail('plan-within-write-scope', `plan paths outside the contract: ${listPaths(outside)}`);
+  }
+
+  // An item whose spec files were derived from the write set has no narrower list than the write set itself.
+  if (!facts.itemSpec.derived.includes('files')) {
+    const specFiles = [...facts.itemSpec.files].sort();
+    const beyond = planPaths.filter((path) => !matchesAny(path, specFiles));
+    if (beyond.length > 0) {
+      fail('plan-within-spec', `plan paths outside the item's spec files: ${listPaths(beyond)}`);
+    }
+  }
+
+  const unasked = facts.ownerChoices
+    .filter((choice) => !choice.answered)
+    .map((choice) => `${choice.acceptanceId} (${choice.key})`)
+    .sort();
+  if (unasked.length > 0) {
+    fail('owner-choice-unasked', `acceptance criteria verified by an owner choice that was never asked: ${listPaths(unasked)}`);
+  }
+  return { passed: failures.length === 0, failures };
 }

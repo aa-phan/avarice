@@ -80,7 +80,8 @@ export function storedText(text: string, max: number): string {
 }
 
 // The quick PLAN a unit wrote (plan 03-06; D-07 stage 2). Model-written text read for the paths it names, the decision checkpoints it
-// declares and the acceptance IDs it cites. Stub: filled in with the G1 tracer.
+// declares and the acceptance IDs it cites. It is read as data, never as an instruction, and a plan that cites an ID or declares an
+// auto_select can only fail a gate, never pass one on the plan's word.
 export interface QuickPlanCheckpoint {
   hasAutoSelect: boolean;
   optionIds: string[];
@@ -93,6 +94,94 @@ export interface QuickPlan {
   acceptanceRefs: string[];
 }
 
-export function parseQuickPlan(_text: string | null): QuickPlan | null {
-  return null;
+const PLAN_TEXT_CAP = 64 * 1024;
+
+// A path as the plan wrote it: surrounding whitespace, quotes and backticks removed, and a list bullet.
+function cleanPlanPath(raw: string): string {
+  return raw.trim().replace(/^-\s+/, '').trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+}
+
+function pushUnique(into: string[], value: string): void {
+  if (value !== '' && !into.includes(value)) into.push(value);
+}
+
+// The `files_modified:` list of the frontmatter, in its inline `[a, b]` form or as `- item` lines.
+function readFilesModified(text: string): string[] {
+  const block = FRONTMATTER.exec(text);
+  const found: string[] = [];
+  if (block === null) return found;
+  let inList = false;
+  for (const raw of (block[1] as string).split(/\r?\n/)) {
+    const key = KEY_LINE.exec(raw);
+    if (key !== null && !/^\s/.test(raw)) {
+      inList = (key[1] as string) === 'files_modified';
+      if (inList) {
+        const inline = (key[2] as string).trim();
+        if (inline.startsWith('[')) {
+          for (const item of inline.replace(/^\[|\]\s*$/g, '').split(',')) pushUnique(found, cleanPlanPath(item));
+          inList = false;
+        } else if (inline !== '') {
+          pushUnique(found, cleanPlanPath(inline));
+          inList = false;
+        }
+      }
+      continue;
+    }
+    if (inList && /^\s*-\s+\S/.test(raw)) pushUnique(found, cleanPlanPath(raw));
+  }
+  return found;
+}
+
+// The text between each `<name>` and its `</name>`, found with indexOf so an unclosed tag costs one scan, not one per tag.
+function elementTexts(text: string, name: string): string[] {
+  const open = `<${name}>`;
+  const close = `</${name}>`;
+  const found: string[] = [];
+  let from = 0;
+  for (;;) {
+    const start = text.indexOf(open, from);
+    if (start === -1) return found;
+    const end = text.indexOf(close, start + open.length);
+    if (end === -1) return found;
+    found.push(text.slice(start + open.length, end));
+    from = end + close.length;
+  }
+}
+
+const TASK_OPEN = /<task(?=[\s>])([^>]*)>/g;
+const DECISION_TYPE = /\btype\s*=\s*["']checkpoint:decision["']/;
+const AUTO_SELECT_ATTRIBUTE = /\bauto_select\s*=\s*["']?[^\s"'>]/;
+const OPTION_ID = /<option\b[^>]*?\bid\s*=\s*["']([^"']+)["']/g;
+const ACCEPTANCE_ID = /\bAC[0-9]+\b/g;
+
+// `null` text is a plan that is absent. Text over 64 KiB is cut and the rest is read; nothing here throws on its input.
+export function parseQuickPlan(text: string | null): QuickPlan | null {
+  if (text === null) return null;
+  const body = text.length > PLAN_TEXT_CAP ? text.slice(0, PLAN_TEXT_CAP) : text;
+
+  const taskFiles: string[] = [];
+  const decisionCheckpoints: QuickPlanCheckpoint[] = [];
+  const opener = new RegExp(TASK_OPEN.source, 'g');
+  for (let match = opener.exec(body); match !== null; match = opener.exec(body)) {
+    const start = opener.lastIndex;
+    const end = body.indexOf('</task>', start);
+    if (end === -1) break;
+    const attributes = match[1] as string;
+    const inner = body.slice(start, end);
+    opener.lastIndex = end + '</task>'.length;
+    for (const list of elementTexts(inner, 'files')) {
+      for (const item of list.split(/[,\r\n]/)) pushUnique(taskFiles, cleanPlanPath(item));
+    }
+    if (DECISION_TYPE.test(attributes)) {
+      const optionIds: string[] = [];
+      for (const option of inner.matchAll(OPTION_ID)) pushUnique(optionIds, option[1] as string);
+      decisionCheckpoints.push({ hasAutoSelect: AUTO_SELECT_ATTRIBUTE.test(attributes) || /<auto_select[\s>]/.test(inner), optionIds });
+    }
+  }
+
+  const refs = new Set<string>();
+  for (const ref of body.matchAll(ACCEPTANCE_ID)) refs.add(ref[0]);
+  const acceptanceRefs = [...refs].sort((a, b) => Number.parseInt(a.slice(2), 10) - Number.parseInt(b.slice(2), 10) || (a < b ? -1 : a > b ? 1 : 0));
+
+  return { filesModified: readFilesModified(body), taskFiles, decisionCheckpoints, acceptanceRefs };
 }
