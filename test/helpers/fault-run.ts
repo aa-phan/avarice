@@ -230,6 +230,11 @@ export const RUN_KILL_POINTS = [
 ] as const;
 export type RunKillPoint = (typeof RUN_KILL_POINTS)[number];
 
+// The kill points inside an item-local block (plan 03-18), reached only by a run whose item asks (test/fault/run-park.test.ts): right after the `park`
+// checkpoint (the delta is still in the tree), between the park step and the decision, and after the supervisor released its lease on a blocked run.
+export const PARK_KILL_POINTS = ['after-checkpoint:park', 'mid-park', 'after-release:blocked'] as const;
+export type ParkKillPoint = (typeof PARK_KILL_POINTS)[number];
+
 export function runHostEnv(host: FakeRunOptions, extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return { AVARICE_FAKE_HOST: JSON.stringify({ run: host }), AVARICE_LEASE_TTL_MS: String(RUN_LEASE_TTL_MS), ...extra };
 }
@@ -262,7 +267,7 @@ export function runRunWithFault(
   roots: CliRoots,
   repo: ScratchRepo,
   briefPath: string,
-  point: RunKillPoint | undefined,
+  point: RunKillPoint | ParkKillPoint | undefined,
   host: FakeRunOptions = {},
   env: Record<string, string | undefined> = {},
   extraArgs: readonly string[] = [],
