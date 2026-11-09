@@ -290,7 +290,8 @@ test('live s50 S-50, RC-7: a three-item brief without sizes or files starts with
     t,
     {
       name: 's50',
-      capUsd: 0.5,
+      capUsd: 0.4,
+      perInvocationUsd: 0.4,
       invocations: 1,
       wallClockMinutes: 20,
       brief: itemsBriefText(S50_ITEMS, ['clamp(15, 0, 10) returns 10 | verifiedBy: check:test', 'sum([1, 2, 3]) returns 6 | verifiedBy: check:test', 'mean([2, 4]) returns 3 | verifiedBy: check:test'], { title: 'Three small helpers' }),
@@ -318,7 +319,8 @@ test('live s50 S-50, RC-7: a three-item brief without sizes or files starts with
       }
       const stored = rows<{ item_id: string; size: string; spec_json: string }>(r, 'SELECT item_id, size, spec_json FROM work_items WHERE run_id = ? ORDER BY rowid', r.runId);
       assert.deepEqual(stored.map((s) => s.item_id), ['A', 'B', 'C']);
-      for (const s of stored) assert.ok((JSON.parse(s.spec_json) as { derived: string[] }).derived.includes('files'), `${s.item_id} stored spec`);
+      // The stored row is the whole work item; its specification, with `derived`, sits under `spec` (as in the contract above).
+      for (const s of stored) assert.ok((JSON.parse(s.spec_json) as { spec: { derived: string[] } }).spec.derived.includes('files'), `${s.item_id} stored spec`);
       // The first unit ran (at most one invocation was allowed); what its plan named for the derived fields is a step, never a contract change.
       const records = invocationRecords(dataOf(r), r.runId);
       assert.ok(records.length <= 1, `invocations: ${records.length}`);
