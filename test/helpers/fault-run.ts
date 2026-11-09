@@ -244,6 +244,12 @@ export const REPAIR_SCENARIO_POINTS: ReadonlySet<RunKillPoint> = new Set<RunKill
 export const PARK_KILL_POINTS = ['after-checkpoint:park', 'mid-park', 'after-release:blocked'] as const;
 export type ParkKillPoint = (typeof PARK_KILL_POINTS)[number];
 
+// The kill points inside the resume of an answered item (plan 03-22), reached only by a run whose answered item resumes its own session
+// (test/fault/run-resume-session.test.ts): right after the `unpark` checkpoint (the delta may or may not be back in the tree), after the delta was put back and
+// before the host is launched (`mid-unpark`), and inside the resumed unit (`mid-invocation:run`, with the host process of the resumed session left behind).
+export const RESUME_KILL_POINTS = ['after-checkpoint:unpark', 'mid-unpark', 'mid-invocation:run'] as const;
+export type ResumeKillPoint = (typeof RESUME_KILL_POINTS)[number];
+
 export function runHostEnv(host: FakeRunOptions, extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return { AVARICE_FAKE_HOST: JSON.stringify({ run: host }), AVARICE_LEASE_TTL_MS: String(RUN_LEASE_TTL_MS), ...extra };
 }
