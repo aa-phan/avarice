@@ -3,6 +3,7 @@
 // the hook refuses, and the refusals named a rule and nothing else. These texts are what the unit prompt, the run agents' prompts and the hook's shell
 // refusals say, so the three cannot drift apart. They state rules the hook already enforces and grant nothing: the admitted commands stay the contract's
 // commands and READ_ONLY_COMMANDS.
+import { READ_ONLY_COMMANDS } from './invocation-scope.ts';
 
 // The forms the hook refuses outside quotes (docs/system/containment.md, "Command identity (Bash)", rules 5 and 9), in the words the model reads.
 export const RUN_REFUSED_FORMS = "';', '&&', '||', a redirection such as '2>&1', '$(...)', backticks, a word that starts with '~', and an unquoted '*', '?', '[' or '{'";
@@ -41,6 +42,10 @@ export function shellRuleReason(rule: string, lists: ShellAdmitted): string | un
       return undefined;
   }
 }
+
+// The closing note of every run agent's prompt (plan 03-34): the planner, plan checker, executor and verifier run in the same invocation as the unit,
+// their refusals count toward the same loop limit, and their GSD prompts tell them to run gsd-tools, mkdir and git steps the hook refuses.
+export const AVARICE_RUN_SHELL_ADDENDUM = `${RUN_SHELL_RULES_SENTENCE} ${readOnlyCommandsSentence(READ_ONLY_COMMANDS)} Do not run gsd-tools, mkdir or a git command that changes the repository; create files with the Write tool, which creates missing directories.`;
 
 // The quick workflow's own shell steps are outside the run's command list, and a unit that reads both instructions literally stops (haiku, run 2 of plan
 // 03-27). It does that work with the file tools and the agents instead, and still runs the four stages.
