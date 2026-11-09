@@ -596,6 +596,8 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
 
   // A repair has no CON-16 retry: it is the one chance a newly failing check gets (plan 03-19).
   if (attempt.value.reason === REPAIR_REASON) return reconcileRepair(unit, attempt.value, ran, kind);
+  // A resume is not retried as a resume either: see reconcileResume.
+  if (attempt.value.reason === RESUME_REASON) return reconcileResume(unit, attempt.value, snapshot.value, ran);
 
   const history = attemptHistoryOf(unit, attemptId, kind);
   if (!history.ok) return history;
@@ -666,6 +668,38 @@ function reconcileRepair(unit: Unit, attempt: AttemptRow, ran: boolean, kind: st
     itemId: unit.item.itemId,
   });
   return blocked.ok ? ok('blocked') : blocked;
+}
+
+// A resume attempt that was in flight (the item is `delegated`, its delta may or may not be back in the tree). One that never launched its unit ran nothing:
+// the clone goes back to the attempt's snapshot (which takes the delta out again) and the item resumes again from the start, which puts the delta back (unpark
+// is idempotent, and so is the end state). One whose unit was interrupted, or ended any other way the supervisor did not record, has no session to trust: it
+// takes the road of a resumed unit that crashed, the fresh unit with the owner's answer, unless the invocations budget is spent (plan 03-22).
+function reconcileResume(unit: Unit, attempt: AttemptRow, snapshot: WorkspaceSnapshot, ran: boolean): Result<ItemReconcile> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const { attemptId, ordinal } = attempt;
+  if (ran) {
+    const budgets = deps.ledger.getBudgets(ctx.runId);
+    if (!budgets.ok) return budgets;
+    const invocations = budgets.value.find((b) => b.name === 'invocations');
+    // The killed invocation's reservation counts here: it is spent by the next reservation, so the fresh unit needs one beyond it.
+    if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
+      const blocked = blockRun(ctx, {
+        reason: 'budget_exhausted',
+        signal: { kind: 'budget', names: ['invocations'] },
+        issue: "the invocations budget is spent, so the interrupted resumed session was not followed by a fresh unit with the owner's answer",
+        data: { budget: 'invocations' },
+        attemptId,
+        itemId: unit.item.itemId,
+      });
+      return blocked.ok ? ok('blocked') : blocked;
+    }
+    const recorded = recordResumeFallback(unit, attemptId, ordinal, 'interrupted');
+    if (!recorded.ok) return recorded;
+  }
+  const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal, snapshot });
+  if (!discarded.ok) return discarded;
+  return ok(discarded.value.discarded ? 'retry' : 'blocked');
 }
 
 // An item that passed its gate (`gated`): the supervisor may have made its commit and died before it recorded it. A HEAD that moved is the item's own
@@ -1108,7 +1142,10 @@ function unparkDelta(unit: Unit, attemptId: string, base: WorkspaceSnapshot, par
   const marked = ctx.checkpoint(UNPARK_CHECKPOINT, { itemId: unit.item.itemId, attemptId, revision: base.head });
   if (!marked.ok) return marked;
   const applied = workspace.unpark(unit.clone, parked.record);
-  if (applied.ok) return ok('applied');
+  if (applied.ok) {
+    faultPoint('mid-unpark');
+    return ok('applied');
+  }
   if (applied.error.kind === 'not_found') return ok('park-missing');
   if (applied.error.kind !== 'conflict') return applied;
   const head = workspace.head(unit.clone);

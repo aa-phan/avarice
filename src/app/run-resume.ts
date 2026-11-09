@@ -5,7 +5,9 @@
 //                 killed supervisor): it is ended by the session ID its step recorded. Every reap completes before any row is marked or anything is
 //                 read from the clone, and a reap that fails stops the resume with every row still `started` (T-02-56, FR-7); so does a started launch that cannot be reaped at all (no recorded session ID, or a host with no reap).
 //   2. reconcile  by the run's state: a `running` run whose item was in flight is put back to its attempt's snapshot and retried once (CON-16) or, when
-//                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); a `verifying` run is shown
+//                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); an in-flight attempt that was a
+//                 resume of an answered item's session (plan 03-22) is put back to its snapshot (which takes the unparked delta out) and goes to the fresh
+//                 unit that carries the owner's answer, or, when it never launched its unit, resumes again (the unpark is repeatable); a `verifying` run is shown
 //                 `paused (verification interrupted)`, the checks of the interrupted final pass that never finished get `inconclusive` evidence (T-02-58),
 //                 and the run goes back to `verifying`, which re-verifies on the current revision.
 //   3. the stage loop continues from the committed state.
