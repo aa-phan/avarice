@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-25-PLAN.md
-last_updated: "2026-11-09T13:29:16.582Z"
+stopped_at: Completed 03-26-PLAN.md
+last_updated: "2026-11-09T14:42:58.625Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: d139340c1dd6ef7a7a808d546e8755177d6b27e7
+state_head: 9fad6628dc4d8bb9e25832b437690e692d90c91e
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 86
+  completed_plans: 87
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 26 of 33
+Plan: 27 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -142,6 +142,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P23 | 75min | 3 tasks | 18 files |
 | Phase 03 P24 | 41 min | 3 tasks | 16 files |
 | Phase 03 P25 | 25 min | 2 tasks | 11 files |
+| Phase 03 P26 | 70 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -317,6 +318,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-24: cancel kill points are CANCEL_KILL_POINTS, not RUN_KILL_POINTS, because the kill suite runs every RUN_KILL_POINTS entry against a run that is never cancelled
 - [Phase 03]: 03-25: decide <id> on a terminal prompts after the record (keys, withdraw, text, amend); an empty line leaves it open, exit 0. amend chains into contract amend (renderAmendmentPreview, confirmAndCommit) pre-filled from the record's measured request, one y writes contract v(n+1) and answers the decision together. — D-13 and D-17: one engine for the command and the prompt, widening only through a confirmed amendment.
 - [Phase 03]: 03-25: the shell's Decide action (keys 7, d) lists getInbox decisions and runs decide <id> through ctx.command with the shell's ask; the one-shot command reads standard input only when both streams are terminals. — ADR-013: the shell is a presentation layer over the command modules.
+- [Phase 03]: 03-26: a blocked_on_decision run that isBlockedRunContinuable is resumable, and resume --wait lets the supervisor take it up — decide starts no supervisor under a live lease, so an answer written under a killed supervisor's lease waited for nobody; found by the race suite (kill at the block), fixed RED-first
+- [Phase 03]: 03-26: RECONCILE_KILL_POINTS names the paused stage's reconcile checkpoint with its own suite (run-reconcile); the kill-point lists stay separate and the coverage test checks their union and that each has its own suite
+- [Phase 03]: 03-26: the test CLI holds a process at an armed fault point (AVARICE_TEST_HOLD) and logs exit codes (AVARICE_TEST_EXIT_LOG), test-only, so a test writes in the window between two writes of a detached supervisor
 
 ### Pending Todos
 
@@ -369,6 +373,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T13:29:11.126Z
-Stopped at: Completed 03-25-PLAN.md
+Last session: 2026-11-09T14:42:58.417Z
+Stopped at: Completed 03-26-PLAN.md
 Resume file: None
