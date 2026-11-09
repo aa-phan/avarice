@@ -361,3 +361,23 @@ export function buildDecisionRecord(input: DecisionRecordInput): DecisionRecordD
     urgency: 'blocking',
   };
 }
+
+// The amend command a stored decision carries (`consequences.amend`, written by buildDecisionRecord), with the decision's own ID where the record
+// kept the placeholder. Null when the record has none: a pause, a permission refusal, or a Phase 2 decision. Stored text is data, so the value is
+// read defensively and never trusted to be a string.
+export function amendCommandOf(stored: unknown, decisionId: string): string | null {
+  if (typeof stored !== 'object' || stored === null) return null;
+  const amend = (stored as Record<string, unknown>)['amend'];
+  if (typeof amend !== 'object' || amend === null) return null;
+  const command = (amend as Record<string, unknown>)['command'];
+  if (typeof command !== 'string' || command === '') return null;
+  return SAFE_ID.test(decisionId) ? command.split(DECISION_ID_PLACEHOLDER).join(decisionId) : command;
+}
+
+// A Phase 3 record that is answered by an amendment: it lists options and every one of them is withdraw. A Phase 2 record stored no options at all
+// (`[]`), so it is never this: an answer to it is an unlisted option, not a request to amend.
+export function isAmendOnly(stored: unknown): boolean {
+  if (!Array.isArray(stored) || stored.length === 0) return false;
+  const options = optionsOf(stored);
+  return options.length === stored.length && options.every((o) => o.kind === 'withdraw');
+}
