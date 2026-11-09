@@ -86,4 +86,51 @@ Prediction (plan 03-35 tests it live): with the rules stated and the contradicti
 
 ## Live probe (plan 03-35)
 
-To be filled in by plan 03-35 with its measurements.
+Measured 2026-11-09 on Claude Code 2.1.319, plan 03-27's item A (small, no model) alone on a generated scratch repository, `--model haiku` chosen by size. Sources: the two lines of `test/containment/live-small-probe.jsonl` (cited as "probe line 1" and "probe line 2"), the spend ledger `test/containment/live-spend-phase3.jsonl` (plan `03-35`), and the two transcripts under the macOS temporary directory (`avarice-cli-49yPtu` for run 1, `avarice-cli-ngQJYp` for run 2; each `tool_use` is a call, each hook refusal the `tool_result` text `avarice: <rule>`). The judge reads the ledger, the launch-model log, the host's init event, the clone's commits and the transcript's Write calls; no model text is in the lines.
+
+Plan 03-35 ran probe-small-1 twice (the tracer's one permitted re-run) and stopped at its decision checkpoint, because both runs failed fact 3. Probe-small-2 and probe-small-3 were not run, by owner decision (below).
+
+### Results
+
+| Run | Run ID | Verdict | Cost (USD) | Duration | Tool calls | Agent calls by type | Hook denies by rule | Probe line |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `run_01M70QY9KAA9ABJ2274FDJSY3R` | FAIL, fact 3 (and fact 5, see the note) | 0.1019 | 503.0 s | 76 | planner 2, plan-checker 2, executor 1, verifier 1 | `shell-syntax` 1, `shell-not-allowed` 1 | 1 |
+| 2 | `run_01M70RGRVDPC6QNHXN5F5TMVJP` | FAIL, fact 3 | 0.0819 | 643.7 s | 51 | planner 1, plan-checker 1, executor 1, verifier 1 | `shell-syntax` 1 | 2 |
+
+Both runs: state `ready_for_review`, item A `done`, exit 0, no decision row, no `loop.limit` event, G0, G1 (A), G2 (A) and G4 passed, one invocation (kind `denied` only because it met a refusal; status `completed`), launch flag, `launch:run` step and init model all haiku (`claude-haiku-5-5`), cost within the 0.30 USD haiku cap (`withinHaikuCap` true). The review banner failed `osascript-missing` three times, as the quiet profile intends. Cost is far inside the 0.30 USD cap and inside the 0.05 to 0.15 USD the plan expected.
+
+The judge's six facts, per run:
+
+| Fact | Run 1 | Run 2 |
+|---|---|---|
+| 1 Model: launch flag, `launch:run` step and init event are haiku | pass | pass |
+| 2 Run `ready_for_review`, item A `done` | pass | pass |
+| 3 Exactly one commit on the pin, files `src/shout.ts` and `test/shout.test.ts` | **fail**: the one commit also holds `test/slug.test.ts` | **fail**: the same extra file |
+| 4 G1 and G2 for A passed, A has passed check evidence | pass | pass |
+| 5 A PLAN, a SUMMARY and a VERIFICATION with status passed | pass as re-judged (see the note) | pass (`quickRecordsWritten` all true, classify step `passed`, summary present) |
+| 6 No decision row, no `loop.limit` event | pass | pass |
+
+Fact 5, run 1 note: probe line 1 records fact 5 as failed (`no PLAN under .planning/quick`). That was the first version of the judge, which looked for the records in the clone; the unit's quick records are archived out of the clone before the commit (D-17), so the clone cannot show them. The judge was corrected (commit `61a9186`: it now reads the host's Write calls and the classify step) with no change to a cap, the spec or any other fact, and run 2 was judged by the corrected judge. Run 1's transcript shows the three Writes (`261109-a01-PLAN.md`, `-SUMMARY.md`, `-VERIFICATION.md`) and the VERIFICATION content carries `status: passed`; line 1 was not rewritten.
+
+### What each run did
+
+- **Run 1.** Its first call, a compound `ls`, was refused (`shell-syntax`); it then used Read twice (the clone's `quick.md`, which does not exist, and the global one). It wrote the quick PLAN, started the planner twice, the plan-checker twice, the executor and the verifier through the Agent tool. One subagent's `grep` was refused (`shell-not-allowed`) and was followed by a Read. Each refusal was followed by a corrected call of the admitted form; there was never a second refusal in a row.
+- **Run 2.** It ran six admitted calls, then one compound `grep` refused (`shell-syntax`), then Grep (not available in the session, see below), then a Read. It ran the workflow once through each of the four agents.
+- **Observation, not a failure: the host has no Glob or Grep tool.** Run 2's transcript has three `tool_result`s `No such tool available: Glob` / `Grep ... find files with find via the Bash tool instead`. The unit prompt of plan 03-34 tells the unit to use the Read, Grep and Glob tools. The unit recovered each time (the next call was admitted); but each error costs a turn, and the host's advice (use `find` or `grep` through Bash) points at `grep`, which the hook does not admit (`READ_ONLY_COMMANDS` lists `find` and no `grep`; the refusals at run 1 call 39 and run 2 call 7 were `grep` lines). This is a text-versus-host mismatch in the prompt that plan 03-34 wrote; it is a candidate finding for the owner, not a change made here.
+
+### Verdict on plan 03-34's prediction
+
+**Confirmed, with one exception that is not about the prediction.** The prediction was that, with the rules stated and the contradiction removed, a haiku unit runs the quick workflow by starting the planner, plan-checker, executor and verifier, or ends with a question the run can show, and not with a refusal loop. In both runs the haiku unit started all four agents, finished the item with its own commit, passed G1 and G2, hit one or two refusals each and corrected each one, opened no decision and reached no loop limit, for 0.0819 and 0.1019 USD (against the 0.0040 and 0.0152 USD of the two failed 03-27 units, which ended before the work, and the 0.88 to 0.90 USD of a sonnet unit). The exception is fact 3: in both runs the one commit also changed `test/slug.test.ts`.
+
+**Cause of the fact 3 failure (from the clone, the transcripts and the brief).** The probe brief is made with `itemsBriefText` (`test/helpers/run-fixtures.ts`), whose fixed "Behavior" section reads "A slug never contains two dashes in a row, and the slug rules are covered by tests." The probe uses only item A (a `shout` helper), but that sentence stays in the brief. Both units read it as part of the task: run 1 wrote `test/slug.test.ts` with Write, run 2 used Edit on it and named its quick task directory `slug-no-double-dash`. `test/**` is inside the brief's write set, so the edit is contained (no hook or gate refused it); it is outside what the probe judge expects of item A alone. The cause is the shared brief text and not haiku's reliability, and it is not a refusal problem.
+
+### Owner decision at plan 03-35 Task 3 (2026-11-09)
+
+- **Owner:** the project owner, through the orchestrator's `<user_response>` for this continuation.
+- **Option:** `proceed-haiku` (keep haiku for small items; D-10 and RC-8's size-to-model map unchanged; run plan 03-36 as planned).
+- **Rationale, as given:** the 03-34 fix removed the reliability failure (the whole workflow completed, no refusal loop, about 0.09 USD per unit); the extra `test/slug.test.ts` edit is attributed to the probe brief's fixed text and stayed inside the write set.
+- **Scope of the decision:** the owner did not ask for probe-small-2 or probe-small-3 and asked that no other live case run in plan 03-35, so two of the three probes in the plan's reliability bar were not run. The bar of "three runs, none failed" was therefore not met; the owner accepted the two-run measurement. Nothing under `src/` or `docs/system/`, `ROUTINE_PRESET` or any cap changed.
+
+### For plan 03-36 and the documentation plans
+
+Plan 03-36's cases that are built with `itemsBriefText` carry the same "Behavior" sentence, so a small item may again touch `test/slug.test.ts`, and a judge that expects an exact file list for the commit will fail for the same reason. The cases' judges should expect that file or the cases should be given a brief text without the sentence (a test-side choice; plan 03-36's plan is not edited here). The Glob and Grep mismatch above should be on the findings list the documentation plan writes.

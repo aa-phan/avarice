@@ -180,8 +180,9 @@ The total live-model spend of Phase 3 may not pass **25 USD** (owner decision D-
 | 03-01 | 2026-11-08 | 2.1.319 | Admission of 2.1.319: the 22 live onboarding T3 tests (19 started a host) plus the re-run of case 06a: 20 ledger lines | 0.1515 | 0.1515 |
 | 03-13 | 2026-11-09 | 2.1.319 | Spike S3-A, Sonnet: `round-1` pause (0.0617), `round-1-resume` (0.8795) and `missing-session` twice (0 each): 4 ledger lines | 0.9412 | 1.0927 |
 | 03-27 | 2026-11-09 | 2.1.319 | Phase 3 run-purpose cases, tracer only: `s17-s51` twice (1.4970 and 1.9591): 2 ledger lines; the other seven cases were not started (tracer gate) | 3.4561 | 4.5488 |
+| 03-35 | 2026-11-09 | 2.1.319 | Small-unit probe on haiku: `probe-small-1` twice (0.1019 and 0.0819): 2 ledger lines; `probe-small-2` and `-3` not run (owner decision) | 0.1838 | 4.7326 |
 
-The cumulative total equals the sum of `costUsd` over the ledger (26 lines, 4.5488 to four decimals, 4.55 to two; 24 lines and 1.0927 before plan 03-27). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; plan 03-27's own total is 3.4561 USD of its 6.00 USD cap; after it 20.4512 USD remain under the ceiling.
+The cumulative total equals the sum of `costUsd` over the ledger (28 lines, 4.7326 to four decimals, 4.73 to two; 26 lines and 4.5488 before plan 03-35; 24 lines and 1.0927 before plan 03-27). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; plan 03-27's own total is 3.4561 USD of its 6.00 USD cap; after it 20.4512 USD remain under the ceiling.
 
 ### Phase 3 run-purpose cases (plan 03-27)
 
@@ -203,6 +204,28 @@ What the two `s17-s51` runs measured (ledger, transcripts and clone; run 1 and r
 - **Held (S-51, RC-8).** The launch lines carried `--model haiku`, `--model sonnet`, `--model opus` in that order; the `launch:run` steps named the same models; the host's init events reported `claude-haiku-5-5`, `claude-sonnet-5-5` and `claude-opus-5-5`.
 - **Not held: A (small, haiku) did not complete in either run.** Run 1: the unit's first three calls were improvised shell lines the hook refused (`shell-syntax` twice, `shell-not-allowed` once), so the third denial in a row ended the invocation (terminal reason `hook_stopped`, 0.004 USD) and the item opened a `repeated_failure` decision. Run 2: two refused shell lines, then Reads and `npm test`, and the final message said the quick workflow needs shell commands outside the run's command list and that it would not do the change by hand; no edit, kind `denied`, a `permission` decision (0.0152 USD). In both runs the supervisor opened a second decision, so the run held two open decisions and two notification rows instead of one. Sonnet (B) and opus (C) ran the same workflow to a question and to a commit.
 - **Cost.** Opus on the one-line item C cost 1.4323 USD (run 1) and 1.7854 USD (run 2), 33 and 41 tool calls; the plan assumed it would be cheap.
+
+### Small-unit probe on haiku (plan 03-35)
+
+Suite `test/containment/live-run-phase3.test.ts` (cases `live probe-small-1`, `-2`, `-3`, skipped unless `AVARICE_LIVE=1`), results `test/containment/live-small-probe.jsonl`, spend `live-spend-phase3.jsonl` under plan `03-35`, host `test/helpers/live-harness.ts` (`planGroupTotalRefusal` checks the group 03-27, 03-35 and 03-36 against 10.00 USD, owner decision 2 of 2026-11-09, and the Phase 3 ceiling against 25 USD before every start). Each case runs plan 03-27's item A alone (small, no model, so `--model haiku` comes from the size map) through the production `start --brief ... --policy routine --wait` on a generated scratch repository; caps: case 0.50 USD, per invocation 0.40 USD, 2 invocations, 20 minutes. The judge reads only the ledger, the launch-model log, the host's init event, the clone's commits and the transcript's Write calls. Record: `spikes/phase-3-wave-0/S3-B-small-unit-haiku.md`, "Live probe (plan 03-35)".
+
+```bash
+AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-35 node --test --test-name-pattern="probe-small-1" test/containment/live-run-phase3.test.ts
+```
+
+| Case | Scenario | Verdict | Cost (USD) | Host | Results line |
+|---|---|---|---|---|---|
+| `probe-small-1`, run 1 | S-51 and S-17 item A, small on haiku | FAIL, fact 3: the one commit holds `src/shout.ts`, `test/shout.test.ts` and `test/slug.test.ts`. (Fact 5 was also recorded as failed by the first version of the judge, which looked for the quick records in the clone; re-judged from the transcript they were written and the VERIFICATION says `status: passed`.) Facts 1, 2, 4, 6 passed: state `ready_for_review`, item A `done`, G1 and G2 passed, no decision, no `loop.limit` | 0.1019 | 2.1.319 | `live-small-probe.jsonl` line 1 |
+| `probe-small-1`, run 2 (the tracer's one permitted re-run, the corrected judge) | same | FAIL, fact 3: the same extra file `test/slug.test.ts`. Facts 1, 2, 4, 5, 6 passed (quick PLAN, SUMMARY and VERIFICATION written, classify step `passed`) | 0.0819 | 2.1.319 | `live-small-probe.jsonl` line 2 |
+| `probe-small-2`, `probe-small-3` | same | not run: at the plan's decision checkpoint (Task 3) the owner chose `proceed-haiku` (2026-11-09) and asked for neither probe | 0 | | none |
+
+What the two runs measured: both haiku units ran the whole quick workflow (planner, plan-checker, executor, verifier through the Agent tool), met one or two hook refusals each (`shell-syntax`, and in run 1 one `shell-not-allowed` from a subagent), corrected each with an admitted call, and finished with their own commit; cost 0.0819 to 0.1019 USD, 51 and 76 tool calls, 503 and 644 seconds. The failed fact is not a hook or gate refusal: the probe brief's fixed "Behavior" sentence ("the slug rules are covered by tests", from `itemsBriefText`) led both units to edit `test/slug.test.ts`, inside the brief's `test/**` write set. Observation: the host has no `Glob` or `Grep` tool in the session (run 2 met three such errors), though the unit prompt names them.
+
+| Spend | USD | Against |
+|---|---|---|
+| Plan 03-35 (two ledger lines) | 0.1838 | its own worst case of 2.00 for four runs |
+| Group 03-27, 03-35 and 03-36 (3.4561 + 0.1838 + 0) | 3.6399 | 10.00 |
+| Cumulative Phase 3 (4.5488 + 0.1838, 28 ledger lines) | 4.7326 | 25.00 |
 
 ### Spike S3-A on Claude Code 2.1.319 (2026-11-09, plan 03-13)
 
