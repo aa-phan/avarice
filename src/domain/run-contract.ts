@@ -431,6 +431,34 @@ function looksLikePath(word: string): boolean {
   return /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.[A-Za-z0-9]{1,8}$/.test(word) && FILE_EXTENSIONS.has(word.slice(word.lastIndexOf('.') + 1));
 }
 
+// The tokens of an item's own text that derivation reads: the backtick spans, and the path-like words and spans (the candidates).
+// One rule, used by deriveItemSpec and by itemCandidateTerms, so what start asks the indexes about and what the compiler derives from
+// cannot drift apart.
+function candidateTokens(texts: readonly string[]): { spans: string[]; candidates: string[] } {
+  const text = texts.join('\n');
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => (m[1] as string).trim());
+  const words = text
+    .split(/\s+/)
+    .map((word) => word.replace(EDGE_PUNCTUATION, ''))
+    .filter((word) => word !== '');
+  return { spans, candidates: sortedUnique([...spans, ...words].filter(looksLikePath)) };
+}
+
+// What start asks the indexes about, per item (D-07 stage 1): the path candidates and the backtick identifiers of the item's title and
+// its acceptance text, sorted and de-duplicated. An item that names nothing has no terms. A brief without items is the single item A.
+export function itemCandidateTerms(brief: Brief): Map<string, string[]> {
+  const items: ReadonlyArray<{ id: string; title: string; acceptance: readonly string[] }> = brief.items ?? [
+    { id: 'A', title: brief.title, acceptance: brief.acceptance.map((c) => c.id) },
+  ];
+  const terms = new Map<string, string[]>();
+  for (const item of items) {
+    const acceptanceText = brief.acceptance.filter((c) => item.acceptance.includes(c.id)).map((c) => c.text);
+    const { spans, candidates } = candidateTokens([item.title, ...acceptanceText]);
+    terms.set(item.id, sortedUnique([...candidates, ...spans.filter((span) => IDENTIFIER.test(span))]));
+  }
+  return terms;
+}
+
 // RC-7 stage 1: fields a brief item did not give are derived from the item's own text and the index facts. The candidates
 // are the backtick spans and the path-like words of the item title and its acceptance text. Files are the candidates the
 // index knows and the run may write (else the whole write set); symbols are the backtick identifiers the index lists for
@@ -442,13 +470,7 @@ export function deriveItemSpec(
   writeSet: readonly string[],
   facts?: IndexFacts,
 ): RunWorkItem['spec'] {
-  const text = [item.title, ...item.acceptanceText].join('\n');
-  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => (m[1] as string).trim());
-  const words = text
-    .split(/\s+/)
-    .map((word) => word.replace(EDGE_PUNCTUATION, ''))
-    .filter((word) => word !== '');
-  const candidates = sortedUnique([...spans, ...words].filter(looksLikePath));
+  const { spans, candidates } = candidateTokens([item.title, ...item.acceptanceText]);
   const known = new Set(facts?.files ?? []);
   const named = candidates.filter((c) => known.has(c) && withinAny(c, writeSet));
 

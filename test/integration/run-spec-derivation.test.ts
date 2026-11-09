@@ -3,14 +3,17 @@
 // indexes are the real graph reader over a graph file the fixture writes; nothing here calls a model.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { collectIndexFacts } from '../../src/app/derive-spec.ts';
+import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import type { BriefItem } from '../../src/domain/brief.ts';
 import type { RunContract } from '../../src/domain/run-contract.ts';
 import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
+import { writeFakeGraphify } from '../helpers/fake-graphify.ts';
 import { FakeIntelHost } from '../helpers/fake-intel-host.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
@@ -21,7 +24,6 @@ import {
   commitConventions,
   ledgerRows,
   makeRunRepo,
-  onboardRunRepo,
   onboardRunRepoWithIndexes,
   writeItemsBrief,
 } from '../helpers/run-fixtures.ts';
@@ -29,7 +31,8 @@ import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanup: string[] = [];
 after(() => {
-  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
+  // A detached supervisor the start spawned may still be writing its data root: retry the removal.
+  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
 // A brief of three items with no sizes and no spec: A names a file and a symbol the graph knows, B names nothing, C depends on B.
@@ -44,13 +47,36 @@ interface Fixture {
   repo: ScratchRepo;
 }
 
+// Onboards the repository to `active` with no graph and no intel index: graphify fails to extract and the intel host is unavailable, so
+// the active record lists both indexes as absent.
+async function onboardWithoutIndexes(roots: CliRoots, repo: ScratchRepo): Promise<void> {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_GRAPHIFY_BIN: writeFakeGraphify(mkdtempSync(join(tmpdir(), 'avarice-fake-graphify-')), 'extract-fails'),
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
+  };
+  const composed = createDeps(env, { host: new FakeIntelHost(new FakeAgentHost(), { hostError: { kind: 'unavailable', cause: 'no intel host' } }) });
+  assert.ok(composed.ok, 'composition');
+  try {
+    const started = startOnboarding(composed.value.deps, { repoPath: repo.path, policy: 'onboarding' });
+    assert.ok(started.ok, JSON.stringify(started));
+    const outcome = await runOnboarding(composed.value.deps, started.value.onboardingId);
+    assert.ok(outcome.ok && outcome.value.state === 'active', 'the repository is onboarded');
+  } finally {
+    composed.value.close();
+  }
+}
+
 // An onboarded repository with conventions committed after the pin; with indexes the graph has a node `slugify` in src/slug.ts.
 async function fixture(options: { indexes: boolean }): Promise<Fixture> {
   const roots = makeRoots();
   const repo = makeRunRepo();
   cleanup.push(roots.base, repo.base);
   if (options.indexes) await onboardRunRepoWithIndexes(roots, repo, 'slugify');
-  else onboardRunRepo(roots, repo);
+  else await onboardWithoutIndexes(roots, repo);
   commitConventions(repo, RUN_CONVENTIONS);
   return { roots, repo };
 }
@@ -117,6 +143,20 @@ describe('an index that is absent never blocks a start (S-50)', () => {
     const contract = contractOf(f, runIdOf(r.stdout));
     assert.deepEqual(contract.intent.workItems[0]?.spec.files, ['src/**', 'test/**']);
     assert.ok(r.stdout.split('\n').includes('index: not used (absent)'), r.stdout);
+  });
+});
+
+describe('an answer the repository no longer backs is not used (T-03-32)', { skip: !offlineAvailable() }, () => {
+  it('a graph node whose file is not at HEAD gives no facts: the summary says stale and the item keeps the write set', async () => {
+    const f = await fixture({ indexes: true });
+    const staging = ledgerRows<{ staging_worktree: string }>(f.roots, 'SELECT staging_worktree FROM onboardings')[0]?.staging_worktree as string;
+    const graph = JSON.parse(readFileSync(join(staging, '.planning', 'graphs', 'graph.json'), 'utf8')) as { nodes: Array<Record<string, unknown>> };
+    for (const node of graph.nodes) if (node['source_file'] === 'src/slug.ts') node['source_file'] = 'src/gone.ts';
+    writeFileSync(join(staging, '.planning', 'graphs', 'graph.json'), JSON.stringify(graph));
+    const r = start(f, ITEMS);
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.ok(r.stdout.split('\n').includes('index: not used (stale)'), r.stdout);
+    assert.deepEqual(contractOf(f, runIdOf(r.stdout)).intent.workItems[0]?.spec.files, ['src/**', 'test/**']);
   });
 });
 

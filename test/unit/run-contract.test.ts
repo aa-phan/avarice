@@ -13,6 +13,7 @@ import {
   ROUTINE_POLICY,
   checkG0Static,
   compileRunContract,
+  itemCandidateTerms,
   scaledBudgetLimits,
 } from '../../src/domain/run-contract.ts';
 import type { IndexFacts, RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
@@ -830,6 +831,24 @@ describe('compileRunContract: spec derivation from index facts (RC-7, D-07 stage
     assert.equal(one.digest, two.digest);
     const none = unwrap(compileRunContract(inputFor({ brief })));
     assert.notEqual(one.digest, none.digest);
+  });
+
+  it('itemCandidateTerms: what start asks the indexes is the paths and the backtick identifiers of each item, sorted and de-duplicated', () => {
+    const brief = briefWithText('Touch src/lib/dates.ts and `src/lib/copy.ts` via `copyText`', 'Also `formatDate`, `copyText`, `src/lib/dates.ts` and `budget.max-cost`.');
+    const terms = itemCandidateTerms(brief);
+    assert.deepEqual([...terms.keys()], ['A', 'B']);
+    assert.deepEqual(terms.get('A'), ['copyText', 'formatDate', 'src/lib/copy.ts', 'src/lib/dates.ts']);
+    assert.deepEqual(terms.get('B'), [], 'an item that names nothing has no terms');
+  });
+
+  it('itemCandidateTerms: a brief without items is the single item A, and its terms are the ones deriveItemSpec reads', () => {
+    const lines = ['---', 'title: Fix `slugify` in src/slug.ts', '---', '## Behavior', 'x', '', '## Acceptance criteria', '- AC1: keeps `trimDashes` | verifiedBy: check:test', '', '## Write', '- src/**', '', '## Target checks', '- test', ''];
+    const brief = loadBrief(lines.join('\n'));
+    assert.deepEqual([...itemCandidateTerms(brief).entries()], [['A', ['slugify', 'src/slug.ts', 'trimDashes']]]);
+    const facts: IndexFacts = { files: ['src/slug.ts'], symbolsByFile: { 'src/slug.ts': ['slugify', 'trimDashes'] } };
+    const a = compile({ brief, indexFacts: facts }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/slug.ts']);
+    assert.deepEqual(a?.spec.symbols, ['slugify', 'trimDashes']);
   });
 });
 

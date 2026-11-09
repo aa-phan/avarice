@@ -10,7 +10,7 @@ import { parseConventions } from '../domain/conventions.ts';
 import { canonicalJson } from '../domain/digest.ts';
 import { judgeRunPreflight } from '../domain/run-preflight.ts';
 import { compileRunContract, ROUTINE_POLICY } from '../domain/run-contract.ts';
-import type { RunContract } from '../domain/run-contract.ts';
+import type { IndexFacts, RunContract } from '../domain/run-contract.ts';
 import type { PortError } from '../domain/result.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
 import { GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
@@ -29,6 +29,8 @@ export interface RunStartRequest {
   policy: string;
   // `--budget name=value`; validated by the compiler, which only lets a value go down.
   budgetOverrides: Readonly<Record<string, number>>;
+  // What the start command read from the indexes before this call (D-07 stage 1); the compiler derives item specs from it.
+  indexFacts?: IndexFacts;
 }
 
 export interface RunStartOutcome {
@@ -82,7 +84,7 @@ const DAY_MS = 86_400_000;
 const GIT_PREFIX = /^git:/;
 
 // A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8.
-function readBriefFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
+export function readBriefFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY);
@@ -119,7 +121,7 @@ function canonicalOrSelf(path: string): string {
 }
 
 // The registered project whose repository contains `cwd` (the deepest one when repositories nest), or the one `--project` names.
-function findProject(deps: AppDeps, request: RunStartRequest): { project: ProjectRow } | { message: string } | { error: string } {
+export function findProject(deps: AppDeps, request: RunStartRequest): { project: ProjectRow } | { message: string } | { error: string } {
   const listed = deps.ledger.listProjects();
   if (!listed.ok) return { error: describeError(listed.error) };
   if (request.projectId !== undefined) {
@@ -241,6 +243,7 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     nowIso: new Date(nowMs).toISOString(),
     policy: request.policy,
     ...(Object.keys(request.budgetOverrides).length > 0 ? { budgetOverrides: request.budgetOverrides } : {}),
+    ...(request.indexFacts !== undefined ? { indexFacts: request.indexFacts } : {}),
   });
   if (!compiled.ok) return usage(compiled.error.kind === 'invalid' ? compiled.error.field : 'contract', describeError(compiled.error));
   const { contract, digest } = compiled.value;

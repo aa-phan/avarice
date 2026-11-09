@@ -7,11 +7,13 @@
 // Then (D-18) it spawns a detached `avarice supervise <runId>` and returns: the run is recorded and the supervisor owns it, so closing
 // the shell leaves it running. With `--wait` it polls the ledger and exits 0 at `ready_for_review` and 3 at any other stop state or when
 // the supervisor died with the run unfinished, printing the final result line and, when interrupted, how to continue.
+import { collectIndexFacts, startTerms } from '../../app/derive-spec.ts';
 import { startRun } from '../../app/run-start.ts';
 import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import type { WaitResult } from '../spawn-supervisor.ts';
 import type { RunStartOutcome } from '../../app/run-start.ts';
 import { ROUTINE_POLICY } from '../../domain/run-contract.ts';
+import type { RunWorkItem } from '../../domain/run-contract.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import { parseBudgetFlags } from '../args.ts';
 import type { Io, ParsedArgs } from '../args.ts';
@@ -42,11 +44,31 @@ export function usage(args: ParsedArgs): string | undefined {
 
 const list = (items: readonly string[]): string => (items.length === 0 ? 'none' : items.map(stripControl).join(', '));
 
-// One screen: the result line, then what was authorized.
-export function renderStart(outcome: RunStartOutcome): string {
+const SHOWN_SPEC_ENTRIES = 4;
+
+// A spec list on one line: the first entries, then how many more.
+function specList(entries: readonly string[]): string {
+  const shown = entries.slice(0, SHOWN_SPEC_ENTRIES).map(stripControl).join(', ');
+  return entries.length > SHOWN_SPEC_ENTRIES ? `${shown} and ${entries.length - SHOWN_SPEC_ENTRIES} more` : shown;
+}
+
+// One line per work item (S-50): size, model, dependencies and the spec's files and symbols. A field the compiler derived is marked
+// `(derived)`, and a model that follows from the size rather than from the brief is marked `(from size)`.
+export function renderItemLine(item: RunWorkItem): string {
+  const derived = new Set(item.spec.derived);
+  const parts = [
+    `${stripControl(item.size)}${derived.has('size') ? ' (derived)' : ''}, ${stripControl(item.model)}${item.modelSource === 'modelBySize' ? ' (from size)' : ''}`,
+  ];
+  if (item.dependsOn.length > 0) parts.push(`depends on ${item.dependsOn.map(stripControl).join(', ')}`);
+  parts.push(`files ${specList(item.spec.files)}${derived.has('files') ? ' (derived)' : ''}`);
+  if (item.spec.symbols.length > 0) parts.push(`symbols ${specList(item.spec.symbols)}${derived.has('symbols') ? ' (derived)' : ''}`);
+  return `item ${stripControl(item.id)}: ${parts.join('; ')}`;
+}
+
+// One screen: the result line, then what was authorized, the index note and one line per work item.
+export function renderStart(outcome: RunStartOutcome, indexNote: string): string {
   const c = outcome.contract;
   const b = c.budgets;
-  const item = c.intent.workItems[0];
   const criteria = c.intent.acceptance.length;
   return [
     resultLine(`run ${outcome.runId}`, 'contract_ready'),
@@ -58,7 +80,8 @@ export function renderStart(outcome: RunStartOutcome): string {
     `write paths: ${list(c.files.write)}`,
     `required checks: ${list(c.verification.requiredChecks)}`,
     `budgets: ${usd(b.costUsd.perRun)} per run, ${usd(b.costUsd.perInvocation)} per invocation; ${b.wallClockMinutes} min, ${b.invocations} invocations, ${b.toolCalls} tool calls`,
-    `model: ${stripControl(item?.model ?? 'unknown')}`,
+    stripControl(indexNote),
+    ...c.intent.workItems.map(renderItemLine),
     `contract: ${c.policyPreset} v${c.contractVersion} ${outcome.contractDigest}`,
     `stored at: ${stripControl(outcome.contractPath)}`,
     '',
@@ -95,15 +118,20 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     return EXIT_USAGE;
   }
 
-  const started = startRun(deps, {
+  const request = {
     cwd: process.cwd(),
     ...(typeof projectId === 'string' ? { projectId } : {}),
     briefPath,
     policy,
     budgetOverrides: overrides,
-  });
+  };
+  // Before the start transaction (D-07 stage 1, RC-7): read what the indexes know about the files and symbols the items name. This only
+  // reads; a start killed here leaves no run, and an index that is absent or stale never blocks the start.
+  const named = startTerms(deps, request);
+  const index = named === undefined ? undefined : await collectIndexFacts(deps, named.projectId, named.terms);
+  const started = startRun(deps, { ...request, ...(index?.facts !== undefined ? { indexFacts: index.facts } : {}) });
   if (started.ok) {
-    io.out(renderStart(started.value));
+    io.out(renderStart(started.value, index?.note ?? 'index: not used (absent)'));
     return supervise(deps, io, started.value, args.flags['wait'] === true);
   }
   const failure = started.failure;
