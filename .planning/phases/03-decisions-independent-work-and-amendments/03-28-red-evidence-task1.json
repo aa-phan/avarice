@@ -1,0 +1,11 @@
+{
+  "command": "node --test --test-reporter=tap --test-name-pattern=\"p3-run1-copy-fallback.md parses\" test/unit/exit-drafts.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: the three Phase 3 exit briefs (plan 03-28, D-02 to D-04)\n    # Subtest: p3-run1-copy-fallback.md parses, names the pin, expects one decision and plants exactly one decision:fallback-wording criterion in item B\n    not ok 1 - p3-run1-copy-fallback.md parses, names the pin, expects one decision and plants exactly one decision:fallback-wording criterion in item B\n      ---\n      failureType: 'testCodeFailure'\n      error: \"ENOENT: no such file or directory, open '/Users/aphan/avarice/.claude/worktrees/phase-03/test/benchmark/phase3/p3-run1-copy-fallback.md'\"\n      code: 'ENOENT'\n      ...\n# tests 1\n# pass 0\n# fail 1\n",
+  "wholeFile": "node --test test/unit/exit-drafts.test.ts: 36 tests, 22 pass (the Phase 2 draft checks), 14 fail (every Phase 3 check that reads a brief or the dry-run record)",
+  "targetTest": "p3-run1-copy-fallback.md parses, names the pin, expects one decision and plants exactly one decision:fallback-wording criterion in item B",
+  "targetFile": "test/unit/exit-drafts.test.ts",
+  "expected": "each Phase 3 exit brief parses with the real parser, expects one decision, carries exactly one decision:<key> criterion in the owner-choice item, has an independent item, compiles against the portfolio conventions at the pin with no G0 failure, and the dry run record names the brief digests",
+  "actual": "the three brief files and the dry-run record do not exist: test/benchmark/phase3/ is absent, so every Phase 3 check fails with ENOENT on the first brief it reads",
+  "semanticAssessment": "The failure is the missing deliverable the test asserts on: the files named by the plan do not exist yet. It is not an import, syntax or fixture error: the same file's 22 Phase 2 draft checks still pass in the same run, and the imports of the new block (IndexFacts, compileRunContract) resolve."
+}
