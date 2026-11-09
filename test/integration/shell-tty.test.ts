@@ -16,6 +16,8 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { startRun } from '../../src/app/run-start.ts';
+import { stateDigestOf } from '../../src/app/run-stages/blocked.ts';
+import type { RunContract } from '../../src/domain/run-contract.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -277,7 +279,7 @@ describe('the Decide action of the shell on a driven terminal', { skip: HAS_PYTH
         consequences: {},
         evidenceRefs: [],
         affectedItems: [],
-        stateDigest: 'sha256:test',
+        stateDigest: stateDigestOf(contract.value.version, contract.value.body as RunContract),
         urgency: 'blocking',
         nowMs: Date.now(),
       });
@@ -306,7 +308,9 @@ describe('the Decide action of the shell on a driven terminal', { skip: HAS_PYTH
       await waitFor(() => term.screen().includes('answer (1, 2'), 'the answer prompt of the decide command, asked by the shell', 30_000);
       assert.equal(row().state, 'open', 'nothing is written before the answer');
       term.type('1\r');
-      await waitFor(() => term.screen().includes(`decision ${decisionId} answered (1)`), 'the answered decision', 30_000);
+      await waitFor(() => term.screen().includes(`decision ${decisionId} answered (1)`), 'the answered decision', 30_000).catch((e: Error) => {
+        throw new Error(`${e.message}; the last frame was ${JSON.stringify(plain(term.output().split('\x1b[H').at(-1) ?? ''))}`);
+      });
       assert.deepEqual(row(), { state: 'answered', answer: '1', answered_by: `owner:${userInfo().username}`, answer_channel: 'terminal' });
 
       term.type('q');

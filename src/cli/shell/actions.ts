@@ -3,7 +3,7 @@
 // detached `avarice supervise` through those modules, exactly as the one-shot path does, and return without waiting: the shell shows progress by
 // reading the ledger (the watch action) and sends no signal to a supervisor when it exits.
 import { describeError } from '../../adapters/sqlite/db.ts';
-import { getRunStatuses, orderRuns } from '../../app/run-status.ts';
+import { getInbox, getRunStatuses, orderRuns } from '../../app/run-status.ts';
 import type { RunStatus } from '../../app/run-status.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import { ROUTINE_POLICY } from '../../domain/run-contract.ts';
@@ -249,6 +249,58 @@ const commandLine: ShellAction = {
   },
 };
 
+// ---- decide --------------------------------------------------------------------------------------------------------
+
+const DECISION_COLUMNS: readonly Column[] = [
+  { key: 'n', header: '#', subject: true },
+  { key: 'decision', header: 'DECISION', subject: true },
+  { key: 'run', header: 'RUN', subject: true },
+  { key: 'class', header: 'CLASS', subject: true },
+  { key: 'issue', header: 'ISSUE (the unit\'s words, as data)' },
+];
+
+// The first line of a decision's issue that has anything on it: the issue is the unit's own text, shown as data and never acted on.
+const firstLineOf = (issue: string): string =>
+  issue
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line !== '') ?? '';
+
+// Lists the open decisions, lets the owner pick one by number or ID, and runs `decide <id>` in this process. The command prints the record and asks
+// its question through the shell's own prompt, so the answer goes through the same engine and the same checks as `avarice decide` (D-13, ADR-013).
+const decide: ShellAction = {
+  id: 'decide',
+  keys: ['7', 'd'],
+  label: 'Decide',
+  run: async (ctx) => {
+    const read = ctx.read((deps) => getInbox(deps.ledger));
+    if (!read.ok) {
+      ctx.show(`store: unavailable (${read.detail.replace(/\s+/g, ' ')})`);
+      return;
+    }
+    if (!read.value.ok) {
+      ctx.show(`store: unavailable (${describeError(read.value.error).replace(/\s+/g, ' ')})`);
+      return;
+    }
+    const { decisions } = read.value.value;
+    if (decisions.length === 0) {
+      ctx.show('no open decisions');
+      return;
+    }
+    const rows = decisions.map((d, i) => ({ n: String(i + 1), decision: d.decisionId, run: d.runId, class: d.class, issue: firstLineOf(d.issue) }));
+    ctx.show(renderTable(DECISION_COLUMNS, rows, ctx.width));
+    const answer = await ctx.prompt('decision to answer (number or ID): ');
+    const entry = answer === undefined ? '' : printable(answer).trim();
+    if (entry === '') return;
+    const id = pick(entry, decisions.map((d) => d.decisionId));
+    if (id === undefined) {
+      ctx.show(`no decision matches ${JSON.stringify(entry)}`);
+      return;
+    }
+    await ctx.command(['decide', id]);
+  },
+};
+
 const quit: ShellAction = {
   id: 'quit',
   keys: ['q'],
@@ -256,4 +308,4 @@ const quit: ShellAction = {
   run: () => Promise.resolve('quit'),
 };
 
-export const SHELL_ACTIONS: readonly ShellAction[] = [start, watch, resume, status, inbox, commandLine, quit];
+export const SHELL_ACTIONS: readonly ShellAction[] = [start, watch, resume, status, inbox, commandLine, decide, quit];
