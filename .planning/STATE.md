@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-12-PLAN.md
-last_updated: "2026-11-09T03:38:13.568Z"
+stopped_at: Completed 03-13-PLAN.md
+last_updated: "2026-11-09T03:52:07.459Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: beef323b682d57371510770c43037a20595f523f
+state_head: 537ea6a839a5c13373fce40ab945a9ac338b9e65
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 72
+  completed_plans: 73
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 12 of 33
+Plan: 13 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -128,6 +128,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P03 | 31 min | 3 tasks | 11 files |
 | Phase 03 P11 | 35 min | 2 tasks | 4 files |
 | Phase 03 P12 | 70 min | 3 tasks | 9 files |
+| Phase 03 P13 | 15 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -277,6 +278,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Fake run host: perAttempt counts fresh calls per item, a resumed call plays base + perItem.<ID>.resume (else resume), missingSession affects only a resumed call, and the outcome session is resumeSessionId, else sessionId, else a made-up one
 - [Phase 03]: 03-12: amendRunContract takes no lease fence; it checks expectVersion inside the transaction under the run lock and is the only statement that changes a budget limit (D-19)
 - [Phase 03]: 03-12: notification state machine is pending to held|delivered|failed and held to delivered|failed; failed is final, so plan 03-23 cannot move a failed row to delivered with setNotificationState
+- [Phase 03]: 03-13: A3 held in round 1, so RUN_DECISION_SENTENCE is unchanged; PLAN_CITES_ACCEPTANCE_HARD stays false after one live PLAN — A resume of an unknown session ends with an error_during_execution result event, so plan 03-22 keys its fresh-unit fallback on structural fields, not on a missing result
 
 ### Pending Todos
 
@@ -329,6 +331,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T03:38:13.405Z
-Stopped at: Completed 03-12-PLAN.md
+Last session: 2026-11-09T03:52:07.306Z
+Stopped at: Completed 03-13-PLAN.md
 Resume file: None
