@@ -1047,15 +1047,28 @@ export function spike3Refusal(capUsdForRun: number): string | undefined {
   return undefined;
 }
 
-// Plan 03-27: the live run-purpose cases of Slice 2. At most 6.00 USD in all, under the Phase 3 ceiling (D-05), on generated scratch repositories.
+// Plan 03-27: the live run-purpose cases of Slice 2, under the Phase 3 ceiling (D-05), on generated scratch repositories. Owner decision 2 of 2026-11-09 raised
+// plan 03-27's total from 6.00 to 10.00 USD for its resumed cases, including any probe; the probes of plan 03-35 and the cases of plan 03-36 are recorded under
+// their own plan IDs, so the 10.00 USD is shared by the group of the three plans and judged over their summed spend.
 export const LIVE_PLAN_03_27 = '03-27';
-export const LIVE_PLAN_03_27_TOTAL_USD = 6.0;
+export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36'];
+export const LIVE_PLAN_03_27_TOTAL_USD = 10.0;
 
 // The skip text for a start of `plan` whose cap would take the plan's recorded spend in the current phase's ledger past `totalUsd`, or undefined.
 export function planTotalRefusal(plan: string, totalUsd: number, capUsdForRun: number): string | undefined {
   const spent = currentSpendLedger.spentByPlan(plan);
   if (spent + capUsdForRun > totalUsd + 1e-9) {
     return `not run: plan ${plan} spend ${spent.toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass its ${totalUsd.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
+// The skip text for a start whose cap would take the summed recorded spend of every plan in `plans` (current phase's ledger) past `totalUsd`, or undefined.
+// Plans outside the group are not counted.
+export function planGroupTotalRefusal(plans: readonly string[], totalUsd: number, capUsdForRun: number): string | undefined {
+  const spent = plans.reduce((sum, plan) => sum + currentSpendLedger.spentByPlan(plan), 0);
+  if (spent + capUsdForRun > totalUsd + 1e-9) {
+    return `not run: plans ${plans.join(', ')} spend ${spent.toFixed(4)} together plus this case's cap ${capUsdForRun.toFixed(2)} would pass their ${totalUsd.toFixed(2)} USD total`;
   }
   return undefined;
 }
@@ -1234,6 +1247,8 @@ export interface RunUnitSpec {
   probe?: (clone: string) => Record<string, unknown>;
   // Plan 03-27: the most `plan` may spend in all; a start whose cap would pass it is refused before anything is prepared.
   planTotalUsd?: number;
+  // Plan 03-35: the plans whose summed spend `planTotalUsd` limits (the group of plans 03-27, 03-35 and 03-36); without it only `plan` counts.
+  planGroup?: readonly string[];
   // Plan 03-27: the directory the adapter reads the agent definitions from, given the real one and the evidence directory (a copy whose
   // definition carries `permissionMode`, for CS-15). The scope's read roots still name the real directory.
   agentsDir?: (realAgentsDir: string, evidenceDir: string) => string;
@@ -1374,7 +1389,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const spends = spec.noLaunch !== true;
   const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : plan === SPIKE3_PLAN ? spike3Refusal(spec.costCapUsd) : currentSpendLedger.fits(spec.costCapUsd) ? undefined : ceilingRefusal('case', spec.costCapUsd);
   if (refusal !== undefined) return { skipped: refusal };
-  const overPlan = !spends || spec.planTotalUsd === undefined ? undefined : planTotalRefusal(plan, spec.planTotalUsd, spec.costCapUsd);
+  const overPlan = !spends || spec.planTotalUsd === undefined ? undefined : spec.planGroup !== undefined ? planGroupTotalRefusal(spec.planGroup, spec.planTotalUsd, spec.costCapUsd) : planTotalRefusal(plan, spec.planTotalUsd, spec.costCapUsd);
   if (overPlan !== undefined) return { skipped: overPlan };
 
   const fixture = prepareRunUnit(spec.project);
@@ -1777,8 +1792,8 @@ export interface LiveRunSpec {
   steps?: readonly LiveCliStep[];
   // How long to wait, after `start` returned, for the supervisor's notification rows to leave `pending` (it raises its banner just before it exits).
   settleNotificationsMs?: number;
-  // Refuse the start when this plan's recorded spend plus `capUsd` would pass `totalUsd`.
-  planCap?: { plan: string; totalUsd: number };
+  // Refuse the start when this plan's recorded spend plus `capUsd` would pass `totalUsd`; with `group`, when the summed spend of every plan of the group would.
+  planCap?: { plan: string; totalUsd: number; group?: readonly string[] };
   // Gates the start (the current phase's ceiling) and becomes the run's and the invocation's cost budget.
   capUsd: number;
   // Kills the first supervisor at this point; `status --json` is captured, then `resume <id> --wait` runs.
@@ -2054,7 +2069,7 @@ export function invocationRecords(dataRoot: string, runId?: string): InvocationR
 // indexes (no model spend). Everything returned is ground truth: ledger rows, the transcripts of the host, the digests of the user's checkout.
 export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   if (!currentSpendLedger.fits(spec.capUsd)) return { skipped: ceilingRefusal('run', spec.capUsd) };
-  const overPlan = spec.planCap === undefined ? undefined : planTotalRefusal(spec.planCap.plan, spec.planCap.totalUsd, spec.capUsd);
+  const overPlan = spec.planCap === undefined ? undefined : spec.planCap.group !== undefined ? planGroupTotalRefusal(spec.planCap.group, spec.planCap.totalUsd, spec.capUsd) : planTotalRefusal(spec.planCap.plan, spec.planCap.totalUsd, spec.capUsd);
   if (overPlan !== undefined) return { skipped: overPlan };
   const roots = spec.shortRoots === true ? makeShortRoots() : makeRoots();
   const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n', ...(spec.repoFiles ?? {}) });

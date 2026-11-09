@@ -9,6 +9,8 @@ import { join } from 'node:path';
 
 import {
   CURRENT_SPEND_PHASE,
+  LIVE_PLAN_03_27_GROUP,
+  LIVE_PLAN_03_27_TOTAL_USD,
   PHASE2_CEILING_USD,
   PHASE3_CEILING_USD,
   fitsCap,
@@ -18,6 +20,7 @@ import {
   phase2Spent,
   phase3Ceiling,
   phase3Spent,
+  planGroupTotalRefusal,
   recordPhase2Spend,
   recordPhase3Spend,
   recordSpend,
@@ -251,5 +254,39 @@ describe('Phase 3 live-spend ledger and ceiling (D-05)', () => {
     recordSpend({ case: 'case-b', costUsd: 0.1, assumed: false });
     const second = readFileSync(ledger3, 'utf8').split('\n').filter((l) => l !== '');
     assert.equal((JSON.parse(second[1] as string) as Record<string, unknown>)['plan'], 'unknown');
+  });
+});
+
+describe('Phase 3 plan-group total (owner decision 2 of 2026-11-09: 03-27, 03-35 and 03-36 share 10.00 USD)', () => {
+  it('names the group and states its total as 10 USD', () => {
+    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36']);
+    assert.equal(LIVE_PLAN_03_27_TOTAL_USD, 10);
+  });
+
+  it('sums the spend of every plan of the group and fits a 0.50 USD cap at 9.50, refusing it at 9.51', () => {
+    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1.5, '03-36'));
+    assert.equal(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5), undefined);
+    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1.51, '03-36'));
+    assert.notEqual(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5), undefined);
+  });
+
+  it('ignores the spend of plans outside the group', () => {
+    writeFileSync(ledger3, line3(9, '03-13') + line3(9, '03-01') + line3(0.2, '03-27'));
+    assert.equal(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5), undefined);
+  });
+
+  it('fits at an empty ledger', () => {
+    assert.equal(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 10), undefined);
+    assert.notEqual(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 10.01), undefined);
+  });
+
+  it('words the refusal with the group, the spend, the cap and the total', () => {
+    writeFileSync(ledger3, line3(9.6, '03-27'));
+    const text = planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5) ?? '';
+    assert.match(text, /^not run: /);
+    assert.match(text, /03-27, 03-35, 03-36/);
+    assert.match(text, /9\.6000/);
+    assert.match(text, /0\.50/);
+    assert.match(text, /10\.00 USD/);
   });
 });

@@ -1,12 +1,14 @@
 // T3 live cases of Slice 2 for the run purpose (plan 03-27): independent work around a real model's question (S-17), the size-to-model map (S-51), spec
 // derivation (S-50), regression charging (S-52), test integrity (S-21), silence and a failing notifier (S-18, short), subagent budgets and writes (CS-5)
 // and an agent definition that asks for a permission mode (CS-15), through the real run supervisor and the real contained Claude Code host on generated
-// scratch repositories. SKIPPED unless AVARICE_LIVE=1, so `npm test` never starts the real claude and never spends.
+// scratch repositories, and (plan 03-35) three probes of a small item on haiku. SKIPPED unless AVARICE_LIVE=1, so `npm test` never starts the real claude and
+// never spends.
 //
 //   AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-27 node --test --test-name-pattern="s17-s51" test/containment/live-run-phase3.test.ts
+//   AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-35 node --test --test-name-pattern="probe-small-1" test/containment/live-run-phase3.test.ts
 //
-// Every case is gated by the Phase 3 ledger (25 USD, D-05) and by this plan's own total (6.00 USD) before it starts, and records its cost in the Phase 3
-// ledger under plan 03-27. Every profile names an osascript path that does not exist, so no real banner is ever posted. Every verdict is ground truth: the
+// Every case is gated by the Phase 3 ledger (25 USD, D-05) and by the summed spend of the group of plans 03-27, 03-35 and 03-36 (10.00 USD, owner decision 2
+// of 2026-11-09) before it starts, and records its cost in the Phase 3 ledger under the plan named by AVARICE_PHASE3_PLAN. Every profile names an osascript path that does not exist, so no real banner is ever posted. Every verdict is ground truth: the
 // ledger (work items, attempts, decisions, gate rows, evidence, hook decisions, notification rows, budget rows), the transcripts of the host and the files of
 // the run's clone. The model's reply is never a verdict, and a case where the situation it needs never arose fails as `not exercised`. One result line per
 // case goes to AVARICE_LIVE_RESULTS (default test/containment/live-run-phase3.jsonl); no question text is written to it.
@@ -18,7 +20,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { REPO_ROOT } from '../helpers/run-cli.ts';
-import { LIVE_PLAN_03_27, LIVE_PLAN_03_27_TOTAL_USD, invocationRecords, launchModelsOf, ledgerRows, modelLoggingWrapperScript, redactHome, runLiveRun, runLiveRunUnit } from '../helpers/live-harness.ts';
+import { LIVE_PLAN_03_27, LIVE_PLAN_03_27_GROUP, LIVE_PLAN_03_27_TOTAL_USD, LIVE_RUN_PLAN, invocationRecords, launchModelsOf, ledgerRows, modelLoggingWrapperScript, redactHome, runLiveRun, runLiveRunUnit } from '../helpers/live-harness.ts';
 import type { InvocationRecord, LiveCliStep, LiveRunResult, LiveRunSpec, RunUnitContext, ToolTrace } from '../helpers/live-harness.ts';
 import { FIXED_SLUG, LIST_TESTS_SCRIPT, RUN_CONVENTIONS_WITH_INVENTORY, itemsBriefText } from '../helpers/run-fixtures.ts';
 import { buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
@@ -29,10 +31,12 @@ const LIVE = process.env['AVARICE_LIVE'] === '1';
 const KEEP = process.env['AVARICE_LIVE_KEEP'] === '1';
 const RESULTS = process.env['AVARICE_LIVE_RESULTS'] ?? join(REPO_ROOT, 'test', 'containment', 'live-run-phase3.jsonl');
 const opts = { skip: LIVE ? false : 'set AVARICE_LIVE=1 to run the Phase 3 live run-purpose cases (they spend model budget)', timeout: 40 * 60_000 };
-const PLAN_CAP = { plan: LIVE_PLAN_03_27, totalUsd: LIVE_PLAN_03_27_TOTAL_USD };
+// The probes of plan 03-35 write their own lines, so plan 03-27's results file keeps only its own cases.
+const PROBE_RESULTS = process.env['AVARICE_LIVE_PROBE_RESULTS'] ?? join(REPO_ROOT, 'test', 'containment', 'live-small-probe.jsonl');
+const PLAN_CAP = { plan: LIVE_PLAN_03_27, totalUsd: LIVE_PLAN_03_27_TOTAL_USD, group: LIVE_PLAN_03_27_GROUP };
 
-function record(entry: Record<string, unknown>): void {
-  appendFileSync(RESULTS, redactHome(JSON.stringify({ ...entry, at: new Date().toISOString() })) + '\n');
+function record(entry: Record<string, unknown>, path: string = RESULTS): void {
+  appendFileSync(path, redactHome(JSON.stringify({ plan: LIVE_RUN_PLAN, ...entry, at: new Date().toISOString() })) + '\n');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -148,10 +152,10 @@ function summarizeRun(r: LiveRunResult): Record<string, unknown> {
   };
 }
 
-async function liveRun(t: TestContext, spec: LiveRunSpec, judge: (r: LiveRunResult) => Record<string, unknown> | void): Promise<void> {
+async function liveRun(t: TestContext, spec: LiveRunSpec, judge: (r: LiveRunResult) => Record<string, unknown> | void, resultsPath: string = RESULTS): Promise<void> {
   const run = await runLiveRun({ ...spec, planCap: PLAN_CAP, profile: spec.profile ?? quietProfile(), indexes: spec.indexes ?? false, wrapperScript: spec.wrapperScript ?? modelLoggingWrapperScript });
   if ('skipped' in run) {
-    record({ case: spec.name, verdict: 'not run', reason: run.skipped });
+    record({ case: spec.name, verdict: 'not run', reason: run.skipped }, resultsPath);
     t.skip(run.skipped);
     return;
   }
@@ -162,10 +166,10 @@ async function liveRun(t: TestContext, spec: LiveRunSpec, judge: (r: LiveRunResu
   } catch (e) {
     const message = (e as Error).message;
     verdict = message.startsWith('not exercised') ? 'NOT EXERCISED' : 'FAIL';
-    extra = { failure: message.slice(0, 1200) };
+    extra = { failure: message.slice(0, 1200), ...((e as { facts?: Record<string, unknown> }).facts ?? {}) };
     throw e;
   } finally {
-    record({ case: spec.name, verdict, planCap: LIVE_PLAN_03_27_TOTAL_USD, ...summarizeRun(run), ...extra });
+    record({ case: spec.name, verdict, planCap: LIVE_PLAN_03_27_TOTAL_USD, ...summarizeRun(run), ...extra }, resultsPath);
     console.log(`# ${spec.name}: ${verdict}; state ${run.state}; cost ${run.costUsd.toFixed(4)} USD; evidence ${run.evidenceDir}`);
     if (verdict === 'PASS' && !KEEP) run.dispose();
   }
@@ -629,6 +633,7 @@ test('live cs15 CS-15, CON-15: an agent definition carrying permissionMode is re
     costCapUsd: 0.3,
     plan: LIVE_PLAN_03_27,
     planTotalUsd: LIVE_PLAN_03_27_TOTAL_USD,
+    planGroup: LIVE_PLAN_03_27_GROUP,
     noLaunch: true,
     agentsDir: (real, evidenceDir) => {
       const dir = join(evidenceDir, 'poisoned-agents');
@@ -675,6 +680,7 @@ test('live cs15 CS-15, CON-15: an agent definition carrying permissionMode is re
     costCapUsd: 0.3,
     plan: LIVE_PLAN_03_27,
     planTotalUsd: LIVE_PLAN_03_27_TOTAL_USD,
+    planGroup: LIVE_PLAN_03_27_GROUP,
     model: 'haiku',
     watch: (c: RunUnitContext) => [join(c.clone, 'src', 'slug.ts'), join(c.clone, 'test', 'slug.test.ts'), join(c.clone, '.planning', 'config.json')],
     prompt: (_contract, x) =>
@@ -713,3 +719,118 @@ test('live cs15 CS-15, CON-15: an agent definition carrying permissionMode is re
     if (verdict2 === 'PASS' && !KEEP) part2.dispose();
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-35: three probes of a small item on haiku (RC-8, AUT-3), each on a fresh scratch repository
+// ---------------------------------------------------------------------------------------------------------------
+
+// The most one probe invocation may cost for the run to count as within what the haiku price predicts (plan 03-35).
+const HAIKU_INVOCATION_CAP_USD = 0.3;
+
+// A hook refusal reaches the model as the text `avarice: <rule>[: <reason>]`; only the rule token is read.
+const refusalRule = (call: ToolTrace): string | undefined => /^avarice: ([a-z0-9-]+)/.exec(call.resultText.trim())?.[1];
+
+// The probe's run spec: item A of S-17 alone (small, names no model, so the size-to-model map picks the model) and nothing else.
+const probeSpec = (name: string): LiveRunSpec => ({
+  name,
+  capUsd: 0.5,
+  perInvocationUsd: 0.4,
+  invocations: 2,
+  wallClockMinutes: 20,
+  brief: itemsBriefText([S17_ITEMS[0] as BriefItem], [S17_ACCEPTANCE[0] as string], { title: 'A small helper on the smallest model' }),
+  repoFiles: FILES_TEST_PASSES,
+  settleNotificationsMs: 150_000,
+});
+
+// Ground truth only, in the order of the plan; each fact is recorded even when a later one fails, and the first failures are thrown together.
+function probeJudge(r: LiveRunResult): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  const failures: string[] = [];
+  const check = (label: string, fn: () => void): void => {
+    try {
+      fn();
+    } catch (e) {
+      failures.push(`${label}: ${(e as Error).message}`);
+    }
+  };
+  const records = r.runId === '' ? [] : invocationRecords(dataOf(r), r.runId);
+  const flags = launchModelsOf(r.roots.base);
+  const trace = records.flatMap((i) => i.parsed.trace);
+  const refusals = trace.flatMap((call, index) => {
+    const rule = refusalRule(call);
+    if (rule === undefined) return [];
+    const next = trace.slice(index + 1).find((c) => c.tool === 'Bash' || c.tool === 'Read');
+    return [{ rule, nextCallAdmitted: next !== undefined && refusalRule(next) === undefined }];
+  });
+  const agentCalls: Record<string, number> = {};
+  for (const call of trace) if (call.tool === 'Agent' || call.tool === 'Task') agentCalls[String(call.input['subagent_type'] ?? '?')] = (agentCalls[String(call.input['subagent_type'] ?? '?')] ?? 0) + 1;
+  const invocationCosts = records.map((i) => Number(i.costUsd.toFixed(4)));
+  const maxInvocationUsd = invocationCosts.reduce((a, b) => Math.max(a, b), 0);
+  Object.assign(facts, {
+    hostStarted: r.hostStarted,
+    launchModelFlags: flags,
+    launchRunModels: records.map((i) => i.model),
+    initModels: records.map((i) => i.parsed.init?.['model']),
+    invocationCostsUsd: invocationCosts,
+    maxInvocationUsd,
+    withinHaikuCap: invocationCosts.length > 0 && maxInvocationUsd <= HAIKU_INVOCATION_CAP_USD + 1e-9,
+    toolCalls: trace.length,
+    agentCalls,
+    refusals,
+  });
+
+  // (1) the launch flag, the launch:run step and the host's init event all name haiku.
+  check('1 model', () => {
+    assert.ok(r.hostStarted, 'the host never started');
+    assert.ok(flags.length > 0 && flags.every((f) => /haiku/i.test(f)), `--model flags: ${flags.join(',')}`);
+    assert.ok(records.length > 0 && records.every((i) => /haiku/i.test(i.model)), `launch:run models: ${records.map((i) => i.model).join(',')}`);
+    assert.ok(records.every((i) => typeof i.parsed.init?.['model'] === 'string' && /haiku/i.test(String(i.parsed.init['model']))), `init event models: ${records.map((i) => String(i.parsed.init?.['model'])).join(',')}`);
+  });
+  // (2) the run is ready for review and item A is done.
+  check('2 state', () => {
+    assert.equal(r.state, 'ready_for_review', `the run ended ${r.state} (${r.reason ?? 'no reason'}); start said:\n${r.start.stdout.slice(-1200)}`);
+    assert.deepEqual(r.runId === '' ? {} : itemStates(r), { A: 'done' });
+  });
+  // (3) exactly one commit on top of the pin, with the item's two files.
+  check('3 commit', () => {
+    const commits = commitsOf(r);
+    facts['commits'] = commits.map((c) => c.files);
+    assert.equal(commits.length, 1, `commits: ${JSON.stringify(commits)}`);
+    assert.deepEqual([...(commits[0] as { files: string[] }).files].sort(), ['src/shout.ts', 'test/shout.test.ts'], `commit files: ${JSON.stringify(commits)}`);
+  });
+  // (4) G1 and G2 rows for A passed, and A has passed check evidence.
+  check('4 gates', () => {
+    const gates = gatesOf(r);
+    facts['gates'] = gates.map((g) => [g.gate, g.item, g.passed]);
+    for (const gate of ['G1', 'G2']) assert.ok(gates.some((g) => g.gate === gate && g.item === 'A' && g.passed), `no passed ${gate} row for A: ${JSON.stringify(gates.map((g) => [g.gate, g.item, g.passed]))}`);
+    const checks = rows<{ status: string }>(r, "SELECT e.status FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.work_item = ?", r.runId, 'A');
+    assert.ok(checks.length > 0 && checks.every((c) => c.status === 'passed'), `A has no passed check evidence: ${JSON.stringify(checks)}`);
+  });
+  // (5) the quick workflow's files: a PLAN, a SUMMARY and a VERIFICATION whose status is passed.
+  check('5 quick files', () => {
+    facts['quickFiles'] = r.quickFiles;
+    for (const kind of ['PLAN', 'SUMMARY', 'VERIFICATION']) assert.ok(r.quickFiles.some((f) => new RegExp(`${kind}\\.md$`).test(f)), `no ${kind} under .planning/quick: ${r.quickFiles.join(', ')}`);
+    facts['verificationStatus'] = r.verificationStatus;
+    assert.ok(r.verificationStatus !== undefined && /passed/i.test(r.verificationStatus), `verification status line: ${String(r.verificationStatus)}`);
+  });
+  // (6) no decision row and no loop.limit event for the run.
+  check('6 decisions and loops', () => {
+    const decisions = r.runId === '' ? [] : decisionsOf(r);
+    const limits = r.invocationEvents.filter((e) => e.type === 'loop.limit');
+    facts['decisions'] = decisions.map((d) => d.class);
+    facts['loopLimitEvents'] = limits.length;
+    assert.deepEqual(decisions.map((d) => [d.class, d.state]), [], 'the run opened a decision');
+    assert.equal(limits.length, 0, 'a loop.limit event was recorded');
+  });
+
+  if (failures.length > 0) {
+    throw Object.assign(new Error(failures.join(' || ')), { facts });
+  }
+  return facts;
+}
+
+for (const n of [1, 2, 3]) {
+  test(`live probe-small-${n} S-51, S-17 item A, RC-8, AUT-3: a small item that names no model runs on haiku and completes the quick workflow, judged from ground truth`, opts, async (t) => {
+    await liveRun(t, probeSpec(`probe-small-${n}`), probeJudge, PROBE_RESULTS);
+  });
+}
