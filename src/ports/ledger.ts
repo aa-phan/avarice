@@ -655,8 +655,9 @@ export interface Ledger {
   insertRecordAndActivate(onboardingId: string, guard: TransitionGuard, input: ActivateInput): Result<ActivationResult>;
   getActiveRecord(projectId: string): Result<ActiveRecord | null>;
 
-  // Budgets (CON-13). The rows are created from the contract and only ever grow in `used`: createBudgets leaves
-  // an existing row untouched, and nothing refunds, resets or raises a limit (RC-5).
+  // Budgets (CON-13). The rows are created from the contract and only ever grow in `used`: createBudgets leaves an existing row
+  // untouched, and nothing refunds or resets spend. Only amendRunContract changes a limit (D-19). It is called only by the amend
+  // command, from a terminal outside the run, so the run cannot raise its own limits (RC-5).
   createBudgets(runId: string, contractVersion: number, rows: readonly BudgetRowInput[]): Result<BudgetRow[]>;
   // One conditional UPDATE on `reserved`: it changes a row only while used + reserved + amount stays within the limit.
   reserveBudget(runId: string, name: string, amount: number): Result<BudgetReservation>;

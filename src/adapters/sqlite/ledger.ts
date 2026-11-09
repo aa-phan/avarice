@@ -8,7 +8,7 @@ import type { IdPrefix } from '../../domain/ids.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
-import { assertItemTransition, assertRunTransition, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
+import { assertItemTransition, assertRunTransition, isRunTerminal, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
 import type { RunState, WorkItemState } from '../../domain/run-lifecycle.ts';
 import type {
   ActivateInput,
@@ -926,25 +926,72 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  // One transaction under the run lock, and no lease fence (D-19): the amend command is not the supervisor. The run's latest contract
+  // version must still be the one the caller amended, and the run must not have ended. Contract version n+1, the changed limits and
+  // the event commit together or not at all. Spend is never touched: used and reserved carry over and nothing is refunded.
   amendRunContract(input: AmendRunContractInput): Result<AmendRunContractResult> {
-    void input;
-    return err({ kind: 'invalid', field: 'amendRunContract', reason: 'not implemented' });
+    return tx(this.db, () => {
+      const run = this.lockRun(input.runId);
+      if (!Number.isInteger(input.expectVersion) || input.expectVersion < 1) abort({ kind: 'invalid', field: 'expectVersion', reason: 'a contract version is a positive integer' });
+      for (const [field, value] of [['digest', input.next.digest], ['policyRevision', input.next.policyRevision], ['reason', input.next.reason], ['authorizedBy', input.next.authorizedBy]] as const) {
+        if (typeof value !== 'string' || value === '') abort({ kind: 'invalid', field, reason: `an amendment needs a ${field}` });
+      }
+      const state = str(run['state']) as RunState;
+      if (isRunTerminal(state)) abort({ kind: 'conflict', expected: 'a run that has not ended', actual: `run ${input.runId} is ${state}` });
+      const latest = this.latestContractVersion(input.runId);
+      if (latest !== input.expectVersion) {
+        abort({ kind: 'conflict', expected: `contract version ${input.expectVersion}`, actual: latest === 0 ? 'no contract' : `contract version ${latest}` });
+      }
+      const seen = new Set<string>();
+      for (const change of input.budgetChanges) {
+        if (change.name === '') abort({ kind: 'invalid', field: 'budget.name', reason: 'a budget needs a name' });
+        if (seen.has(change.name)) abort({ kind: 'invalid', field: `budget.${change.name}`, reason: 'a budget is changed once per amendment' });
+        seen.add(change.name);
+        if (!Number.isFinite(change.limit) || change.limit < 0) abort({ kind: 'invalid', field: `budget.${change.name}`, reason: 'a budget limit is a finite non-negative number' });
+      }
+      const version = latest + 1;
+      const contract = this.insertContractRow(
+        input.runId,
+        { version, digest: input.next.digest, body: input.next.body, policyRevision: input.next.policyRevision, authorizedBy: input.next.authorizedBy, reason: input.next.reason, nowMs: input.nowMs },
+        input.next.diff,
+      );
+      // limit_value is changed here and nowhere else: this is the one statement that can raise (or lower) a limit (RC-5, D-19).
+      for (const change of input.budgetChanges) {
+        const changed = this.db
+          .prepare('UPDATE budgets SET limit_value = ?, contract_version = ? WHERE run_id = ? AND name = ?')
+          .run(change.limit, version, input.runId, change.name).changes;
+        if (Number(changed) !== 1) abort({ kind: 'invalid', field: `budget.${change.name}`, reason: `run ${input.runId} has no budget ${change.name}` });
+      }
+      this.insertEvent({
+        type: 'contract.amended',
+        runId: input.runId,
+        data: { runId: input.runId, version, budgets: input.budgetChanges.length },
+        nowMs: input.nowMs,
+      });
+      return { contract, staleEvidence: 0, staleGates: 0, resolved: null };
+    });
   }
 
   // The caller's transaction must be open and the run vetted.
   private insertContract(runId: string, input: StoreRunContractInput): ContractRow {
+    const contract = this.insertContractRow(runId, input, undefined);
+    if (input.budgets !== undefined) this.insertBudgets(runId, contract.version, input.budgets);
+    this.insertEvent({ type: 'contract.stored', runId, data: { runId, version: contract.version, digest: input.digest }, nowMs: input.nowMs });
+    return contract;
+  }
+
+  // The contract row alone, with the amendment's diff when there is one; the caller writes the event that says why it exists.
+  private insertContractRow(runId: string, input: StoreRunContractInput, diff: unknown): ContractRow {
     const version = input.version ?? 1;
     if (!Number.isInteger(version) || version < 1) abort({ kind: 'invalid', field: 'version', reason: 'a contract version is a positive integer' });
     if (this.db.prepare('SELECT 1 AS found FROM contracts WHERE run_id = ? AND version = ?').get(runId, version)) {
       abort({ kind: 'conflict', expected: `no contract version ${version} for run ${runId}`, actual: `contract version ${version} is already stored` });
     }
     const bodyJson = boundedBodyJson(input.body, 'contract');
-    const now = iso(input.nowMs);
+    const diffJson = diff === undefined ? null : boundedBodyJson(diff, 'diff');
     this.db
-      .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, now);
-    if (input.budgets !== undefined) this.insertBudgets(runId, version, input.budgets);
-    this.insertEvent({ type: 'contract.stored', runId, data: { runId, version, digest: input.digest }, nowMs: input.nowMs });
+      .prepare('INSERT INTO contracts (run_id, version, digest, body_json, policy_revision, authorized_by, reason, diff_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(runId, version, input.digest, bodyJson, input.policyRevision, input.authorizedBy, input.reason ?? null, diffJson, iso(input.nowMs));
     return toContract(this.db.prepare('SELECT * FROM contracts WHERE run_id = ? AND version = ?').get(runId, version) as Row);
   }
 

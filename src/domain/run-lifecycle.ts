@@ -65,6 +65,10 @@ const DIAGRAM_EDGES: readonly Edge[] = [
 // failed, cancelled and closed end the run; nothing leaves them.
 const TERMINAL: readonly RunState[] = ['failed', 'cancelled', 'closed'];
 
+export function isRunTerminal(state: RunState): boolean {
+  return TERMINAL.includes(state);
+}
+
 // "Every non-terminal state can also move to cancelled, paused and blocked_on_decision."
 const NON_TERMINAL: readonly RunState[] = RUN_STATES.filter((state) => !TERMINAL.includes(state));
 const GENERIC_TARGETS: readonly RunState[] = ['cancelled', 'paused', 'blocked_on_decision'];
