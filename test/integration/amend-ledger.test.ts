@@ -13,7 +13,7 @@ import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initia
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
-import type { AmendRunContractInput } from '../../src/ports/ledger.ts';
+import type { AmendRunContractInput, DecisionInput } from '../../src/ports/ledger.ts';
 import type { Result } from '../../src/domain/result.ts';
 
 const T0 = Date.UTC(2026, 10, 8, 9, 0, 0);
@@ -191,5 +191,239 @@ describe('amendRunContract (tracer)', () => {
     refused(h.ledger.amendRunContract(amendInput({ budgetChanges: [{ name: 'costUsd', limit: -1 }] })), 'invalid');
     refused(h.ledger.amendRunContract(amendInput({ budgetChanges: [{ name: 'costUsd', limit: Number.NaN }] })), 'invalid');
     assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+  });
+});
+
+const DIGEST_STATE = 'sha256:' + '9'.repeat(64);
+
+// Two work items, B blocked on a decision of the given class, and one open decision listing B.
+function seedDecision(h: Harness, decisionClass: string): string {
+  for (const itemId of ['A', 'B']) {
+    must(h.ledger.upsertWorkItem({ runId: 'run_1', itemId, dependsOn: [], size: 'medium', model: 'sonnet', spec: { goal: itemId }, nowMs: T0 + 3 }));
+  }
+  const lease = must(h.ledger.acquireRunLease('run_1', 'holder', 1_000_000, T0 + 4));
+  must(h.ledger.transitionWorkItem('run_1', 'B', { fence: lease.fence }, { to: 'blocked_on_decision', nowMs: T0 + 5 }));
+  const decision: DecisionInput = {
+    runId: 'run_1',
+    contractVersion: 1,
+    class: decisionClass,
+    issue: 'The item needs a path outside its write scope',
+    recommendation: 'amend',
+    options: [{ key: 'withdraw', label: 'withdraw', kind: 'withdraw' }],
+    consequences: { withdraw: 'the item stays blocked' },
+    evidenceRefs: [],
+    affectedItems: ['B'],
+    stateDigest: DIGEST_STATE,
+    urgency: 'blocking',
+    nowMs: T0 + 10,
+  };
+  return must(h.ledger.openDecision(decision)).decisionId;
+}
+
+function itemState(h: Harness, itemId: string): string {
+  return (h.db.prepare("SELECT state FROM work_items WHERE run_id = 'run_1' AND item_id = ?").get(itemId) as { state: string }).state;
+}
+
+// An attempt on item A with one clean, passed evidence row; returns the evidence ID.
+function seedEvidence(h: Harness, name = 'unit tests'): string {
+  const attempt = must(h.ledger.recordRunAttempt('run_1', { reason: 'first try', itemId: 'A', nowMs: T0 + 20 }));
+  const row = must(
+    h.ledger.recordEvidence({
+      attemptId: attempt.attemptId,
+      workItem: 'A',
+      kind: 'test',
+      name,
+      status: 'passed',
+      revision: 'git:abc1234',
+      clean: true,
+      treeDigest: 'sha256:' + 'c'.repeat(64),
+      environment: { node: '24' },
+      contractVersion: 1,
+      policyRevision: 'p1',
+      independence: 'deterministic',
+      acceptance: ['AC-1'],
+      command: ['node', '--test'],
+      exitCode: 0,
+      durationMs: 1200,
+      nowMs: T0 + 21,
+    }),
+  );
+  return row.evidenceId;
+}
+
+describe('amendRunContract: stale evidence and gate rows', () => {
+  it('appends a stale copy of each named evidence row under the new version and leaves the original alone', () => {
+    const h = harness();
+    seedRun(h);
+    const e1 = seedEvidence(h);
+    const original = { ...(h.db.prepare('SELECT * FROM evidence WHERE evidence_id = ?').get(e1) as Record<string, unknown>) };
+    const result = must(h.ledger.amendRunContract(amendInput({ staleEvidenceIds: [e1] })));
+    assert.equal(result.staleEvidence, 1);
+    assert.deepEqual({ ...(h.db.prepare('SELECT * FROM evidence WHERE evidence_id = ?').get(e1) as Record<string, unknown>) }, original);
+    const rows = must(h.ledger.listEvidence('run_1'));
+    assert.equal(rows.length, 2);
+    const copy = rows[1];
+    assert.ok(copy !== undefined);
+    assert.notEqual(copy.evidenceId, e1);
+    assert.equal(copy.status, 'stale');
+    assert.equal(copy.contractVersion, 2);
+    assert.deepEqual(copy.environment, { invalidatedBy: 'amendment', supersedes: e1 });
+    assert.equal(copy.attemptId, rows[0]?.attemptId);
+    assert.equal(copy.workItem, 'A');
+    assert.equal(copy.kind, 'test');
+    assert.equal(copy.name, 'unit tests');
+    assert.equal(copy.revision, 'git:abc1234');
+    assert.equal(copy.clean, true);
+    assert.equal(copy.treeDigest, 'sha256:' + 'c'.repeat(64));
+    assert.equal(rows[0]?.status, 'passed');
+    assert.equal(rows[0]?.contractVersion, 1);
+    const [event] = eventsOf(h, 'contract.amended');
+    assert.equal(event?.['staleEvidence'], 1);
+    assert.equal(event?.['staleGates'], 0);
+  });
+
+  it('refuses evidence of no known row, writing nothing at all', () => {
+    const h = harness();
+    seedRun(h);
+    seedEvidence(h);
+    const eventsBefore = h.count('events');
+    refused(h.ledger.amendRunContract(amendInput({ staleEvidenceIds: ['ev_missing'] })), 'invalid');
+    assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+    assert.equal(h.count('evidence'), 1);
+    assert.equal(budgetRow(h, 'costUsd')['limit_value'], 10);
+    assert.equal(h.count('events'), eventsBefore);
+  });
+
+  it('appends a failed stale-after-amendment row for each named gate with the revision of its latest row', () => {
+    const h = harness();
+    seedRun(h);
+    for (const [revision, passed] of [['git:rev1', true], ['git:rev2', true]] as const) {
+      must(h.ledger.recordGateResult({ runId: 'run_1', gate: 'G2', workItem: 'A', contractVersion: 1, policyRevision: 'p1', revision, passed, failures: [], nowMs: T0 + 30 }));
+    }
+    must(h.ledger.recordGateResult({ runId: 'run_1', gate: 'G3', contractVersion: 1, policyRevision: 'p1', revision: 'git:other', passed: true, failures: [], nowMs: T0 + 31 }));
+    const result = must(h.ledger.amendRunContract(amendInput({ staleGates: [{ gate: 'G2', detail: 'files.write changed' }] })));
+    assert.equal(result.staleGates, 1);
+    const gates = must(h.ledger.listGateResults('run_1'));
+    assert.equal(gates.length, 4);
+    const row = gates[3];
+    assert.ok(row !== undefined);
+    assert.equal(row.gate, 'G2');
+    assert.equal(row.passed, false);
+    assert.deepEqual(row.failures, [{ rule: 'stale-after-amendment', detail: 'files.write changed' }]);
+    assert.equal(row.contractVersion, 2);
+    assert.equal(row.revision, 'git:rev2');
+    assert.equal(row.workItem, 'A');
+    assert.equal(gates[0]?.passed, true);
+    assert.equal(gates[2]?.contractVersion, 1);
+    assert.equal(eventsOf(h, 'contract.amended')[0]?.['staleGates'], 1);
+  });
+
+  it('refuses a stale gate that never ran, writing nothing', () => {
+    const h = harness();
+    seedRun(h);
+    refused(h.ledger.amendRunContract(amendInput({ staleGates: [{ gate: 'G2', detail: 'x' }] })), 'invalid');
+    assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+    assert.equal(h.count('gate_results'), 0);
+  });
+
+  it('keeps the insert-only triggers in force', () => {
+    const h = harness();
+    seedRun(h);
+    const e1 = seedEvidence(h);
+    must(h.ledger.amendRunContract(amendInput({ staleEvidenceIds: [e1] })));
+    assert.throws(() => h.db.exec("UPDATE evidence SET status = 'passed' WHERE status = 'stale'"), /insert-only/);
+    assert.throws(() => h.db.exec('DELETE FROM evidence'), /insert-only/);
+  });
+});
+
+describe('amendRunContract: the decision it resolves', () => {
+  it('answers an open scope_expansion decision with amended:v2 and moves its blocked item to ready, in the same transaction', () => {
+    const h = harness();
+    seedRun(h);
+    const decisionId = seedDecision(h, 'scope_expansion');
+    assert.equal(itemState(h, 'B'), 'blocked_on_decision');
+    const result = must(h.ledger.amendRunContract(amendInput({ resolvesDecisionId: decisionId })));
+    assert.equal(result.resolved?.decisionId, decisionId);
+    assert.equal(result.resolved?.state, 'answered');
+    assert.equal(result.resolved?.answer, 'amended:v2');
+    assert.equal(result.resolved?.answeredBy, 'owner:aphan');
+    assert.equal(result.resolved?.answerChannel, 'terminal');
+    assert.equal(itemState(h, 'B'), 'ready');
+    assert.equal(eventsOf(h, 'decision.answered').length, 1);
+    assert.equal(eventsOf(h, 'decision.answered')[0]?.['itemsReleased'], 1);
+    const [event] = eventsOf(h, 'contract.amended');
+    assert.equal(event?.['resolvedDecisionId'], decisionId);
+  });
+
+  it('releases an item only when no other open decision still lists it', () => {
+    const h = harness();
+    seedRun(h);
+    const first = seedDecision(h, 'permission');
+    must(
+      h.ledger.openDecision({
+        runId: 'run_1',
+        contractVersion: 1,
+        class: 'budget',
+        issue: 'the cost limit is reached',
+        options: [{ key: 'withdraw', label: 'withdraw', kind: 'withdraw' }],
+        consequences: {},
+        evidenceRefs: [],
+        affectedItems: ['B'],
+        stateDigest: DIGEST_STATE,
+        urgency: 'blocking',
+        nowMs: T0 + 11,
+      }),
+    );
+    must(h.ledger.amendRunContract(amendInput({ resolvesDecisionId: first })));
+    assert.equal(itemState(h, 'B'), 'blocked_on_decision');
+  });
+
+  it('refuses a pause-class decision and writes nothing: no version 2, no stale rows, no limit change', () => {
+    const h = harness();
+    seedRun(h);
+    const e1 = seedEvidence(h);
+    const decisionId = seedDecision(h, 'acceptance');
+    const eventsBefore = h.count('events');
+    refused(h.ledger.amendRunContract(amendInput({ resolvesDecisionId: decisionId, staleEvidenceIds: [e1] })), 'invalid');
+    assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+    assert.equal(h.count('evidence'), 1);
+    assert.equal(budgetRow(h, 'costUsd')['limit_value'], 10);
+    assert.equal(itemState(h, 'B'), 'blocked_on_decision');
+    assert.equal(h.count('events'), eventsBefore);
+    assert.equal(must(h.ledger.listDecisions({ runId: 'run_1' }))[0]?.state, 'open');
+  });
+
+  it('refuses an answered decision and an unknown one, each writing nothing', () => {
+    const h = harness();
+    seedRun(h);
+    const decisionId = seedDecision(h, 'repeated_failure');
+    must(h.ledger.answerDecision({ runId: 'run_1', decisionId, answer: 'withdraw', answeredBy: 'owner', channel: 'terminal', expectContractVersion: 1, nowMs: T0 + 40 }));
+    refused(h.ledger.amendRunContract(amendInput({ resolvesDecisionId: decisionId })), 'conflict');
+    refused(h.ledger.amendRunContract(amendInput({ resolvesDecisionId: 'dec_missing' })), 'not_found');
+    assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+    assert.equal(budgetRow(h, 'costUsd')['limit_value'], 10);
+  });
+});
+
+describe('amendRunContract: the run states', () => {
+  it('refuses a cancelled run with conflict, writing nothing', () => {
+    const h = harness();
+    seedRun(h);
+    const lease = must(h.ledger.acquireRunLease('run_1', 'holder', 1_000_000, T0 + 4));
+    const run = must(h.ledger.getRun('run_1'));
+    must(h.ledger.transitionRun('run_1', { version: run.version, fence: lease.fence }, { to: 'cancelled', nextAction: 'none', nowMs: T0 + 50 }));
+    const eventsBefore = h.count('events');
+    refused(h.ledger.amendRunContract(amendInput()), 'conflict');
+    assert.equal(h.count('contracts', "run_id = 'run_1'"), 1);
+    assert.equal(budgetRow(h, 'costUsd')['limit_value'], 10);
+    assert.equal(h.count('events'), eventsBefore);
+  });
+
+  it('works for a run in running', () => {
+    const h = harness();
+    seedRun(h);
+    const lease = must(h.ledger.acquireRunLease('run_1', 'holder', 1_000_000, T0 + 4));
+    must(h.ledger.transitionRun('run_1', { version: 1, fence: lease.fence }, { to: 'running', nextAction: 'x', nowMs: T0 + 50 }));
+    assert.equal(must(h.ledger.amendRunContract(amendInput())).contract.version, 2);
   });
 });
