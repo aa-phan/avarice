@@ -16,6 +16,7 @@ import type { AppDeps } from './deps.ts';
 import { faultPoint, leaseTtlMs } from './onboarding-service.ts';
 import { writeContractFile } from './run-start.ts';
 import { runningStage } from './run-stages/item.ts';
+import { isBlockedRunContinuable } from './run-stages/schedule.ts';
 import { verifyingStage } from './run-stages/finish.ts';
 import { contractReadyStage } from './run-stages/prepare.ts';
 import type { RunRow } from '../ports/ledger.ts';
@@ -105,16 +106,55 @@ function ensureContractFile(deps: AppDeps, runId: string): Result<void> {
 export interface RunSupervisorOptions {
   // Runs once under the lease, before the stage loop (resume reconciles an interrupted invocation here).
   prelude?: (ctx: RunStageContext) => Promise<Result<void>> | Result<void>;
+  // Test hook: runs in the window between the release of the lease on a blocked run and the re-check that follows it, where a `decide` in another
+  // process can land its answer (the same window `after-release:blocked` names for a kill). Nothing in production sets it.
+  afterRelease?: () => Promise<void> | void;
 }
 
 const outcomeOf = (row: RunRow, message: string | null): RunOutcome => ({ runId: row.runId, state: row.state, reason: row.reason, message });
 
+// What one stay under the lease came to: the outcome, and whether the lease was held at all (a run that is not picked up never takes it).
+interface Held {
+  outcome: RunOutcome;
+  held: boolean;
+}
+
 // Takes the lease, loops the stage for the run's state until a stop state or a state with no stage, and releases the lease.
-// A run already in a stop state takes no lease and runs nothing.
+// A run already in a stop state takes no lease and runs nothing, except a run blocked at an item decision that an answer has made continuable
+// (D-16): that one is taken and moved back to running.
+//
+// A run that reaches blocked_on_decision at a decision does not end the supervisor at once (research Pattern 2): the lease is released, the items and
+// the decisions are read again, and the run goes on in this process only if an answer made an item ready (or left no decision open) in that window.
+// `decide` answers a decision and then starts a supervisor if the run holds no lease; the supervisor releases the lease and then looks for an answer;
+// whichever of the two happens second sees the other's write, so a run cannot stay blocked with an answer waiting. Nothing polls.
 export async function runSupervisor(deps: AppDeps, runId: string, options: RunSupervisorOptions = {}): Promise<Result<RunOutcome>> {
+  let prelude = options.prelude;
+  for (;;) {
+    const stay = await superviseHeld(deps, runId, prelude === undefined ? {} : { prelude });
+    if (!stay.ok) return stay;
+    // The prelude (a resume's reconcile) is for the first stay only.
+    prelude = undefined;
+    const { outcome, held } = stay.value;
+    if (!held || outcome.state !== 'blocked_on_decision' || outcome.reason !== 'decision') return ok(outcome);
+    faultPoint('after-release:blocked');
+    if (options.afterRelease !== undefined) await options.afterRelease();
+    const now = deps.ledger.getRun(runId);
+    if (!now.ok) return now;
+    const again = isBlockedRunContinuable(deps, now.value);
+    if (!again.ok) return again;
+    if (!again.value) return ok(outcome);
+  }
+}
+
+async function superviseHeld(deps: AppDeps, runId: string, options: Pick<RunSupervisorOptions, 'prelude'>): Promise<Result<Held>> {
   const first = deps.ledger.getRun(runId);
   if (!first.ok) return first;
-  if (isRunStopState(first.value.state)) return ok(outcomeOf(first.value, null));
+  if (isRunStopState(first.value.state)) {
+    // Not continuable: no lease, nothing written.
+    const pickup = isBlockedRunContinuable(deps, first.value);
+    if (!pickup.ok) return pickup;
+    if (!pickup.value) return ok({ outcome: outcomeOf(first.value, null), held: false });
+  }
 
   const holder = holderId();
   const ttl = leaseTtlMs();
@@ -147,14 +187,24 @@ export async function runSupervisor(deps: AppDeps, runId: string, options: RunSu
       const prepared = await options.prelude(ctx);
       if (!prepared.ok) return prepared;
     }
+    // A blocked run that an answer made continuable goes back to running; the state it reads under the lease decides, not the one read before it.
+    const entered = deps.ledger.getRun(runId);
+    if (!entered.ok) return entered;
+    if (entered.value.state === 'blocked_on_decision') {
+      const pickup = isBlockedRunContinuable(deps, entered.value);
+      if (!pickup.ok) return pickup;
+      if (!pickup.value) return ok({ outcome: outcomeOf(entered.value, null), held: true });
+      const resumed = ctx.transition(entered.value, 'running', 'context-pack', { data: { resumedFrom: 'blocked_on_decision' } });
+      if (!resumed.ok) return resumed;
+    }
     for (;;) {
       if (lease.lost !== null) return err(lease.lost);
       const current = deps.ledger.getRun(runId);
       if (!current.ok) return current;
       const row = current.value;
-      if (isRunStopState(row.state)) return ok(outcomeOf(row, notes.at(-1) ?? null));
+      if (isRunStopState(row.state)) return ok({ outcome: outcomeOf(row, notes.at(-1) ?? null), held: true });
       const stage = stages.get(row.state);
-      if (stage === undefined) return ok(outcomeOf(row, notes.at(-1) ?? `no stage for ${row.state}`));
+      if (stage === undefined) return ok({ outcome: outcomeOf(row, notes.at(-1) ?? `no stage for ${row.state}`), held: true });
 
       const renewed = deps.ledger.renewRunLease(runId, holder, fence, ttl, deps.clock.nowMs());
       if (!renewed.ok) {

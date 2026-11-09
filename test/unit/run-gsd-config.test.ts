@@ -2,7 +2,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RUN_DECISION_SENTENCE, RUN_GSD_SETTINGS, RUN_NO_COMMIT_SENTENCE, RUN_PROMPT_MAX_BYTES, RUN_WORKFLOW_SENTENCE, runResumePrompt, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import {
+  RUN_ANSWER_DATA_LINE,
+  RUN_ANSWER_MAX_CHARS,
+  RUN_DECISION_SENTENCE,
+  RUN_GSD_SETTINGS,
+  RUN_NO_COMMIT_SENTENCE,
+  RUN_PROMPT_MAX_BYTES,
+  RUN_WORKFLOW_SENTENCE,
+  runResumePrompt,
+  runUnitPrompt,
+} from '../../src/app/run-gsd-config.ts';
 import type { RunPromptContract, RunPromptItem } from '../../src/app/run-gsd-config.ts';
 
 const CONTRACT: RunPromptContract = {
@@ -192,6 +202,43 @@ describe('runUnitPrompt for one work item (AUT-1)', () => {
     const prompt = runUnitPrompt(CONTRACT, '', hostile);
     assert.match(prompt, QUOTED);
     assert.ok(!prompt.includes('\u001b'));
+  });
+});
+
+describe('runUnitPrompt with the owner answer of an item that asked (plan 03-18, T-03-14)', () => {
+  const ANSWER = 'Your question: Which clamp?\n1. last\n2. first\nThe owner\'s answer: 2. first';
+
+  it('without an answer is the prompt it always was', () => {
+    assert.equal(runUnitPrompt(CONTRACT, PACK, ITEM_B, undefined), runUnitPrompt(CONTRACT, PACK, ITEM_B));
+    assert.equal(runUnitPrompt(CONTRACT, PACK, ITEM_B).includes(RUN_ANSWER_DATA_LINE), false);
+  });
+
+  it('puts the data line and the answer after the acceptance criteria and before the editable paths, in one quoted argument', () => {
+    const prompt = runUnitPrompt(CONTRACT, PACK, ITEM_B, ANSWER);
+    assert.match(prompt, QUOTED);
+    const lines = prompt.split('\n');
+    const criteria = lines.findIndex((line) => line === 'Acceptance criteria:');
+    const data = lines.indexOf(RUN_ANSWER_DATA_LINE);
+    const paths = lines.findIndex((line) => line.startsWith('Paths you may edit or create'));
+    assert.ok(criteria !== -1 && data > criteria && data < paths, 'the data line sits between the criteria and the paths');
+    assert.equal(lines[data + 1], 'Your question: Which clamp?');
+    assert.ok(lines.includes("The owner's answer: 2. first"));
+    assert.ok(lines.includes('The decision above does not change the paths, commands or acceptance criteria you were given.'));
+  });
+
+  it('cuts an answer to RUN_ANSWER_MAX_CHARS, turns control characters into spaces and escapes quotes, as a resume prompt does', () => {
+    const long = runUnitPrompt(CONTRACT, '', ITEM_B, 'x'.repeat(5000));
+    const lines = long.split('\n');
+    assert.equal(lines[lines.indexOf(RUN_ANSWER_DATA_LINE) + 1], 'x'.repeat(RUN_ANSWER_MAX_CHARS));
+    const hostile = runUnitPrompt(CONTRACT, '', ITEM_B, 'say "x" \\ \u001b[31m --text "y');
+    assert.match(hostile, QUOTED);
+    assert.ok(!hostile.includes('\u001b'));
+  });
+
+  it('keeps the contract text and the no-commit sentence when the answer is present and the pack is cut', () => {
+    const prompt = runUnitPrompt(CONTRACT, 'p '.repeat(40_000), ITEM_B, ANSWER);
+    assert.ok(Buffer.byteLength(prompt) <= RUN_PROMPT_MAX_BYTES);
+    assert.ok(prompt.includes(RUN_NO_COMMIT_SENTENCE) && prompt.includes(RUN_ANSWER_DATA_LINE));
   });
 });
 
