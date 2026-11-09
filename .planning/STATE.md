@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-11-09T01:09:06.422Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-11-09T01:17:40.910Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 3798469cc2f2ceff28c02a43c99de1f6d70f6fb6
+state_head: a3f6262f439cb82dcdcb5ce58c01776fb36f2e48
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 65
+  completed_plans: 66
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 5 of 33
+Plan: 6 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -121,6 +121,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P02 | 55 min | 3 tasks | 14 files |
 | Phase 03 P04 | 12 min | 2 tasks | 6 files |
 | Phase 03 P05 | 45 min | 3 tasks | 9 files |
+| Phase 03 P06 | 35 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -260,6 +261,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-04: runDisposition order is in-flight item, first ready item, all-done, blocked (open decision), undeliverable; isContinuableBlocked is true when an item is ready or no open decision remains — One pure rule shared by the running stage, the supervisor and decide; reaching undeliverable after a withdrawal instead of waiting forever
 - [Phase 03]: 03-05: a choice is routine only when the contract lists it as delegated (and not human) or the plan declared an auto_select; both are assumptions that open no decision. A contract default lifts only a decision that offers a real answer; withdraw-only and prohibited decisions never take one, and buildDecisionRecord re-checks a claimed default against the contract. — AUT-1 and AUT-2: no model text or confidence can make a consequential choice proceed, and the unit's recommendation is never an authorized default.
 - [Phase 03]: 03-05: validateResponse rejects carry a stage (D-15 check) and a code; an empty digest on either side is stale; a withdraw is the one answer applied whatever the digest says; the facts hold no time field. computeStateDigest adds sorted ticket revisions only for non-brief references, so a manual brief equals the Phase 2 digest. The printed amend command carries <decision-id> until the caller passes the ledger's ID. — D-15, AUT-4, AUT-5: silence and time cannot approve, and decisions opened before this phase keep matching.
+- [Phase 03]: 03-06: plan-cites-acceptance is a G1 advisory behind PLAN_CITES_ACCEPTANCE_HARD=false until spike S3-A (03-13) flips it — A live quick PLAN is not yet proven to cite contract acceptance IDs; GateVerdict.advisories keeps existing verdict tests deep-equal
+- [Phase 03]: 03-06: G3 judges the failing test at file level; repair-limit fails when attempts >= limit, so the routine preset limit of 0 fails on first look — Flagged assumption A7; a repair that must edit such a test goes to a decision, and only an amendment-authorized path is exempt
 
 ### Pending Todos
 
@@ -312,6 +315,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T01:09:06.288Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-11-09T01:17:40.773Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
