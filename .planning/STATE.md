@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-28-PLAN.md
-last_updated: "2026-11-09T23:39:20.501Z"
+stopped_at: Halted 03-29 at Task 1 (D-03 stop, run 1 two pause decisions)
+last_updated: "2026-11-09T23:56:10.941Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 4d5ace957bbd405d85376463115ca381e53852ef
+state_head: 40213cab7ad65bff42093771df24de8cb067fd71
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 100
-  completed_plans: 95
+  completed_plans: 96
 ---
 
 # Project State
@@ -380,6 +380,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
 - Plan 03-37 halted at s21 (NOT EXERCISED twice on pinned 2.1.319: the harness tamper ran, the haiku unit's planner stopped with an acceptance decision before any gate); cs5, s52 and s17-s51 not run; 03-27 and 03-36 stay halted, 03-28..03-33 blocked; owner decision needed on the s21 brief [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
 - Plan 03-38 halted at s21 (FAIL on pinned 2.1.319: the combined harness tamper cannot produce the removed-test, new-skip-marker and repeated_failure results the judge asserts); cs5, s52 and s17-s51 not run; 03-27, 03-36 and 03-37 stay halted, 03-28..03-33 blocked; owner decision needed on S-21's tamper, judge or scenario text [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
+- Phase 3 exit run 1 (03-29) stopped under D-03: item A asked B's owner-choice question and was parked uncommitted, so two pause decisions opened (run_01M71BDV8MWGEG7XSAWH1GZ80W, left blocked, unanswered). Needs a fix plan and a repeat of all three runs; owner decides the cap or ceiling for the repeat (16.88 USD headroom).
 
 ### Quick Tasks Completed
 
@@ -400,6 +401,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T23:39:20.278Z
-Stopped at: Completed 03-28-PLAN.md
+Last session: 2026-11-09T23:56:10.705Z
+Stopped at: Halted 03-29 at Task 1 (D-03 stop, run 1 two pause decisions)
 Resume file: None
