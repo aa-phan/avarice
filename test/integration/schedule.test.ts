@@ -3,9 +3,10 @@
 // launchctl (test/helpers/fake-launchctl.mjs), so no test registers anything with the real launchd; the one gated real round trip is the last block.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { main } from '../../src/cli/main.ts';
 import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
@@ -415,5 +416,63 @@ describe('LaunchdScheduler (T-03-45)', () => {
       assert.ok(!result.ok, label);
       assert.equal(result.error.kind, 'invalid');
     }
+  });
+});
+
+// A1 of the research: launchd accepts StartCalendarInterval as an array of Hour and Minute dictionaries. This is the one test that talks to the real
+// launchd, so it is off unless AVARICE_LAUNCHD=1. It installs a temporary agent under a test-only label into the real ~/Library/LaunchAgents, asks
+// launchd about it, removes it, and removes it again in `after` if anything above failed. Its environment names temporary profile roots, so even an agent
+// that fires in the few seconds it is loaded can only touch a temporary directory.
+describe('real launchd round trip (A1; set AVARICE_LAUNCHD=1)', { skip: process.env['AVARICE_LAUNCHD'] === '1' ? false : 'set AVARICE_LAUNCHD=1 to talk to the real launchd' }, () => {
+  const label = `${DIGEST_LABEL_PREFIX}test-${randomBytes(6).toString('hex')}`;
+  const agents = join(homedir(), 'Library', 'LaunchAgents');
+  const file = join(agents, `${label}.plist`);
+  const scratch = makeTemp('avarice-real-launchd-');
+  const launchctl = (...args: string[]): { status: number; out: string } => {
+    const result = spawnSync('/bin/launchctl', args, { encoding: 'utf8', timeout: 10_000 });
+    return { status: result.status ?? -1, out: `${result.stdout}${result.stderr}` };
+  };
+
+  // Runs even when the test fails or throws: unload the label, then delete the file only if it is the one this test wrote.
+  after(() => {
+    launchctl('bootout', `gui/${UID}/${label}`);
+    try {
+      if (readFileSync(file, 'utf8').split('\n').includes(PLIST_MARKER)) rmSync(file, { force: true });
+    } catch {
+      // not there: nothing to clean
+    }
+  });
+
+  it('bootstraps a temporary agent, lists it, boots it out and leaves nothing behind', () => {
+    const at = new Date(Date.now() + 12 * 3_600_000);
+    const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    const scheduler = new LaunchdScheduler({ agentsDir: agents, launchctl: '/bin/launchctl', plutil: PLUTIL, uid: UID });
+    const installed = scheduler.install({
+      label,
+      nodePath: process.execPath,
+      entryPath: ENTRY,
+      times: [time, '03:07'],
+      env: { AVARICE_CONFIG_HOME: join(scratch, 'config'), AVARICE_DATA_ROOT: join(scratch, 'data'), AVARICE_WORK_ROOT: join(scratch, 'work') },
+      logPath: join(scratch, 'data', 'logs', 'digest.log'),
+    });
+    assert.ok(installed.ok, installed.ok ? '' : JSON.stringify(installed.error));
+    assert.equal(installed.value.status, 'installed');
+    assert.equal(installed.value.path, file);
+    assert.equal(lstatSync(file).mode & 0o777, 0o644);
+
+    // launchd knows the agent, with the calendar intervals it was given.
+    const printed = launchctl('print', `gui/${UID}/${label}`);
+    assert.equal(printed.status, 0, printed.out);
+    assert.ok(printed.out.includes(label), printed.out);
+    assert.match(printed.out, /calendarinterval|StartCalendarInterval/i, 'launchd registered the calendar intervals');
+    assert.ok(printed.out.includes(ENTRY), 'it will run the CLI entry we gave it');
+
+    const removed = scheduler.remove(label);
+    assert.ok(removed.ok, removed.ok ? '' : JSON.stringify(removed.error));
+    assert.equal(removed.value.status, 'removed');
+    assert.equal(existsSync(file), false, 'the plist is deleted');
+    assert.notEqual(launchctl('print', `gui/${UID}/${label}`).status, 0, 'launchd no longer knows the agent');
+    const again = scheduler.remove(label);
+    assert.ok(again.ok && again.value.status === 'not-installed', 'a second remove finds nothing and is not an error');
   });
 });

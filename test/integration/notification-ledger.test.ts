@@ -239,6 +239,26 @@ describe('setNotificationState', () => {
     assert.equal(must(h.ledger.setNotificationState([b.notificationId], 'failed', T0 + 20))[0]?.state, 'failed');
   });
 
+  // The one way out of `failed`: a digest that succeeds covers the banners that did not arrive (plan 03-23). `failed` stays final for the delivery of a
+  // single banner, so recordNotificationAttempt on a failed row is still a conflict.
+  it('moves a failed row to delivered, stamps its delivery time, and refuses every other move out of failed', () => {
+    const h = harness();
+    seedRun(h);
+    const row = create(h);
+    must(h.ledger.recordNotificationAttempt(row.notificationId, { outcome: 'failed', errorCode: 'osascript-failed', nowMs: T0 + 20 }));
+    assert.equal(must(h.ledger.listNotifications({ states: ['failed'] })).length, 1);
+    for (const state of ['held', 'pending'] as const) refused(h.ledger.setNotificationState([row.notificationId], state as 'held', T0 + 25), 'invalid');
+    refused(h.ledger.setNotificationState([row.notificationId], 'failed', T0 + 25), 'invalid');
+    refused(h.ledger.recordNotificationAttempt(row.notificationId, { outcome: 'delivered', nowMs: T0 + 26 }), 'conflict');
+    assert.equal(must(h.ledger.listNotifications({ states: ['failed'] })).length, 1, 'the refused moves changed nothing');
+    const moved = must(h.ledger.setNotificationState([row.notificationId], 'delivered', T0 + 30))[0];
+    assert.equal(moved?.state, 'delivered');
+    assert.equal(moved?.deliveredAt, new Date(T0 + 30).toISOString());
+    assert.equal(moved?.attempts, 1, 'the attempts already made are kept');
+    refused(h.ledger.setNotificationState([row.notificationId], 'failed', T0 + 40), 'invalid');
+    refused(h.ledger.recordNotificationAttempt(row.notificationId, { outcome: 'failed', errorCode: 'x', nowMs: T0 + 40 }), 'conflict');
+  });
+
   it('refuses a move that is not allowed and moves none of the named rows', () => {
     const h = harness();
     seedRun(h);
