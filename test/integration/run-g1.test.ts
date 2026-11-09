@@ -112,8 +112,9 @@ describe('G1 asks for an owner choice the unit never asked (D-02)', () => {
     assert.deepEqual(optionsOf(JSON.parse(decision?.options_json ?? '[]')).map((o) => o.kind), ['text'], 'free text (D-02)');
     assert.equal(gatesOf(s.roots, ran.runId).filter((g) => g.gate === 'G2').length, 0);
 
-    // The owner answers; a supervisor takes the run and the item runs again as a fresh unit that passes the rule.
-    const host = new FakeRunHost(FIX);
+    // The owner answers; a supervisor takes the run and the item resumes its own session (plan 03-22) and passes the rule: its parked plan is back in the tree.
+    // The resumed call finishes under a quick directory of its own: the records the first unit wrote are back in the tree, and a unit rewrites them only after it reads them.
+    const host = new FakeRunHost({ ...FIX, resume: { quickId: '261105-fk2-resume' } });
     const composed = createDeps(profileEnv(s.roots), { host });
     assert.ok(composed.ok, 'composition');
     try {
@@ -128,9 +129,9 @@ describe('G1 asks for an owner choice the unit never asked (D-02)', () => {
     assert.deepEqual(
       g1Of(s, ran.runId).map((g) => g.passed),
       [0, 1],
-      'the first unit failed G1, the answered unit passed it',
+      'the first unit failed G1, the resumed unit passed it',
     );
-    assert.deepEqual(attemptsDb(s.roots, ran.runId).map((a) => a.reason), ['initial', 'answer']);
+    assert.deepEqual(attemptsDb(s.roots, ran.runId).map((a) => a.reason), ['initial', 'resume']);
   });
 });
 

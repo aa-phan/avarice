@@ -47,11 +47,12 @@ import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { flushDueNotifications } from '../notify.ts';
 import { faultPoint } from '../onboarding-service.ts';
-import { RUN_GSD_SETTINGS, runUnitPrompt } from '../run-gsd-config.ts';
+import { RUN_GSD_SETTINGS, runResumePrompt, runUnitPrompt } from '../run-gsd-config.ts';
 import type { RunPromptItem } from '../run-gsd-config.ts';
 import { blockItem, blockRun, completeItemBlock, moveOn } from './blocked.ts';
 import { discardAttempt } from './discard.ts';
 import { latestParkOf, parkItem, parkStepOf } from './park.ts';
+import type { ParkedItem } from './park.ts';
 import { REPAIR_REASON, itemStartInventory, itemStartStatuses, recordReproducerStep, repairStepOf, repairUnit, repairsOf, reproducerFor, reproducerIssue, reproducerRefs } from './repair.ts';
 import type { PreparedRepair, ReproducerSet } from './repair.ts';
 import { scheduleOf } from './schedule.ts';
@@ -73,6 +74,14 @@ const RETRY_REASON = 'con16-retry';
 const ITEM_BASE_STEP = 'item:base';
 // The reason of the first attempt of an item after its decision was answered (plan 03-18).
 export const ANSWER_REASON = 'answer';
+// The reason of the attempt that resumes the item's own paused session with the owner's answer (plan 03-22; D-08, D-16).
+export const RESUME_REASON = 'resume';
+// The checkpoint before the parked delta is put back on top of the current HEAD for a resumed unit, and the step that says an answered item gave up on its
+// resume and runs a fresh unit with the answer instead (the host did not know the session, the resumed unit crashed, or the delta could not be unparked).
+const UNPARK_CHECKPOINT = 'unpark';
+const RESUME_FALLBACK_STEP = 'resume:fallback';
+// A session ID the host accepts (the adapter refuses anything else): the ledger's value is checked again before it is put on a launch line (T-03-42).
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The question the owner answered, as the fresh unit's prompt repeats it (data, cut).
 const QUESTION_PROMPT_CHARS = 600;
 
@@ -118,16 +127,61 @@ function promptItemOf(contract: RunContract, itemId: string): RunPromptItem | un
 }
 
 // The latest decision of the item, when the owner answered it: the item is the first of the decision's affected items. `firstUse` is false once a
-// `launch:run` step names the decision (the answer was given to a unit already), so only the first attempt after the answer is an `answer` attempt.
-function answeredDecisionOf(ctx: RunStageContext, itemId: string): Result<{ decision: DecisionRow; firstUse: boolean } | null> {
+// `launch:run` step of a unit that is not a resume names the decision (the answer was given to a fresh unit already), so only the first attempt after the answer
+// is an `answer` attempt; a resume that was tried leaves it true, because a resume that fell back is followed by that fresh unit. `fellBack` is true once the
+// item gave up on resuming for this decision (plan 03-22).
+interface Answered {
+  decision: DecisionRow;
+  firstUse: boolean;
+  fellBack: boolean;
+}
+
+function answeredDecisionOf(ctx: RunStageContext, itemId: string): Result<Answered | null> {
   const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId });
   if (!decisions.ok) return decisions;
   const latest = decisions.value.filter((d) => d.affectedItems[0] === itemId).at(-1);
   if (latest === undefined || latest.state !== 'answered' || latest.answer === null) return ok(null);
   const steps = ctx.deps.ledger.getRunSteps(ctx.runId);
   if (!steps.ok) return steps;
-  const used = steps.value.some((s) => s.step === 'launch:run' && isObject(s.result) && s.result['answeredDecisionId'] === latest.decisionId);
-  return ok({ decision: latest, firstUse: !used });
+  const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId, { itemId });
+  if (!attempts.ok) return attempts;
+  const resumes = new Set(attempts.value.filter((a) => a.reason === RESUME_REASON).map((a) => a.attemptId));
+  const used = steps.value.some(
+    (s) => s.step === 'launch:run' && isObject(s.result) && s.result['answeredDecisionId'] === latest.decisionId && !resumes.has(String(s.result['attemptId'])),
+  );
+  const fellBack = steps.value.some((s) => s.step === RESUME_FALLBACK_STEP && isObject(s.result) && s.result['itemId'] === itemId && s.result['decisionId'] === latest.decisionId);
+  return ok({ decision: latest, firstUse: !used, fellBack });
+}
+
+// What a resume of the answered item needs: the session its paused unit ran under (the item's `gsd_session`, set when the unit was delegated, D-08) and the
+// delta that unit left, which is put back before the host is called. An item with neither, or a session the host would refuse, runs a fresh unit with the
+// answer instead (plan 03-18's path).
+interface ResumePlan {
+  sessionId: string;
+  parked: ParkedItem;
+}
+
+function resumePlanOf(unit: Unit): Result<ResumePlan | null> {
+  const session = unit.item.gsdSession;
+  if (session === null || !SESSION_ID.test(session)) return ok(null);
+  const parked = latestParkOf(unit.ctx, unit.item.itemId);
+  if (!parked.ok) return parked;
+  return ok(parked.value === null ? null : { sessionId: session, parked: parked.value });
+}
+
+// The item as a resume prompt names it: its title and criteria when the brief has several items, else the one item of the brief.
+function resumeItemOf(contract: RunContract, itemId: string): RunPromptItem {
+  const own = promptItemOf(contract, itemId);
+  if (own !== undefined) return own;
+  const item = contract.intent.workItems.find((i) => i.id === itemId);
+  return { id: itemId, task: item?.task ?? contract.intent.title, acceptance: [] };
+}
+
+// The owner's answer as the resumed session reads it: a choice by its number and label (the session remembers asking), free text as typed.
+function resumeAnswerText(decision: DecisionRow): string {
+  const answer = (decision.answer ?? '').trim();
+  const chosen = optionsOf(decision.options).find((o) => o.kind === 'choice' && o.key === answer);
+  return chosen !== undefined ? `${chosen.key}. ${chosen.label}` : answer;
 }
 
 // What the fresh unit is told about the decision: the question it asked (a numbered choice answers by its number, so the number alone would say
@@ -237,6 +291,9 @@ interface Classified {
   hostError: PortError | undefined;
   // The hook stopped this invocation at a loop limit (CON-14): `loop.limit` event for it.
   loopLimit: { reason: string; count: number; limit: number } | null;
+  // The host did not know the session a resume named (spike S3-A): a result event of subtype `error_during_execution`, an error, no turns, no cost and exit 1.
+  // Only a resumed unit reads it; it is a structural fact, not a reading of any text (the adapter drops the host's own message).
+  sessionGone: boolean;
 }
 
 const isInScope = (change: PathChange, contract: RunContract): boolean =>
@@ -329,6 +386,15 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
     question,
     hostError: outcome.ok ? undefined : outcome.error,
     loopLimit: loopLimit.value,
+    sessionGone:
+      outcome.ok &&
+      cls.kind === 'failed' &&
+      details?.resultSeen === true &&
+      details.isError === true &&
+      details.subtype === 'error_during_execution' &&
+      details.numTurns === 0 &&
+      outcome.value.costUsd === 0 &&
+      details.exitCode === 1,
   });
 }
 
@@ -655,7 +721,9 @@ function reconcileGated(unit: Unit): Result<ItemReconcile> {
   const recorded = recordStep(ctx, 'commit', ordinal, { attemptId, commit: head.value, paths: changed.value.length, archived: 0, artifactsRemoved: 0, reconciled: true }, deps.clock.nowMs());
   if (!recorded.ok) return recorded;
   const done = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'done', nowMs: deps.clock.nowMs(), attemptId, data: { commit: head.value.slice(0, 12), reconciled: true } });
-  return done.ok ? ok('committed') : done;
+  if (!done.ok) return done;
+  const unparked = dropItemPark(unit);
+  return unparked.ok ? ok('committed') : unparked;
 }
 
 function snapshotOf(ctx: RunStageContext, attemptId: string): Result<WorkspaceSnapshot> {
@@ -730,15 +798,24 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   // the reason `answer`, and every later attempt of it (a CON-16 retry) carries the answer too.
   const answered = answeredDecisionOf(ctx, unit.item.itemId);
   if (!answered.ok) return answered;
-  const reason = mine.value.length === 0 ? 'initial' : answered.value?.firstUse === true ? ANSWER_REASON : RETRY_REASON;
+  // The first attempt after the answer resumes the item's own paused session when it can (plan 03-22; D-08, D-16): its delta is put back and the host is
+  // called with `--resume`. An item that fell back, or has no session or no delta to put back, runs a fresh unit with the answer.
+  let resume: ResumePlan | null = null;
+  if (adopted === undefined && mine.value.length > 0 && answered.value !== null && answered.value.firstUse && !answered.value.fellBack) {
+    const plan = resumePlanOf(unit);
+    if (!plan.ok) return plan;
+    resume = plan.value;
+  }
+  const reason = mine.value.length === 0 ? 'initial' : resume !== null ? RESUME_REASON : answered.value?.firstUse === true ? ANSWER_REASON : RETRY_REASON;
   const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason, itemId: unit.item.itemId, nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
-  // The session ID is chosen here so the work item carries it from the moment it is delegated (D-08, RC-8): a decision's answer resumes that session.
-  const sessionId = randomUUID();
+  // The session ID is chosen here so the work item carries it from the moment it is delegated (D-08, RC-8): a decision's answer resumes that session. A
+  // resume keeps the session it resumes; every fresh unit, including the one a failed resume falls back to, has its own.
+  const sessionId = resume?.sessionId ?? randomUUID();
   const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId, gsdSession: sessionId });
   if (!delegated.ok) return delegated;
-  return launchUnit(unit, row, { attemptId, ordinal, sessionId, pack: pack.value, answered: answered.value });
+  return launchUnit(unit, row, { attemptId, ordinal, sessionId, pack: pack.value, answered: answered.value, ...(resume !== null ? { resume } : {}) });
 }
 
 // What a unit is launched with: its attempt, the pack, the owner's answer when the item asked, and for a repair the reproducer and the item's base.
@@ -747,8 +824,10 @@ interface Launch {
   ordinal: number;
   sessionId: string;
   pack: string;
-  answered: { decision: DecisionRow; firstUse: boolean } | null;
+  answered: Answered | null;
   repair?: { text: string; base: WorkspaceSnapshot };
+  // A resume of the item's own session: the plan says which session and which delta (plan 03-22).
+  resume?: ResumePlan;
 }
 
 // The launch of one unit of an item that is `delegated`: the settings, the snapshot, the contained invocation, the classification, and then its gate, or its
@@ -758,7 +837,7 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
-  const { attemptId, ordinal, sessionId, pack, answered, repair } = launch;
+  const { attemptId, ordinal, sessionId, pack, answered, repair, resume } = launch;
 
   // The previous item's commit took `.planning/config.json` out of the clone (D-17): this item's unit gets the GSD settings again, before its snapshot,
   // so the settings never count as its change.
@@ -776,15 +855,27 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
     const based = recordStep(ctx, ITEM_BASE_STEP, ordinal, { attemptId, itemId: unit.item.itemId }, startedMs);
     if (!based.ok) return based;
   }
-  // The snapshot a block of the item parks against, and the one a unit that did not progress is discarded to (a repair is never discarded).
+  // The snapshot a block of the item parks against, and the one a unit that did not progress is discarded to (a repair is never discarded). A resume's is
+  // the clean tree it took before it put the parked delta back, so the item's work since its base is the delta and whatever the resumed unit adds.
   const itemBase = repair?.base ?? snapshot.value;
+
+  // A resume puts the item's parked delta back on top of the current HEAD before the host is called. When it cannot (the delta no longer applies, or its ref is
+  // gone), the item gives up on the resume and runs a fresh unit with the answer from the HEAD it has.
+  if (resume !== undefined) {
+    const restored = unparkDelta(unit, attemptId, snapshot.value, resume.parked);
+    if (!restored.ok) return restored;
+    if (restored.value !== 'applied') return fallBackToAnswer(unit, row, { attemptId, snapshot: snapshot.value, reason: restored.value, spentCheck: false });
+  }
 
   const launching = ctx.checkpoint('launch:run', { attemptId, itemId: unit.item.itemId, revision: snapshot.value.head });
   if (!launching.ok) return launching;
 
   let prompt: string;
   try {
-    prompt = runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text);
+    prompt =
+      resume !== undefined && answered !== null
+        ? runResumePrompt(resumeAnswerText(answered.decision), resumeItemOf(contract, unit.item.itemId))
+        : runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text);
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
     const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: itemBase });
@@ -796,6 +887,7 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
     attemptId,
     itemId: unit.item.itemId,
     sessionId,
+    ...(resume !== undefined ? { resumeSessionId: resume.sessionId } : {}),
     ...(answered !== null ? { answeredDecisionId: answered.decision.decisionId } : {}),
   });
   if (!prepared.ok) return prepared;
@@ -810,8 +902,10 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
     });
     return blocked.ok ? ok(undefined) : blocked;
   }
-  // The attempt has started on the answer: the parked delta of the question is no longer needed (the unit is fresh and does the work again), so its ref
-  // is dropped. An absent ref is success, so a retry of this attempt drops nothing twice.
+  // The attempt has started on the answer: the parked delta of the question is no longer needed, so its ref is dropped. A fresh unit does the work again; a
+  // resume has the delta back in the tree already (and every road after the host is called, a fallback included, starts from the item's base, not from the
+  // ref). The ref must go before the unit can block again, or the next park of the item would meet it. An absent ref is success, so a retry of this attempt
+  // drops nothing twice.
   if (answered !== null) {
     const parked = latestParkOf(ctx, unit.item.itemId);
     if (!parked.ok) return parked;
@@ -868,7 +962,7 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
   if (!recorded.ok) return recorded;
 
   // A unit the hook stopped at a loop limit is routed whatever else it did (CON-14): it is not committed.
-  if (c.kind !== 'progressed' || c.loopLimit !== null) return routeOutcome(unit, row, attemptId, c, itemBase, repair !== undefined);
+  if (c.kind !== 'progressed' || c.loopLimit !== null) return routeOutcome(unit, row, attemptId, c, itemBase, repair !== undefined, resume !== undefined);
 
   const implemented = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'implemented', nowMs: deps.clock.nowMs(), attemptId });
   if (!implemented.ok) return implemented;
@@ -890,7 +984,7 @@ async function launchRepair(unit: Unit, row: RunRow, prepared: PreparedRepair, b
 // because it is a breach of containment and no recovery may touch a clone whose HEAD the supervisor did not move.
 // `snapshot` is the item's base (what a block parks against, and what a unit that crashed is discarded to). A repair is the item's one chance at a check: it
 // is never discarded and retried, and every ending that is not a result the gates can judge is a decision.
-async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Classified, snapshot: WorkspaceSnapshot, repair = false): Promise<Result<void>> {
+async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Classified, snapshot: WorkspaceSnapshot, repair = false, resumed = false): Promise<Result<void>> {
   const { ctx } = unit;
   const common = { attemptId, itemId: unit.item.itemId } as const;
   const done = (blocked: Result<RunRow>): Result<void> => (blocked.ok ? ok(undefined) : blocked);
@@ -958,6 +1052,11 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   // progress, paused, was denied or made no progress is never retried (FR-4), and neither is a host that refused to launch.
   const crashed = c.kind === 'inconclusive' || (c.kind === 'failed' && (c.facts.exitCode !== 0 || c.facts.signal !== null || !c.facts.resultSeen));
   const hostRefused = c.hostError !== undefined && c.hostError.kind !== 'timeout';
+  // A resumed session that the host does not know, or whose unit crashed with no moved HEAD, is not a CON-16 retry of the resume: the parked delta is put
+  // back to the item's base and the item runs a fresh unit with the owner's answer (plan 03-22, research Pitfall 4). That unit has its own retry.
+  if (resumed && (c.sessionGone || crashed) && !hostRefused) {
+    return fallBackToAnswer(unit, row, { attemptId, snapshot, reason: c.sessionGone ? 'session-gone' : 'crashed', spentCheck: true });
+  }
   const history = attemptHistoryOf(unit, attemptId, c.kind);
   if (!history.ok) return history;
   const stored = ctx.deps.ledger.getRunContract(ctx.runId);
@@ -993,6 +1092,103 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   const data = !repair && history.value.length > 1 ? { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } : undefined;
   if (!enforcement) return blockThisItem(failure(), issue, data);
   return done(blockRun(ctx, { reason: 'enforcement_failure', signal: { kind: 'enforcement' }, issue, ...(data !== undefined ? { data } : {}), ...common }));
+}
+
+// ---- the resume of an answered item (plan 03-22) ----------------------------------------------------------------------------------------
+
+// Puts the item's parked delta back on top of the current HEAD (AUT-3). The `unpark` checkpoint carries the lease fence, so a stale supervisor stops before it
+// writes. `applied` also when the delta is already in the tree (the workspace leaves a path that holds the parked content as it is, so a second call changes
+// nothing). A delta that no longer applies because another item committed a change to a parked path is a conflict: nothing was written, the event names the
+// number of paths and never the paths, and the caller falls back to a fresh unit.
+function unparkDelta(unit: Unit, attemptId: string, base: WorkspaceSnapshot, parked: ParkedItem): Result<'applied' | 'unpark-conflict' | 'park-missing'> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const marked = ctx.checkpoint(UNPARK_CHECKPOINT, { itemId: unit.item.itemId, attemptId, revision: base.head });
+  if (!marked.ok) return marked;
+  const applied = workspace.unpark(unit.clone, parked.record);
+  if (applied.ok) return ok('applied');
+  if (applied.error.kind === 'not_found') return ok('park-missing');
+  if (applied.error.kind !== 'conflict') return applied;
+  const head = workspace.head(unit.clone);
+  const moved = head.ok ? workspace.diffCommits(unit.clone, parked.record.baseHead, head.value) : head;
+  const parkedPaths = new Set(parked.record.paths);
+  const count = moved.ok ? moved.value.filter((change) => parkedPaths.has(change.path)).length : 0;
+  const event = deps.ledger.appendEvent({
+    type: 'item.unpark_conflict',
+    level: 'warn',
+    runId: ctx.runId,
+    attemptId,
+    data: { runId: ctx.runId, itemId: unit.item.itemId, paths: Math.max(1, count) },
+    nowMs: deps.clock.nowMs(),
+  });
+  if (!event.ok) return event;
+  return ok('unpark-conflict');
+}
+
+// Says that the item gave up on resuming for the decision it answered, once: the next attempt of the item is a fresh unit with the answer (reason `answer`).
+function recordResumeFallback(unit: Unit, attemptId: string, ordinal: number, reason: string): Result<void> {
+  const { ctx } = unit;
+  const answered = answeredDecisionOf(ctx, unit.item.itemId);
+  if (!answered.ok) return answered;
+  if (answered.value?.fellBack === true) return ok(undefined);
+  const recorded = recordStep(ctx, RESUME_FALLBACK_STEP, ordinal, { attemptId, itemId: unit.item.itemId, decisionId: answered.value?.decision.decisionId ?? null, reason }, ctx.deps.clock.nowMs());
+  return recorded.ok ? ok(undefined) : recorded;
+}
+
+interface Fallback {
+  attemptId: string;
+  // The item's base snapshot of the resume attempt: the clone goes back to it, which takes the unparked delta out again.
+  snapshot: WorkspaceSnapshot;
+  reason: 'unpark-conflict' | 'park-missing' | 'session-gone' | 'crashed';
+  // The resumed unit was charged: a fresh one needs an invocation left, as the CON-16 retry does, or the owner is told the budget is spent.
+  spentCheck: boolean;
+}
+
+// The resume could not happen, or crashed: the attempt is discarded to the item's base (which removes the unparked delta) and the item runs a fresh unit
+// that carries the owner's answer, from the HEAD it has now. A delta that cannot be applied is dropped with its ref, so nothing of it is ever written over
+// another item's change.
+async function fallBackToAnswer(unit: Unit, row: RunRow, input: Fallback): Promise<Result<void>> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const ordinal = ordinalOf(ctx, input.attemptId);
+  if (!ordinal.ok) return ordinal;
+  if (input.spentCheck) {
+    const budgets = deps.ledger.getBudgets(ctx.runId);
+    if (!budgets.ok) return budgets;
+    const invocations = budgets.value.find((b) => b.name === 'invocations');
+    if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
+      const blocked = blockRun(ctx, {
+        reason: 'budget_exhausted',
+        signal: { kind: 'budget', names: ['invocations'] },
+        issue: `the invocations budget is spent, so the resumed session (${input.reason}) was not followed by a fresh unit with the owner's answer`,
+        data: { budget: 'invocations' },
+        attemptId: input.attemptId,
+        itemId: unit.item.itemId,
+      });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
+  }
+  const recorded = recordResumeFallback(unit, input.attemptId, ordinal.value, input.reason);
+  if (!recorded.ok) return recorded;
+  if (input.reason === 'unpark-conflict') {
+    const dropped = dropItemPark(unit);
+    if (!dropped.ok) return dropped;
+  }
+  const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId: input.attemptId, ordinal: ordinal.value, snapshot: input.snapshot });
+  if (!discarded.ok) return discarded;
+  if (!discarded.value.discarded) return ok(undefined);
+  return attemptUnit(unit, row, { retry: true });
+}
+
+// The item is committed, or its resume gave up on the delta: the park ref of the delta goes. An absent ref is success, so this is repeatable.
+function dropItemPark(unit: Unit): Result<void> {
+  const workspace = unit.ctx.deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const parked = latestParkOf(unit.ctx, unit.item.itemId);
+  if (!parked.ok) return parked;
+  return parked.value === null ? ok(undefined) : workspace.dropPark(unit.clone, parked.value.record.ref);
 }
 
 // The batched banner of decision notices (D-24), delivered at an item boundary when its window has passed. A notification never changes what a run
@@ -1608,6 +1804,9 @@ async function commitUnit(unit: Unit, attemptId: string, snapshot: WorkspaceSnap
 
   const done = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'done', nowMs: deps.clock.nowMs(), attemptId, data: { commit: commit.value.slice(0, 12) } });
   if (!done.ok) return done;
+  // The item's work is committed: a delta that was parked for its question (and put back for its resume) has no use left, so its ref goes.
+  const unparked = dropItemPark(unit);
+  if (!unparked.ok) return unparked;
   const current = deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;
 

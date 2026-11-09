@@ -250,7 +250,7 @@ const FALLBACK_ATTEMPTS: Array<[string, string, string]> = [
   ['C', 'initial', 'committed'],
   ['B', 'resume', 'discarded'],
   ['B', 'answer', 'committed'],
-  ['D', 'initial', 'committed'],
+  ['D', 'initial', 'handed-off'],
 ];
 
 describe('a session the host does not know: the item falls back to a fresh unit with the answer (spike S3-A)', () => {

@@ -313,10 +313,13 @@ describe('a supervisor started on a blocked run (D-16)', () => {
     assert.equal(live.host.calls.length, 0, 'no unit was launched');
   });
 
-  it('takes the run once the owner answered, moves it to running and finishes it: B runs again as a fresh unit with the answer, D after it, and the run reaches ready_for_review', async () => {
+  it('takes the run once the owner answered, moves it to running and finishes it: B resumes its own session with the answer (plan 03-22), D runs after it, and the run reaches ready_for_review', async () => {
     const decisionId = openDecisionId(f.roots, runId);
     const recordB = join(f.roots.base, 'unit-B-again.json');
-    const live = inProcess(f.roots, s17Host({ question: undefined, recordTo: recordB }));
+    const firstSession = (ledgerRows<{ gsd_session: string }>(f.roots, "SELECT gsd_session FROM work_items WHERE run_id = ? AND item_id = 'B'", runId)[0] as { gsd_session: string }).gsd_session;
+    // B's resumed call finishes the item under its own quick directory; the host script of plan 03-18 had no resume entry, because B ran as a fresh unit.
+    const base = s17Host();
+    const live = inProcess(f.roots, { perItem: { ...base.perItem, B: { ...unitOf('B'), resume: { ...unitOf('B'), quickId: '261105-fk2-resume', recordTo: recordB } } } });
     try {
       answer(live.deps, runId, decisionId, '2');
       assert.deepEqual(
@@ -337,7 +340,7 @@ describe('a supervisor started on a blocked run (D-16)', () => {
     assert.equal(pickup?.resumedFrom, 'blocked_on_decision');
     assert.deepEqual(itemStatesOf(f.roots, runId).map((r) => r.join(':')), ['A:done', 'B:done', 'C:done', 'D:done']);
 
-    // B ran a fresh unit (the reason `answer`), whose recorded prompt carries the question and the owner's answer as data; its park ref is gone.
+    // B ran a resume (the reason `resume`) of its own first session, whose recorded prompt carries the owner's answer as data; its park ref is gone once it is committed.
     const attempts = attemptsOfRun(f.roots, runId);
     assert.deepEqual(
       attempts.map((a) => [a.item_id, a.reason]),
@@ -345,15 +348,15 @@ describe('a supervisor started on a blocked run (D-16)', () => {
         ['A', 'initial'],
         ['B', 'initial'],
         ['C', 'initial'],
-        ['B', 'answer'],
+        ['B', 'resume'],
         ['D', 'initial'],
       ],
     );
-    const prompt = (JSON.parse(readFileSync(recordB, 'utf8')) as { prompt: string; resumeSessionId?: string }).prompt;
-    assert.ok(prompt.includes(RUN_ANSWER_DATA_LINE), 'the fixed data line');
-    assert.ok(prompt.includes('2. 410'), "the owner's choice by its label");
-    assert.ok(prompt.includes('Which status code?'), 'the question the unit asked');
-    assert.equal(parkRefOf(runRowOf(f.roots, runId).workspace_path, runId, 'B'), null, 'the park ref was dropped when the answered attempt started');
+    const recorded = JSON.parse(readFileSync(recordB, 'utf8')) as { prompt: string; resumeSessionId?: string };
+    assert.equal(recorded.resumeSessionId, firstSession, 'the session of the first unit of B');
+    assert.ok(recorded.prompt.includes(RUN_ANSWER_DATA_LINE), 'the fixed data line');
+    assert.ok(recorded.prompt.includes('2. 410'), "the owner's choice by its label");
+    assert.equal(parkRefOf(runRowOf(f.roots, runId).workspace_path, runId, 'B'), null, 'the park ref was dropped when B was committed');
 
     // The decision is recorded on the launch step of that attempt, so it is used once.
     const launches = ledgerRows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'launch:run' ORDER BY rowid", runId).map(
@@ -412,7 +415,7 @@ describe('block, release, re-check: an answer that lands after the release is no
     const f = s17Fixture(cleanup);
     // B asks before it does anything (no edit, no record, no PLAN: the shape a live unit that must ask ends in); its second unit does the work.
     const host: FakeRunOptions = {
-      perItem: { ...s17Host().perItem, B: { question: S17_QUESTION, perAttempt: [{}, { ...unitOf('B'), question: undefined }] } },
+      perItem: { ...s17Host().perItem, B: { question: S17_QUESTION, perAttempt: [{}, { ...unitOf('B'), question: undefined }], resume: unitOf('B') } },
     };
     const live = inProcess(f.roots, host);
     try {
@@ -439,16 +442,16 @@ describe('block, release, re-check: an answer that lands after the release is no
           ['A', 'initial'],
           ['B', 'initial'],
           ['C', 'initial'],
-          ['B', 'answer'],
+          ['B', 'resume'],
           ['D', 'initial'],
         ],
       );
-      // The question was asked before any work: nothing was parked but the records of the unit, and the answered unit's prompt carries the choice.
+      // The question was asked before any work: nothing was parked but the records of the unit, and the resumed unit's prompt carries the choice.
       const park = ledgerRows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'park'", runId);
       assert.equal(park.length, 1);
       assert.deepEqual((JSON.parse((park[0] as { result_json: string }).result_json) as { paths: string[] }).paths, []);
       const prompts = live.host.calls.map((c) => c.prompt);
-      assert.ok(prompts.at(-2)?.includes('1. 404'), `the answered unit of B carries the choice: ${prompts.at(-2)?.slice(0, 80)}`);
+      assert.ok(prompts.at(-2)?.includes('1. 404'), `the resumed unit of B carries the choice: ${prompts.at(-2)?.slice(0, 80)}`);
     } finally {
       live.close();
     }

@@ -312,6 +312,9 @@ export interface PrepareRunOptions {
   // The decision whose answer the unit's prompt carries (plan 03-18): recorded on the `launch:run` step, so the first attempt after an answer can be told
   // from a retry of it.
   answeredDecisionId?: string;
+  // The session of the item's own paused unit, resumed with `--resume` (plan 03-22; D-08): read from the ledger by the caller, never from user input. The request
+  // carries it as the session the invocation runs under, so the `launch:run` step records it and a reap after a kill finds the host by it.
+  resumeSessionId?: string;
 }
 
 // The directories of the GSD install the run reads: the `gsd:inspect` step when a stage recorded one, else what the GSD adapter reports now.
@@ -422,7 +425,8 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
     scope,
     extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
     expectedFiles: [...(options.expectedFiles ?? [])],
-    sessionId: options.sessionId ?? randomUUID(),
+    sessionId: options.resumeSessionId ?? options.sessionId ?? randomUUID(),
+    ...(options.resumeSessionId !== undefined ? { resumeSessionId: options.resumeSessionId } : {}),
     ownerKind: 'run',
     ownerId: run.runId,
   };
