@@ -102,11 +102,9 @@ function bullets(field: string, lines: readonly string[]): Result<string[]> {
   return ok(items);
 }
 
-export function parseAcceptanceSection(_lines: readonly string[]): Result<BriefAcceptance[]> {
-  return invalid('brief.acceptance', 'parseAcceptanceSection is not implemented');
-}
-
-function readAcceptance(lines: readonly string[]): Result<BriefAcceptance[]> {
+// The lines of an acceptance section (`- AC1: text | verifiedBy: check:unit, test:name`) as criteria. Exported so the amend command
+// reads an acceptance file with the parser the brief uses: one syntax, one set of refusals, at most 20 criteria.
+export function parseAcceptanceSection(lines: readonly string[]): Result<BriefAcceptance[]> {
   const items = bullets('brief.acceptance', lines);
   if (!items.ok) return items;
   if (items.value.length > BRIEF_LIMITS.acceptance) {
@@ -400,7 +398,7 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
   const behavior = (sections.get('behavior') ?? []).join('\n').trim();
   if (behavior === '') return invalid('brief.behavior', 'is required: add a "## Behavior" section that says what should change');
 
-  const acceptance = readAcceptance(sections.get('acceptance') ?? []);
+  const acceptance = parseAcceptanceSection(sections.get('acceptance') ?? []);
   if (!acceptance.ok) return acceptance;
   let items: BriefItem[] | undefined;
   if (front.items !== undefined) {
