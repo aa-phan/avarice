@@ -1,4 +1,5 @@
-// The Phase 2 live-spend ceiling (plan 02-01, D-15): one ledger, one 25 USD ceiling, checked before any live host start.
+// The per-phase live-spend ceilings: Phase 2 (plan 02-01, D-15) and Phase 3 (plan 03-01, D-05), each one ledger and one 25 USD
+// ceiling, checked before any live host start. Every new live spend is judged against the Phase 3 ledger.
 // Offline: the ledger and the suite ledger point at temp files, so nothing here starts a host or spends.
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,15 +7,35 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { PHASE2_CEILING_USD, fitsCap, fitsPhase2Ceiling, phase2Ceiling, phase2Spent, recordPhase2Spend, spendRefusal } from '../helpers/live-harness.ts';
+import {
+  CURRENT_SPEND_PHASE,
+  PHASE2_CEILING_USD,
+  PHASE3_CEILING_USD,
+  fitsCap,
+  fitsPhase2Ceiling,
+  fitsPhase3Ceiling,
+  phase2Ceiling,
+  phase2Spent,
+  phase3Ceiling,
+  phase3Spent,
+  recordPhase2Spend,
+  recordPhase3Spend,
+  recordSpend,
+  spendRefusal,
+  spikeRefusal,
+} from '../helpers/live-harness.ts';
 
 const LEDGER_ENV = 'AVARICE_PHASE2_LEDGER';
 const CEILING_ENV = 'AVARICE_PHASE2_CEILING_USD';
 const SUITE_LEDGER_ENV = 'AVARICE_LIVE_LEDGER';
-const KEYS = [LEDGER_ENV, CEILING_ENV, SUITE_LEDGER_ENV];
+const P3_LEDGER_ENV = 'AVARICE_PHASE3_LEDGER';
+const P3_CEILING_ENV = 'AVARICE_PHASE3_CEILING_USD';
+const P3_PLAN_ENV = 'AVARICE_PHASE3_PLAN';
+const KEYS = [LEDGER_ENV, CEILING_ENV, SUITE_LEDGER_ENV, P3_LEDGER_ENV, P3_CEILING_ENV, P3_PLAN_ENV];
 
 let dir = '';
 let ledger = '';
+let ledger3 = '';
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -22,6 +43,10 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'avarice-phase2-ledger-'));
   ledger = join(dir, 'live-spend-phase2.jsonl');
   process.env[LEDGER_ENV] = ledger;
+  ledger3 = join(dir, 'live-spend-phase3.jsonl');
+  process.env[P3_LEDGER_ENV] = ledger3;
+  delete process.env[P3_CEILING_ENV];
+  delete process.env[P3_PLAN_ENV];
   process.env[SUITE_LEDGER_ENV] = join(dir, 'suite-ledger.jsonl');
   delete process.env[CEILING_ENV];
 });
@@ -108,17 +133,123 @@ describe('Phase 2 live-spend ledger and ceiling (D-15)', () => {
     assert.equal(phase2Spent(), 0);
   });
 
-  it('makes the existing per-suite fitsCap also require the Phase 2 ceiling', () => {
+  it('keeps the Phase 2 ledger independent of the Phase 3 ledger', () => {
+    writeFileSync(ledger, line(24.9));
+    assert.equal(fitsPhase2Ceiling(0.4), false);
+    assert.equal(fitsPhase3Ceiling(0.4), true);
+    assert.equal(phase3Spent(), 0);
+  });
+});
+
+const line3 = (costUsd: number, plan = '03-01'): string => JSON.stringify({ plan, case: 'c', costUsd, claudeVersion: '2.1.319', at: '2026-11-08T00:00:00.000Z' }) + '\n';
+
+describe('Phase 3 live-spend ledger and ceiling (D-05)', () => {
+  it('states the ceiling as 25 USD and Phase 3 as the current spend phase', () => {
+    assert.equal(PHASE3_CEILING_USD, 25);
+    assert.equal(phase3Ceiling(), 25);
+    assert.equal(CURRENT_SPEND_PHASE, 3);
+  });
+
+  it('reads a missing ledger as 0 spend, and a case under the ceiling fits (empty edge)', () => {
+    assert.equal(phase3Spent(), 0);
+    assert.equal(fitsPhase3Ceiling(0.4), true);
+    assert.equal(fitsPhase3Ceiling(25), true);
+    assert.equal(fitsPhase3Ceiling(25.01), false);
+  });
+
+  it('sums costUsd over every line of the ledger', () => {
+    writeFileSync(ledger3, line3(1.25) + line3(0.5, '03-13') + line3(0.0214));
+    assert.ok(Math.abs(phase3Spent() - 1.7714) < 1e-9);
+  });
+
+  it('throws an Error naming the line number for a malformed line, never reading it as 0', () => {
+    writeFileSync(ledger3, line3(1) + '{not json\n' + line3(2));
+    assert.throws(() => phase3Spent(), (e: Error) => e instanceof Error && /line 2/.test(e.message) && /Phase 3/.test(e.message));
+    writeFileSync(ledger3, line3(1) + line3(2) + JSON.stringify({ plan: 'p', case: 'c' }) + '\n');
+    assert.throws(() => phase3Spent(), (e: Error) => e instanceof Error && /line 3/.test(e.message));
+    writeFileSync(ledger3, JSON.stringify({ plan: 'p', case: 'c', costUsd: 'free' }) + '\n');
+    assert.throws(() => phase3Spent(), (e: Error) => e instanceof Error && /line 1/.test(e.message));
+    assert.throws(() => fitsPhase3Ceiling(0.4), (e: Error) => e instanceof Error);
+  });
+
+  it('fits a 0.40 USD case at a recorded 24.60 and refuses it at 24.61', () => {
+    writeFileSync(ledger3, line3(24.6));
+    assert.equal(fitsPhase3Ceiling(0.4), true);
+    writeFileSync(ledger3, line3(24.61));
+    assert.equal(fitsPhase3Ceiling(0.4), false);
+  });
+
+  it('lets AVARICE_PHASE3_CEILING_USD lower the ceiling, never raise it, and ignores a non-number', () => {
+    process.env[P3_CEILING_ENV] = '10';
+    assert.equal(phase3Ceiling(), 10);
+    writeFileSync(ledger3, line3(9.7));
+    assert.equal(fitsPhase3Ceiling(0.4), false);
+    process.env[P3_CEILING_ENV] = '40';
+    assert.equal(phase3Ceiling(), 25);
+    process.env[P3_CEILING_ENV] = 'lots';
+    assert.equal(phase3Ceiling(), 25);
+    process.env[P3_CEILING_ENV] = '-3';
+    assert.equal(phase3Ceiling(), 25);
+    // The Phase 2 variable does not move the Phase 3 ceiling.
+    delete process.env[P3_CEILING_ENV];
+    process.env[CEILING_ENV] = '5';
+    assert.equal(phase3Ceiling(), 25);
+  });
+
+  it('appends one JSON line with an ISO timestamp and never rewrites earlier lines', () => {
+    writeFileSync(ledger3, line3(3));
+    const first = readFileSync(ledger3, 'utf8');
+    recordPhase3Spend({ plan: '03-01', case: '01-edit-src', costUsd: 0.0029, claudeVersion: '2.1.319' });
+    recordPhase3Spend({ plan: '03-01', case: '02-write-src', costUsd: 0.0023, claudeVersion: '2.1.319' });
+    const text = readFileSync(ledger3, 'utf8');
+    assert.ok(text.startsWith(first), 'earlier lines were rewritten');
+    const lines = text.split('\n').filter((l) => l !== '');
+    assert.equal(lines.length, 3);
+    const entry = JSON.parse(lines[1] as string) as Record<string, unknown>;
+    assert.equal(entry['plan'], '03-01');
+    assert.equal(entry['case'], '01-edit-src');
+    assert.equal(entry['costUsd'], 0.0029);
+    assert.equal(entry['claudeVersion'], '2.1.319');
+    assert.ok(typeof entry['at'] === 'string' && !Number.isNaN(Date.parse(entry['at'])) && new Date(entry['at']).toISOString() === entry['at']);
+    assert.ok(Math.abs(phase3Spent() - 3.0052) < 1e-9);
+  });
+
+  it('refuses to record a cost that is not a finite non-negative number', () => {
+    assert.throws(() => recordPhase3Spend({ plan: '03-01', case: 'x', costUsd: Number.NaN, claudeVersion: 'v' }));
+    assert.throws(() => recordPhase3Spend({ plan: '03-01', case: 'x', costUsd: -1, claudeVersion: 'v' }));
+    assert.equal(phase3Spent(), 0);
+  });
+
+  it('makes the per-suite fitsCap require the Phase 3 ceiling, and not the Phase 2 one', () => {
+    assert.equal(fitsCap(0.4), true);
+    writeFileSync(ledger3, line3(24.9));
+    assert.equal(fitsCap(0.4), false);
+    writeFileSync(ledger3, line3(1));
     assert.equal(fitsCap(0.4), true);
     writeFileSync(ledger, line(24.9));
-    assert.equal(fitsCap(0.4), false);
-    writeFileSync(ledger, line(1));
     assert.equal(fitsCap(0.4), true);
   });
 
-  it('words the skip as the D-15 ask-the-owner text when the Phase 2 ceiling is the limit', () => {
+  it('words the skip as the D-05 ask-the-owner text when the Phase 3 ceiling is the limit', () => {
     assert.equal(spendRefusal(0.4), undefined);
-    writeFileSync(ledger, line(24.9));
-    assert.equal(spendRefusal(0.4), "not run: Phase 2 spend 24.9000 plus this case's cap 0.40 would pass the 25.00 USD ceiling (D-15); ask the owner");
+    writeFileSync(ledger3, line3(24.9));
+    assert.equal(spendRefusal(0.4), "not run: Phase 3 spend 24.9000 plus this case's cap 0.40 would pass the 25.00 USD ceiling (D-05); ask the owner");
+    assert.match(spikeRefusal(0.4) ?? '', /Phase 3 spend .*\(D-05\)/);
+  });
+
+  it('records every host run of the per-suite recorder in the Phase 3 ledger under AVARICE_PHASE3_PLAN, and none in Phase 2', () => {
+    process.env[P3_PLAN_ENV] = '03-01';
+    recordSpend({ case: 'case-a', costUsd: 0.12, assumed: false }, '2.1.319');
+    const lines = readFileSync(ledger3, 'utf8').split('\n').filter((l) => l !== '');
+    assert.equal(lines.length, 1);
+    const entry = JSON.parse(lines[0] as string) as Record<string, unknown>;
+    assert.equal(entry['plan'], '03-01');
+    assert.equal(entry['case'], 'case-a');
+    assert.equal(entry['claudeVersion'], '2.1.319');
+    assert.equal(phase2Spent(), 0);
+    delete process.env[P3_PLAN_ENV];
+    recordSpend({ case: 'case-b', costUsd: 0.1, assumed: false });
+    const second = readFileSync(ledger3, 'utf8').split('\n').filter((l) => l !== '');
+    assert.equal((JSON.parse(second[1] as string) as Record<string, unknown>)['plan'], 'unknown');
   });
 });
