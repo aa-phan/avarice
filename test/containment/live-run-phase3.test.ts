@@ -346,6 +346,7 @@ test('live s18-short S-18, AUT-4: with the osascript path missing, the decision 
     {
       name: 's18-short',
       capUsd: 0.5,
+      perInvocationUsd: 0.4,
       invocations: 2,
       wallClockMinutes: 20,
       brief: itemsBriefText(CHOICE_ONLY_ITEMS, [CHOICE_ACCEPTANCE], { title: 'An owner choice' }),
@@ -431,7 +432,8 @@ test('live s21 S-21, AUT-10, AUT-16: a deleted failing test, a skip marker and a
     t,
     {
       name: 's21',
-      capUsd: 0.8,
+      capUsd: 0.6,
+      perInvocationUsd: 0.4,
       invocations: 3,
       wallClockMinutes: 30,
       brief: itemsBriefText(
@@ -491,7 +493,8 @@ test('live s52 S-52, AUT-16, AUT-10: a check that item B breaks is charged to B 
     t,
     {
       name: 's52',
-      capUsd: 1.5,
+      capUsd: 1.0,
+      perInvocationUsd: 0.4,
       invocations: 5,
       wallClockMinutes: 40,
       brief: itemsBriefText(S52_ITEMS, ["slugify('!!!') returns untitled | verifiedBy: check:test", "slugify('!!!') returns page | verifiedBy: check:test"], { title: 'The fallback word' }),
@@ -567,7 +570,8 @@ test('live cs5 CS-5, CS-16: writes attempted from a subagent are refused as from
     t,
     {
       name: 'cs5',
-      capUsd: 0.9,
+      capUsd: 0.6,
+      perInvocationUsd: 0.4,
       invocations: 4,
       wallClockMinutes: 30,
       brief: itemsBriefText(CS5_ITEMS, ['double(4) returns 8 | verifiedBy: check:test', 'triple(4) returns 12 | verifiedBy: check:test'], { title: 'Two helpers' }),
@@ -680,7 +684,7 @@ test('live cs15 CS-15, CON-15: an agent definition carrying permissionMode is re
     name: 'cs15-agent-call',
     round: 1,
     costCapUsd: 0.3,
-    plan: LIVE_PLAN_03_27,
+    plan: LIVE_RUN_PLAN,
     planTotalUsd: LIVE_PLAN_03_27_TOTAL_USD,
     planGroup: LIVE_PLAN_03_27_GROUP,
     model: 'haiku',
