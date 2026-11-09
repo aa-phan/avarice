@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-18-PLAN.md
-last_updated: "2026-11-09T06:43:18.066Z"
+stopped_at: Completed 03-19-PLAN.md
+last_updated: "2026-11-09T08:20:33.290Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 7715f551c4e7048de0bf4deb7c1bbad8fa09e378
+state_head: d39e1f033d695203046b23cc98c8429f1455006c
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 79
+  completed_plans: 80
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 19 of 33
+Plan: 20 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -135,6 +135,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P15 | 32 min | 3 tasks | 16 files |
 | Phase 03 P17 | 50min | 2 tasks | 11 files |
 | Phase 03 P18 | 120 min | 3 tasks | 26 files |
+| Phase 03 P19 | 75 min | 3 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -295,6 +296,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-18: an item-local block writes its park step started (with the block descriptor) before the park checkpoint, so a resume finishes the block from the step and never runs the unit again
 - [Phase 03]: 03-18: a blocked run is continued only from a block that came from running (or paused during a resume's reconcile); decide must use isBlockedRunContinuable
 - [Phase 03]: 03-18: budget endings are decision class budget (withdraw only, amendable); the Phase 2 class permission is replaced in six offline tests and one live case
+- [Phase 03]: 03-19: a check is repaired only when it failed and passed at the item's start; every other failing check, and a failed repair, is a decision with the reproducer — an item's start is the last committed item's G2 result over the baseline, so a regression is charged to the item that caused it
+- [Phase 03]: 03-19: G1 judges only a progressed unit; a decision G1 opens is tagged in its evidence references, and G3 authorizes no test path until an amendment can name one — S3-A: a paused unit has no PLAN; the tag says which owner choices an answer settled; the amendment plan owns authorized test paths
 
 ### Pending Todos
 
@@ -347,6 +350,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T06:43:17.881Z
-Stopped at: Completed 03-18-PLAN.md
+Last session: 2026-11-09T08:20:33.107Z
+Stopped at: Completed 03-19-PLAN.md
 Resume file: None

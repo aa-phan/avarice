@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 18/33 plans executed (15 waves)
+**Plans:** 19/33 plans executed (15 waves)
 
 Plans:
 **Wave 1**
@@ -243,7 +243,7 @@ Plans:
 - [x] 03-18-PLAN.md — Item-local decisions with park, S-17 offline, block-release-recheck, continuable pickup
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03-19-PLAN.md — Bounded repair, regression charging (S-52), G3 and integrity (S-21), G1 in the item flow
+- [x] 03-19-PLAN.md — Bounded repair, regression charging (S-52), G3 and integrity (S-21), G1 in the item flow
 - [ ] 03-20-PLAN.md — `avarice decide` with the response validation suite, stale re-open and supervisor pickup
 - [ ] 03-21-PLAN.md — `status` and `inbox`: items, decisions, banner state, cancel request (optional JSON keys only)
 
@@ -372,7 +372,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 18/33 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 19/33 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
