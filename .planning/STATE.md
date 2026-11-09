@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-19-PLAN.md
-last_updated: "2026-11-09T08:20:33.290Z"
+stopped_at: Completed 03-20-PLAN.md
+last_updated: "2026-11-09T08:56:23.834Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: d39e1f033d695203046b23cc98c8429f1455006c
+state_head: 04b21fdac614f40bba910d8abf98d3322062af52
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 80
+  completed_plans: 81
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 20 of 33
+Plan: 21 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -136,6 +136,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P17 | 50min | 2 tasks | 11 files |
 | Phase 03 P18 | 120 min | 3 tasks | 26 files |
 | Phase 03 P19 | 75 min | 3 tasks | 29 files |
+| Phase 03 P20 | 30 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -298,6 +299,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-18: budget endings are decision class budget (withdraw only, amendable); the Phase 2 class permission is replaced in six offline tests and one live case
 - [Phase 03]: 03-19: a check is repaired only when it failed and passed at the item's start; every other failing check, and a failed repair, is a decision with the reproducer — an item's start is the last committed item's G2 result over the baseline, so a regression is charged to the item that caused it
 - [Phase 03]: 03-19: G1 judges only a progressed unit; a decision G1 opens is tagged in its evidence references, and G3 authorizes no test path until an amendment can name one — S3-A: a paused unit has no PLAN; the tag says which owner choices an answer settled; the amendment plan owns authorized test paths
+- [Phase 03]: 03-20: a refusal on identity is not recorded; a refusal about the decision is decision.rejected with the run, the decision and the check name only — An identity refusal says nothing about the decision; the run's own attempt is on record by the hook's deny event (D-14, CS-11)
+- [Phase 03]: 03-20: decide withdraws through withdrawDecision, never answerDecision with the text withdraw; an option key on a withdraw-only record that carries an amend command records amendment.requested and applies nothing — answerDecision would release the items to ready; a Phase 2 record (options []) answered by a key stays an unlisted option (D-17, owner decision 2)
 
 ### Pending Todos
 
@@ -350,6 +353,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T08:20:33.107Z
-Stopped at: Completed 03-19-PLAN.md
+Last session: 2026-11-09T08:56:23.632Z
+Stopped at: Completed 03-20-PLAN.md
 Resume file: None
