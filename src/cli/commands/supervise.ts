@@ -4,6 +4,7 @@
 // 3 for any other stop state, a state with no stage yet, or a lease another supervisor still holds, 64 for a usage error or an
 // unknown run, 70 for an internal failure.
 import { describeError } from '../../adapters/sqlite/db.ts';
+import { notifyRunStop } from '../../app/notify.ts';
 import { reconcileRun } from '../../app/run-resume.ts';
 import { runSupervisor } from '../../app/run-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
@@ -48,5 +49,9 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   }
   const { state, reason, message } = outcome.value;
   for (const line of outcomeLines(`run ${runId}`, state, reason, message)) io.out(`${line}\n`);
+  // Tell the owner (plan 03-16). The inbox and status already show the stop; a banner that cannot be raised is recorded in the ledger and never
+  // changes the exit code. A settings file that cannot be read is said once on stderr.
+  const notified = await notifyRunStop(deps, runId, { state, reason });
+  if (!notified.ok) io.err(`${errorLine('supervise', `no notification raised for run ${runId}: ${describeError(notified.error)}`)}\n`);
   return state === 'ready_for_review' ? 0 : EXIT_NOT_READY;
 }

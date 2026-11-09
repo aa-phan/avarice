@@ -17,6 +17,8 @@ import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
 import { resolveProfile } from '../adapters/fs/profile-paths.ts';
+import { readProfileNotify } from '../adapters/fs/profile-config.ts';
+import { LocalNotifier } from '../adapters/notify/local-notifier.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
 import { GitRunSource } from '../adapters/git/run-source.ts';
@@ -33,15 +35,17 @@ import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
 import { digestOf } from '../domain/digest.ts';
+import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { Ledger } from '../ports/ledger.ts';
+import type { Notifier } from '../ports/notifier.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
 import type { EgressProxy } from '../ports/egress-proxy.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
-import type { AppDeps, Clock, GsdProblem, IdSource } from '../app/deps.ts';
+import type { AppDeps, Clock, GsdProblem, IdSource, NotifyDeps } from '../app/deps.ts';
 
 export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003];
 export const EXIT_INTERNAL = 70;
@@ -58,6 +62,9 @@ export interface DepsOverrides {
   // Replaces the allowlisting egress proxy. Only test entries pass this (a test whose registry is a local server on a port the conventions
   // cannot name); bin/avarice.ts never does, so production always runs the in-repo allowlist proxy.
   egress?: EgressProxy;
+  // Replaces the local osascript notifier. Only test entries pass this (so a test never posts a real banner); bin/avarice.ts never
+  // does, so production always runs LocalNotifier with the path from the profile config.
+  notifier?: Notifier;
 }
 
 export interface CreateDepsOptions {
@@ -272,10 +279,26 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   }
   // The context sources read the indexes through GSD's own readers, so they exist exactly when the GSD adapter does.
   const context = gsd !== undefined ? { intel: new GsdIntelContext(gsd, { nowMs: () => clock.nowMs() }), graph: new GsdGraphContext(gsd, { nowMs: () => clock.nowMs() }) } : undefined;
+  // Local notification (plan 03-16). The settings are read from the profile config each time they are asked for, so an edited file is
+  // honored by the next banner; the osascript path is read once. A read-only command raises no banner.
+  const readNotifySettings = () => readProfileNotify(profile.configHome, profile.profile);
+  let notify: NotifyDeps | undefined;
+  if (options.readOnly !== true) {
+    const settings = readNotifySettings();
+    notify = {
+      notifier: overrides.notifier ?? new LocalNotifier({ osascriptPath: settings.ok ? settings.value.local.osascriptPath : NOTIFY_DEFAULTS.local.osascriptPath }),
+      settings: readNotifySettings,
+      sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+      minuteOfDay: (nowMs) => {
+        const at = new Date(nowMs);
+        return at.getHours() * 60 + at.getMinutes();
+      },
+    };
+  }
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), clock, ids, profile, home },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home },
       close: () => {
         try {
           store.close();
