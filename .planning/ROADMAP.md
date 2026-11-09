@@ -264,7 +264,7 @@ Plans:
 **Gap closure after the 03-27 halt** *(run with `/gsd-execute-phase 3 --gaps-only`; 03-27's SUMMARY stays halted, blocking 03-28 to 03-33, until 03-36 resumes it)*
 - [ ] 03-34-PLAN.md — Diagnose the small-unit failure from the evidence; the unit prompt, the run agents and the hook's refusals state the run's shell rules (offline)
 - [ ] 03-35-PLAN.md — Plan-group spend guard (10.00 USD for 03-27's resumed cases); three live haiku probes of 03-27's item A; owner decision checkpoint only if haiku fails
-- [ ] 03-36-PLAN.md — Re-run 03-27's live cases (S-51 judged first) and resume 03-27's SUMMARY to complete when every case passes
+- [ ] 03-36-PLAN.md — Re-run 03-27's live cases, cheap cases first and s17-s51 last (S-51 judged first), and resume 03-27's SUMMARY to complete when every case passes
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
