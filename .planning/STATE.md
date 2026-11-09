@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Halted 03-37-PLAN.md at s21 (not exercised twice; cs5, s52, s17-s51 not run)
-last_updated: "2026-11-09T21:01:32.443Z"
+stopped_at: Halted 03-38-PLAN.md at s21 (FAIL; cs5, s52, s17-s51 not run)
+last_updated: "2026-11-09T21:53:00.610Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 58668b475129c4bc44c74472bae7641190f6df17
+state_head: b3d5cf77918a2c959e1d5cf2f71cab3a3ce37836
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 98
-  completed_plans: 92
+  total_plans: 99
+  completed_plans: 93
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-37 HALTED at s21 (03-27 and 03-36 stay halted; 03-28..03-33 blocked until an owner decision and a follow-up plan)
-Status: Halted — owner decision needed on the s21 brief: on the pinned 2.1.319 host the harness tamper ran both times, but the haiku unit's planner stopped with an acceptance decision before any gate (NOT EXERCISED twice)
-Last activity: 2026-11-09 — plan 03-37 halted: s21 NOT EXERCISED twice, cs5, s52 and s17-s51 not run (0.0794 USD; group 3.9528 of 10.00, Phase 3 5.0455 of 25); open item: host 2.1.321 not admitted
+Plan: 03-38 HALTED at s21 (03-27, 03-36 and 03-37 stay halted; 03-28..03-33 blocked until an owner decision and a follow-up plan)
+Status: Halted — owner decision needed on how S-21 is proven: the per-case brief worked (the haiku unit reached the gates) but the combined harness tamper (delete, skip, override) fails G2 on deletion-scope and no-new-overrides and blocks the run with a permission decision, so the removed-test, new-skip-marker and repeated_failure results the judge asserts cannot occur
+Last activity: 2026-11-09 — plan 03-38 halted: s21 FAIL on the pinned 2.1.319 host, cs5, s52 and s17-s51 not run (0.0721 USD; group 4.0250 of 10.00, Phase 3 5.1177 of 25); open item: host 2.1.321 not admitted
 
 Progress: [███░░░░░░░] 25%
 
@@ -146,6 +146,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P34 | 75 min | 3 tasks | 12 files |
 | Phase 03 P35 | 45 min | 3 tasks | 7 files |
 | Phase 03 P37 | 1h 10m | 1 tasks | 8 files |
+| Phase 03 P38 | 1h 15m | 1 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -334,6 +335,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-09 after the 03-36 halt (s21 not exercised: the haiku unit read scripts/tamper.mjs, declined to run it and opened a decision): move the tamper and write probes out of the unit's reach — a harness-only change (no src/, gate, hook, containment-list, model-map or docs/system change) so the case, not the model, performs the tamper and G2/G3 judge the tree it leaves; cs5 must still have the write genuinely issued from a subagent, so its new shape needs care. Re-run s21, cs5, s52 and s17-s51 under the existing per-case caps and the 10.00 USD group guard (3.8735 spent); s50, cs15 and s18-short keep their 03-36 PASS lines
 - [Phase 03]: Owner decision 2026-11-09 (plan 03-37): pin every live command to the admitted host 2.1.319 with AVARICE_LIVE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 so the Phase 3 run-purpose evidence stays on one host version; AVARICE_LIVE_ADMIT_CLAUDE_VERSION unused, ADMITTED_CLAUDE_VERSIONS and the installed default binary untouched — The installed Claude Code auto-updated to 2.1.321, which is not admitted; admitting it is out of scope for 03-37
 - [Phase 03]: Owner decision 2026-11-09 after the 03-37 halt (s21 not exercised twice: the haiku planner stopped at an acceptance question because the shared itemsBriefText Behavior sentence "the slug rules are covered by tests" contradicts s21's auth acceptance): fix ALL remaining live briefs in one harness-only gap plan — each of s21, cs5, s52 and s17-s51 gets its own brief text matching its acceptance criteria and stating the intended direction so nothing is left to ask, except s17-s51's item B, which must still ask; built in test/helpers/live-phase3-fixtures.ts (as cs5BriefText is); no change to src/, docs/system/, test/helpers/run-fixtures.ts, gates, hook, containment lists, ROUTINE_PRESET or caps; still pinned to 2.1.319; s50, cs15 and s18-short keep their 03-36 PASS lines
+- [Phase 03]: Plan 03-38 halted at s21: FAIL on the pinned 2.1.319 host after the per-case briefs worked (the unit reached the gates) — The harness tamper deleted a test outside the empty delete globs, so G2 failed on deletion-scope and no-new-overrides and the run blocked with a permission decision; the inventory rules removed-test and new-skip-marker run only when every other G2 rule passes, and repeated_failure follows a repair that a scope breach never reaches. Not cause (a), (b) or (c), so no re-run; owner decision needed on how S-21 is proven
 
 ### Pending Todos
 
@@ -370,6 +372,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - Plan 03-36 halted at s21 (NOT EXERCISED: the haiku unit read scripts/tamper.mjs and declined to run npm test); cs5 likely the same; owner decision needed on how the tamper and write-probe cases are exercised; 03-27 stays halted, 03-28..03-33 blocked
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
 - Plan 03-37 halted at s21 (NOT EXERCISED twice on pinned 2.1.319: the harness tamper ran, the haiku unit's planner stopped with an acceptance decision before any gate); cs5, s52 and s17-s51 not run; 03-27 and 03-36 stay halted, 03-28..03-33 blocked; owner decision needed on the s21 brief
+- Plan 03-38 halted at s21 (FAIL on pinned 2.1.319: the combined harness tamper cannot produce the removed-test, new-skip-marker and repeated_failure results the judge asserts); cs5, s52 and s17-s51 not run; 03-27, 03-36 and 03-37 stay halted, 03-28..03-33 blocked; owner decision needed on S-21's tamper, judge or scenario text
 
 ### Quick Tasks Completed
 
@@ -390,6 +393,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T21:01:31.899Z
-Stopped at: Halted 03-37-PLAN.md at s21 (not exercised twice; cs5, s52, s17-s51 not run)
+Last session: 2026-11-09T21:53:00.367Z
+Stopped at: Halted 03-38-PLAN.md at s21 (FAIL; cs5, s52, s17-s51 not run)
 Resume file: None
