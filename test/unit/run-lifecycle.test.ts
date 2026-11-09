@@ -193,6 +193,8 @@ const ITEM_EDGES: ReadonlyArray<readonly [WorkItemState, WorkItemState]> = [
   ['implemented', 'gated'],
   ['gated', 'done'],
   ['delegated', 'ready'],
+  // A bounded repair of an item whose required check newly failed (AUT-10, D-11).
+  ['implemented', 'delegated'],
   ['ready', 'blocked_on_decision'],
   ['delegated', 'blocked_on_decision'],
   ['implemented', 'blocked_on_decision'],
@@ -201,11 +203,20 @@ const ITEM_EDGES: ReadonlyArray<readonly [WorkItemState, WorkItemState]> = [
 ];
 
 describe('work item transition table', () => {
+  it('allows the one repair delegation of an implemented item (AUT-10) and refuses it from gated and done', () => {
+    assert.ok(assertItemTransition('implemented', 'delegated').ok);
+    for (const from of ['gated', 'done'] as const) {
+      const result = assertItemTransition(from, 'delegated');
+      assert.ok(!result.ok, `${from} -> delegated`);
+      assert.equal(result.error.kind, 'invalid');
+    }
+  });
+
   it('has the six item states', () => {
     assert.deepEqual([...WORK_ITEM_STATES].sort(), ['blocked_on_decision', 'delegated', 'done', 'gated', 'implemented', 'ready']);
   });
 
-  it('accepts exactly ready -> delegated -> implemented -> gated -> done, the discard-and-retry edge and the blocked edges', () => {
+  it('accepts exactly ready -> delegated -> implemented -> gated -> done, the discard-and-retry edge, the repair edge and the blocked edges', () => {
     const expected = new Set(ITEM_EDGES.map(([a, b]) => `${a}>${b}`));
     for (const from of WORK_ITEM_STATES) {
       for (const to of WORK_ITEM_STATES) {
@@ -227,6 +238,9 @@ describe('work item transition table', () => {
       ['implemented', 'done'],
       ['done', 'ready'],
       ['done', 'blocked_on_decision'],
+      ['gated', 'delegated'],
+      ['done', 'delegated'],
+      ['blocked_on_decision', 'delegated'],
     ] as const) {
       assert.ok(!assertItemTransition(from, to).ok, `${from} -> ${to}`);
     }
