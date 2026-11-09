@@ -1,12 +1,17 @@
-// avarice contract amend <runId> --reason <text> --budget name=value ...
+// avarice contract amend <runId> --reason <text> [--budget name=value]... [--add-write glob]... [--acceptance-file file [--item id]]
+//                         [--check +name | -name]... [--decision decisionId]
 // Records contract version n+1 for a run (RC-6, D-17, D-18, D-19, D-20): the one way a limit rises or a scope widens, and it is a person at a
 // terminal outside the run who does it. The command prints the field-level diff and what it would invalidate, asks `apply contract v<n+1>? [y/N]`,
-// and on yes writes the amendment in one ledger transaction, then the contract file. Declining prints `not amended` and exits 0. Exit 0 amended or
-// declined, 3 when the run has ended or the contract moved, 64 for a usage error, an invalid flag or an unknown run, 70 for an internal failure.
+// and on yes writes the amendment in one ledger transaction (version, limits, stale rows, the decision it answers), then the contract file.
+// Declining prints `not amended` and exits 0. It refuses inside a run (AVARICE_RUN), without a terminal on standard input and output, and from the
+// process tree of a run, before the profile is resolved, so a refusal creates nothing (CS-11). Exit 0 amended or declined, 3 when the run has ended,
+// the contract moved or the decision is no longer open, 64 for a refusal, a usage error, an invalid flag or an unknown run, 70 for an internal failure.
+import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-import { describeError } from '../../adapters/sqlite/db.ts';
 import { commitAmendment, planAmendment } from '../../app/amend.ts';
 import type { AmendRequest, AmendmentPlan } from '../../app/amend.ts';
+import { describeError } from '../../app/run-start.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { FieldDiff } from '../../domain/amendment.ts';
 import type { PortError } from '../../domain/result.ts';
@@ -20,11 +25,32 @@ const EXIT_REFUSED = 3;
 const EXIT_USAGE = 64;
 const EXIT_INTERNAL = 70;
 
-const USAGE = 'usage: avarice contract amend <runId> --reason <text> [--budget name=value]...';
+const USAGE = [
+  'usage: avarice contract amend <runId> --reason <text> [--budget name=value]... [--add-write glob]...',
+  '         [--acceptance-file file [--item id]] [--check +name|-name]... [--decision decisionId]',
+].join('\n');
 const RUN_ID = /^run_[0-9A-Za-z]+$/;
+const DECISION_ID = /^dec_[0-9A-Za-z]+$/;
+const CHECK_FLAG = /^([+-])(.+)$/;
+const ACCEPTANCE_FILE_MAX_BYTES = 64 * 1024;
 
-// Flags of the amendment grammar that a later change of this plan adds.
-const NOT_YET: readonly string[] = ['add-write', 'check', 'acceptance-file', 'item', 'decision'];
+// The values a repeatable flag was given, or a message for the usage line when it was given without one.
+function values(args: ParsedArgs, flag: string): string[] | string {
+  if (args.flags[flag] === true) return `--${flag} needs a value`;
+  return args.repeated?.[flag] ?? [];
+}
+
+function checkEntries(args: ParsedArgs): Array<{ op: '+' | '-'; name: string }> | string {
+  const given = values(args, 'check');
+  if (typeof given === 'string') return given;
+  const out: Array<{ op: '+' | '-'; name: string }> = [];
+  for (const entry of given) {
+    const match = CHECK_FLAG.exec(entry);
+    if (match === null) return `--check ${JSON.stringify(entry)} must be +name or -name`;
+    out.push({ op: match[1] as '+' | '-', name: match[2] as string });
+  }
+  return out;
+}
 
 // Checked before the profile is resolved, so a refusal or a usage error leaves nothing on disk: no data root, no store, no file (CS-11). The
 // refusals come first: inside a run (AVARICE_RUN), without a terminal on standard input and output, and from the process tree of a run. Without
@@ -32,15 +58,28 @@ const NOT_YET: readonly string[] = ['add-write', 'check', 'acceptance-file', 'it
 export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env, context?: IdentityContext): string | undefined {
   const refused = context === undefined ? 'needs an interactive terminal' : refuseOutsideTerminal(env, context);
   if (refused !== undefined) return refused;
+  const message = (text: string): string => `${text}\n${USAGE}`;
   const [sub, runId, ...rest] = args.positionals;
-  if (sub !== 'amend') return `contract needs a subcommand: amend\n${USAGE}`;
-  if (runId === undefined || !RUN_ID.test(runId) || rest.length > 0) return `contract amend needs exactly one run ID\n${USAGE}`;
-  for (const flag of NOT_YET) if (args.flags[flag] !== undefined) return `--${flag} is not supported yet\n${USAGE}`;
+  if (sub !== 'amend') return message('contract needs a subcommand: amend');
+  if (runId === undefined || !RUN_ID.test(runId) || rest.length > 0) return message('contract amend needs exactly one run ID');
   const reason = args.flags['reason'];
-  if (typeof reason !== 'string' || reason.trim() === '') return `--reason is required: say why the contract changes\n${USAGE}`;
+  if (typeof reason !== 'string' || reason.trim() === '') return message('--reason is required: say why the contract changes');
   const budgets = parseBudgetFlags(args);
-  if (typeof budgets === 'string') return `${budgets}\n${USAGE}`;
-  if (Object.keys(budgets).length === 0) return `nothing to amend: name a budget with --budget name=value\n${USAGE}`;
+  if (typeof budgets === 'string') return message(budgets);
+  const globs = values(args, 'add-write');
+  if (typeof globs === 'string') return message(globs);
+  const checks = checkEntries(args);
+  if (typeof checks === 'string') return message(checks);
+  const file = args.flags['acceptance-file'];
+  if (file !== undefined && (typeof file !== 'string' || file === '')) return message('--acceptance-file needs a file');
+  const item = args.flags['item'];
+  if (item !== undefined && (typeof item !== 'string' || item === '')) return message('--item needs a work item ID');
+  if (item !== undefined && file === undefined) return message('--item names the work item of a new criterion and goes with --acceptance-file');
+  const decision = args.flags['decision'];
+  if (decision !== undefined && (typeof decision !== 'string' || !DECISION_ID.test(decision))) return message('--decision needs a decision ID (dec_...)');
+  if (Object.keys(budgets).length === 0 && globs.length === 0 && checks.length === 0 && file === undefined) {
+    return message('nothing to amend: name a budget, a write glob, a check or an acceptance file');
+  }
   return undefined;
 }
 
@@ -62,21 +101,51 @@ function planLines(plan: AmendmentPlan): string[] {
   lines.push(`invalidates: ${plan.invalidates.length === 0 ? 'nothing' : plan.invalidates.join(', ')}`);
   if (plan.staleGates.length > 0) lines.push(`stale gates: ${plan.staleGates.join(', ')}`);
   if (plan.staleEvidenceIds.length > 0) lines.push(`stale evidence: ${plan.staleEvidenceIds.join(', ')}`);
+  if (plan.resolvesDecisionId !== undefined) lines.push(`answers decision ${plan.resolvesDecisionId} as amended:v${plan.version}`);
   return lines.map(stripControl);
+}
+
+// A regular file of at most 64 KiB, decoded as strict UTF-8: the acceptance criteria an owner file adds to a contract (T-03 trust boundary).
+function readAcceptanceFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
+  let fd: number;
+  try {
+    fd = openSync(resolve(path), constants.O_RDONLY);
+  } catch (e) {
+    return { ok: false, reason: `${JSON.stringify(path)} cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})` };
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return { ok: false, reason: `${JSON.stringify(path)} is not a regular file` };
+    if (stat.size > ACCEPTANCE_FILE_MAX_BYTES) return { ok: false, reason: `${JSON.stringify(path)} is larger than ${ACCEPTANCE_FILE_MAX_BYTES} bytes` };
+    const buffer = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const n = readSync(fd, buffer, offset, buffer.length - offset, offset);
+      if (n === 0) break;
+      offset += n;
+    }
+    try {
+      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset)) };
+    } catch {
+      return { ok: false, reason: `${JSON.stringify(path)} is not valid UTF-8` };
+    }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // One line from standard input, for a command run with no one to ask for it (the one-shot CLI). undefined at end of input.
 function askStdin(question: string): Promise<string | undefined> {
-  return new Promise((resolve) => {
+  return new Promise((resolveAnswer) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     let answered = false;
     rl.once('close', () => {
-      if (!answered) resolve(undefined);
+      if (!answered) resolveAnswer(undefined);
     });
     rl.question(question, (answer) => {
       answered = true;
       rl.close();
-      resolve(answer);
+      resolveAnswer(answer);
     });
   });
 }
@@ -84,10 +153,8 @@ function askStdin(question: string): Promise<string | undefined> {
 function fail(io: Io, error: PortError): number {
   switch (error.kind) {
     case 'not_found':
-      io.err(`${errorLine('contract', `no run ${error.ref}`)}\n`);
-      return EXIT_USAGE;
     case 'invalid':
-      io.err(`${errorLine('contract', `invalid ${error.field}: ${error.reason}`)}\n`);
+      io.err(`${errorLine('contract', describeError(error))}\n`);
       return EXIT_USAGE;
     case 'conflict':
       io.err(`${errorLine('contract', `not amended: ${describeError(error)}`)}\n`);
@@ -102,7 +169,24 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   const runId = args.positionals[1] as string;
   const budgets = parseBudgetFlags(args);
   if (typeof budgets === 'string') return fail(io, { kind: 'invalid', field: 'budget', reason: budgets });
-  const request: AmendRequest = { reason: args.flags['reason'] as string, budgets };
+  const checks = checkEntries(args);
+  if (typeof checks === 'string') return fail(io, { kind: 'invalid', field: 'check', reason: checks });
+  const globs = values(args, 'add-write');
+  if (typeof globs === 'string') return fail(io, { kind: 'invalid', field: 'add-write', reason: globs });
+
+  const request: AmendRequest = { reason: args.flags['reason'] as string };
+  if (Object.keys(budgets).length > 0) request.budgets = budgets;
+  if (globs.length > 0) request.addWrite = globs;
+  if (checks.length > 0) request.checks = checks;
+  const file = args.flags['acceptance-file'];
+  if (typeof file === 'string') {
+    const read = readAcceptanceFile(file);
+    if (!read.ok) return fail(io, { kind: 'invalid', field: 'acceptance-file', reason: read.reason });
+    const item = args.flags['item'];
+    request.acceptance = { text: read.text, ...(typeof item === 'string' ? { item } : {}) };
+  }
+  const decision = args.flags['decision'];
+  if (typeof decision === 'string') request.decisionId = decision;
 
   const planned = planAmendment(deps, runId, request);
   if (!planned.ok) return fail(io, planned.error);
@@ -118,6 +202,9 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
 
   const committed = commitAmendment(deps, plan, `owner:${responderName()}`, deps.clock.nowMs());
   if (!committed.ok) return fail(io, committed.error);
-  io.out(`contract v${committed.value.version} recorded\n`);
+  const { value } = committed;
+  io.out(`contract v${value.version} recorded\n`);
+  if (value.staleEvidence > 0 || value.staleGates > 0) io.out(`appended ${value.staleEvidence} stale evidence row(s) and ${value.staleGates} stale gate row(s)\n`);
+  if (value.resolvedDecisionId !== null) io.out(`decision ${value.resolvedDecisionId} answered amended:v${value.version}\n`);
   return 0;
 }

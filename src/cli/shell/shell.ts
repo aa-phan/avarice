@@ -348,9 +348,21 @@ class Session implements ActionContext {
   async command(argv: readonly string[]): Promise<number> {
     this.consumer = null;
     let captured = '';
+    // How much of `captured` line mode has already printed, because a question had to follow it.
+    let printed = 0;
     const io: Io = {
       out: (text) => void (captured += text),
       err: (text) => void (captured += text),
+      // A command that needs an answer (`contract amend`) asks through the shell's own prompt, so the answer is read here and not from raw
+      // standard input. What the command printed so far stays on screen above the question.
+      ask: (question) => {
+        if (this.full) this.output = stripControl(captured).replace(/\n+$/, '');
+        else {
+          this.stdout.write(stripControl(captured.slice(printed)));
+          printed = captured.length;
+        }
+        return this.prompt(question);
+      },
     };
     if (this.full) {
       this.output = `running ${stripControl(argv.join(' '))} ...`;
@@ -362,12 +374,15 @@ class Session implements ActionContext {
     const { stdin: _stdin, stdout: _stdout, ...rest } = this.overrides;
     let code: number;
     try {
-      code = await this.dispatch(argv, { ...rest, env: this.env, io });
+      code = await this.dispatch(argv, { ...rest, env: this.env, io, ask: io.ask });
     } catch (e) {
       captured += `${errorLine(argv[0], `failed: ${message(e)}`)}\n`;
       code = 70;
     }
-    this.show(code === 0 ? captured : `${captured.replace(/\n*$/, '\n')}exit ${code}\n`);
+    const text = code === 0 ? captured : `${captured.replace(/\n*$/, '\n')}exit ${code}\n`;
+    // Line mode printed what came before a question already; the rest, if any, follows it.
+    const tail = this.full ? text : text.slice(printed);
+    if (this.full || printed === 0 || tail.trim() !== '') this.show(tail);
     return code;
   }
 

@@ -59,7 +59,7 @@ const usage = (field: string, message: string): RunStartResult => ({ ok: false, 
 const internal = (message: string): RunStartResult => ({ ok: false, failure: { kind: 'internal', message } });
 
 // The one-line text of a port error. (The adapters' own describeError is out of reach of the application layer.)
-function describeError(error: PortError): string {
+export function describeError(error: PortError): string {
   switch (error.kind) {
     case 'invalid':
       return `invalid ${error.field}: ${error.reason}`;
