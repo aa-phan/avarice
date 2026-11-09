@@ -129,7 +129,7 @@ export function freshProfile(): CliRoots {
 }
 
 export function openRaw(roots: CliRoots, readOnly = true): DatabaseSync {
-  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly });
+  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly, timeout: 5000 });
 }
 
 export function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {

@@ -173,7 +173,7 @@ export async function onboardRunRepoWithIndexes(roots: CliRoots, repo: ScratchRe
   } finally {
     composed.value.close();
   }
-  const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true, timeout: 5000 });
   let staging: string;
   try {
     staging = (db.prepare('SELECT staging_worktree FROM onboardings').get() as { staging_worktree: string }).staging_worktree;
@@ -424,7 +424,7 @@ export function writeItemsBrief(dir: string, items: readonly BriefItem[] = ITEMS
 
 // Rows of the ledger of a profile, read-only.
 export function ledgerRows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
-  const handle = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  const handle = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true, timeout: 5000 });
   try {
     return (handle.prepare(sql).all(...params) as Array<Record<string, unknown>>).map((r) => ({ ...r }) as T);
   } finally {

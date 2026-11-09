@@ -143,7 +143,7 @@ export interface EventRowShape {
 }
 
 export function withDb<T>(ledgerPath: string, fn: (db: DatabaseSync) => T): T {
-  const db = new DatabaseSync(ledgerPath, { readOnly: true });
+  const db = new DatabaseSync(ledgerPath, { readOnly: true, timeout: 5000 });
   try {
     return fn(db);
   } finally {

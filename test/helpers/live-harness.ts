@@ -466,7 +466,7 @@ export function parseTranscript(text: string): ParsedTranscript {
 // ---------------------------------------------------------------------------------------------------------------
 
 export function ledgerRows<T>(dataRoot: string, sql: string, ...params: Array<string | number>): T[] {
-  const db = new DatabaseSync(join(dataRoot, 'state.db'), { readOnly: true });
+  const db = new DatabaseSync(join(dataRoot, 'state.db'), { readOnly: true, timeout: 5000 });
   try {
     return (db.prepare(sql).all(...params) as Array<Record<string, unknown>>).map((r) => ({ ...r }) as T);
   } finally {
