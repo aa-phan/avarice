@@ -179,8 +179,30 @@ The total live-model spend of Phase 3 may not pass **25 USD** (owner decision D-
 |---|---|---|---|---|---|
 | 03-01 | 2026-11-08 | 2.1.319 | Admission of 2.1.319: the 22 live onboarding T3 tests (19 started a host) plus the re-run of case 06a: 20 ledger lines | 0.1515 | 0.1515 |
 | 03-13 | 2026-11-09 | 2.1.319 | Spike S3-A, Sonnet: `round-1` pause (0.0617), `round-1-resume` (0.8795) and `missing-session` twice (0 each): 4 ledger lines | 0.9412 | 1.0927 |
+| 03-27 | 2026-11-09 | 2.1.319 | Phase 3 run-purpose cases, tracer only: `s17-s51` twice (1.4970 and 1.9591): 2 ledger lines; the other seven cases were not started (tracer gate) | 3.4561 | 4.5488 |
 
-The cumulative total equals the sum of `costUsd` over the ledger (24 lines, 1.0927 to four decimals, 1.09 to two; 20 lines and 0.1515 before plan 03-13). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; after it 23.9073 USD remain under the ceiling.
+The cumulative total equals the sum of `costUsd` over the ledger (26 lines, 4.5488 to four decimals, 4.55 to two; 24 lines and 1.0927 before plan 03-27). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; plan 03-27's own total is 3.4561 USD of its 6.00 USD cap; after it 20.4512 USD remain under the ceiling.
+
+### Phase 3 run-purpose cases (plan 03-27)
+
+Suite `test/containment/live-run-phase3.test.ts` (skipped unless `AVARICE_LIVE=1`), harness `test/helpers/live-harness.ts` (`runLiveRun` with `brief`, `repoFiles`, `conventions`, `profile`, `steps`, `settleNotificationsMs` and `planCap`; `modelLoggingWrapperScript`, `invocationRecords`, `planTotalRefusal`; `runLiveRunUnit` with `agentsDir` and `planTotalUsd`), results `test/containment/live-run-phase3.jsonl`, spend `live-spend-phase3.jsonl` under plan `03-27` with a 6.00 USD plan total checked before every start. Each case runs the production `start --brief ... --policy routine --wait` with the real supervisor and the real contained host on a generated scratch repository (no real project, no package install). Every profile names an osascript path that does not exist (`/nonexistent/avarice-live-phase3/osascript`), so every delivery fails `osascript-missing` and no banner is posted. Every verdict is read from the ledger (work items, attempts, decisions, gate rows, evidence, hook decisions, notification rows, budget rows), the host's own transcripts and the files of the run's clone; the question text of a decision is never written to the results file.
+
+```bash
+AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-27 node --test --test-name-pattern="s17-s51" test/containment/live-run-phase3.test.ts
+```
+
+| Case | Scenario | Verdict | Cost (USD) | Host | Results line |
+|---|---|---|---|---|---|
+| `s17-s51`, run 1 | S-17, S-51, RC-8: A small (haiku), B medium (sonnet, owner choice), C large (opus), D small depends on B; cap 3.00 | FAIL: A ended blocked (the item states were A `blocked_on_decision`, B `blocked_on_decision`, C `done`, D `ready`) | 1.4970 | 2.1.319 | `live-run-phase3.jsonl` line 1 |
+| `s17-s51`, run 2 (the one re-run, same case, per-invocation cap raised from 1.60 to 2.00) | same | FAIL: the same item states | 1.9591 | 2.1.319 | `live-run-phase3.jsonl` line 2 |
+| `s50`, `s18-short`, `s21`, `s52`, `cs5`, `cs15` | S-50, S-18, S-21, S-52, CS-5, CS-15 | not run: the tracer failed twice, so no expansion case was started | 0 | | none |
+
+What the two `s17-s51` runs measured (ledger, transcripts and clone; run 1 and run 2 gave the same item states, decisions and models, and the figures are run 2's unless a run is named):
+
+- **Held (S-17).** B's unit made no edit and ended with a numbered-choice question (classifier kind `paused`, signal `numbered-choice`); B went `blocked_on_decision` with one open `acceptance` decision affecting B and D, no G1 row names B, and its attempt ended `blocked:decision`. C, independent, ran after B blocked, passed G1 and G2 with passed check evidence and was committed (one commit holding `src/version.ts` and `test/version.test.ts`). D was never delegated (no attempt, no invocation). The run ended `blocked_on_decision (decision)`, exit 3. Both banners failed (`osascript-missing`, three attempts) and no decision was answered.
+- **Held (S-51, RC-8).** The launch lines carried `--model haiku`, `--model sonnet`, `--model opus` in that order; the `launch:run` steps named the same models; the host's init events reported `claude-haiku-5-5`, `claude-sonnet-5-5` and `claude-opus-5-5`.
+- **Not held: A (small, haiku) did not complete in either run.** Run 1: the unit's first three calls were improvised shell lines the hook refused (`shell-syntax` twice, `shell-not-allowed` once), so the third denial in a row ended the invocation (terminal reason `hook_stopped`, 0.004 USD) and the item opened a `repeated_failure` decision. Run 2: two refused shell lines, then Reads and `npm test`, and the final message said the quick workflow needs shell commands outside the run's command list and that it would not do the change by hand; no edit, kind `denied`, a `permission` decision (0.0152 USD). In both runs the supervisor opened a second decision, so the run held two open decisions and two notification rows instead of one. Sonnet (B) and opus (C) ran the same workflow to a question and to a commit.
+- **Cost.** Opus on the one-line item C cost 1.4323 USD (run 1) and 1.7854 USD (run 2), 33 and 41 tool calls; the plan assumed it would be cheap.
 
 ### Spike S3-A on Claude Code 2.1.319 (2026-11-09, plan 03-13)
 
