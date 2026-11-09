@@ -7,7 +7,7 @@
 //   claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file>
 //     [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config
 //     --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose
-//     --session-id <uuid>
+//     --session-id <uuid>      (a resume ends `--resume <uuid>` instead; the two are never both on the line)
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 
@@ -20,6 +20,8 @@ export interface LaunchArgsInput {
   model: string;
   costCapUsd: number;
   sessionId: string;
+  // An earlier session to resume (D-08): the line ends `--resume <id>` and carries no `--session-id`; never `--fork-session`.
+  resumeSessionId?: string;
   // Named agent for the session (the intel seam, S0-D).
   agent?: string;
 }
@@ -51,8 +53,8 @@ export function buildLaunchArgs(input: LaunchArgsInput): string[] {
     '--output-format',
     'stream-json',
     '--verbose',
-    '--session-id',
-    input.sessionId,
+    // A resume swaps only this final pair: the CLI refuses `--session-id` together with `--resume`, and every flag above stays.
+    ...(input.resumeSessionId !== undefined ? ['--resume', input.resumeSessionId] : ['--session-id', input.sessionId]),
   ];
 }
 

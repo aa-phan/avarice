@@ -137,7 +137,11 @@ export class ClaudeHostAdapter implements AgentHost {
   async invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     if (signal.aborted) return err({ kind: 'cancelled', sideEffect: 'none' });
     const o = this.#o;
-    const sessionId = req.sessionId ?? randomUUID();
+    // A resume continues an earlier session and takes the place of the caller's chosen ID; the launch line then carries `--resume`.
+    if (req.resumeSessionId !== undefined && !UUID.test(req.resumeSessionId)) {
+      return err({ kind: 'invalid', field: 'resumeSessionId', reason: 'a session ID must be a UUID' });
+    }
+    const sessionId = req.resumeSessionId ?? req.sessionId ?? randomUUID();
     if (!UUID.test(sessionId)) return err({ kind: 'invalid', field: 'sessionId', reason: 'a session ID must be a UUID' });
     // Whose invocation this is: an onboarding (the default, every Phase 1 caller) or a run (plan 02-08). The owner's ID becomes a
     // directory name, so it is a plain name; the run purpose belongs to a run and only to one.
@@ -182,6 +186,7 @@ export class ClaudeHostAdapter implements AgentHost {
       model: req.model,
       costCapUsd: req.costCapUsd,
       sessionId,
+      ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
       ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
     });
     const safe = assertLaunchArgsSafe(args);
@@ -362,20 +367,21 @@ export class ClaudeHostAdapter implements AgentHost {
     return ok({ parsed: parser.finish(), transcript, exitCode: exit.code, signal: exit.signal, timedOut });
   }
 
-  // Ends any process that carries the invocation's `--session-id`: a supervisor killed mid-invocation leaves its host
-  // running in its own process group, and a resume must end it before anything else touches staging.
+  // Ends any process that carries the invocation's `--session-id` or `--resume` (a resumed host carries the latter): a
+  // supervisor killed mid-invocation leaves its host running in its own process group, and a resume must end it before
+  // anything else touches staging.
   async reap(request: ReapRequest): Promise<Result<{ terminated: number }>> {
     return reapBySessionId(request.sessionId, this.#o.killGraceMs ?? DEFAULT_KILL_GRACE_MS);
   }
 }
 
-// Ends any process that carries the session ID in its command line (`--session-id {uuid}`): a supervisor killed mid-invocation
-// leaves its host running in its own process group, and a resume must end it before anything else touches staging. Shared by
-// the adapter and the test fake host, so a test exercises the production search and kill rules.
+// Ends any process that carries the session ID in its command line (`--session-id {uuid}` for a fresh host, `--resume {uuid}` for a
+// resumed one): a supervisor killed mid-invocation leaves its host running in its own process group, and a resume must end it before
+// anything else touches staging. Shared by the adapter and the test fake host, so a test exercises the production search and kill rules.
 export async function reapBySessionId(sessionId: string, killGraceMs: number = DEFAULT_KILL_GRACE_MS): Promise<Result<{ terminated: number }>> {
   if (!UUID.test(sessionId)) return err({ kind: 'invalid', field: 'sessionId', reason: 'a session ID must be a UUID' });
-  // The pattern is matched as a regular expression against the whole command line; a UUID has no metacharacter.
-  const found = spawnSync('/usr/bin/pgrep', ['-f', '--', `--session-id ${sessionId}`], { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] });
+  // The pattern is an extended regular expression matched against the whole command line; a UUID has no metacharacter.
+  const found = spawnSync('/usr/bin/pgrep', ['-f', '--', `--(session-id|resume) ${sessionId}`], { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] });
   if (found.error !== undefined) return err({ kind: 'unavailable', cause: `cannot search for the host process: ${(found.error as NodeJS.ErrnoException).code ?? 'pgrep failed'}` });
   // pgrep: 0 matched, 1 none matched, anything else is an error.
   if (found.status === 1) return ok({ terminated: 0 });

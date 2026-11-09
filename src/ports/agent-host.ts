@@ -34,6 +34,10 @@ export interface InvocationRequest {
   // The session the host runs under, chosen by the caller so it can be recorded before launch (a resume can then
   // find a process that outlived its supervisor). The adapter generates one when absent.
   sessionId?: string;
+  // Resume this earlier session of the same work item instead of starting a new one (a paused unit that the owner has answered). The
+  // adapter picks the vendor flag; the containment, the budget and every other launch input are the ones a fresh invocation gets. When
+  // set it takes the place of `sessionId`, and the outcome names this session.
+  resumeSessionId?: string;
   // Who the invocation belongs to. Absent means an onboarding and `onboardingId` (every Phase 1 caller); `run` names the run in
   // `ownerId`, and the adapter keeps that invocation's files under the run instead of the onboarding (plan 02-08).
   ownerKind?: 'onboarding' | 'run';
