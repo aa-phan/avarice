@@ -236,21 +236,44 @@ export function bannerText(input: BannerInput): { title: string; body: string } 
   return { title: 'AVARICE', body: `${head}${tail}` };
 }
 
-// Stubs: the timing rules land in the next commit.
-export const BACKOFF_DELAYS_MS: readonly number[] = [];
-
-export function inQuietHours(_minuteOfDay: number, _quiet: ProfileNotify['quietHours']): boolean {
-  return false;
+// Quiet hours (D-24): the range [start, end) in whole minutes of the local day, so a banner at the start minute is held and
+// one at the end minute is not. A range whose start is after its end wraps past midnight. Fractions are compared as they
+// are, never rounded. Off (null) holds nothing. A held banner waits for the next digest; the inbox still updates.
+export function inQuietHours(minuteOfDay: number, quiet: ProfileNotify['quietHours']): boolean {
+  if (quiet === null || quiet.start === quiet.end) return false;
+  if (quiet.start < quiet.end) return minuteOfDay >= quiet.start && minuteOfDay < quiet.end;
+  return minuteOfDay >= quiet.start || minuteOfDay < quiet.end;
 }
 
-export function batchDue(_firstPendingAtMs: number, _nowMs: number, _windowMinutes: number): boolean {
-  return false;
+// Batching (D-24): the first notification waits for the window to pass so a burst becomes one banner. Integer
+// milliseconds from the injected clock; the window is a whole number of minutes.
+export function batchDue(firstPendingAtMs: number, nowMs: number, windowMinutes: number): boolean {
+  return nowMs - firstPendingAtMs >= windowMinutes * 60_000;
 }
 
-export function nextAttemptAt(_attempts: number, _lastAttemptAtMs: number): number | null {
-  return null;
+// Retry backoff (D-22): the delay before attempt 1, 2 and 3 of a delivery inside the process that raised the notification.
+// After the third, the notification is `failed`, stays listed by the inbox and is retried by the next digest.
+export const BACKOFF_DELAYS_MS: readonly number[] = [0, 10_000, 60_000];
+
+// `attempts` is how many attempts have been made. Null means no more in-process attempts, including for a count that is
+// not a whole non-negative number (fail closed: no invented retry).
+export function nextAttemptAt(attempts: number, lastAttemptAtMs: number): number | null {
+  if (!Number.isInteger(attempts) || attempts < 0) return null;
+  const delay = BACKOFF_DELAYS_MS[attempts];
+  return delay === undefined ? null : lastAttemptAtMs + delay;
 }
 
-export function nextDigestAt(_minuteOfDay: number, _times: readonly string[]): { minute: number; nextDay: boolean } | null {
-  return null;
+// The first digest time strictly after `minuteOfDay`; past the last one of the day, the first of the next day. Null when
+// no digest time is set. Entries that are not HH:MM are skipped (the parser has already refused them).
+export function nextDigestAt(minuteOfDay: number, times: readonly string[]): { minute: number; nextDay: boolean } | null {
+  const minutes: number[] = [];
+  for (const time of times) {
+    const match = CLOCK_TIME.exec(time);
+    if (match !== null) minutes.push(Number(match[1]) * 60 + Number(match[2]));
+  }
+  minutes.sort((a, b) => a - b);
+  const first = minutes[0];
+  if (first === undefined) return null;
+  const later = minutes.find((minute) => minute > minuteOfDay);
+  return later !== undefined ? { minute: later, nextDay: false } : { minute: first, nextDay: true };
 }
