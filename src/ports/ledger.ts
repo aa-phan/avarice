@@ -182,6 +182,8 @@ export interface AttemptRow {
   startedAt: string;
   endedAt: string | null;
   outcome: string | null;
+  // The work item the attempt served; null for an attempt written without one, which reads as item A.
+  itemId: string | null;
 }
 
 export interface ActivateInput {
@@ -359,6 +361,9 @@ export interface RunStepRow {
 
 export interface RunAttemptInput {
   reason: string;
+  // The work item the attempt serves. A multi-item stage names it; an attempt with no item is read as item A, so a run that
+  // began before per-item attempts keeps its history.
+  itemId?: string;
   nowMs: number;
 }
 
@@ -535,6 +540,28 @@ export interface AnswerDecisionInput {
   nowMs: number;
 }
 
+// The owner's answer to a decision whose state digest or contract version moved on after it was opened (D-15). The answer is kept on
+// the stale row as context; a successor with the same question is opened on the new state.
+export interface ReopenStaleDecisionInput {
+  runId: string;
+  decisionId: string;
+  answer: string;
+  answeredBy: string;
+  channel: 'terminal';
+  stateDigest: string;
+  contractVersion: number;
+  evidenceRefs: readonly string[];
+  nowMs: number;
+}
+
+export interface WithdrawDecisionInput {
+  runId: string;
+  decisionId: string;
+  // owner: the owner took the question back; cancel: the run was cancelled (AUT-12).
+  reason: 'owner' | 'cancel';
+  nowMs: number;
+}
+
 export interface CheckValidationInput {
   projectId: string;
   baseRevision: string;
@@ -656,7 +683,8 @@ export interface Ledger {
   // Attempts: ordinal 1, 2, ... per run. An attempt ends once, with an outcome.
   recordRunAttempt(runId: string, input: RunAttemptInput): Result<AttemptRow>;
   endRunAttempt(attemptId: string, input: { outcome: string; nowMs: number }): Result<AttemptRow>;
-  listRunAttempts(runId: string): Result<AttemptRow[]>;
+  // With an itemId, the attempts of that item; item A also matches the attempts that carry no item.
+  listRunAttempts(runId: string, filter?: { itemId?: string }): Result<AttemptRow[]>;
 
   // Evidence and gate results are insert-only (T-02-06, AUT-8): an interrupted check is marked by a new `inconclusive`
   // row, never by an UPDATE. The adapter refuses a status or independence outside the documented sets.
@@ -677,6 +705,12 @@ export interface Ledger {
   // open -> answered, and every affected item that no other open decision blocks goes blocked_on_decision -> ready. Refused with
   // `conflict` when the run's latest contract version is not expectContractVersion.
   answerDecision(input: AnswerDecisionInput): Result<DecisionRow>;
+  // open -> stale with the received answer kept, and a new open decision carrying the same class, issue, options, consequences,
+  // affected items, recommendation and authorized default on the new state digest and contract version, supersedes set to the old
+  // ID. Affected items keep their state.
+  reopenStaleDecision(input: ReopenStaleDecisionInput): Result<{ stale: DecisionRow; reopened: DecisionRow }>;
+  // open -> withdrawn. Affected items keep their state.
+  withdrawDecision(input: WithdrawDecisionInput): Result<DecisionRow>;
   // Oldest first.
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
 

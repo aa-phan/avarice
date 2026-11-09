@@ -55,6 +55,7 @@ import type {
   RunCheckpointInput,
   RunCheckpointRow,
   RunRow,
+  ReopenStaleDecisionInput,
   RunStepRow,
   RunTransitionInput,
   StepResultInput,
@@ -63,6 +64,7 @@ import type {
   StoreRunContractInput,
   TransitionGuard,
   TransitionInput,
+  WithdrawDecisionInput,
   WorkItemInput,
   WorkItemRow,
   WorkItemTransitionInput,
@@ -1000,7 +1002,7 @@ export class SqliteLedger implements Ledger {
     });
   }
 
-  listRunAttempts(runId: string): Result<AttemptRow[]> {
+  listRunAttempts(runId: string, _filter?: { itemId?: string }): Result<AttemptRow[]> {
     return guarded(() => {
       this.lockRun(runId);
       return (this.db.prepare('SELECT * FROM attempts WHERE run_id = ? ORDER BY ordinal').all(runId) as Row[]).map(toAttempt);
@@ -1273,6 +1275,14 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  reopenStaleDecision(_input: ReopenStaleDecisionInput): Result<{ stale: DecisionRow; reopened: DecisionRow }> {
+    return err({ kind: 'invalid', field: 'reopenStaleDecision', reason: 'not implemented' });
+  }
+
+  withdrawDecision(_input: WithdrawDecisionInput): Result<DecisionRow> {
+    return err({ kind: 'invalid', field: 'withdrawDecision', reason: 'not implemented' });
+  }
+
   // A decision of this run that is still open; a decision of another run is not found, one in any other state is a conflict.
   private openDecisionRow(runId: string, decisionId: string): DecisionRow {
     const row = this.db.prepare('SELECT * FROM decisions WHERE decision_id = ? AND run_id = ?').get(decisionId, runId) as Row | undefined;
@@ -1408,6 +1418,7 @@ function toAttempt(r: Row): AttemptRow {
     startedAt: str(r['started_at']),
     endedAt: strOrNull(r['ended_at']),
     outcome: strOrNull(r['outcome']),
+    itemId: null,
   };
 }
 

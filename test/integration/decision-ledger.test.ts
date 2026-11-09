@@ -155,6 +155,9 @@ describe('migration 0003 (schema version 3)', () => {
     // The old decision row is read through the ledger: it supersedes nothing.
     const ledger = new SqliteLedger(db, (prefix) => prefix + '0'.repeat(26));
     assert.equal(must(ledger.listDecisions({ runId: 'run_1' }))[0]?.supersedes, null);
+    // An attempt written before the migration has no item and is read as item A (D-12).
+    assert.deepEqual(must(ledger.listRunAttempts('run_1', { itemId: 'A' })).map((a) => [a.attemptId, a.itemId]), [['att_1', null]]);
+    assert.deepEqual(must(ledger.listRunAttempts('run_1', { itemId: 'B' })), []);
     db.close();
   });
 });
@@ -243,5 +246,102 @@ describe('answerDecision (tracer)', () => {
     refused(h.ledger.answerDecision(answerInput('dec_missing')), 'not_found');
     refused(h.ledger.answerDecision(answerInput(opened.decisionId, { answer: '' })), 'invalid');
     assert.equal(must(h.ledger.listDecisions({ runId: 'run_1' }))[0]?.state, 'open');
+  });
+});
+describe('reopenStaleDecision', () => {
+  function staleInput(decisionId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      runId: 'run_1',
+      decisionId,
+      answer: ANSWER,
+      answeredBy: 'owner',
+      channel: 'terminal' as const,
+      stateDigest: DIGEST_2,
+      contractVersion: 2,
+      evidenceRefs: ['ev_1', 'ev_2'] as readonly string[],
+      nowMs: T0 + 40,
+      ...overrides,
+    };
+  }
+
+  it('marks the open decision stale with the received answer kept, and opens a successor that carries the original question', () => {
+    const h = harness();
+    seedBlockedRun(h);
+    const original = must(h.ledger.openDecision(decisionInput()));
+    const { stale, reopened } = must(h.ledger.reopenStaleDecision(staleInput(original.decisionId)));
+    assert.equal(stale.decisionId, original.decisionId);
+    assert.equal(stale.state, 'stale');
+    assert.equal(stale.answer, ANSWER);
+    assert.equal(stale.answeredBy, 'owner');
+    assert.equal(stale.answerChannel, 'terminal');
+    assert.equal(stale.answeredAt, new Date(T0 + 40).toISOString());
+    assert.notEqual(reopened.decisionId, original.decisionId);
+    assert.equal(reopened.state, 'open');
+    assert.equal(reopened.supersedes, original.decisionId);
+    assert.equal(reopened.stateDigest, DIGEST_2);
+    assert.equal(reopened.contractVersion, 2);
+    assert.deepEqual(reopened.evidenceRefs, ['ev_1', 'ev_2']);
+    for (const field of ['class', 'issue', 'recommendation', 'options', 'consequences', 'affectedItems', 'authorizedDefault', 'urgency'] as const) {
+      assert.deepEqual(reopened[field], original[field], field);
+    }
+    assert.equal(reopened.answer, null);
+    assert.equal(original.supersedes, null);
+    assert.equal(h.count('events', "type = 'decision.stale'"), 1);
+    const opened = eventsOf(h, 'decision.opened').at(-1);
+    assert.equal(opened?.['supersedes'], original.decisionId);
+    assert.equal(opened?.['decisionId'], reopened.decisionId);
+    for (const row of h.db.prepare('SELECT data_json FROM events').all() as Array<{ data_json: string }>) assert.ok(!row.data_json.includes('private answer text'));
+    assert.equal(itemState(h, 'B'), 'blocked_on_decision', 'affected items are unchanged');
+  });
+
+  it('refuses a decision that is not open and writes nothing', () => {
+    const h = harness();
+    seedBlockedRun(h);
+    const original = must(h.ledger.openDecision(decisionInput()));
+    must(h.ledger.answerDecision(answerInput(original.decisionId)));
+    const before = [h.count('events'), h.count('decisions')];
+    refused(h.ledger.reopenStaleDecision(staleInput(original.decisionId)), 'conflict');
+    assert.deepEqual([h.count('events'), h.count('decisions')], before);
+  });
+});
+
+describe('withdrawDecision', () => {
+  it('moves an open decision to withdrawn with one decision.withdrawn event, the affected items keep their state', () => {
+    const h = harness();
+    seedBlockedRun(h);
+    const opened = must(h.ledger.openDecision(decisionInput()));
+    const withdrawn = must(h.ledger.withdrawDecision({ runId: 'run_1', decisionId: opened.decisionId, reason: 'cancel', nowMs: T0 + 50 }));
+    assert.equal(withdrawn.state, 'withdrawn');
+    assert.equal(itemState(h, 'B'), 'blocked_on_decision');
+    assert.deepEqual(eventsOf(h, 'decision.withdrawn'), [{ runId: 'run_1', decisionId: opened.decisionId, reason: 'cancel' }]);
+  });
+
+  it('refuses a decision that is not open and a reason outside owner and cancel, writing nothing', () => {
+    const h = harness();
+    seedBlockedRun(h);
+    const opened = must(h.ledger.openDecision(decisionInput()));
+    const before = h.count('events');
+    refused(h.ledger.withdrawDecision({ runId: 'run_1', decisionId: opened.decisionId, reason: 'whim' as never, nowMs: T0 + 50 }), 'invalid');
+    assert.equal(h.count('events'), before);
+    must(h.ledger.withdrawDecision({ runId: 'run_1', decisionId: opened.decisionId, reason: 'owner', nowMs: T0 + 51 }));
+    refused(h.ledger.withdrawDecision({ runId: 'run_1', decisionId: opened.decisionId, reason: 'owner', nowMs: T0 + 52 }), 'conflict');
+    assert.equal(h.count('events', "type = 'decision.withdrawn'"), 1);
+  });
+});
+
+describe('the per-item attempt key (D-12)', () => {
+  it('stores the item an attempt served, keeps ordinals unique per run, and reads an attempt with no item as item A', () => {
+    const h = harness();
+    seedBlockedRun(h);
+    const a = must(h.ledger.recordRunAttempt('run_1', { reason: 'first', nowMs: T0 + 60 }));
+    const b = must(h.ledger.recordRunAttempt('run_1', { reason: 'second', itemId: 'B', nowMs: T0 + 61 }));
+    const a2 = must(h.ledger.recordRunAttempt('run_1', { reason: 'third', itemId: 'A', nowMs: T0 + 62 }));
+    assert.equal(a.itemId, null);
+    assert.equal(b.itemId, 'B');
+    assert.deepEqual([a.ordinal, b.ordinal, a2.ordinal], [1, 2, 3]);
+    assert.equal((h.db.prepare('SELECT item_id FROM attempts WHERE attempt_id = ?').get(b.attemptId) as { item_id: string }).item_id, 'B');
+    assert.deepEqual(must(h.ledger.listRunAttempts('run_1', { itemId: 'A' })).map((r) => r.attemptId), [a.attemptId, a2.attemptId]);
+    assert.deepEqual(must(h.ledger.listRunAttempts('run_1', { itemId: 'B' })).map((r) => r.attemptId), [b.attemptId]);
+    assert.equal(must(h.ledger.listRunAttempts('run_1')).length, 3);
   });
 });
