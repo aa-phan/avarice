@@ -30,8 +30,8 @@ import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-c
 import { StreamJsonParser } from '../../src/adapters/host-claude/stream-json.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
-import { RUN_GSD_SETTINGS, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
-import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
+import { RUN_GSD_SETTINGS, runResumePrompt, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import type { RunPromptContract, RunPromptItem } from '../../src/app/run-gsd-config.ts';
 import { runSupervisor } from '../../src/app/run-service.ts';
 import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
@@ -1031,6 +1031,21 @@ export function spikeRefusal(capUsdForRun: number): string | undefined {
   return undefined;
 }
 
+// Spike S3-A (plan 03-13): the live pause and resume. At most 4.00 USD in all, under the Phase 3 ceiling (D-05), on a generated scratch repository.
+export const SPIKE3_PLAN = '03-13';
+export const SPIKE3_TOTAL_CAP_USD = 4.0;
+
+// The skip text for a Phase 3 spike start that does not fit, or undefined: judged against the Phase 3 ledger (ceiling) and the plan's own total.
+// A start is refused when the Phase 3 ledger plus the cap would pass 25 USD, or the spike's recorded spend plus the cap would pass 4.00 USD.
+export function spike3Refusal(capUsdForRun: number): string | undefined {
+  if (!phase3Ledger.fits(capUsdForRun)) return ceilingRefusal('round', capUsdForRun);
+  const spent = phase3Ledger.spentByPlan(SPIKE3_PLAN);
+  if (spent + capUsdForRun > SPIKE3_TOTAL_CAP_USD + 1e-9) {
+    return `not run: plan ${SPIKE3_PLAN} spend ${spent.toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE3_TOTAL_CAP_USD.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
 const realOrSelf = (path: string): string => {
   try {
     return realpathSync(path);
@@ -1066,6 +1081,8 @@ export interface PrepareRunUnitOptions {
   setup?: (repo: ScratchRepo) => void;
   // The conventions committed after onboarding (default: the run conventions with `npm test` as the one command).
   conventions?: unknown;
+  // The brief text the run starts from (default: the one-item run brief).
+  brief?: string;
 }
 
 export function prepareRunUnit(options: PrepareRunUnitOptions = {}): RunUnitFixture {
@@ -1074,7 +1091,7 @@ export function prepareRunUnit(options: PrepareRunUnitOptions = {}): RunUnitFixt
   options.setup?.(repo);
   onboardRunRepo(roots, repo);
   commitConventions(repo, options.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
-  const briefPath = writeBrief(join(roots.base, 'briefs'));
+  const briefPath = options.brief === undefined ? writeBrief(join(roots.base, 'briefs')) : writeBrief(join(roots.base, 'briefs'), options.brief);
   const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
   const composed = createDeps(env, {});
   if (!composed.ok) throw new Error(`composition failed: ${composed.message}`);
@@ -1190,6 +1207,52 @@ export interface RunUnitSpec {
   ensureDirs?: readonly string[];
   // Settings applied before launch (default RUN_GSD_SETTINGS).
   settings?: readonly GsdSetting[];
+  // Plan 03-13: after the first invocation, a second one resumes its session (or `sessionId`) through the same adapter, fixture and clone with
+  // the owner's answer in the prompt (runResumePrompt for the first work item, or `itemId`). It runs only when the first invocation returned an
+  // outcome, and only when the spike's own caps still fit its `costCapUsd` (default: the first invocation's cap).
+  resume?: { answer: string; sessionId?: string; itemId?: string; costCapUsd?: number };
+  // Plan 03-13: the one and only invocation is a resume of `sessionId` (a session that does not exist) with runResumePrompt for `itemId` (default:
+  // the first work item). There is no first unit; the main fields of the result describe this resume.
+  resumeOnly?: { sessionId: string; answer: string; itemId?: string };
+  // The work item the first invocation's prompt is built for (runUnitPrompt with that item); without it the harness builds the prompt as before.
+  itemId?: string;
+  // Runs against the clone after each invocation and returns small ground-truth facts (what a file contains), recorded by the caller.
+  probe?: (clone: string) => Record<string, unknown>;
+}
+
+// The facts of the clone after one invocation, and of the invocation itself.
+export interface CloneFacts {
+  changedPaths: Array<{ path: string; status: string }>;
+  outsideWriteSet: string[];
+  headAfter: string;
+  summaryFiles: string[];
+  quickFiles: string[];
+  // The text of the first PLAN file under `.planning/quick`, or null (read as data by the caller; never stored in results).
+  planText: string | null;
+  verificationStatus: string | undefined;
+  probe: Record<string, unknown>;
+}
+
+// The second invocation of a spec with `resume`: facts of the resumed session and of the clone after it.
+export interface ResumedUnit extends CloneFacts {
+  // Why it did not run, when it did not.
+  skipped?: string;
+  invocationId: string;
+  sessionId: string;
+  outcome: Result<InvocationOutcome>;
+  hostStarted: boolean;
+  costUsd: number;
+  costAssumed: boolean;
+  exitCode: number | null | undefined;
+  streamSubtype: string | undefined;
+  resultSeen: boolean | undefined;
+  isError: boolean | undefined;
+  transcript: string;
+  parsed: ParsedTranscript;
+  hookDecisions: HookEvent[];
+  toolCompleted: CompletedTool[];
+  durationMs: number;
+  prompt: string;
 }
 
 export interface LiveRunUnitResult {
@@ -1238,6 +1301,12 @@ export interface LiveRunUnitResult {
   cloneOutsideAfter: string;
   // `direct` launch details (exit code of the host process).
   directExit: number | null | undefined;
+  // Plan 03-13: the clone's quick files, the quick PLAN text and the probe, after the first invocation (the main fields above are the same moment).
+  quickFiles: string[];
+  planText: string | null;
+  probe: Record<string, unknown>;
+  // The resumed invocation, when the spec asked for one.
+  resumed?: ResumedUnit;
   dispose(): void;
 }
 
@@ -1284,7 +1353,7 @@ function describeDenials(parsed: ParsedTranscript, fixture: RunUnitFixture): Run
 export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const plan = spec.plan ?? SPIKE_PLAN;
   const spends = spec.noLaunch !== true;
-  const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : currentSpendLedger.fits(spec.costCapUsd) ? undefined : ceilingRefusal('case', spec.costCapUsd);
+  const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : plan === SPIKE3_PLAN ? spike3Refusal(spec.costCapUsd) : currentSpendLedger.fits(spec.costCapUsd) ? undefined : ceilingRefusal('case', spec.costCapUsd);
   if (refusal !== undefined) return { skipped: refusal };
 
   const fixture = prepareRunUnit(spec.project);
@@ -1343,7 +1412,15 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     ledgerFile: join(fixture.dataRoot, 'state.db'),
   };
   spec.beforeLaunch?.(ctx);
-  const prompt = spec.prompt !== undefined ? spec.prompt(contract, ctx) : runUnitPrompt(contract, '');
+  const itemOf = (id: string | undefined): RunPromptItem => promptItemOf(contract, id);
+  const prompt =
+    spec.resumeOnly !== undefined
+      ? runResumePrompt(spec.resumeOnly.answer, itemOf(spec.resumeOnly.itemId))
+      : spec.prompt !== undefined
+        ? spec.prompt(contract, ctx)
+        : spec.itemId !== undefined
+          ? runUnitPrompt(contract, '', itemOf(spec.itemId))
+          : runUnitPrompt(contract, '');
   const extensions = PURPOSE_EXTENSIONS.run;
   const request: InvocationRequest = {
     onboardingId: 'onb_spike',
@@ -1361,6 +1438,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
     expectedFiles: [],
     sessionId: randomUUID(),
+    ...(spec.resumeOnly !== undefined ? { resumeSessionId: spec.resumeOnly.sessionId } : {}),
     ownerKind: 'run',
     ownerId: runId,
   };
@@ -1444,9 +1522,89 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     }
   }
   const hostStarted = existsSync(wrapper.marker);
+  // The first invocation's own duration: the resume that may follow is timed in `resumed`.
+  const firstDurationMs = Date.now() - started;
   if (!outcome.ok && spec.launch !== 'direct') costAssumed = hostStarted;
   const recorded = costAssumed ? spec.costCapUsd : costUsd;
   if (hostStarted) currentSpendLedger.record({ plan, case: spec.name, costUsd: recorded, claudeVersion: versionNumber(version) });
+
+  // The clone's facts at this moment (the first invocation's), then the resume when the spec asks for one.
+  const writeGlobsForFacts = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
+  const cloneFacts = (): CloneFacts => {
+    const changed = workspace.changedSince(clone, snapshot.value);
+    const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
+    const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobsForFacts) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
+    const files = walkFiles(clone);
+    const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
+    const quickFiles = files.filter((f) => f.startsWith('.planning/quick/'));
+    const planFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*PLAN\.md$/.test(f));
+    const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
+    const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
+    const headNow = workspace.head(clone);
+    return {
+      changedPaths,
+      outsideWriteSet,
+      headAfter: headNow.ok ? headNow.value : 'unreadable',
+      summaryFiles,
+      quickFiles,
+      planText: planFile === undefined ? null : readFileSync(join(clone, planFile), 'utf8'),
+      verificationStatus,
+      probe: spec.probe?.(clone) ?? {},
+    };
+  };
+  const firstFacts = cloneFacts();
+
+  let resumed: ResumedUnit | undefined;
+  if (spec.resume !== undefined && spec.launch !== 'direct' && spec.noLaunch !== true && outcome.ok) {
+    const resumeCap = spec.resume.costCapUsd ?? spec.costCapUsd;
+    const resumeRefusal = plan === SPIKE3_PLAN ? spike3Refusal(resumeCap) : currentSpendLedger.fits(resumeCap) ? undefined : ceilingRefusal('resume', resumeCap);
+    const resumeInvocationId = deps.ids.next('inv_');
+    const resumeSession = spec.resume.sessionId ?? outcome.value.sessionId;
+    if (resumeRefusal !== undefined) {
+      resumed = { ...firstFacts, skipped: resumeRefusal, invocationId: resumeInvocationId, sessionId: resumeSession, outcome: err({ kind: 'unavailable', cause: 'not run' }), hostStarted: false, costUsd: 0, costAssumed: false, exitCode: undefined, streamSubtype: undefined, resultSeen: undefined, isError: undefined, transcript: '', parsed: parseTranscript(''), hookDecisions: [], toolCompleted: [], durationMs: 0, prompt: '' };
+    } else {
+      const resumePrompt = runResumePrompt(spec.resume.answer, itemOf(spec.resume.itemId));
+      const resumeRequest: InvocationRequest = { ...request, invocationId: resumeInvocationId, prompt: resumePrompt, costCapUsd: resumeCap, resumeSessionId: resumeSession };
+      rmSync(wrapper.marker, { force: true });
+      const resumeStarted = Date.now();
+      const resumedOutcome = await adapter.invoke(resumeRequest, new AbortController().signal);
+      const resumeHostStarted = existsSync(wrapper.marker);
+      let resumeTranscript = '';
+      let resumeCost = 0;
+      let resumeAssumed = false;
+      if (resumedOutcome.ok) {
+        resumeCost = resumedOutcome.value.costUsd;
+        const bytes = resumedOutcome.value.transcriptArtifact === undefined ? undefined : deps.artifacts.get(resumedOutcome.value.transcriptArtifact);
+        if (bytes?.ok) resumeTranscript = new TextDecoder().decode(bytes.value);
+        resumeAssumed = resumedOutcome.value.details?.resultSeen !== true;
+      } else {
+        resumeAssumed = resumeHostStarted;
+      }
+      const resumeRecorded = resumeAssumed ? resumeCap : resumeCost;
+      if (resumeHostStarted) currentSpendLedger.record({ plan, case: `${spec.name}-resume`, costUsd: resumeRecorded, claudeVersion: versionNumber(version) });
+      const resumedFacts = cloneFacts();
+      resumed = {
+        ...resumedFacts,
+        invocationId: resumeInvocationId,
+        sessionId: resumeSession,
+        outcome: resumedOutcome,
+        hostStarted: resumeHostStarted,
+        costUsd: resumeHostStarted ? resumeRecorded : 0,
+        costAssumed: resumeAssumed,
+        exitCode: resumedOutcome.ok ? resumedOutcome.value.details?.exitCode : undefined,
+        streamSubtype: resumedOutcome.ok ? resumedOutcome.value.details?.subtype : undefined,
+        resultSeen: resumedOutcome.ok ? resumedOutcome.value.details?.resultSeen : undefined,
+        isError: resumedOutcome.ok ? resumedOutcome.value.details?.isError : undefined,
+        transcript: resumeTranscript,
+        parsed: parseTranscript(resumeTranscript),
+        hookDecisions: hookDecisions(fixture.dataRoot, resumeInvocationId),
+        toolCompleted: toolCompleted(fixture.dataRoot, resumeInvocationId),
+        durationMs: Date.now() - resumeStarted,
+        prompt: resumePrompt,
+      };
+      writeFileSync(join(evidenceDir, 'transcript-resume.jsonl'), resumeTranscript);
+    }
+  }
 
   const steps = deps.ledger.getRunSteps(runId);
   const configureStep = steps.ok ? steps.value.find((s) => s.step === 'gsd:configure') : undefined;
@@ -1454,15 +1612,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   // The evidence directory keeps the redacted transcript beside the profile until the caller removes it.
   writeFileSync(join(evidenceDir, 'transcript.jsonl'), transcript);
   const hooks = hookDecisions(fixture.dataRoot, request.invocationId);
-  const changed = workspace.changedSince(clone, snapshot.value);
-  const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
-  const writeGlobs = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
-  const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobs) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
-  const files = walkFiles(clone);
-  const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
-  const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
-  const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
-  const headNow = workspace.head(clone);
+  const { changedPaths, outsideWriteSet, summaryFiles, verificationStatus } = firstFacts;
 
   return {
     name: spec.name,
@@ -1477,7 +1627,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     toolCompleted: toolCompleted(fixture.dataRoot, request.invocationId),
     denials: describeDenials(parsed, fixture),
     headBefore: snapshot.value.head,
-    headAfter: headNow.ok ? headNow.value : 'unreadable',
+    headAfter: firstFacts.headAfter,
     changedPaths,
     outsideWriteSet,
     summaryFiles,
@@ -1494,7 +1644,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     claudeVersion: version,
     evidenceDir,
     prompt,
-    durationMs: Date.now() - started,
+    durationMs: firstDurationMs,
     ctx,
     watchedBefore,
     watchedAfter: Object.fromEntries(watchPaths.map((p) => [p, fileDigest(p)])),
@@ -1505,12 +1655,27 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     cloneOutsideBefore: before.cloneOutside,
     cloneOutsideAfter: cloneOutside(),
     directExit,
+    quickFiles: firstFacts.quickFiles,
+    planText: firstFacts.planText,
+    probe: firstFacts.probe,
+    ...(resumed !== undefined ? { resumed } : {}),
     dispose: () => {
       fixture.close();
       rmSync(fixture.roots.base, { recursive: true, force: true });
       fixture.repo.dispose();
     },
   };
+}
+
+// The work item of a compiled contract as a prompt states it: its own task and the acceptance criteria it owns, each as `ID: text`.
+export function promptItemOf(contract: RunContract, id: string | undefined): RunPromptItem {
+  const item = id === undefined ? contract.intent.workItems[0] : contract.intent.workItems.find((candidate) => candidate.id === id);
+  if (item === undefined) throw new Error(`the contract has no work item ${id ?? '(first)'}`);
+  const acceptance = item.acceptance.map((ref) => {
+    const criterion = contract.intent.acceptance.find((candidate) => candidate.id === ref);
+    return criterion === undefined ? ref : `${criterion.id}: ${criterion.text}`;
+  });
+  return { id: item.id, task: item.task, acceptance, specFiles: item.spec.derived.includes('files') ? [] : item.spec.files };
 }
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -18,3 +18,7 @@
 {"plan":"03-01","case":"14-fast-onboarding","costUsd":0.04355524,"claudeVersion":"2.1.319","at":"2026-11-09T00:17:25.011Z"}
 {"plan":"03-01","case":"19-knowledge-onboarding","costUsd":0.05464537,"claudeVersion":"2.1.319","at":"2026-11-09T00:21:11.112Z"}
 {"plan":"03-01","case":"06a-standin-policy","costUsd":0.0031556199999999996,"claudeVersion":"2.1.319","at":"2026-11-09T00:22:26.953Z"}
+{"plan":"03-13","case":"round-1","costUsd":0.0617452,"claudeVersion":"2.1.319","at":"2026-11-09T03:43:49.058Z"}
+{"plan":"03-13","case":"round-1-resume","costUsd":0.8794982,"claudeVersion":"2.1.319","at":"2026-11-09T03:47:08.000Z"}
+{"plan":"03-13","case":"missing-session","costUsd":0,"claudeVersion":"2.1.319","at":"2026-11-09T03:47:12.423Z"}
+{"plan":"03-13","case":"missing-session","costUsd":0,"claudeVersion":"2.1.319","at":"2026-11-09T03:48:39.785Z"}
