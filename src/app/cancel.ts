@@ -16,10 +16,12 @@ import { isRunTerminal } from '../domain/run-lifecycle.ts';
 import type { RunRow } from '../ports/ledger.ts';
 import { chargeRunOrphans } from './budget.ts';
 import type { AppDeps } from './deps.ts';
-import { leaseTtlMs } from './onboarding-service.ts';
+import { faultPoint, leaseTtlMs } from './onboarding-service.ts';
 import { holderId, makeRunContext } from './run-context.ts';
 import { reapRunLaunches } from './run-resume.ts';
 import type { RunStageContext } from './run-stages/stage.ts';
+
+const CANCEL_LEASE_MAX_MS = 60_000;
 
 export interface CancelOutcome {
   // `cancelled`: this call moved the run to cancelled (or found it so). `requested`: a supervisor holds the lease and will finish it.
@@ -54,6 +56,9 @@ export function finishCancel(ctx: RunStageContext, row: RunRow): Result<{ run: R
     }
     withdrawn += 1;
   }
+  // A kill here leaves the decisions withdrawn and the run not yet cancelled: the request stands, and the next `cancel` or supervisor start runs this again,
+  // which withdraws nothing a second time.
+  faultPoint('mid-cancel');
 
   const attempts = deps.ledger.listRunAttempts(runId);
   if (!attempts.ok) return attempts;
@@ -83,7 +88,8 @@ export async function cancelUnderLease(ctx: RunStageContext): Promise<Result<{ r
 // Takes the run lease for the length of one cancel and carries it out. A lease another holder took first is a supervisor that will see the request: `requested`.
 export async function completeCancel(deps: AppDeps, runId: string): Promise<Result<CancelOutcome>> {
   const holder = holderId();
-  const grant = deps.ledger.acquireRunLease(runId, holder, leaseTtlMs(), deps.clock.nowMs());
+  // The cancel holds the lease only while it works, so a cancel that dies leaves it for at most this long, never a supervisor's whole term.
+  const grant = deps.ledger.acquireRunLease(runId, holder, Math.min(leaseTtlMs(), CANCEL_LEASE_MAX_MS), deps.clock.nowMs());
   if (!grant.ok) return grant.error.kind === 'conflict' ? ok({ kind: 'requested', withdrawn: 0 }) : grant;
   const { fence } = grant.value;
   try {
@@ -106,6 +112,8 @@ export async function cancelRun(deps: AppDeps, runId: string, by: string, nowMs:
 
   const requested = deps.ledger.requestRunCancel(runId, { by, nowMs });
   if (!requested.ok) return requested;
+  // A kill here leaves the request committed and nothing else done: the next supervisor start or `cancel` carries it out.
+  faultPoint('after-cancel-request');
 
   const again = deps.ledger.getRun(runId);
   if (!again.ok) return again;
