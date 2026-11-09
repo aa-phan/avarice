@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 32/38 plans executed (15 waves, plus 5 gap-closure plans)
+**Plans:** 32/39 plans executed (15 waves, plus 6 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -266,7 +266,8 @@ Plans:
 - [x] 03-35-PLAN.md — Plan-group spend guard (10.00 USD for 03-27's resumed cases); three live haiku probes of 03-27's item A; owner decision checkpoint only if haiku fails
 - [x] 03-36-PLAN.md — Re-run 03-27's live cases, cheap cases first and s17-s51 last (S-51 judged first), and resume 03-27's SUMMARY to complete when every case passes (halted at s21)
 - [x] 03-37-PLAN.md — After the 03-36 halt: the harness performs the s21 tamper and cs5 asks plainly for its subagent write (owner decision); s21, cs5, s52 and s17-s51 live; complete 03-27 and 03-36 (halted at s21, not exercised twice)
-- [x] 03-38-PLAN.md — After the 03-37 halt: one brief per remaining live case that states its direction (owner decision; S-17 keeps its owner choice) and a passing slug source for s21; s21, cs5, s52 and s17-s51 live on the pinned 2.1.319 host; complete 03-27, 03-36 and 03-37
+- [x] 03-38-PLAN.md — After the 03-37 halt: one brief per remaining live case that states its direction (owner decision; S-17 keeps its owner choice) and a passing slug source for s21; s21, cs5, s52 and s17-s51 live on the pinned 2.1.319 host; complete 03-27, 03-36 and 03-37 (halted at s21: the judge asserted rules the built run cannot produce)
+- [ ] 03-39-PLAN.md — After the 03-38 halt: S-21 judged on the built behaviour from the kept 03-38 run (no spend) and one findings line on the scenario-versus-code difference (owner decision); cs5, s52 and s17-s51 live on the pinned host; complete 03-27, 03-36, 03-37 and 03-38
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
