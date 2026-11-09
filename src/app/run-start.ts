@@ -245,12 +245,12 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (!compiled.ok) return usage(compiled.error.kind === 'invalid' ? compiled.error.field : 'contract', describeError(compiled.error));
   const { contract, digest } = compiled.value;
 
-  const item = contract.intent.workItems[0];
-  if (item === undefined) return internal('the compiled contract has no work item');
+  // Every compiled item is stored in the creation transaction, in declaration order (D-09): the running stage runs them one at a time.
+  if (contract.intent.workItems.length === 0) return internal('the compiled contract has no work item');
   const created = deps.ledger.createRunWithContract({
     run: { runId, projectId: project.projectId, title: contract.intent.title, nowMs, baseRevision: pin, branch: contract.workspace.branch },
     contract: { digest, body: contract, policyRevision: contract.policyRevision, authorizedBy: 'cli:start', budgets: budgetRowsOfRun(contract), nowMs },
-    workItems: [{ runId, itemId: item.id, type: 'implement', dependsOn: item.dependsOn, size: item.size, model: item.model, spec: item, nowMs }],
+    workItems: contract.intent.workItems.map((item) => ({ runId, itemId: item.id, type: 'implement' as const, dependsOn: item.dependsOn, size: item.size, model: item.model, spec: item, nowMs })),
   });
   if (!created.ok) return internal(describeError(created.error));
 

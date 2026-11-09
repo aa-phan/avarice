@@ -11,6 +11,8 @@ import { checkG0Static } from '../../domain/run-contract.ts';
 import type { G0Failure, RunContract } from '../../domain/run-contract.ts';
 import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
+import { runDisposition } from '../../domain/work-items.ts';
+import type { ItemFacts } from '../../domain/work-items.ts';
 import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
 import { blockingOf, validateChecks } from '../check-validation.ts';
 import { installDependencies, measureInventory, runRequiredChecks } from '../checks.ts';
@@ -264,14 +266,25 @@ registerContractReadyAction(
   { step: VALIDATE_STEP },
 );
 
-// The first attempt of the run, opened by the baseline because the evidence of a check names an attempt. The unit's first attempt is this
-// one: the running stage adopts it instead of opening another, so a run that never retries has exactly one attempt.
-function initialAttempt(deps: AppDeps, runId: string): Result<AttemptRow> {
+// The item the scheduler starts first (no decision exists before the first unit): dependency order first, declaration order after that. The
+// run-level actions that name an item (the baseline's attempt, a block before any unit) name this one explicitly.
+function firstItemToRun(deps: AppDeps, runId: string): Result<string> {
+  const items = deps.ledger.listWorkItems(runId);
+  if (!items.ok) return items;
+  const facts: ItemFacts[] = items.value.map((i, order) => ({ itemId: i.itemId, state: i.state, dependsOn: i.dependsOn, order }));
+  const disposition = runDisposition(facts, []);
+  const itemId = disposition.kind === 'start' || disposition.kind === 'continue' ? disposition.itemId : items.value.at(0)?.itemId;
+  return itemId === undefined ? err({ kind: 'internal', cause: `run ${runId} has no work item` }) : ok(itemId);
+}
+
+// The first attempt of the run, opened by the baseline because the evidence of a check names an attempt. It belongs to the item that runs first,
+// and that item's unit adopts it instead of opening another, so a run that never retries has one attempt per item.
+function initialAttempt(deps: AppDeps, runId: string, itemId: string): Result<AttemptRow> {
   const attempts = deps.ledger.listRunAttempts(runId);
   if (!attempts.ok) return attempts;
-  const first = attempts.value[0];
+  const first = attempts.value.at(0);
   if (first !== undefined) return ok(first);
-  return deps.ledger.recordRunAttempt(runId, { reason: 'initial', nowMs: deps.clock.nowMs() });
+  return deps.ledger.recordRunAttempt(runId, { reason: 'initial', itemId, nowMs: deps.clock.nowMs() });
 }
 
 // `baseline` (D-12): every required (and targeted) active check runs once at the pin in the run clone, before the unit touches it. The
@@ -284,19 +297,18 @@ registerContractReadyAction(
     if (!workspace.ok) return workspace;
     const stored = deps.ledger.getRunContract(ctx.runId);
     if (!stored.ok) return stored;
-    const items = deps.ledger.listWorkItems(ctx.runId);
-    if (!items.ok) return items;
-    const attempt = initialAttempt(deps, ctx.runId);
+    const itemId = firstItemToRun(deps, ctx.runId);
+    if (!itemId.ok) return itemId;
+    const attempt = initialAttempt(deps, ctx.runId, itemId.value);
     if (!attempt.ok) return attempt;
 
     const startedMs = deps.clock.nowMs();
-    const itemId = items.value[0]?.itemId;
     const ran = await runRequiredChecks(deps, row, contract, {
       cwd: workspace.value.path,
       attemptId: attempt.value.attemptId,
       phase: 'base',
       contractVersion: stored.value?.version ?? 1,
-      ...(itemId !== undefined ? { itemId } : {}),
+      itemId: itemId.value,
     });
     if (!ran.ok) return ran;
     // AUT-9: the test inventory at the pin, measured here so the unit's tests are compared with what was there before it touched them.
@@ -304,7 +316,7 @@ registerContractReadyAction(
       phase: 'base',
       attemptId: attempt.value.attemptId,
       contractVersion: stored.value?.version ?? 1,
-      ...(itemId !== undefined ? { itemId } : {}),
+      itemId: itemId.value,
     });
     if (!inventory.ok) return inventory;
     const recorded = deps.ledger.recordRunStep(ctx.runId, {

@@ -206,17 +206,19 @@ describe('a two-item brief runs from start to ready_for_review, one unit, one G2
   });
 
   it('moves the run running -> running between the items and running -> verifying after the last', () => {
-    const states = ledgerRows<{ from_state: string | null; to_state: string; next_action: string }>(
-      f.roots,
-      "SELECT from_state, to_state, next_action FROM checkpoints WHERE run_id = ? AND from_state IN ('running') ORDER BY seq",
-      runId,
-    );
+    const moves = ledgerRows<{ data_json: string }>(f.roots, "SELECT data_json FROM events WHERE run_id = ? AND type = 'run.transition' ORDER BY seq", runId)
+      .map((e) => JSON.parse(e.data_json) as { from: string; to: string; nextAction: string })
+      .filter((m) => m.from === 'running');
     assert.deepEqual(
-      states.map((s) => `${s.from_state}>${s.to_state}`),
-      ['running>running', 'running>verifying'],
+      moves.map((m) => `${m.from}>${m.to} (${m.nextAction})`),
+      ['running>running (context-pack)', 'running>verifying (verify:checks)'],
     );
+    const betweenItems = ledgerRows<{ item_id: string | null }>(f.roots, "SELECT item_id FROM checkpoints WHERE run_id = ? AND from_state = 'running' AND to_state = 'running' AND next_action = 'context-pack' ORDER BY seq", runId);
+    assert.ok(betweenItems.some((c) => c.item_id === 'B'), 'the move between the items names the item that starts next');
+    // A transition names the next action and the stage then commits the same checkpoint before its side effect: a repeat collapses.
+    const collapsed = checkpointsOf(f, runId).filter((action, index, all) => index === 0 || action !== all[index - 1]);
     assert.deepEqual(
-      checkpointsOf(f, runId).filter((a) => ['launch:run', 'gate:g2', 'commit', 'verify:checks', 'gate:g4'].includes(a)),
+      collapsed.filter((a) => ['launch:run', 'gate:g2', 'commit', 'verify:checks', 'gate:g4'].includes(a)),
       ['launch:run', 'gate:g2', 'commit', 'launch:run', 'gate:g2', 'commit', 'verify:checks', 'gate:g4'],
     );
   });

@@ -9,7 +9,12 @@
 //   discard-attempt  the CON-16 recovery (discard.ts), then the retry attempt goes straight on to `launch:run`
 //   gate:g2       scope, deletions, GSD verification status, overrides, PRUNE entries, and the required checks on the working tree
 //   commit        quick records and GSD bookkeeping archived and taken out of the clone, then the supervisor commits only the in-scope paths
-//                 with `Avarice-Run` and `Avarice-Attempt` trailers; the run moves to `verifying`
+//                 with `Avarice-Run` and `Avarice-Attempt` trailers; the run moves to `running` again while another item remains (D-09), to
+//                 `verifying` after the last
+//
+// A run has several work items (plan 03-14; D-08, D-09, AUT-3, AUT-16): the stage asks `runDisposition` (src/domain/work-items.ts) which item to
+// continue or start, runs it through the steps above as its own unit with its own attempt, gate and commit, and then asks again. Items run one at a
+// time, in dependency and declaration order. Nothing here reads the first item, the run's last attempt or a literal ID to mean the current item.
 //
 // The GSD records of the unit (`.planning/quick/**`, `.planning/STATE.md`) are artifacts (D-17): they never reach the review branch.
 // The host's own outcome `kind` is not read here (spike S2-B: both live rounds ended `denied` on improvised shell lines, with the unit done).
@@ -27,6 +32,8 @@ import type { PortError, Result } from '../../domain/result.ts';
 import { compareInventories } from '../../domain/test-inventory.ts';
 import type { InventoryFailure } from '../../domain/test-inventory.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
+import { runDisposition } from '../../domain/work-items.ts';
+import type { DecisionFacts, ItemFacts, RunDisposition } from '../../domain/work-items.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
@@ -34,11 +41,14 @@ import { measureInventory, recordedBase, recordedInventory, runRequiredChecks } 
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { faultPoint } from '../onboarding-service.ts';
-import { runUnitPrompt } from '../run-gsd-config.ts';
+import { RUN_GSD_SETTINGS, runUnitPrompt } from '../run-gsd-config.ts';
+import type { RunPromptItem } from '../run-gsd-config.ts';
 import { blockRun } from './blocked.ts';
 import { discardAttempt } from './discard.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
+const GSD_CONFIG_PATH = '.planning/config.json';
+const GSD_CONFIGURE_STEP = 'gsd:configure';
 const RECORD_MAX_BYTES = 64 * 1024;
 const ARCHIVE_MAX_BYTES = 2 * 1024 * 1024;
 const PACK_BUDGET = 4000;
@@ -60,15 +70,40 @@ interface Unit {
   item: WorkItemRow;
 }
 
-function loadUnit(ctx: RunStageContext, row: RunRow): Result<Unit> {
+// The unit of one named work item (D-09): the stage and the resume reconcile both say which item they mean.
+function loadUnit(ctx: RunStageContext, row: RunRow, itemId: string): Result<Unit> {
   const stored = ctx.deps.ledger.getRunContract(ctx.runId);
   if (!stored.ok) return stored;
   if (stored.value === null) return err({ kind: 'internal', cause: `run ${ctx.runId} has no stored contract` });
   if (row.workspacePath === null) return err({ kind: 'internal', cause: `run ${ctx.runId} has no workspace recorded` });
   const items = ctx.deps.ledger.listWorkItems(ctx.runId);
   if (!items.ok) return items;
-  if (items.value.length !== 1) return err({ kind: 'internal', cause: `run ${ctx.runId} has ${items.value.length} work items; a Phase 2 run has exactly one` });
-  return ok({ ctx, contract: stored.value.body as RunContract, contractVersion: stored.value.version, clone: row.workspacePath, item: items.value[0] as WorkItemRow });
+  const item = items.value.find((i) => i.itemId === itemId);
+  if (item === undefined) return err({ kind: 'not_found', ref: `work item ${itemId} of run ${ctx.runId}` });
+  return ok({ ctx, contract: stored.value.body as RunContract, contractVersion: stored.value.version, clone: row.workspacePath, item });
+}
+
+// What the scheduler says to do now: the run's items in declaration order (the ledger's row order) and its decisions, through the pure rule.
+function schedule(ctx: RunStageContext): Result<{ items: WorkItemRow[]; disposition: RunDisposition }> {
+  const items = ctx.deps.ledger.listWorkItems(ctx.runId);
+  if (!items.ok) return items;
+  const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId });
+  if (!decisions.ok) return decisions;
+  const facts: ItemFacts[] = items.value.map((i, order) => ({ itemId: i.itemId, state: i.state, dependsOn: i.dependsOn, order }));
+  const decided: DecisionFacts[] = decisions.value.map((d) => ({ decisionId: d.decisionId, state: d.state, affectedItems: d.affectedItems }));
+  return ok({ items: items.value, disposition: runDisposition(facts, decided) });
+}
+
+// The item as the unit prompt states it. A run with one item keeps the Phase 2 prompt (no item line); with several, each unit is told which
+// item it is, its title, the criteria it owns and the files its spec names when the spec is explicit.
+function promptItemOf(contract: RunContract, itemId: string): RunPromptItem | undefined {
+  if (contract.intent.workItems.length <= 1) return undefined;
+  const item = contract.intent.workItems.find((i) => i.id === itemId);
+  if (item === undefined) return undefined;
+  const owned = new Set(item.acceptance);
+  const acceptance = contract.intent.acceptance.filter((c) => owned.has(c.id)).map((c) => `${c.id}: ${c.text}`);
+  const explicit = !item.spec.derived.includes('files') && item.spec.files.length > 0;
+  return { id: item.id, task: item.task, acceptance, ...(explicit ? { specFiles: item.spec.files } : {}) };
 }
 
 // The step result of this attempt, by the attempt ID every result carries.
@@ -81,8 +116,9 @@ function stepOfAttempt(ctx: RunStageContext, step: string, attemptId: string): R
   return ok(null);
 }
 
-function latestAttempt(ctx: RunStageContext): Result<AttemptRow | null> {
-  const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId);
+// The latest attempt of one item (an attempt that carries no item reads as the item the ledger calls A).
+function latestAttemptOf(ctx: RunStageContext, itemId: string): Result<AttemptRow | null> {
+  const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId, { itemId });
   if (!attempts.ok) return attempts;
   return ok(attempts.value.at(-1) ?? null);
 }
@@ -240,35 +276,52 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
 // ---- the stage ---------------------------------------------------------------------------------------
 
 export const runningStage: RunStage = async (ctx, row) => {
-  const loaded = loadUnit(ctx, row);
+  const scheduled = schedule(ctx);
+  if (!scheduled.ok) return scheduled;
+  const { items, disposition } = scheduled.value;
+  if (disposition.kind === 'all-done') {
+    // Every item is committed: the last attempt of the run names the revision that goes to verification.
+    const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId);
+    if (!attempts.ok) return attempts;
+    const attempt = attempts.value.at(-1);
+    if (row.workspacePath === null) return err({ kind: 'internal', cause: `run ${ctx.runId} has no workspace recorded` });
+    const head = ctx.deps.runWorkspace?.head(row.workspacePath);
+    if (head === undefined || !head.ok) return head ?? err({ kind: 'internal', cause: 'the run workspace is not composed' });
+    const itemId = attempt?.itemId ?? items.at(0)?.itemId;
+    const moved = ctx.transition(row, 'verifying', 'verify:checks', {
+      ...(attempt !== undefined ? { attemptId: attempt.attemptId } : {}),
+      ...(itemId !== undefined ? { itemId } : {}),
+      revision: `git:${head.value}`,
+    });
+    return moved.ok ? ok(undefined) : moved;
+  }
+  // Items that wait on a decision, and items nothing can run, belong to the decision plans (03-18, 03-19): until then a blocked item stops the whole
+  // run, so the stage never meets this disposition. Failing loudly names a regression.
+  if (disposition.kind === 'blocked' || disposition.kind === 'undeliverable') {
+    return err({ kind: 'internal', cause: `run ${ctx.runId} is running but the scheduler says ${disposition.kind}: no item can be started or continued` });
+  }
+
+  const loaded = loadUnit(ctx, row, disposition.itemId);
   if (!loaded.ok) return loaded;
   const unit = loaded.value;
   switch (unit.item.state) {
     case 'ready':
       return attemptUnit(unit, row);
     case 'implemented': {
-      const attempt = latestAttempt(ctx);
+      const attempt = latestAttemptOf(ctx, unit.item.itemId);
       if (!attempt.ok) return attempt;
-      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is implemented but run ${ctx.runId} has no attempt` });
+      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is implemented but run ${ctx.runId} has no attempt of it` });
       const snapshot = snapshotOf(ctx, attempt.value.attemptId);
       if (!snapshot.ok) return snapshot;
       return gateUnit(unit, row, attempt.value.attemptId, snapshot.value);
     }
     case 'gated': {
-      const attempt = latestAttempt(ctx);
+      const attempt = latestAttemptOf(ctx, unit.item.itemId);
       if (!attempt.ok) return attempt;
-      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt` });
+      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt of it` });
       const snapshot = snapshotOf(ctx, attempt.value.attemptId);
       if (!snapshot.ok) return snapshot;
       return commitUnit(unit, attempt.value.attemptId, snapshot.value);
-    }
-    case 'done': {
-      const attempt = latestAttempt(ctx);
-      if (!attempt.ok) return attempt;
-      const head = ctx.deps.runWorkspace?.head(unit.clone);
-      if (head === undefined || !head.ok) return head ?? err({ kind: 'internal', cause: 'the run workspace is not composed' });
-      const moved = ctx.transition(row, 'verifying', 'verify:checks', { ...(attempt.value !== null ? { attemptId: attempt.value.attemptId } : {}), itemId: unit.item.itemId, revision: `git:${head.value}` });
-      return moved.ok ? ok(undefined) : moved;
     }
     default:
       // delegated: an attempt was in flight when the supervisor stopped. Whether its host still runs and what it left is the recovery
@@ -285,8 +338,8 @@ export type ItemReconcile = 'none' | 'retry' | 'committed' | 'blocked';
 // Called by the supervisor's resume prelude (run-resume.ts) after every surviving host has been reaped, so nothing writes the clone while it is read.
 // Only `delegated` and `gated` items can have been in flight; every other item state is continued by the stage as it is. The decisions rest on the
 // ledger (the attempt, its snapshot and classify steps) and on git (the clone's HEAD and its trailers), never on anything the unit said.
-export function reconcileItem(ctx: RunStageContext, row: RunRow): Result<ItemReconcile> {
-  const loaded = loadUnit(ctx, row);
+export function reconcileItem(ctx: RunStageContext, row: RunRow, itemId: string): Result<ItemReconcile> {
+  const loaded = loadUnit(ctx, row, itemId);
   if (!loaded.ok) return loaded;
   const unit = loaded.value;
   if (unit.item.state === 'delegated') return reconcileDelegated(unit);
@@ -303,9 +356,9 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
-  const attempt = latestAttempt(ctx);
+  const attempt = latestAttemptOf(ctx, unit.item.itemId);
   if (!attempt.ok) return attempt;
-  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is delegated but run ${ctx.runId} has no attempt` });
+  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is delegated but run ${ctx.runId} has no attempt of it` });
   const { attemptId, ordinal } = attempt.value;
   const common = { attemptId, itemId: unit.item.itemId } as const;
 
@@ -406,9 +459,9 @@ function reconcileGated(unit: Unit): Result<ItemReconcile> {
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
-  const attempt = latestAttempt(ctx);
+  const attempt = latestAttemptOf(ctx, unit.item.itemId);
   if (!attempt.ok) return attempt;
-  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt` });
+  if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt of it` });
   const { attemptId, ordinal } = attempt.value;
   const snapshot = snapshotOf(ctx, attemptId);
   if (!snapshot.ok) return snapshot;
@@ -461,6 +514,34 @@ function snapshotOf(ctx: RunStageContext, attemptId: string): Result<WorkspaceSn
   return ok({ head: r['head'], tree: r['tree'], ignored: Array.isArray(r['ignored']) ? r['ignored'].filter((x): x is string => typeof x === 'string') : [] });
 }
 
+// The GSD settings (RC-4) for an item whose clone no longer has them: the commit of the item before it took `.planning/config.json` out (D-17), so
+// `config-set` runs again (outside any invocation, RESEARCH Pitfall 2) and the item gets its own `gsd:configure` step. A clone that has the file
+// (the first item, a retry of any item) is left alone, so a run of one item records the steps it always did.
+async function reapplyGsdSettings(unit: Unit, ordinal: number, attemptId: string): Promise<Result<void>> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const present = workspace.readText(unit.clone, GSD_CONFIG_PATH, RECORD_MAX_BYTES);
+  // A file over the read limit is a file that is there.
+  if (!present.ok && present.error.kind !== 'invalid') return present;
+  if (!present.ok || present.value !== null) return ok(undefined);
+
+  const gsd = deps.gsd;
+  if (gsd === undefined) return err({ kind: 'unavailable', cause: deps.gsdProblem !== undefined ? `no admitted gsd-core: ${deps.gsdProblem.found}` : 'no admitted gsd-core' });
+  const startedMs = deps.clock.nowMs();
+  const applied = await gsd.configure(unit.clone, RUN_GSD_SETTINGS);
+  if (!applied.ok) return applied;
+  const recorded = recordStep(
+    ctx,
+    GSD_CONFIGURE_STEP,
+    ordinal,
+    { attemptId, itemId: unit.item.itemId, applied: applied.value.map((s) => ({ key: s.key, value: s.value })), settingsDigest: digestOf(RUN_GSD_SETTINGS), runId: ctx.runId },
+    startedMs,
+  );
+  return recorded.ok ? ok(undefined) : recorded;
+}
+
 // item ready -> delegated -> (launch, classify) -> implemented -> (G2) -> gated -> (commit) -> done
 async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean } = {}): Promise<Result<void>> {
   const { ctx, contract } = unit;
@@ -470,9 +551,12 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
 
   const attempts = deps.ledger.listRunAttempts(ctx.runId);
   if (!attempts.ok) return attempts;
-  // The baseline opened the first attempt (the evidence of a check names an attempt); the unit adopts it while it has not started. Any
-  // other attempt (a retry) is opened here.
-  const last = attempts.value.at(-1);
+  // The ordinal is the run's own count (a step is keyed by it); the reason and the retry budget count this item's attempts only.
+  const mine = deps.ledger.listRunAttempts(ctx.runId, { itemId: unit.item.itemId });
+  if (!mine.ok) return mine;
+  // The baseline opened the first attempt for the item that runs first (the evidence of a check names an attempt); that item adopts it while it has
+  // not started. Any other attempt (another item's first, or a retry) is opened here.
+  const last = mine.value.at(-1);
   let adopted: AttemptRow | undefined;
   if (last !== undefined && last.endedAt === null && last.reason === 'initial') {
     const started = stepOfAttempt(ctx, 'snapshot', last.attemptId);
@@ -490,11 +574,19 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   const pack = await contextPack(unit, row, ordinal);
   if (!pack.ok) return pack;
 
-  const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason: ordinal === 1 ? 'initial' : RETRY_REASON, nowMs: deps.clock.nowMs() });
+  const attempt =
+    adopted !== undefined
+      ? ok(adopted)
+      : deps.ledger.recordRunAttempt(ctx.runId, { reason: mine.value.length === 0 ? 'initial' : RETRY_REASON, itemId: unit.item.itemId, nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
   const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId });
   if (!delegated.ok) return delegated;
+
+  // The previous item's commit took `.planning/config.json` out of the clone (D-17): this item's unit gets the GSD settings again, before its snapshot,
+  // so the settings never count as its change.
+  const configured = await reapplyGsdSettings(unit, ordinal, attemptId);
+  if (!configured.ok) return configured;
 
   // The clone as it is right before the unit runs: the configure step's `.planning/config.json` is in it, so only what the unit changes counts.
   const startedMs = deps.clock.nowMs();
@@ -508,7 +600,7 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
 
   let prompt: string;
   try {
-    prompt = runUnitPrompt(contract, pack.value);
+    prompt = runUnitPrompt(contract, pack.value, promptItemOf(contract, unit.item.itemId));
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
     const blocked = blockRun(ctx, { reason: 'decision', decisionClass: 'acceptance', issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId });
@@ -641,7 +733,9 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
         blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the invocations budget is spent, so the crashed unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common }),
       );
     }
-    const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal: history.value.length, snapshot });
+    const ordinal = ordinalOf(ctx, attemptId);
+    if (!ordinal.ok) return ordinal;
+    const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal: ordinal.value, snapshot });
     if (!discarded.ok) return discarded;
     if (!discarded.value.discarded) return ok(undefined);
     return attemptUnit(unit, row, { retry: true });
@@ -686,8 +780,16 @@ function launchedAttempts(ctx: RunStageContext): Result<Set<string>> {
   return ok(launched);
 }
 
+// The run's own count of an attempt (the key of the steps it wrote).
+function ordinalOf(ctx: RunStageContext, attemptId: string): Result<number> {
+  const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId);
+  if (!attempts.ok) return attempts;
+  return ok(attempts.value.find((a) => a.attemptId === attemptId)?.ordinal ?? 1);
+}
+
+// This item's attempts only: its one CON-16 retry is its own, whatever the other items did.
 function attemptHistoryOf(unit: Unit, attemptId: string, kind: string): Result<AttemptKind[]> {
-  const attempts = unit.ctx.deps.ledger.listRunAttempts(unit.ctx.runId);
+  const attempts = unit.ctx.deps.ledger.listRunAttempts(unit.ctx.runId, { itemId: unit.item.itemId });
   if (!attempts.ok) return attempts;
   const launched = launchedAttempts(unit.ctx);
   if (!launched.ok) return launched;
@@ -865,7 +967,9 @@ async function commitUnit(unit: Unit, attemptId: string, snapshot: WorkspaceSnap
   const strays = remaining.value.filter((x) => !isInScope(x, contract) && !matchesAny(x.path, contract.files.artifacts));
   if (strays.length > 0) return err({ kind: 'internal', cause: `G2 passed but ${strays.length} changed path(s) are outside the commit set: ${strays.slice(0, 3).map((x) => x.path).join(', ')}` });
 
-  const subject = storedText(contract.intent.title, 200).replace(/\s+/g, ' ').trim().slice(0, 72);
+  // The subject is the item's own title (AUT-16); a brief without items has one item A whose title is the brief's.
+  const itemTitle = contract.intent.workItems.find((i) => i.id === unit.item.itemId)?.task ?? contract.intent.title;
+  const subject = storedText(itemTitle, 200).replace(/\s+/g, ' ').trim().slice(0, 72);
   const commit = workspace.commit(unit.clone, {
     paths,
     message: subject === '' ? 'AVARICE run change' : subject,
@@ -884,6 +988,21 @@ async function commitUnit(unit: Unit, attemptId: string, snapshot: WorkspaceSnap
   if (!done.ok) return done;
   const current = deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;
-  const moved = ctx.transition(current.value, 'verifying', 'verify:checks', { attemptId, itemId: unit.item.itemId, revision: `git:${commit.value}` });
+
+  // The next step is the scheduler's: another item to start (the run moves running -> running, its next action the item's pack), or verification
+  // when every item is committed. An item's attempt ends with its commit unless it is the last one: the last attempt ends with the hand-off.
+  const next = schedule(ctx);
+  if (!next.ok) return next;
+  const after = next.value.disposition;
+  if (after.kind === 'all-done') {
+    const moved = ctx.transition(current.value, 'verifying', 'verify:checks', { attemptId, itemId: unit.item.itemId, revision: `git:${commit.value}` });
+    return moved.ok ? ok(undefined) : moved;
+  }
+  if (after.kind !== 'start' && after.kind !== 'continue') {
+    return err({ kind: 'internal', cause: `run ${ctx.runId} committed item ${unit.item.itemId} but the scheduler says ${after.kind}: no item can be started or continued` });
+  }
+  const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'committed', nowMs: deps.clock.nowMs() });
+  if (!ended.ok && ended.error.kind !== 'conflict') return ended;
+  const moved = ctx.transition(current.value, 'running', 'context-pack', { itemId: after.itemId, revision: `git:${commit.value}` });
   return moved.ok ? ok(undefined) : moved;
 }

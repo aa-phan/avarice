@@ -257,7 +257,7 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   }
   let outcome: string = 'none';
   if (inFlight) {
-    const reconciled = reconcileItem(ctx, current);
+    const reconciled = reconcileItem(ctx, current, item.itemId);
     if (!reconciled.ok) return reconciled;
     outcome = reconciled.value;
     // A reconcile that blocked the run has already moved it to blocked_on_decision.
