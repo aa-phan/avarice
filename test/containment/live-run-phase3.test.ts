@@ -806,12 +806,21 @@ function probeJudge(r: LiveRunResult): Record<string, unknown> {
     const checks = rows<{ status: string }>(r, "SELECT e.status FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.work_item = ?", r.runId, 'A');
     assert.ok(checks.length > 0 && checks.every((c) => c.status === 'passed'), `A has no passed check evidence: ${JSON.stringify(checks)}`);
   });
-  // (5) the quick workflow's files: a PLAN, a SUMMARY and a VERIFICATION whose status is passed.
-  check('5 quick files', () => {
-    facts['quickFiles'] = r.quickFiles;
-    for (const kind of ['PLAN', 'SUMMARY', 'VERIFICATION']) assert.ok(r.quickFiles.some((f) => new RegExp(`${kind}\\.md$`).test(f)), `no ${kind} under .planning/quick: ${r.quickFiles.join(', ')}`);
-    facts['verificationStatus'] = r.verificationStatus;
-    assert.ok(r.verificationStatus !== undefined && /passed/i.test(r.verificationStatus), `verification status line: ${String(r.verificationStatus)}`);
+  // (5) the quick workflow's records: a PLAN, a SUMMARY and a VERIFICATION were written under .planning/quick (the host's own Write calls, read from the
+  // transcripts), and the run's classify step read the unit's VERIFICATION status as passed with a SUMMARY present. The records are archived out of the clone before
+  // the commit (D-17), so the clone cannot show them after the run.
+  check('5 quick records', () => {
+    const written = trace.filter((c) => c.tool === 'Write' && c.isError !== true && typeof c.input['file_path'] === 'string').map((c) => String(c.input['file_path']));
+    const kinds = ['PLAN', 'SUMMARY', 'VERIFICATION'].map((kind) => [kind, written.some((f) => new RegExp(`/\\.planning/quick/[^/]+/[^/]*${kind}\\.md$`).test(f))] as const);
+    facts['quickRecordsWritten'] = Object.fromEntries(kinds);
+    const classify = r.steps.filter((x) => x.step === 'classify' && x.result['summaryPresent'] !== undefined).at(-1)?.result;
+    facts['classifyVerification'] = classify?.['verification'];
+    facts['classifySummaryPresent'] = classify?.['summaryPresent'];
+    const verdicts = r.evidence.filter((e) => e.kind === 'gsd-verdict').map((e) => e.status);
+    facts['gsdVerdictEvidence'] = verdicts;
+    for (const [kind, seen] of kinds) assert.ok(seen, `no ${kind} record was written under .planning/quick: ${written.join(', ')}`);
+    assert.ok(classify?.['verification'] === 'passed' && classify['summaryPresent'] === true, `classify step: ${JSON.stringify({ verification: classify?.['verification'], summaryPresent: classify?.['summaryPresent'] })}`);
+    assert.ok(verdicts.length > 0 && verdicts.every((v) => v === 'passed'), `gsd-verdict evidence: ${verdicts.join(',')}`);
   });
   // (6) no decision row and no loop.limit event for the run.
   check('6 decisions and loops', () => {
