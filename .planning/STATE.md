@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-24-PLAN.md
-last_updated: "2026-11-09T12:56:37.643Z"
+stopped_at: Completed 03-25-PLAN.md
+last_updated: "2026-11-09T13:29:16.582Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 2f408045124ebc9c0876d84c9fe4592125ca4594
+state_head: d139340c1dd6ef7a7a808d546e8755177d6b27e7
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 85
+  completed_plans: 86
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 25 of 33
+Plan: 26 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -141,6 +141,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P22 | 45 min | 3 tasks | 16 files |
 | Phase 03 P23 | 75min | 3 tasks | 18 files |
 | Phase 03 P24 | 41 min | 3 tasks | 16 files |
+| Phase 03 P25 | 25 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -314,6 +315,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-24: cancel commits the owner's request first, even with no live lease, so supervise as well as cancel finishes a cancel that died
 - [Phase 03]: 03-24: a cancel with a live lease only records the request; the lease timer aborts the unit and the attempt ends cancelled with its invocation charged; a cancel with no live lease takes a lease of at most 60 s
 - [Phase 03]: 03-24: cancel kill points are CANCEL_KILL_POINTS, not RUN_KILL_POINTS, because the kill suite runs every RUN_KILL_POINTS entry against a run that is never cancelled
+- [Phase 03]: 03-25: decide <id> on a terminal prompts after the record (keys, withdraw, text, amend); an empty line leaves it open, exit 0. amend chains into contract amend (renderAmendmentPreview, confirmAndCommit) pre-filled from the record's measured request, one y writes contract v(n+1) and answers the decision together. — D-13 and D-17: one engine for the command and the prompt, widening only through a confirmed amendment.
+- [Phase 03]: 03-25: the shell's Decide action (keys 7, d) lists getInbox decisions and runs decide <id> through ctx.command with the shell's ask; the one-shot command reads standard input only when both streams are terminals. — ADR-013: the shell is a presentation layer over the command modules.
 
 ### Pending Todos
 
@@ -366,6 +369,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T12:56:37.445Z
-Stopped at: Completed 03-24-PLAN.md
+Last session: 2026-11-09T13:29:11.126Z
+Stopped at: Completed 03-25-PLAN.md
 Resume file: None
