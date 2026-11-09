@@ -519,6 +519,20 @@ export interface DecisionRow {
   answeredBy: string | null;
   answer: string | null;
   answerChannel: string | null;
+  // The decision this one re-opened because its state digest or contract version had moved on (D-15); null otherwise.
+  supersedes: string | null;
+}
+
+// The owner's answer to an open decision. `expectContractVersion` is the contract version the caller validated the answer
+// against; the ledger re-checks it inside the transaction so an amendment cannot slip in between validation and write.
+export interface AnswerDecisionInput {
+  runId: string;
+  decisionId: string;
+  answer: string;
+  answeredBy: string;
+  channel: 'terminal';
+  expectContractVersion: number;
+  nowMs: number;
 }
 
 export interface CheckValidationInput {
@@ -657,8 +671,12 @@ export interface Ledger {
   transitionWorkItem(runId: string, itemId: string, guard: { fence: number }, t: WorkItemTransitionInput): Result<WorkItemRow>;
   listWorkItems(runId: string): Result<WorkItemRow[]>;
 
-  // Decisions open in state `open`; answering them is Phase 3.
+  // Decisions open in state `open`. answerDecision, reopenStaleDecision and withdrawDecision each move an open decision in one
+  // transaction under the run lock and refuse with `conflict` when it is no longer open.
   openDecision(input: DecisionInput): Result<DecisionRow>;
+  // open -> answered, and every affected item that no other open decision blocks goes blocked_on_decision -> ready. Refused with
+  // `conflict` when the run's latest contract version is not expectContractVersion.
+  answerDecision(input: AnswerDecisionInput): Result<DecisionRow>;
   // Oldest first.
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
 

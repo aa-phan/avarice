@@ -14,6 +14,7 @@ import type {
   ActivateInput,
   ActivationResult,
   ActiveRecord,
+  AnswerDecisionInput,
   AdapterConfigInput,
   ArtifactInput,
   BudgetCharge,
@@ -1223,6 +1224,10 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  answerDecision(_input: AnswerDecisionInput): Result<DecisionRow> {
+    return err({ kind: 'invalid', field: 'answerDecision', reason: 'not implemented' });
+  }
+
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]> {
     return guarded(() => {
       if (filter.state !== undefined && !DECISION_STATES.includes(filter.state)) {
@@ -1493,6 +1498,7 @@ function toDecision(r: Row): DecisionRow {
     answeredBy: strOrNull(r['answered_by']),
     answer: strOrNull(r['answer']),
     answerChannel: strOrNull(r['answer_channel']),
+    supersedes: null,
   };
 }
 
