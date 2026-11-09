@@ -173,4 +173,5 @@ None. No new network, auth, file-access or schema surface: only prompt text, a r
 
 - Created files exist: the S3-B record, `src/domain/run-shell-rules.ts`, `test/integration/run-prompt-policy.test.ts`.
 - Commits `064e2e1`, `475554d`, `7d38907`, `152e5b0` are ancestors of HEAD; `git rev-list --count 240ab24..HEAD` is 4 before this file.
+- `node --test` over the whole repository (run after the Task 3 code, before the summary commit): 3489 tests, 3422 pass, 0 fail, 67 skipped (live cases without `AVARICE_LIVE`).
 - `node --test "test/unit/**/*.test.ts"` 1859 pass; the targeted integration suites (hook, run-prompt-policy, fail-closed, claude-host, run-loops, run-outcomes, hook-git-secret-reads, hook-read-digest) pass; `npm run typecheck` and `node scripts/check-boundaries.ts` clean; `git diff bc1b012 -- src/domain/invocation-scope.ts src/domain/run-contract.ts` and the diff of the read-only regression tests and fake hosts are empty.
