@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Halted 03-36-PLAN.md at s21 (not exercised; cs5, s52, s17-s51 not run)
-last_updated: "2026-11-09T19:19:57.751Z"
+stopped_at: Halted 03-37-PLAN.md at s21 (not exercised twice; cs5, s52, s17-s51 not run)
+last_updated: "2026-11-09T21:01:32.443Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 4db74dc063acefb96119cf701f428e4648f0b3d3
+state_head: 58668b475129c4bc44c74472bae7641190f6df17
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 97
-  completed_plans: 91
+  total_plans: 98
+  completed_plans: 92
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-36 HALTED at s21 (03-27 stays halted; 03-28..03-33 blocked until an owner decision and a follow-up plan)
-Status: Halted — owner decision needed on how the s21 tamper and cs5 write-probe cases are exercised (the haiku unit read the script and declined to run npm test)
-Last activity: 2026-11-09 — plan 03-36 halted: s50, cs15 and s18-short PASS live, s21 NOT EXERCISED, cs5, s52 and s17-s51 not run (0.2336 USD; group 3.8735 of 10.00, Phase 3 4.9662 of 25)
+Plan: 03-37 HALTED at s21 (03-27 and 03-36 stay halted; 03-28..03-33 blocked until an owner decision and a follow-up plan)
+Status: Halted — owner decision needed on the s21 brief: on the pinned 2.1.319 host the harness tamper ran both times, but the haiku unit's planner stopped with an acceptance decision before any gate (NOT EXERCISED twice)
+Last activity: 2026-11-09 — plan 03-37 halted: s21 NOT EXERCISED twice, cs5, s52 and s17-s51 not run (0.0794 USD; group 3.9528 of 10.00, Phase 3 5.0455 of 25); open item: host 2.1.321 not admitted
 
 Progress: [███░░░░░░░] 25%
 
@@ -145,6 +145,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P26 | 70 min | 3 tasks | 14 files |
 | Phase 03 P34 | 75 min | 3 tasks | 12 files |
 | Phase 03 P35 | 45 min | 3 tasks | 7 files |
+| Phase 03 P37 | 1h 10m | 1 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -331,6 +332,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Plan 03-34: the small-unit failure is fixed in the prompt, the shell refusal reasons and the run agents' note; modelBySize, the loop limit and every containment list are unchanged — Owner decision 1 of 2026-11-09 forbids the quick fixes; the cause is a self-contradicting prompt, unstated shell rules and bare refusals, proven offline, live proof is plan 03-35
 - [Phase 03]: Owner decision (plan 03-35 Task 3, 2026-11-09): proceed-haiku. Small items stay on haiku (D-10, RC-8 map unchanged) and plan 03-36 runs as planned; probe-small-2 and -3 not run — Both probe-small-1 runs completed the whole quick workflow on haiku for 0.0819 and 0.1019 USD with no refusal loop or decision; the only failed fact is an extra test/slug.test.ts edit attributed to the probe brief's fixed Behavior text and inside the write set. Plan 03-36's itemsBriefText cases carry the same sentence
 - [Phase 03]: Owner decision 2026-11-09 after the 03-36 halt (s21 not exercised: the haiku unit read scripts/tamper.mjs, declined to run it and opened a decision): move the tamper and write probes out of the unit's reach — a harness-only change (no src/, gate, hook, containment-list, model-map or docs/system change) so the case, not the model, performs the tamper and G2/G3 judge the tree it leaves; cs5 must still have the write genuinely issued from a subagent, so its new shape needs care. Re-run s21, cs5, s52 and s17-s51 under the existing per-case caps and the 10.00 USD group guard (3.8735 spent); s50, cs15 and s18-short keep their 03-36 PASS lines
+- [Phase 03]: Owner decision 2026-11-09 (plan 03-37): pin every live command to the admitted host 2.1.319 with AVARICE_LIVE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 so the Phase 3 run-purpose evidence stays on one host version; AVARICE_LIVE_ADMIT_CLAUDE_VERSION unused, ADMITTED_CLAUDE_VERSIONS and the installed default binary untouched — The installed Claude Code auto-updated to 2.1.321, which is not admitted; admitting it is out of scope for 03-37
 
 ### Pending Todos
 
@@ -365,6 +367,8 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 - Plan 03-27 halted at its tracer gate: s17-s51 failed twice live because item A (small, so haiku) did not complete; S-50, S-18, S-21, S-52, CS-5, CS-15 not started; 3.4561 USD of the plan's 6.00 spent (Phase 3: 4.5488 of 25). A fix plan or an owner decision on haiku for small items is needed before plans that depend on 03-27 run.
 - Plan 03-36 halted at s21 (NOT EXERCISED: the haiku unit read scripts/tamper.mjs and declined to run npm test); cs5 likely the same; owner decision needed on how the tamper and write-probe cases are exercised; 03-27 stays halted, 03-28..03-33 blocked
+- Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
+- Plan 03-37 halted at s21 (NOT EXERCISED twice on pinned 2.1.319: the harness tamper ran, the haiku unit's planner stopped with an acceptance decision before any gate); cs5, s52 and s17-s51 not run; 03-27 and 03-36 stay halted, 03-28..03-33 blocked; owner decision needed on the s21 brief
 
 ### Quick Tasks Completed
 
@@ -385,6 +389,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T19:19:56.766Z
-Stopped at: Halted 03-36-PLAN.md at s21 (not exercised; cs5, s52, s17-s51 not run)
+Last session: 2026-11-09T21:01:31.899Z
+Stopped at: Halted 03-37-PLAN.md at s21 (not exercised twice; cs5, s52, s17-s51 not run)
 Resume file: None
