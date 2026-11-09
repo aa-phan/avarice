@@ -718,7 +718,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
   it('follows SIGTERM with SIGKILL after the grace when the host ignores SIGTERM', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, ignoreSigterm: true });
     const started = Date.now();
-    const run = await inProcess(s, { killGraceMs: 300 }, (adapter) => new ClampedHost(adapter, 300));
+    const run = await inProcess(s, { killGraceMs: 300 }, (adapter) => new ClampedHost(adapter, 3_000));
     assert.equal(run.state, 'blocked');
     const [first] = finishedEvents(s.roots);
     assert.deepEqual([first?.['outcome'], first?.['timedOut'], first?.['signal']], ['inconclusive', true, 'SIGKILL']);

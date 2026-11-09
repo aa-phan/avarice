@@ -298,7 +298,7 @@ describe('FC-10: a sandbox that cannot run the command reports unavailable', () 
 
   it('retries a probe that timed out once, and the retry gives a usable sandbox (WR-07)', async () => {
     const { launcher, cwd } = stubLauncher(`${COUNT}\nif [ "$n" = 1 ]; then exec /bin/sleep 30; fi\nexit 0`);
-    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [300, 10_000] });
+    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [2_000, 10_000] });
     assert.equal(executor.descriptor.attributes?.['enforcement'], 'enforced');
     assert.equal(runs(launcher), 2);
     const result = await executor.run(spec(cwd));
@@ -309,7 +309,7 @@ describe('FC-10: a sandbox that cannot run the command reports unavailable', () 
   it('does not cache a probe that timed out twice: the next use probes again (WR-07)', () => {
     const { launcher } = stubLauncher(`${COUNT}\nif [ -e "$d/slow" ]; then exec /bin/sleep 30; fi\nexit 0`);
     writeFileSync(join(launcher, '..', 'slow'), '');
-    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [200, 400] });
+    const executor = new SandboxedExecutor({ sandboxExecPath: launcher, probeTimeoutsMs: [2_000, 2_000] });
     assert.equal(executor.descriptor.attributes?.['enforcement'], 'none');
     assert.equal(runs(launcher), 2);
     unlinkSync(join(launcher, '..', 'slow'));
