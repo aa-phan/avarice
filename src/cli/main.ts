@@ -8,6 +8,8 @@ import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
 import { errorLine } from './render/style.ts';
+import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
+import type { Result } from '../domain/result.ts';
 
 export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract'] as const;
 export const EXIT_USAGE = 64;
@@ -26,6 +28,8 @@ export interface MainOverrides extends DepsOverrides {
   // Answers the question of a command that needs a yes or no (`contract amend`). The interactive shell passes its own line prompt so the
   // question appears in the shell; a test passes a scripted answer. Absent, the command reads one line from standard input.
   ask?(question: string): Promise<string | undefined>;
+  // Test seam: replaces the reader of the process ancestry. Only main.ts names it; production passes nothing and reads the real process table.
+  ancestry?(): Result<ProcessEntry[]>;
 }
 
 const USAGE = `usage: avarice <command> [options]

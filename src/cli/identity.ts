@@ -3,6 +3,26 @@
 // profile. The refusal of a run, of a pipe and of a run's process tree sits next to this file's helpers (refuseOutsideTerminal).
 import { statSync } from 'node:fs';
 import { userInfo } from 'node:os';
+import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
+import type { Result } from '../domain/result.ts';
+
+// What a command that must not run inside a run is told about where it runs: whether standard input and output are terminals, and a reader
+// of the process ancestry (called only when the earlier checks pass, so a refusal that needs no process table never reads it).
+export interface TerminalFacts {
+  stdinIsTty: boolean;
+  stdoutIsTty: boolean;
+}
+
+export interface IdentityContext {
+  terminal: TerminalFacts;
+  ancestry(): Result<ProcessEntry[]>;
+}
+
+// The reason to refuse, or undefined: the checks apply in this order. A command that needs an owner at a terminal outside the run calls this
+// from usage(), before the profile is resolved.
+export function refuseOutsideTerminal(_env: NodeJS.ProcessEnv, _context: IdentityContext): string | undefined {
+  return undefined;
+}
 
 // The OS user the process runs as, with control characters removed so the name is safe to store and to print. `unknown` when the OS has no
 // answer (a user ID with no passwd entry) or the name is empty after cleaning.

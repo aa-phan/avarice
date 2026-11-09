@@ -1,3 +1,5 @@
+import type { IdentityContext } from './identity.ts';
+
 // Minimal argument parser and the command-module contract.
 //   positionals          words that are not flags
 //   --flag value         a value flag; the next word is consumed unless the flag is declared boolean
@@ -88,5 +90,6 @@ export interface CommandModule<Deps> {
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
   // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
-  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv): string | undefined;
+  // `context` tells a command that must not run inside a run where it runs: terminal facts and the process ancestry reader.
+  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv, context?: IdentityContext): string | undefined;
 }

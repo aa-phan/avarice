@@ -9,7 +9,10 @@ import { join } from 'node:path';
 import { createDeps } from '../../src/cli/composition.ts';
 import { main } from '../../src/cli/main.ts';
 import { startRun } from '../../src/app/run-start.ts';
+import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
 import { canonicalJson, digestOf } from '../../src/domain/digest.ts';
+import { err as portErr, ok } from '../../src/domain/result.ts';
+import type { Result } from '../../src/domain/result.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { RUN_CONVENTIONS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
@@ -73,17 +76,33 @@ interface Ran {
   questions: string[];
 }
 
-// `avarice contract amend <argv>` in this process, on a terminal that answers `answer` (undefined: no answer can be read).
-async function amend(roots: CliRoots, argv: readonly string[], options: { answer?: string } = {}): Promise<Ran> {
-  const term = fakeTerminal();
+const entry = (pid: number, ppid: number, command: string): ProcessEntry => ({ pid, ppid, command });
+// A shell, a login and launchd: a person at a terminal. The signature of a run's supervisor is in INSIDE_A_RUN.
+const CALM_CHAIN = (): Result<ProcessEntry[]> => ok([entry(300, 200, 'node avarice.ts contract amend'), entry(200, 100, '-zsh'), entry(100, 1, 'login'), entry(1, 0, '/sbin/launchd')]);
+const INSIDE_A_RUN = (): Result<ProcessEntry[]> =>
+  ok([entry(300, 250, 'bash'), entry(250, 200, 'claude --print'), entry(200, 1, 'node --disable-warning=ExperimentalWarning /opt/avarice/bin/avarice.ts supervise run_01ABC'), entry(1, 0, '/sbin/launchd')]);
+
+interface AmendOptions {
+  // What the confirmation is answered with (undefined: no answer can be read).
+  answer?: string;
+  stdinIsTty?: boolean;
+  stdoutIsTty?: boolean;
+  env?: NodeJS.ProcessEnv;
+  ancestry?: () => Result<ProcessEntry[]>;
+}
+
+// `avarice contract amend <argv>` in this process, on a terminal that answers `answer`.
+async function amend(roots: CliRoots, argv: readonly string[], options: AmendOptions = {}): Promise<Ran> {
+  const term = fakeTerminal({ inputIsTty: options.stdinIsTty ?? true, outputIsTty: options.stdoutIsTty ?? true });
   const out: string[] = [];
   const err: string[] = [];
   const questions: string[] = [];
   const code = await main(['contract', 'amend', ...argv], {
-    env: profileEnv(roots),
+    env: { ...profileEnv(roots), ...options.env },
     io: { out: (t) => void out.push(t), err: (t) => void err.push(t) },
     stdin: term.stdin,
     stdout: term.stdout,
+    ancestry: options.ancestry ?? CALM_CHAIN,
     ask: (question) => {
       questions.push(question);
       return Promise.resolve(options.answer);
@@ -167,5 +186,53 @@ describe('contract amend: a budget raise confirmed at a terminal becomes contrac
     assert.deepEqual(contracts(f.roots, runId).map((c) => c.version), [1]);
     assert.equal(budget(f.roots, runId, 'costUsd').limit_value, 10);
     assert.equal(existsSync(contractFile(f.roots, runId, 2)), false);
+  });
+});
+
+// D-18, CS-11: three layers keep the run from amending itself. The refusals sit in usage(), before the profile is resolved, so on a profile
+// that was never created they leave no data root, no store file and no row.
+describe('contract amend: refused inside a run, off a terminal and from a run process tree (CS-11)', () => {
+  const ARGV = ['run_01ABC', '--budget', 'costUsdPerRun=12', '--reason', 'room to resume'];
+
+  const cases: ReadonlyArray<{ name: string; options: AmendOptions; message: RegExp }> = [
+    { name: 'AVARICE_RUN is set', options: { env: { AVARICE_RUN: 'run_01ABC' }, answer: 'y' }, message: /refused inside a run \(AVARICE_RUN is set\)/ },
+    { name: 'standard input is not a terminal', options: { stdinIsTty: false, answer: 'y' }, message: /needs an interactive terminal/ },
+    { name: 'standard output is not a terminal', options: { stdoutIsTty: false, answer: 'y' }, message: /needs an interactive terminal/ },
+    { name: 'an ancestor is a run supervisor', options: { ancestry: INSIDE_A_RUN, answer: 'y' }, message: /refused from inside a run's process tree/ },
+    {
+      name: 'the process table cannot be read (fail closed)',
+      options: { ancestry: () => portErr({ kind: 'unavailable', cause: 'ps is not allowed here' }), answer: 'y' },
+      message: /refused from inside a run's process tree/,
+    },
+  ];
+
+  for (const c of cases) {
+    it(`exits 64 naming the reason and creates no data root, store or file when ${c.name}`, async () => {
+      const roots = makeRoots();
+      cleanup.push(roots.base);
+      const r = await amend(roots, ARGV, c.options);
+      assert.equal(r.code, 64, r.err + r.out);
+      assert.match(r.err, c.message);
+      assert.equal(r.out, '');
+      assert.deepEqual(r.questions, [], 'nothing was asked');
+      assert.equal(existsSync(join(roots.AVARICE_DATA_ROOT, 'state.db')), false, 'no store file');
+      assert.equal(existsSync(roots.AVARICE_DATA_ROOT), false, 'no data root');
+      assert.equal(existsSync(roots.AVARICE_CONFIG_HOME), false, 'no config home');
+    });
+  }
+
+  it('leaves an existing run untouched: no version 2, no stale row, no file, even with the answer y', async () => {
+    const f = fixture();
+    const runId = seedRun(f);
+    const events = (): number => ledgerRows<{ n: number }>(f.roots, 'SELECT count(*) AS n FROM events')[0]?.n ?? 0;
+    const eventsBefore = events();
+    for (const c of cases) {
+      const r = await amend(f.roots, [runId, '--budget', 'costUsdPerRun=12', '--reason', 'try'], c.options);
+      assert.equal(r.code, 64, `${c.name}: ${r.err}`);
+    }
+    assert.deepEqual(contracts(f.roots, runId).map((c) => c.version), [1]);
+    assert.equal(budget(f.roots, runId, 'costUsd').limit_value, 10);
+    assert.equal(existsSync(contractFile(f.roots, runId, 2)), false);
+    assert.equal(events(), eventsBefore);
   });
 });

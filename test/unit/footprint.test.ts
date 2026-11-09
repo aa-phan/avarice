@@ -149,6 +149,30 @@ describe("the proxy's resolver seam stays out of production", () => {
   });
 });
 
+// `contract amend` refuses a caller whose process tree holds a run's supervisor. The reader of that tree is an override of main() so a test can
+// supply a chain; a production path that passed or read the override could make the refusal look at a chain someone chose (plan 03-15, T-03-27).
+describe('the ancestry seam stays out of production', () => {
+  const MAIN = join(REPO_ROOT, 'src', 'cli', 'main.ts');
+  const mainSource = readFileSync(MAIN, 'utf8');
+
+  it('no production file other than src/cli/main.ts reads or declares the ancestry override of MainOverrides', () => {
+    const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== MAIN);
+    assert.ok(files.length > 20, 'the scan found the source tree');
+    const names = /\boverrides\??\.ancestry\b|\bancestry\s*\?\s*\(/;
+    assert.deepEqual(files.filter((f) => names.test(readFileSync(f, 'utf8'))), []);
+  });
+
+  it('bin/avarice.ts never mentions the ancestry reader', () => {
+    assert.equal(/ancestry/i.test(readFileSync(PRODUCTION_ENTRY, 'utf8')), false);
+  });
+
+  it('main.ts reads the override once and defaults to the real process walk', () => {
+    assert.equal((mainSource.match(/\boverrides\.ancestry\b/g) ?? []).length, 1, 'one read of the override');
+    assert.match(mainSource, /overrides\.ancestry\s*\?\?\s*\(\(\)\s*=>\s*processAncestry\(process\.pid\)\)/);
+    assert.match(mainSource, /import \{ processAncestry \} from '\.\.\/adapters\/proc\/ancestry\.ts'/);
+  });
+});
+
 // Processes that mention any of these unique temp names, or hold a file open under them, belong to this test.
 async function lingering(tokens: readonly string[], dirs: readonly string[]): Promise<string[]> {
   const found: string[] = [];
