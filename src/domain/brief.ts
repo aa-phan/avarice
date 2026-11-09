@@ -60,6 +60,7 @@ export const BRIEF_LIMITS = {
   titleChars: 200,
   listItems: 128,
   expectedDecisionsMax: 1000,
+  items: 20,
 } as const;
 
 const SIZES: readonly string[] = ['small', 'medium', 'large'];
@@ -73,6 +74,12 @@ const SECTIONS: Readonly<Record<string, string>> = {
   'target checks': 'targetChecks',
 };
 const VERIFIED_BY = /^(?:check|test|diff):\S(?:.*\S)?$/;
+// `decision:<key>` marks a criterion whose choice belongs to the owner. It never satisfies acceptance alone: G0 wants a
+// check, test or diff reference beside it, and a later gate uses the key to catch a silent pick.
+const DECISION_REF = /^decision:[a-z][a-z0-9-]{0,39}$/;
+const ITEM_KEYS: readonly string[] = ['id', 'title', 'dependsOn', 'size', 'model', 'acceptance', 'spec'];
+const SPEC_KEYS: readonly string[] = ['files', 'symbols', 'configKeys', 'references'];
+const ITEM_ID = /^[A-Z][A-Za-z0-9_-]{0,31}$/;
 
 // Control characters other than tab and newline (a lone CR survives CRLF normalization and is refused here).
 const BAD_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
@@ -118,8 +125,11 @@ function readAcceptance(lines: readonly string[]): Result<BriefAcceptance[]> {
       for (const part of (split[2] as string).split(',')) {
         const ref = part.trim();
         if (ref === '') continue;
-        if (!VERIFIED_BY.test(ref)) {
-          return invalid('brief.acceptance.verifiedBy', `${id}: ${JSON.stringify(ref)} must be check:<name>, test:<id> or diff:<rule>`);
+        if (!VERIFIED_BY.test(ref) && !DECISION_REF.test(ref)) {
+          return invalid(
+            'brief.acceptance.verifiedBy',
+            `${id}: ${JSON.stringify(ref)} must be check:<name>, test:<id>, diff:<rule> or decision:<key> (a lower-case key of up to 40 letters, digits and dashes)`,
+          );
         }
         verifiedBy.push(ref);
       }
@@ -163,14 +173,153 @@ function parseItemsJson(raw: string): Result<unknown> {
   }
 }
 
-// Plain items of the tracer: an array of objects with id, title, dependsOn and acceptance.
-function readItems(raw: unknown, acceptanceIds: readonly string[]): Result<BriefItem[]> {
-  void acceptanceIds;
-  if (!Array.isArray(raw)) return invalid('brief.items', 'must be an array of items');
-  const items: BriefItem[] = [];
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+const shown = (text: string): string => JSON.stringify(text.slice(0, 40));
+
+// A spec list that is free text (symbols, config keys, references): each entry one short line.
+function readSpecList(field: string, raw: unknown): Result<string[]> {
+  if (!Array.isArray(raw)) return invalid(field, 'must be an array of text');
+  if (raw.length > BRIEF_LIMITS.listItems) return invalid(field, `at most ${BRIEF_LIMITS.listItems} entries`);
+  const out: string[] = [];
   for (const entry of raw as unknown[]) {
-    const item = entry as BriefItem;
-    items.push({ ...item });
+    if (typeof entry !== 'string' || entry.trim() === '' || entry.length > BRIEF_LIMITS.titleChars || BAD_CONTROL.test(entry)) {
+      return invalid(field, `every entry must be 1 to ${BRIEF_LIMITS.titleChars} characters of text with no control character`);
+    }
+    out.push(entry);
+  }
+  return ok(out);
+}
+
+function readItemSpec(at: string, raw: unknown): Result<NonNullable<BriefItem['spec']>> {
+  if (!isPlainObject(raw)) return invalid(`${at}.spec`, 'must be an object');
+  const spec: NonNullable<BriefItem['spec']> = {};
+  for (const key of Object.keys(raw)) {
+    if (!SPEC_KEYS.includes(key)) return invalid(`${at}.spec.${key.slice(0, 40)}`, `unknown spec key; the spec keys are ${SPEC_KEYS.join(', ')}`);
+  }
+  if (Object.hasOwn(raw, 'files')) {
+    const field = `${at}.spec.files`;
+    const files = raw.files;
+    if (!Array.isArray(files) || files.length === 0) {
+      return invalid(field, 'must be a non-empty array of globs: an item must be allowed to write something');
+    }
+    if (files.length > BRIEF_LIMITS.listItems) return invalid(field, `at most ${BRIEF_LIMITS.listItems} globs`);
+    const out: string[] = [];
+    for (const entry of files as unknown[]) {
+      const glob = validateGlob(field, entry);
+      if (!glob.ok) return invalid(field, glob.error.kind === 'invalid' ? glob.error.reason : 'unsafe glob');
+      out.push(glob.value);
+    }
+    spec.files = out;
+  }
+  for (const key of ['symbols', 'configKeys', 'references'] as const) {
+    if (!Object.hasOwn(raw, key)) continue;
+    const list = readSpecList(`${at}.spec.${key}`, raw[key]);
+    if (!list.ok) return list;
+    spec[key] = list.value;
+  }
+  return ok(spec);
+}
+
+// Validates the parsed `items` value (D-06). Refusals name `brief.items[<n>].<field>`. Every acceptance criterion belongs to
+// exactly one item, ids are unique, dependsOn names existing items and is acyclic, and an unknown key is refused.
+function readItems(raw: unknown, acceptanceIds: readonly string[]): Result<BriefItem[]> {
+  if (!Array.isArray(raw) || raw.length === 0) return invalid('brief.items', 'must be a non-empty array of items');
+  if (raw.length > BRIEF_LIMITS.items) return invalid('brief.items', `at most ${BRIEF_LIMITS.items} items`);
+  const items: BriefItem[] = [];
+  const index = new Map<string, number>();
+  for (const [n, entry] of (raw as unknown[]).entries()) {
+    const at = `brief.items[${n}]`;
+    if (!isPlainObject(entry)) return invalid(at, 'must be an object');
+    for (const key of Object.keys(entry)) {
+      if (!ITEM_KEYS.includes(key)) return invalid(`${at}.${key.slice(0, 40)}`, `unknown item key; the item keys are ${ITEM_KEYS.join(', ')}`);
+    }
+    const id = entry.id;
+    if (typeof id !== 'string' || !ITEM_ID.test(id)) return invalid(`${at}.id`, 'must match ^[A-Z][A-Za-z0-9_-]{0,31}$');
+    if (index.has(id)) return invalid(`${at}.id`, `duplicate item id ${id}`);
+    index.set(id, n);
+    const title = entry.title;
+    if (typeof title !== 'string' || title.trim() === '' || title.length > BRIEF_LIMITS.titleChars || BAD_CONTROL.test(title)) {
+      return invalid(`${at}.title`, `must be 1 to ${BRIEF_LIMITS.titleChars} characters with no control character`);
+    }
+    const dependsOn = entry.dependsOn;
+    if (!Array.isArray(dependsOn) || dependsOn.some((dep) => typeof dep !== 'string')) {
+      return invalid(`${at}.dependsOn`, 'must be an array of item ids');
+    }
+    if (new Set(dependsOn as string[]).size !== dependsOn.length) return invalid(`${at}.dependsOn`, 'names an item twice');
+    const built: BriefItem = { id, title, dependsOn: [...(dependsOn as string[])], acceptance: [] };
+    if (Object.hasOwn(entry, 'size')) {
+      if (typeof entry.size !== 'string' || !SIZES.includes(entry.size)) return invalid(`${at}.size`, 'must be small, medium or large');
+      built.size = entry.size as BriefSize;
+    }
+    if (Object.hasOwn(entry, 'model')) {
+      if (typeof entry.model !== 'string' || !MODELS.includes(entry.model)) return invalid(`${at}.model`, 'must be haiku, sonnet or opus');
+      built.model = entry.model as BriefModel;
+    }
+    const acceptance = entry.acceptance;
+    if (!Array.isArray(acceptance) || acceptance.length === 0) {
+      return invalid(`${at}.acceptance`, 'must name at least one acceptance criterion of the brief');
+    }
+    for (const ref of acceptance as unknown[]) {
+      if (typeof ref !== 'string' || !acceptanceIds.includes(ref)) {
+        return invalid(`${at}.acceptance`, `${JSON.stringify(typeof ref === 'string' ? ref.slice(0, 40) : ref)} is not an acceptance criterion of this brief`);
+      }
+    }
+    if (new Set(acceptance as string[]).size !== acceptance.length) return invalid(`${at}.acceptance`, 'names a criterion twice');
+    built.acceptance = [...(acceptance as string[])];
+    if (Object.hasOwn(entry, 'spec')) {
+      const spec = readItemSpec(at, entry.spec);
+      if (!spec.ok) return spec;
+      built.spec = spec.value;
+    }
+    items.push(built);
+  }
+
+  for (const [n, item] of items.entries()) {
+    for (const dep of item.dependsOn) {
+      if (dep === item.id) return invalid(`brief.items[${n}].dependsOn`, `${item.id} cannot depend on itself`);
+      if (!index.has(dep)) return invalid(`brief.items[${n}].dependsOn`, `names unknown item ${shown(dep)}`);
+    }
+  }
+  const owner = new Map<string, string>();
+  for (const item of items) {
+    for (const ref of item.acceptance) {
+      const first = owner.get(ref);
+      if (first !== undefined) return invalid('brief.items', `${ref} belongs to items ${first} and ${item.id}: each criterion belongs to exactly one item`);
+      owner.set(ref, item.id);
+    }
+  }
+  for (const ref of acceptanceIds) {
+    if (!owner.has(ref)) return invalid('brief.items', `${ref} belongs to no item: each criterion belongs to exactly one item`);
+  }
+
+  // Depth-first cycle check in declaration order; the reason lists the cycle as `A -> B -> A`.
+  const mark = new Map<string, 'open' | 'done'>();
+  const path: string[] = [];
+  const visit = (id: string): string[] | null => {
+    mark.set(id, 'open');
+    path.push(id);
+    for (const dep of (items[index.get(id) as number] as BriefItem).dependsOn) {
+      if (mark.get(dep) === 'open') return [...path.slice(path.indexOf(dep)), dep];
+      if (!mark.has(dep)) {
+        const found = visit(dep);
+        if (found !== null) return found;
+      }
+    }
+    path.pop();
+    mark.set(id, 'done');
+    return null;
+  };
+  for (const item of items) {
+    if (mark.has(item.id)) continue;
+    const cycle = visit(item.id);
+    if (cycle !== null) {
+      return invalid(`brief.items[${index.get(cycle[0] as string)}].dependsOn`, `forms a dependency cycle: ${cycle.join(' -> ')}`);
+    }
   }
   return ok(items);
 }
@@ -251,6 +400,8 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
   if (!acceptance.ok) return acceptance;
   let items: BriefItem[] | undefined;
   if (front.items !== undefined) {
+    if (front.size !== undefined) return invalid('brief.size', 'is not allowed beside items: put size and model on each item');
+    if (front.model !== undefined) return invalid('brief.model', 'is not allowed beside items: put size and model on each item');
     const json = parseItemsJson(front.items);
     if (!json.ok) return json;
     const read = readItems(json.value, acceptance.value.map((c) => c.id));
