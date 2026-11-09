@@ -158,9 +158,17 @@ describe('applyAmendment tracer: a budget raise produces contract version 2 (RC-
 
   it('accepts a fractional cost and every name --budget accepts', () => {
     const v1 = compile(ONE_ITEM_BRIEF);
+    const values: Record<(typeof BUDGET_OVERRIDE_NAMES)[number], number> = {
+      wallClockMinutes: 60,
+      invocations: 5,
+      toolCalls: 100,
+      subagentsTotal: 5,
+      subagentsConcurrent: 1,
+      costUsdPerInvocation: 1.5,
+      costUsdPerRun: 12.5,
+    };
     for (const name of BUDGET_OVERRIDE_NAMES) {
-      const value = name.startsWith('costUsd') ? 1.5 : 1;
-      const r = amend(v1, { budgets: { [name]: value } });
+      const r = amend(v1, { budgets: { [name]: values[name] } });
       assert.equal(r.ok, true, `${name} should be amendable`);
     }
   });
