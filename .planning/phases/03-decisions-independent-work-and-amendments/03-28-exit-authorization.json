@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "plan": "03-28",
+  "decidedAt": "2026-11-09",
+  "decidedBy": "owner",
+  "selection": "approve",
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:4019f32906cc1ad90571389b14cd2bee47d71b1e6853d78d36f1411ebc78631b"
+    }
+  ],
+  "perRunCapUsd": 5.67,
+  "perRunCapFlag": "--budget costUsdPerRun=5.67",
+  "ceilingUsd": 25,
+  "spentUsdSoFar": 7.9739,
+  "headroomUsd": 17.0261,
+  "dryRun": "03-28-dry-run.json",
+  "host": {
+    "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+    "claudeVersion": "2.1.319",
+    "pin": "every exit `avarice start` in plans 03-29 and 03-30 runs with AVARICE_CLAUDE_BIN set to claudeBin",
+    "ownerTerminalRequirement": "every owner-terminal `avarice decide` and `avarice resume` is given with the same AVARICE_CLAUDE_BIN=<claudeBin>; plans 03-29 and 03-30 print the exact command for the owner",
+    "admittedClaudeVersionsChanged": false,
+    "defaultBinaryChanged": false
+  },
+  "itemA": "stays small (haiku) in all three briefs; no brief change",
+  "notes": [
+    "D-03: 3 of 3, one `avarice start` each; any unexpected block or failure means a fix and all three again.",
+    "The dry run spent 0 USD and left the portfolio unchanged; the live runs spend only under this authorization."
+  ]
+}
