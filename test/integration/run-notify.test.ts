@@ -19,7 +19,7 @@ import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initia
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
-import { notifyRunStop } from '../../src/app/notify.ts';
+import { flushDueNotifications, notifyRunStop, queueDecisionNotice } from '../../src/app/notify.ts';
 import type { AppDeps, NotifyDeps } from '../../src/app/deps.ts';
 import { NOTIFY_DEFAULTS } from '../../src/domain/notify-policy.ts';
 import type { ProfileNotify } from '../../src/domain/notify-policy.ts';
@@ -368,5 +368,127 @@ describe('delivery follows the profile (D-21, D-22, D-24; AUT-4, AUT-6)', () => 
     const result = await notifyRunStop(deps, 'run_1', blocked);
     assert.ok(!result.ok && result.error.kind === 'invalid');
     assert.equal(sql(b, 'SELECT 1 FROM notifications').length, 0);
+  });
+});
+
+describe('batched decision notices (D-24)', () => {
+  const WINDOW_MS = 10 * 60_000;
+
+  // A second open decision on the same item, so a run has two decisions to batch.
+  function openSecond(b: Bench): string[] {
+    must(
+      b.ledger.openDecision({
+        runId: 'run_1',
+        contractVersion: 1,
+        class: 'architecture',
+        issue: 'A second private question',
+        options: [],
+        consequences: {},
+        evidenceRefs: [],
+        affectedItems: ['A'],
+        stateDigest: DIGEST,
+        urgency: 'blocking',
+        nowMs: T0 + 11,
+      }),
+    );
+    return must(b.ledger.listDecisions({ runId: 'run_1', state: 'open' })).map((d) => d.decisionId);
+  }
+
+  it('queues a pending row per decision and delivers nothing', () => {
+    const b = bench();
+    const [first, second] = openSecond(b) as [string, string];
+    const rows = must(queueDecisionNotice(b.deps, 'run_1', first));
+    must(queueDecisionNotice(b.deps, 'run_1', second));
+    assert.equal(rows.length, 1);
+    assert.deepEqual(sql(b, 'SELECT kind, destination, subject_ids_json, state, attempts FROM notifications ORDER BY rowid'), [
+      { kind: 'decisions', destination: 'local', subject_ids_json: JSON.stringify([first]), state: 'pending', attempts: 0 },
+      { kind: 'decisions', destination: 'local', subject_ids_json: JSON.stringify([second]), state: 'pending', attempts: 0 },
+    ]);
+    assert.equal(b.calls.length, 0);
+    must(queueDecisionNotice(b.deps, 'run_1', first));
+    assert.equal(sql(b, 'SELECT 1 FROM notifications').length, 2, 'queueing the same decision again adds no row');
+  });
+
+  it('queues nothing for a destination the profile does not list', () => {
+    const b = bench();
+    b.settings.value = { ...b.settings.value, destinations: [] };
+    const [first] = openSecond(b) as [string];
+    assert.deepEqual(must(queueDecisionNotice(b.deps, 'run_1', first)), []);
+    assert.equal(sql(b, 'SELECT 1 FROM notifications').length, 0);
+  });
+
+  it('flushes nothing before the batch window has passed, then one banner counting every pending decision and marking all their rows delivered', async () => {
+    const b = bench();
+    const ids = openSecond(b);
+    for (const id of ids) must(queueDecisionNotice(b.deps, 'run_1', id));
+    const queuedAt = b.clock.now;
+    b.clock.now = queuedAt + WINDOW_MS - 1;
+    assert.equal(must(await flushDueNotifications(b.deps, 'run_1')).result, 'none');
+    assert.equal(b.calls.length, 0);
+    assert.deepEqual(sql(b, 'SELECT DISTINCT state FROM notifications'), [{ state: 'pending' }]);
+    b.clock.now = queuedAt + WINDOW_MS;
+    const flushed = must(await flushDueNotifications(b.deps, 'run_1'));
+    assert.equal(flushed.result, 'delivered');
+    assert.deepEqual(b.calls, [{ title: 'AVARICE', body: 'run_1: 2 decisions waiting. Run: avarice inbox' }]);
+    assert.deepEqual(sql(b, 'SELECT state, attempts FROM notifications ORDER BY rowid'), [
+      { state: 'delivered', attempts: 1 },
+      { state: 'delivered', attempts: 1 },
+    ]);
+    // Nothing is left to flush.
+    assert.equal(must(await flushDueNotifications(b.deps, 'run_1')).result, 'none');
+    assert.equal(b.calls.length, 1);
+  });
+
+  it('holds the flush in quiet hours: the rows are held and no banner is posted', async () => {
+    const b = bench();
+    for (const id of openSecond(b)) must(queueDecisionNotice(b.deps, 'run_1', id));
+    b.settings.value = { ...b.settings.value, quietHours: { start: 22 * 60, end: 8 * 60 } };
+    b.settings.minute = 2 * 60;
+    b.clock.now += WINDOW_MS;
+    assert.equal(must(await flushDueNotifications(b.deps, 'run_1')).result, 'held');
+    assert.equal(b.calls.length, 0);
+    assert.deepEqual(sql(b, 'SELECT DISTINCT state FROM notifications'), [{ state: 'held' }]);
+  });
+
+  it('merges the queued rows of a blocked run into its one banner: one delivery, every row delivered', async () => {
+    const b = bench();
+    const ids = openSecond(b);
+    must(queueDecisionNotice(b.deps, 'run_1', ids[0] as string));
+    const result = must(await notifyRunStop(b.deps, 'run_1', blocked));
+    assert.equal(result.result, 'delivered');
+    assert.deepEqual(b.calls, [{ title: 'AVARICE', body: 'run_1: 2 decisions waiting. Run: avarice inbox' }]);
+    assert.deepEqual(sql(b, 'SELECT subject_ids_json, state FROM notifications ORDER BY rowid'), [
+      { subject_ids_json: JSON.stringify([ids[0]]), state: 'delivered' },
+      { subject_ids_json: JSON.stringify([ids[1]]), state: 'delivered' },
+    ]);
+  });
+
+  it('adds no row when the queued rows already cover every open decision of the blocked run', async () => {
+    const b = bench();
+    const ids = openSecond(b);
+    for (const id of ids) must(queueDecisionNotice(b.deps, 'run_1', id));
+    must(await notifyRunStop(b.deps, 'run_1', blocked));
+    assert.equal(b.calls.length, 1);
+    assert.deepEqual(sql(b, 'SELECT state FROM notifications'), [{ state: 'delivered' }, { state: 'delivered' }]);
+  });
+
+  it('holds queued rows together with the stop row in quiet hours, and never writes a decision', async () => {
+    const b = bench();
+    const ids = openSecond(b);
+    must(queueDecisionNotice(b.deps, 'run_1', ids[0] as string));
+    b.settings.value = { ...b.settings.value, quietHours: { start: 22 * 60, end: 8 * 60 } };
+    b.settings.minute = 23 * 60;
+    const before = JSON.stringify(sql(b, 'SELECT * FROM decisions'));
+    assert.equal(must(await notifyRunStop(b.deps, 'run_1', blocked)).result, 'held');
+    assert.equal(b.calls.length, 0);
+    assert.deepEqual(sql(b, 'SELECT DISTINCT state FROM notifications'), [{ state: 'held' }]);
+    assert.equal(JSON.stringify(sql(b, 'SELECT * FROM decisions')), before);
+  });
+
+  it('flushes nothing when no notify deps are composed', async () => {
+    const b = bench();
+    const bare = { ...b.deps, notify: undefined } as AppDeps;
+    assert.equal(must(await flushDueNotifications(bare, 'run_1')).result, 'none');
+    assert.deepEqual(must(queueDecisionNotice(bare, 'run_1', 'dec_x')), []);
   });
 });
