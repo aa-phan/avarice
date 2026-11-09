@@ -129,8 +129,8 @@ interface Driven {
   kill(): void;
 }
 
-function onTerminal(roots: CliRoots): Driven {
-  const child = spawn('python3', [PTY_DRIVE, '30', '100', ...NODE_ARGS], { env: terminalEnv(roots), stdio: ['pipe', 'pipe', 'pipe'] });
+function onTerminal(roots: CliRoots, args: readonly string[] = []): Driven {
+  const child = spawn('python3', [PTY_DRIVE, '30', '100', ...NODE_ARGS, ...args], { env: terminalEnv(roots), stdio: ['pipe', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', (chunk: Buffer) => void (output += chunk.toString()));
   child.stderr.on('data', (chunk: Buffer) => void (output += chunk.toString()));
@@ -251,51 +251,90 @@ describe('contract amend from the command line of the shell on a driven terminal
 
 // The Decide action (plan 03-25; D-13, ADR-013): key 7 lists the open decisions, the choice runs `decide <id>` in the shell's process on the real
 // terminal, and the command's question is asked through the shell's own prompt. The answer is recorded as the OS user on the terminal channel.
-describe('the Decide action of the shell on a driven terminal', { skip: HAS_PYTHON ? false : 'python3 with the pty module is not available, so the driven terminal cannot be created' }, () => {
-  it('lists the open decision, asks the answer through the shell prompt and records `answered (1)` by the OS user on the terminal channel', async () => {
-    const roots = newRoots();
-    const repo = makeRunRepo();
-    cleanup.push(repo.base);
-    onboardRunRepo(roots, repo);
-    commitConventions(repo);
-    const composed = createDeps(profileEnv(roots), {});
-    assert.ok(composed.ok, 'composition');
-    let decisionId: string;
-    try {
-      const { deps } = composed.value;
-      const started = startRun(deps, { cwd: repo.path, briefPath: writeBrief(join(roots.base, 'briefs')), policy: 'routine', budgetOverrides: {} });
-      assert.ok(started.ok, JSON.stringify(started));
-      const contract = deps.ledger.getRunContract(started.value.runId);
-      assert.ok(contract.ok && contract.value !== null, 'the run has a contract');
-      const opened = deps.ledger.openDecision({
-        runId: started.value.runId,
-        contractVersion: contract.value.version,
-        class: 'acceptance',
-        issue: 'Which status code?',
-        options: [
-          { key: '1', label: '404', kind: 'choice' },
-          { key: '2', label: '410', kind: 'choice' },
-        ],
-        consequences: {},
-        evidenceRefs: [],
-        affectedItems: [],
-        stateDigest: stateDigestOf(contract.value.version, contract.value.body as RunContract),
-        urgency: 'blocking',
-        nowMs: Date.now(),
-      });
-      assert.ok(opened.ok, JSON.stringify(opened));
-      decisionId = opened.value.decisionId;
-    } finally {
-      composed.value.close();
-    }
-    const row = (): { state: string; answer: string | null; answered_by: string | null; answer_channel: string | null } =>
-      ledgerRows<{ state: string; answer: string | null; answered_by: string | null; answer_channel: string | null }>(roots, 'SELECT state, answer, answered_by, answer_channel FROM decisions WHERE decision_id = ?', decisionId)[0] as {
-        state: string;
-        answer: string | null;
-        answered_by: string | null;
-        answer_channel: string | null;
-      };
+interface DecisionDbRow {
+  state: string;
+  answer: string | null;
+  answered_by: string | null;
+  answer_channel: string | null;
+}
 
+// A profile with one run and one open decision on it (two listed options), opened on the run's real state digest so an answer applies.
+function profileWithDecision(): { roots: CliRoots; decisionId: string; row: () => DecisionDbRow } {
+  const roots = newRoots();
+  const repo = makeRunRepo();
+  cleanup.push(repo.base);
+  onboardRunRepo(roots, repo);
+  commitConventions(repo);
+  const composed = createDeps(profileEnv(roots), {});
+  assert.ok(composed.ok, 'composition');
+  try {
+    const { deps } = composed.value;
+    const started = startRun(deps, { cwd: repo.path, briefPath: writeBrief(join(roots.base, 'briefs')), policy: 'routine', budgetOverrides: {} });
+    assert.ok(started.ok, JSON.stringify(started));
+    const contract = deps.ledger.getRunContract(started.value.runId);
+    assert.ok(contract.ok && contract.value !== null, 'the run has a contract');
+    const opened = deps.ledger.openDecision({
+      runId: started.value.runId,
+      contractVersion: contract.value.version,
+      class: 'acceptance',
+      issue: 'Which status code?',
+      options: [
+        { key: '1', label: '404', kind: 'choice' },
+        { key: '2', label: '410', kind: 'choice' },
+      ],
+      consequences: {},
+      evidenceRefs: [],
+      affectedItems: [],
+      stateDigest: stateDigestOf(contract.value.version, contract.value.body as RunContract),
+      urgency: 'blocking',
+      nowMs: Date.now(),
+    });
+    assert.ok(opened.ok, JSON.stringify(opened));
+    const decisionId = opened.value.decisionId;
+    return {
+      roots,
+      decisionId,
+      row: () => ledgerRows<DecisionDbRow>(roots, 'SELECT state, answer, answered_by, answer_channel FROM decisions WHERE decision_id = ?', decisionId)[0] as DecisionDbRow,
+    };
+  } finally {
+    composed.value.close();
+  }
+}
+
+describe('the Decide action of the shell on a driven terminal', { skip: HAS_PYTHON ? false : 'python3 with the pty module is not available, so the driven terminal cannot be created' }, () => {
+  // `avarice decide <id>` as a one-shot command on a real terminal, with no shell: the question is read from standard input (D-13).
+  it('`decide <id>` on a real terminal prints the record, asks on standard input and records `answered (2)`; an empty line afterwards leaves a decision open', async () => {
+    const { roots, decisionId, row } = profileWithDecision();
+    const term = onTerminal(roots, ['decide', decisionId]);
+    try {
+      await waitFor(() => term.screen().includes('answer (1, 2'), `the answer prompt on standard input (got ${JSON.stringify(term.screen())})`, 30_000);
+      assert.match(term.screen(), new RegExp(`decision ${decisionId} \\(open\\)`));
+      assert.equal(row().state, 'open', 'nothing is written before the answer');
+      term.type('2\r');
+      await waitFor(() => term.screen().includes(`decision ${decisionId} answered (2)`), 'the answered decision', 30_000);
+      const result = await Promise.race([term.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`the command did not end; screen ${JSON.stringify(term.screen())}`)), 20_000))]);
+      assert.equal(result.code, 0, term.screen());
+      assert.deepEqual(row(), { state: 'answered', answer: '2', answered_by: `owner:${userInfo().username}`, answer_channel: 'terminal' });
+    } finally {
+      term.kill();
+    }
+
+    const second = profileWithDecision();
+    const left = onTerminal(second.roots, ['decide', second.decisionId]);
+    try {
+      await waitFor(() => left.screen().includes('answer (1, 2'), 'the answer prompt', 30_000);
+      left.type('\r');
+      const result = await Promise.race([left.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`the command did not end; screen ${JSON.stringify(left.screen())}`)), 20_000))]);
+      assert.equal(result.code, 0, left.screen());
+      assert.match(left.screen(), /^left open$/m);
+      assert.equal(second.row().state, 'open');
+    } finally {
+      left.kill();
+    }
+  });
+
+  it('lists the open decision, asks the answer through the shell prompt and records `answered (1)` by the OS user on the terminal channel', async () => {
+    const { roots, decisionId, row } = profileWithDecision();
     const term = onTerminal(roots);
     try {
       await waitFor(() => term.screen().includes('open decisions: 1'), 'the home view with one open decision', 30_000);
