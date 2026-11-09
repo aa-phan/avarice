@@ -99,7 +99,7 @@ describe('status shows a finished run: state, checkpoint, evidence and branch, o
     assert.match(ran.stdout, new RegExp(`^run ${runId}: ready_for_review$`, 'm'));
     assert.match(ran.stdout, new RegExp(`^  branch avarice/${runId} at [0-9a-f]{7} \\(clean\\)$`, 'm'));
     assert.match(ran.stdout, /^ {2}evidence: test passed$/m);
-    assert.match(ran.stdout, /^ {2}gates: G0 passed, G2 passed, G4 passed$/m);
+    assert.match(ran.stdout, /^ {2}gates: G0 passed, G1 passed, G2 passed, G4 passed$/m);
     assert.match(ran.stdout, /^ {2}last checkpoint: handoff:fetch \(\d{2}:\d{2}, [^)]+\)$/m);
     assert.match(ran.stdout, /^ {2}budget: cost [0-9.]+ USD of 10\.00 USD; invocations 1 of 3; tool calls \d+ of 400; /m);
     assert.match(ran.stdout, /^ {2}references: brief \S+ at [0-9a-f]{12}; conventions \.avarice\/config\.json at [0-9a-f]{12}$/m);
@@ -135,6 +135,7 @@ describe('status shows a finished run: state, checkpoint, evidence and branch, o
       run.gates.map((g) => [g.gate, g.passed]),
       [
         ['G0', true],
+        ['G1', true],
         ['G2', true],
         ['G4', true],
       ],

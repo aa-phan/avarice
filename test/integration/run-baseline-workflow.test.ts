@@ -129,6 +129,7 @@ describe('start --wait reaches ready_for_review with the fake run host (tracer; 
       'context-pack',
       'launch:run',
       'classify',
+      'gate:g1',
       'gate:g2',
       'commit',
       'verify:checks',

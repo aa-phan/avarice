@@ -13,6 +13,7 @@ import {
   evaluateG2,
   evaluateG3,
   evaluateG4,
+  g1PathBreaches,
   integrityFailures,
 } from '../../src/domain/gates.ts';
 import type { G1Facts, G2Facts, G3Facts, G4Facts } from '../../src/domain/gates.ts';
@@ -502,5 +503,23 @@ describe('the integrity gates of the routine preset', () => {
     const g2 = { passed: false, failures: [{ rule: 'no-new-overrides', detail: 'x' }, { rule: 'scope-conformance', detail: 'y' }] };
     assert.deepEqual(integrityFailures({ G2: g2 }, ['scope-conformance']), ['scope-conformance']);
     assert.deepEqual(integrityFailures({ G2: g2 }, ['not-a-gate']), []);
+  });
+});
+
+describe('g1PathBreaches (plan 03-19): the paths the decision of a failed G1 names', () => {
+  it('names the plan paths outside the write and create globs, and agrees with what evaluateG1 reports', () => {
+    const facts = g1({ plan: plan({ filesModified: ['src/lib/copy.ts', 'docs/x.md', '.github/workflows/ci.yml', '../outside.ts', './test/new.test.ts'], taskFiles: ['/etc/passwd'] }) });
+    const { scope, spec } = g1PathBreaches(facts);
+    assert.deepEqual(scope, ['../outside.ts', '.github/workflows/ci.yml', '/etc/passwd', 'docs/x.md']);
+    assert.deepEqual(spec, [], 'an item whose spec files were derived has no narrower list than the write set');
+    const detail = evaluateG1(facts).failures.find((f) => f.rule === 'plan-within-write-scope')?.detail ?? '';
+    for (const path of scope) assert.ok(detail.includes(path), path);
+    assert.ok(!detail.includes('src/lib/copy.ts') && !detail.includes('test/new.test.ts'));
+  });
+
+  it('names the plan paths beyond an explicit item spec separately, and nothing for a missing plan', () => {
+    const facts = g1({ itemSpec: { files: ['src/lib/copy.ts'], derived: [] }, plan: plan({ filesModified: ['src/lib/copy.ts', 'src/lib/dates.ts'], taskFiles: [] }) });
+    assert.deepEqual(g1PathBreaches(facts), { scope: [], spec: ['src/lib/dates.ts'] });
+    assert.deepEqual(g1PathBreaches(g1({ plan: null })), { scope: [], spec: [] });
   });
 });

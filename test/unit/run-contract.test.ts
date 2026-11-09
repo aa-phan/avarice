@@ -14,6 +14,7 @@ import {
   checkG0Static,
   compileRunContract,
   itemCandidateTerms,
+  planNamedSpec,
   scaledBudgetLimits,
 } from '../../src/domain/run-contract.ts';
 import type { IndexFacts, RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
@@ -867,5 +868,28 @@ describe('RC-8: the model never exceeds the explicit model or the size map entry
     const item = compile({ brief: loadBrief(lines.join('\n')) }).intent.workItems[0];
     assert.equal(item?.model, 'haiku', 'an explicit model wins even over a larger size');
     assert.equal(item?.modelSource, 'brief');
+  });
+});
+
+describe('planNamedSpec: RC-7 stage 2, what a quick PLAN names for the fields the item left to derivation (plan 03-19)', () => {
+  const text = 'Change `slugify` and `Slugger`, read `slug.max-length` and `package.json`, and see docs/slug-rules.md, src/notes.md and README.md.';
+  const held = { symbols: ['Slugger'], configKeys: [], references: [], derived: ['symbols', 'configKeys', 'references'] };
+
+  it('lists identifiers as symbols, dotted lower-case spans that are not file names as config keys, and .md paths under docs/ or the write set as references', () => {
+    assert.deepEqual(planNamedSpec(text, held, ['src/**']), { symbols: ['slugify'], configKeys: ['slug.max-length'], references: ['docs/slug-rules.md', 'src/notes.md'] });
+  });
+
+  it('reads only the fields the item derived, and lists a name the spec already holds once, in the spec', () => {
+    assert.deepEqual(planNamedSpec(text, { ...held, derived: ['configKeys'] }, ['src/**']), { symbols: [], configKeys: ['slug.max-length'], references: [] });
+    assert.deepEqual(planNamedSpec(text, { ...held, symbols: ['slugify', 'Slugger'] }, ['src/**']).symbols, []);
+    assert.deepEqual(planNamedSpec(text, { ...held, derived: [] }, ['src/**']), { symbols: [], configKeys: [], references: [] });
+  });
+
+  it('is the same list whatever order the names come in, and caps each list', () => {
+    const many = Array.from({ length: 80 }, (_, i) => `\`name${String(i).padStart(2, '0')}\``).join(' ');
+    const named = planNamedSpec(many, held, []);
+    assert.equal(named.symbols.length, 50);
+    assert.deepEqual(named.symbols, [...named.symbols].sort());
+    assert.deepEqual(planNamedSpec('`b` `a`', held, []).symbols, planNamedSpec('`a` `b`', held, []).symbols);
   });
 });

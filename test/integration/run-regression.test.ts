@@ -94,9 +94,9 @@ describe('S-52 offline: B breaks a test A added, the failure is charged to B, on
     assert.equal(commits[1]?.attempt, attemptsDb(s.roots, ran.runId)[2]?.attempt_id, "B's commit names the repair attempt, the last one");
   });
 
-  it("leaves A's G2 evidence alone: one passed G2 row for A and no stale row, and the repair checkpoint is taken once", () => {
+  it("leaves A's gate evidence alone: one passed G1 row and one passed G2 row for A and no stale row, and the repair checkpoint is taken once", () => {
     const rows = gatesOf(s.roots, ran.runId).filter((g) => g.work_item === 'A');
-    assert.deepEqual(rows.map((g) => `${g.gate}:${g.passed}`), ['G2:1']);
+    assert.deepEqual(rows.map((g) => `${g.gate}:${g.passed}`), ['G1:1', 'G2:1']);
     assert.equal(checkpointsOf(s.roots, ran.runId).filter((a) => a === 'repair').length, 1);
   });
 });

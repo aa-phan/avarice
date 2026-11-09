@@ -105,7 +105,7 @@ describe('S-21 offline: a repair that fixes the code passes G3 and G2 (the contr
     assert.equal(ran.state, 'ready_for_review', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
     assert.deepEqual(
       gatesOf(s.roots, ran.runId).map((g) => `${g.gate}:${g.passed}`),
-      ['G0:1', 'G2:0', 'G3:1', 'G2:1', 'G4:1'],
+      ['G0:1', 'G1:1', 'G2:0', 'G1:1', 'G3:1', 'G2:1', 'G4:1'],
     );
     assert.equal(cloneCommits(workspaceOf(s.roots, ran.runId), baseOf(s, ran.runId)).length, 1);
     const [step] = stepsOf(s.roots, ran.runId, 'repair:reproducer');
@@ -120,7 +120,7 @@ describe('a repair that puts the repository back to the pin leaves the item noth
     const ran = await runScenario(s, s21Host({ edits: { 'src/slug.ts': FIXED_SLUG } }));
     assert.equal(ran.state, 'blocked_on_decision', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
     assert.equal(ran.reason, 'decision');
-    assert.deepEqual(gatesOf(s.roots, ran.runId).map((g) => `${g.gate}:${g.passed}`), ['G0:1', 'G2:0', 'G3:1', 'G2:1']);
+    assert.deepEqual(gatesOf(s.roots, ran.runId).map((g) => `${g.gate}:${g.passed}`), ['G0:1', 'G1:1', 'G2:0', 'G1:1', 'G3:1', 'G2:1']);
     const [decision] = decisionsOf(s.roots, ran.runId);
     assert.equal(decision?.class, 'repeated_failure');
     assert.match(decision?.issue ?? '', /no change of the item is left to commit/);

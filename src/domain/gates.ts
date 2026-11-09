@@ -216,6 +216,21 @@ function normalizePlanPath(path: string): string {
   return path.replace(/^(?:\.\/)+/, '');
 }
 
+// The plan paths G1 holds against the contract, as written (a leading `./` dropped): those outside the write and create globs (an absolute path, a `..`
+// segment, a protected path and a path no glob holds), and, when the item's spec files were not derived, those beyond the spec files. The decision of a failed
+// G1 names them, so the amend command it prints asks for exactly the paths the plan needed (plan 03-19).
+export function g1PathBreaches(facts: Pick<G1Facts, 'plan' | 'globs' | 'itemSpec'>): { scope: string[]; spec: string[] } {
+  if (facts.plan === null) return { scope: [], spec: [] };
+  const writable = [...facts.globs.write].sort();
+  const creatable = [...facts.globs.create].sort();
+  const protectedGlobs = [...facts.globs.protected].sort();
+  const planPaths = [...new Set([...facts.plan.filesModified, ...facts.plan.taskFiles].map(normalizePlanPath))].sort();
+  const scope = planPaths.filter((path) => planPathProblem(path) !== null || matchesAny(path, protectedGlobs) || (!matchesAny(path, writable) && !matchesAny(path, creatable)));
+  const specFiles = [...facts.itemSpec.files].sort();
+  const spec = facts.itemSpec.derived.includes('files') ? [] : planPaths.filter((path) => !matchesAny(path, specFiles));
+  return { scope, spec };
+}
+
 // G1, in the rule order of G1_RULES. The plan is model-written text: it can fail this gate and never pass it, and a plan that is absent
 // fails closed. Every list is sorted before it is judged, so input order never changes the verdict.
 // plan-cites-acceptance is an advisory. Spike S3-A (plan 03-13) measured one live quick PLAN, written after a resume, that cites its item's

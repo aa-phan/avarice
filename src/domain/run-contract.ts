@@ -505,6 +505,27 @@ export function deriveItemSpec(
   return { files, symbols, configKeys, references, derived };
 }
 
+// RC-7 stage 2 (plan 03-19): what the quick PLAN names for the spec fields the item left to derivation. The rules are the ones of stage 1, applied to the plan's
+// text: backtick identifiers are symbols, dotted lower-case backtick spans that are not file names are config keys, and `.md` paths under docs/ or inside the
+// write set are references. Only a field the item derived is read (an explicit field is the owner's), and only a name the item's spec does not already hold is
+// listed. The result is data for a step, never an input to the contract: the compiled spec stays as it was. Every list is sorted, de-duplicated and capped.
+export const PLAN_SPEC_MAX_NAMES = 50;
+
+export function planNamedSpec(
+  planText: string,
+  spec: Pick<RunWorkItem['spec'], 'symbols' | 'configKeys' | 'references' | 'derived'>,
+  writeSet: readonly string[],
+): { symbols: string[]; configKeys: string[]; references: string[] } {
+  const { spans, candidates } = candidateTokens([planText]);
+  const isFileName = (span: string): boolean => FILE_EXTENSIONS.has(span.slice(span.lastIndexOf('.') + 1));
+  const fresh = (names: Iterable<string>, held: readonly string[]): string[] => sortedUnique(names).filter((name) => !held.includes(name)).slice(0, PLAN_SPEC_MAX_NAMES);
+  return {
+    symbols: spec.derived.includes('symbols') ? fresh(spans.filter((span) => IDENTIFIER.test(span)), spec.symbols) : [],
+    configKeys: spec.derived.includes('configKeys') ? fresh(spans.filter((span) => CONFIG_KEY.test(span) && !isFileName(span)), spec.configKeys) : [],
+    references: spec.derived.includes('references') ? fresh(candidates.filter((c) => c.endsWith('.md') && (c.startsWith('docs/') || withinAny(c, writeSet))), spec.references) : [],
+  };
+}
+
 // One work item per brief item in declaration order, or the single item A that owns every criterion when the brief has no
 // items (a Phase 2 brief). A size the brief did not give is the preset default and is named in `spec.derived`; a model the
 // brief did not give is the size's `modelBySize` entry (D-10).

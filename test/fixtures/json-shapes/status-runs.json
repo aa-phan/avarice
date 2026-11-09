@@ -50,7 +50,7 @@
         "state": "ready_for_review",
         "reason": null,
         "lastCheckpoint": {
-          "seq": 16,
+          "seq": 17,
           "nextAction": "handoff:fetch",
           "revision": "git:<sha1>",
           "at": "<iso>"
@@ -72,6 +72,11 @@
             "gate": "G0",
             "passed": true,
             "revision": "<sha1>"
+          },
+          {
+            "gate": "G1",
+            "passed": true,
+            "revision": "tree:sha256:<sha256>"
           },
           {
             "gate": "G2",

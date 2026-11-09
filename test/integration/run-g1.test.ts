@@ -10,7 +10,7 @@ import { runSupervisor } from '../../src/app/run-service.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { optionsOf } from '../../src/domain/decision-policy.ts';
 import { PLAN_CITES_ACCEPTANCE_HARD } from '../../src/domain/gates.ts';
-import { FIXED_SLUG, briefWithAcceptance, ledgerRows, profileEnv } from '../helpers/run-fixtures.ts';
+import { briefWithAcceptance, ledgerRows, profileEnv } from '../helpers/run-fixtures.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import { decisionsOf, itemStatesOf } from '../helpers/independent-work.ts';
@@ -22,7 +22,8 @@ after(() => {
   for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
 });
 
-const FIX: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' };
+// The slug of this repository is already fixed at the pin, so the unit adds a file of its own: a change in scope with every required check passing.
+const FIX: FakeRunOptions = { edits: { 'src/helper.ts': 'export const helper = 1;\n' }, summary: true, verification: 'passed' };
 const BRIEF = briefWithAcceptance('Repeated separators collapse to one dash | verifiedBy: check:test');
 const OWNER_BRIEF = briefWithAcceptance('Repeated separators collapse to one dash | verifiedBy: decision:fallback-wording, check:test');
 
@@ -32,7 +33,9 @@ interface Failure {
   advisory?: boolean;
 }
 const failuresOf = (row: { failures_json: string } | undefined): Failure[] => (row === undefined ? [] : (JSON.parse(row.failures_json) as Failure[]));
-const g1Of = (s: Scenario, runId: string) => gatesOf(s.roots, runId).filter((g) => g.gate === 'G1');
+// The rules a gate row failed on: an advisory stored beside them is a finding, not a failure.
+const failedRules = (row: { failures_json: string } | undefined): string[] => failuresOf(row).filter((f) => f.advisory !== true).map((f) => f.rule);
+const g1Of =(s: Scenario, runId: string) => gatesOf(s.roots, runId).filter((g) => g.gate === 'G1');
 const contractDigestOf = (s: Scenario, runId: string): string[] => ledgerRows<{ digest: string }>(s.roots, 'SELECT digest FROM contracts WHERE run_id = ? ORDER BY version', runId).map((r) => r.digest);
 
 describe('G1 turns a plan that needs more than its spec into a decision (D-07, T-03-37)', () => {
@@ -43,7 +46,7 @@ describe('G1 turns a plan that needs more than its spec into a decision (D-07, T
     assert.equal(ran.reason, 'decision');
     const [g1] = g1Of(s, ran.runId);
     assert.equal(g1?.passed, 0);
-    assert.deepEqual(failuresOf(g1).map((f) => f.rule), ['plan-within-write-scope']);
+    assert.deepEqual(failedRules(g1), ['plan-within-write-scope']);
     assert.match(failuresOf(g1)[0]?.detail ?? '', /docs\/x\.md/);
 
     const [decision] = decisionsOf(s.roots, ran.runId);
@@ -79,7 +82,7 @@ describe('G1 turns a plan that needs more than its spec into a decision (D-07, T
     const ran = await runScenario(s, { ...FIX, planText: plan });
     assert.equal(ran.state, 'blocked_on_decision', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
     const [g1] = g1Of(s, ran.runId);
-    assert.deepEqual(failuresOf(g1).map((f) => f.rule), ['decision-checkpoint-unresolved']);
+    assert.deepEqual(failedRules(g1), ['decision-checkpoint-unresolved']);
     const [decision] = decisionsOf(s.roots, ran.runId);
     assert.equal(decision?.class, 'acceptance');
     assert.deepEqual(optionsOf(JSON.parse(decision?.options_json ?? '[]')).map((o) => `${o.key}:${o.kind}`), ['a:choice', 'b:choice']);
@@ -102,7 +105,7 @@ describe('G1 asks for an owner choice the unit never asked (D-02)', () => {
     const ran = await runScenario(s, FIX);
     assert.equal(ran.state, 'blocked_on_decision', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
     const [g1] = g1Of(s, ran.runId);
-    assert.deepEqual(failuresOf(g1).map((f) => f.rule), ['owner-choice-unasked']);
+    assert.deepEqual(failedRules(g1), ['owner-choice-unasked']);
     assert.match(failuresOf(g1)[0]?.detail ?? '', /AC1 \(fallback-wording\)/);
     const [decision] = decisionsOf(s.roots, ran.runId);
     assert.equal(decision?.class, 'acceptance');

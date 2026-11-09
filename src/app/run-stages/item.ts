@@ -22,17 +22,18 @@ import { randomUUID } from 'node:crypto';
 import { digestOf, sha256Hex } from '../../domain/digest.ts';
 import { baselineDelta, revisionOf } from '../../domain/evidence.ts';
 import type { DeltaBlocking } from '../../domain/evidence.ts';
-import { evaluateG2, evaluateG3, integrityFailures } from '../../domain/gates.ts';
-import type { GateVerdict } from '../../domain/gates.ts';
+import { evaluateG1, evaluateG2, evaluateG3, g1PathBreaches, integrityFailures } from '../../domain/gates.ts';
+import type { G1Facts, GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
 import { classifyOutcome, detectPause } from '../../domain/outcome.ts';
 import type { ClassifiedKind, OutcomeFacts, PauseSignal } from '../../domain/outcome.ts';
-import { countPruneEntries, parseQuickVerification, quickRecordKind, storedText } from '../../domain/quick-record.ts';
-import type { QuickVerification } from '../../domain/quick-record.ts';
+import { countPruneEntries, parseQuickPlan, parseQuickVerification, quickRecordKind, storedText } from '../../domain/quick-record.ts';
+import type { QuickPlan, QuickVerification } from '../../domain/quick-record.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import { compareInventories } from '../../domain/test-inventory.ts';
 import type { InventoryFailure } from '../../domain/test-inventory.ts';
+import { planNamedSpec } from '../../domain/run-contract.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import { optionsOf } from '../../domain/decision-policy.ts';
 import type { DecisionSignal } from '../../domain/decision-policy.ts';
@@ -1076,6 +1077,28 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
   // A repair attempt is judged by G2 as any unit is, against the item's own base, with the repair's own classification.
   const isRepair = attemptRow.reason === REPAIR_REASON;
 
+  // G1 (D-02, D-07): the plan of the unit is judged before anything else is, so a plan that needs more than the contract gives (a path outside the write set, a
+  // question it settled itself, a choice that was the owner's) stops the unit here. Its delta is parked and a decision opens; G2 never runs for it.
+  const plan = judgePlan(unit, attemptRow);
+  if (!plan.ok) return plan;
+  if (!plan.value.verdict.passed) {
+    const { signal, evidenceRefs } = g1Decision(plan.value.facts, plan.value.verdict);
+    const integrity = integrityFailures({ G1: plan.value.verdict }, contract.verification.integrityGates);
+    const blocked = blockItem(ctx, {
+      reason: 'decision',
+      signal,
+      issue: `gate G1 failed: ${plan.value.verdict.failures.map((f) => f.detail).join('; ')}`,
+      evidenceRefs,
+      base: snapshot,
+      attemptId,
+      itemId: unit.item.itemId,
+      data: { gate: 'G1', rules: plan.value.verdict.failures.map((f) => f.rule).join(','), ...(integrity.length > 0 ? { integrity: integrity.join(',') } : {}) },
+    });
+    if (!blocked.ok) return blocked;
+    await flushBatch(ctx);
+    return ok(undefined);
+  }
+
   // G3 (AUT-10, D-11): a repair is judged on its own diff before G2 judges the whole item again. Both verdicts are recorded whatever either says, so a repair
   // that fails G3 and G2 leaves both rows; the item's decision names the failures of both. The inventory is measured once, here, and G2 reads it.
   let g3: GateVerdict | null = null;
@@ -1254,6 +1277,150 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
   const gated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'gated', nowMs: deps.clock.nowMs(), attemptId });
   if (!gated.ok) return gated;
   return commitUnit(unit, attemptId, snapshot);
+}
+
+// ---- gate G1: the plan of a unit that progressed ----------------------------------------------------------------------------------------------------
+
+const PLAN_READ_BYTES = 64 * 1024;
+// The tags a decision G1 opened carries in its evidence references: which owner choices its answer settled, and that a plan checkpoint settles none.
+const G1_OWNER_CHOICE_TAG = 'g1:owner-choice:';
+const G1_CHECKPOINT_TAG = 'g1:checkpoint';
+const G1_SCOPE_TAG = 'g1:scope';
+
+// The quick PLAN of the unit, read from its clone as data (64 KiB, the cut parseQuickPlan applies): every PLAN file the unit wrote, merged into one plan. A
+// plan that is absent, or too large to read, is null, which G1 fails closed. `text` is what the spec:plan step reads names from.
+function readPlan(unit: Unit, own: WorkspaceSnapshot): Result<{ plan: QuickPlan | null; text: string }> {
+  const workspace = unit.ctx.deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const changed = workspace.changedSince(unit.clone, own);
+  if (!changed.ok) return changed;
+  const paths = changed.value.filter((c) => c.status !== 'deleted' && quickRecordKind(c.path) === 'plan').map((c) => c.path).sort();
+  const plans: QuickPlan[] = [];
+  const texts: string[] = [];
+  for (const path of paths) {
+    const read = workspace.readText(unit.clone, path, PLAN_READ_BYTES);
+    if (!read.ok) {
+      // A plan over the limit is not read at all, and a gate that cannot read the plan does not pass it.
+      if (read.error.kind === 'invalid') return ok({ plan: null, text: '' });
+      return read;
+    }
+    if (read.value === null) continue;
+    const parsed = parseQuickPlan(read.value);
+    if (parsed === null) continue;
+    plans.push(parsed);
+    texts.push(read.value);
+  }
+  if (plans.length === 0) return ok({ plan: null, text: '' });
+  const union = (lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())];
+  return ok({
+    plan: {
+      filesModified: union(plans.map((p) => p.filesModified)),
+      taskFiles: union(plans.map((p) => p.taskFiles)),
+      decisionCheckpoints: plans.flatMap((p) => p.decisionCheckpoints),
+      acceptanceRefs: union(plans.map((p) => p.acceptanceRefs)),
+    },
+    text: texts.join('\n'),
+  });
+}
+
+// The owner choices of the item (D-02): each `decision:<key>` its acceptance criteria name, and whether the owner has been asked. A decision the owner
+// answered settles a choice when it is the unit's own question (it carries no tag), or when G1 opened it for exactly that choice; the answer to a decision G1 opened
+// for a plan checkpoint settles none.
+function ownerChoicesOf(unit: Unit): Result<G1Facts['ownerChoices']> {
+  const { ctx, contract } = unit;
+  const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId, state: 'answered' });
+  if (!decisions.ok) return decisions;
+  let all = false;
+  const settled = new Set<string>();
+  for (const d of decisions.value) {
+    if (d.affectedItems[0] !== unit.item.itemId || d.class !== 'acceptance') continue;
+    const tags = d.evidenceRefs.filter((ref) => ref.startsWith('g1:'));
+    if (tags.length === 0) all = true;
+    for (const tag of tags) if (tag.startsWith(G1_OWNER_CHOICE_TAG)) settled.add(tag.slice(G1_OWNER_CHOICE_TAG.length));
+  }
+  const item = contract.intent.workItems.find((i) => i.id === unit.item.itemId);
+  const owned = new Set(item?.acceptance ?? contract.intent.acceptance.map((a) => a.id));
+  const choices: G1Facts['ownerChoices'][number][] = [];
+  for (const criterion of contract.intent.acceptance) {
+    if (!owned.has(criterion.id)) continue;
+    for (const ref of criterion.verifiedBy) {
+      if (!ref.startsWith('decision:')) continue;
+      const key = ref.slice('decision:'.length);
+      choices.push({ acceptanceId: criterion.id, key, answered: all || settled.has(`${criterion.id}:${key}`) });
+    }
+  }
+  return ok(choices);
+}
+
+interface PlanJudgement {
+  verdict: GateVerdict;
+  facts: G1Facts;
+}
+
+// G1 on the plan of a unit that progressed (D-02, D-07 stage 2): the checkpoint, the plan read as data, the item's spec and the contract's globs as the facts,
+// the verdict recorded as a G1 row (an advisory beside a passing verdict is stored in it, marked), and what the plan names for the spec fields the item left to
+// derivation recorded in a `spec:plan` step (RC-7). The contract is never changed by what a plan says.
+function judgePlan(unit: Unit, attempt: AttemptRow): Result<PlanJudgement> {
+  const { ctx, contract } = unit;
+  const { deps } = ctx;
+  const own = snapshotOf(ctx, attempt.attemptId);
+  if (!own.ok) return own;
+  const marked = ctx.checkpoint('gate:g1', { attemptId: attempt.attemptId, itemId: unit.item.itemId, revision: own.value.head });
+  if (!marked.ok) return marked;
+
+  const classified = stepOfAttempt(ctx, 'classify', attempt.attemptId);
+  if (!classified.ok) return classified;
+  const read = readPlan(unit, own.value);
+  if (!read.ok) return read;
+  const choices = ownerChoicesOf(unit);
+  if (!choices.ok) return choices;
+  const item = contract.intent.workItems.find((i) => i.id === unit.item.itemId);
+  const facts: G1Facts = {
+    plan: read.value.plan,
+    globs: { write: contract.files.write, create: contract.files.create, protected: contract.files.protected },
+    // An item the contract does not list (a run stored before items) is judged by the write set alone.
+    itemSpec: { files: item?.spec.files ?? [], derived: item?.spec.derived ?? ['files'] },
+    outcome: typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'unknown',
+    ownerChoices: choices.value,
+    itemAcceptance: item?.acceptance ?? contract.intent.acceptance.map((a) => a.id),
+  };
+  const verdict = evaluateG1(facts);
+  const recorded = recordGateRow(unit, attempt.attemptId, 'G1', verdict);
+  if (!recorded.ok) return recorded;
+
+  if (read.value.plan !== null && item !== undefined) {
+    const named = planNamedSpec(read.value.text, item.spec, [...contract.files.write, ...contract.files.create]);
+    const fields = (['symbols', 'configKeys', 'references'] as const).filter((field) => named[field].length > 0);
+    if (fields.length > 0) {
+      const now = deps.clock.nowMs();
+      const step = recordStep(ctx, 'spec:plan', attempt.ordinal, { attemptId: attempt.attemptId, itemId: unit.item.itemId, source: 'plan', derivedFrom: 'plan', fields, symbols: named.symbols, configKeys: named.configKeys, references: named.references }, now);
+      if (!step.ok) return step;
+    }
+  }
+  return ok({ verdict, facts });
+}
+
+// The signal a failed G1 opens its decision with (D-02, D-07): a plan path outside the contract is a scope_expansion whose amend command names those paths; a plan
+// checkpoint the unit resolved is an acceptance decision with the plan's options; an owner choice nobody asked is an acceptance decision that allows free text;
+// a plan that cannot be read is a question the owner answers in words. The tags say what the answer settles.
+function g1Decision(facts: G1Facts, verdict: GateVerdict): { signal: DecisionSignal; evidenceRefs: string[] } {
+  const rules = new Set(verdict.failures.map((f) => f.rule));
+  if (rules.has('plan-within-write-scope') || rules.has('plan-within-spec')) {
+    return { signal: { kind: 'g1-scope', paths: g1PathBreaches(facts).scope }, evidenceRefs: [G1_SCOPE_TAG] };
+  }
+  if (rules.has('decision-checkpoint-unresolved')) {
+    const open = facts.plan?.decisionCheckpoints.find((c) => !c.hasAutoSelect);
+    return { signal: { kind: 'g1-checkpoint', options: (open?.optionIds ?? []).map((id) => ({ id })) }, evidenceRefs: [G1_CHECKPOINT_TAG] };
+  }
+  if (rules.has('owner-choice-unasked')) {
+    const unasked = facts.ownerChoices.filter((c) => !c.answered).sort((a, b) => (a.acceptanceId + a.key < b.acceptanceId + b.key ? -1 : 1));
+    const first = unasked[0];
+    return {
+      signal: first === undefined ? { kind: 'pause' } : { kind: 'g1-owner-choice', acceptanceId: first.acceptanceId, key: first.key },
+      evidenceRefs: unasked.map((c) => `${G1_OWNER_CHOICE_TAG}${c.acceptanceId}:${c.key}`),
+    };
+  }
+  return { signal: { kind: 'pause' }, evidenceRefs: [] };
 }
 
 // The gate row of G1 or G3: the revision is the clone's HEAD and a digest of its working tree, as G2's is. A finding that did not fail the gate (G1's advisory
