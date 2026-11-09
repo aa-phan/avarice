@@ -696,7 +696,7 @@ describe('every containment layer is checked at launch, after the files are writ
 describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13)', () => {
   it('ends an overrunning host with SIGTERM, leaves no process in its group, and retries once before it blocks', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, background: true });
-    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 5_000));
     assert.deepEqual([run.state, run.reason], ['blocked', 'decision']);
     const launches = s.fake.launches();
     assert.equal(launches.length, 2, 'one launch and the one retry the contract allows');
@@ -710,7 +710,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
 
   it('judges an inconclusive ending by what staging holds: the retry rule completes a run whose second launch finishes', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, sleepFirstOnly: true });
-    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 5_000));
     assert.deepEqual([run.state, run.reason], ['active', null]);
     assert.deepEqual(finishedEvents(s.roots).map((f) => f['outcome']), ['inconclusive', 'progressed']);
   });
