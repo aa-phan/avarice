@@ -94,14 +94,14 @@ function describeError(error: { kind: string } & Record<string, unknown>): strin
 // preflight (read-only; Task 3's verification of the owner's commit, and the dry run's last step on its clone)
 // ---------------------------------------------------------------------------------------------------------------
 
-interface PreflightReport {
+export interface PreflightReport {
   lines: string[];
   ok: boolean;
   conventionsRevision?: string;
   checksDigest?: string;
 }
 
-function preflight(repo: string, configPath: string, pinRef: string, nowMs: number): PreflightReport {
+export function preflight(repo: string, configPath: string, pinRef: string, nowMs: number): PreflightReport {
   const lines: string[] = [];
   let ok = true;
   const fail = (line: string): void => {
@@ -612,7 +612,7 @@ interface RefLine {
   object: string;
 }
 
-function snapshot(repo: string): Json {
+export function snapshot(repo: string): Json {
   const digest = checkoutDigest(repo, [RUN_REF_PATTERN]);
   const stage = mustGit(repo, ['ls-files', '--stage', '-z']);
   const refs: RefLine[] = mustGit(repo, ['for-each-ref', '--format=%(refname) %(objectname)'])
