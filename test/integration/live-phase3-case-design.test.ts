@@ -230,10 +230,10 @@ describe('cs5: the subagent write is a plain request for a write the hook refuse
   });
 });
 
-describe('the plan group of plan 03-38', () => {
-  it('is 03-27, 03-35, 03-36, 03-37 and 03-38, and planGroupTotalRefusal names all five', () => {
-    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37', '03-38']);
-    assert.match(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 0, 1) ?? '', /03-27, 03-35, 03-36, 03-37, 03-38/);
+describe('the plan group of plan 03-39', () => {
+  it('is 03-27, 03-35, 03-36, 03-37, 03-38 and 03-39, and planGroupTotalRefusal names all six', () => {
+    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37', '03-38', '03-39']);
+    assert.match(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 0, 1) ?? '', /03-27, 03-35, 03-36, 03-37, 03-38, 03-39/);
   });
 });
 
