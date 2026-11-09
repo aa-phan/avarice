@@ -3,6 +3,7 @@
 // profile. The refusal of a run, of a pipe and of a run's process tree sits next to this file's helpers (refuseOutsideTerminal).
 import { statSync } from 'node:fs';
 import { userInfo } from 'node:os';
+import { inRunProcessTree } from '../adapters/proc/ancestry.ts';
 import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
 
@@ -20,7 +21,10 @@ export interface IdentityContext {
 
 // The reason to refuse, or undefined: the checks apply in this order. A command that needs an owner at a terminal outside the run calls this
 // from usage(), before the profile is resolved.
-export function refuseOutsideTerminal(_env: NodeJS.ProcessEnv, _context: IdentityContext): string | undefined {
+export function refuseOutsideTerminal(env: NodeJS.ProcessEnv, context: IdentityContext): string | undefined {
+  if (env['AVARICE_RUN'] !== undefined) return 'refused inside a run (AVARICE_RUN is set)';
+  if (!context.terminal.stdinIsTty || !context.terminal.stdoutIsTty) return 'needs an interactive terminal';
+  if (inRunProcessTree(context.ancestry())) return "refused from inside a run's process tree";
   return undefined;
 }
 

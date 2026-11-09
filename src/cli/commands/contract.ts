@@ -12,7 +12,8 @@ import type { FieldDiff } from '../../domain/amendment.ts';
 import type { PortError } from '../../domain/result.ts';
 import { parseBudgetFlags } from '../args.ts';
 import type { Io, ParsedArgs } from '../args.ts';
-import { responderName } from '../identity.ts';
+import { refuseOutsideTerminal, responderName } from '../identity.ts';
+import type { IdentityContext } from '../identity.ts';
 import { errorLine, stripControl } from '../render/style.ts';
 
 const EXIT_REFUSED = 3;
@@ -25,8 +26,12 @@ const RUN_ID = /^run_[0-9A-Za-z]+$/;
 // Flags of the amendment grammar that a later change of this plan adds.
 const NOT_YET: readonly string[] = ['add-write', 'check', 'acceptance-file', 'item', 'decision'];
 
-// Checked before the profile is resolved, so a usage error leaves nothing on disk.
-export function usage(args: ParsedArgs): string | undefined {
+// Checked before the profile is resolved, so a refusal or a usage error leaves nothing on disk: no data root, no store, no file (CS-11). The
+// refusals come first: inside a run (AVARICE_RUN), without a terminal on standard input and output, and from the process tree of a run. Without
+// the context that tells where the command runs, it refuses.
+export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env, context?: IdentityContext): string | undefined {
+  const refused = context === undefined ? 'needs an interactive terminal' : refuseOutsideTerminal(env, context);
+  if (refused !== undefined) return refused;
   const [sub, runId, ...rest] = args.positionals;
   if (sub !== 'amend') return `contract needs a subcommand: amend\n${USAGE}`;
   if (runId === undefined || !RUN_ID.test(runId) || rest.length > 0) return `contract amend needs exactly one run ID\n${USAGE}`;

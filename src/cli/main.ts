@@ -8,8 +8,10 @@ import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
 import { errorLine } from './render/style.ts';
+import { processAncestry } from '../adapters/proc/ancestry.ts';
 import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
+import type { IdentityContext } from './identity.ts';
 
 export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract'] as const;
 export const EXIT_USAGE = 64;
@@ -92,7 +94,13 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
   }
 
   const args = parseArgs(argv.slice(1), { boolean: mod.booleanFlags ?? [] });
-  const usageError = mod.usage?.(args, env);
+  // What a command that must not run inside a run is told about where it runs (CS-11): the terminal facts of the streams this process (or the
+  // shell's test streams) holds, and a reader of the process ancestry that walks the real process table unless a test supplies a chain.
+  const identity: IdentityContext = {
+    terminal: { stdinIsTty: (overrides.stdin ?? process.stdin).isTTY === true, stdoutIsTty: (overrides.stdout ?? process.stdout).isTTY === true },
+    ancestry: overrides.ancestry ?? (() => processAncestry(process.pid)),
+  };
+  const usageError = mod.usage?.(args, env, identity);
   if (usageError !== undefined) {
     io.err(`${errorLine(name, usageError)}\n${USAGE}`);
     return EXIT_USAGE;
