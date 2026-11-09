@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 7/33 plans executed (15 waves)
+**Plans:** 8/33 plans executed (15 waves)
 
 Plans:
 **Wave 1**
@@ -224,7 +224,7 @@ Plans:
 - [x] 03-06-PLAN.md — Gates G1 and G3, the integrity gate map, the smallest reproducer
 - [x] 03-07-PLAN.md — Notify policy: profile notify keys, destination subset, quiet hours, batching, backoff, banner text
 - [x] 03-08-PLAN.md — Host resume launch line, reap by `--resume`, final-text question, stop-and-ask and resume prompts
-- [ ] 03-09-PLAN.md — RunWorkspace park and unpark of a paused item's delta
+- [x] 03-09-PLAN.md — RunWorkspace park and unpark of a paused item's delta
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-03-PLAN.md — Brief `items`, N-item compile with derived specs, scaled routine budgets, repair limit 1
@@ -372,7 +372,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 7/33 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 8/33 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |

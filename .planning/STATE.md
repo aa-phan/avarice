@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-11-09T01:45:17.966Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-11-09T02:37:09.497Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 6ae6ea81ca73fb45581019a40289cdf18ccf5892
+state_head: 69e872204cffbb75409be72493d9426838561dd6
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 68
+  completed_plans: 69
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 8 of 33
+Plan: 9 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -124,6 +124,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P06 | 35 min | 3 tasks | 9 files |
 | Phase 03 P07 | 12 min | 2 tasks | 4 files |
 | Phase 03 P08 | 45 min | 3 tasks | 12 files |
+| Phase 03 P09 | 41 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -269,6 +270,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-07: nextAttemptAt takes attempts already made (3 or more gives null); nextDigestAt returns the first digest time strictly after the given minute, or null when none is set
 - [Phase 03]: 03-08: a resumed session wins over a caller-chosen sessionId, so the launch line never carries both --resume and --session-id — The CLI refuses both together; the resume must keep every containment flag
 - [Phase 03]: 03-08: the final result text tail (last 2000 stripped characters) is returned only as InvocationOutcome.question, never in an event, step result or detail — AVARICE needs the pause question as data; model text must stay out of the ledger and logs
+- [Phase 03]: 03-09: unpark keeps the park ref; the caller drops it once the item resumed or committed; re-park of the same content returns the same record, a different delta under the ref is a conflict
 
 ### Pending Todos
 
@@ -321,6 +323,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T01:45:17.820Z
-Stopped at: Completed 03-08-PLAN.md
+Last session: 2026-11-09T02:37:09.336Z
+Stopped at: Completed 03-09-PLAN.md
 Resume file: None
