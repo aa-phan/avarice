@@ -8,7 +8,7 @@ import { renderTable, terminalWidth } from '../../src/cli/render/table.ts';
 import { renderStatus } from '../../src/cli/render/status-view.ts';
 import { renderInbox, renderRunDetails, renderRuns, runStateWord } from '../../src/cli/render/run-view.ts';
 import type { ProjectStatus } from '../../src/app/status.ts';
-import type { RunStatus } from '../../src/app/run-status.ts';
+import type { InboxDecision, RunStatus } from '../../src/app/run-status.ts';
 
 describe('result line and states (OPS-7 rows 1 and 3)', () => {
   it('prints the ledger word with its reason in parentheses', () => {
@@ -365,6 +365,9 @@ function runStatus(over: Partial<RunStatus> = {}): RunStatus {
       { name: 'invocations', used: 1, limit: 3 },
     ],
     references: [{ kind: 'brief', id: 'brief.md', revision: 'sha256:0123456789abcdef0123' }],
+    items: [],
+    decisions: [],
+    notifications: { delivered: 0, pending: 0, held: 0, failed: 0, lastError: null },
     ...over,
   };
 }
@@ -411,6 +414,51 @@ describe('run details (OPS-7, FR-11)', () => {
     assert.match(text, /^ {2}decisions: 2 open \(see avarice inbox\)$/m);
   });
 
+  it('prints one line per item, with the decision an item waits on, and one per decision with its successor (AUT-12)', () => {
+    const run = runStatus({
+      state: 'blocked_on_decision',
+      reason: 'decision',
+      openDecisions: 1,
+      items: [
+        { itemId: 'A', state: 'done', size: 'small', model: 'sonnet', dependsOn: [], attempts: 1 },
+        { itemId: 'B', state: 'blocked_on_decision', size: 'medium', model: 'opus', dependsOn: ['A'], attempts: 2 },
+        { itemId: 'D', state: 'ready', size: 'small', model: 'sonnet', dependsOn: ['B', 'C'], attempts: 0 },
+      ],
+      decisions: [
+        { decisionId: 'dec_old', class: 'acceptance', state: 'stale', affectedItems: ['B', 'D'], supersedes: null, successor: 'dec_new' },
+        { decisionId: 'dec_new', class: 'acceptance', state: 'open', affectedItems: ['B', 'D'], supersedes: 'dec_old', successor: null },
+        { decisionId: 'dec_gone', class: 'budget', state: 'withdrawn', affectedItems: [], supersedes: null, successor: null },
+      ],
+    });
+    const text = renderRunDetails(run, NOW, 100);
+    assert.match(text, /^ {2}item A {2}done {2}size small, model sonnet, after none, 1 attempt$/m);
+    assert.match(text, /^ {2}item B {2}blocked_on_decision {2}decision dec_new {2}size medium, model opus, after A, 2 attempts$/m);
+    assert.match(text, /^ {2}item D {2}ready {2}size small, model sonnet, after B, C, 0 attempts$/m);
+    assert.match(text, /^ {2}decision dec_old {2}acceptance {2}stale {2}items B, D {2}replaced by dec_new$/m);
+    assert.match(text, /^ {2}decision dec_new {2}acceptance {2}open {2}items B, D {2}replaces dec_old$/m);
+    assert.match(text, /^ {2}decision dec_gone {2}budget {2}withdrawn$/m);
+  });
+
+  it('prints a cancel request, and the delivery state of the notifications with the code of one that failed', () => {
+    const text = renderRunDetails(runStatus({ cancelRequestedAt: '2026-11-05T14:04:00.000Z', notifications: { delivered: 2, pending: 0, held: 1, failed: 1, lastError: 'osascript-failed' } }), NOW, 100);
+    assert.match(text, /^ {2}cancel requested \(\d{2}:\d{2}, 1 min ago\)$/m);
+    assert.match(text, /^ {2}notifications: 2 delivered, 1 held, 1 failed \(osascript-failed\)$/m);
+    const none = renderRunDetails(runStatus(), NOW, 100);
+    assert.doesNotMatch(none, /cancel requested|notifications:|item |decision /);
+  });
+
+  it('strips escape sequences and line breaks from every value of an item or decision line (T-03-41)', () => {
+    const run = runStatus({
+      items: [{ itemId: 'A\x1b]0;x\x07', state: 'ready', size: 'sm\x1b[31mall', model: `opus\nsecond line ${'y'.repeat(100)}`, dependsOn: ['Z\x1b[0m'], attempts: 0 }],
+      decisions: [{ decisionId: 'dec_1', class: 'acceptance', state: 'open', affectedItems: ['A\x07'], supersedes: null, successor: null }],
+    });
+    const text = renderRunDetails(run, NOW, 100);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    const line = text.split('\n').find((l) => l.startsWith('  item ')) ?? '';
+    assert.match(line, /^ {2}item A {2}ready {2}size small, model opus second line y+…, after Z, 0 attempts$/);
+    assert.ok(!text.split('\n').some((l) => l.startsWith('second')), 'a line break in a value does not start a new line');
+  });
+
   it('strips escape sequences from a title, a branch and an evidence name (T-02-49)', () => {
     const text = renderRuns([runStatus({ title: 'fix \x1b[31mit\x1b[0m', branch: 'avarice/\x1b]0;x\x07r', evidence: [{ name: 'te\x1bst', kind: 'check', status: 'passed', revision: 'g', clean: true }] })], NOW, 120);
     assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
@@ -432,7 +480,20 @@ describe('run details (OPS-7, FR-11)', () => {
 });
 
 describe('inbox (OPS-7, FR-11)', () => {
-  const decision = { decisionId: 'dec_01JD', runId: 'run_01JR', class: 'acceptance', urgency: 'blocking', openedAt: '2026-11-05T14:02:00.000Z', issue: 'Which approach?\n1. a\n2. b' } as const;
+  const decision: InboxDecision = {
+    decisionId: 'dec_01JD',
+    runId: 'run_01JR',
+    class: 'acceptance',
+    urgency: 'blocking',
+    openedAt: '2026-11-05T14:02:00.000Z',
+    issue: 'Which approach?\n1. a\n2. b',
+    items: ['B', 'D'],
+    options: [
+      { key: '1', label: 'a', kind: 'choice' },
+      { key: '2', label: 'b', kind: 'choice' },
+    ],
+    command: 'avarice decide dec_01JD <option-key>',
+  };
   const review = { runId: 'run_01JR2', title: 't', branch: 'avarice/run_01JR2', commit: 'abcdef1234567890abcdef1234567890abcdef12', repository: '/Users/me/projects/a-repository' } as const;
 
   it('says how many decisions and reviews there are, and prints nothing else when there are none', () => {
@@ -454,6 +515,28 @@ describe('inbox (OPS-7, FR-11)', () => {
     const text = renderInbox({ decisions: [{ ...decision, issue: 'a\x1b[31mb\x1b[0m\x1b]0;t\x07c' }], reviews: [] }, NOW, 100);
     assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
     assert.match(text, /issue dec_01JD: abc$/m);
+  });
+
+  it('prints the items, each option, the command and the state of the banner under the issue (AUT-4)', () => {
+    const say = (notification?: InboxDecision['notification']): string => renderInbox({ decisions: [notification === undefined ? decision : { ...decision, notification }], reviews: [] }, NOW, 100);
+    const text = say({ state: 'delivered', attempts: 1 });
+    assert.match(text, /^issue dec_01JD: Which approach\? 1\. a 2\. b\n {2}items: B, D\n {2}option 1: a\n {2}option 2: b\n {2}answer with: avarice decide dec_01JD <option-key>\n {2}banner delivered\n/m);
+    assert.doesNotMatch(say(), /banner/, 'no banner row, no banner line');
+    assert.match(say({ state: 'held', attempts: 0 }), /^ {2}banner held for the next digest$/m);
+    assert.match(say({ state: 'pending', attempts: 1, lastError: 'osascript-failed' }), /^ {2}banner pending$/m);
+    const failed = say({ state: 'failed', attempts: 3, lastError: 'osascript-failed' });
+    assert.match(failed, /^ {2}banner not delivered \(osascript-failed\); this list is the record$/m);
+    assert.match(failed, /^dec_01JD\s+run_01JR\s+acceptance\s+blocking\s+/m, 'the failed banner leaves the decision listed');
+  });
+
+  it('strips control characters from an option label and cuts a long one to the width (T-03-41)', () => {
+    const odd = { ...decision, options: [{ key: '1', label: 'go\x1b[31m on\x1b]0;t\x07 now', kind: 'choice' as const }, { key: '2', label: 'z'.repeat(300), kind: 'choice' as const }] };
+    const text = renderInbox({ decisions: [odd], reviews: [] }, NOW, 60);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    assert.match(text, /^ {2}option 1: go on now$/m);
+    const long = text.split('\n').find((l) => l.startsWith('  option 2: ')) ?? '';
+    assert.equal(Array.from(long).length, 60);
+    assert.ok(long.endsWith('…'));
   });
 
   it('prints each review with its branch, a short commit and the repository cut from the start', () => {

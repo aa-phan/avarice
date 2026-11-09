@@ -1,7 +1,7 @@
 // Human-readable run views (OPS-7; plan 02-15): the runs part of `status` and the whole of `inbox`. Pure functions over the read models of
 // src/app/run-status.ts: the caller passes the time and the terminal width in, and every recorded string (a title, a branch, a decision
 // issue, a path) passes through stripControl before it is printed (T-02-49). The `--json` paths never come through here.
-import type { InboxDecision, InboxReview, InboxView, RunStatus } from '../../app/run-status.ts';
+import type { InboxDecision, InboxNotification, InboxReview, InboxView, RunDecisionView, RunItemView, RunNotificationView, RunStatus } from '../../app/run-status.ts';
 import { orderRuns } from '../../app/run-status.ts';
 import { duration, localTime, resultLine, stateWord, stripControl, usd } from './style.ts';
 import { renderTable } from './table.ts';
@@ -50,6 +50,48 @@ function branchLine(run: RunStatus): string | null {
   return `branch ${branch} at ${sha7(run.commit)}${clean}`;
 }
 
+// One value of a line, as a single run of text: control characters removed, line breaks and runs of spaces made one space. Ledger values are
+// IDs, states and sizes, and a model name or a label is text a person or a model wrote, so every one of them comes through here.
+function word(text: string): string {
+  return stripControl(text).replace(/\s+/g, ' ').trim();
+}
+
+// A value that a person or a model wrote (an item ID, a size, a model name), cut so that one long value never pushes the rest of its line out of view.
+const VALUE_MAX = 40;
+const value = (text: string): string => fit(text, VALUE_MAX);
+
+// An item belongs to the open decision that names it first among its affected items; the decision also holds up the items that depend on it.
+function openDecisionOf(run: RunStatus, itemId: string): RunDecisionView | undefined {
+  return (run.decisions ?? []).find((d) => d.state === 'open' && d.affectedItems[0] === itemId);
+}
+
+function itemLine(run: RunStatus, item: RunItemView): string {
+  const decision = openDecisionOf(run, item.itemId);
+  const after = item.dependsOn.length === 0 ? 'none' : item.dependsOn.map(value).join(', ');
+  const attempts = `${item.attempts} ${item.attempts === 1 ? 'attempt' : 'attempts'}`;
+  return `item ${value(item.itemId)}  ${word(item.state)}  ${decision !== undefined ? `decision ${word(decision.decisionId)}  ` : ''}size ${value(item.size)}, model ${value(item.model)}, after ${after}, ${attempts}`;
+}
+
+function decisionLine(d: RunDecisionView): string {
+  const items = d.affectedItems.length === 0 ? '' : `  items ${d.affectedItems.map(value).join(', ')}`;
+  const successor = d.successor === null ? '' : `  replaced by ${word(d.successor)}`;
+  const supersedes = d.supersedes === null ? '' : `  replaces ${word(d.supersedes)}`;
+  return `decision ${word(d.decisionId)}  ${word(d.class)}  ${word(d.state)}${items}${successor}${supersedes}`;
+}
+
+// `notifications: 1 delivered, 1 failed (osascript-failed)`: the delivery states that hold at least one banner. A delivery that failed is
+// named with its code; the decision it was about stays open and listed.
+function notificationsLine(n: RunNotificationView): string | null {
+  const parts: string[] = [];
+  if (n.delivered > 0) parts.push(`${n.delivered} delivered`);
+  if (n.pending > 0) parts.push(`${n.pending} pending`);
+  if (n.held > 0) parts.push(`${n.held} held`);
+  if (n.failed > 0) parts.push(`${n.failed} failed${n.lastError !== null ? ` (${word(n.lastError)})` : ''}`);
+  if (parts.length === 0) return null;
+  if (n.failed === 0 && n.lastError !== null) parts.push(`last error ${word(n.lastError)}`);
+  return `notifications: ${parts.join(', ')}`;
+}
+
 // The detail lines of one run, each indented two spaces and ending with a newline. The first line is the result line.
 export function renderRunDetails(run: RunStatus, nowMs: number, _width: number): string {
   const lines: string[] = [resultLine(`run ${run.runId}`, run.interrupted !== undefined ? run.interrupted.presentedAs : run.state, run.interrupted !== undefined ? run.interrupted.reason : run.reason)];
@@ -59,6 +101,7 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
     detail(i.attemptId === null ? `interrupted at ${stripControl(i.step)}` : `interrupted attempt ${stripControl(i.attemptId)} at ${stripControl(i.step)}`);
     detail(`continue with: ${stripControl(i.resumeCommand)}`);
   }
+  if (run.cancelRequestedAt !== undefined) detail(`cancel requested (${localTime(Date.parse(run.cancelRequestedAt), nowMs)})`);
   if (run.lastCheckpoint !== null) detail(`last checkpoint: ${stripControl(run.lastCheckpoint.nextAction)} (${localTime(Date.parse(run.lastCheckpoint.at), nowMs)})`);
   const branch = branchLine(run);
   if (branch !== null) detail(branch);
@@ -68,7 +111,11 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
       : `evidence: ${run.evidence.map((e) => `${stripControl(e.name)} ${stripControl(e.status)}${e.preExisting === true ? ' (pre-existing)' : ''}`).join(', ')}`,
   );
   detail(run.gates.length === 0 ? 'gates: none' : `gates: ${run.gates.map((g) => `${stripControl(g.gate)} ${g.passed ? 'passed' : 'failed'}`).join(', ')}`);
+  for (const item of run.items ?? []) detail(itemLine(run, item));
   if (run.openDecisions > 0) detail(`decisions: ${run.openDecisions} open (see avarice inbox)`);
+  for (const d of run.decisions ?? []) detail(decisionLine(d));
+  const banners = run.notifications === undefined ? null : notificationsLine(run.notifications);
+  if (banners !== null) detail(banners);
   const budget = budgetLine(run);
   if (budget !== null) detail(budget);
   if (run.references.length > 0) detail(`references: ${run.references.map((r) => `${stripControl(r.kind)} ${stripControl(r.id)} at ${shortRevision(r.revision)}`).join('; ')}`);
@@ -124,6 +171,33 @@ function fit(text: string, width: number): string {
   return all.length <= width ? flat : width <= 1 ? '…' : `${all.slice(0, width - 1).join('')}…`;
 }
 
+// Whether the banner for a decision arrived. A banner that did not arrive says so and says where the decision is still recorded.
+function bannerLine(n: InboxNotification): string {
+  switch (n.state) {
+    case 'delivered':
+      return 'banner delivered';
+    case 'held':
+      return 'banner held for the next digest';
+    case 'pending':
+      return 'banner pending';
+    case 'failed':
+      return `banner not delivered (${n.lastError !== undefined ? word(n.lastError) : 'unknown'}); this list is the record`;
+  }
+}
+
+// What the owner needs to answer a decision without another command: the items it holds up, each option, the command and the banner state.
+function decisionDetails(d: InboxDecision, width: number): string[] {
+  const lines: string[] = [];
+  if (d.items.length > 0) lines.push(`  items: ${d.items.map(value).join(', ')}`);
+  for (const option of d.options) {
+    const label = `  option ${value(option.key)}: `;
+    lines.push(`${label}${fit(option.label, Math.max(8, width - Array.from(label).length))}`);
+  }
+  lines.push(`  answer with: ${word(d.command)}`);
+  if (d.notification !== undefined) lines.push(`  ${bannerLine(d.notification)}`);
+  return lines;
+}
+
 const reviewRow = (r: InboxReview): Record<string, string> => ({ run: r.runId, branch: r.branch ?? '-', commit: r.commit === null ? '-' : sha7(r.commit), repository: r.repository });
 
 // `inbox: 1 open decision, 1 review`, then a table of each. A decision's issue is model-derived text: it is printed on its own line under
@@ -132,7 +206,7 @@ export function renderInbox(view: InboxView, nowMs: number, width: number): stri
   const head = `inbox: ${plural(view.decisions.length, 'open decision', 'open decisions')}, ${plural(view.reviews.length, 'review', 'reviews')}\n`;
   const issues = view.decisions.map((d) => {
     const label = `issue ${stripControl(d.decisionId)}: `;
-    return `${label}${fit(d.issue, Math.max(8, width - Array.from(label).length))}\n`;
+    return `${label}${fit(d.issue, Math.max(8, width - Array.from(label).length))}\n${decisionDetails(d, width).map((line) => `${line}\n`).join('')}`;
   });
   const decisions = view.decisions.length === 0 ? '' : `decisions:\n${renderTable(DECISION_COLUMNS, view.decisions.map((d) => decisionRow(d, nowMs)), width)}${issues.join('')}`;
   const reviews = view.reviews.length === 0 ? '' : `reviews:\n${renderTable(REVIEW_COLUMNS, view.reviews.map(reviewRow), width)}`;

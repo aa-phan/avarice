@@ -122,7 +122,7 @@ describe('status shows a finished run: state, checkpoint, evidence and branch, o
     assert.equal(JSON.stringify(rest, null, 2), JSON.stringify(was, null, 2));
     assert.ok(runs !== undefined && runs.length === 1);
     const run = runs[0] as RunJson;
-    assert.deepEqual(Object.keys(run), ['runId', 'title', 'state', 'reason', 'lastCheckpoint', 'branch', 'commit', 'clean', 'evidence', 'gates', 'openDecisions', 'budgets', 'references']);
+    assert.deepEqual(Object.keys(run), ['runId', 'title', 'state', 'reason', 'lastCheckpoint', 'branch', 'commit', 'clean', 'evidence', 'gates', 'openDecisions', 'budgets', 'references', 'items', 'decisions', 'notifications']);
     assert.equal(run.runId, runId);
     assert.equal(run.state, 'ready_for_review');
     assert.equal(run.reason, null);
@@ -323,7 +323,9 @@ describe('a blocked run is listed before a ready run, and the inbox lists its de
     const view = JSON.parse(ran.stdout) as { decisions: Array<Record<string, unknown>>; reviews: Array<Record<string, unknown>> };
     assert.deepEqual(Object.keys(view), ['decisions', 'reviews']);
     assert.equal(view.decisions.length, 1);
-    assert.deepEqual(Object.keys(view.decisions[0] as object), ['decisionId', 'runId', 'class', 'urgency', 'openedAt', 'issue']);
+    const keys = Object.keys(view.decisions[0] as object);
+    assert.deepEqual(keys.slice(0, 9), ['decisionId', 'runId', 'class', 'urgency', 'openedAt', 'issue', 'items', 'options', 'command'], 'the Phase 2 keys, then the keys Phase 3 appended');
+    assert.ok(keys.length === 9 || (keys.length === 10 && keys[9] === 'notification'), `only a banner state may follow: ${keys.join(', ')}`);
     assert.equal(view.decisions[0]?.['runId'], blockedId);
     assert.equal(view.decisions[0]?.['class'], 'acceptance');
     assert.equal(view.reviews.length, 1);
