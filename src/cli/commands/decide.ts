@@ -131,6 +131,22 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     case 'rejected':
       io.err(`${errorLine('decide', outcome.detail ?? outcome.check ?? 'the answer was not applied')}\n`);
       return rejectedExit(outcome);
+    case 'duplicate':
+      io.out(`decision ${decisionId} already answered; ignored\n`);
+      return 0;
+    case 'amendment-requested':
+      io.out(`decision ${decisionId} is answered by an amendment, not by an option; nothing was applied\n`);
+      io.out(`amend with: ${stripControl(outcome.amendCommand ?? '')}\n`);
+      io.out(`or take it back: avarice decide ${decisionId} withdraw\n`);
+      return EXIT_NOT_APPLIED;
+    case 'stale': {
+      const next = outcome.reopened?.decisionId ?? '';
+      const { opened, latest } = outcome.contractVersions ?? { opened: 0, latest: 0 };
+      io.out(`the run changed since decision ${decisionId} was asked${opened !== latest ? ` (contract v${opened} -> v${latest})` : ''}; your answer was not applied\n`);
+      io.out(`decision ${next} asks the same question on the new state, with your answer kept as context\n`);
+      io.out(`answer it with: avarice decide ${next} <option-key>\n`);
+      return EXIT_NOT_APPLIED;
+    }
     default:
       break;
   }
