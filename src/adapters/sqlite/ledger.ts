@@ -109,6 +109,16 @@ const NO_NEXT_ACTION = 'none';
 // any other value, so a typo cannot reach an evidence or decision row (AUT-8).
 const EVIDENCE_STATUS_SET: readonly EvidenceStatus[] = ['passed', 'failed', 'skipped', 'unavailable', 'inconclusive', 'stale'];
 const EVIDENCE_INDEPENDENCE_SET: readonly EvidenceIndependence[] = ['deterministic', 'external', 'model-review'];
+const NOTIFICATION_STATES: readonly NotificationState[] = ['pending', 'held', 'delivered', 'failed'];
+// pending -> held | delivered | failed and held -> delivered | failed; delivered and failed are final (AUT-6).
+const NOTIFICATION_MOVES: Readonly<Record<NotificationState, readonly NotificationState[]>> = {
+  pending: ['held', 'delivered', 'failed'],
+  held: ['delivered', 'failed'],
+  delivered: [],
+  failed: [],
+};
+// An error code is a short token: it is the only text a notification event may carry about a failure.
+const ERROR_CODE = /^[a-z0-9-]{1,64}$/;
 // The classes of a decision that is not a pause: it offers only `withdraw`, and an amendment (or a withdrawal) is how it ends.
 const AMENDABLE_DECISION_CLASSES: readonly string[] = ['repeated_failure', 'permission', 'budget', 'scope_expansion'];
 const DECISION_CLASSES: readonly string[] =['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget'];
@@ -1542,33 +1552,125 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  // ---- notifications, cancel requests --------------------------------------------------------------------
+
   createNotification(input: NewNotification): Result<NotificationRow> {
-    void input;
-    return err({ kind: 'invalid', field: 'createNotification', reason: 'not implemented' });
+    return tx(this.db, () => {
+      if (input.runId !== null) this.lockRun(input.runId);
+      if (input.kind === '') abort({ kind: 'invalid', field: 'kind', reason: 'a notification has a kind' });
+      if (input.destination === '') abort({ kind: 'invalid', field: 'destination', reason: 'a notification has a destination' });
+      if (!Array.isArray(input.subjectIds) || input.subjectIds.length === 0 || input.subjectIds.some((s) => typeof s !== 'string' || s === '')) {
+        abort({ kind: 'invalid', field: 'subjectIds', reason: 'a notification names at least one subject by ID' });
+      }
+      if (input.state !== 'pending' && input.state !== 'held') abort({ kind: 'invalid', field: 'state', reason: 'a notification starts pending or held' });
+      const notificationId = this.newId('ntf_');
+      const now = iso(input.nowMs);
+      this.db
+        .prepare(
+          `INSERT INTO notifications (notification_id, run_id, kind, destination, subject_ids_json, state, attempts, next_attempt_at, last_error, created_at, updated_at, delivered_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, ?, NULL)`,
+        )
+        .run(notificationId, input.runId, input.kind, input.destination, boundedBodyJson(input.subjectIds, 'subjectIds'), input.state, now, now);
+      return this.readNotification(notificationId);
+    });
   }
 
+  // One delivery attempt on a pending or held row. The event carries the IDs, the attempt count and the code, never text (AUT-6).
   recordNotificationAttempt(notificationId: string, input: NotificationAttemptInput): Result<NotificationRow> {
-    void notificationId;
-    void input;
-    return err({ kind: 'invalid', field: 'recordNotificationAttempt', reason: 'not implemented' });
+    return tx(this.db, () => {
+      if (input.outcome !== 'delivered' && input.outcome !== 'failed') abort({ kind: 'invalid', field: 'outcome', reason: 'an attempt is delivered or failed' });
+      if (input.outcome === 'failed') {
+        if (input.errorCode === undefined || !ERROR_CODE.test(input.errorCode)) {
+          abort({ kind: 'invalid', field: 'errorCode', reason: 'a failed attempt carries a short code of at most 64 characters: a-z, 0-9 and -' });
+        }
+        if (input.nextAttemptAtMs !== undefined && !Number.isFinite(input.nextAttemptAtMs)) abort({ kind: 'invalid', field: 'nextAttemptAtMs', reason: 'the next attempt is a time' });
+      } else if (input.errorCode !== undefined || input.nextAttemptAtMs !== undefined) {
+        abort({ kind: 'invalid', field: 'errorCode', reason: 'a delivered attempt has no error code and no next attempt' });
+      }
+      const row = this.readNotification(notificationId);
+      if (row.state !== 'pending' && row.state !== 'held') abort({ kind: 'conflict', expected: `notification ${notificationId} pending or held`, actual: `notification ${notificationId} ${row.state}` });
+      const attempt = row.attempts + 1;
+      const now = iso(input.nowMs);
+      if (input.outcome === 'delivered') {
+        this.db
+          .prepare("UPDATE notifications SET state = 'delivered', attempts = ?, next_attempt_at = NULL, delivered_at = ?, updated_at = ? WHERE notification_id = ?")
+          .run(attempt, now, now, notificationId);
+      } else {
+        const retry = input.nextAttemptAtMs === undefined ? null : iso(input.nextAttemptAtMs);
+        this.db
+          .prepare('UPDATE notifications SET state = ?, attempts = ?, next_attempt_at = ?, last_error = ?, updated_at = ? WHERE notification_id = ?')
+          .run(retry === null ? 'failed' : row.state, attempt, retry, input.errorCode ?? null, now, notificationId);
+      }
+      this.insertEvent({
+        type: input.outcome === 'delivered' ? 'notify.delivered' : 'notify.failed',
+        ...(row.runId !== null ? { runId: row.runId } : {}),
+        data: { notificationId, runId: row.runId, attempt, ...(input.outcome === 'failed' ? { code: input.errorCode } : {}) },
+        nowMs: input.nowMs,
+      });
+      return this.readNotification(notificationId);
+    });
   }
 
+  // Every named row moves along an allowed edge, or none does.
   setNotificationState(notificationIds: readonly string[], state: 'held' | 'delivered' | 'failed', nowMs: number): Result<NotificationRow[]> {
-    void notificationIds;
-    void state;
-    void nowMs;
-    return err({ kind: 'invalid', field: 'setNotificationState', reason: 'not implemented' });
+    return tx(this.db, () => {
+      if (state !== 'held' && state !== 'delivered' && state !== 'failed') abort({ kind: 'invalid', field: 'state', reason: 'a notification is set held, delivered or failed' });
+      const rows = notificationIds.map((id) => this.readNotification(id));
+      for (const row of rows) {
+        if (!NOTIFICATION_MOVES[row.state].includes(state)) abort({ kind: 'invalid', field: 'state', reason: `a ${row.state} notification does not move to ${state}` });
+      }
+      const now = iso(nowMs);
+      for (const row of rows) {
+        this.db
+          .prepare('UPDATE notifications SET state = ?, updated_at = ?, delivered_at = ? WHERE notification_id = ?')
+          .run(state, now, state === 'delivered' ? now : row.deliveredAt, row.notificationId);
+      }
+      return rows.map((row) => this.readNotification(row.notificationId));
+    });
   }
 
   listNotifications(filter?: { states?: readonly NotificationState[]; runId?: string }): Result<NotificationRow[]> {
-    void filter;
-    return err({ kind: 'invalid', field: 'listNotifications', reason: 'not implemented' });
+    return guarded(() => {
+      const where: string[] = [];
+      const args: string[] = [];
+      if (filter?.states !== undefined) {
+        for (const s of filter.states) {
+          if (!(NOTIFICATION_STATES as readonly string[]).includes(s)) abort({ kind: 'invalid', field: 'states', reason: `${String(s)} is not a notification state (${NOTIFICATION_STATES.join(', ')})` });
+        }
+        if (filter.states.length === 0) return [];
+        where.push(`state IN (${filter.states.map(() => '?').join(', ')})`);
+        args.push(...filter.states);
+      }
+      if (filter?.runId !== undefined) {
+        where.push('run_id = ?');
+        args.push(filter.runId);
+      }
+      const clause = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+      return (this.db.prepare(`SELECT * FROM notifications${clause} ORDER BY created_at, rowid`).all(...args) as Row[]).map(toNotification);
+    });
   }
 
+  private readNotification(notificationId: string): NotificationRow {
+    const row = this.db.prepare('SELECT * FROM notifications WHERE notification_id = ?').get(notificationId) as Row | undefined;
+    if (!row) throw notFound(`notification ${notificationId}`);
+    return toNotification(row);
+  }
+
+  // The request is written before the supervisor acts on it (AUT-12), under the run lock and without a lease: the cancel command
+  // is not the supervisor. The first request stands; version, state and lease are not touched.
   requestRunCancel(runId: string, input: { by: string; nowMs: number }): Result<CancelRequest> {
-    void runId;
-    void input;
-    return err({ kind: 'invalid', field: 'requestRunCancel', reason: 'not implemented' });
+    return tx(this.db, () => {
+      const row = this.lockRun(runId);
+      if (input.by === '') abort({ kind: 'invalid', field: 'by', reason: 'a cancel request names who asked' });
+      const state = str(row['state']) as RunState;
+      if (isRunTerminal(state)) abort({ kind: 'conflict', expected: 'a run that has not ended', actual: `run ${runId} is ${state}` });
+      const earlier = strOrNull(row['cancel_requested_at']);
+      if (earlier !== null) return { requestedAt: earlier, requestedBy: str(row['cancel_requested_by']), repeated: true };
+      const requestedAt = iso(input.nowMs);
+      this.db.prepare('UPDATE runs SET cancel_requested_at = ?, cancel_requested_by = ? WHERE run_id = ?').run(requestedAt, input.by, runId);
+      this.insertEvent({ type: 'run.cancel_requested', runId, data: { runId, requestedBy: input.by }, nowMs: input.nowMs });
+      return { requestedAt, requestedBy: input.by, repeated: false };
+    });
   }
 
   recordCheckValidation(input: CheckValidationInput): Result<void> {
@@ -1799,6 +1901,23 @@ function toWorkItem(r: Row): WorkItemRow {
     state: str(r['state']) as WorkItemState,
     gsdSession: strOrNull(r['gsd_session']),
     attempts: Number(r['attempts']),
+  };
+}
+
+function toNotification(r: Row): NotificationRow {
+  return {
+    notificationId: str(r['notification_id']),
+    runId: strOrNull(r['run_id']),
+    kind: str(r['kind']),
+    destination: str(r['destination']),
+    subjectIds: parseJson(r['subject_ids_json']) as readonly string[],
+    state: str(r['state']) as NotificationState,
+    attempts: Number(r['attempts']),
+    nextAttemptAt: strOrNull(r['next_attempt_at']),
+    lastError: strOrNull(r['last_error']),
+    createdAt: str(r['created_at']),
+    updatedAt: str(r['updated_at']),
+    deliveredAt: strOrNull(r['delivered_at']),
   };
 }
 
