@@ -15,6 +15,8 @@ export interface GateFailure {
 export interface GateVerdict {
   passed: boolean;
   failures: GateFailure[];
+  // Findings recorded but not failing (G1 plan-cites-acceptance while it is advisory). Present only when non-empty.
+  advisories?: GateFailure[];
 }
 
 export const G2_RULES = [
@@ -216,7 +218,14 @@ function normalizePlanPath(path: string): string {
 
 // G1, in the rule order of G1_RULES. The plan is model-written text: it can fail this gate and never pass it, and a plan that is absent
 // fails closed. Every list is sorted before it is judged, so input order never changes the verdict.
-export function evaluateG1(facts: G1Facts): GateVerdict {
+// plan-cites-acceptance starts as an advisory; spike S3-A (plan 03-13) flips it once a live quick PLAN cites contract acceptance IDs.
+export const PLAN_CITES_ACCEPTANCE_HARD = false;
+
+export interface G1Options {
+  citesAcceptanceHard?: boolean;
+}
+
+export function evaluateG1(facts: G1Facts, _options: G1Options = {}): GateVerdict {
   const failures: GateFailure[] = [];
   const fail = (rule: (typeof G1_RULES)[number], detail: string): void => {
     failures.push({ rule, detail });
@@ -260,4 +269,26 @@ export function evaluateG1(facts: G1Facts): GateVerdict {
     fail('owner-choice-unasked', `acceptance criteria verified by an owner choice that was never asked: ${listPaths(unasked)}`);
   }
   return { passed: failures.length === 0, failures };
+}
+
+export const G3_RULES = ['repair-limit', 'failing-test-present', 'failing-test-unchanged'] as const;
+
+export interface G3Facts {
+  repairAttempts: number;
+  limit: number;
+  failingTests: readonly string[];
+  inventoryAfter: readonly string[];
+  testFilesOfFailing: readonly string[];
+  changes: ReadonlyArray<{ path: string; status: ChangeStatus }>;
+  authorizedTestPaths: readonly string[];
+}
+
+export function evaluateG3(_facts: G3Facts): GateVerdict {
+  return { passed: true, failures: [] };
+}
+
+export const INTEGRITY_GATE_RULES: Readonly<Record<string, readonly string[]>> = {};
+
+export function integrityFailures(_verdicts: { G1?: GateVerdict; G2?: GateVerdict; G3?: GateVerdict }, _gates: readonly string[]): string[] {
+  return [];
 }
