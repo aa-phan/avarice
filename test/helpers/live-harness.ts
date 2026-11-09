@@ -19,6 +19,7 @@ import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { configPathFor } from '../../src/adapters/fs/profile-paths.ts';
 import { fingerprintGsdPreamble } from '../../src/adapters/gsd/preamble.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
@@ -1046,6 +1047,19 @@ export function spike3Refusal(capUsdForRun: number): string | undefined {
   return undefined;
 }
 
+// Plan 03-27: the live run-purpose cases of Slice 2. At most 6.00 USD in all, under the Phase 3 ceiling (D-05), on generated scratch repositories.
+export const LIVE_PLAN_03_27 = '03-27';
+export const LIVE_PLAN_03_27_TOTAL_USD = 6.0;
+
+// The skip text for a start of `plan` whose cap would take the plan's recorded spend in the current phase's ledger past `totalUsd`, or undefined.
+export function planTotalRefusal(plan: string, totalUsd: number, capUsdForRun: number): string | undefined {
+  const spent = currentSpendLedger.spentByPlan(plan);
+  if (spent + capUsdForRun > totalUsd + 1e-9) {
+    return `not run: plan ${plan} spend ${spent.toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass its ${totalUsd.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
 const realOrSelf = (path: string): string => {
   try {
     return realpathSync(path);
@@ -1218,6 +1232,11 @@ export interface RunUnitSpec {
   itemId?: string;
   // Runs against the clone after each invocation and returns small ground-truth facts (what a file contains), recorded by the caller.
   probe?: (clone: string) => Record<string, unknown>;
+  // Plan 03-27: the most `plan` may spend in all; a start whose cap would pass it is refused before anything is prepared.
+  planTotalUsd?: number;
+  // Plan 03-27: the directory the adapter reads the agent definitions from, given the real one and the evidence directory (a copy whose
+  // definition carries `permissionMode`, for CS-15). The scope's read roots still name the real directory.
+  agentsDir?: (realAgentsDir: string, evidenceDir: string) => string;
 }
 
 // The facts of the clone after one invocation, and of the invocation itself.
@@ -1355,6 +1374,8 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const spends = spec.noLaunch !== true;
   const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : plan === SPIKE3_PLAN ? spike3Refusal(spec.costCapUsd) : currentSpendLedger.fits(spec.costCapUsd) ? undefined : ceilingRefusal('case', spec.costCapUsd);
   if (refusal !== undefined) return { skipped: refusal };
+  const overPlan = !spends || spec.planTotalUsd === undefined ? undefined : planTotalRefusal(plan, spec.planTotalUsd, spec.costCapUsd);
+  if (overPlan !== undefined) return { skipped: overPlan };
 
   const fixture = prepareRunUnit(spec.project);
   const { deps, contract, clone, scratch, runId } = fixture;
@@ -1446,7 +1467,8 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const preamble = fingerprintGsdPreamble(fixture.gsdCoreDir);
   if (!preamble.ok) throw new Error('the GSD preamble was not found');
   const configDir = fixture.env['CLAUDE_CONFIG_DIR'] !== undefined && fixture.env['CLAUDE_CONFIG_DIR'] !== '' ? fixture.env['CLAUDE_CONFIG_DIR'] : join(deps.home ?? homedir(), '.claude');
-  const gsdLocations = { gsdCoreDir: fixture.gsdCoreDir, agentsDir: join(fixture.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir };
+  const realAgentsDir = join(fixture.gsdCoreDir, '..', 'agents');
+  const gsdLocations = { gsdCoreDir: fixture.gsdCoreDir, agentsDir: spec.agentsDir?.(realAgentsDir, evidenceDir) ?? realAgentsDir, skillsRoot: join(configDir, 'skills'), configDir };
   const writeGlobsOfContract = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
   const cloneOutside = (): string => treeDigest(clone, (rel) => rel === '.claude' || rel.startsWith('.claude/') || matchesAny(rel, writeGlobsOfContract));
   const contractVersions = (): number[] => ledgerRows<{ version: number }>(fixture.dataRoot, 'SELECT version FROM contracts WHERE run_id = ? ORDER BY version', runId).map((r) => r.version);
@@ -1717,9 +1739,46 @@ export function liveBrief(model: 'haiku' | 'sonnet'): string {
 
 export type RunFault = 'mid-verify';
 
+// A command run through the production CLI after the run has stopped (plan 03-27): `inbox --json`, `status --json`, `digest`, or `decide` on a
+// pseudo-terminal (the identity rule needs a terminal).
+export interface LiveCliStep {
+  name: string;
+  // Milliseconds to wait before the command.
+  waitMs?: number;
+  argv: (context: { runId: string; roots: CliRoots; decisionId: string | undefined }) => string[];
+  // Run on a pseudo-terminal through test/helpers/pty-drive.py.
+  pty?: boolean;
+  timeoutMs?: number;
+}
+
+export interface LiveCliStepResult {
+  name: string;
+  argv: string[];
+  result: CliResult;
+}
+
+// The pseudo-terminal wrapper of a `pty` step: 24 rows by 80 columns, standard input closed (the command needs no typing).
+const PTY_WRAP: readonly string[] = ['python3', '-I', join(REPO_ROOT, 'test', 'helpers', 'pty-drive.py'), '24', '80'];
+
 export interface LiveRunSpec {
   name: string;
-  model: 'haiku' | 'sonnet';
+  // The model of the default one-item brief (liveBrief); ignored when `brief` is given.
+  model?: 'haiku' | 'sonnet';
+  // Plan 03-27: the brief text of the run (replaces liveBrief), the tracked files of the scratch project beyond the defaults, the conventions committed after
+  // onboarding (default: the run conventions with `npm test` as the one agent command), and whether the project is onboarded with the fixture indexes
+  // (default true; false onboards with the fake host only).
+  brief?: string;
+  repoFiles?: Readonly<Record<string, string>>;
+  conventions?: unknown;
+  indexes?: boolean;
+  // Extra keys of the profile's config file (the `notify` block with an osascript path that does not exist: no real banner), written after onboarding.
+  profile?: Record<string, unknown>;
+  // Commands run after the run stopped, in order, with their results in `cli`.
+  steps?: readonly LiveCliStep[];
+  // How long to wait, after `start` returned, for the supervisor's notification rows to leave `pending` (it raises its banner just before it exits).
+  settleNotificationsMs?: number;
+  // Refuse the start when this plan's recorded spend plus `capUsd` would pass `totalUsd`.
+  planCap?: { plan: string; totalUsd: number };
   // Gates the start (the current phase's ceiling) and becomes the run's and the invocation's cost budget.
   capUsd: number;
   // Kills the first supervisor at this point; `status --json` is captured, then `resume <id> --wait` runs.
@@ -1752,6 +1811,8 @@ export interface LiveRunResult {
   repo: ScratchRepo;
   runId: string;
   start: CliResult;
+  // The results of the spec's `steps`, in order.
+  cli: LiveCliStepResult[];
   interruptedStatus: Record<string, unknown> | undefined;
   interruptedRun: Record<string, unknown> | undefined;
   // `status` (the text view) while the run was interrupted.
@@ -1924,16 +1985,90 @@ export function readThenEditOf(parsed: ParsedTranscript, hooks: readonly HookEve
   };
 }
 
+// The launch wrapper of plan 03-27: as the marker wrapper, and it also appends the value of each `--model` flag the host is launched with to
+// `launch-models.log` in `dir` (the flag the supervisor passed, S-51), never the prompt. A `claude` that is called without `-p` runs untouched.
+export function modelLoggingWrapperScript(real: string, dir: string, marker: string): string {
+  const override = admissionOverride(versionNumber(claudeVersion(real)));
+  const versionCase = override === undefined ? '' : `case "$1" in --version) exec /bin/echo '${override.as} (Claude Code, harness-only admission override; real host ${override.reported})';; esac\n`;
+  const log = join(dir, 'launch-models.log');
+  return [
+    '#!/bin/sh',
+    `${versionCase}case "$1" in -p) : > '${marker}'`,
+    "  prev=''",
+    '  for a in "$@"; do',
+    `    if [ "$prev" = "--model" ]; then echo "$a" >> '${log}'; fi`,
+    '    prev="$a"',
+    '  done;;',
+    'esac',
+    `exec '${real}' "$@"`,
+    '',
+  ].join('\n');
+}
+
+// The `--model` values the host was launched with, in launch order (from the wrapper above).
+export function launchModelsOf(dir: string): string[] {
+  const file = join(dir, 'launch-models.log');
+  return existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((l) => l !== '') : [];
+}
+
+// One contained invocation of a run as the ledger and its transcript record it: the `launch:run` step (item, model, kind, cost), the host's own
+// init event, and the hook decisions of the invocation.
+export interface InvocationRecord {
+  invocationId: string;
+  itemId: string | undefined;
+  model: string;
+  status: string;
+  kind: string | undefined;
+  costUsd: number;
+  attempt: number;
+  parsed: ParsedTranscript;
+  hooks: HookEvent[];
+}
+
+export function invocationRecords(dataRoot: string, runId?: string): InvocationRecord[] {
+  const store = new LocalArtifactStore(dataRoot);
+  const rows = runId === undefined
+    ? ledgerRows<{ attempt: number; status: string; result_json: string }>(dataRoot, "SELECT attempt, status, result_json FROM run_steps WHERE step = 'launch:run' ORDER BY rowid")
+    : ledgerRows<{ attempt: number; status: string; result_json: string }>(dataRoot, "SELECT attempt, status, result_json FROM run_steps WHERE step = 'launch:run' AND run_id = ? ORDER BY rowid", runId);
+  return rows.map((row) => {
+    const result = JSON.parse(row.result_json) as Record<string, unknown>;
+    const digest = typeof result['transcript'] === 'string' ? result['transcript'] : undefined;
+    const bytes = digest === undefined ? undefined : store.get(digest);
+    const invocationId = String(result['invocationId']);
+    return {
+      invocationId,
+      itemId: typeof result['itemId'] === 'string' ? result['itemId'] : undefined,
+      model: String(result['model']),
+      status: row.status,
+      kind: typeof result['kind'] === 'string' ? result['kind'] : undefined,
+      costUsd: typeof result['costUsd'] === 'number' ? result['costUsd'] : 0,
+      attempt: row.attempt,
+      parsed: parseTranscript(bytes?.ok ? new TextDecoder().decode(bytes.value) : ''),
+      hooks: hookDecisions(dataRoot, invocationId),
+    };
+  });
+}
+
 // One run on a generated GSD scratch project through the production CLI (`start --brief --policy routine --wait`) with the real host. The scratch
 // repository gets an uncommitted tracked change, an untracked file and an ignored file (S-20) after it is committed and onboarded with fixture
 // indexes (no model spend). Everything returned is ground truth: ledger rows, the transcripts of the host, the digests of the user's checkout.
 export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   if (!currentSpendLedger.fits(spec.capUsd)) return { skipped: ceilingRefusal('run', spec.capUsd) };
+  const overPlan = spec.planCap === undefined ? undefined : planTotalRefusal(spec.planCap.plan, spec.planCap.totalUsd, spec.capUsd);
+  if (overPlan !== undefined) return { skipped: overPlan };
   const roots = spec.shortRoots === true ? makeShortRoots() : makeRoots();
-  const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n' });
-  await onboardRunRepoWithIndexes(roots, repo, 'answer');
-  commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
-  const briefPath = writeBrief(join(roots.base, 'briefs'), liveBrief(spec.model));
+  const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n', ...(spec.repoFiles ?? {}) });
+  if (spec.indexes === false) onboardRunRepo(roots, repo);
+  else await onboardRunRepoWithIndexes(roots, repo, 'answer');
+  commitConventions(repo, spec.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'), spec.brief ?? liveBrief(spec.model ?? 'haiku'));
+  // A profile config edited by hand: the notify block names an osascript path that does not exist, so no banner is ever posted (plan 03-27). Written after the
+  // onboarding, which may have created the default file.
+  if (spec.profile !== undefined) {
+    const configPath = configPathFor(roots.AVARICE_CONFIG_HOME, 'personal-local');
+    mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
+    writeFileSync(configPath, `${JSON.stringify({ schema: 1, profile: 'personal-local', dataRoot: roots.AVARICE_DATA_ROOT, workRoot: roots.AVARICE_WORK_ROOT, ...spec.profile }, null, 2)}\n`, { mode: 0o600 });
+  }
   // The user's checkout is dirty in the three ways S-20 names; the run must leave every one of them as it is.
   writeFileSync(join(repo.path, 'NOTES.md'), 'notes, edited by the user and not committed\n');
   writeFileSync(join(repo.path, 'draft.txt'), 'an untracked file of the user\n');
@@ -1997,6 +2132,21 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
 
   const dataRoot = roots.AVARICE_DATA_ROOT;
   const hostStarted = existsSync(marker);
+  // `start --wait` returns when the run stops; the supervisor raises its banner (three attempts, about 70 seconds when every one fails) just before it exits.
+  if (spec.settleNotificationsMs !== undefined && runId !== '') {
+    const deadline = Date.now() + spec.settleNotificationsMs;
+    while (Date.now() < deadline && ledgerRows<{ n: number }>(dataRoot, "SELECT COUNT(*) AS n FROM notifications WHERE state = 'pending' AND (run_id = ? OR run_id IS NULL)", runId)[0]?.n !== 0) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_000);
+    }
+  }
+  const cli: LiveCliStepResult[] = [];
+  for (const step of spec.steps ?? []) {
+    if (step.waitMs !== undefined) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, step.waitMs);
+    const decisionId = ledgerRows<{ decision_id: string }>(dataRoot, "SELECT decision_id FROM decisions WHERE run_id = ? AND state = 'open' ORDER BY opened_at, rowid LIMIT 1", runId)[0]?.decision_id;
+    const argv = step.argv({ runId, roots, decisionId });
+    const result = runCli(argv, { ...cliOptions, cwd: repo.path, timeoutMs: step.timeoutMs ?? 5 * 60_000, env: baseEnv, ...(step.pty === true ? { wrap: PTY_WRAP } : {}) });
+    cli.push({ name: step.name, argv, result });
+  }
   const [run] = ledgerRows<{ state: string; reason: string | null; workspace_path: string | null; base_revision: string }>(dataRoot, 'SELECT state, reason, workspace_path, base_revision FROM runs WHERE run_id = ?', runId);
   const attempts = ledgerRows<{ attempt_id: string; ordinal: number; outcome: string | null }>(dataRoot, 'SELECT attempt_id, ordinal, outcome FROM attempts WHERE run_id = ? ORDER BY ordinal', runId).map((a) => ({ attemptId: a.attempt_id, ordinal: a.ordinal, outcome: a.outcome }));
   const steps = ledgerRows<{ step: string; status: string; attempt: number; result_json: string }>(dataRoot, 'SELECT step, status, attempt, result_json FROM run_steps WHERE run_id = ? ORDER BY rowid', runId).map((s) => ({ step: s.step, status: s.status, attempt: s.attempt, result: JSON.parse(s.result_json) as Record<string, unknown> }));
@@ -2045,6 +2195,7 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
     repo,
     runId,
     start,
+    cli,
     interruptedStatus,
     interruptedRun,
     interruptedStatusText,

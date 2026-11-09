@@ -22,3 +22,5 @@
 {"plan":"03-13","case":"round-1-resume","costUsd":0.8794982,"claudeVersion":"2.1.319","at":"2026-11-09T03:47:08.000Z"}
 {"plan":"03-13","case":"missing-session","costUsd":0,"claudeVersion":"2.1.319","at":"2026-11-09T03:47:12.423Z"}
 {"plan":"03-13","case":"missing-session","costUsd":0,"claudeVersion":"2.1.319","at":"2026-11-09T03:48:39.785Z"}
+{"plan":"03-27","case":"s17-s51","costUsd":1.49695293,"claudeVersion":"2.1.319","at":"2026-11-09T15:22:26.122Z"}
+{"plan":"03-27","case":"s17-s51","costUsd":1.9591461400000003,"claudeVersion":"2.1.319","at":"2026-11-09T15:31:47.064Z"}
