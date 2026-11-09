@@ -28,7 +28,8 @@ after(() => {
   for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
 });
 
-const FIX: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG } };
+// The repair that fixes the code and leaves one change of its own behind (the slug alone would put the repository back to the pin, with nothing to commit).
+const FIX: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG, 'src/helper.ts': 'export const helper = 1;\n' } };
 // A first unit that changes something in scope and leaves every required check passing (the slug of this repository is already fixed).
 const CHANGE: FakeRunOptions = { edits: { 'src/helper.ts': 'export const helper = 1;\n' } };
 
@@ -110,6 +111,21 @@ describe('S-21 offline: a repair that fixes the code passes G3 and G2 (the contr
     const [step] = stepsOf(s.roots, ran.runId, 'repair:reproducer');
     assert.deepEqual(step?.result['failingTestIds'], [S21_TEST_ID]);
     assert.deepEqual(step?.result['testFiles'], ['test/slug.test.ts']);
+  });
+});
+
+describe('a repair that puts the repository back to the pin leaves the item nothing to commit', () => {
+  it('passes G3 and G2, and ends in a decision instead of an empty commit', async () => {
+    const s = s21Scenario(cleanup);
+    const ran = await runScenario(s, s21Host({ edits: { 'src/slug.ts': FIXED_SLUG } }));
+    assert.equal(ran.state, 'blocked_on_decision', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
+    assert.equal(ran.reason, 'decision');
+    assert.deepEqual(gatesOf(s.roots, ran.runId).map((g) => `${g.gate}:${g.passed}`), ['G0:1', 'G2:0', 'G3:1', 'G2:1']);
+    const [decision] = decisionsOf(s.roots, ran.runId);
+    assert.equal(decision?.class, 'repeated_failure');
+    assert.match(decision?.issue ?? '', /no change of the item is left to commit/);
+    assert.equal(cloneCommits(workspaceOf(s.roots, ran.runId), baseOf(s, ran.runId)).length, 0);
+    assert.deepEqual(itemStatesOf(s.roots, ran.runId), [['A', 'blocked_on_decision']]);
   });
 });
 

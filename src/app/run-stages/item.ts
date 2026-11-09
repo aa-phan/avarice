@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 import { digestOf, sha256Hex } from '../../domain/digest.ts';
 import { baselineDelta, revisionOf } from '../../domain/evidence.ts';
 import type { DeltaBlocking } from '../../domain/evidence.ts';
-import { evaluateG2 } from '../../domain/gates.ts';
+import { evaluateG2, evaluateG3, integrityFailures } from '../../domain/gates.ts';
 import type { GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
 import { classifyOutcome, detectPause } from '../../domain/outcome.ts';
@@ -41,7 +41,7 @@ import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, DecisionRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
 import { measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
-import type { CheckRunResult } from '../checks.ts';
+import type { CheckRunResult, InventoryMeasure } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { flushDueNotifications } from '../notify.ts';
@@ -1076,6 +1076,17 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
   // A repair attempt is judged by G2 as any unit is, against the item's own base, with the repair's own classification.
   const isRepair = attemptRow.reason === REPAIR_REASON;
 
+  // G3 (AUT-10, D-11): a repair is judged on its own diff before G2 judges the whole item again. Both verdicts are recorded whatever either says, so a repair
+  // that fails G3 and G2 leaves both rows; the item's decision names the failures of both. The inventory is measured once, here, and G2 reads it.
+  let g3: GateVerdict | null = null;
+  let measured: InventoryMeasure | null | undefined;
+  if (isRepair) {
+    const judged = await judgeRepair(unit, row, attemptRow);
+    if (!judged.ok) return judged;
+    g3 = judged.value.verdict;
+    measured = judged.value.inventory;
+  }
+
   const marked = ctx.checkpoint('gate:g2', { attemptId, itemId: unit.item.itemId, revision: snapshot.head });
   if (!marked.ok) return marked;
 
@@ -1110,7 +1121,7 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
     // The item starts from the inventory the item committed last ended with, else from the one measured at the pin (the first item).
     const before = itemStartInventory(ctx, unit.item.itemId);
     if (!before.ok) return before;
-    const after = await measureInventory(deps, row, contract, unit.clone, { phase: 'item', attemptId, contractVersion: unit.contractVersion, itemId: unit.item.itemId });
+    const after: Result<InventoryMeasure | null> = measured !== undefined ? ok(measured) : await measureInventory(deps, row, contract, unit.clone, { phase: 'item', attemptId, contractVersion: unit.contractVersion, itemId: unit.item.itemId });
     if (!after.ok) return after;
     if (after.value !== null) {
       if (before.value === null) return err({ kind: 'internal', cause: `run ${ctx.runId} declares a test inventory but none was recorded at base` });
@@ -1158,23 +1169,38 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
   });
   if (!gate.ok) return gate;
 
-  if (!verdict.passed) {
+  const g3Failed = g3 !== null && !g3.passed;
+  if (!verdict.passed || g3Failed) {
     const rules = verdict.failures.map((f) => f.rule);
-    const common = { attemptId, itemId: unit.item.itemId, data: { gate: 'G2', rules: rules.join(',') } } as const;
+    const g3Rules = g3 !== null && g3Failed ? g3.failures.map((f) => f.rule) : [];
+    // A failure of G3 names the gate of each rule; a failure of G2 alone keeps the names it always had.
+    const named = g3Failed ? [...g3Rules.map((r) => `G3:${r}`), ...rules.map((r) => `G2:${r}`)] : rules;
+    const integrity = integrityFailures({ G2: verdict, ...(g3 !== null ? { G3: g3 } : {}) }, contract.verification.integrityGates);
+    const common = { attemptId, itemId: unit.item.itemId, data: { gate: g3Failed ? 'G3' : 'G2', rules: named.join(','), ...(integrity.length > 0 ? { integrity: integrity.join(',') } : {}) } } as const;
     // Only a check that failed (it ran and said so) has an output to reproduce; a check that did not run, or ran inconclusively, has none.
     const checksOnly = rules.length > 0 && rules.every((r) => r === 'checks-delta');
     const failedRuns = checksOnly ? failingRuns.filter((r) => r.status === 'failed') : [];
 
     // AUT-10, D-11: a check that passed when the item began and fails now, with nothing else wrong, gets one repair unit on the same item before the owner is
-    // asked. A check that failed at the start too, one that could not run, and every other failure goes straight to the decision below.
-    const newlyFailing = checksOnly && blocking.length > 0 && blocking.every((b) => b.reason === 'regressed') && failedRuns.length === blocking.length;
+    // asked. A check that failed at the start too, one that could not run, a repair that failed G3, and every other failure goes straight to the decision below.
+    const newlyFailing = !g3Failed && checksOnly && blocking.length > 0 && blocking.every((b) => b.reason === 'regressed') && failedRuns.length === blocking.length;
     if (newlyFailing) {
       const offered = await offerRepair(unit, row, { attemptId, base: snapshot, failing: failedRuns, evidence: failingEvidence });
       if (offered !== null) return offered;
     }
 
-    let issue = `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`;
+    const details = [...(g3 !== null && g3Failed ? [`gate G3 failed: ${g3.failures.map((f) => f.detail).join('; ')}`] : []), ...(verdict.passed ? [] : [`gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`])];
+    let issue = details.join(' | ');
     let evidenceRefs = failingEvidence;
+    if (failedRuns.length === 0 && isRepair) {
+      // A repair that was judged on something other than a failing check (it weakened the test, it added an override) still cites the reproducer it was started with.
+      const step = repairStepOf(ctx, attemptId);
+      if (!step.ok) return step;
+      if (step.value !== null) {
+        issue = `${issue} | reproducer: ${reproducerIssue(step.value)} | the check gets one repair, and it failed`;
+        evidenceRefs = [...new Set([...failingEvidence, ...reproducerRefs(step.value)])];
+      }
+    }
     if (failedRuns.length > 0) {
       // The smallest reproducer of the failing checks: in the issue, in the evidence the decision cites, and in a `repair:reproducer` step.
       const inventory = repairInventoryOf(unit);
@@ -1209,9 +1235,91 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Res
     return ok(undefined);
   }
 
+  // A repair can put the work back to the pin: the item then has nothing in scope to commit, which is a decision and never an empty commit.
+  if (changes.every((c) => !isInScope(c, contract))) {
+    const blocked = blockItem(ctx, {
+      reason: 'decision',
+      signal: { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) },
+      issue: 'every gate passed, but no change of the item is left to commit: the repair undid the work of the unit before it',
+      base: snapshot,
+      attemptId,
+      itemId: unit.item.itemId,
+      data: { gate: 'G2', rules: 'nothing-to-commit' },
+    });
+    if (!blocked.ok) return blocked;
+    await flushBatch(ctx);
+    return ok(undefined);
+  }
+
   const gated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'gated', nowMs: deps.clock.nowMs(), attemptId });
   if (!gated.ok) return gated;
   return commitUnit(unit, attemptId, snapshot);
+}
+
+// The gate row of G1 or G3: the revision is the clone's HEAD and a digest of its working tree, as G2's is. A finding that did not fail the gate (G1's advisory
+// that a plan cites no acceptance ID) is stored beside the failures, each entry marked `advisory`, and never counts against the verdict.
+function recordGateRow(unit: Unit, attemptId: string, gate: 'G1' | 'G3', verdict: GateVerdict): Result<void> {
+  const { ctx, contract } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const head = workspace.head(unit.clone);
+  if (!head.ok) return head;
+  const tree = workspace.snapshot(unit.clone);
+  if (!tree.ok) return tree;
+  const revision = revisionOf({ head: head.value, clean: false, treeDigest: sha256Hex(`git-tree:${tree.value.tree}`) });
+  if (!revision.ok) return revision;
+  return deps.ledger.recordGateResult({
+    runId: ctx.runId,
+    gate,
+    workItem: unit.item.itemId,
+    attemptId,
+    contractVersion: unit.contractVersion,
+    policyRevision: contract.policyRevision,
+    revision: revision.value,
+    passed: verdict.passed,
+    failures: [...verdict.failures, ...(verdict.advisories ?? []).map((a) => ({ ...a, advisory: true }))],
+    nowMs: deps.clock.nowMs(),
+  });
+}
+
+// Gate G3 on a repair attempt (AUT-10, D-11). The facts are what AVARICE measured: how many repairs the failing checks had before this one, the failing test IDs
+// the reproducer named (resolved to the inventory's IDs), the inventory measured on the repaired tree, the files that hold the failing tests, and the paths the
+// repair itself changed (since its own snapshot, not the item's base). No amendment can authorize a change to the failing test yet, so the authorized list is empty.
+async function judgeRepair(unit: Unit, row: RunRow, attempt: AttemptRow): Promise<Result<{ verdict: GateVerdict; inventory: InventoryMeasure | null }>> {
+  const { ctx, contract } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const own = snapshotOf(ctx, attempt.attemptId);
+  if (!own.ok) return own;
+  const marked = ctx.checkpoint('gate:g3', { attemptId: attempt.attemptId, itemId: unit.item.itemId, revision: own.value.head });
+  if (!marked.ok) return marked;
+
+  const step = repairStepOf(ctx, attempt.attemptId);
+  if (!step.ok) return step;
+  const launched = launchedAttempts(ctx);
+  if (!launched.ok) return launched;
+  const earlier = repairsOf(ctx, unit.item.itemId, launched.value, attempt.attemptId);
+  if (!earlier.ok) return earlier;
+  const before = Math.max(0, ...(step.value?.repairFor ?? []).map((name) => earlier.value.get(name) ?? 0));
+  const inventory = await measureInventory(deps, row, contract, unit.clone, { phase: 'item', attemptId: attempt.attemptId, contractVersion: unit.contractVersion, itemId: unit.item.itemId });
+  if (!inventory.ok) return inventory;
+  const changed = workspace.changedSince(unit.clone, own.value);
+  if (!changed.ok) return changed;
+
+  const verdict = evaluateG3({
+    repairAttempts: before,
+    limit: contract.budgets.repairAttemptsPerCheck,
+    failingTests: step.value?.failingTestIds ?? [],
+    inventoryAfter: inventory.value?.snapshot.ids ?? [],
+    testFilesOfFailing: step.value?.testFiles ?? [],
+    changes: changed.value.map((c) => ({ path: c.path, status: c.status })),
+    authorizedTestPaths: [],
+  });
+  const recorded = recordGateRow(unit, attempt.attemptId, 'G3', verdict);
+  if (!recorded.ok) return recorded;
+  return ok({ verdict, inventory: inventory.value });
 }
 
 // The test IDs a repair's failing test names are resolved against (the inventory the item began with and the one its first unit left) and the globs of the
