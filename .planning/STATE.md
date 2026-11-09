@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-14-PLAN.md
-last_updated: "2026-11-09T04:41:40.798Z"
+stopped_at: Completed 03-16-PLAN.md
+last_updated: "2026-11-09T05:01:22.603Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 0377f97f48ab53264d873cf9e54eaadb12ee86e0
+state_head: 41c825231a25b1a2bbe2369096379976d8a3e708
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 75
+  completed_plans: 76
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 15 of 33
+Plan: 16 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -131,6 +131,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P13 | 15 min | 2 tasks | 7 files |
 | Phase 03 P10 | 35 min | 2 tasks | 6 files |
 | Phase 03 P14 | 40 min | 2 tasks | 10 files |
+| Phase 03 P16 | 11 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -283,6 +284,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-13: A3 held in round 1, so RUN_DECISION_SENTENCE is unchanged; PLAN_CITES_ACCEPTANCE_HARD stays false after one live PLAN — A resume of an unknown session ends with an error_during_execution result event, so plan 03-22 keys its fresh-unit fallback on structural fields, not on a missing result
 - [Phase 03]: 03-10: an amendment that leaves a per-invocation cost cap above the per-run cap, or a concurrent subagent cap above the total, is refused rather than adjusted, so an amendment edits only named fields
 - [Phase 03]: 03-14: the baseline attempt and any block before the first unit name the item the scheduler starts first (dependency order, then declaration order); a non-final item's attempt ends committed and the last ends handed-off; the Work item prompt line appears only for a contract with several items; final evidence, interrupted-check rows and G4 name no item — D-09, AUT-3: that item adopts the baseline attempt even when the first declared item depends on a later one, and a one-item run records exactly what it did in Phase 2
+- [Phase 03]: 03-16: open-decision banners carry the run ID and a count, not decision IDs; every attempt is recorded on every row a banner covers; a throwing notifier is a notifier-error failure — Follows the plan's tracer body text; keeps model and repository text off the lock screen; keeps rows of one banner in agreement
+- [Phase 03]: 03-16: readProfileNotify opens the profile config with O_NOFOLLOW and reads at most 64 KiB from the open descriptor — Closes the check-then-read window of lstat and keeps a planted link or huge file from steering a notification
 
 ### Pending Todos
 
@@ -335,6 +338,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T04:41:35.742Z
-Stopped at: Completed 03-14-PLAN.md
+Last session: 2026-11-09T05:01:15.049Z
+Stopped at: Completed 03-16-PLAN.md
 Resume file: None
