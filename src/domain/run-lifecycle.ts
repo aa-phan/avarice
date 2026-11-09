@@ -135,7 +135,8 @@ export type RunStepStatus = (typeof RUN_STEP_STATUSES)[number];
 
 // Work items move ready -> delegated -> implemented -> gated -> done, or to blocked_on_decision
 // ("Run state machine", prose after the diagram). A delegated item that is discarded goes back to ready
-// (CON-16 discard and retry).
+// (CON-16 discard and retry), and an implemented item whose required check newly failed goes back to delegated for
+// one bounded repair (AUT-10).
 export const WORK_ITEM_STATES = ['ready', 'delegated', 'implemented', 'gated', 'done', 'blocked_on_decision'] as const;
 
 export type WorkItemState = (typeof WORK_ITEM_STATES)[number];
@@ -148,6 +149,9 @@ const ITEM_EDGES: readonly ItemEdge[] = [
   ['implemented', 'gated'],
   ['gated', 'done'],
   ['delegated', 'ready'],
+  // A bounded repair of an item whose required check newly failed (AUT-10, D-11). The repair limit is enforced by
+  // gate G3 and the invocation budget, not by this table.
+  ['implemented', 'delegated'],
   // An item blocked by a decision becomes ready again once no open decision affects it.
   ['blocked_on_decision', 'ready'],
   ...WORK_ITEM_STATES.filter((state) => state !== 'done' && state !== 'blocked_on_decision').map((state): ItemEdge => [state, 'blocked_on_decision']),
