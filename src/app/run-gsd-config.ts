@@ -1,9 +1,16 @@
 // What a contained run tells GSD: the run-scoped GSD settings applied before the first invocation, and the one `/gsd-quick` prompt a
 // unit of work starts from (plan 02-08; RC-4, RC-5, D-03, T-02-25). Plan 02-09's spike observes the real quick workflow and refines
 // both; every value here is the one the plan names, and a key nobody has verified is not in the list.
+//
+// Plan 03-34: the prompt also states the run's shell rules as the hook enforces them, the read-only commands it admits, and what to do about the quick
+// workflow's own shell steps (plan 03-27's haiku unit stopped on the contradiction; spikes/phase-3-wave-0/S3-B-small-unit-haiku.md).
+import { READ_ONLY_COMMANDS } from '../domain/invocation-scope.ts';
 import type { RunContract } from '../domain/run-contract.ts';
+import { RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence } from '../domain/run-shell-rules.ts';
 import type { GsdSetting } from '../ports/gsd-onboarding.ts';
 import { printable } from './context.ts';
+
+export { RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence };
 
 // Applied with `config-set` by AVARICE, outside any invocation, as step `gsd:configure` (RESEARCH Pitfall 2): no human prompt
 // (`text_mode`, both gates off), no worktree and no branch (the run's clone is the workspace and the supervisor owns git), no commit by
@@ -119,6 +126,9 @@ function contractText(contract: RunPromptContract, item?: RunPromptItem, ownerAn
     ...bullets(files.artifacts, 'none'),
     'Commands you may run, exactly as written:',
     ...bullets(execution.commands, 'none'),
+    RUN_SHELL_RULES_SENTENCE,
+    readOnlyCommandsSentence(READ_ONLY_COMMANDS),
+    RUN_WORKFLOW_SHELL_SENTENCE,
     RUN_DECISION_SENTENCE(contract.decisions),
     RUN_WORKFLOW_SENTENCE,
     RUN_NO_COMMIT_SENTENCE,

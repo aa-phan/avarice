@@ -9,11 +9,15 @@ import {
   RUN_GSD_SETTINGS,
   RUN_NO_COMMIT_SENTENCE,
   RUN_PROMPT_MAX_BYTES,
+  RUN_SHELL_RULES_SENTENCE,
   RUN_WORKFLOW_SENTENCE,
+  RUN_WORKFLOW_SHELL_SENTENCE,
+  readOnlyCommandsSentence,
   runResumePrompt,
   runUnitPrompt,
 } from '../../src/app/run-gsd-config.ts';
 import type { RunPromptContract, RunPromptItem } from '../../src/app/run-gsd-config.ts';
+import { READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 
 const CONTRACT: RunPromptContract = {
   intent: {
@@ -274,6 +278,73 @@ describe('RUN_DECISION_SENTENCE (AUT-1)', () => {
   it('says so when a list is empty rather than printing a blank', () => {
     const none = RUN_DECISION_SENTENCE({ human: [], delegated: [] });
     assert.match(none, /none/);
+  });
+});
+
+describe('the run shell rules in the unit prompt (plan 03-34; the 03-27 small-unit diagnosis)', () => {
+  const READ_ONLY = readOnlyCommandsSentence(READ_ONLY_COMMANDS);
+
+  it('puts the three shell lines after the command bullets and before the decision sentence, for an item prompt and a contract-level prompt', () => {
+    for (const prompt of [runUnitPrompt(CONTRACT, PACK, ITEM_B), runUnitPrompt(CONTRACT, PACK), runUnitPrompt(CONTRACT, '')]) {
+      assert.match(prompt, QUOTED);
+      const lines = prompt.split('\n');
+      const last = lines.indexOf('- npx vitest run <paths>');
+      const rules = lines.indexOf(RUN_SHELL_RULES_SENTENCE);
+      const readOnly = lines.indexOf(READ_ONLY);
+      const workflow = lines.indexOf(RUN_WORKFLOW_SHELL_SENTENCE);
+      const decision = lines.indexOf(RUN_DECISION_SENTENCE(CONTRACT.decisions));
+      assert.ok(last !== -1 && rules === last + 1, 'the rules line follows the last command bullet');
+      assert.equal(readOnly, rules + 1);
+      assert.equal(workflow, readOnly + 1);
+      assert.equal(decision, workflow + 1);
+    }
+  });
+
+  it('states one plain command per call, the refused forms and relative paths', () => {
+    assert.match(RUN_SHELL_RULES_SENTENCE, /one plain command per Bash call/);
+    for (const form of [';', '&&', '||', '2>&1', '$(', 'backtick', '~', '*', '?', '[', '{']) assert.ok(RUN_SHELL_RULES_SENTENCE.includes(form), form);
+    assert.match(RUN_SHELL_RULES_SENTENCE, /relative to the working directory/);
+  });
+
+  it('lists every read-only command in list order and the Read, Grep and Glob tools, so a list change changes the sentence', () => {
+    let at = -1;
+    for (const command of READ_ONLY_COMMANDS) {
+      const found = READ_ONLY.indexOf(command, at + 1);
+      assert.ok(found > at, command);
+      at = found;
+    }
+    for (const tool of ['Read', 'Grep', 'Glob']) assert.ok(READ_ONLY.includes(tool), tool);
+    assert.notEqual(readOnlyCommandsSentence([...READ_ONLY_COMMANDS, 'tree']), READ_ONLY);
+    assert.notEqual(readOnlyCommandsSentence(READ_ONLY_COMMANDS.slice(1)), READ_ONLY);
+  });
+
+  it('tells the unit not to run the workflow shell steps and not to stop for them, and to use Write and the four agents', () => {
+    for (const word of ['gsd-tools', 'mkdir', 'git', 'Write tool', 'Agent tool', 'planner', 'plan-checker', 'executor', 'verifier']) assert.ok(RUN_WORKFLOW_SHELL_SENTENCE.includes(word), word);
+    assert.match(RUN_WORKFLOW_SHELL_SENTENCE, /do not stop/i);
+    assert.match(RUN_WORKFLOW_SHELL_SENTENCE, /\.planning\/quick\//);
+  });
+
+  it('keeps the workflow sentence and the no-commit sentence, and names no absolute path or double quote of its own', () => {
+    const prompt = runUnitPrompt(CONTRACT, PACK, ITEM_B);
+    assert.ok(prompt.includes(RUN_WORKFLOW_SENTENCE) && prompt.includes(RUN_NO_COMMIT_SENTENCE));
+    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE]) {
+      assert.equal(/["\\]/.test(text), false);
+      assert.equal(/(^|\s)\//.test(text), false);
+    }
+  });
+
+  it('counts the new lines in the cap: a brief that fits to the last byte keeps them, and one byte more is refused, never cut', () => {
+    const withBehavior = (behavior: string): RunPromptContract => ({ ...CONTRACT, intent: { ...CONTRACT.intent, behavior } });
+    const baseBytes = new TextEncoder().encode(runUnitPrompt(withBehavior('x'), '', ITEM_B)).length;
+    const exact = runUnitPrompt(withBehavior('x'.repeat(RUN_PROMPT_MAX_BYTES - baseBytes + 1)), '', ITEM_B);
+    assert.equal(new TextEncoder().encode(exact).length, RUN_PROMPT_MAX_BYTES);
+    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE]) assert.ok(exact.includes(text));
+    assert.throws(() => runUnitPrompt(withBehavior('x'.repeat(RUN_PROMPT_MAX_BYTES - baseBytes + 2)), '', ITEM_B), RangeError);
+  });
+
+  it('leaves the resume prompt alone: a resumed session keeps the rules of its original prompt', () => {
+    const resume = runResumePrompt('1', ITEM_B);
+    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE]) assert.equal(resume.includes(text), false);
   });
 });
 
