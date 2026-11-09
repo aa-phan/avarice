@@ -1049,9 +1049,10 @@ export function spike3Refusal(capUsdForRun: number): string | undefined {
 
 // Plan 03-27: the live run-purpose cases of Slice 2, under the Phase 3 ceiling (D-05), on generated scratch repositories. Owner decision 2 of 2026-11-09 raised
 // plan 03-27's total from 6.00 to 10.00 USD for its resumed cases, including any probe; the probes of plan 03-35 and the cases of plan 03-36 are recorded under
-// their own plan IDs, so the 10.00 USD is shared by the group of the three plans and judged over their summed spend.
+// their own plan IDs, so the 10.00 USD is shared by the group of the plans and judged over their summed spend. Plan 03-37 (the cases moved out of the unit's reach
+// after 03-36 halted at s21) joins the group.
 export const LIVE_PLAN_03_27 = '03-27';
-export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36'];
+export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36', '03-37'];
 export const LIVE_PLAN_03_27_TOTAL_USD = 10.0;
 
 // The skip text for a start of `plan` whose cap would take the plan's recorded spend in the current phase's ledger past `totalUsd`, or undefined.
@@ -1807,6 +1808,10 @@ export interface LiveRunSpec {
   shortRoots?: boolean;
   // Replaces the launch wrapper: given the real binary, the evidence directory and the marker path, the shell script text of the `claude` the supervisor starts.
   wrapperScript?: (real: string, dir: string, marker: string) => string;
+  // Plan 03-37: a step the harness itself runs after the host process of every `-p` launch exits and before the supervisor classifies the unit. `script` is given the
+  // profile's work root (the clone is under it) and returns the text of a node ES module; runLiveRun writes it to `after-unit.mjs` in the evidence directory (outside
+  // every clone's read set) and uses afterUnitWrapperScript as the launch wrapper, whatever `wrapperScript` says (the wrapper also logs each `--model` flag).
+  afterUnit?: { script: (workRoot: string) => string };
   // Extra budget overrides (`name=value`).
   budgets?: readonly string[];
   // How long a lease lasts, ms (the killed supervisor's lease must lapse before the resume).
@@ -1863,6 +1868,8 @@ export interface LiveRunResult {
   clone: string | undefined;
   quickFiles: string[];
   verificationStatus: string | undefined;
+  // The lines the spec's `afterUnit` step wrote to `after-unit.log` (plan 03-37), or an empty list when there is no such step or no log.
+  afterUnitLog: string[];
   costUsd: number;
   hostStarted: boolean;
   claudeVersion: string;
@@ -2020,6 +2027,34 @@ export function modelLoggingWrapperScript(real: string, dir: string, marker: str
   ].join('\n');
 }
 
+// Plan 03-37: the launch wrapper of a case whose tamper is made by the harness. As modelLoggingWrapperScript, except that a `-p` launch runs the real host as a child
+// (not exec), keeps its exit code, and then runs `scriptPath` with the node that runs the harness (an absolute path: the supervisor's scrubbed environment may have
+// no node on PATH), given the log path as its argument. The post-step's output (stdout and stderr) goes to `<dir>/after-unit.log`; the host's own stdout and exit
+// code are what the wrapper passes on, so the supervisor reads the host's result and classifies the unit only after the post-step has finished (the adapter waits
+// for the exit of the process it started). Every other first argument (`--version`) keeps the exec form and runs no post-step.
+export function afterUnitWrapperScript(real: string, dir: string, marker: string, scriptPath: string): string {
+  const override = admissionOverride(versionNumber(claudeVersion(real)));
+  const versionCase = override === undefined ? '' : `case "$1" in --version) exec /bin/echo '${override.as} (Claude Code, harness-only admission override; real host ${override.reported})';; esac\n`;
+  const log = join(dir, 'launch-models.log');
+  const afterLog = join(dir, 'after-unit.log');
+  return [
+    '#!/bin/sh',
+    `${versionCase}case "$1" in -p) : > '${marker}'`,
+    "  prev=''",
+    '  for a in "$@"; do',
+    `    if [ "$prev" = "--model" ]; then echo "$a" >> '${log}'; fi`,
+    '    prev="$a"',
+    '  done',
+    `  '${real}' "$@"`,
+    '  code=$?',
+    `  '${process.execPath}' '${scriptPath}' '${afterLog}' >> '${afterLog}' 2>&1`,
+    '  exit $code;;',
+    'esac',
+    `exec '${real}' "$@"`,
+    '',
+  ].join('\n');
+}
+
 // The `--model` values the host was launched with, in launch order (from the wrapper above).
 export function launchModelsOf(dir: string): string[] {
   const file = join(dir, 'launch-models.log');
@@ -2094,7 +2129,15 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   const version = claudeVersion(realClaude);
   const marker = join(roots.base, 'host-started.marker');
   let wrapperBin: string;
-  if (spec.wrapperScript !== undefined) {
+  if (spec.afterUnit !== undefined) {
+    // Plan 03-37: the harness makes its changes after the host exits. The script sits directly in the evidence directory, outside the clone and every read root of
+    // the unit; it is told the profile's work root and refuses any other directory.
+    const scriptPath = join(roots.base, 'after-unit.mjs');
+    writeFileSync(scriptPath, spec.afterUnit.script(roots.AVARICE_WORK_ROOT));
+    wrapperBin = join(roots.base, 'claude-wrapper');
+    writeFileSync(wrapperBin, afterUnitWrapperScript(realClaude, roots.base, marker, scriptPath));
+    chmodSync(wrapperBin, 0o755);
+  } else if (spec.wrapperScript !== undefined) {
     wrapperBin = join(roots.base, 'claude-wrapper');
     writeFileSync(wrapperBin, spec.wrapperScript(realClaude, roots.base, marker));
     chmodSync(wrapperBin, 0o755);
@@ -2200,6 +2243,8 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   const quickFiles = clone === undefined || !existsSync(clone) ? [] : walkFiles(clone).filter((f) => f.startsWith('.planning/quick/'));
   const verificationFile = quickFiles.find((f) => /VERIFICATION\.md$/.test(f));
   const verificationStatus = clone === undefined || verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((l) => /^\W*status\W*:/i.test(l.trim()));
+  const afterUnitLogFile = join(roots.base, 'after-unit.log');
+  const afterUnitLog = existsSync(afterUnitLogFile) ? readFileSync(afterUnitLogFile, 'utf8').split('\n').filter((l) => l !== '') : [];
   const invocationEvents = ledgerEvents(dataRoot).map((e) => ({ type: e.type, data: e.data }));
   const costUsd = hostStarted ? budgetsSpent : 0;
   if (hostStarted) currentSpendLedger.record({ plan: LIVE_RUN_PLAN, case: spec.name, costUsd, claudeVersion: versionNumber(version) });
@@ -2244,6 +2289,7 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
     clone,
     quickFiles,
     verificationStatus,
+    afterUnitLog,
     costUsd,
     hostStarted,
     claudeVersion: version,
