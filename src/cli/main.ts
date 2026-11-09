@@ -3,7 +3,8 @@
 // its file; this file does not change.
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './args.ts';
-import type { CommandModule, Io } from './args.ts';
+import type { CommandExtras, CommandModule, Io } from './args.ts';
+import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
 import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
@@ -13,7 +14,7 @@ import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
 import type { IdentityContext } from './identity.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule'] as const;
 export const EXIT_USAGE = 64;
 
 // The terminal the interactive shell (FR-27, ADR-013) reads keys from and draws on. `isTTY` is how a stream says it is a terminal;
@@ -32,6 +33,9 @@ export interface MainOverrides extends DepsOverrides {
   ask?(question: string): Promise<string | undefined>;
   // Test seam: replaces the reader of the process ancestry. Only main.ts names it; production passes nothing and reads the real process table.
   ancestry?(): Result<ProcessEntry[]>;
+  // Test seam: aims `schedule` at a temporary agents directory, a fake launchctl and a chosen program line. Only main.ts names it; production
+  // passes nothing, so the agent is written under ~/Library/LaunchAgents for the running Node binary and CLI entry.
+  scheduler?: SchedulerSeam;
 }
 
 const USAGE = `usage: avarice <command> [options]
@@ -113,7 +117,9 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
   }
   try {
     // A command that needs an answer asks through the io; the shell and the tests supply a way to ask, the one-shot CLI reads standard input.
-    return await mod.run(args, composed.value.deps, overrides.ask === undefined ? io : { ...io, ask: overrides.ask });
+    const scheduler = overrides.scheduler;
+    const extras: CommandExtras = scheduler === undefined ? {} : { scheduler };
+    return await mod.run(args, composed.value.deps, overrides.ask === undefined ? io : { ...io, ask: overrides.ask }, extras);
   } catch (e) {
     io.err(`${errorLine(name, `failed: ${e instanceof Error ? e.message : String(e)}`)}\n`);
     return EXIT_INTERNAL;

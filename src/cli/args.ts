@@ -1,3 +1,4 @@
+import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
 import type { IdentityContext } from './identity.ts';
 
 // Minimal argument parser and the command-module contract.
@@ -81,9 +82,15 @@ export interface Io {
   ask?(question: string): Promise<string | undefined>;
 }
 
+// What main() hands a command beyond its arguments, dependencies and io: test seams of the command that owns them. Production passes none.
+export interface CommandExtras {
+  // The LaunchAgent writer's directory, tools and program line (`schedule`).
+  scheduler?: SchedulerSeam;
+}
+
 // What a file under src/cli/commands/ exports. `readOnly` makes composition open the store read-only.
 export interface CommandModule<Deps> {
-  run(args: ParsedArgs, deps: Deps, io: Io): Promise<number> | number;
+  run(args: ParsedArgs, deps: Deps, io: Io, extras?: CommandExtras): Promise<number> | number;
   readOnly?: boolean;
   // Composition also locates GSD and builds its adapter (a read-only command that reads the indexes through GSD).
   needsGsd?: boolean;

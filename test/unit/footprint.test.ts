@@ -210,7 +210,7 @@ describe('the scheduler seam stays out of production', () => {
 
   it('main.ts reads the override once and hands it to the command module as an extra, nowhere else', () => {
     assert.equal((mainSource.match(/\boverrides\.scheduler\b/g) ?? []).length, 1, 'one read of the override');
-    assert.match(mainSource, /scheduler:\s*overrides\.scheduler/);
+    assert.match(mainSource, /const scheduler = overrides\.scheduler;\s*\n\s*const extras: CommandExtras = scheduler === undefined \? \{\} : \{ scheduler \};/);
   });
 
   it('only the schedule command module constructs the LaunchAgent writer', () => {
