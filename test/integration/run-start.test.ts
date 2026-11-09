@@ -104,7 +104,7 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.ok(lines.length <= 24, 'a one-screen summary');
     assert.match(r.stdout, /Collapse repeated dashes in slugs/);
     assert.match(r.stdout, new RegExp(f.pin));
-    assert.match(r.stdout, /5\.00 USD per run, 2\.00 USD per invocation/);
+    assert.match(r.stdout, /10\.00 USD per run, 2\.00 USD per invocation/);
     assert.match(r.stdout, /sonnet/);
     assert.match(r.stdout, /src\/\*\*, test\/\*\*/);
     assert.match(r.stdout, /required checks?: test/);
@@ -130,8 +130,8 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.equal(budgets['invocations']?.limit_value, 3);
     assert.equal(budgets['toolCalls']?.limit_value, 400);
     assert.equal(budgets['subagentsTotal']?.limit_value, 10);
-    assert.equal(budgets['wallClockMs']?.limit_value, 3_600_000);
-    assert.equal(budgets['costUsd']?.limit_value, 5);
+    assert.equal(budgets['wallClockMs']?.limit_value, 7_200_000);
+    assert.equal(budgets['costUsd']?.limit_value, 10);
     assert.equal(budgets['costUsd']?.exactness, 'estimated');
     assert.ok(Object.values(budgets).every((b) => b.used === 0));
 
@@ -350,7 +350,7 @@ describe('start exits 64 for an invalid request, creating nothing (RC-5, AUT-7)'
 
   it('an over-preset budget names budget.costUsdPerRun', () => {
     const f = fixture();
-    const r = invalid(f, ['--budget', 'costUsdPerRun=6']);
+    const r = invalid(f, ['--budget', 'costUsdPerRun=11']);
     assert.match(r.stderr, /budget\.costUsdPerRun/);
   });
 

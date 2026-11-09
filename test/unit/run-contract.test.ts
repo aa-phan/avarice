@@ -13,8 +13,9 @@ import {
   ROUTINE_POLICY,
   checkG0Static,
   compileRunContract,
+  scaledBudgetLimits,
 } from '../../src/domain/run-contract.ts';
-import type { RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
+import type { IndexFacts, RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
 
 function unwrap<T>(r: Result<T>): T {
   if (!r.ok) throw new Error(`expected ok, got ${JSON.stringify(r.error)}`);
@@ -90,10 +91,10 @@ describe('run contract tracer: a brief and conventions compile into a routine co
     assert.equal(contract.intent.workItems[0]?.model, 'sonnet');
     assert.equal(contract.workspace.branch, `avarice/${RUN_ID}`);
     assert.match(contract.workspace.branch, /^avarice\/run_/);
-    assert.equal(contract.budgets.wallClockMinutes, 60);
+    assert.equal(contract.budgets.wallClockMinutes, 120);
     assert.equal(contract.budgets.invocations, 3);
     assert.equal(contract.budgets.toolCalls, 400);
-    assert.deepEqual(contract.budgets.costUsd, { perInvocation: 2, perRun: 5, exactness: 'estimated' });
+    assert.deepEqual(contract.budgets.costUsd, { perInvocation: 2, perRun: 10, exactness: 'estimated' });
     assert.equal(digest, digestOf(contract));
   });
 
@@ -162,16 +163,16 @@ describe('compileRunContract: every RC-1 field exists on a compiled contract', (
 
   it('carries the preset limits with their recorded derivations (D-13)', () => {
     const { budgets } = contract;
-    assert.equal(budgets.wallClockMinutes, 60);
+    assert.equal(budgets.wallClockMinutes, 120);
     assert.equal(budgets.invocations, 3);
     assert.equal(budgets.toolCalls, 400);
     assert.equal(budgets.subagentsConcurrent, 2);
     assert.equal(budgets.subagentsTotal, 10);
     assert.equal(budgets.costUsd.perInvocation, 2);
-    assert.equal(budgets.costUsd.perRun, 5);
+    assert.equal(budgets.costUsd.perRun, 10);
     assert.equal(budgets.costUsd.exactness, 'estimated');
-    assert.equal(budgets.repairAttemptsPerCheck, 0);
-    assert.match(budgets.repairAttemptsReason, /no repair/);
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+    assert.match(budgets.repairAttemptsReason, /one repair invocation.*repeated_failure/);
     assert.equal(budgets.invocationsDerivation.total, budgets.invocations);
     assert.equal(budgets.subagentsDerivation.total, budgets.subagentsTotal);
     assert.equal(budgets.subagentsDerivation.perUnit.total * budgets.subagentsDerivation.rounds, budgets.subagentsTotal);
@@ -316,13 +317,13 @@ describe('compileRunContract: budgets only go down (RC-5)', () => {
     assert.equal(budgets.subagentsTotal, 5);
     assert.equal(budgets.subagentsConcurrent, 1);
     assert.equal(budgets.costUsd.perInvocation, 1.5);
-    assert.equal(budgets.costUsd.perRun, 5);
+    assert.equal(budgets.costUsd.perRun, 10);
     assert.equal(compile({ budgetOverrides: { toolCalls: 400, wallClockMinutes: 60 } }).budgets.toolCalls, 400);
   });
 
   it('refuses a value above the preset with field budget.<name>', () => {
     const above: Record<string, number> = {
-      wallClockMinutes: 61, invocations: 4, toolCalls: 401, subagentsTotal: 11, subagentsConcurrent: 3, costUsdPerInvocation: 2.01, costUsdPerRun: 6,
+      wallClockMinutes: 121, invocations: 4, toolCalls: 401, subagentsTotal: 11, subagentsConcurrent: 3, costUsdPerInvocation: 2.01, costUsdPerRun: 11,
     };
     for (const [name, value] of Object.entries(above)) {
       assert.equal(refusal({ budgetOverrides: { [name]: value } }).field, `budget.${name}`, name);
@@ -660,5 +661,192 @@ describe('checkG0Static: a decision: reference never stands alone (D-02)', () =>
     assert.equal(failures.length, 1);
     assert.equal(failures[0]?.rule, 'acceptance-verified-by');
     assert.match(failures[0]?.detail ?? '', /AC9 needs a check, test or diff reference beside decision:/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Scaled routine budgets (D-11, D-12, owner decision 1, CON-15) and spec derivation from index facts (RC-7, D-07 stage 1).
+// ---------------------------------------------------------------------------------------------------------------------
+function threeItemBrief(): Brief {
+  const items = [
+    { id: 'A', title: 't1', dependsOn: [], acceptance: ['AC1'] },
+    { id: 'B', title: 't2', dependsOn: ['A'], acceptance: ['AC2'] },
+    { id: 'C', title: 't3', dependsOn: ['B'], acceptance: ['AC3'] },
+  ];
+  const lines = ['---', 'title: Three items', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+  lines.push('## Acceptance criteria');
+  for (const n of [1, 2, 3]) lines.push(`- AC${n}: criterion ${n} | verifiedBy: check:test`);
+  lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+  return loadBrief(lines.join('\n'));
+}
+
+describe('scaledBudgetLimits: the routine limits grow with the item count (D-12)', () => {
+  it('gives the Phase 2 single-item values for one item, with a cost and wall clock that do not scale', () => {
+    const one = scaledBudgetLimits(1);
+    assert.equal(one.invocations, 3);
+    assert.equal(one.subagentsTotal, 10);
+    assert.equal(one.toolCalls, 400);
+    assert.equal(one.wallClockMinutes, 120);
+    assert.equal(one.costUsd.perRun, 10);
+    assert.equal(one.costUsd.perInvocation, 2);
+  });
+
+  it('gives items x 2 + 1 invocations, items x 10 subagents and items x 400 tool calls for three items', () => {
+    const three = scaledBudgetLimits(3);
+    assert.equal(three.invocations, 7);
+    assert.equal(three.subagentsTotal, 30);
+    assert.equal(three.toolCalls, 1200);
+    assert.equal(three.wallClockMinutes, 120);
+    assert.equal(three.costUsd.perRun, 10);
+    assert.equal(three.costUsd.perInvocation, 2);
+  });
+
+  it('records the invocation formula and a subagent derivation scaled by the item count', () => {
+    const three = scaledBudgetLimits(3);
+    assert.equal(three.invocationsDerivation.formula, '3 item units + 3 retries or repairs + 1 resume = 7');
+    assert.equal(three.invocationsDerivation.total, 7);
+    assert.equal(three.subagentsDerivation.total, 30);
+    assert.equal(three.subagentsDerivation.units, 3);
+    assert.equal(three.subagentsDerivation.perUnit.total * three.subagentsDerivation.rounds * three.subagentsDerivation.units, 30);
+    assert.match(three.subagentsDerivation.formula, /3 items/);
+  });
+
+  it('carries the derivations onto the compiled budgets of a three-item brief', () => {
+    const { budgets } = compile({ brief: threeItemBrief() });
+    assert.equal(budgets.invocations, 7);
+    assert.equal(budgets.subagentsTotal, 30);
+    assert.equal(budgets.toolCalls, 1200);
+    assert.equal(budgets.invocationsDerivation.total, 7);
+    assert.equal(budgets.subagentsDerivation.total, 30);
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+  });
+});
+
+describe('compileRunContract: overrides only lower the scaled limits (CON-15)', () => {
+  it('refuses invocations=8 for three items and accepts 5; refuses 4 for one item', () => {
+    const r = refusal({ brief: threeItemBrief(), budgetOverrides: { invocations: 8 } });
+    assert.equal(r.field, 'budget.invocations');
+    assert.match(r.reason, /7/);
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { invocations: 5 } }).budgets.invocations, 5);
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { invocations: 7 } }).budgets.invocations, 7);
+    assert.equal(refusal({ budgetOverrides: { invocations: 4 } }).field, 'budget.invocations');
+  });
+
+  it('refuses a subagent or tool-call override above the scaled limit and accepts one at or below it', () => {
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { subagentsTotal: 31 } }).field, 'budget.subagentsTotal');
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { toolCalls: 1201 } }).field, 'budget.toolCalls');
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { subagentsTotal: 30, toolCalls: 1200 } }).budgets.toolCalls, 1200);
+  });
+
+  it('refuses costUsdPerRun=11 for a one-item brief and accepts 6; cost does not scale with items', () => {
+    assert.equal(refusal({ budgetOverrides: { costUsdPerRun: 11 } }).field, 'budget.costUsdPerRun');
+    assert.equal(compile({ budgetOverrides: { costUsdPerRun: 6 } }).budgets.costUsd.perRun, 6);
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { costUsdPerRun: 11 } }).field, 'budget.costUsdPerRun');
+    assert.equal(compile({ brief: threeItemBrief() }).budgets.costUsd.perRun, 10);
+  });
+
+  it('keeps the repair limit at 1 with a reason that names one repair invocation then repeated_failure', () => {
+    const { budgets } = compile();
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+    assert.match(budgets.repairAttemptsReason, /one repair invocation/);
+    assert.match(budgets.repairAttemptsReason, /repeated_failure/);
+    assert.equal(refusal({ budgetOverrides: { repairAttemptsPerCheck: 3 } }).field, 'budget.repairAttemptsPerCheck');
+  });
+});
+
+describe('compileRunContract: spec derivation from index facts (RC-7, D-07 stage 1)', () => {
+  const FACTS: IndexFacts = {
+    files: ['src/lib/copy.ts', 'src/lib/dates.ts', 'scripts/tool.ts', 'docs/guide.md'],
+    symbolsByFile: { 'src/lib/copy.ts': ['copyText', 'otherThing'], 'src/lib/dates.ts': ['formatDate'] },
+  };
+
+  function briefWithText(title: string, ac1: string, ac2 = 'second'): Brief {
+    const items = [
+      { id: 'A', title, dependsOn: [], acceptance: ['AC1'] },
+      { id: 'B', title: 'plain', dependsOn: [], acceptance: ['AC2'] },
+    ];
+    const lines = ['---', 'title: Facts', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+    lines.push('## Acceptance criteria', `- AC1: ${ac1} | verifiedBy: check:test`, `- AC2: ${ac2} | verifiedBy: check:test`);
+    lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+    return loadBrief(lines.join('\n'));
+  }
+
+  it('derives files and symbols the item text names, each named in spec.derived', () => {
+    const { workItems } = compile({ brief: briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works'), indexFacts: FACTS }).intent;
+    const a = workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts']);
+    assert.deepEqual(a?.spec.symbols, ['copyText']);
+    for (const field of ['files', 'symbols', 'configKeys', 'references']) assert.ok(a?.spec.derived.includes(field), field);
+  });
+
+  it('reads the acceptance text too, and sorts and de-duplicates each derived list', () => {
+    const brief = briefWithText('Touch src/lib/dates.ts and `src/lib/copy.ts`', 'Also `src/lib/dates.ts`, `formatDate`, `copyText` and `src/lib/copy.ts`.');
+    const a = compile({ brief, indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts', 'src/lib/dates.ts']);
+    assert.deepEqual(a?.spec.symbols, ['copyText', 'formatDate']);
+  });
+
+  it('gives an item that names no known path the run write set, marked derived', () => {
+    const { workItems } = compile({ brief: briefWithText('Do something', 'It works'), indexFacts: FACTS }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/**']);
+    assert.deepEqual(workItems[0]?.spec.symbols, []);
+    assert.ok(workItems[0]?.spec.derived.includes('files'));
+    assert.deepEqual(workItems[1]?.spec.files, ['src/**']);
+  });
+
+  it('does not take a named file that is outside the run write set', () => {
+    const { workItems } = compile({ brief: briefWithText('Edit `scripts/tool.ts`', 'It works'), indexFacts: FACTS }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/**']);
+  });
+
+  it('derives references from a .md path under the write set or docs/, and config keys from dotted lower-case spans', () => {
+    const brief = briefWithText('Update `docs/guide.md` and `notes.md`', 'Honors `budget.max-cost` and `copy.ts` and `src/lib/copy.ts`.');
+    const a = compile({ brief, indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.references, ['docs/guide.md']);
+    assert.deepEqual(a?.spec.configKeys, ['budget.max-cost']);
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts']);
+  });
+
+  it('works without facts: files are the write set and symbols stay empty, both derived', () => {
+    const a = compile({ brief: briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works') }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/**']);
+    assert.deepEqual(a?.spec.symbols, []);
+    assert.ok(a?.spec.derived.includes('files') && a?.spec.derived.includes('symbols'));
+  });
+
+  it('keeps an explicit spec field as given and not in derived, and derives the others', () => {
+    const items = [{ id: 'A', title: 'Rewrite `copyText` in `src/lib/copy.ts`', dependsOn: [], acceptance: ['AC1'], spec: { files: ['src/lib/dates.ts'] } }];
+    const lines = ['---', 'title: Facts', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+    const a = compile({ brief: loadBrief(lines.join('\n')), indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/dates.ts']);
+    assert.ok(!a?.spec.derived.includes('files'));
+    assert.ok(a?.spec.derived.includes('symbols'));
+  });
+
+  it('gives the same contract digest for the same brief and facts, and a different one when the facts differ', () => {
+    const brief = briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works');
+    const one = unwrap(compileRunContract(inputFor({ brief, indexFacts: FACTS })));
+    const two = unwrap(compileRunContract(inputFor({ brief, indexFacts: { files: [...FACTS.files].reverse(), symbolsByFile: FACTS.symbolsByFile } })));
+    assert.equal(one.digest, two.digest);
+    const none = unwrap(compileRunContract(inputFor({ brief })));
+    assert.notEqual(one.digest, none.digest);
+  });
+});
+
+describe('RC-8: the model never exceeds the explicit model or the size map entry (prohibition)', () => {
+  it('maps small to haiku, medium to sonnet and large to opus, and never selects a larger model than asked', () => {
+    const expected: Record<string, string> = { small: 'haiku', medium: 'sonnet', large: 'opus' };
+    for (const [size, model] of Object.entries(expected)) {
+      const items = [{ id: 'A', title: 't', dependsOn: [], size, acceptance: ['AC1'] }];
+      const lines = ['---', 'title: x', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+      const item = compile({ brief: loadBrief(lines.join('\n')) }).intent.workItems[0];
+      assert.equal(item?.model, model, size);
+      assert.equal(item?.modelSource, 'modelBySize');
+    }
+    const explicit = [{ id: 'A', title: 't', dependsOn: [], size: 'large', model: 'haiku', acceptance: ['AC1'] }];
+    const lines = ['---', 'title: x', `items: ${JSON.stringify(explicit)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+    const item = compile({ brief: loadBrief(lines.join('\n')) }).intent.workItems[0];
+    assert.equal(item?.model, 'haiku', 'an explicit model wins even over a larger size');
+    assert.equal(item?.modelSource, 'brief');
   });
 });

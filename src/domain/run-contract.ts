@@ -189,6 +189,39 @@ export interface RunContract {
   notify: { reviewReady: string[]; blocking: string[]; digest: string[] };
 }
 
+// Facts the start command reads from the index (graph and intel) and hands to the pure compiler (D-07 stage 1).
+export interface IndexFacts {
+  files: readonly string[];
+  symbolsByFile: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface ScaledBudgetLimits {
+  wallClockMinutes: number;
+  invocations: number;
+  invocationsDerivation: InvocationDerivation;
+  toolCalls: number;
+  subagentsConcurrent: number;
+  subagentsTotal: number;
+  subagentsDerivation: SubagentDerivation;
+  costUsd: { perInvocation: number; perRun: number };
+}
+
+// Stub: the scaled limits arrive with the green step of the plan.
+export function scaledBudgetLimits(itemCount: number): ScaledBudgetLimits {
+  void itemCount;
+  const preset = ROUTINE_PRESET.budgets;
+  return {
+    wallClockMinutes: preset.wallClockMinutes,
+    invocations: preset.invocations,
+    invocationsDerivation: structuredClone(INVOCATION_DERIVATION),
+    toolCalls: preset.toolCalls,
+    subagentsConcurrent: preset.subagentsConcurrent,
+    subagentsTotal: preset.subagentsTotal,
+    subagentsDerivation: structuredClone(SUBAGENT_DERIVATION),
+    costUsd: { perInvocation: preset.costUsd.perInvocation, perRun: preset.costUsd.perRun },
+  };
+}
+
 export interface RunCompileInput {
   runId: string;
   projectId: string;
@@ -201,6 +234,8 @@ export interface RunCompileInput {
   policy?: string;
   // `--budget` style overrides. Untrusted: validated here, and they can only lower a preset value.
   budgetOverrides?: unknown;
+  // Index facts the compiler derives item specs from; without them a spec derives from the write set alone.
+  indexFacts?: IndexFacts;
 }
 
 export interface G0Failure {
