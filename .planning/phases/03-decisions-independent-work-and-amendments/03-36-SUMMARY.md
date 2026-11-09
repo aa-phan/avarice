@@ -2,7 +2,9 @@
 phase: 03-decisions-independent-work-and-amendments
 plan: 36
 subsystem: live-testing
-status: halted
+status: complete
+resumed_by: "03-39"
+halted_history: "halted 2026-11-09 at s21 (not exercised: the unit read and declined the tamper script); completed by plan 03-39"
 tags: [gap-closure, live, s-50, s-18, cs-15, s-21, stop-rule, halted, haiku, spend-guard]
 
 requires:
@@ -225,3 +227,20 @@ None - no external service configuration required.
 ## Self-Check: PASSED
 
 The four files named above exist and carry the described changes; commits `344c024`, `c1a5c87` and `47f2ecf` are on the branch; the ledger sums to 4.9662 USD over 33 lines (group 3.8735, plan 03-36 labelled 0.2308 plus 0.0028 labelled 03-27); `npm run typecheck` is clean and the suite skips all ten tests without `AVARICE_LIVE`. The plan's own acceptance (eight PASS lines, 03-27 resumed) is NOT met; this is recorded as `status: halted`.
+
+## Resumed by plan 03-39
+
+The cases this plan left open have passed, so its halt is closed. The halt record above stays as written.
+
+**The owner's decisions after the halt.** On 2026-11-09 the owner moved the s21 tamper and the cs5 write out of the unit's reach (plan 03-37), pinned the host to 2.1.319 (the installed 2.1.321 is not admitted), gave each remaining case its own brief (plan 03-38), and then decided that S-21 is judged on the built behaviour (plan 03-39).
+
+**The PASS lines that completed the open cases** (this plan's own PASS lines, `s50`, `cs15-definition`, `cs15` and `s18-short`, stay as recorded above):
+
+| Case | Plan | Cost (USD) | Results line | Run |
+|---|---|---|---|---|
+| `s21` (re-judged on the built behaviour, no new spend) | 03-39 | 0 | 12 | `run_01M7149X5PFK4CTK44C9NWX5JK` (the plan 03-38 run, evidence kept at `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-9o5pqG`) |
+| `cs5` | 03-39 | 0.1318 | 13 | `run_01M715R14RYDVVC608VSNZGS2Q` |
+| `s52` | 03-39 | 0.1640 | 14 | `run_01M71682X3SN57X5Y0KHQ5XVQ9` |
+| `s17-s51` | 03-39 | 2.5605 | 15 | `run_01M716VJSNXFWTEN5VQGJTMFMB` |
+
+Totals after plan 03-39: plan 03-39 spent 2.8563 USD; the group 03-27, 03-35, 03-36, 03-37, 03-38 and 03-39 spent 6.8812 of 10.00 USD; Phase 3 spent 7.9739 of 25 USD (39 ledger lines). Host: Claude Code 2.1.319, the pinned binary. S-21 was judged on the built behaviour (owner decision of 2026-11-09): G2 for item A failed with `deletion-scope` and `no-new-overrides`, the skip marker was not separately evaluated because the test inventory runs only when every other G2 rule passes, nothing was committed, the run never reached `ready_for_review` and ended `blocked_on_decision` with an open `permission` decision. The single-tamper paths are proven offline by `test/integration/run-repair.test.ts` (describe "S-21 offline: each way a repair can weaken the check ends in a repeated_failure decision with the reproducer (T-03-36)", with the repair control), `test/integration/run-gates.test.ts` (a `.skip(` added to an existing test: G2 test-inventory new-skip-marker) and `test/unit/gates.test.ts`. The scenario-versus-code disagreement is one line in `docs/system/findings.md`, for the owner to decide which side moves.

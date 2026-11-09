@@ -184,6 +184,7 @@ The total live-model spend of Phase 3 may not pass **25 USD** (owner decision D-
 | 03-36 | 2026-11-09 | 2.1.319 | Resumed run-purpose cases, halted at `s21`: `s50` twice (0.0782 and 0.0730), `s18-short` (0.0639), `s21` (0.0158) under plan `03-36`, and `cs15`'s agent call (0.0028) that the ledger labels `03-27`: 5 ledger lines; `cs5`, `s52` and `s17-s51` not run (stop rule) | 0.2336 | 4.9662 |
 | 03-37 | 2026-11-09 | 2.1.319 (pinned binary, owner decision of 2026-11-09) | Gap plan after the 03-36 halt, halted at `s21`: `s21` twice (0.0430 and 0.0364), both NOT EXERCISED: 2 ledger lines; `cs5`, `s52` and `s17-s51` not run (stop rule) | 0.0794 | 5.0456 |
 | 03-38 | 2026-11-09 | 2.1.319 (pinned binary) | Gap plan with one brief per live case, halted at `s21`: `s21` once (0.0721), FAIL: 1 ledger line; `cs5`, `s52` and `s17-s51` not run (stop rule) | 0.0721 | 5.1177 |
+| 03-39 | 2026-11-09 | 2.1.319 (pinned binary) | Gap plan after the 03-38 halt: `s21` re-judged from the kept 03-38 run (no ledger line), then `cs5` (0.1318), `s52` (0.1640) and `s17-s51` (2.5605), all PASS: 3 ledger lines | 2.8563 | 7.9739 |
 
 The cumulative total equals the sum of `costUsd` over the ledger (28 lines, 4.7326 to four decimals, 4.73 to two; 26 lines and 4.5488 before plan 03-35; 24 lines and 1.0927 before plan 03-27). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; plan 03-27's own total is 3.4561 USD of its 6.00 USD cap; after it 20.4512 USD remain under the ceiling.
 
@@ -296,6 +297,32 @@ What the run measured (ledger, transcript and the run's contract): the brief fix
 | Plan 03-38 (1 line) | 0.0721 | its table's 5.20 for first runs |
 | Group 03-27, 03-35, 03-36, 03-37 and 03-38 | 4.0250 | 10.00 |
 | Cumulative Phase 3 (36 ledger lines) | 5.1177 | 25.00 |
+
+### Phase 3 run-purpose cases, completed (plan 03-39)
+
+Same suite, harness, briefs and scratch repositories as plan 03-38, after the owner's decision of 2026-11-09 to judge S-21 on the built behaviour. Every live command ran with `AVARICE_LIVE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319` and `AVARICE_PHASE3_PLAN=03-39`; `AVARICE_LIVE_ADMIT_CLAUDE_VERSION` was never set. Every start was checked against the group 03-27, 03-35, 03-36, 03-37, 03-38 and 03-39 (10.00 USD) and the Phase 3 ceiling (25 USD) on actual spend plus the case cap; none was refused. No case was re-run and no cap was raised, lowered or moved. All eight case names of plan 03-27 now have a PASS line under plans 03-36 to 03-39.
+
+```bash
+AVARICE_REJUDGE_S21=1 AVARICE_PHASE3_PLAN=03-39 node --test --test-name-pattern="rejudge s21" test/containment/live-run-phase3.test.ts
+AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-39 AVARICE_LIVE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 \
+  node --test --test-name-pattern="live cs5" test/containment/live-run-phase3.test.ts
+```
+
+| Case | Scenario | Verdict | Cost (USD) | Host | Results line |
+|---|---|---|---|---|---|
+| `s21` re-judge of the kept plan 03-38 run `run_01M7149X5PFK4CTK44C9NWX5JK` | S-21, AUT-10, AUT-16 | PASS, judged on the built behaviour (tamper made by the harness): `AFTER-UNIT 1 delete=applied skip=applied override=applied`; G2 for A failed with `deletion-scope` (naming `test/expired.test.ts`) and `no-new-overrides`; the skip marker was not separately evaluated, because the inventory runs only when every other G2 rule passes; no commit on the base; no transition to `ready_for_review`; run `blocked_on_decision` (`enforcement_failure`) with one open `permission` decision. No host was started | 0 | 2.1.319 | `live-run-phase3.jsonl` line 12 (the plan 03-38 FAIL on line 11 is unchanged) |
+| `s21` live fallback | S-21 | not run: the plan 03-38 evidence directory was present | 0 | | none |
+| `cs5` | CS-5, CS-16 | PASS: the parent's write to `config/probe-a.json` and the subagent's identical write were both refused by the hook rule `outside-write-set`, equal to the rule the offline decision gives for the same call; both writes were made (`parentWrote`, `subagentWrote`); 82 tool calls over two items, 63 of them charged to the run's own budgets (A 51, B 43); both items ended `blocked_on_decision` with an `acceptance` decision each | 0.1318 | 2.1.319 | line 13 |
+| `s52` | S-52, AUT-16, AUT-10 | PASS: A done (G1 and G2 passed, committed); after B, G2 failed with `checks-delta` and failed `check:test` evidence naming B; one repair attempt on B ended `blocked:decision`, with an open `permission` decision affecting B that carries the check's reproducer; A's G2 row and commit unchanged | 0.1640 | 2.1.319 | line 14 |
+| `s17-s51` | S-17, S-51, RC-8 | PASS (S-51 judged first: PASS, launch order haiku, sonnet, opus, init models `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`). S-17: A and C done (two commits, `src/shout.ts` with its test and `src/version.ts` with its test), B `blocked_on_decision` with one open `acceptance` decision affecting B and D, D `ready` and never delegated, one notification, no answer. Invocations: A haiku 0.0787, B sonnet 0.9504, C opus 1.5313 | 2.5605 | 2.1.319 | line 15 |
+
+No case was NOT EXERCISED and none needed its one re-run. In `cs5` both items still ended with an open `acceptance` decision (the result line records no more than that; the evidence directory was disposed after the PASS), which the case does not judge; the writes, the refusals and the charging it does judge were all reached. Known and unchanged: the unit prompt names `Grep` and `Glob`, which the host session lacks (the hook recorded `unknown-tool` denials in `cs5`, `s52` and `s17-s51`); every banner failed `osascript-missing`, as the profile intends, so none was posted.
+
+| Spend | USD | Against |
+|---|---|---|
+| Plan 03-39 (3 ledger lines: cs5 0.1318, s52 0.1640, s17-s51 2.5605; the re-judge has no ledger line) | 2.8563 | its table's 4.60 for first runs |
+| Group 03-27, 03-35, 03-36, 03-37, 03-38 and 03-39 (4.0250 + 2.8563) | 6.8812 | 10.00 |
+| Cumulative Phase 3 (5.1177 + 2.8563, 39 ledger lines) | 7.9739 | 25.00 |
 
 ### Spike S3-A on Claude Code 2.1.319 (2026-11-09, plan 03-13)
 

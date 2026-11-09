@@ -2,7 +2,9 @@
 phase: 03-decisions-independent-work-and-amendments
 plan: 27
 subsystem: live-testing
-status: halted
+status: complete
+resumed_by: "03-39"
+halted_history: "halted 2026-11-09 at the tracer gate (s17-s51 failed twice on item A, haiku); resumed by plans 03-36 to 03-39 and completed by plan 03-39"
 tags: [live, tracer-gate, s-17, s-51, rc-8, haiku, spend-ledger, halted]
 
 requires:
@@ -194,3 +196,26 @@ No `docs/system/` file changed: nothing built changed behaviour. The documentati
 ## Self-Check: PASSED
 
 Created and modified files exist (the suite, the results file, the harness, the ledger, LIVE-CASES.md); commits `384df53` and `848a724` are ancestors of HEAD; the ledger sums to 4.5488 USD over 26 lines, 3.4561 of it plan 03-27 (under its 6.00 and the 25 USD ceiling); `tsc -p .` and `check-boundaries` are clean; the three live-harness unit tests pass and the new suite skips all 7 cases without `AVARICE_LIVE`. The plan's own acceptance (eight PASS lines) is NOT met; this is recorded as `status: halted`, not as a pass.
+
+## Resumed by plan 03-39
+
+Plan 03-27's eight live cases have all passed, so the halt of this plan is closed. The halt record above stays as written.
+
+**The fix chain.** Plans 03-34 and 03-35 dealt with the haiku unit (03-35 probed it, and the owner chose `proceed-haiku`); plan 03-36 ran four cases (`s50`, `cs15-definition`, `cs15`, `s18-short`) and halted at `s21`; plan 03-37 moved the `s21` tamper and the `cs5` write out of the unit's reach and halted at `s21` again; plan 03-38 gave each remaining case its own brief and halted when the `s21` judge asserted rules the built run cannot produce for a combined tamper; plan 03-39 judged `s21` on the built behaviour from the kept 03-38 run and ran `cs5`, `s52` and `s17-s51`, which passed on their first runs.
+
+**Each case's PASS line.**
+
+| Case | Plan | Cost (USD) | Results line | Run | Evidence directory |
+|---|---|---|---|---|---|
+| `s17-s51` | 03-39 | 2.5605 | 15 | `run_01M716VJSNXFWTEN5VQGJTMFMB` | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-Pkw83m` (disposed after the PASS) |
+| `s50` | 03-36 | 0.0730 | 4 | `run_01M70V4QSDDAVWM07SNVPF5NB1` | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-oAPw6i` (disposed) |
+| `s18-short` | 03-36 | 0.0639 | 7 | `run_01M70VK8XFHQHAYY6XB9AKD0NG` | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-cwx6gS` (disposed) |
+| `s21` (re-judged on the built behaviour, no new spend) | 03-39 | 0 | 12 | `run_01M7149X5PFK4CTK44C9NWX5JK` (the plan 03-38 run) | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-9o5pqG` (kept) |
+| `s52` | 03-39 | 0.1640 | 14 | `run_01M71682X3SN57X5Y0KHQ5XVQ9` | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-3J5gRc` (disposed) |
+| `cs5` | 03-39 | 0.1318 | 13 | `run_01M715R14RYDVVC608VSNZGS2Q` | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-QqOIP9` (disposed) |
+| `cs15-definition` | 03-36 | 0 | 5 | none (refused before the host started) | none |
+| `cs15` | 03-36 | 0.0028 (ledger label `03-27`) | 6 | no run ID | `/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-cli-dg3RLM` (disposed) |
+
+**Original "Decision needed" options not taken.** None of the three options above was taken. Item A stayed a small item on haiku (option 1 would have judged the case without A, option 2 would have changed `modelBySize.small` or the small-unit prompt, option 3 would have given A an explicit model). With the per-case brief of plan 03-38, `s17-s51` passed as written: A (haiku) and C (opus) done, B (sonnet) blocked on the owner choice, D ready and never delegated.
+
+Totals after plan 03-39: plan 03-39 spent 2.8563 USD; the group 03-27, 03-35, 03-36, 03-37, 03-38 and 03-39 spent 6.8812 of 10.00 USD; Phase 3 spent 7.9739 of 25 USD (39 ledger lines). Host: Claude Code 2.1.319, the pinned binary. S-21 was judged on the built behaviour (owner decision of 2026-11-09): G2 for item A failed with `deletion-scope` and `no-new-overrides`, the skip marker was not separately evaluated because the test inventory runs only when every other G2 rule passes, nothing was committed, the run never reached `ready_for_review` and ended `blocked_on_decision` with an open `permission` decision. The single-tamper paths are proven offline by `test/integration/run-repair.test.ts` (describe "S-21 offline: each way a repair can weaken the check ends in a repeated_failure decision with the reproducer (T-03-36)", with the repair control), `test/integration/run-gates.test.ts` (a `.skip(` added to an existing test: G2 test-inventory new-skip-marker) and `test/unit/gates.test.ts`. The scenario-versus-code disagreement is one line in `docs/system/findings.md`, for the owner to decide which side moves.
