@@ -93,6 +93,16 @@ export interface FakeRunOptions {
   // stay JSON-serializable: the options travel to the supervisor as AVARICE_FAKE_HOST.
   perItem?: Readonly<Record<string, FakeRunOptions>>;
   resume?: FakeRunOptions;
+  // A resumed call (one that carries `resumeSessionId`) ends as the real CLI ends for a session it does not know: exit 1, no result event, nothing
+  // written to the clone, kind `failed`. Only a resumed call is affected, so it belongs in a `resume` entry; a fresh call ignores it. It lets a test
+  // reach the fresh-unit fallback.
+  missingSession?: boolean;
+  // The unit makes this many Agent calls through the real hook, before its edits, each with its own tool_use_id and a completion after it (so each is
+  // charged to subagentsTotal and none stays in flight). The outcome reports how many the hook admitted as `details.subagentsSpawned`.
+  subagents?: number;
+  // The text of the quick PLAN.md the unit leaves (written through the hook like the SUMMARY). It is written even when the unit writes no SUMMARY, as a
+  // unit that stopped to ask after it planned would leave it. Absent: the default plan, written only together with the SUMMARY.
+  planText?: string;
 }
 
 // The item line of a unit or resume prompt: a line that starts `Work item <ID>:`, or the first line of the quoted task text. A phrase of that shape
@@ -127,9 +137,10 @@ interface HookRun {
   stopped: boolean;
 }
 
-function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolName: string, toolInput: Record<string, unknown>): HookRun {
+// `extra` carries the top-level fields of the hook input beside the tool call (`tool_use_id`).
+function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolName: string, toolInput: Record<string, unknown>, extra: Record<string, unknown> = {}): HookRun {
   const result = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', HOOK_ENTRY, '--event', event, '--policy', policyFile], {
-    input: JSON.stringify({ cwd, hook_event_name: event === 'pre' ? 'PreToolUse' : 'PostToolUse', tool_name: toolName, tool_input: toolInput }),
+    input: JSON.stringify({ cwd, hook_event_name: event === 'pre' ? 'PreToolUse' : 'PostToolUse', tool_name: toolName, tool_input: toolInput, ...extra }),
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -190,6 +201,20 @@ export class FakeRunHost implements AgentHost {
     if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
 
+    // A session the CLI does not know: it prints an error and exits 1 with no result event, before it touches anything.
+    if (req.resumeSessionId !== undefined && o.missingSession === true) {
+      return ok({
+        sessionId,
+        kind: 'failed',
+        permissionDenials: [],
+        costUsd: 0,
+        durationMs: Date.now() - startedMs,
+        headBefore: head,
+        headAfter: head,
+        details: { exitCode: 1, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: false },
+      });
+    }
+
     const built = buildHookPolicy(
       req.scope,
       { onboardingId: req.onboardingId, runId: req.runId, invocationId: req.invocationId, subagentTypes: [...PURPOSE_EXTENSIONS.run.agents] },
@@ -203,15 +228,15 @@ export class FakeRunHost implements AgentHost {
     let denies = 0;
     let stopped = false;
     // One tool call: PreToolUse, the effect when allowed, PostToolUse.
-    const tool = (name: string, input: Record<string, unknown>, effect: () => void): boolean => {
-      const pre = callHook(policyFile, cwd, 'pre', name, input);
+    const tool = (name: string, input: Record<string, unknown>, effect: () => void, extra: Record<string, unknown> = {}): boolean => {
+      const pre = callHook(policyFile, cwd, 'pre', name, input, extra);
       if (pre.stopped) stopped = true;
       if (pre.denied !== null) {
         denies += 1;
         return false;
       }
       effect();
-      callHook(policyFile, cwd, 'post', name, input);
+      callHook(policyFile, cwd, 'post', name, input, extra);
       return true;
     };
     const write = (rel: string, text: string): void => {
@@ -254,6 +279,17 @@ export class FakeRunHost implements AgentHost {
       const original = readFileSync(join(cwd, 'src/slug.ts'), 'utf8');
       edits['src/slug.ts'] = `${original}// attempted fix\n`;
     }
+    // Agent calls through the hook, one after another (each completes before the next starts, so none holds a concurrency slot).
+    let subagentsAdmitted = 0;
+    for (let i = 0; i < (o.subagents ?? 0) && !stopped; i += 1) {
+      const admitted = tool(
+        'Agent',
+        { subagent_type: 'gsd-executor', description: `fake subagent ${i + 1}`, prompt: 'work' },
+        () => {},
+        { tool_use_id: `toolu_fake_${i + 1}` },
+      );
+      if (admitted) subagentsAdmitted += 1;
+    }
     for (const [rel, text] of Object.entries(edits)) edit(rel, text);
     const crashed = o.crash !== undefined || o.timeoutMs !== undefined;
     for (const rel of o.crash?.afterFiles ?? []) {
@@ -285,9 +321,13 @@ export class FakeRunHost implements AgentHost {
 
     const quick = o.quickId ?? FAKE_QUICK_ID;
     const wroteEdits = Object.keys(edits).length > 0;
-    if ((o.summary ?? wroteEdits) && !crashed) {
-      const base = `.planning/quick/${quick}`;
-      tool('Write', { file_path: join(cwd, `${base}/${quick}-PLAN.md`), content: 'plan' }, () => write(`${base}/${quick}-PLAN.md`, '# Plan\n\nFix the slug.\n'));
+    const base = `.planning/quick/${quick}`;
+    const writesSummary = (o.summary ?? wroteEdits) && !crashed;
+    if (!crashed && (o.planText !== undefined || writesSummary)) {
+      const plan = o.planText ?? '# Plan\n\nFix the slug.\n';
+      tool('Write', { file_path: join(cwd, `${base}/${quick}-PLAN.md`), content: plan }, () => write(`${base}/${quick}-PLAN.md`, plan));
+    }
+    if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
       const status = o.verification ?? 'passed';
       if (status !== 'none') {
@@ -413,6 +453,7 @@ export class FakeRunHost implements AgentHost {
         numTurns: 1,
         resultSeen: !crashed,
         ...(crashed ? {} : { isError: false }),
+        ...(o.subagents !== undefined ? { subagentsSpawned: subagentsAdmitted } : {}),
       },
     });
   }

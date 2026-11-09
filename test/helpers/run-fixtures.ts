@@ -12,6 +12,7 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import { runSupervisor } from '../../src/app/run-service.ts';
 import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
+import type { BriefItem } from '../../src/domain/brief.ts';
 import type { DepsOverrides } from '../../src/cli/composition.ts';
 import { FakeAgentHost } from './fake-agent-host.ts';
 import { FakeRunHost } from './fake-run-host.ts';
@@ -359,6 +360,66 @@ export function briefWithAcceptance(...criteria: readonly string[]): string {
 // The standard brief with its target checks replaced.
 export function briefTargeting(...targets: readonly string[]): string {
   return RUN_BRIEF.replace('## Target checks\n- test\n', `## Target checks\n${targets.map((t) => `- ${t}`).join('\n')}\n`);
+}
+
+// ---- briefs with work items (plan 03-11, D-06) ---------------------------------------------------------------------------------------------------
+
+export interface ItemsBriefOptions {
+  // File name under `dir` (default `brief.md`).
+  name?: string;
+  title?: string;
+  // Extra frontmatter lines (`key: value`), after the title and before `items`.
+  front?: readonly string[];
+  // The `## Write` and `## Target checks` bullets (default: the write set of RUN_REPO_FILES and the check `test`).
+  write?: readonly string[];
+  targetChecks?: readonly string[];
+}
+
+// The text of a brief with work items: the frontmatter `items:` JSON array written across lines indented by two spaces (the syntax parseBrief
+// reads), and one acceptance criterion `AC<n>: <criterion>` per entry of `acceptance`, in order. Each criterion is `<text> | verifiedBy: <refs>`.
+export function itemsBriefText(items: readonly BriefItem[], acceptance: readonly string[], extra: ItemsBriefOptions = {}): string {
+  return [
+    '---',
+    `title: ${extra.title ?? 'Slug work in three items'}`,
+    ...(extra.front ?? []),
+    'items: [',
+    ...items.map((item, i) => `  ${JSON.stringify(item)}${i < items.length - 1 ? ',' : ''}`),
+    '  ]',
+    '---',
+    '## Behavior',
+    'A slug never contains two dashes in a row, and the slug rules are covered by tests.',
+    '',
+    '## Acceptance criteria',
+    ...acceptance.map((criterion, i) => `- AC${i + 1}: ${criterion}`),
+    '',
+    '## Write',
+    ...(extra.write ?? ['src/**', 'test/**']).map((glob) => `- ${glob}`),
+    '',
+    '## Target checks',
+    ...(extra.targetChecks ?? ['test']).map((check) => `- ${check}`),
+    '',
+  ].join('\n');
+}
+
+// Three items: A and B depend on nothing, C depends on B; each owns one criterion verified by the check `test`; the write set is the one of
+// RUN_REPO_FILES (src and test).
+export const ITEMS_BRIEF_ITEMS: readonly BriefItem[] = [
+  { id: 'A', title: 'Collapse repeated dashes', dependsOn: [], acceptance: ['AC1'] },
+  { id: 'B', title: 'Trim leading and trailing dashes', dependsOn: [], acceptance: ['AC2'] },
+  { id: 'C', title: 'Cover the slug rules with a test', dependsOn: ['B'], acceptance: ['AC3'] },
+];
+
+export const ITEMS_BRIEF_ACCEPTANCE: readonly string[] = [
+  'Repeated separators collapse to one dash | verifiedBy: check:test',
+  'A slug has no dash at either end | verifiedBy: check:test',
+  'The slug rules have a test | verifiedBy: check:test',
+];
+
+export const ITEMS_BRIEF: string = itemsBriefText(ITEMS_BRIEF_ITEMS, ITEMS_BRIEF_ACCEPTANCE);
+
+// Writes a brief with work items under `dir` and returns its path.
+export function writeItemsBrief(dir: string, items: readonly BriefItem[] = ITEMS_BRIEF_ITEMS, acceptance: readonly string[] = ITEMS_BRIEF_ACCEPTANCE, extra: ItemsBriefOptions = {}): string {
+  return writeBrief(dir, itemsBriefText(items, acceptance, extra), extra.name ?? 'brief.md');
 }
 
 // Rows of the ledger of a profile, read-only.

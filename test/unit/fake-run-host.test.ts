@@ -4,9 +4,12 @@
 // The module is imported as a namespace so a missing export fails one test at a time, not the load of the whole file.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseBrief } from '../../src/domain/brief.ts';
+import type { BriefItem } from '../../src/domain/brief.ts';
 import { computeRunScope } from '../../src/domain/invocation-scope.ts';
 import type { InvocationScope } from '../../src/domain/invocation-scope.ts';
 import type { InvocationRequest } from '../../src/ports/agent-host.ts';
@@ -14,6 +17,19 @@ import { runResumePrompt, runUnitPrompt } from '../../src/app/run-gsd-config.ts'
 import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
 import * as fake from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
+import { makeRoots } from '../helpers/run-cli.ts';
+import {
+  FIXED_SLUG,
+  ITEMS_BRIEF,
+  RUN_CONVENTIONS_WITH_COMMANDS,
+  commitConventions,
+  ledgerRows,
+  makeRunRepo,
+  onboardRunRepo,
+  runInProcess,
+  writeBrief,
+  writeItemsBrief,
+} from '../helpers/run-fixtures.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanup: string[] = [];
@@ -181,5 +197,93 @@ describe('FakeRunHost records a resumed invocation (D-08)', () => {
       calls.push(String(out.value.question));
     }
     assert.deepEqual(calls, ['A first?', 'B first?', 'A second?']);
+  });
+});
+
+describe('FakeRunHost: a missing session (D-08)', () => {
+  it('a resumed call with missingSession ends as the CLI does for an unknown session: exit 1, no result, kind failed, nothing written', async () => {
+    const { req, clone } = bareRequest({ prompt: resumePrompt('B'), resumeSessionId: SESSION });
+    const host = new fake.FakeRunHost({ edits: { 'src/a.ts': 'changed\n' }, resume: { missingSession: true } });
+    const out = await host.invoke(req, new AbortController().signal);
+    assert.ok(out.ok, JSON.stringify(out));
+    assert.equal(out.value.kind, 'failed');
+    assert.equal(out.value.details?.exitCode, 1);
+    assert.equal(out.value.details?.resultSeen, false);
+    assert.equal(out.value.question, undefined);
+    assert.equal(out.value.headBefore, out.value.headAfter);
+    assert.equal(readFileSync(join(clone, 'src/a.ts'), 'utf8'), 'a\n', 'the clone is untouched');
+  });
+
+  it('only a resumed call is affected: a fresh call of the same host ignores it', async () => {
+    const fresh = bareRequest({ prompt: unitPrompt('B') });
+    const host = new fake.FakeRunHost({ summary: false, missingSession: true });
+    const out = await host.invoke(fresh.req, new AbortController().signal);
+    assert.ok(out.ok, JSON.stringify(out));
+    assert.equal(out.value.kind, 'progressed');
+    assert.equal(out.value.details?.exitCode, 0);
+  });
+});
+
+describe('the new options are plain data (the supervisor receives them as JSON)', () => {
+  it('missingSession, subagents and planText survive JSON through perItem and resume, and are selected like any option', () => {
+    const options: FakeRunOptions = {
+      subagents: 2,
+      planText: '# Plan\n\nFiles: src/slug.ts\n',
+      perItem: { B: { question: 'Which?', resume: { missingSession: true, subagents: 1, planText: 'p' } } },
+      resume: { missingSession: false },
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(options)), options);
+    assert.deepEqual(select(options, resumePrompt('B'), 0, SESSION), { subagents: 1, planText: 'p', missingSession: true });
+    assert.deepEqual(select(options, unitPrompt('B'), 0), { subagents: 2, planText: '# Plan\n\nFiles: src/slug.ts\n', question: 'Which?' });
+  });
+});
+
+describe('the items brief fixture', () => {
+  it('ITEMS_BRIEF parses to three items: A and B depend on nothing, C on B, each with one criterion verified by check:test', () => {
+    const parsed = parseBrief(ITEMS_BRIEF, { kind: 'inline', id: 'items-brief' });
+    assert.ok(parsed.ok, JSON.stringify(parsed));
+    const brief = parsed.value;
+    assert.deepEqual(brief.items?.map((item) => [item.id, item.dependsOn, item.acceptance]), [['A', [], ['AC1']], ['B', [], ['AC2']], ['C', ['B'], ['AC3']]]);
+    assert.deepEqual(brief.acceptance.map((criterion) => criterion.verifiedBy), [['check:test'], ['check:test'], ['check:test']]);
+    assert.deepEqual(brief.write, ['src/**', 'test/**']);
+    assert.deepEqual(brief.targetChecks, ['test']);
+  });
+
+  it('writeItemsBrief writes the items across continuation lines, and what it writes parses back to the same items', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'avarice-items-brief-'));
+    cleanup.push(dir);
+    const items: BriefItem[] = [
+      { id: 'A', title: 'first', dependsOn: [], size: 'small', acceptance: ['AC1'], spec: { files: ['src/slug.ts'] } },
+      { id: 'B', title: 'second', dependsOn: ['A'], model: 'opus', acceptance: ['AC2'] },
+    ];
+    const path = writeItemsBrief(dir, items, ['one | verifiedBy: check:test', 'two | verifiedBy: test:slug'], { name: 'two.md', title: 'Two', front: ['expectedDecisions: 2'], write: ['src/**'] });
+    const text = readFileSync(path, 'utf8');
+    assert.match(text, /^items: \[\n {2}\{"id":"A"/m, 'the array continues on lines indented by two spaces');
+    const parsed = parseBrief(text, { kind: 'file', id: path });
+    assert.ok(parsed.ok, JSON.stringify(parsed));
+    assert.deepEqual(parsed.value.items, items);
+    assert.equal(parsed.value.title, 'Two');
+    assert.equal(parsed.value.expectedDecisions, 2);
+    assert.deepEqual(parsed.value.write, ['src/**']);
+  });
+});
+
+// subagents and planText go through the real hook, so they need a ledger: one real run in this process.
+describe('subagents and planText through the real hook (G1, CON-15)', () => {
+  it('each Agent call is charged to subagentsTotal by the hook, and the run goes on to review', async () => {
+    const roots = makeRoots();
+    const repo = makeRunRepo();
+    cleanup.push(roots.base, repo.base);
+    onboardRunRepo(roots, repo);
+    commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
+    const brief = writeBrief(join(roots.base, 'briefs'));
+    const plan = '# Plan\n\nFiles: src/slug.ts\n';
+    const run = await runInProcess(roots, repo, brief, { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed', subagents: 2, planText: plan });
+    assert.equal(run.state, 'ready_for_review', String(run.reason));
+    const charged = ledgerRows<{ used: number }>(roots, "SELECT used FROM budgets WHERE run_id = ? AND name = 'subagentsTotal'", run.runId);
+    assert.equal(charged[0]?.used, 2, 'two Agent calls were charged to subagentsTotal');
+    // The stage archives the unit's quick records as artifacts (D-17): the plan the unit was told to leave is among them, byte for byte.
+    const records = ledgerRows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE run_id = ? AND kind = 'gsd-quick-record'", run.runId).map((row) => row.digest);
+    assert.ok(records.includes(`sha256:${createHash('sha256').update(plan).digest('hex')}`), `the quick PLAN.md of the unit was archived, got ${records.join(', ')}`);
   });
 });
