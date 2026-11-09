@@ -9,7 +9,7 @@ import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
 import { errorLine } from './render/style.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract'] as const;
 export const EXIT_USAGE = 64;
 
 // The terminal the interactive shell (FR-27, ADR-013) reads keys from and draws on. `isTTY` is how a stream says it is a terminal;
@@ -100,7 +100,8 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return composed.code;
   }
   try {
-    return await mod.run(args, composed.value.deps, io);
+    // A command that needs an answer asks through the io; the shell and the tests supply a way to ask, the one-shot CLI reads standard input.
+    return await mod.run(args, composed.value.deps, overrides.ask === undefined ? io : { ...io, ask: overrides.ask });
   } catch (e) {
     io.err(`${errorLine(name, `failed: ${e instanceof Error ? e.message : String(e)}`)}\n`);
     return EXIT_INTERNAL;
