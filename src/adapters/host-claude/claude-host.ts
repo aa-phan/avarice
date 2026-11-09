@@ -255,6 +255,9 @@ export class ClaudeHostAdapter implements AgentHost {
       headBefore: headBefore.value,
       headAfter: headAfter.value,
       transcriptArtifact: stored.value.digest,
+      // The tail of the final result text, as data for the one caller that reads it (a pause question). It goes nowhere else:
+      // not into `details`, an event, a step result or a log line.
+      ...(result?.finalTextTail !== undefined ? { question: result.finalTextTail } : {}),
       details: {
         exitCode: ran.exitCode,
         signal: ran.signal,
