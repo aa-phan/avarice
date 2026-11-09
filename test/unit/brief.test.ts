@@ -223,3 +223,58 @@ describe('parseBrief: empty and encoding edges (FR-1)', () => {
     assert.equal(refusedField(parse('## Behavior\nx\u001b[2Jy\n')), 'brief.text');
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Work items (D-06): `items:` in the frontmatter is one JSON array, possibly continued on lines indented by two spaces.
+// ---------------------------------------------------------------------------------------------------------------------
+const TWO_ITEMS =
+  '[{"id":"A","title":"t1","dependsOn":[],"size":"small","acceptance":["AC1"]},{"id":"B","title":"t2","dependsOn":["A"],"model":"opus","acceptance":["AC2"]}]';
+
+const ITEM_BODY = [
+  '## Behavior',
+  'Do the thing.',
+  '',
+  '## Acceptance criteria',
+  '- AC1: first | verifiedBy: check:test',
+  '- AC2: second | verifiedBy: check:test',
+  '',
+].join('\n');
+
+function itemBrief(items: string, front: string[] = [], body: string = ITEM_BODY): string {
+  return ['---', 'title: Two items', ...front, `items: ${items}`, '---', body].join('\n');
+}
+
+describe('parseBrief: items (D-06 tracer)', () => {
+  it('pins the digest of a brief without items, so a Phase 2 brief keeps its digest', () => {
+    assert.equal(unwrap(parse(FULL)).digest, 'sha256:9ab6ad39face4f9c737569159dfb7eac9429500fa2d7d4ace9ca8f0606e8b6d4');
+    assert.equal(unwrap(parse(FULL)).items, undefined);
+  });
+
+  it('parses a one-line items array to Brief.items with two entries', () => {
+    const brief = unwrap(parse(itemBrief(TWO_ITEMS)));
+    assert.equal(brief.items?.length, 2);
+    assert.deepEqual(brief.items?.[0], { id: 'A', title: 't1', dependsOn: [], size: 'small', acceptance: ['AC1'] });
+    assert.deepEqual(brief.items?.[1], { id: 'B', title: 't2', dependsOn: ['A'], model: 'opus', acceptance: ['AC2'] });
+  });
+
+  it('parses the same items written across lines indented by two spaces identically', () => {
+    const multi = [
+      '---',
+      'title: Two items',
+      'items: [',
+      '  {"id":"A","title":"t1","dependsOn":[],"size":"small","acceptance":["AC1"]},',
+      '  {"id":"B","title":"t2","dependsOn":["A"],"model":"opus","acceptance":["AC2"]}',
+      '  ]',
+      '---',
+      ITEM_BODY,
+    ].join('\n');
+    const one = unwrap(parse(itemBrief(TWO_ITEMS)));
+    const many = unwrap(parse(multi));
+    assert.deepEqual(many.items, one.items);
+    assert.equal(many.digest, one.digest);
+  });
+
+  it('refuses items that are not valid JSON with field brief.items', () => {
+    assert.equal(refusedField(parse(itemBrief('[{"id":'))), 'brief.items');
+  });
+});

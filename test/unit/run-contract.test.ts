@@ -523,3 +523,55 @@ describe('domain purity (NFR-3)', () => {
     assert.equal(a.contract.compiledAt, NOW);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Work items (D-06, D-10): the compiler emits one work item per brief item, each with its own acceptance, size and model.
+// ---------------------------------------------------------------------------------------------------------------------
+export function itemsBrief(items: unknown[], extraAcceptance: string[] = [], front: string[] = []): Brief {
+  const lines = ['---', 'title: Two items', ...front, `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+  lines.push('## Acceptance criteria', '- AC1: first | verifiedBy: check:test', '- AC2: second | verifiedBy: check:test', ...extraAcceptance);
+  lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+  return loadBrief(lines.join('\n'));
+}
+
+export const TWO_ITEM_LIST = [
+  { id: 'A', title: 't1', dependsOn: [], size: 'small', acceptance: ['AC1'] },
+  { id: 'B', title: 't2', dependsOn: ['A'], model: 'opus', acceptance: ['AC2'] },
+];
+
+describe('compileRunContract: a two-item brief compiles to two work items (tracer)', () => {
+  it('gives A (small, haiku from modelBySize) and B (medium derived, opus from the brief), each with its acceptance', () => {
+    const { workItems } = compile({ brief: itemsBrief(TWO_ITEM_LIST) }).intent;
+    assert.deepEqual(workItems.map((w) => w.id), ['A', 'B']);
+    const [a, b] = workItems;
+    assert.equal(a?.size, 'small');
+    assert.equal(a?.model, 'haiku');
+    assert.equal(a?.modelSource, 'modelBySize');
+    assert.deepEqual(a?.acceptance, ['AC1']);
+    assert.deepEqual(a?.dependsOn, []);
+    assert.equal(a?.task, 't1');
+    assert.equal(b?.size, 'medium');
+    assert.ok(b?.spec.derived.includes('size'), 'a defaulted size is named in spec.derived');
+    assert.ok(!a?.spec.derived.includes('size'), 'a given size is not derived');
+    assert.equal(b?.model, 'opus');
+    assert.equal(b?.modelSource, 'brief');
+    assert.deepEqual(b?.dependsOn, ['A']);
+    assert.deepEqual(b?.acceptance, ['AC2']);
+  });
+
+  it('compiles a brief without items to the single item A that carries every criterion', () => {
+    const { workItems } = compile({
+      brief: briefWith({ acceptance: ['- AC1: one | verifiedBy: check:test', '- AC2: two | verifiedBy: check:test'] }),
+    }).intent;
+    assert.equal(workItems.length, 1);
+    assert.equal(workItems[0]?.id, 'A');
+    assert.deepEqual(workItems[0]?.acceptance, ['AC1', 'AC2']);
+    assert.deepEqual(workItems[0]?.dependsOn, []);
+  });
+
+  it('writes contractVersion as a number an amendment can raise', () => {
+    const { contract } = unwrap(compileRunContract(inputFor()));
+    assert.equal(typeof contract.contractVersion, 'number');
+    assert.equal(contract.contractVersion, 1);
+  });
+});

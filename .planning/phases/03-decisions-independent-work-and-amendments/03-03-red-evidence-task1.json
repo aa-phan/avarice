@@ -1,0 +1,10 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/brief.test.ts\" \"test/unit/run-contract.test.ts\"",
+  "exitCode": 1,
+  "output": "# tests 100\n# pass 95\n# fail 5\nnot ok 2 - parses a one-line items array to Brief.items with two entries\n  error: 'expected ok, got {\"kind\":\"invalid\",\"field\":\"brief.frontmatter.items\",\"reason\":\"unknown frontmatter key\"}'\nnot ok 3 - parses the same items written across lines indented by two spaces identically\n  error: 'expected ok, got {\"kind\":\"invalid\",\"field\":\"brief.frontmatter.items\",\"reason\":\"unknown frontmatter key\"}'\nnot ok 4 - refuses items that are not valid JSON with field brief.items\n  expected: 'brief.items'\n  actual: 'brief.frontmatter.items'\nnot ok 1 - gives A (small, haiku from modelBySize) and B (medium derived, opus from the brief), each with its acceptance\n  error: 'expected ok, got {\"kind\":\"invalid\",\"field\":\"brief.frontmatter.items\",\"reason\":\"unknown frontmatter key\"}'\nnot ok 2 - compiles a brief without items to the single item A that carries every criterion\n  (workItems[0].acceptance is undefined: RunWorkItem has no acceptance field yet)\n",
+  "targetTest": "gives A (small, haiku from modelBySize) and B (medium derived, opus from the brief), each with its acceptance",
+  "targetFile": "test/unit/run-contract.test.ts",
+  "expected": "A brief with items: [...] in its frontmatter parses to Brief.items and compiles to two work items with their own acceptance, size, model and modelSource; a brief without items compiles to the single item A carrying every criterion ID",
+  "actual": "items is not a frontmatter key, so the parser refuses brief.frontmatter.items (unknown frontmatter key); the single item A has no acceptance field",
+  "semanticAssessment": "The five failures are assertion failures over missing behaviour (unknown frontmatter key, missing RunWorkItem.acceptance), never load or syntax errors; the existing 95 tests, including the pinned no-items digest test, pass before the change. Target test: the two-item compile case."
+}
