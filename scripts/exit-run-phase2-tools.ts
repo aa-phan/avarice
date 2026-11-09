@@ -627,7 +627,7 @@ export function snapshot(repo: string): Json {
 // What "the checkout is unchanged" compares: the checkout digest (refs outside the run refs included), the index entries and the symbolic HEAD.
 // `counts.refsAllowed` is how many run refs exist: it changes by one per handed-off run and is judged on its own (newRefs), not here.
 // Recomputed from the parts by `evidence`, so a snapshot file cannot carry a stale rule.
-function compositeOf(snap: Json): string {
+export function compositeOf(snap: Json): string {
   const digest = isObject(snap['digest']) ? snap['digest'] : {};
   const counts = isObject(digest['counts']) ? { ...digest['counts'] } : {};
   delete counts['refsAllowed'];
