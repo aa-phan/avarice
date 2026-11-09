@@ -6,7 +6,6 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { runSupervisor } from '../../src/app/run-service.ts';
 import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
@@ -19,12 +18,10 @@ import { FakeRunHost } from '../helpers/fake-run-host.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { TEST_CLI, runHostEnv, runIdFromOutput } from '../helpers/fault-run.ts';
 import { attemptsOfRun, itemStatesOf, runRowOf, s17Fixture, s17Host } from '../helpers/independent-work.ts';
-import { makeRoots, runCli } from '../helpers/run-cli.ts';
-import type { CliRoots } from '../helpers/run-cli.ts';
-import { FIXED_SLUG, RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
-import type { ScratchRepo } from '../helpers/scratch-repo.ts';
+import { runCli } from '../helpers/run-cli.ts';
+import { FIXED_SLUG, ledgerRows, profileEnv } from '../helpers/run-fixtures.ts';
 import { waitFor } from '../helpers/shell-streams.ts';
-import { cancelCli, checkoutState, cloneKept, eventsOf, rowsSnapshot, startBlockedS17 } from '../helpers/cancel-cli.ts';
+import { cancelCli, checkoutState, cloneKept, eventsOf, rowsSnapshot, singleFixture, startBlockedS17 } from '../helpers/cancel-cli.ts';
 
 const cleanup: string[] = [];
 after(() => {
@@ -150,28 +147,12 @@ describe('cancel refuses outside a person at a terminal, and writes nothing (CS-
 
 // ---- a supervisor holds the lease (plan 03-24, Task 2) -----------------------------------------------------------------------------------------------------
 
-interface Single {
-  roots: CliRoots;
-  repo: ScratchRepo;
-  brief: string;
-}
-
-// An onboarded repository with the conventions committed and the one-item brief written.
-function singleFixture(): Single {
-  const roots = makeRoots();
-  const repo = makeRunRepo();
-  cleanup.push(roots.base, repo.base);
-  onboardRunRepo(roots, repo);
-  commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
-  return { roots, repo, brief: writeBrief(join(roots.base, 'briefs')) };
-}
-
 const sessionAlive = (sessionId: string): boolean => execFileSync('ps', ['-axo', 'command'], { encoding: 'utf8' }).split('\n').some((line) => line.includes(sessionId) && !line.includes('ps -axo'));
 
 const HANG: FakeRunOptions = { edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed', hangUntilAbort: { maxMs: 40_000 } };
 
 describe('cancel with a live supervisor in the middle of a unit: the unit is aborted, ended cancelled and never retried (AUT-12)', () => {
-  const s = singleFixture();
+  const s = singleFixture(cleanup);
   let runId = '';
   let sessionId = '';
   let ran: Awaited<ReturnType<typeof cancelCli>>;
@@ -272,7 +253,7 @@ describe('cancel between items and at the start of a supervisor: no further unit
   });
 
   it('a supervisor that starts on a run with a request standing cancels it at entry: no stage runs and no unit launches', async () => {
-    const f = singleFixture();
+    const f = singleFixture(cleanup);
     const host = new FakeRunHost({ edits: { 'src/slug.ts': FIXED_SLUG }, summary: true, verification: 'passed' });
     const composed = createDeps(profileEnv(f.roots), { host });
     assert.ok(composed.ok, 'composition');

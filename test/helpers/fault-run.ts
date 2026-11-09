@@ -1,7 +1,7 @@
 // Helpers for the kill-point and lease suites: run the test CLI (production main() with the fake host) to
 // completion, kill it at a named point, resume it, and normalize a project record for comparison. Every
 // profile lives under a temp dir (makeRoots); nothing here touches the user's profile or a real model.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { REPO_ROOT, makeRoots } from './run-cli.ts';
@@ -249,6 +249,44 @@ export type ParkKillPoint = (typeof PARK_KILL_POINTS)[number];
 // before the host is launched (`mid-unpark`), and inside the resumed unit (`mid-invocation:run`, with the host process of the resumed session left behind).
 export const RESUME_KILL_POINTS = ['after-checkpoint:unpark', 'mid-unpark', 'mid-invocation:run'] as const;
 export type ResumeKillPoint = (typeof RESUME_KILL_POINTS)[number];
+
+// The kill points of a cancel (plan 03-24; AUT-12), reached only by a run that is cancelled (test/fault/run-cancel.test.ts), so the single-item reference of the kill
+// suite never reaches them and they are not in RUN_KILL_POINTS: right after the owner's request is committed (before the supervisor aborts anything, or before
+// `cancel` takes the lease), and after the open decisions are withdrawn and before the run moves to cancelled.
+export const CANCEL_KILL_POINTS = ['after-cancel-request', 'mid-cancel'] as const;
+export type CancelKillPoint = (typeof CANCEL_KILL_POINTS)[number];
+
+const PTY_DRIVE = join(REPO_ROOT, 'test', 'helpers', 'pty-drive.py');
+
+export interface TerminalRun {
+  // The exit status of the command, as pty-drive.py reports it (a command killed by a signal exits with 256 minus the signal number).
+  code: number | null;
+  output: string;
+}
+
+// Runs the test CLI on a real pseudo-terminal, as a person at a shell would: a command that needs a terminal (`cancel`) is armed with a fault point and
+// killed there by its own SIGKILL, which no injected stream can show. Returns null when python3 is missing, so the caller can skip with a reason.
+export function runOnTerminal(roots: CliRoots, argv: readonly string[], env: Record<string, string | undefined> = {}, timeoutMs = 120_000): TerminalRun | null {
+  const childEnv: Record<string, string | undefined> = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
+    TERM: 'xterm-256color',
+    ...env,
+  };
+  delete childEnv['NODE_TEST_CONTEXT'];
+  delete childEnv['NO_COLOR'];
+  delete childEnv['AVARICE_RUN'];
+  const result = spawnSync('python3', ['-I', PTY_DRIVE, '24', '80', process.execPath, '--disable-warning=ExperimentalWarning', TEST_CLI, ...argv], {
+    encoding: 'utf8',
+    env: childEnv as NodeJS.ProcessEnv,
+    timeout: timeoutMs,
+  });
+  if (result.error !== undefined && (result.error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+  return { code: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+}
 
 export function runHostEnv(host: FakeRunOptions, extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return { AVARICE_FAKE_HOST: JSON.stringify({ run: host }), AVARICE_LEASE_TTL_MS: String(RUN_LEASE_TTL_MS), ...extra };

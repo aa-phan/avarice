@@ -10,10 +10,12 @@ import type { MainOverrides } from '../../src/cli/main.ts';
 import { ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { checkoutDigest, RUN_REF_PATTERN } from '../../scripts/checkout-digest.ts';
-import { runCli } from './run-cli.ts';
+import { join } from 'node:path';
+import { makeRoots, runCli } from './run-cli.ts';
 import type { CliRoots } from './run-cli.ts';
 import { TEST_CLI } from './fault-run.ts';
-import { ledgerRows, profileEnv } from './run-fixtures.ts';
+import { RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeBrief } from './run-fixtures.ts';
+import type { ScratchRepo } from './scratch-repo.ts';
 import { runIdOfOutput, runRowOf, s17Fixture, s17Host } from './independent-work.ts';
 import type { S17Fixture } from './independent-work.ts';
 import { fakeTerminal } from './shell-streams.ts';
@@ -51,6 +53,22 @@ export async function cancelCli(roots: CliRoots, argv: readonly string[], option
     ancestry: options.ancestry ?? CALM_CHAIN,
   });
   return { code, out: out.join(''), err: err.join('') };
+}
+
+export interface SingleFixture {
+  roots: CliRoots;
+  repo: ScratchRepo;
+  brief: string;
+}
+
+// An onboarded repository with the conventions committed and the one-item brief written; `cleanup` collects the directories to remove.
+export function singleFixture(cleanup: string[]): SingleFixture {
+  const roots = makeRoots();
+  const repo = makeRunRepo();
+  cleanup.push(roots.base, repo.base);
+  onboardRunRepo(roots, repo);
+  commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
+  return { roots, repo, brief: writeBrief(join(roots.base, 'briefs')) };
 }
 
 export interface StartedBlocked {
