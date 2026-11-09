@@ -37,3 +37,4 @@
 {"plan":"03-39","case":"cs5","costUsd":0.131836085,"claudeVersion":"2.1.319","at":"2026-11-09T22:17:49.256Z"}
 {"plan":"03-39","case":"s52","costUsd":0.16396206500000002,"claudeVersion":"2.1.319","at":"2026-11-09T22:28:40.414Z"}
 {"plan":"03-39","case":"s17-s51","costUsd":2.5604579849999993,"claudeVersion":"2.1.319","at":"2026-11-09T22:42:00.923Z"}
+{"plan":"03-29","case":"exit-p3-run1-copy-fallback-run_01M71BDV8MWGEG7XSAWH1GZ80W-start","costUsd":0.14304393999999998,"claudeVersion":"2.1.319","at":"2026-11-09T23:54:26.785Z"}
