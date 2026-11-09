@@ -149,6 +149,23 @@ describe("the proxy's resolver seam stays out of production", () => {
   });
 });
 
+// AUT-4: a decision is answered, re-opened or withdrawn by a person, never because time passed. The ledger calls that move a decision (the `answerDecision`,
+// `reopenStaleDecision` and `withdrawDecision` of the port) are made by `decide`, which runs only from a terminal outside the run, and by nothing else in the
+// source: no supervisor stage, timer or notification retry can reach them (plan 03-20). A later plan that adds a caller (cancel withdraws the decisions of a
+// cancelled run) names itself here.
+describe('only the decide service answers a decision (AUT-4)', () => {
+  it('no production file other than the ledger and the decide service calls the three calls that move a decision', () => {
+    const ledgerFiles = [join(REPO_ROOT, 'src', 'ports', 'ledger.ts'), join(REPO_ROOT, 'src', 'adapters', 'sqlite', 'ledger.ts')];
+    const callers = sourceFiles(join(REPO_ROOT, 'src'))
+      .filter((f) => !ledgerFiles.includes(f))
+      .filter((f) => /\.(?:answerDecision|reopenStaleDecision|withdrawDecision)\s*\(/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(
+      callers.map((f) => basename(f)),
+      ['decide.ts'],
+    );
+  });
+});
+
 // `contract amend` refuses a caller whose process tree holds a run's supervisor. The reader of that tree is an override of main() so a test can
 // supply a chain; a production path that passed or read the override could make the refusal look at a chain someone chose (plan 03-15, T-03-27).
 describe('the ancestry seam stays out of production', () => {
