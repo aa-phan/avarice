@@ -575,3 +575,90 @@ describe('compileRunContract: a two-item brief compiles to two work items (trace
     assert.equal(contract.contractVersion, 1);
   });
 });
+
+describe('compileRunContract: spec files stay inside the run write set (RC-7, T-03-05)', () => {
+  const specItems = (a: unknown, b: unknown): unknown[] => [
+    { id: 'A', title: 't1', dependsOn: [], acceptance: ['AC1'], ...(a as object) },
+    { id: 'B', title: 't2', dependsOn: [], acceptance: ['AC2'], ...(b as object) },
+  ];
+
+  it('accepts two items whose explicit spec files overlap', () => {
+    const { workItems } = compile({
+      brief: itemsBrief(specItems({ spec: { files: ['src/lib/copy.ts', 'src/shared/**'] } }, { spec: { files: ['src/shared/**'] } })),
+    }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/lib/copy.ts', 'src/shared/**']);
+    assert.deepEqual(workItems[1]?.spec.files, ['src/shared/**']);
+    assert.ok(!workItems[0]?.spec.derived.includes('files'), 'an explicit field is not derived');
+    assert.ok(workItems[0]?.spec.derived.includes('symbols'));
+  });
+
+  it('refuses src-evil/** under src/** and a glob outside the write set with field brief.items[n].spec.files', () => {
+    for (const glob of ['src-evil/**', 'src-evil/x.ts', 'srcx', 'docs/readme.md', '**']) {
+      const r = refusal({ brief: itemsBrief(specItems({}, { spec: { files: [glob] } })) });
+      assert.equal(r.field, 'brief.items[1].spec.files', glob);
+    }
+  });
+
+  it('refuses a spec file on a protected path with field brief.items[n].spec.files', () => {
+    const custom = conventionsWith({ paths: { write: ['src/**'], protected: ['src/generated/**'], artifacts: [] } });
+    const r = refusal({ conventions: custom, brief: itemsBrief(specItems({ spec: { files: ['src/generated/api.ts'] } }, {})) });
+    assert.equal(r.field, 'brief.items[0].spec.files');
+    assert.match(r.reason, /protected/);
+  });
+
+  it('refuses an item whose explicit spec.files is empty before it reaches the compiler (an item must be allowed to write something)', () => {
+    const parsed = parseBrief(
+      ['---', 'title: x', `items: ${JSON.stringify(specItems({ spec: { files: [] } }, {}))}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: a | verifiedBy: check:test', '- AC2: b | verifiedBy: check:test', ''].join('\n'),
+      { kind: 'file', id: 'b.md' },
+    );
+    assert.equal(parsed.ok, false);
+    if (!parsed.ok) assert.equal((parsed.error as { field: string }).field, 'brief.items[0].spec.files');
+  });
+
+  it('keeps work items in declaration order, so the same brief gives the same digest', () => {
+    const items = specItems({}, {});
+    const a = unwrap(compileRunContract(inputFor({ brief: itemsBrief(items) })));
+    const b = unwrap(compileRunContract(inputFor({ brief: itemsBrief(items) })));
+    assert.equal(a.digest, b.digest);
+    assert.deepEqual(a.contract.intent.workItems.map((w) => w.id), ['A', 'B']);
+    const reversed = unwrap(compileRunContract(inputFor({ brief: itemsBrief([...items].reverse()) })));
+    assert.deepEqual(reversed.contract.intent.workItems.map((w) => w.id), ['B', 'A']);
+  });
+
+  it('records modelSource brief when an explicit model equals the size map value, and haiku/sonnet/opus from the size otherwise', () => {
+    const { workItems } = compile({
+      brief: itemsBrief(specItems({ model: 'sonnet' }, { size: 'large' })),
+    }).intent;
+    assert.equal(workItems[0]?.model, 'sonnet');
+    assert.equal(workItems[0]?.modelSource, 'brief');
+    assert.equal(workItems[0]?.size, 'medium');
+    assert.equal(workItems[1]?.model, 'opus');
+    assert.equal(workItems[1]?.modelSource, 'modelBySize');
+    assert.ok(!workItems[1]?.spec.derived.includes('size'));
+  });
+});
+
+describe('checkG0Static: a decision: reference never stands alone (D-02)', () => {
+  it('refuses a criterion whose only references are decision: forms, naming the criterion', () => {
+    const r = refusal({ brief: briefWith({ acceptance: ['- AC1: copy is the owner\'s choice | verifiedBy: decision:fallback-wording'] }) });
+    assert.equal(r.field, 'g0');
+    assert.match(r.reason, /acceptance-verified-by/);
+    assert.match(r.reason, /AC1 needs a check, test or diff reference beside decision:/);
+  });
+
+  it('accepts decision: beside a check, test or diff reference', () => {
+    const brief = briefWith({ acceptance: ['- AC1: copy | verifiedBy: decision:fallback-wording, check:test'] });
+    assert.deepEqual(checkG0Static(compile({ brief })), []);
+    const diff = briefWith({ acceptance: ['- AC1: copy | verifiedBy: decision:fallback-wording, diff:src/a.ts unchanged'], targets: [] });
+    assert.deepEqual(checkG0Static(compile({ brief: diff })), []);
+  });
+
+  it('flags the criterion from checkG0Static directly', () => {
+    const contract = compile();
+    const only: RunContract = { ...contract, intent: { ...contract.intent, acceptance: [{ id: 'AC9', text: 'x', verifiedBy: ['decision:k'] }] } };
+    const failures = checkG0Static(only);
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0]?.rule, 'acceptance-verified-by');
+    assert.match(failures[0]?.detail ?? '', /AC9 needs a check, test or diff reference beside decision:/);
+  });
+});

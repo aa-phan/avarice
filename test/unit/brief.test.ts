@@ -278,3 +278,161 @@ describe('parseBrief: items (D-06 tracer)', () => {
     assert.equal(refusedField(parse(itemBrief('[{"id":'))), 'brief.items');
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Item validation, field by field.
+// ---------------------------------------------------------------------------------------------------------------------
+const ONE_AC_BODY = '## Behavior\nDo the thing.\n\n## Acceptance criteria\n- AC1: first | verifiedBy: check:test\n';
+
+function item(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return { id: 'A', title: 't', dependsOn: [], acceptance: ['AC1'], ...over };
+}
+
+function second(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return { id: 'B', title: 'u', dependsOn: [], acceptance: ['AC2'], ...over };
+}
+
+function itemsField(items: unknown, front: string[] = [], body: string = ONE_AC_BODY): string {
+  return refusedField(parse(itemBrief(JSON.stringify(items), front, body)));
+}
+
+function itemsReason(items: unknown, body: string = ONE_AC_BODY): string {
+  const r = parse(itemBrief(JSON.stringify(items), [], body));
+  assert.equal(r.ok, false);
+  if (r.ok) throw new Error('unreachable');
+  return (r.error as { reason: string }).reason;
+}
+
+describe('parseBrief: item validation (D-06)', () => {
+  it('accepts one valid item and a brief with two items that own all criteria', () => {
+    assert.equal(unwrap(parse(itemBrief(JSON.stringify([item()]), [], ONE_AC_BODY))).items?.length, 1);
+    unwrap(parse(itemBrief(JSON.stringify([item(), second({ dependsOn: ['A'] })]))));
+  });
+
+  it('refuses items that are not an array, or an empty array, with field brief.items', () => {
+    for (const raw of ['{}', '"x"', 'null', '5', '[]']) {
+      assert.equal(refusedField(parse(itemBrief(raw, [], ONE_AC_BODY))), 'brief.items', raw);
+    }
+  });
+
+  it('refuses more than 20 items with field brief.items, and accepts 20', () => {
+    const ac = (n: number): string => Array.from({ length: n }, (_, i) => `- AC${i + 1}: c${i + 1} | verifiedBy: check:test`).join('\n');
+    const body = `## Behavior\nx\n\n## Acceptance criteria\n${ac(20)}\n`;
+    const make = (n: number): unknown[] => Array.from({ length: n }, (_, i) => item({ id: `I${i}`, acceptance: [`AC${(i % 20) + 1}`] }));
+    assert.equal(itemsField(make(21), [], body), 'brief.items');
+    assert.equal(unwrap(parse(itemBrief(JSON.stringify(make(20)), [], body))).items?.length, 20);
+  });
+
+  it('refuses an item that is not an object with field brief.items[n]', () => {
+    assert.equal(itemsField([item(), 'B'], [], ITEM_BODY), 'brief.items[1]');
+    assert.equal(itemsField([null], [], ONE_AC_BODY), 'brief.items[0]');
+    assert.equal(itemsField([[]], [], ONE_AC_BODY), 'brief.items[0]');
+  });
+
+  it('refuses an id outside ^[A-Z][A-Za-z0-9_-]{0,31}$ or a repeated id with field brief.items[n].id', () => {
+    for (const id of ['a', '1A', 'A B', 'A'.repeat(33), '', 'A/B', 5, null]) {
+      assert.equal(itemsField([item({ id })]), 'brief.items[0].id', String(id));
+    }
+    assert.equal(itemsField([item(), second({ id: 'A' })], [], ITEM_BODY), 'brief.items[1].id');
+    for (const id of ['A_1-b', `A${'z'.repeat(31)}`]) unwrap(parse(itemBrief(JSON.stringify([item({ id })]), [], ONE_AC_BODY)));
+  });
+
+  it('refuses a title that is empty, over 200 characters, holds a control character or is not text with field brief.items[n].title', () => {
+    for (const title of ['', 'x'.repeat(201), 'bad\u0007title', 5, undefined]) {
+      assert.equal(itemsField([item({ title })]), 'brief.items[0].title', String(title));
+    }
+    unwrap(parse(itemBrief(JSON.stringify([item({ title: 'x'.repeat(200) })]), [], ONE_AC_BODY)));
+  });
+
+  it('refuses dependsOn that is not an array, names an unknown id or itself, with field brief.items[n].dependsOn', () => {
+    assert.equal(itemsField([item({ dependsOn: 'B' })]), 'brief.items[0].dependsOn');
+    assert.equal(itemsField([item({ dependsOn: undefined })]), 'brief.items[0].dependsOn');
+    assert.equal(itemsField([item({ dependsOn: [5] })]), 'brief.items[0].dependsOn');
+    assert.equal(itemsField([item({ dependsOn: ['Z'] })]), 'brief.items[0].dependsOn');
+    assert.equal(itemsField([item({ dependsOn: ['A'] })]), 'brief.items[0].dependsOn');
+    assert.equal(itemsField([item(), second({ dependsOn: ['A', 'A'] })], [], ITEM_BODY), 'brief.items[1].dependsOn');
+  });
+
+  it('refuses a dependency cycle with field brief.items[n].dependsOn and lists the cycle', () => {
+    const two = [item({ dependsOn: ['B'] }), second({ dependsOn: ['A'] })];
+    assert.equal(itemsField(two, [], ITEM_BODY), 'brief.items[0].dependsOn');
+    assert.match(itemsReason(two, ITEM_BODY), /A -> B -> A/);
+    const body3 = `${ITEM_BODY}- AC3: third | verifiedBy: check:test\n`;
+    const three = [item({ dependsOn: ['C'] }), second({ dependsOn: ['A'] }), { id: 'C', title: 'v', dependsOn: ['B'], acceptance: ['AC3'] }];
+    assert.equal(itemsField(three, [], body3), 'brief.items[0].dependsOn');
+    assert.match(itemsReason(three, body3), /A -> C -> B -> A/);
+    unwrap(parse(itemBrief(JSON.stringify([item(), second({ dependsOn: ['A'] }), { id: 'C', title: 'v', dependsOn: ['A', 'B'], acceptance: ['AC3'] }]), [], body3)));
+  });
+
+  it('refuses a size or model outside the enums with fields brief.items[n].size and brief.items[n].model', () => {
+    for (const size of ['xl', 'Medium', '', 5]) assert.equal(itemsField([item({ size })]), 'brief.items[0].size', String(size));
+    for (const model of ['gpt-5', 'Sonnet', '', 5]) assert.equal(itemsField([item({ model })]), 'brief.items[0].model', String(model));
+    for (const size of ['small', 'medium', 'large']) unwrap(parse(itemBrief(JSON.stringify([item({ size })]), [], ONE_AC_BODY)));
+    for (const model of ['haiku', 'sonnet', 'opus']) unwrap(parse(itemBrief(JSON.stringify([item({ model })]), [], ONE_AC_BODY)));
+  });
+
+  it('refuses empty acceptance or an unknown criterion with field brief.items[n].acceptance', () => {
+    assert.equal(itemsField([item({ acceptance: [] })]), 'brief.items[0].acceptance');
+    assert.equal(itemsField([item({ acceptance: 'AC1' })]), 'brief.items[0].acceptance');
+    assert.equal(itemsField([item({ acceptance: ['AC9'] })]), 'brief.items[0].acceptance');
+    assert.equal(itemsField([item({ acceptance: [1] })]), 'brief.items[0].acceptance');
+    assert.equal(itemsField([item({ acceptance: ['AC1', 'AC1'] })]), 'brief.items[0].acceptance');
+  });
+
+  it('refuses a criterion that two items own, or that no item owns, with field brief.items', () => {
+    assert.equal(itemsField([item(), second({ acceptance: ['AC1'] })], [], ITEM_BODY), 'brief.items');
+    assert.match(itemsReason([item(), second({ acceptance: ['AC1'] })], ITEM_BODY), /AC1/);
+    assert.equal(itemsField([item()], [], ITEM_BODY), 'brief.items');
+    assert.match(itemsReason([item()], ITEM_BODY), /AC2/);
+  });
+
+  it('refuses an unknown item key or spec key with field brief.items[n].<key>', () => {
+    assert.equal(itemsField([item({ cost: 5 })]), 'brief.items[0].cost');
+    assert.equal(itemsField([item({ budget: {} })]), 'brief.items[0].budget');
+    assert.equal(itemsField([item({ spec: { writes: ['x'] } })]), 'brief.items[0].spec.writes');
+    assert.equal(itemsField([item({ spec: 'x' })]), 'brief.items[0].spec');
+    assert.equal(itemsField([item({ spec: [] })]), 'brief.items[0].spec');
+  });
+
+  it('refuses spec.files that is empty, not an array, or holds an unsafe glob with field brief.items[n].spec.files', () => {
+    assert.equal(itemsField([item({ spec: { files: [] } })]), 'brief.items[0].spec.files');
+    assert.equal(itemsField([item({ spec: { files: 'src/a.ts' } })]), 'brief.items[0].spec.files');
+    for (const glob of ['/etc/passwd', '../x', 'a\\b', '~/x', 'src//x', 5]) {
+      assert.equal(itemsField([item({ spec: { files: [glob] } })]), 'brief.items[0].spec.files', String(glob));
+    }
+  });
+
+  it('keeps explicit spec lists as given, and refuses a malformed symbol, config key or reference list', () => {
+    const spec = { files: ['src/a.ts', 'src/b/**'], symbols: ['copyText'], configKeys: ['budget.costUsd'], references: ['docs/a.md'] };
+    assert.deepEqual(unwrap(parse(itemBrief(JSON.stringify([item({ spec })]), [], ONE_AC_BODY))).items?.[0]?.spec, spec);
+    for (const key of ['symbols', 'configKeys', 'references']) {
+      assert.equal(itemsField([item({ spec: { [key]: 'x' } })]), `brief.items[0].spec.${key}`, key);
+      assert.equal(itemsField([item({ spec: { [key]: [''] } })]), `brief.items[0].spec.${key}`, key);
+      assert.equal(itemsField([item({ spec: { [key]: [5] } })]), `brief.items[0].spec.${key}`, key);
+    }
+  });
+
+  it('refuses a top-level size or model beside items with fields brief.size and brief.model', () => {
+    assert.equal(itemsField([item()], ['size: small']), 'brief.size');
+    assert.equal(itemsField([item()], ['model: haiku']), 'brief.model');
+    const r = parse(itemBrief(JSON.stringify([item()]), ['size: small'], ONE_AC_BODY));
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match((r.error as { reason: string }).reason, /put size and model on each item/);
+  });
+});
+
+describe('parseBrief: the decision: verifiedBy form (D-02)', () => {
+  const ac = (refs: string): string => `## Behavior\nx\n## Acceptance criteria\n- AC3: copy is the owner's choice | verifiedBy: ${refs}\n`;
+
+  it('parses decision:<key> beside a check', () => {
+    const brief = unwrap(parse(ac('decision:fallback-wording, check:test')));
+    assert.deepEqual(brief.acceptance[0]?.verifiedBy, ['decision:fallback-wording', 'check:test']);
+  });
+
+  it('refuses a decision key outside ^[a-z][a-z0-9-]{0,39}$ with field brief.acceptance.verifiedBy', () => {
+    for (const key of ['', 'Upper', '1abc', 'a_b', 'a'.repeat(41), 'a b']) {
+      assert.equal(refusedField(parse(ac(`decision:${key}`))), 'brief.acceptance.verifiedBy', key);
+    }
+    unwrap(parse(ac(`decision:${'a'.repeat(40)}`)));
+  });
+});

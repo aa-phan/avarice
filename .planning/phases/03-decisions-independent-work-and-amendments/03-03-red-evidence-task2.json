@@ -1,0 +1,10 @@
+{
+  "command": "node --test --test-reporter=tap \"test/unit/brief.test.ts\" \"test/unit/run-contract.test.ts\" \"test/unit/conventions.test.ts\"",
+  "exitCode": 1,
+  "output": "# tests 150\n# pass 127\n# fail 23\nnot ok 5 - parseBrief: item validation (D-06)\n    not ok 2 - refuses items that are not an array, or an empty array, with field brief.items\n    not ok 5 - refuses an id outside ^[A-Z][A-Za-z0-9_-]{0,31}$ or a repeated id with field brief.items[n].id\n    not ok 8 - refuses a dependency cycle with field brief.items[n].dependsOn and lists the cycle\n    not ok 11 - refuses a criterion that two items own, or that no item owns, with field brief.items\n    not ok 13 - refuses spec.files that is empty, not an array, or holds an unsafe glob with field brief.items[n].spec.files\n    not ok 15 - refuses a top-level size or model beside items with fields brief.size and brief.model\nnot ok 6 - parseBrief: the decision: verifiedBy form (D-02)\nnot ok 23 - compileRunContract: spec files stay inside the run write set (RC-7, T-03-05)\nnot ok 24 - checkG0Static: a decision: reference never stands alone (D-02)\n",
+  "targetTest": "refuses a dependency cycle with field brief.items[n].dependsOn and lists the cycle",
+  "targetFile": "test/unit/brief.test.ts",
+  "expected": "Every item rule is refused with its field path (brief.items, brief.items[n].id, .title, .dependsOn with the cycle listed, .size, .model, .acceptance, .<key>, .spec.files); decision:<key> parses as a verifiedBy form; G0 fails a criterion with only decision: references; compile refuses spec.files outside the write set or on a protected path",
+  "actual": "The tracer parser accepts any array of objects as items and VERIFIED_BY has no decision: form, so every refusal test fails on an assertion (ok result where a refusal is expected) and the compiler keeps the write set for every spec",
+  "semanticAssessment": "All 23 failures are assertion failures over missing validation, never load or syntax errors; the 127 tests that passed before the change still pass. Target test: the cycle case, whose parse returns ok with the cyclic items."
+}
