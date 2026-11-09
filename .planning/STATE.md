@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-11-09T03:09:24.625Z"
+stopped_at: Completed 03-11-PLAN.md
+last_updated: "2026-11-09T03:20:58.382Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 59762b26f17e9e10022d6a4b81ef67e028530438
+state_head: 615f264eabcb12a7c4c6c9832f49993cfad9ff02
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 70
+  completed_plans: 71
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 10 of 33
+Plan: 11 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -126,6 +126,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P08 | 45 min | 3 tasks | 12 files |
 | Phase 03 P09 | 41 min | 2 tasks | 5 files |
 | Phase 03 P03 | 31 min | 3 tasks | 11 files |
+| Phase 03 P11 | 35 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -272,6 +273,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-08: a resumed session wins over a caller-chosen sessionId, so the launch line never carries both --resume and --session-id — The CLI refuses both together; the resume must keep every containment flag
 - [Phase 03]: 03-08: the final result text tail (last 2000 stripped characters) is returned only as InvocationOutcome.question, never in an event, step result or detail — AVARICE needs the pause question as data; model text must stay out of the ledger and logs
 - [Phase 03]: 03-09: unpark keeps the park ref; the caller drops it once the item resumed or committed; re-park of the same content returns the same record, a different delta under the ref is a conflict
+- [Phase 03]: Fake run host: perAttempt counts fresh calls per item, a resumed call plays base + perItem.<ID>.resume (else resume), missingSession affects only a resumed call, and the outcome session is resumeSessionId, else sessionId, else a made-up one
 
 ### Pending Todos
 
@@ -324,6 +326,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T03:09:24.474Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-11-09T03:20:58.228Z
+Stopped at: Completed 03-11-PLAN.md
 Resume file: None
