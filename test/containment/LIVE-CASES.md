@@ -178,8 +178,18 @@ The total live-model spend of Phase 3 may not pass **25 USD** (owner decision D-
 | Plan | Date | Host version | Cases | Cost (USD) | Cumulative (USD) |
 |---|---|---|---|---|---|
 | 03-01 | 2026-11-08 | 2.1.319 | Admission of 2.1.319: the 22 live onboarding T3 tests (19 started a host) plus the re-run of case 06a: 20 ledger lines | 0.1515 | 0.1515 |
+| 03-13 | 2026-11-09 | 2.1.319 | Spike S3-A, Sonnet: `round-1` pause (0.0617), `round-1-resume` (0.8795) and `missing-session` twice (0 each): 4 ledger lines | 0.9412 | 1.0927 |
 
-The cumulative total equals the sum of `costUsd` over the ledger (20 lines, 0.1515 to four decimals, 0.15 to two).
+The cumulative total equals the sum of `costUsd` over the ledger (24 lines, 1.0927 to four decimals, 1.09 to two; 20 lines and 0.1515 before plan 03-13). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; after it 23.9073 USD remain under the ceiling.
+
+### Spike S3-A on Claude Code 2.1.319 (2026-11-09, plan 03-13)
+
+Suite `test/containment/spike-pause-resume.test.ts` (`round-1 pause`, `round-1 resume`, `missing-session`, and the `round-2` pair that runs only when round 1 shows a silent pick; all skipped unless `AVARICE_LIVE=1`), the real `ClaudeHostAdapter` with purpose `run` on a generated scratch GSD project, model `sonnet`. Round 1 (the only round): the unit for the planted-choice item asked a numbered-choice question before any tool call and changed nothing (0.0617 USD); its session resumed with `--resume` under the same containment flags and a fresh 1.50 USD cap, finished the item, wrote a PLAN citing the item's acceptance ID and a SUMMARY, with 6 hook denials of improvised shell lines (0.8795 USD); a resume of an unknown session ended with a result event (`error_during_execution`, 0 turns, 0 cost, exit 1), not without one. Verdicts `A2: confirmed`, `A3: confirmed`, `A10: confirmed`, and for A4 the PLAN cited AC2 and `PLAN_CITES_ACCEPTANCE_HARD` stays false (one sample). Record: `spikes/phase-3-wave-0/S3-A-pause-resume.md`; results `live-run-phase3-spike.jsonl`.
+
+```bash
+AVARICE_LIVE=1 AVARICE_PHASE3_PLAN=03-13 AVARICE_LIVE_RESULTS=test/containment/live-run-phase3-spike.jsonl \
+  node --test --test-name-pattern="round-1|missing-session" test/containment/spike-pause-resume.test.ts
+```
 
 ## Run purpose (Phase 2, plan 02-20)
 

@@ -218,7 +218,8 @@ function normalizePlanPath(path: string): string {
 
 // G1, in the rule order of G1_RULES. The plan is model-written text: it can fail this gate and never pass it, and a plan that is absent
 // fails closed. Every list is sorted before it is judged, so input order never changes the verdict.
-// plan-cites-acceptance starts as an advisory; spike S3-A (plan 03-13) flips it once a live quick PLAN cites contract acceptance IDs.
+// plan-cites-acceptance is an advisory. Spike S3-A (plan 03-13) measured one live quick PLAN, written after a resume, that cites its item's
+// acceptance ID, and left this false: the plan's rule asks for two rounds. Set it true once a second live PLAN cites its item's IDs.
 export const PLAN_CITES_ACCEPTANCE_HARD = false;
 
 export interface G1Options {
