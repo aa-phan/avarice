@@ -941,6 +941,46 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
     assert.equal(none.value.details?.isError, undefined);
   });
 
+  it('launches a resume as --resume <id> under every containment flag, and reports the resumed session', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const resumed = randomUUID();
+    const launched = await s.adapter.invoke(requestFor(s, { resumeSessionId: resumed }), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    assert.equal(launched.value.sessionId, resumed, 'the outcome names the resumed session');
+    const [logged] = s.fake.argvs();
+    const argv = logged?.argv ?? [];
+    assert.deepEqual(argv.slice(-2), ['--resume', resumed]);
+    assert.ok(!argv.includes('--session-id') && !argv.includes('--fork-session'));
+    const value = (flag: string): string | undefined => argv[argv.indexOf(flag) + 1];
+    assert.equal(value('--permission-mode'), 'dontAsk');
+    assert.equal(value('--permission-prompts'), 'none');
+    assert.equal(value('--setting-sources'), '');
+    assert.ok(argv.includes('--strict-mcp-config'));
+    assert.equal(value('--max-budget-usd'), '1');
+    assert.match(value('--settings') ?? '', /host-settings\.json$/);
+  });
+
+  it('refuses a resumeSessionId that is not a UUID with the invalid field resumeSessionId, starting nothing', async () => {
+    const s = setupRun({ transcript: 'success' });
+    for (const bad of ['not-a-uuid', '.* --session-id', '']) {
+      const refused = await s.adapter.invoke(requestFor(s, { resumeSessionId: bad }), new AbortController().signal);
+      assert.equal(refused.ok, false, bad);
+      assert.deepEqual(refused.ok ? null : refused.error, { kind: 'invalid', field: 'resumeSessionId', reason: 'a session ID must be a UUID' }, bad);
+    }
+    assert.equal(s.fake.started(), false);
+  });
+
+  it('lets the resumed session win when the request also names a session, so the launch line never carries both flags', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const resumed = randomUUID();
+    const launched = await s.adapter.invoke(requestFor(s, { sessionId: randomUUID(), resumeSessionId: resumed }), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    const argv = s.fake.argvs()[0]?.argv ?? [];
+    assert.deepEqual(argv.slice(-2), ['--resume', resumed]);
+    assert.ok(!argv.includes('--session-id'));
+    assert.equal(launched.value.sessionId, resumed);
+  });
+
   it('refuses a run request whose owner is missing, mismatched or not a plain name, starting nothing', async () => {
     const s = setupRun({ transcript: 'success' });
     const cases: Array<[string, Partial<InvocationRequest>]> = [

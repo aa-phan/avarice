@@ -153,3 +153,50 @@ describe('assertLaunchArgsSafe', () => {
     assert.match(refused([]), /prompt|settings/);
   });
 });
+
+describe('buildLaunchArgs with resumeSessionId (D-08, plan 03-08)', () => {
+  const RESUMED = '7a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
+
+  it('ends with --resume <id>, carries no --session-id and never forks the session', () => {
+    const argv = buildLaunchArgs(input({ resumeSessionId: RESUMED }));
+    assert.deepEqual(argv.slice(-2), ['--resume', RESUMED]);
+    assert.ok(!argv.includes('--session-id'), 'the CLI refuses --session-id together with --resume');
+    assert.ok(!argv.includes('--fork-session'));
+    assert.equal(argv.filter((token) => token === '--resume').length, 1);
+  });
+
+  it('keeps every containment flag of the fresh launch line', () => {
+    const fresh = buildLaunchArgs(input());
+    const resumed = buildLaunchArgs(input({ resumeSessionId: RESUMED }));
+    assert.deepEqual(resumed.slice(0, -2), fresh.slice(0, -2), 'only the final flag pair differs');
+    assert.equal(valueOf(resumed, '--settings'), '/inv/host-settings.json');
+    assert.equal(valueOf(resumed, '--setting-sources'), '');
+    assert.equal(valueOf(resumed, '--permission-mode'), 'dontAsk');
+    assert.equal(valueOf(resumed, '--permission-prompts'), 'none');
+    assert.ok(resumed.includes('--strict-mcp-config'));
+    assert.equal(valueOf(resumed, '--max-budget-usd'), '1');
+  });
+
+  it("is byte-identical to today's line when no resume is asked for", () => {
+    const argv = buildLaunchArgs(input());
+    assert.deepEqual(argv.slice(-2), ['--session-id', SESSION]);
+    assert.ok(!argv.includes('--resume'));
+  });
+
+  it('builds a resume line that assertLaunchArgsSafe accepts, and still refuses one that lost a containment flag', () => {
+    const good = buildLaunchArgs(input({ resumeSessionId: RESUMED, agent: 'gsd-intel-updater' }));
+    const verdict = assertLaunchArgsSafe(good);
+    assert.ok(verdict.ok, JSON.stringify(verdict));
+    const drop = (flag: string): string[] => {
+      const argv = [...good];
+      argv.splice(argv.indexOf(flag), 2);
+      return argv;
+    };
+    for (const [flag, rule] of [['--settings', /settings/], ['--permission-mode', /permission-mode/], ['--max-budget-usd', /max-budget-usd/]] as const) {
+      const refusal = assertLaunchArgsSafe(drop(flag));
+      assert.ok(!refusal.ok, flag);
+      assert.match(refusal.ok ? '' : refusal.error.kind === 'denied' ? refusal.error.rule : '', rule);
+    }
+    assert.ok(!assertLaunchArgsSafe([...good, '--dangerously-skip-permissions']).ok);
+  });
+});

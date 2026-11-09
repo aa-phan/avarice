@@ -7,7 +7,9 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
+import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { resumeOnboarding } from '../../src/app/resume.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
@@ -172,6 +174,58 @@ describe('resume reaps every started launch before anything else (plan 01-21)', 
       assert.equal(f.reapCalls.length, 0, 'nothing was reaped');
     } finally {
       f.close();
+    }
+  });
+});
+
+// The process-level rule: a host that outlives its supervisor is found by its session flag, whichever flag it carries. The IDs are
+// unique per run because the search covers the whole process table.
+describe('reapBySessionId finds a host by --session-id or --resume (plan 03-08, D-08)', () => {
+  const alive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const sleeper = (flag: string, sessionId: string): number => {
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', flag, sessionId], { detached: true, stdio: 'ignore' });
+    child.unref();
+    assert.ok(child.pid !== undefined);
+    return child.pid;
+  };
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 500));
+
+  for (const flag of ['--session-id', '--resume']) {
+    it(`ends a process whose command line carries ${flag} <uuid>, with its group, and counts it`, async () => {
+      const sessionId = randomUUID();
+      const pid = sleeper(flag, sessionId);
+      await settle();
+      assert.ok(alive(pid), 'the survivor is running');
+      const reaped = await reapBySessionId(sessionId, 200);
+      assert.deepEqual(reaped, { ok: true, value: { terminated: 1 } });
+      assert.equal(alive(pid), false);
+    });
+  }
+
+  it('leaves a process that carries the UUID under another flag, or another UUID under --resume, alone', async () => {
+    const mine = randomUUID();
+    const other = randomUUID();
+    const wrongFlag = sleeper('--note', mine);
+    const wrongId = sleeper('--resume', other);
+    await settle();
+    try {
+      assert.deepEqual(await reapBySessionId(mine, 200), { ok: true, value: { terminated: 0 } });
+      assert.ok(alive(wrongFlag) && alive(wrongId), 'neither process was touched');
+    } finally {
+      for (const pid of [wrongFlag, wrongId]) {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          // already gone
+        }
+      }
     }
   });
 });
