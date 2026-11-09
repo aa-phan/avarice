@@ -34,6 +34,10 @@ const VITEST_FAIL = /^\s*FAIL\s+(\S.*? > .*\S)\s*$/;
 // node:test with the TAP reporter: `not ok <n> - <name>`, at any indentation. A TODO or SKIP directive is not a failure.
 const TAP_NOT_OK = /^\s*not ok\s+\d+\s+-\s+(.*\S)\s*$/;
 const TAP_DIRECTIVE = /\s#\s*(?:TODO|SKIP)\b/i;
+// node:test with the spec reporter, which is what it writes when stdout is not a terminal (plan 03-19): `<cross> <name> (<n>ms)`, once where the test ran and
+// once more in the closing `failing tests:` list. The closing list's own header has no duration, so it is no line of this shape, and a name that comes twice is
+// listed once. Built from an escape so the source holds no symbol that is not ASCII.
+const SPEC_FAIL = new RegExp('^\\s*\\u2716\\s+(.*?\\S)\\s+\\(\\d+(?:\\.\\d+)?ms\\)\\s*$');
 
 // Best effort: the failing test IDs the output names, in order of first appearance, at most 20, each cut to 200 characters and
 // stripped of control characters. Output it does not recognize gives []; a reproducer is valid without test IDs.
@@ -49,6 +53,7 @@ export function extractFailingTests(output: string): string[] {
     } else {
       const tap = TAP_NOT_OK.exec(line);
       if (tap !== null && !TAP_DIRECTIVE.test(line)) name = tap[1];
+      else name = SPEC_FAIL.exec(line)?.[1];
     }
     if (name === undefined) continue;
     const id = storedText(name, MAX_ID_LENGTH).trim();

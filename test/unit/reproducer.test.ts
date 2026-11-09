@@ -18,6 +18,22 @@ describe('extractFailingTests', () => {
     assert.deepEqual(extractFailingTests(output), ['rejects an empty string']);
   });
 
+  it('reads a node:test spec line (the reporter it writes off a terminal) once, although its closing list repeats it', () => {
+    const cross = String.fromCharCode(0x2716);
+    const output = [
+      `${String.fromCharCode(0x2714)} adds up (0.269375ms)`,
+      `${cross} breaks here (0.340042ms)`,
+      `${String.fromCharCode(0x2139)} fail 1`,
+      '',
+      `${cross} failing tests:`,
+      '',
+      'test at test/a.test.ts:4:1',
+      `${cross} breaks here (0.340042ms)`,
+      '  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:',
+    ].join('\n');
+    assert.deepEqual(extractFailingTests(output), ['breaks here']);
+  });
+
   it('skips a TAP not ok line that carries a skip or todo directive, and a vitest FAIL line that names only a file', () => {
     assert.deepEqual(extractFailingTests('not ok 1 - later # TODO not yet\nnot ok 2 - skipped # SKIP why\n FAIL  tests/unit/broken.test.ts\n'), []);
   });

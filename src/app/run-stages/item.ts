@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { digestOf, sha256Hex } from '../../domain/digest.ts';
 import { baselineDelta, revisionOf } from '../../domain/evidence.ts';
+import type { DeltaBlocking } from '../../domain/evidence.ts';
 import { evaluateG2 } from '../../domain/gates.ts';
 import type { GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
@@ -39,7 +40,8 @@ import type { RunDisposition } from '../../domain/work-items.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, DecisionRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
-import { measureInventory, recordedBase, recordedInventory, runRequiredChecks } from '../checks.ts';
+import { measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
+import type { CheckRunResult } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { flushDueNotifications } from '../notify.ts';
@@ -49,6 +51,8 @@ import type { RunPromptItem } from '../run-gsd-config.ts';
 import { blockItem, blockRun, completeItemBlock, moveOn } from './blocked.ts';
 import { discardAttempt } from './discard.ts';
 import { latestParkOf, parkItem, parkStepOf } from './park.ts';
+import { REPAIR_REASON, itemStartInventory, itemStartStatuses, recordReproducerStep, repairStepOf, repairUnit, repairsOf, reproducerFor, reproducerIssue, reproducerRefs } from './repair.ts';
+import type { PreparedRepair, ReproducerSet } from './repair.ts';
 import { scheduleOf } from './schedule.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
@@ -63,6 +67,9 @@ const RUN_RETENTION = 'run';
 const QUICK_RECORD_KIND = 'gsd-quick-record';
 // The reason of the attempt that follows a discard (CON-16).
 const RETRY_REASON = 'con16-retry';
+// The step that names the attempt whose snapshot an item's work is measured against: its G2 and its commit read the changes since it, whatever repair
+// units came after (plan 03-19). Written by every unit that is not a repair.
+const ITEM_BASE_STEP = 'item:base';
 // The reason of the first attempt of an item after its decision was answered (plan 03-18).
 export const ANSWER_REASON = 'answer';
 // The question the owner answered, as the fresh unit's prompt repeats it (data, cut).
@@ -147,6 +154,31 @@ function latestAttemptOf(ctx: RunStageContext, itemId: string): Result<AttemptRo
   const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId, { itemId });
   if (!attempts.ok) return attempts;
   return ok(attempts.value.at(-1) ?? null);
+}
+
+// The latest attempt of the item whose unit progressed (its `classify` step says so): the one gate G2 and the commit judge. A repair attempt a kill left
+// before its unit launched, or one that ended any other way, is not it.
+function gatedAttemptOf(ctx: RunStageContext, itemId: string): Result<AttemptRow | null> {
+  const attempts = ctx.deps.ledger.listRunAttempts(ctx.runId, { itemId });
+  if (!attempts.ok) return attempts;
+  for (const attempt of [...attempts.value].reverse()) {
+    const classified = stepOfAttempt(ctx, 'classify', attempt.attemptId);
+    if (!classified.ok) return classified;
+    if (classified.value?.['kind'] === 'progressed') return ok(attempt);
+  }
+  return ok(null);
+}
+
+// The snapshot an item's work is measured against: the one of the latest unit of the item that is not a repair (its `item:base` step). A run that predates
+// the step, or an attempt with none, is measured against its own attempt's snapshot, which was the only one there was.
+function itemBaseOf(ctx: RunStageContext, itemId: string, attemptId: string): Result<WorkspaceSnapshot> {
+  const steps = ctx.deps.ledger.getRunSteps(ctx.runId);
+  if (!steps.ok) return steps;
+  for (const step of [...steps.value].reverse()) {
+    if (step.step !== ITEM_BASE_STEP || step.status !== 'completed' || !isObject(step.result)) continue;
+    if (step.result['itemId'] === itemId && typeof step.result['attemptId'] === 'string') return snapshotOf(ctx, step.result['attemptId']);
+  }
+  return snapshotOf(ctx, attemptId);
 }
 
 function recordStep(ctx: RunStageContext, step: string, attempt: number, result: Record<string, unknown>, startedMs: number): Result<unknown> {
@@ -335,20 +367,19 @@ export const runningStage: RunStage = async (ctx, row) => {
     case 'ready':
       return attemptUnit(unit, row);
     case 'implemented': {
-      const attempt = latestAttemptOf(ctx, unit.item.itemId);
+      // The attempt that is judged is the latest one whose unit progressed: a repair attempt that never launched has no classification and is not it.
+      const attempt = gatedAttemptOf(ctx, unit.item.itemId);
       if (!attempt.ok) return attempt;
-      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is implemented but run ${ctx.runId} has no attempt of it` });
-      const snapshot = snapshotOf(ctx, attempt.value.attemptId);
-      if (!snapshot.ok) return snapshot;
-      return gateUnit(unit, row, attempt.value.attemptId, snapshot.value);
+      if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is implemented but run ${ctx.runId} has no progressed attempt of it` });
+      return gateUnit(unit, row, attempt.value.attemptId);
     }
     case 'gated': {
       const attempt = latestAttemptOf(ctx, unit.item.itemId);
       if (!attempt.ok) return attempt;
       if (attempt.value === null) return err({ kind: 'internal', cause: `item ${unit.item.itemId} is gated but run ${ctx.runId} has no attempt of it` });
-      const snapshot = snapshotOf(ctx, attempt.value.attemptId);
-      if (!snapshot.ok) return snapshot;
-      return commitUnit(unit, attempt.value.attemptId, snapshot.value);
+      const base = itemBaseOf(ctx, unit.item.itemId, attempt.value.attemptId);
+      if (!base.ok) return base;
+      return commitUnit(unit, attempt.value.attemptId, base.value);
     }
     default:
       // delegated: an attempt was in flight when the supervisor stopped. Whether its host still runs and what it left is the recovery
@@ -377,7 +408,26 @@ export function reconcileItem(ctx: RunStageContext, row: RunRow, itemId: string)
   }
   if (unit.item.state === 'delegated') return reconcileDelegated(unit);
   if (unit.item.state === 'gated') return reconcileGated(unit);
+  if (unit.item.state === 'implemented') {
+    // A repair attempt a kill left before its unit launched (the checkpoint and the attempt were written, the move to delegated was not): it ran nothing, so
+    // it is ended and the item is gated again, which starts the repair again.
+    const ended = endUnlaunchedRepair(unit);
+    if (!ended.ok) return ended;
+  }
   return ok('none');
+}
+
+// The latest attempt of the item when it is a repair whose unit never launched: ended `discarded`. Nothing else is touched.
+function endUnlaunchedRepair(unit: Unit): Result<void> {
+  const { ctx } = unit;
+  const attempt = latestAttemptOf(ctx, unit.item.itemId);
+  if (!attempt.ok) return attempt;
+  if (attempt.value === null || attempt.value.reason !== REPAIR_REASON || attempt.value.endedAt !== null) return ok(undefined);
+  const launched = launchedAttempts(ctx);
+  if (!launched.ok) return launched;
+  if (launched.value.has(attempt.value.attemptId)) return ok(undefined);
+  const ended = ctx.deps.ledger.endRunAttempt(attempt.value.attemptId, { outcome: 'discarded', nowMs: ctx.deps.clock.nowMs() });
+  return ended.ok || ended.error.kind === 'conflict' ? ok(undefined) : ended;
 }
 
 // The supervisor died inside an item block (blockItem): the park step of the item's latest attempt was recorded `started` (the delta may or may not be
@@ -392,7 +442,8 @@ function resumeBlock(unit: Unit): Result<boolean> {
   if (!step.ok) return step;
   if (step.value === null) return ok(false);
   if (step.value.status === 'started') {
-    const snapshot = snapshotOf(ctx, attempt.value.attemptId);
+    // The delta that is parked is the item's whole work since its base, whichever unit (a repair included) the block ended in.
+    const snapshot = itemBaseOf(ctx, unit.item.itemId, attempt.value.attemptId);
     if (!snapshot.ok) return snapshot;
     const parked = parkItem(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId: attempt.value.attemptId, ordinal: attempt.value.ordinal }, snapshot.value, step.value.block);
     if (!parked.ok) return parked;
@@ -431,8 +482,10 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
       const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'discarded', nowMs: deps.clock.nowMs() });
       if (!ended.ok && ended.error.kind !== 'conflict') return ended;
     }
-    const moved = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'ready', nowMs: deps.clock.nowMs(), attemptId, data: { reconciled: true } });
-    return moved.ok ? ok('retry') : moved;
+    // A repair that never started goes back to the item's work as it was (implemented, to be gated and repaired again); any other attempt, to ready.
+    const repair = attempt.value.reason === REPAIR_REASON;
+    const moved = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: repair ? 'implemented' : 'ready', nowMs: deps.clock.nowMs(), attemptId, data: { reconciled: true } });
+    return moved.ok ? ok(repair ? 'none' : 'retry') : moved;
   }
   const snapshot = snapshotOf(ctx, attemptId);
   if (!snapshot.ok) return snapshot;
@@ -474,6 +527,9 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
     return blocked.ok ? ok('blocked') : blocked;
   }
 
+  // A repair has no CON-16 retry: it is the one chance a newly failing check gets (plan 03-19).
+  if (attempt.value.reason === REPAIR_REASON) return reconcileRepair(unit, attempt.value, ran, kind);
+
   const history = attemptHistoryOf(unit, attemptId, kind);
   if (!history.ok) return history;
   const stored = deps.ledger.getRunContract(ctx.runId);
@@ -509,6 +565,40 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   const discarded = discardAttempt(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId, ordinal, snapshot: snapshot.value });
   if (!discarded.ok) return discarded;
   return ok(discarded.value.discarded ? 'retry' : 'blocked');
+}
+
+// A repair attempt that was in flight (the item is `delegated`). A repair that never launched its unit ran nothing, so it is ended and the item goes back to
+// `implemented` to be gated, and repaired, again. One whose unit progressed before the kill goes on to its gate. One whose unit was interrupted, or ended any
+// other way, has used the check's one repair: the item is parked and the owner decides, with the reproducer the repair was started with.
+function reconcileRepair(unit: Unit, attempt: AttemptRow, ran: boolean, kind: string): Result<ItemReconcile> {
+  const { ctx } = unit;
+  const { deps } = ctx;
+  const { attemptId } = attempt;
+  const back = (): Result<ItemReconcile> => {
+    const moved = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'implemented', nowMs: deps.clock.nowMs(), attemptId, data: { reconciled: true } });
+    return moved.ok ? ok('none') : moved;
+  };
+  if (!ran) {
+    const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'discarded', nowMs: deps.clock.nowMs() });
+    if (!ended.ok && ended.error.kind !== 'conflict') return ended;
+    return back();
+  }
+  if (kind === 'progressed') return back();
+
+  const base = itemBaseOf(ctx, unit.item.itemId, attemptId);
+  if (!base.ok) return base;
+  const step = repairStepOf(ctx, attemptId);
+  if (!step.ok) return step;
+  const blocked = blockItem(ctx, {
+    reason: 'decision',
+    signal: { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) },
+    issue: `the repair unit was interrupted, and a check gets one repair${step.value !== null ? `: ${reproducerIssue(step.value)}` : ''}`,
+    evidenceRefs: step.value !== null ? reproducerRefs(step.value) : [],
+    base: base.value,
+    attemptId,
+    itemId: unit.item.itemId,
+  });
+  return blocked.ok ? ok('blocked') : blocked;
 }
 
 // An item that passed its gate (`gated`): the supervisor may have made its commit and died before it recorded it. A HEAD that moved is the item's own
@@ -647,6 +737,27 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   const sessionId = randomUUID();
   const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId, gsdSession: sessionId });
   if (!delegated.ok) return delegated;
+  return launchUnit(unit, row, { attemptId, ordinal, sessionId, pack: pack.value, answered: answered.value });
+}
+
+// What a unit is launched with: its attempt, the pack, the owner's answer when the item asked, and for a repair the reproducer and the item's base.
+interface Launch {
+  attemptId: string;
+  ordinal: number;
+  sessionId: string;
+  pack: string;
+  answered: { decision: DecisionRow; firstUse: boolean } | null;
+  repair?: { text: string; base: WorkspaceSnapshot };
+}
+
+// The launch of one unit of an item that is `delegated`: the settings, the snapshot, the contained invocation, the classification, and then its gate, or its
+// routing when it did not progress. A repair is launched the same way, on the work the item's first unit left in the clone (plan 03-19).
+async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Result<void>> {
+  const { ctx, contract } = unit;
+  const { deps } = ctx;
+  const workspace = deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const { attemptId, ordinal, sessionId, pack, answered, repair } = launch;
 
   // The previous item's commit took `.planning/config.json` out of the clone (D-17): this item's unit gets the GSD settings again, before its snapshot,
   // so the settings never count as its change.
@@ -659,16 +770,23 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   if (!snapshot.ok) return snapshot;
   const snapped = recordStep(ctx, 'snapshot', ordinal, { attemptId, head: snapshot.value.head, tree: snapshot.value.tree, ignored: snapshot.value.ignored.slice(0, MAX_IGNORED_STORED), ignoredCount: snapshot.value.ignored.length }, startedMs);
   if (!snapped.ok) return snapped;
+  // A unit that is not a repair starts the item's work: what G2 and the commit measure it against is this snapshot, whatever repair follows.
+  if (repair === undefined) {
+    const based = recordStep(ctx, ITEM_BASE_STEP, ordinal, { attemptId, itemId: unit.item.itemId }, startedMs);
+    if (!based.ok) return based;
+  }
+  // The snapshot a block of the item parks against, and the one a unit that did not progress is discarded to (a repair is never discarded).
+  const itemBase = repair?.base ?? snapshot.value;
 
   const launching = ctx.checkpoint('launch:run', { attemptId, itemId: unit.item.itemId, revision: snapshot.value.head });
   if (!launching.ok) return launching;
 
   let prompt: string;
   try {
-    prompt = runUnitPrompt(contract, pack.value, promptItemOf(contract, unit.item.itemId), answered.value === null ? undefined : ownerAnswerText(answered.value.decision));
+    prompt = runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text);
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
-    const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: snapshot.value });
+    const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: itemBase });
     return blocked.ok ? ok(undefined) : blocked;
   }
   const current = deps.ledger.getRun(ctx.runId);
@@ -677,7 +795,7 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
     attemptId,
     itemId: unit.item.itemId,
     sessionId,
-    ...(answered.value !== null ? { answeredDecisionId: answered.value.decision.decisionId } : {}),
+    ...(answered !== null ? { answeredDecisionId: answered.decision.decisionId } : {}),
   });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) {
@@ -693,7 +811,7 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   }
   // The attempt has started on the answer: the parked delta of the question is no longer needed (the unit is fresh and does the work again), so its ref
   // is dropped. An absent ref is success, so a retry of this attempt drops nothing twice.
-  if (answered.value !== null) {
+  if (answered !== null) {
     const parked = latestParkOf(ctx, unit.item.itemId);
     if (!parked.ok) return parked;
     if (parked.value !== null) {
@@ -749,17 +867,29 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   if (!recorded.ok) return recorded;
 
   // A unit the hook stopped at a loop limit is routed whatever else it did (CON-14): it is not committed.
-  if (c.kind !== 'progressed' || c.loopLimit !== null) return routeOutcome(unit, row, attemptId, c, snapshot.value);
+  if (c.kind !== 'progressed' || c.loopLimit !== null) return routeOutcome(unit, row, attemptId, c, itemBase, repair !== undefined);
 
   const implemented = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'implemented', nowMs: deps.clock.nowMs(), attemptId });
   if (!implemented.ok) return implemented;
-  return gateUnit(unit, row, attemptId, snapshot.value);
+  return gateUnit(unit, row, attemptId);
+}
+
+// The repair of a newly failing check, launched: its attempt, the move to delegated and the reproducer step were written by `repairUnit`.
+async function launchRepair(unit: Unit, row: RunRow, prepared: PreparedRepair, base: WorkspaceSnapshot): Promise<Result<void>> {
+  const pack = await contextPack(unit, row, prepared.ordinal);
+  if (!pack.ok) return pack;
+  // The owner's answer, when the item asked: the repair is the same work item, and the unit that began it carried the answer.
+  const answered = answeredDecisionOf(unit.ctx, unit.item.itemId);
+  if (!answered.ok) return answered;
+  return launchUnit(unit, row, { attemptId: prepared.attemptId, ordinal: prepared.ordinal, sessionId: prepared.sessionId, pack: pack.value, answered: answered.value, repair: { text: prepared.text, base } });
 }
 
 // The routing table of a unit that did not progress: classified kind -> (blocked reason, decision class). The CON-16 discard-and-retry sits
 // before the `failed` and `inconclusive` fallbacks, and the loop-limit escalation (CON-14) ahead of the other kinds; a moved HEAD stays first,
 // because it is a breach of containment and no recovery may touch a clone whose HEAD the supervisor did not move.
-async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Classified, snapshot: WorkspaceSnapshot): Promise<Result<void>> {
+// `snapshot` is the item's base (what a block parks against, and what a unit that crashed is discarded to). A repair is the item's one chance at a check: it
+// is never discarded and retried, and every ending that is not a result the gates can judge is a decision.
+async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Classified, snapshot: WorkspaceSnapshot, repair = false): Promise<Result<void>> {
   const { ctx } = unit;
   const common = { attemptId, itemId: unit.item.itemId } as const;
   const done = (blocked: Result<RunRow>): Result<void> => (blocked.ok ? ok(undefined) : blocked);
@@ -767,7 +897,13 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   // whole run and stops it (blockRun). The decision policy says which (blockScope); the routing below names the structural signal of each ending.
   // The attempt has ended at an item boundary, so the batched banner is flushed when its window has passed.
   const blockThisItem = async (signal: DecisionSignal, issue: string, data?: Readonly<Record<string, unknown>>): Promise<Result<void>> => {
-    const blocked = blockItem(ctx, { reason: 'decision', signal, issue, ...(data !== undefined ? { data } : {}), base: snapshot, ...common });
+    // A decision about a repair cites the reproducer the repair was started with.
+    let evidenceRefs: string[] = [];
+    if (repair) {
+      const step = repairStepOf(ctx, attemptId);
+      if (step.ok && step.value !== null) evidenceRefs = reproducerRefs(step.value);
+    }
+    const blocked = blockItem(ctx, { reason: 'decision', signal, issue, ...(data !== undefined ? { data } : {}), ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}), base: snapshot, ...common });
     if (!blocked.ok) return blocked;
     await flushBatch(ctx);
     return ok(undefined);
@@ -826,7 +962,7 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   const stored = ctx.deps.ledger.getRunContract(ctx.runId);
   if (!stored.ok) return stored;
   const retries = stored.value === null ? 0 : (stored.value.body as RunContract).budgets.retry;
-  if (crashed && !hostRefused && history.value.length < 1 + retries) {
+  if (crashed && !hostRefused && !repair && history.value.length < 1 + retries) {
     const budgets = ctx.deps.ledger.getBudgets(ctx.runId);
     if (!budgets.ok) return budgets;
     const invocations = budgets.value.find((b) => b.name === 'invocations');
@@ -852,8 +988,8 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   // A host that refused to launch (no sandbox, a failed self-test) is a containment condition, not a model failure.
   const enforcement = c.hostError !== undefined && (c.hostError.kind === 'unavailable' || c.hostError.kind === 'denied');
   // A second failure names every attempt and what each ended as: the retry was the one chance (FR-4).
-  const issue = history.value.length > 1 ? `${why}, again after a discard and retry: ${describeHistory(history.value)}` : why;
-  const data = history.value.length > 1 ? { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } : undefined;
+  const issue = repair ? `the repair of the failing check failed: ${why}` : history.value.length > 1 ? `${why}, again after a discard and retry: ${describeHistory(history.value)}` : why;
+  const data = !repair && history.value.length > 1 ? { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } : undefined;
   if (!enforcement) return blockThisItem(failure(), issue, data);
   return done(blockRun(ctx, { reason: 'enforcement_failure', signal: { kind: 'enforcement' }, issue, ...(data !== undefined ? { data } : {}), ...common }));
 }
@@ -907,6 +1043,8 @@ function attemptHistoryOf(unit: Unit, attemptId: string, kind: string): Result<A
     }
     // An attempt whose supervisor died before it launched a unit (a reconcile put it back) ran nothing: it is not a failure of the unit.
     if (!launched.value.has(a.attemptId)) continue;
+    // A repair is the one chance of a failing check, never an attempt at the unit (it is not retried, and it does not spend the unit's retry).
+    if (a.reason === REPAIR_REASON) continue;
     const classified = stepOfAttempt(unit.ctx, 'classify', a.attemptId);
     if (!classified.ok) return classified;
     history.push({ attemptId: a.attemptId, kind: typeof classified.value?.['kind'] === 'string' ? classified.value['kind'] : 'unknown' });
@@ -918,11 +1056,25 @@ const describeHistory = (history: readonly AttemptKind[]): string => history.map
 
 // G2 over the unit's changes (AUT-7): facts AVARICE measured. The required checks run on the working tree only when the unit already
 // passes every other rule, so agent-changed code is not run for a unit that is already stopped.
-async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: WorkspaceSnapshot): Promise<Result<void>> {
+//
+// What the unit is judged against is the item's own start (plan 03-19; AUT-16, D-11): the changes since the item's base snapshot (the work of every unit
+// of the item, a repair included), the test inventory and the check statuses the item began with (the item committed last, else the pin). A check that
+// passed at the start and fails now is charged to this item; one that failed at the start and still fails is pre-existing. A newly failing check, with
+// nothing else wrong, is repaired once (repair.ts) before the owner is asked.
+async function gateUnit(unit: Unit, row: RunRow, attemptId: string): Promise<Result<void>> {
   const { ctx, contract } = unit;
   const { deps } = ctx;
   const workspace = deps.runWorkspace;
   if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const itemBase = itemBaseOf(ctx, unit.item.itemId, attemptId);
+  if (!itemBase.ok) return itemBase;
+  const snapshot = itemBase.value;
+  const itemAttempts = deps.ledger.listRunAttempts(ctx.runId, { itemId: unit.item.itemId });
+  if (!itemAttempts.ok) return itemAttempts;
+  const attemptRow = itemAttempts.value.find((a) => a.attemptId === attemptId);
+  if (attemptRow === undefined) return err({ kind: 'internal', cause: `attempt ${attemptId} is not an attempt of item ${unit.item.itemId} of run ${ctx.runId}` });
+  // A repair attempt is judged by G2 as any unit is, against the item's own base, with the repair's own classification.
+  const isRepair = attemptRow.reason === REPAIR_REASON;
 
   const marked = ctx.checkpoint('gate:g2', { attemptId, itemId: unit.item.itemId, revision: snapshot.head });
   if (!marked.ok) return marked;
@@ -948,11 +1100,15 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
   let inventory: InventoryFailure[] = [];
   let verdict: GateVerdict = evaluateG2({ ...facts, inventory, delta: [] });
   let failingEvidence: string[] = [];
+  // The checks that blocked against the item's start, and the runs of the ones that failed (a newly failing check is what a repair is for).
+  let blocking: DeltaBlocking[] = [];
+  let failingRuns: CheckRunResult[] = [];
   if (verdict.passed) {
     // AUT-9: the inventory after the unit, measured now that the invocation has ended and its process group is gone, against the one measured
     // at the pin. A contract that declares no inventory has nothing to compare. Only a unit that already passes every other rule has its
     // repository's list command run.
-    const before = recordedInventory(deps, ctx.runId, 'base');
+    // The item starts from the inventory the item committed last ended with, else from the one measured at the pin (the first item).
+    const before = itemStartInventory(ctx, unit.item.itemId);
     if (!before.ok) return before;
     const after = await measureInventory(deps, row, contract, unit.clone, { phase: 'item', attemptId, contractVersion: unit.contractVersion, itemId: unit.item.itemId });
     if (!after.ok) return after;
@@ -963,20 +1119,23 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
     }
   }
   if (verdict.passed) {
-    // D-12: the unit is judged against what the checks did at the pin, measured by the baseline action, not against an assumed green base.
-    const base = recordedBase(deps, ctx.runId);
-    if (!base.ok) return base;
-    const ran = await runRequiredChecks(deps, row, contract, { cwd: unit.clone, attemptId, phase: 'item', contractVersion: unit.contractVersion, itemId: unit.item.itemId, base: base.value });
+    // D-12, AUT-16: the unit is judged against what the checks said when the item began (the G2 result of the item committed last, else what the baseline
+    // measured at the pin), not against an assumed green base: a check that failed then and fails now is pre-existing, one that passed then is charged here.
+    const start = itemStartStatuses(ctx, unit.item.itemId);
+    if (!start.ok) return start;
+    const ran = await runRequiredChecks(deps, row, contract, { cwd: unit.clone, attemptId, phase: 'item', contractVersion: unit.contractVersion, itemId: unit.item.itemId, base: start.value });
     if (!ran.ok) return ran;
     const delta = baselineDelta({
-      base: base.value,
+      base: start.value,
       head: ran.value.map((r) => ({ name: r.name, status: r.status, evidenceId: r.evidenceId })),
       required: contract.verification.requiredChecks,
       targets: contract.verification.targetChecks,
     });
     verdict = evaluateG2({ ...facts, inventory, delta: delta.blocking });
+    blocking = delta.blocking;
     const blockingNames = new Set(delta.blocking.map((b) => b.name));
-    failingEvidence = ran.value.filter((r) => r.status !== 'passed' && blockingNames.has(r.name)).map((r) => r.evidenceId);
+    failingRuns = ran.value.filter((r) => r.status !== 'passed' && blockingNames.has(r.name));
+    failingEvidence = failingRuns.map((r) => r.evidenceId);
   }
 
   const head = workspace.head(unit.clone);
@@ -1002,7 +1161,31 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
   if (!verdict.passed) {
     const rules = verdict.failures.map((f) => f.rule);
     const common = { attemptId, itemId: unit.item.itemId, data: { gate: 'G2', rules: rules.join(',') } } as const;
-    const issue = `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`;
+    // Only a check that failed (it ran and said so) has an output to reproduce; a check that did not run, or ran inconclusively, has none.
+    const checksOnly = rules.length > 0 && rules.every((r) => r === 'checks-delta');
+    const failedRuns = checksOnly ? failingRuns.filter((r) => r.status === 'failed') : [];
+
+    // AUT-10, D-11: a check that passed when the item began and fails now, with nothing else wrong, gets one repair unit on the same item before the owner is
+    // asked. A check that failed at the start too, one that could not run, and every other failure goes straight to the decision below.
+    const newlyFailing = checksOnly && blocking.length > 0 && blocking.every((b) => b.reason === 'regressed') && failedRuns.length === blocking.length;
+    if (newlyFailing) {
+      const offered = await offerRepair(unit, row, { attemptId, base: snapshot, failing: failedRuns, evidence: failingEvidence });
+      if (offered !== null) return offered;
+    }
+
+    let issue = `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`;
+    let evidenceRefs = failingEvidence;
+    if (failedRuns.length > 0) {
+      // The smallest reproducer of the failing checks: in the issue, in the evidence the decision cites, and in a `repair:reproducer` step.
+      const inventory = repairInventoryOf(unit);
+      if (!inventory.ok) return inventory;
+      const set = reproducerFor(ctx, unit.clone, failedRuns, snapshot, inventory.value);
+      if (!set.ok) return set;
+      const recordedSet = recordReproducerStep(ctx, attemptRow, unit.item.itemId, set.value);
+      if (!recordedSet.ok) return recordedSet;
+      issue = `${issue} | reproducer: ${reproducerIssue(set.value)}${isRepair ? ' | the check gets one repair, and it failed' : ''}`;
+      evidenceRefs = [...new Set([...failingEvidence, ...reproducerRefs(set.value)])];
+    }
     // A breach of the write scope is a state of the whole run; any other failure is about this one item, whose delta is parked (blockItem).
     const blocked =
       rules.includes('scope-conformance') || rules.includes('deletion-scope')
@@ -1015,9 +1198,9 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
           })
         : blockItem(ctx, {
             reason: 'decision',
-            signal: rules.every((r) => r === 'checks-delta') ? { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) } : { kind: 'pause' },
+            signal: checksOnly || isRepair ? { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) } : { kind: 'pause' },
             issue,
-            evidenceRefs: failingEvidence,
+            evidenceRefs,
             base: snapshot,
             ...common,
           });
@@ -1029,6 +1212,55 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
   const gated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'gated', nowMs: deps.clock.nowMs(), attemptId });
   if (!gated.ok) return gated;
   return commitUnit(unit, attemptId, snapshot);
+}
+
+// The test IDs a repair's failing test names are resolved against (the inventory the item began with and the one its first unit left) and the globs of the
+// test files: what gate G3 reads. Empty when the contract declares no inventory, and then there is nothing G3 can judge but the repair limit.
+function repairInventoryOf(unit: Unit): Result<{ ids: string[]; globs: string[] }> {
+  const { ctx, contract } = unit;
+  const globs = contract.verification.testInventory?.globs ?? [];
+  if (contract.verification.testInventory === null) return ok({ ids: [], globs: [] });
+  const started = itemStartInventory(ctx, unit.item.itemId);
+  if (!started.ok) return started;
+  const latest = recordedInventory(ctx.deps, ctx.runId, 'item', { workItem: unit.item.itemId });
+  if (!latest.ok) return latest;
+  return ok({ ids: [...new Set([...(started.value?.snapshot.ids ?? []), ...(latest.value?.snapshot.ids ?? [])])], globs: [...globs] });
+}
+
+// One repair of the checks that newly failed, when each has had fewer repairs than the contract allows and the invocations budget has room for the unit.
+// Null when no repair is offered (the limit is reached): the failure becomes a decision. A spent budget is a decision of its own, naming the budget.
+async function offerRepair(unit: Unit, row: RunRow, input: { attemptId: string; base: WorkspaceSnapshot; failing: CheckRunResult[]; evidence: string[] }): Promise<Result<void> | null> {
+  const { ctx, contract } = unit;
+  const { deps } = ctx;
+  const launched = launchedAttempts(ctx);
+  if (!launched.ok) return launched;
+  const used = repairsOf(ctx, unit.item.itemId, launched.value);
+  if (!used.ok) return used;
+  const limit = contract.budgets.repairAttemptsPerCheck;
+  if (!input.failing.every((f) => (used.value.get(f.name) ?? 0) < limit)) return null;
+
+  const budgets = deps.ledger.getBudgets(ctx.runId);
+  if (!budgets.ok) return budgets;
+  const invocations = budgets.value.find((b) => b.name === 'invocations');
+  if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
+    const names = input.failing.map((f) => f.name).sort().join(', ');
+    const blocked = blockRun(ctx, {
+      reason: 'budget_exhausted',
+      signal: { kind: 'budget', names: ['invocations'] },
+      issue: `the invocations budget is spent, so the repair of the failing check (${names}) was not started`,
+      evidenceRefs: input.evidence,
+      data: { budget: 'invocations' },
+      attemptId: input.attemptId,
+      itemId: unit.item.itemId,
+    });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
+
+  const inventory = repairInventoryOf(unit);
+  if (!inventory.ok) return inventory;
+  const prepared = repairUnit(ctx, { clone: unit.clone, itemId: unit.item.itemId, failedAttemptId: input.attemptId, base: input.base, failing: input.failing, inventory: inventory.value });
+  if (!prepared.ok) return prepared;
+  return launchRepair(unit, row, prepared.value, input.base);
 }
 
 // Archives the GSD records and takes them, and the GSD bookkeeping files, out of the clone (D-17), then commits the in-scope paths.

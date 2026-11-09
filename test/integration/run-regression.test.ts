@@ -89,7 +89,8 @@ describe('S-52 offline: B breaks a test A added, the failure is charged to B, on
     const commitStepOfA = stepsOf(s.roots, ran.runId, 'commit').find((c) => c.result['attemptId'] === attemptsDb(s.roots, ran.runId)[0]?.attempt_id);
     assert.equal(commits[0]?.sha, commitStepOfA?.result['commit'], "A's commit is the one recorded when A finished");
     assert.deepEqual(commits[0]?.files.sort(), ['src/a-helper.ts', 'test/slug.test.ts']);
-    assert.deepEqual(commits[1]?.files.sort(), ['src/b-first.ts', 'src/b-repair.ts', 'src/slug.ts']);
+    // The slug is back to what the pin had, so the net change of B holds the file each unit added and nothing for the file the repair undid.
+    assert.deepEqual(commits[1]?.files.sort(), ['src/b-first.ts', 'src/b-repair.ts']);
     assert.equal(commits[1]?.attempt, attemptsDb(s.roots, ran.runId)[2]?.attempt_id, "B's commit names the repair attempt, the last one");
   });
 

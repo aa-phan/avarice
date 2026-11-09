@@ -12,7 +12,22 @@ import { FakeRunHost } from './fake-run-host.ts';
 import type { FakeRunOptions } from './fake-run-host.ts';
 import { makeRoots } from './run-cli.ts';
 import type { CliRoots } from './run-cli.ts';
-import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, profileEnv, writeItemsBrief } from './run-fixtures.ts';
+import {
+  FIXED_SLUG,
+  LIST_TESTS_SCRIPT,
+  RUN_BRIEF,
+  RUN_CONVENTIONS,
+  RUN_CONVENTIONS_WITH_INVENTORY,
+  RUN_REPO_FILES,
+  TWO_TESTS,
+  commitConventions,
+  ledgerRows,
+  makeRunRepo,
+  onboardRunRepo,
+  profileEnv,
+  writeBrief,
+  writeItemsBrief,
+} from './run-fixtures.ts';
 import type { ItemsBriefOptions } from './run-fixtures.ts';
 import { git } from './scratch-repo.ts';
 import type { ScratchRepo } from './scratch-repo.ts';
@@ -51,6 +66,28 @@ export function s52Host(extra: { b?: FakeRunOptions; repair?: FakeRunOptions } =
   return { perItem: { A: A_UNIT, B: { ...B_FIRST, ...(extra.b ?? {}), perAttempt: [{}, { ...B_REPAIR, ...(extra.repair ?? {}) }] } } };
 }
 
+// ---- S-21: one item, a test inventory, a unit that breaks a test the repository already had ----------------------------------------------------------
+
+// The name of the test the first unit breaks, and the ID the inventory lists it under (the list script prints `<file> > <name>`).
+export const S21_TEST_NAME = 'repeated separators collapse to one dash';
+export const S21_TEST_ID = `test/slug.test.ts > ${S21_TEST_NAME}`;
+// The first unit puts back the slug the repository had before it was fixed: the test above fails, and the other still passes.
+export const S21_FIRST: FakeRunOptions = { edits: { 'src/slug.ts': RUN_REPO_FILES['src/slug.ts'] as string }, summary: true, verification: 'passed' };
+
+// The host script of one repair: the first unit breaks the test, the second unit plays `repair` (its own quick ID, and no edit of the first unit's unless it names them).
+export function s21Host(repair: FakeRunOptions): FakeRunOptions {
+  return { ...S21_FIRST, perAttempt: [{}, { edits: {}, quickId: '261105-fk2-repair', summary: true, verification: 'passed', ...repair }] };
+}
+
+// A run of the single item A on a repository whose slug is fixed (the required check passes at the pin), with a declared test inventory of two tests.
+export function s21Scenario(cleanup: string[], o: Pick<ScenarioOptions, 'files'> = {}): Scenario {
+  return scenario(cleanup, {
+    files: { 'test/slug.test.ts': TWO_TESTS, 'scripts/list-tests.mjs': LIST_TESTS_SCRIPT, ...(o.files ?? {}) },
+    conventions: RUN_CONVENTIONS_WITH_INVENTORY,
+    briefText: RUN_BRIEF,
+  });
+}
+
 export interface Scenario {
   roots: CliRoots;
   repo: ScratchRepo;
@@ -65,6 +102,8 @@ export interface ScenarioOptions {
   items?: readonly BriefItem[];
   acceptance?: readonly string[];
   brief?: ItemsBriefOptions;
+  // The text of a brief without items (a run of the single item A), used instead of the two items above.
+  briefText?: string;
 }
 
 // An onboarded repository with the conventions committed and a brief with work items written; `cleanup` collects the directories to remove.
@@ -74,7 +113,7 @@ export function scenario(cleanup: string[], o: ScenarioOptions = {}): Scenario {
   cleanup.push(roots.base, repo.base);
   const pin = onboardRunRepo(roots, repo);
   commitConventions(repo, o.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
-  const brief = writeItemsBrief(join(roots.base, 'briefs'), o.items ?? S52_ITEMS, o.acceptance ?? S52_ACCEPTANCE, o.brief ?? {});
+  const brief = o.briefText !== undefined ? writeBrief(join(roots.base, 'briefs'), o.briefText) : writeItemsBrief(join(roots.base, 'briefs'), o.items ?? S52_ITEMS, o.acceptance ?? S52_ACCEPTANCE, o.brief ?? {});
   return { roots, repo, pin, brief };
 }
 
@@ -86,13 +125,13 @@ export interface Ran {
 }
 
 // `start` and the supervisor in this process with the fake run host, so a test reads the prompts the host was given.
-export async function runScenario(s: Scenario, run: FakeRunOptions, overrides: DepsOverrides = {}, budgetOverrides: Readonly<Record<string, unknown>> = {}): Promise<Ran> {
+export async function runScenario(s: Scenario, run: FakeRunOptions, overrides: DepsOverrides = {}, budgetOverrides: Readonly<Record<string, number>> = {}): Promise<Ran> {
   const host = new FakeRunHost(run);
   const composed = createDeps(profileEnv(s.roots), { host, ...overrides });
-  if (!composed.ok) throw new Error(`composition: ${JSON.stringify(composed.error)}`);
+  if (!composed.ok) throw new Error(`composition: ${composed.message}`);
   try {
     const started = startRun(composed.value.deps, { cwd: s.repo.path, briefPath: s.brief, policy: 'routine', budgetOverrides });
-    if (!started.ok) throw new Error(`start: ${JSON.stringify(started.error)}`);
+    if (!started.ok) throw new Error(`start: ${JSON.stringify(started.failure)}`);
     const outcome = await runSupervisor(composed.value.deps, started.value.runId);
     if (!outcome.ok) throw new Error(`supervisor: ${JSON.stringify(outcome.error)}`);
     return { runId: started.value.runId, state: outcome.value.state, reason: outcome.value.reason, host };

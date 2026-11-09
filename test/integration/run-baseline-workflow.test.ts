@@ -369,7 +369,11 @@ describe('every ending that is not a handed-off branch is a recorded decision (T
     const { runId, decision } = assertBlocked(f, r, 'decision', 'repeated_failure');
     const failing = rows<{ evidence_id: string }>(f.roots, "SELECT e.evidence_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind = 'check' AND e.status = 'failed' AND e.environment_json NOT LIKE '%\"label\":\"base\"%'", runId).map((x) => x.evidence_id);
     assert.ok(failing.length >= 1, 'a failed check row');
-    assert.deepEqual(JSON.parse(decision.evidence_refs_json), failing);
+    // The failing evidence IDs come first; behind them the decision cites the reproducer of the failing check (plan 03-19): its name, the digest of its output and its failing test.
+    const refs = JSON.parse(decision.evidence_refs_json) as string[];
+    assert.deepEqual(refs.slice(0, failing.length), failing);
+    assert.ok(refs.includes('check:test'), JSON.stringify(refs));
+    assert.ok(refs.some((ref) => /^output:sha256:[0-9a-f]{64}$/.test(ref)), JSON.stringify(refs));
     assert.match(rows<{ failures_json: string }>(f.roots, "SELECT failures_json FROM gate_results WHERE run_id = ? AND gate = 'G2'", runId)[0]?.failures_json as string, /checks-delta/);
     assert.equal(git(runOf(f, runId).workspace_path, ['rev-parse', 'HEAD']).trim(), f.pin, 'nothing was committed');
   });

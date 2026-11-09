@@ -509,11 +509,14 @@ export async function measureInventory(deps: AppDeps, run: RunRow, contract: Run
 }
 
 // The inventory recorded at a phase, rebuilt from its evidence row and artifact; null when the conventions declare none or none was recorded.
-// The latest row of the phase counts.
-export function recordedInventory(deps: AppDeps, runId: string, phase: 'base' | 'item'): Result<InventoryMeasure | null> {
+// The latest row of the phase counts, or the latest of one work item's rows when `workItem` is named (the inventory an item started from is the
+// one the item before it ended with, plan 03-19).
+export function recordedInventory(deps: AppDeps, runId: string, phase: 'base' | 'item', options: { workItem?: string } = {}): Result<InventoryMeasure | null> {
   const evidence = deps.ledger.listEvidence(runId);
   if (!evidence.ok) return evidence;
-  const row = [...evidence.value].reverse().find((e) => e.kind === 'test-inventory' && e.environment['label'] === PHASE_LABEL[phase]);
+  const row = [...evidence.value]
+    .reverse()
+    .find((e) => e.kind === 'test-inventory' && e.environment['label'] === PHASE_LABEL[phase] && (options.workItem === undefined || e.workItem === options.workItem));
   if (row === undefined) return ok(null);
   if (row.artifactDigest === null || row.artifactDigest === undefined) return err({ kind: 'internal', cause: `the ${phase} test inventory ${row.evidenceId} has no artifact` });
   const bytes = deps.artifacts.get(row.artifactDigest);
