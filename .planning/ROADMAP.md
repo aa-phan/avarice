@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 27/33 plans executed (15 waves)
+**Plans:** 27/36 plans executed (15 waves, plus 3 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -260,6 +260,11 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 - [x] 03-27-PLAN.md — Live scratch cases S-17, S-18, S-21, S-50, S-51, S-52, CS-5, CS-15
+
+**Gap closure after the 03-27 halt** *(run with `/gsd-execute-phase 3 --gaps-only`; 03-27's SUMMARY stays halted, blocking 03-28 to 03-33, until 03-36 resumes it)*
+- [ ] 03-34-PLAN.md — Diagnose the small-unit failure from the evidence; the unit prompt, the run agents and the hook's refusals state the run's shell rules (offline)
+- [ ] 03-35-PLAN.md — Plan-group spend guard (10.00 USD for 03-27's resumed cases); three live haiku probes of 03-27's item A; owner decision checkpoint only if haiku fails
+- [ ] 03-36-PLAN.md — Re-run 03-27's live cases (S-51 judged first) and resume 03-27's SUMMARY to complete when every case passes
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
