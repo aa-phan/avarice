@@ -190,6 +190,42 @@ describe('the ancestry seam stays out of production', () => {
   });
 });
 
+// `schedule install` writes a file that makes launchd run a program (plan 03-23, T-03-44). The agents directory, the launchctl and plutil paths and
+// the uid are an override of main() so a test can aim them at a temporary directory and a fake; a production path that passed or read the override
+// could point the writer anywhere. Only main.ts reads it, only the schedule command receives it, and the bin script never mentions it.
+describe('the scheduler seam stays out of production', () => {
+  const MAIN = join(REPO_ROOT, 'src', 'cli', 'main.ts');
+  const mainSource = readFileSync(MAIN, 'utf8');
+  const SCHEDULE = join(REPO_ROOT, 'src', 'cli', 'commands', 'schedule.ts');
+
+  it('no production file other than src/cli/main.ts reads the scheduler override of MainOverrides', () => {
+    const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== MAIN);
+    assert.ok(files.length > 20, 'the scan found the source tree');
+    assert.deepEqual(files.filter((f) => /\boverrides\??\.scheduler\b/.test(readFileSync(f, 'utf8'))), []);
+  });
+
+  it('bin/avarice.ts never mentions the scheduler', () => {
+    assert.equal(/scheduler/i.test(readFileSync(PRODUCTION_ENTRY, 'utf8')), false);
+  });
+
+  it('main.ts reads the override once and hands it to the command module as an extra, nowhere else', () => {
+    assert.equal((mainSource.match(/\boverrides\.scheduler\b/g) ?? []).length, 1, 'one read of the override');
+    assert.match(mainSource, /scheduler:\s*overrides\.scheduler/);
+  });
+
+  it('only the schedule command module constructs the LaunchAgent writer', () => {
+    const users = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => /\bnew\s+LaunchdScheduler\b/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(users, [SCHEDULE]);
+  });
+
+  it('the launchctl argv names bootstrap and bootout and never the deprecated load and unload', () => {
+    const source = readFileSync(join(REPO_ROOT, 'src', 'adapters', 'schedule', 'launchd.ts'), 'utf8');
+    assert.equal(/'load'|'unload'/.test(source), false);
+    assert.match(source, /'bootstrap'/);
+    assert.match(source, /'bootout'/);
+  });
+});
+
 // Processes that mention any of these unique temp names, or hold a file open under them, belong to this test.
 async function lingering(tokens: readonly string[], dirs: readonly string[]): Promise<string[]> {
   const found: string[] = [];

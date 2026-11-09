@@ -805,7 +805,7 @@ describe('completion (ADR-013 decision 2)', () => {
     assert.deepEqual(completeCommand('st', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
     assert.deepEqual(completeCommand('sta', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
     assert.deepEqual(completeCommand('', COMMANDS)?.candidates, [...COMMANDS].sort());
-    assert.deepEqual(completeCommand('s', COMMANDS)?.candidates, ['start', 'status', 'supervise']);
+    assert.deepEqual(completeCommand('s', COMMANDS)?.candidates, ['schedule', 'start', 'status', 'supervise']);
   });
 
   it('offers nothing for an unknown prefix or once a second word is being typed', () => {
