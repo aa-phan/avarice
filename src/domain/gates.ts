@@ -5,7 +5,7 @@
 import type { AcceptanceMapping, DeltaBlocking, EvidenceStatus } from './evidence.ts';
 import { matchesAny } from './glob.ts';
 import type { QuickPlan } from './quick-record.ts';
-import type { InventoryFailure } from './test-inventory.ts';
+import type { InventoryFailure, InventoryFailureRule } from './test-inventory.ts';
 
 export interface GateFailure {
   rule: string;
@@ -225,8 +225,9 @@ export interface G1Options {
   citesAcceptanceHard?: boolean;
 }
 
-export function evaluateG1(facts: G1Facts, _options: G1Options = {}): GateVerdict {
+export function evaluateG1(facts: G1Facts, options: G1Options = {}): GateVerdict {
   const failures: GateFailure[] = [];
+  const advisories: GateFailure[] = [];
   const fail = (rule: (typeof G1_RULES)[number], detail: string): void => {
     failures.push({ rule, detail });
   };
@@ -261,6 +262,17 @@ export function evaluateG1(facts: G1Facts, _options: G1Options = {}): GateVerdic
     }
   }
 
+  // A checkpoint:decision with no auto_select is a question for a person. A unit that went on to progress resolved it itself.
+  if (facts.outcome === 'progressed') {
+    const open = facts.plan.decisionCheckpoints
+      .filter((checkpoint) => !checkpoint.hasAutoSelect)
+      .map((checkpoint) => (checkpoint.optionIds.length > 0 ? `options ${[...checkpoint.optionIds].sort().join(', ')}` : 'no options named'))
+      .sort();
+    if (open.length > 0) {
+      fail('decision-checkpoint-unresolved', `${open.length} decision checkpoint(s) without auto_select, resolved without pausing: ${listPaths(open)}`);
+    }
+  }
+
   const unasked = facts.ownerChoices
     .filter((choice) => !choice.answered)
     .map((choice) => `${choice.acceptanceId} (${choice.key})`)
@@ -268,7 +280,14 @@ export function evaluateG1(facts: G1Facts, _options: G1Options = {}): GateVerdic
   if (unasked.length > 0) {
     fail('owner-choice-unasked', `acceptance criteria verified by an owner choice that was never asked: ${listPaths(unasked)}`);
   }
-  return { passed: failures.length === 0, failures };
+
+  const wanted = [...new Set(facts.itemAcceptance)].sort();
+  if (wanted.length > 0 && !wanted.some((id) => facts.plan?.acceptanceRefs.includes(id))) {
+    const detail = `the plan cites none of the item's acceptance IDs: ${listPaths(wanted)}`;
+    if (options.citesAcceptanceHard ?? PLAN_CITES_ACCEPTANCE_HARD) fail('plan-cites-acceptance', detail);
+    else advisories.push({ rule: 'plan-cites-acceptance', detail });
+  }
+  return advisories.length > 0 ? { passed: failures.length === 0, failures, advisories } : { passed: failures.length === 0, failures };
 }
 
 export const G3_RULES = ['repair-limit', 'failing-test-present', 'failing-test-unchanged'] as const;
@@ -283,12 +302,60 @@ export interface G3Facts {
   authorizedTestPaths: readonly string[];
 }
 
-export function evaluateG3(_facts: G3Facts): GateVerdict {
-  return { passed: true, failures: [] };
+// G3, in the rule order of G3_RULES (D-11). It judges a repair of a failed required check from facts AVARICE measured: how many
+// repairs the check has had, the failing test IDs, the inventory after the repair and the changed paths. A repair that deletes,
+// renames or edits the failing test to pass is exactly what the last two rules refuse; a repair that must change that test goes
+// to a decision, and an amendment that authorized the path (D-07) is the only thing that lets it through.
+export function evaluateG3(facts: G3Facts): GateVerdict {
+  const failures: GateFailure[] = [];
+  const fail = (rule: (typeof G3_RULES)[number], detail: string): void => {
+    failures.push({ rule, detail });
+  };
+
+  if (facts.repairAttempts >= facts.limit) {
+    fail('repair-limit', `${facts.repairAttempts} repair attempt(s) for this check reached the limit of ${facts.limit}`);
+  }
+
+  const present = new Set(facts.inventoryAfter);
+  const gone = [...new Set(facts.failingTests)].filter((id) => !present.has(id)).sort();
+  if (gone.length > 0) {
+    fail('failing-test-present', `failing tests missing from the inventory after the repair: ${listPaths(gone)}`);
+  }
+
+  const failingFiles = new Set(facts.testFilesOfFailing);
+  const authorized = new Set(facts.authorizedTestPaths);
+  const touched = [...new Set(facts.changes.filter((change) => failingFiles.has(change.path) && !authorized.has(change.path)).map((change) => `${change.path} (${change.status})`))].sort();
+  if (touched.length > 0) {
+    fail('failing-test-unchanged', `test files holding a failing test changed during the repair without an amendment: ${listPaths(touched)}`);
+  }
+  return { passed: failures.length === 0, failures };
 }
 
-export const INTEGRITY_GATE_RULES: Readonly<Record<string, readonly string[]>> = {};
+// The inventory rules, as a record so a rule added to InventoryFailureRule fails the typecheck here until it is listed.
+const INVENTORY_RULE_NAMES: Record<InventoryFailureRule, true> = { 'removed-test': true, 'new-skip-marker': true, 'lowered-test-count': true };
 
-export function integrityFailures(_verdicts: { G1?: GateVerdict; G2?: GateVerdict; G3?: GateVerdict }, _gates: readonly string[]): string[] {
-  return [];
+// Each integrity gate of the routine preset (`verification.integrityGates`) mapped to the rules that enforce it, written
+// `<gate>:<rule>`, with a third part for one rule of the G2 test inventory. A test fails when a gate the preset lists maps to
+// nothing or to a rule that does not exist (AUT-9, AUT-10).
+export const INTEGRITY_GATE_RULES: Readonly<Record<string, readonly string[]>> = {
+  'no-new-overrides': ['G2:no-new-overrides'],
+  'no-test-deletion': ['G2:test-inventory:removed-test', 'G2:test-inventory:lowered-test-count', 'G3:failing-test-present', 'G3:failing-test-unchanged'],
+  'no-skip-markers': ['G2:test-inventory:new-skip-marker'],
+  'scope-conformance': ['G1:plan-within-write-scope', 'G2:scope-conformance', 'G2:deletion-scope'],
+  'prune-is-decision': ['G2:prune-is-decision'],
+};
+
+// Which of `gates` the verdicts broke, sorted. A gate this module does not map is not named: the completeness test is what
+// keeps the preset and the map in step. Advisories never count.
+export function integrityFailures(verdicts: { G1?: GateVerdict; G2?: GateVerdict; G3?: GateVerdict }, gates: readonly string[]): string[] {
+  const broken: string[] = [];
+  for (const gate of gates) {
+    const refs = INTEGRITY_GATE_RULES[gate] ?? [];
+    const hit = refs.some((ref) => {
+      const [which, rule, sub] = ref.split(':') as [keyof typeof verdicts, string, string | undefined];
+      return (verdicts[which]?.failures ?? []).some((failure) => failure.rule === rule && (sub === undefined || (sub in INVENTORY_RULE_NAMES && failure.detail.includes(`${sub}: `))));
+    });
+    if (hit && !broken.includes(gate)) broken.push(gate);
+  }
+  return broken.sort();
 }
