@@ -268,7 +268,7 @@ describe('prepareRunInvocation: launch:run is recorded before the host starts', 
       assert.equal(launch.length, 1);
       assert.equal(launch[0]?.status, 'started');
       assert.equal(launch[0]?.attempt, 1);
-      assert.deepEqual(launch[0]?.result, { invocationId: request.invocationId, sessionId: request.sessionId, purpose: 'run', attemptId: attempt.value.attemptId, itemId: 'A' });
+      assert.deepEqual(launch[0]?.result, { invocationId: request.invocationId, sessionId: request.sessionId, purpose: 'run', attemptId: attempt.value.attemptId, itemId: 'A', model: 'sonnet' });
       assert.equal(budget(u, 'invocations').reserved, 1, 'the budget was reserved before the launch');
     });
   });

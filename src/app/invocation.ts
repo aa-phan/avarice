@@ -428,7 +428,7 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
     step,
     attempt,
     status: 'started',
-    result: { invocationId: request.invocationId, sessionId: request.sessionId, purpose: 'run', attemptId: options.attemptId, itemId: options.itemId },
+    result: { invocationId: request.invocationId, sessionId: request.sessionId, purpose: 'run', attemptId: options.attemptId, itemId: options.itemId, model: item.model },
     nowMs: startedMs,
   });
   if (!started.ok) return started;
@@ -445,8 +445,9 @@ export function completeRunInvocation(deps: AppDeps, prepared: PreparedRunInvoca
       prepared,
       recordStep: (input) => deps.ledger.recordRunStep(request.runId, input),
       retention: RUN_RETENTION,
-      stepExtras: { attemptId, itemId },
-      eventOwner: { runId: request.runId, attemptId, itemId },
+      // The model the invocation was launched with (its item's, D-10), on the step and on the event: a run's model use is traceable per invocation.
+      stepExtras: { attemptId, itemId, model: request.model },
+      eventOwner: { runId: request.runId, attemptId, itemId, model: request.model },
       attemptId,
     },
     outcome,
