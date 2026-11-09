@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-23-PLAN.md
-last_updated: "2026-11-09T11:53:34.524Z"
+stopped_at: Completed 03-24-PLAN.md
+last_updated: "2026-11-09T12:56:37.643Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: a72072db766a74e38a0eae326b0a28fe71bfcef3
+state_head: 2f408045124ebc9c0876d84c9fe4592125ca4594
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 84
+  completed_plans: 85
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 24 of 33
+Plan: 25 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -140,6 +140,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P21 | 40 min | 2 tasks | 12 files |
 | Phase 03 P22 | 45 min | 3 tasks | 16 files |
 | Phase 03 P23 | 75min | 3 tasks | 18 files |
+| Phase 03 P24 | 41 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -310,6 +311,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-22: the resumed unit is classified against the item base taken before the unpark, and the park ref is dropped when the host is launched, not after the commit — A snapshot taken after the unpark would not see the parked records or the parked in-scope change, so a unit that only finishes the item would read as no_progress; a ref that outlives the launch would meet the next park of an item that asks again.
 - [Phase 03]: 03-23: the ledger gains the edge failed -> delivered, reachable only through setNotificationState and used only when a successful digest covers the row; recordNotificationAttempt still refuses a failed row, so failed stays final for a single banner retry path (orchestrator resolution of the 03-12 conflict) — A delivered digest must mark the held and failed banners it covered as delivered; all other 03-12 edges are unchanged and the 03-12 notification-state tests gained a case for the new edge.
 - [Phase 03]: 03-23: the digest LaunchAgent is a fixed, validated, XML-escaped plist (label io.avarice.digest.PROFILE, marker line, integer Hour and Minute intervals) linted with plutil and loaded with launchctl bootstrap and bootout; A1 holds: real launchd accepted StartCalendarInterval as an array of Hour and Minute dictionaries — Mitigates T-03-44 and T-03-45; the gated real round trip with a test-only label bootstrapped, listed and removed the agent and left nothing behind.
+- [Phase 03]: 03-24: cancel commits the owner's request first, even with no live lease, so supervise as well as cancel finishes a cancel that died
+- [Phase 03]: 03-24: a cancel with a live lease only records the request; the lease timer aborts the unit and the attempt ends cancelled with its invocation charged; a cancel with no live lease takes a lease of at most 60 s
+- [Phase 03]: 03-24: cancel kill points are CANCEL_KILL_POINTS, not RUN_KILL_POINTS, because the kill suite runs every RUN_KILL_POINTS entry against a run that is never cancelled
 
 ### Pending Todos
 
@@ -362,6 +366,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T11:53:34.325Z
-Stopped at: Completed 03-23-PLAN.md
+Last session: 2026-11-09T12:56:37.445Z
+Stopped at: Completed 03-24-PLAN.md
 Resume file: None
