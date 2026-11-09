@@ -74,6 +74,9 @@ export function parseBudgetFlags(args: ParsedArgs): Record<string, number> | str
 export interface Io {
   out(text: string): void;
   err(text: string): void;
+  // Asks one question and returns the answer line; undefined when no answer can be read (end of input, Escape). Present when whoever
+  // supplied the io can ask (the interactive shell, a test); a command that needs an answer reads one line from standard input otherwise.
+  ask?(question: string): Promise<string | undefined>;
 }
 
 // What a file under src/cli/commands/ exports. `readOnly` makes composition open the store read-only.

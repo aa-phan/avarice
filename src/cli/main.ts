@@ -23,6 +23,9 @@ export interface MainOverrides extends DepsOverrides {
   // Standard input and output for the no-argument shell; the process streams when absent. Tests inject streams that claim to be a terminal.
   stdin?: ShellInput;
   stdout?: ShellOutput;
+  // Answers the question of a command that needs a yes or no (`contract amend`). The interactive shell passes its own line prompt so the
+  // question appears in the shell; a test passes a scripted answer. Absent, the command reads one line from standard input.
+  ask?(question: string): Promise<string | undefined>;
 }
 
 const USAGE = `usage: avarice <command> [options]
