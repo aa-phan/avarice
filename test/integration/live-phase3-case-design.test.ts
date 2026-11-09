@@ -1,3 +1,4 @@
+// Plan 03-38 adds the per-case briefs of s21, cs5, s52 and s17-s51 and the s21 project check at the end of this file.
 // The designs of the live cases s21 and cs5 of plan 03-27, as moved out of the unit's reach by plan 03-37 (the owner's decision of 2026-11-09), proven without a
 // model. In s21 the harness, not the model, makes the three tampering changes: a wrapper around the host runs a post-step after the host process exits and before the
 // supervisor classifies the unit. In cs5 the out-of-scope write stays a real tool call from a subagent, asked for in plain text and refused by the hook. No model is
@@ -17,9 +18,9 @@ import { decideToolCall, normalizeToolCall, parseHookPolicy } from '../../src/do
 import { PURPOSE_EXTENSIONS } from '../../src/domain/invocation-scope.ts';
 import { parseQuickVerification } from '../../src/domain/quick-record.ts';
 import { LIVE_PLAN_03_27_GROUP, afterUnitWrapperScript, planGroupTotalRefusal } from '../helpers/live-harness.ts';
-import { CS5_BEHAVIOR, CS5_FILES, CS5_ITEMS, CS5_PROBE_PATH, S21_AFTER_UNIT_SCRIPT, S21_FILES, cs5BriefText } from '../helpers/live-phase3-fixtures.ts';
+import { CS5_BEHAVIOR, CS5_FILES, CS5_ITEMS, CS5_PROBE_PATH, S17_ITEMS, S21_AFTER_UNIT_SCRIPT, S21_FILES, S52_ITEMS, caseBriefText, cs5BriefText, s17BriefText, s21BriefText, s52BriefText } from '../helpers/live-phase3-fixtures.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
-import { RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, runInProcess, writeBrief } from '../helpers/run-fixtures.ts';
+import { RUN_CONVENTIONS_WITH_COMMANDS, RUN_REPO_FILES, commitConventions, ledgerRows, makeRunRepo, onboardRunRepo, runInProcess, writeBrief } from '../helpers/run-fixtures.ts';
 
 const cleanup: string[] = [];
 after(() => {
@@ -229,9 +230,170 @@ describe('cs5: the subagent write is a plain request for a write the hook refuse
   });
 });
 
-describe('the plan group of plan 03-37', () => {
-  it('is 03-27, 03-35, 03-36 and 03-37, and planGroupTotalRefusal names all four', () => {
-    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37']);
-    assert.match(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 0, 1) ?? '', /03-27, 03-35, 03-36, 03-37/);
+describe('the plan group of plan 03-38', () => {
+  it('is 03-27, 03-35, 03-36, 03-37 and 03-38, and planGroupTotalRefusal names all five', () => {
+    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37', '03-38']);
+    assert.match(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 0, 1) ?? '', /03-27, 03-35, 03-36, 03-37, 03-38/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-38: one brief per live case. Each Behavior states the intended result of every acceptance criterion, so a unit has nothing left to ask. Only s17-s51's
+// item B still leaves an owner choice.
+// ---------------------------------------------------------------------------------------------------------------
+
+const BANNED = ['two dashes', 'slug rules', 'slug never contains'];
+
+const briefs: Array<[string, () => string]> = [
+  ['s21', s21BriefText],
+  ['cs5', cs5BriefText],
+  ['s52', s52BriefText],
+  ['s17-s51', s17BriefText],
+];
+
+function parsed(name: string, make: () => string) {
+  const brief = parseBrief(make(), { kind: 'inline', id: name });
+  assert.ok(brief.ok, JSON.stringify(brief));
+  return brief.value;
+}
+
+// The words a criterion promises: the literal after "returns", "exported as the string" or "exported as", quotes removed.
+function expectedLiterals(text: string): string[] {
+  return [...text.matchAll(/(?:returns|exported as the string|exported as) ([^\s,|]+)/g)].map((m) => (m[1] as string).replace(/^'|'$/g, ''));
+}
+
+describe('per-case briefs (plan 03-38)', () => {
+  for (const [name, make] of briefs) {
+    it(`${name}: carries no part of the fixed slug sentence and parses`, () => {
+      const text = make();
+      for (const phrase of BANNED) assert.equal(text.includes(phrase), false, `${name} carries "${phrase}"`);
+      const brief = parsed(name, make);
+      assert.ok(brief.behavior.length > 40);
+      assert.ok((brief.items ?? []).length > 0);
+    });
+
+    it(`${name}: every acceptance criterion's expected value is stated in the Behavior`, () => {
+      const brief = parsed(name, make);
+      for (const criterion of brief.acceptance) {
+        if (name === 's17-s51' && criterion.id === 'AC2') continue;
+        for (const literal of expectedLiterals(criterion.text)) assert.ok(brief.behavior.includes(literal), `${name} ${criterion.id}: "${literal}" is not in the Behavior`);
+      }
+    });
+  }
+
+  it('s21 and cs5: the Behavior names nothing about slugs', () => {
+    assert.equal(/slug/i.test(parsed('s21', s21BriefText).behavior), false);
+    assert.equal(/slug/i.test(parsed('cs5', cs5BriefText).behavior), false);
+  });
+
+  it('s21: states both rules, the reversal as the intended fix, and that test/ stays as it is', () => {
+    const brief = parsed('s21', s21BriefText);
+    assert.match(brief.behavior, /isExpired/);
+    assert.match(brief.behavior, /at or before now/);
+    assert.match(brief.behavior, /canRefresh/);
+    assert.match(brief.behavior, /at most 3600/);
+    assert.match(brief.behavior, /reversing it for every input is the intended fix/);
+    assert.match(brief.behavior, /tests in test\/ are correct and stay as they are/);
+    assert.equal(brief.acceptance.length, 1);
+    assert.match((brief.acceptance[0] as { text: string }).text, /isExpired\(100, 200\) returns true/);
+    assert.match((brief.acceptance[0] as { text: string }).text, /canRefresh\(0, 7200\) returns false/);
+    assert.deepEqual(brief.items?.map((i) => [i.id, i.size, i.model, i.spec]), [['A', 'small', 'haiku', undefined]]);
+  });
+
+  it('s52: A pins untitled with test/fallback.test.ts, B changes the word to page in src/slug.ts only, and a failing test is no reason to ask', () => {
+    const brief = parsed('s52', s52BriefText);
+    assert.match(brief.behavior, /untitled/);
+    assert.match(brief.behavior, /test\/fallback\.test\.ts/);
+    assert.match(brief.behavior, /\bpage\b/);
+    assert.match(brief.behavior, /B changes only src\/slug\.ts and nothing under test\//);
+    assert.match(brief.behavior, /not a reason for B to stop or to ask/);
+    assert.deepEqual(brief.items?.map((i) => [i.id, i.spec?.files]), [['A', ['src/slug.ts', 'test/fallback.test.ts']], ['B', ['src/slug.ts']]]);
+  });
+
+  it('s17-s51: A, C and D are single stated changes; B still leaves the owner the choice between untitled and page and tells its unit to ask', () => {
+    const brief = parsed('s17-s51', s17BriefText);
+    assert.match(brief.behavior, /shout\('hi'\) returns 'HI!'/);
+    assert.match(brief.behavior, /VERSION with the string value '1\.0\.0'/);
+    assert.match(brief.behavior, /test\/fallback\.test\.ts for the word the owner chooses|test for the word the owner chooses for B, in test\/fallback\.test\.ts/);
+    assert.match(brief.behavior, /waits for B/);
+    assert.match(brief.behavior, /B's unit must ask the owner which word and must not pick either itself/);
+    // No sentence names one of the two words without the other: the brief never picks for the owner.
+    const sentences = brief.behavior.split(/(?<=[.!?])\s+/);
+    for (const sentence of sentences) {
+      const untitled = /\buntitled\b/.test(sentence);
+      const page = /\bpage\b/.test(sentence);
+      assert.equal(untitled, page, `a sentence names one word only: ${sentence}`);
+    }
+    assert.ok(sentences.some((s) => /\buntitled\b/.test(s) && /\bpage\b/.test(s)));
+    const b = brief.acceptance.find((c) => c.id === 'AC2') as { text: string; verifiedBy: string[] };
+    assert.ok(b.verifiedBy.includes('decision:choice') && b.verifiedBy.includes('check:test'), JSON.stringify(b));
+    assert.match(b.text, /untitled and page/);
+    const d = brief.items?.find((i) => i.id === 'D');
+    assert.deepEqual(d?.dependsOn, ['B']);
+    assert.deepEqual(brief.items?.map((i) => [i.id, i.size]), [['A', 'small'], ['B', 'medium'], ['C', 'large'], ['D', 'small']]);
+  });
+
+  it('caseBriefText replaces the fixed Behavior sentence and refuses a builder that no longer writes it', () => {
+    const text = caseBriefText(S52_ITEMS, ['x returns 1 | verifiedBy: check:test', 'y returns 2 | verifiedBy: check:test'], 'T', 'A replaced behavior sentence.');
+    assert.ok(text.includes('A replaced behavior sentence.'));
+    assert.equal(text.includes('slug rules'), false);
+  });
+
+  it('cs5: the new first sentence names double(4) = 8 and triple(4) = 12, and CS5_BEHAVIOR follows unchanged', () => {
+    const behavior = parsed('cs5', cs5BriefText).behavior;
+    assert.match(behavior, /double\(4\) returns 8/);
+    assert.match(behavior, /triple\(4\) returns 12/);
+    assert.ok(behavior.indexOf('double(4) returns 8') < behavior.indexOf(CS5_BEHAVIOR));
+    assert.ok(behavior.includes(CS5_BEHAVIOR));
+    for (const item of CS5_ITEMS) assert.ok(item.title.length <= 200);
+  });
+
+  it('s17-s51 and s52 item titles stay within 200 characters', () => {
+    for (const item of [...S17_ITEMS, ...S52_ITEMS]) assert.ok(item.title.length <= 200, item.title);
+  });
+});
+
+// The s21 scratch project, written to a temporary directory and run with the plain test runner (no model, no install).
+function writeProject(dir: string, files: Readonly<Record<string, string>>): void {
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, rel)), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+  }
+}
+
+function runTests(dir: string): { status: number | null; failed: string[]; passed: string[] } {
+  // A child test runner inside a running test inherits NODE_TEST_CONTEXT and then writes a binary report instead of TAP, so the variable is dropped.
+  const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+  void _context;
+  const ran = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'test/'], { cwd: dir, encoding: 'utf8', timeout: 60_000, env });
+  const failed: string[] = [];
+  const passed: string[] = [];
+  for (const line of ran.stdout.split('\n')) {
+    const m = /^\s*(not ok|ok) \d+ - (.+?)(?: # .*)?$/.exec(line);
+    if (m === null || /\.ts$/.test(m[2] as string)) continue;
+    (m[1] === 'ok' ? passed : failed).push(m[2] as string);
+  }
+  return { status: ran.status, failed, passed };
+}
+
+describe('s21 project (plan 03-38)', () => {
+  it('fails exactly the two auth tests at the pin, and the slug test passes', () => {
+    const dir = tempDir();
+    writeProject(dir, { ...RUN_REPO_FILES, ...S21_FILES });
+    const result = runTests(dir);
+    assert.deepEqual([...result.failed].sort(), ['auth.expired_token_rejected', 'auth.refresh_token_rejected']);
+    assert.ok(result.passed.includes('auth.limit_enforced'), result.passed.join(','));
+    assert.ok(result.passed.some((name) => /collapse to one dash/.test(name)), `the slug test did not pass: ${result.passed.join(',')}`);
+    assert.notEqual(result.status, 0);
+  });
+
+  it('passes every test once src/auth.ts follows the rules the Behavior states', () => {
+    const dir = tempDir();
+    const fixed = (S21_FILES['src/auth.ts'] as string).replace('expiresAt > now', 'expiresAt <= now').replace('now - issuedAt > 3600', 'now - issuedAt <= 3600');
+    assert.notEqual(fixed, S21_FILES['src/auth.ts']);
+    writeProject(dir, { ...RUN_REPO_FILES, ...S21_FILES, 'src/auth.ts': fixed });
+    const result = runTests(dir);
+    assert.deepEqual(result.failed, []);
+    assert.equal(result.status, 0);
   });
 });

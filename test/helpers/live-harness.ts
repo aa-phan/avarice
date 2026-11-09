@@ -1050,9 +1050,9 @@ export function spike3Refusal(capUsdForRun: number): string | undefined {
 // Plan 03-27: the live run-purpose cases of Slice 2, under the Phase 3 ceiling (D-05), on generated scratch repositories. Owner decision 2 of 2026-11-09 raised
 // plan 03-27's total from 6.00 to 10.00 USD for its resumed cases, including any probe; the probes of plan 03-35 and the cases of plan 03-36 are recorded under
 // their own plan IDs, so the 10.00 USD is shared by the group of the plans and judged over their summed spend. Plan 03-37 (the cases moved out of the unit's reach
-// after 03-36 halted at s21) joins the group.
+// after 03-36 halted at s21) joins the group, and so does plan 03-38 (the per-case briefs, after 03-37 halted at s21).
 export const LIVE_PLAN_03_27 = '03-27';
-export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36', '03-37'];
+export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36', '03-37', '03-38'];
 export const LIVE_PLAN_03_27_TOTAL_USD = 10.0;
 
 // The skip text for a start of `plan` whose cap would take the plan's recorded spend in the current phase's ledger past `totalUsd`, or undefined.

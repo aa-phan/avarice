@@ -257,16 +257,16 @@ describe('Phase 3 live-spend ledger and ceiling (D-05)', () => {
   });
 });
 
-describe('Phase 3 plan-group total (owner decision 2 of 2026-11-09: 03-27, 03-35, 03-36 and 03-37 share 10.00 USD)', () => {
+describe('Phase 3 plan-group total (owner decision 2 of 2026-11-09: 03-27, 03-35, 03-36, 03-37 and 03-38 share 10.00 USD)', () => {
   it('names the group and states its total as 10 USD', () => {
-    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37']);
+    assert.deepEqual([...LIVE_PLAN_03_27_GROUP], ['03-27', '03-35', '03-36', '03-37', '03-38']);
     assert.equal(LIVE_PLAN_03_27_TOTAL_USD, 10);
   });
 
   it('sums the spend of every plan of the group and fits a 0.50 USD cap at 9.50, refusing it at 9.51', () => {
-    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1, '03-36') + line3(0.5, '03-37'));
+    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1, '03-36') + line3(0.3, '03-37') + line3(0.2, '03-38'));
     assert.equal(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5), undefined);
-    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1, '03-36') + line3(0.51, '03-37'));
+    writeFileSync(ledger3, line3(5, '03-27') + line3(3, '03-35') + line3(1, '03-36') + line3(0.3, '03-37') + line3(0.21, '03-38'));
     assert.notEqual(planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5), undefined);
   });
 
@@ -284,7 +284,7 @@ describe('Phase 3 plan-group total (owner decision 2 of 2026-11-09: 03-27, 03-35
     writeFileSync(ledger3, line3(9.6, '03-27'));
     const text = planGroupTotalRefusal(LIVE_PLAN_03_27_GROUP, 10, 0.5) ?? '';
     assert.match(text, /^not run: /);
-    assert.match(text, /03-27, 03-35, 03-36, 03-37/);
+    assert.match(text, /03-27, 03-35, 03-36, 03-37, 03-38/);
     assert.match(text, /9\.6000/);
     assert.match(text, /0\.50/);
     assert.match(text, /10\.00 USD/);
