@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-11-09T01:23:51.218Z"
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-11-09T01:45:17.966Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 7c5d3e4b2db7d32b7a6e1410c7593ac5e6a32068
+state_head: 6ae6ea81ca73fb45581019a40289cdf18ccf5892
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 67
+  completed_plans: 68
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 7 of 33
+Plan: 8 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -123,6 +123,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P05 | 45 min | 3 tasks | 9 files |
 | Phase 03 P06 | 35 min | 3 tasks | 9 files |
 | Phase 03 P07 | 12 min | 2 tasks | 4 files |
+| Phase 03 P08 | 45 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-06: G3 judges the failing test at file level; repair-limit fails when attempts >= limit, so the routine preset limit of 0 fails on first look — Flagged assumption A7; a repair that must edit such a test goes to a decision, and only an amendment-authorized path is exempt
 - [Phase 03]: 03-07: unknown keys under notify and notify.local are refused with their field path, so a typo cannot silently turn quiet hours off
 - [Phase 03]: 03-07: nextAttemptAt takes attempts already made (3 or more gives null); nextDigestAt returns the first digest time strictly after the given minute, or null when none is set
+- [Phase 03]: 03-08: a resumed session wins over a caller-chosen sessionId, so the launch line never carries both --resume and --session-id — The CLI refuses both together; the resume must keep every containment flag
+- [Phase 03]: 03-08: the final result text tail (last 2000 stripped characters) is returned only as InvocationOutcome.question, never in an event, step result or detail — AVARICE needs the pause question as data; model text must stay out of the ledger and logs
 
 ### Pending Todos
 
@@ -318,6 +321,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T01:23:51.062Z
-Stopped at: Completed 03-07-PLAN.md
+Last session: 2026-11-09T01:45:17.820Z
+Stopped at: Completed 03-08-PLAN.md
 Resume file: None
