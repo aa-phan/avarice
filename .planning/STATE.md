@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-16-PLAN.md
-last_updated: "2026-11-09T05:01:22.603Z"
+stopped_at: Completed 03-15-PLAN.md
+last_updated: "2026-11-09T05:34:31.636Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 03 execution started
-state_head: 41c825231a25b1a2bbe2369096379976d8a3e708
+state_head: badf28d8a7f6e514b1302c01247a09904c719f1f
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 94
-  completed_plans: 76
+  completed_plans: 77
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — EXECUTING
-Plan: 16 of 33
+Plan: 17 of 33
 Status: Ready to execute
 Last activity: 2026-11-08 — Phase 03 execution started
 
@@ -132,6 +132,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P10 | 35 min | 2 tasks | 6 files |
 | Phase 03 P14 | 40 min | 2 tasks | 10 files |
 | Phase 03 P16 | 11 min | 3 tasks | 14 files |
+| Phase 03 P15 | 32 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -286,6 +287,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-14: the baseline attempt and any block before the first unit name the item the scheduler starts first (dependency order, then declaration order); a non-final item's attempt ends committed and the last ends handed-off; the Work item prompt line appears only for a contract with several items; final evidence, interrupted-check rows and G4 name no item — D-09, AUT-3: that item adopts the baseline attempt even when the first declared item depends on a later one, and a one-item run records exactly what it did in Phase 2
 - [Phase 03]: 03-16: open-decision banners carry the run ID and a count, not decision IDs; every attempt is recorded on every row a banner covers; a throwing notifier is a notifier-error failure — Follows the plan's tracer body text; keeps model and repository text off the lock screen; keeps rows of one banner in agreement
 - [Phase 03]: 03-16: readProfileNotify opens the profile config with O_NOFOLLOW and reads at most 64 KiB from the open descriptor — Closes the check-then-read window of lstat and keeps a planted link or huge file from steering a notification
+- [Phase 03]: 03-15: contract amend refuses inside a run, off a terminal and from a run's process tree in usage(), before the profile is resolved, exiting 64 and creating nothing — CS-11 and D-18: the run must never reach the amend path; ps failure counts as inside the tree (fail closed); only main.ts names the ancestry test seam (footprint pin)
+- [Phase 03]: 03-15: a command's confirmation goes through Io.ask; the shell passes its own prompt, the one-shot CLI reads one line from stdin; declining exits 0, a moved contract version, an ended run or a closed decision exits 3 — D-18: the amend confirmation uses the shell prompt, with no amend menu action; the ledger transaction under expectVersion makes a racing amendment a conflict
 
 ### Pending Todos
 
@@ -338,6 +341,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T05:01:15.049Z
-Stopped at: Completed 03-16-PLAN.md
+Last session: 2026-11-09T05:34:31.459Z
+Stopped at: Completed 03-15-PLAN.md
 Resume file: None
