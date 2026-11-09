@@ -14,6 +14,8 @@ import type {
   ActivateInput,
   ActivationResult,
   ActiveRecord,
+  AmendRunContractInput,
+  AmendRunContractResult,
   AnswerDecisionInput,
   AdapterConfigInput,
   ArtifactInput,
@@ -922,6 +924,11 @@ export class SqliteLedger implements Ledger {
       this.checkFence(row, guard.fence);
       return this.insertContract(runId, input);
     });
+  }
+
+  amendRunContract(input: AmendRunContractInput): Result<AmendRunContractResult> {
+    void input;
+    return err({ kind: 'invalid', field: 'amendRunContract', reason: 'not implemented' });
   }
 
   // The caller's transaction must be open and the run vetted.

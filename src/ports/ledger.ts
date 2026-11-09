@@ -554,6 +554,40 @@ export interface ReopenStaleDecisionInput {
   nowMs: number;
 }
 
+// The next contract version an amendment writes (RC-6). The diff and the reason are recorded with it; `authorizedBy` names who signed.
+export interface AmendedContract {
+  body: unknown;
+  digest: string;
+  policyRevision: string;
+  diff: unknown;
+  reason: string;
+  authorizedBy: string;
+}
+
+// One amendment, written in one transaction without a lease (D-19, D-20).
+export interface AmendRunContractInput {
+  runId: string;
+  // The contract version the caller amended; the ledger re-checks it inside the transaction.
+  expectVersion: number;
+  next: AmendedContract;
+  // Each names an existing budget row; only its limit and contract version change. Used and reserved never do.
+  budgetChanges: ReadonlyArray<{ name: string; limit: number }>;
+  // Evidence rows the amendment invalidates: each gets a stale copy under the new contract version; the original stays.
+  staleEvidenceIds?: readonly string[];
+  // Gates the amendment invalidates: each gets a failed row under the new contract version; earlier rows stay.
+  staleGates?: ReadonlyArray<{ gate: string; detail: string }>;
+  // An open non-pause decision the amendment answers (`amended:v<n+1>`); its items are released as answerDecision releases them.
+  resolvesDecisionId?: string;
+  nowMs: number;
+}
+
+export interface AmendRunContractResult {
+  contract: ContractRow;
+  staleEvidence: number;
+  staleGates: number;
+  resolved: DecisionRow | null;
+}
+
 export interface WithdrawDecisionInput {
   runId: string;
   decisionId: string;
@@ -675,6 +709,11 @@ export interface Ledger {
   storeRunContract(runId: string, guard: { fence: number }, input: StoreRunContractInput): Result<ContractRow>;
   // The highest version, or null.
   getRunContract(runId: string): Result<ContractRow | null>;
+  // Writes contract version n+1 for an amendment (RC-6, D-19, D-20) in one transaction and takes no lease fence: the amend command
+  // runs from a terminal beside a supervisor that may be running another item. It is refused with `conflict` when the run's latest
+  // contract version is not `expectVersion` or the run is failed, cancelled or closed, and with `invalid` when a budget change names
+  // a row that does not exist or a decision it should resolve is a pause-class decision. Nothing is written when it is refused.
+  amendRunContract(input: AmendRunContractInput): Result<AmendRunContractResult>;
 
   // When a guard is given, the step is written only while that fence is current; a stale one is a conflict and nothing is written.
   recordRunStep(runId: string, input: StepResultInput, guard?: { fence: number }): Result<RunStepRow>;
