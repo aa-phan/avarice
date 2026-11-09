@@ -26,6 +26,9 @@ export interface RunStageContext {
   fence: number;
   // Aborted when this supervisor loses the run lease, so a unit in flight is ended rather than waited out.
   signal: AbortSignal;
+  // True when the signal was aborted because the owner asked to cancel the run (plan 03-24; AUT-12), not because the lease was lost: the unit in flight
+  // ends its attempt `cancelled` and nothing is classified, retried or discarded. A context with no lease timer behind it leaves this out.
+  cancelRequested?(): boolean;
   // Commit a checkpoint naming the action about to run, before its side effect.
   checkpoint(nextAction: string, extra?: { revision?: string; itemId?: string; attemptId?: string }): Result<RunCheckpointRow>;
   // Commit a lifecycle transition (state, checkpoint and event in one transaction).

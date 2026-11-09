@@ -70,8 +70,9 @@ export function resumeRun(deps: AppDeps, runId: string): Result<ResumeDecision> 
 
 // Ends the host of every `launch:*` step the previous holder left `started`, then marks those steps `interrupted`. Every reap completes before any
 // row is marked, so a reap that fails leaves every row `started` and the next resume tries again. A started launch that cannot be reaped at all (the
-// host has no reap, or the step recorded no session ID) stops the resume the same way.
-async function reapStartedLaunches(ctx: RunStageContext): Promise<Result<void>> {
+// host has no reap, or the step recorded no session ID) stops the resume the same way. `avarice cancel` of a run with no live supervisor reaps the same way
+// (plan 03-24) before it withdraws anything, so no host runs beside the cancelled run.
+export async function reapRunLaunches(ctx: RunStageContext): Promise<Result<void>> {
   const { deps, runId } = ctx;
   const steps = deps.ledger.getRunSteps(runId);
   if (!steps.ok) return steps;
@@ -284,7 +285,7 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
 }
 
 async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
-  const reaped = await reapStartedLaunches(ctx);
+  const reaped = await reapRunLaunches(ctx);
   if (!reaped.ok) return reaped;
   // Every host of this run is gone and nothing holds a reservation but a dead supervisor: its invocations are spent (CON-13), whatever the run does next.
   const charged = chargeRunOrphans(ctx.deps, ctx.runId);

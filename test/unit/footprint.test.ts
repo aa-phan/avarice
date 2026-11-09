@@ -151,18 +151,26 @@ describe("the proxy's resolver seam stays out of production", () => {
 
 // AUT-4: a decision is answered, re-opened or withdrawn by a person, never because time passed. The ledger calls that move a decision (the `answerDecision`,
 // `reopenStaleDecision` and `withdrawDecision` of the port) are made by `decide`, which runs only from a terminal outside the run, and by nothing else in the
-// source: no supervisor stage, timer or notification retry can reach them (plan 03-20). A later plan that adds a caller (cancel withdraws the decisions of a
-// cancelled run) names itself here.
+// source: no supervisor stage, timer or notification retry can reach them (plan 03-20). The one other caller is the cancel of a run (plan 03-24), which
+// withdraws the open decisions of the run it cancels with the reason `cancel` and never answers or reopens one; a later plan that adds a caller names itself here.
 describe('only the decide service answers a decision (AUT-4)', () => {
-  it('no production file other than the ledger and the decide service calls the three calls that move a decision', () => {
+  it('no production file other than the ledger, the decide service and the cancel service calls the three calls that move a decision', () => {
     const ledgerFiles = [join(REPO_ROOT, 'src', 'ports', 'ledger.ts'), join(REPO_ROOT, 'src', 'adapters', 'sqlite', 'ledger.ts')];
     const callers = sourceFiles(join(REPO_ROOT, 'src'))
       .filter((f) => !ledgerFiles.includes(f))
       .filter((f) => /\.(?:answerDecision|reopenStaleDecision|withdrawDecision)\s*\(/.test(readFileSync(f, 'utf8')));
     assert.deepEqual(
       callers.map((f) => basename(f)),
-      ['decide.ts'],
+      ['cancel.ts', 'decide.ts'],
     );
+  });
+
+  it('the cancel service only withdraws, with the reason cancel, and never answers or reopens a decision', () => {
+    const source = readFileSync(join(REPO_ROOT, 'src', 'app', 'cancel.ts'), 'utf8');
+    assert.equal(/\.(?:answerDecision|reopenStaleDecision)\s*\(/.test(source), false);
+    const withdrawals = source.match(/\.withdrawDecision\s*\(\{[^}]*\}\)/g) ?? [];
+    assert.equal(withdrawals.length, 1, 'one withdrawal in the cancel service');
+    assert.match(withdrawals[0] as string, /reason:\s*'cancel'/);
   });
 });
 

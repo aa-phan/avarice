@@ -4,8 +4,6 @@
 // context presents the lease fence on every checkpoint and transition, and the context fires the generic kill points
 // `after-checkpoint:<action>` and `after-transition:<state>` through the one fault mechanism (faultPoint of onboarding-service.ts).
 import { existsSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { canonicalJson } from '../domain/digest.ts';
 import { err, ok } from '../domain/result.ts';
@@ -14,13 +12,14 @@ import { isRunStopState } from '../domain/run-lifecycle.ts';
 import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
 import type { AppDeps } from './deps.ts';
 import { faultPoint, leaseTtlMs } from './onboarding-service.ts';
+import { holderId, makeRunContext } from './run-context.ts';
 import { writeContractFile } from './run-start.ts';
 import { runningStage } from './run-stages/item.ts';
 import { isBlockedRunContinuable } from './run-stages/schedule.ts';
 import { verifyingStage } from './run-stages/finish.ts';
 import { contractReadyStage } from './run-stages/prepare.ts';
 import type { RunRow } from '../ports/ledger.ts';
-import type { RunStage, RunStageContext, RunTransitionOptions } from './run-stages/stage.ts';
+import type { RunStage, RunStageContext } from './run-stages/stage.ts';
 
 export interface RunOutcome {
   runId: string;
@@ -42,50 +41,6 @@ export function registerRunStage(state: RunState, stage: RunStage): void {
 registerRunStage('contract_ready', contractReadyStage);
 registerRunStage('running', runningStage);
 registerRunStage('verifying', verifyingStage);
-
-function makeContext(deps: AppDeps, runId: string, fence: number, notes: string[], signal: AbortSignal): RunStageContext {
-  return {
-    deps,
-    runId,
-    fence,
-    signal,
-    checkpoint(nextAction, extra) {
-      const checkpoint = deps.ledger.recordRunCheckpoint(runId, { fence }, { nextAction, nowMs: deps.clock.nowMs(), ...(extra ?? {}) });
-      if (checkpoint.ok) faultPoint('after-checkpoint:' + nextAction);
-      return checkpoint;
-    },
-    transition(row: RunRow, to: RunState, nextAction: string, options: RunTransitionOptions = {}) {
-      const moved = deps.ledger.transitionRun(
-        runId,
-        { version: row.version, fence },
-        {
-          to,
-          nextAction,
-          nowMs: deps.clock.nowMs(),
-          ...(options.reason !== undefined ? { reason: options.reason } : {}),
-          ...(options.data !== undefined ? { data: options.data } : {}),
-          ...(options.attemptId !== undefined ? { attemptId: options.attemptId } : {}),
-          ...(options.itemId !== undefined ? { itemId: options.itemId } : {}),
-          ...(options.revision !== undefined ? { revision: options.revision } : {}),
-          ...(options.workspacePath !== undefined ? { workspacePath: options.workspacePath } : {}),
-          ...(options.branch !== undefined ? { branch: options.branch } : {}),
-        },
-      );
-      if (moved.ok) {
-        faultPoint('after-transition:' + to);
-        faultPoint('after-checkpoint:' + nextAction);
-      }
-      return moved;
-    },
-    note(message) {
-      notes.push(message);
-    },
-  };
-}
-
-function holderId(): string {
-  return `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
-}
 
 // A start killed between its ledger transaction and its contract file write leaves a run without `contract-v<n>.json` (plan 02-10).
 // The file is the ledger's contract, written again by the lease holder before anything is launched.
@@ -165,7 +120,7 @@ async function superviseHeld(deps: AppDeps, runId: string, options: Pick<RunSupe
   // Aborted when a renewal fails, so the host of a unit in flight is ended at once instead of running out its wall clock under a lease this
   // supervisor no longer holds. The finally block leaves it alone: a unit has returned by then.
   const lost = new AbortController();
-  const ctx = makeContext(deps, runId, fence, notes, lost.signal);
+  const ctx = makeRunContext(deps, runId, fence, notes, lost.signal);
 
   // A stage that waits on the host does not return to the loop, so a timer keeps the lease alive; it is unref'd, so it never keeps
   // the process alive by itself. A failed renewal means another process took over, and the loop stops at its next check.
