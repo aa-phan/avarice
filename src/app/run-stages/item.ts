@@ -25,7 +25,7 @@ import { evaluateG2 } from '../../domain/gates.ts';
 import type { GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
 import { classifyOutcome, detectPause } from '../../domain/outcome.ts';
-import type { ClassifiedKind, OutcomeFacts } from '../../domain/outcome.ts';
+import type { ClassifiedKind, OutcomeFacts, PauseSignal } from '../../domain/outcome.ts';
 import { countPruneEntries, parseQuickVerification, quickRecordKind, storedText } from '../../domain/quick-record.ts';
 import type { QuickVerification } from '../../domain/quick-record.ts';
 import { err, ok } from '../../domain/result.ts';
@@ -33,19 +33,23 @@ import type { PortError, Result } from '../../domain/result.ts';
 import { compareInventories } from '../../domain/test-inventory.ts';
 import type { InventoryFailure } from '../../domain/test-inventory.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
-import { runDisposition } from '../../domain/work-items.ts';
-import type { DecisionFacts, ItemFacts, RunDisposition } from '../../domain/work-items.ts';
+import { optionsOf } from '../../domain/decision-policy.ts';
+import type { DecisionSignal } from '../../domain/decision-policy.ts';
+import type { RunDisposition } from '../../domain/work-items.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
-import type { AttemptRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
+import type { AttemptRow, DecisionRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
 import { measureInventory, recordedBase, recordedInventory, runRequiredChecks } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
+import { flushDueNotifications } from '../notify.ts';
 import { faultPoint } from '../onboarding-service.ts';
 import { RUN_GSD_SETTINGS, runUnitPrompt } from '../run-gsd-config.ts';
 import type { RunPromptItem } from '../run-gsd-config.ts';
-import { blockRun } from './blocked.ts';
+import { blockItem, blockRun, completeItemBlock, moveOn } from './blocked.ts';
 import { discardAttempt } from './discard.ts';
+import { latestParkOf, parkItem, parkStepOf } from './park.ts';
+import { scheduleOf } from './schedule.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
 const GSD_CONFIG_PATH = '.planning/config.json';
@@ -59,6 +63,10 @@ const RUN_RETENTION = 'run';
 const QUICK_RECORD_KIND = 'gsd-quick-record';
 // The reason of the attempt that follows a discard (CON-16).
 const RETRY_REASON = 'con16-retry';
+// The reason of the first attempt of an item after its decision was answered (plan 03-18).
+export const ANSWER_REASON = 'answer';
+// The question the owner answered, as the fresh unit's prompt repeats it (data, cut).
+const QUESTION_PROMPT_CHARS = 600;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -85,14 +93,8 @@ function loadUnit(ctx: RunStageContext, row: RunRow, itemId: string): Result<Uni
 }
 
 // What the scheduler says to do now: the run's items in declaration order (the ledger's row order) and its decisions, through the pure rule.
-function schedule(ctx: RunStageContext): Result<{ items: WorkItemRow[]; disposition: RunDisposition }> {
-  const items = ctx.deps.ledger.listWorkItems(ctx.runId);
-  if (!items.ok) return items;
-  const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId });
-  if (!decisions.ok) return decisions;
-  const facts: ItemFacts[] = items.value.map((i, order) => ({ itemId: i.itemId, state: i.state, dependsOn: i.dependsOn, order }));
-  const decided: DecisionFacts[] = decisions.value.map((d) => ({ decisionId: d.decisionId, state: d.state, affectedItems: d.affectedItems }));
-  return ok({ items: items.value, disposition: runDisposition(facts, decided) });
+function schedule(ctx: RunStageContext): Result<{ items: WorkItemRow[]; decisions: DecisionRow[]; disposition: RunDisposition }> {
+  return scheduleOf(ctx.deps, ctx.runId);
 }
 
 // The item as the unit prompt states it. A run with one item keeps the Phase 2 prompt (no item line); with several, each unit is told which
@@ -105,6 +107,29 @@ function promptItemOf(contract: RunContract, itemId: string): RunPromptItem | un
   const acceptance = contract.intent.acceptance.filter((c) => owned.has(c.id)).map((c) => `${c.id}: ${c.text}`);
   const explicit = !item.spec.derived.includes('files') && item.spec.files.length > 0;
   return { id: item.id, task: item.task, acceptance, ...(explicit ? { specFiles: item.spec.files } : {}) };
+}
+
+// The latest decision of the item, when the owner answered it: the item is the first of the decision's affected items. `firstUse` is false once a
+// `launch:run` step names the decision (the answer was given to a unit already), so only the first attempt after the answer is an `answer` attempt.
+function answeredDecisionOf(ctx: RunStageContext, itemId: string): Result<{ decision: DecisionRow; firstUse: boolean } | null> {
+  const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId });
+  if (!decisions.ok) return decisions;
+  const latest = decisions.value.filter((d) => d.affectedItems[0] === itemId).at(-1);
+  if (latest === undefined || latest.state !== 'answered' || latest.answer === null) return ok(null);
+  const steps = ctx.deps.ledger.getRunSteps(ctx.runId);
+  if (!steps.ok) return steps;
+  const used = steps.value.some((s) => s.step === 'launch:run' && isObject(s.result) && s.result['answeredDecisionId'] === latest.decisionId);
+  return ok({ decision: latest, firstUse: !used });
+}
+
+// What the fresh unit is told about the decision: the question it asked (a numbered choice answers by its number, so the number alone would say
+// nothing to a unit that has no memory of asking) and the owner's answer, a choice by its label. Data under the fixed line of the prompt, never an
+// instruction.
+function ownerAnswerText(decision: DecisionRow): string {
+  const answer = (decision.answer ?? '').trim();
+  const chosen = optionsOf(decision.options).find((o) => o.kind === 'choice' && o.key === answer);
+  const question = storedText(decision.issue, QUESTION_PROMPT_CHARS);
+  return `Your question: ${question}\nThe owner's answer: ${chosen !== undefined ? `${chosen.key}. ${chosen.label}` : answer}`;
 }
 
 // The step result of this attempt, by the attempt ID every result carries.
@@ -296,10 +321,11 @@ export const runningStage: RunStage = async (ctx, row) => {
     });
     return moved.ok ? ok(undefined) : moved;
   }
-  // Items that wait on a decision, and items nothing can run, belong to the decision plans (03-18, 03-19): until then a blocked item stops the whole
-  // run, so the stage never meets this disposition. Failing loudly names a regression.
+  // Every remaining item waits on an open decision, or no remaining item can ever run (D-09, AUT-12): the run is visibly blocked (nothing polls; an
+  // answer starts a supervisor again), or it ends failed with the undelivered items named.
   if (disposition.kind === 'blocked' || disposition.kind === 'undeliverable') {
-    return err({ kind: 'internal', cause: `run ${ctx.runId} is running but the scheduler says ${disposition.kind}: no item can be started or continued` });
+    const moved = moveOn(ctx, row, disposition);
+    return moved.ok ? ok(undefined) : moved;
   }
 
   const loaded = loadUnit(ctx, row, disposition.itemId);
@@ -343,9 +369,42 @@ export function reconcileItem(ctx: RunStageContext, row: RunRow, itemId: string)
   const loaded = loadUnit(ctx, row, itemId);
   if (!loaded.ok) return loaded;
   const unit = loaded.value;
+  // An item block that was in progress (plan 03-18) is finished, not redone: its park step says the unit already ended asking.
+  if (unit.item.state === 'delegated' || unit.item.state === 'implemented' || unit.item.state === 'gated') {
+    const resumed = resumeBlock(unit);
+    if (!resumed.ok) return resumed;
+    if (resumed.value) return ok('blocked');
+  }
   if (unit.item.state === 'delegated') return reconcileDelegated(unit);
   if (unit.item.state === 'gated') return reconcileGated(unit);
   return ok('none');
+}
+
+// The supervisor died inside an item block (blockItem): the park step of the item's latest attempt was recorded `started` (the delta may or may not be
+// out of the tree yet) or `completed` (the decision may or may not be written). The park is repeated (the workspace returns the same record for the
+// same content) and the decision half is written from the step. No second unit of the item runs. Returns whether a block was in progress.
+function resumeBlock(unit: Unit): Result<boolean> {
+  const { ctx } = unit;
+  const attempt = latestAttemptOf(ctx, unit.item.itemId);
+  if (!attempt.ok) return attempt;
+  if (attempt.value === null) return ok(false);
+  const step = parkStepOf(ctx, attempt.value.attemptId);
+  if (!step.ok) return step;
+  if (step.value === null) return ok(false);
+  if (step.value.status === 'started') {
+    const snapshot = snapshotOf(ctx, attempt.value.attemptId);
+    if (!snapshot.ok) return snapshot;
+    const parked = parkItem(ctx, { clone: unit.clone, itemId: unit.item.itemId, attemptId: attempt.value.attemptId, ordinal: attempt.value.ordinal }, snapshot.value, step.value.block);
+    if (!parked.ok) return parked;
+  }
+  const done = completeItemBlock(ctx, unit.item.itemId, attempt.value.attemptId);
+  return done.ok ? ok(true) : done;
+}
+
+// The invocation budget the run was given: the limit a repeated failure reached, which the amend command raises by one.
+function invocationsLimitOf(ctx: RunStageContext): number {
+  const budgets = ctx.deps.ledger.getBudgets(ctx.runId);
+  return budgets.ok ? (budgets.value.find((b) => b.name === 'invocations')?.limit ?? -1) : -1;
 }
 
 // An attempt that was in flight (item `delegated`): its invocation was killed with the supervisor, or it had ended and the supervisor died before its
@@ -406,7 +465,7 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   if (head.value !== snapshot.value.head) {
     const blocked = blockRun(ctx, {
       reason: 'enforcement_failure',
-      decisionClass: 'permission',
+      signal: { kind: 'enforcement', check: 'head-moved' },
       issue: 'the clone HEAD moved while the unit was in flight: the supervisor alone commits, so containment did not hold',
       finding: { check: 'head-moved' },
       data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
@@ -428,11 +487,12 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   }
   if (history.value.length >= 1 + retries) {
     // The interrupted attempt was itself the retry: the one chance is spent, and the owner decides (FR-4).
-    const blocked = blockRun(ctx, {
+    const blocked = blockItem(ctx, {
       reason: 'decision',
-      decisionClass: 'repeated_failure',
+      signal: { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) },
       issue: `the unit was interrupted, again after a discard and retry: ${describeHistory(history.value)}`,
       data: { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') },
+      base: snapshot.value,
       ...common,
     });
     return blocked.ok ? ok('blocked') : blocked;
@@ -442,7 +502,7 @@ function reconcileDelegated(unit: Unit): Result<ItemReconcile> {
   const invocations = budgets.value.find((b) => b.name === 'invocations');
   // The killed invocation's reservation counts here: it is spent by the next reservation, so the retry needs a unit beyond it.
   if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
-    const blocked = blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the invocations budget is spent, so the interrupted unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common });
+    const blocked = blockRun(ctx, { reason: 'budget_exhausted', signal: { kind: 'budget', names: ['invocations'] }, issue: `the invocations budget is spent, so the interrupted unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common });
     return blocked.ok ? ok('blocked') : blocked;
   }
 
@@ -476,7 +536,7 @@ function reconcileGated(unit: Unit): Result<ItemReconcile> {
   if (trailers.value.runId !== ctx.runId || trailers.value.attemptId !== attemptId) {
     const blocked = blockRun(ctx, {
       reason: 'enforcement_failure',
-      decisionClass: 'permission',
+      signal: { kind: 'enforcement', check: 'head-moved' },
       issue: 'the clone HEAD moved to a commit the supervisor did not make for this attempt (its Avarice-Run and Avarice-Attempt trailers do not name it): containment did not hold',
       finding: { check: 'head-moved' },
       data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
@@ -490,7 +550,7 @@ function reconcileGated(unit: Unit): Result<ItemReconcile> {
   if (trailers.value.parents.length !== 1 || trailers.value.parents[0] !== snapshot.value.head) {
     const blocked = blockRun(ctx, {
       reason: 'enforcement_failure',
-      decisionClass: 'permission',
+      signal: { kind: 'enforcement', check: 'head-moved' },
       issue: "the clone HEAD moved to a commit that carries this attempt's trailers but does not sit directly on the attempt's snapshot: containment did not hold",
       finding: { check: 'head-moved' },
       data: { headBefore: snapshot.value.head.slice(0, 12), headAfter: head.value.slice(0, 12) },
@@ -575,10 +635,12 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   const pack = await contextPack(unit, row, ordinal);
   if (!pack.ok) return pack;
 
-  const attempt =
-    adopted !== undefined
-      ? ok(adopted)
-      : deps.ledger.recordRunAttempt(ctx.runId, { reason: mine.value.length === 0 ? 'initial' : RETRY_REASON, itemId: unit.item.itemId, nowMs: deps.clock.nowMs() });
+  // An item whose decision the owner answered runs again as a fresh unit that carries the answer (plan 03-18): its first attempt after the answer has
+  // the reason `answer`, and every later attempt of it (a CON-16 retry) carries the answer too.
+  const answered = answeredDecisionOf(ctx, unit.item.itemId);
+  if (!answered.ok) return answered;
+  const reason = mine.value.length === 0 ? 'initial' : answered.value?.firstUse === true ? ANSWER_REASON : RETRY_REASON;
+  const attempt = adopted !== undefined ? ok(adopted) : deps.ledger.recordRunAttempt(ctx.runId, { reason, itemId: unit.item.itemId, nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
   // The session ID is chosen here so the work item carries it from the moment it is delegated (D-08, RC-8): a decision's answer resumes that session.
@@ -603,19 +665,41 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
 
   let prompt: string;
   try {
-    prompt = runUnitPrompt(contract, pack.value, promptItemOf(contract, unit.item.itemId));
+    prompt = runUnitPrompt(contract, pack.value, promptItemOf(contract, unit.item.itemId), answered.value === null ? undefined : ownerAnswerText(answered.value.decision));
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
-    const blocked = blockRun(ctx, { reason: 'decision', decisionClass: 'acceptance', issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId });
+    const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: snapshot.value });
     return blocked.ok ? ok(undefined) : blocked;
   }
   const current = deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;
-  const prepared = prepareRunInvocation(deps, current.value, prompt, { attemptId, itemId: unit.item.itemId, sessionId });
+  const prepared = prepareRunInvocation(deps, current.value, prompt, {
+    attemptId,
+    itemId: unit.item.itemId,
+    sessionId,
+    ...(answered.value !== null ? { answeredDecisionId: answered.value.decision.decisionId } : {}),
+  });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) {
-    const blocked = blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the ${prepared.value.budget} budget is spent, so the unit was not started`, attemptId, itemId: unit.item.itemId, data: { budget: prepared.value.budget } });
+    const blocked = blockRun(ctx, {
+      reason: 'budget_exhausted',
+      signal: { kind: 'budget', names: [prepared.value.budget] },
+      issue: `the ${prepared.value.budget} budget is spent, so the unit was not started`,
+      attemptId,
+      itemId: unit.item.itemId,
+      data: { budget: prepared.value.budget },
+    });
     return blocked.ok ? ok(undefined) : blocked;
+  }
+  // The attempt has started on the answer: the parked delta of the question is no longer needed (the unit is fresh and does the work again), so its ref
+  // is dropped. An absent ref is success, so a retry of this attempt drops nothing twice.
+  if (answered.value !== null) {
+    const parked = latestParkOf(ctx, unit.item.itemId);
+    if (!parked.ok) return parked;
+    if (parked.value !== null) {
+      const dropped = workspace.dropPark(unit.clone, parked.value.record.ref);
+      if (!dropped.ok) return dropped;
+    }
   }
 
   const outcome = await deps.host.invoke(prepared.value.prepared.request, ctx.signal);
@@ -679,12 +763,22 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   const { ctx } = unit;
   const common = { attemptId, itemId: unit.item.itemId } as const;
   const done = (blocked: Result<RunRow>): Result<void> => (blocked.ok ? ok(undefined) : blocked);
+  // An ending about this one item (block reason `decision`) stops the item and the run goes on (blockItem); every other ending is a state of the
+  // whole run and stops it (blockRun). The decision policy says which (blockScope); the routing below names the structural signal of each ending.
+  // The attempt has ended at an item boundary, so the batched banner is flushed when its window has passed.
+  const blockThisItem = async (signal: DecisionSignal, issue: string, data?: Readonly<Record<string, unknown>>): Promise<Result<void>> => {
+    const blocked = blockItem(ctx, { reason: 'decision', signal, issue, ...(data !== undefined ? { data } : {}), base: snapshot, ...common });
+    if (!blocked.ok) return blocked;
+    await flushBatch(ctx);
+    return ok(undefined);
+  };
+  const failure = (): DecisionSignal => ({ kind: 'repeated-failure', limit: invocationsLimitOf(ctx) });
 
   if (c.kind === 'failed' && c.headMoved) {
     return done(
       blockRun(ctx, {
         reason: 'enforcement_failure',
-        decisionClass: 'permission',
+        signal: { kind: 'enforcement', check: 'head-moved' },
         issue: 'the clone HEAD moved during the unit: the supervisor alone commits, so containment did not hold',
         finding: { check: 'head-moved' },
         data: { headBefore: c.facts.headBefore.slice(0, 12), headAfter: c.facts.headAfter.slice(0, 12) },
@@ -696,24 +790,29 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   // is what the decision names, so `budget_exhausted` is routed before the loop limit.
   if (c.loopLimit !== null && c.kind !== 'budget_exhausted') {
     const what = c.loopLimit.reason === 'consecutive-denials' ? 'consecutive denials' : 'consecutive searches without a read';
-    return done(blockRun(ctx, { reason: 'decision', decisionClass: 'repeated_failure', issue: `loop limit: ${c.loopLimit.count} ${what}`, data: { loopLimit: c.loopLimit.reason, count: c.loopLimit.count, limit: c.loopLimit.limit }, ...common }));
+    return blockThisItem(failure(), `loop limit: ${c.loopLimit.count} ${what}`, { loopLimit: c.loopLimit.reason, count: c.loopLimit.count, limit: c.loopLimit.limit });
   }
   if (c.kind === 'budget_exhausted') {
     const budgets = ctx.deps.ledger.getBudgets(ctx.runId);
     const spent = budgets.ok ? budgets.value.filter((b) => b.used + b.reserved >= b.limit).map((b) => b.name) : [];
     if (spent.length === 0 && c.facts.subtype === 'error_max_budget_usd') spent.push('costUsd');
     const names = spent.length > 0 ? spent.join(', ') : 'a budget';
-    return done(blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the unit stopped: ${names} is spent`, data: { budgets: names }, ...common }));
+    return done(blockRun(ctx, { reason: 'budget_exhausted', signal: { kind: 'budget', names: spent }, issue: `the unit stopped: ${names} is spent`, data: { budgets: names }, ...common }));
   }
   if (c.kind === 'paused') {
     const issue = c.question !== undefined && c.question.trim() !== '' ? c.question : `the unit stopped to ask for a decision (${c.pauseSignal ?? 'pause'})`;
-    return done(blockRun(ctx, { reason: 'decision', decisionClass: 'acceptance', issue, data: { signal: c.pauseSignal ?? 'unknown' }, ...common }));
+    const signal: DecisionSignal = {
+      kind: 'pause',
+      ...(c.pauseSignal !== null ? { pauseSignal: c.pauseSignal as PauseSignal } : {}),
+      ...(c.question !== undefined ? { question: c.question } : {}),
+    };
+    return blockThisItem(signal, issue, { signal: c.pauseSignal ?? 'unknown' });
   }
   if (c.kind === 'denied') {
-    return done(blockRun(ctx, { reason: 'decision', decisionClass: 'permission', issue: `the unit made no in-scope change; the host or the hook denied ${c.facts.permissionDenials + c.facts.hookDenies} call(s)`, ...common }));
+    return blockThisItem({ kind: 'permission' }, `the unit made no in-scope change; the host or the hook denied ${c.facts.permissionDenials + c.facts.hookDenies} call(s)`);
   }
   if (c.kind === 'no_progress') {
-    return done(blockRun(ctx, { reason: 'decision', decisionClass: 'repeated_failure', issue: 'the unit ended without a SUMMARY and an in-scope change', ...common }));
+    return blockThisItem(failure(), 'the unit ended without a SUMMARY and an in-scope change');
   }
 
   // failed without a moved HEAD, and inconclusive
@@ -733,7 +832,7 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
     const invocations = budgets.value.find((b) => b.name === 'invocations');
     if (invocations !== undefined && invocations.used + invocations.reserved + 1 > invocations.limit) {
       return done(
-        blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the invocations budget is spent, so the crashed unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common }),
+        blockRun(ctx, { reason: 'budget_exhausted', signal: { kind: 'budget', names: ['invocations'] }, issue: `the invocations budget is spent, so the crashed unit (${describeHistory(history.value)}) was not retried`, data: { budget: 'invocations' }, ...common }),
       );
     }
     const ordinal = ordinalOf(ctx, attemptId);
@@ -754,15 +853,16 @@ async function routeOutcome(unit: Unit, row: RunRow, attemptId: string, c: Class
   const enforcement = c.hostError !== undefined && (c.hostError.kind === 'unavailable' || c.hostError.kind === 'denied');
   // A second failure names every attempt and what each ended as: the retry was the one chance (FR-4).
   const issue = history.value.length > 1 ? `${why}, again after a discard and retry: ${describeHistory(history.value)}` : why;
-  return done(
-    blockRun(ctx, {
-      reason: enforcement ? 'enforcement_failure' : 'decision',
-      decisionClass: enforcement ? 'permission' : 'repeated_failure',
-      issue,
-      ...(history.value.length > 1 ? { data: { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } } : {}),
-      ...common,
-    }),
-  );
+  const data = history.value.length > 1 ? { attempts: history.value.map((a) => a.attemptId).join(','), kinds: history.value.map((a) => a.kind).join(',') } : undefined;
+  if (!enforcement) return blockThisItem(failure(), issue, data);
+  return done(blockRun(ctx, { reason: 'enforcement_failure', signal: { kind: 'enforcement' }, issue, ...(data !== undefined ? { data } : {}), ...common }));
+}
+
+// The batched banner of decision notices (D-24), delivered at an item boundary when its window has passed. A notification never changes what a run
+// does: a failure is said and the run goes on.
+async function flushBatch(ctx: RunStageContext): Promise<void> {
+  const flushed = await flushDueNotifications(ctx.deps, ctx.runId);
+  if (!flushed.ok) ctx.note(`no banner raised at the item boundary: ${flushed.error.kind}`);
 }
 
 // The attempts of the run so far, oldest first, each with the kind it was classified as (this attempt's classification is `kind`; an earlier one is
@@ -796,8 +896,11 @@ function attemptHistoryOf(unit: Unit, attemptId: string, kind: string): Result<A
   if (!attempts.ok) return attempts;
   const launched = launchedAttempts(unit.ctx);
   if (!launched.ok) return launched;
+  // An answer starts the item over: the attempts before the last `answer` attempt were about a question the owner has since settled, so the item
+  // has its own retry again (the attempt that asked is not a failure of the unit that answers).
+  const lastAnswer = attempts.value.map((a) => a.reason).lastIndexOf(ANSWER_REASON);
   const history: AttemptKind[] = [];
-  for (const a of attempts.value) {
+  for (const a of lastAnswer > 0 ? attempts.value.slice(lastAnswer) : attempts.value) {
     if (a.attemptId === attemptId) {
       history.push({ attemptId: a.attemptId, kind });
       continue;
@@ -899,19 +1002,28 @@ async function gateUnit(unit: Unit, row: RunRow, attemptId: string, snapshot: Wo
   if (!verdict.passed) {
     const rules = verdict.failures.map((f) => f.rule);
     const common = { attemptId, itemId: unit.item.itemId, data: { gate: 'G2', rules: rules.join(',') } } as const;
+    const issue = `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`;
+    // A breach of the write scope is a state of the whole run; any other failure is about this one item, whose delta is parked (blockItem).
     const blocked =
       rules.includes('scope-conformance') || rules.includes('deletion-scope')
         ? blockRun(ctx, {
             reason: 'enforcement_failure',
-            decisionClass: 'permission',
-            issue: `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`,
+            signal: { kind: 'enforcement', check: 'scope-of-writes' },
+            issue,
             finding: { check: 'scope-of-writes', paths: breaches(changes, contract) },
             ...common,
           })
-        : rules.every((r) => r === 'checks-delta')
-          ? blockRun(ctx, { reason: 'decision', decisionClass: 'repeated_failure', issue: `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`, evidenceRefs: failingEvidence, ...common })
-          : blockRun(ctx, { reason: 'decision', decisionClass: 'acceptance', issue: `gate G2 failed: ${verdict.failures.map((f) => f.detail).join('; ')}`, evidenceRefs: failingEvidence, ...common });
-    return blocked.ok ? ok(undefined) : blocked;
+        : blockItem(ctx, {
+            reason: 'decision',
+            signal: rules.every((r) => r === 'checks-delta') ? { kind: 'repeated-failure', limit: invocationsLimitOf(ctx) } : { kind: 'pause' },
+            issue,
+            evidenceRefs: failingEvidence,
+            base: snapshot,
+            ...common,
+          });
+    if (!blocked.ok) return blocked;
+    await flushBatch(ctx);
+    return ok(undefined);
   }
 
   const gated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'gated', nowMs: deps.clock.nowMs(), attemptId });
@@ -1001,11 +1113,12 @@ async function commitUnit(unit: Unit, attemptId: string, snapshot: WorkspaceSnap
     const moved = ctx.transition(current.value, 'verifying', 'verify:checks', { attemptId, itemId: unit.item.itemId, revision: `git:${commit.value}` });
     return moved.ok ? ok(undefined) : moved;
   }
-  if (after.kind !== 'start' && after.kind !== 'continue') {
-    return err({ kind: 'internal', cause: `run ${ctx.runId} committed item ${unit.item.itemId} but the scheduler says ${after.kind}: no item can be started or continued` });
-  }
   const ended = deps.ledger.endRunAttempt(attemptId, { outcome: 'committed', nowMs: deps.clock.nowMs() });
   if (!ended.ok && ended.error.kind !== 'conflict') return ended;
-  const moved = ctx.transition(current.value, 'running', 'context-pack', { itemId: after.itemId, revision: `git:${commit.value}` });
+  // The item boundary: the batched banner of the decisions queued so far goes out when its window has passed, before the next item starts (D-24).
+  await flushBatch(ctx);
+  // The next item to start (the run moves running -> running), or, with no item ready, the wait on the open decisions (blocked_on_decision) or the end
+  // of a run that can deliver nothing more (failed): a decision that is open keeps its item and the items that depend on it out of the run.
+  const moved = moveOn(ctx, current.value, after, { itemId: unit.item.itemId, revision: `git:${commit.value}` });
   return moved.ok ? ok(undefined) : moved;
 }

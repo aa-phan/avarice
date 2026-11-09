@@ -124,7 +124,7 @@ describe('a resume with no invocation left for the retry stops with a decision a
     assert.equal(need(b, 'invocations').limit, 1);
     const decisions = rows<{ class: string; issue: string }>(f.roots, 'SELECT class, issue FROM decisions WHERE run_id = ?', runId);
     assert.equal(decisions.length, 1);
-    assert.equal(decisions[0]?.class, 'permission');
+    assert.equal(decisions[0]?.class, 'budget');
     assert.match(decisions[0]?.issue ?? '', /invocations/);
     assert.equal(rows<{ n: number }>(f.roots, "SELECT count(*) AS n FROM run_steps WHERE run_id = ? AND step = 'discard'", runId)[0]?.n, 0, 'nothing was discarded');
     assert.equal(rows<{ n: number }>(f.roots, 'SELECT count(*) AS n FROM attempts WHERE run_id = ?', runId)[0]?.n, 1, 'no second attempt');

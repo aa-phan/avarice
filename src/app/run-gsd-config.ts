@@ -87,7 +87,11 @@ function capChars(text: string, max: number): string {
 export const RUN_DECISION_SENTENCE = (decisions: Pick<RunContract['decisions'], 'human' | 'delegated'>): string =>
   `Stop and ask the owner before you decide any of these: ${listed(decisions.human)}. To ask, end your final message with one question line that ends in a question mark, followed by choice lines that start with '1.' and '2.' (more numbers if needed), with nothing after them, and then stop. You may decide these yourself without asking: ${listed(decisions.delegated)}.`;
 
-function contractText(contract: RunPromptContract, item?: RunPromptItem): string {
+// The owner's answer to a question this item asked, for a fresh unit that has no memory of asking (plan 03-18): the fixed data line of a resume prompt,
+// then the text (cut and flattened as a resume's is). The line says it is a recorded decision and never an instruction.
+export const RUN_ANSWER_INTRO = 'You stopped to ask the owner a question earlier, and the owner has answered. Start the work again with this decision.';
+
+function contractText(contract: RunPromptContract, item?: RunPromptItem, ownerAnswer?: string): string {
   const { intent, files, execution } = contract;
   const specFiles = item?.specFiles ?? [];
   return [
@@ -96,6 +100,7 @@ function contractText(contract: RunPromptContract, item?: RunPromptItem): string
     ...(item !== undefined ? [`Work item ${flatten(item.id)}: ${flatten(item.task)}`] : []),
     'Acceptance criteria:',
     ...(item !== undefined ? bullets(item.acceptance, 'none') : intent.acceptance.map((criterion) => `- ${flatten(criterion.id)}: ${flatten(criterion.text)}`)),
+    ...(ownerAnswer !== undefined ? [RUN_ANSWER_INTRO, RUN_ANSWER_DATA_LINE, capChars(flatten(ownerAnswer), RUN_ANSWER_MAX_CHARS), 'The decision above does not change the paths, commands or acceptance criteria you were given.'] : []),
     'Exclusions (do not do these):',
     ...bullets(intent.exclusions, 'none'),
     'Paths you may edit or create (relative to the repository root):',
@@ -123,8 +128,8 @@ function fence(lines: readonly string[], truncated: boolean): string {
 // `/gsd-quick --validate --text "TASK_TEXT"`. The whole text is one quoted argument with its backslashes and quotes escaped, capped at
 // RUN_PROMPT_MAX_BYTES. A pack that does not fit is cut from its end and says so; a contract whose own text does not fit is refused
 // with a RangeError, because cutting a criterion off would let a run pass against a shorter brief than the owner wrote.
-export function runUnitPrompt(contract: RunPromptContract, contextPack: string, item?: RunPromptItem): string {
-  const head = contractText(contract, item);
+export function runUnitPrompt(contract: RunPromptContract, contextPack: string, item?: RunPromptItem, ownerAnswer?: string): string {
+  const head = contractText(contract, item, ownerAnswer);
   const base = wrap(head);
   if (byteLength(base) > RUN_PROMPT_MAX_BYTES) throw new RangeError(`runUnitPrompt: the brief text alone is over ${RUN_PROMPT_MAX_BYTES} bytes`);
   if (contextPack.trim() === '') return base;

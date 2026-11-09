@@ -296,6 +296,7 @@ export function completeInvocation(deps: AppDeps, prepared: PreparedInvocation, 
 export interface PreparedRunInvocation extends PreparedInvocation {
   attemptId: string;
   itemId: string;
+  answeredDecisionId?: string;
 }
 
 export type PrepareRunOutcome = { granted: true; prepared: PreparedRunInvocation } | { granted: false; budget: string };
@@ -308,6 +309,9 @@ export interface PrepareRunOptions {
   sessionId?: string;
   // Clone-relative files the invocation is expected to leave; none by default (a run is judged from the clone, not from a file list).
   expectedFiles?: readonly string[];
+  // The decision whose answer the unit's prompt carries (plan 03-18): recorded on the `launch:run` step, so the first attempt after an answer can be told
+  // from a retry of it.
+  answeredDecisionId?: string;
 }
 
 // The directories of the GSD install the run reads: the `gsd:inspect` step when a stage recorded one, else what the GSD adapter reports now.
@@ -428,17 +432,28 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
     step,
     attempt,
     status: 'started',
-    result: { invocationId: request.invocationId, sessionId: request.sessionId, purpose: 'run', attemptId: options.attemptId, itemId: options.itemId, model: item.model },
+    result: {
+      invocationId: request.invocationId,
+      sessionId: request.sessionId,
+      purpose: 'run',
+      attemptId: options.attemptId,
+      itemId: options.itemId,
+      model: item.model,
+      ...(options.answeredDecisionId !== undefined ? { answeredDecisionId: options.answeredDecisionId } : {}),
+    },
     nowMs: startedMs,
   });
   if (!started.ok) return started;
-  return ok({ granted: true, prepared: { request, reservation, attempt, startedMs, step, attemptId: options.attemptId, itemId: options.itemId } });
+  return ok({
+    granted: true,
+    prepared: { request, reservation, attempt, startedMs, step, attemptId: options.attemptId, itemId: options.itemId, ...(options.answeredDecisionId !== undefined ? { answeredDecisionId: options.answeredDecisionId } : {}) },
+  });
 }
 
 // The run counterpart of completeInvocation: the same settlement and records, kept for the life of the run, and an event that names the
 // run, the attempt and the invocation.
 export function completeRunInvocation(deps: AppDeps, prepared: PreparedRunInvocation, outcome: Result<InvocationOutcome>): Result<InvocationOutcome> {
-  const { request, attemptId, itemId } = prepared;
+  const { request, attemptId, itemId, answeredDecisionId } = prepared;
   return finishInvocation(
     deps,
     {
@@ -446,7 +461,7 @@ export function completeRunInvocation(deps: AppDeps, prepared: PreparedRunInvoca
       recordStep: (input) => deps.ledger.recordRunStep(request.runId, input),
       retention: RUN_RETENTION,
       // The model the invocation was launched with (its item's, D-10), on the step and on the event: a run's model use is traceable per invocation.
-      stepExtras: { attemptId, itemId, model: request.model },
+      stepExtras: { attemptId, itemId, model: request.model, ...(answeredDecisionId !== undefined ? { answeredDecisionId } : {}) },
       eventOwner: { runId: request.runId, attemptId, itemId, model: request.model },
       attemptId,
     },

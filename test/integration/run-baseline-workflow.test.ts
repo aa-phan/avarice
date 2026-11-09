@@ -289,7 +289,7 @@ describe('every ending that is not a handed-off branch is a recorded decision (T
   it('a budget spent inside the unit (the hook denies budget_exhausted) ends in blocked (budget_exhausted) naming the budget', () => {
     const f = fixture();
     const r = runCli([...startArgs(f), '--budget', 'toolCalls=2'], { roots: f.roots, cwd: f.repo.path, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: JSON.stringify({ run: FIX }) }, timeoutMs: 300_000 });
-    const { runId, decision } = assertBlocked(f, r, 'budget_exhausted', 'permission');
+    const { runId, decision } = assertBlocked(f, r, 'budget_exhausted', 'budget');
     assert.match(decision.issue, /toolCalls/);
     assert.equal(classifyOf(f, runId)['kind'], 'budget_exhausted');
   });
