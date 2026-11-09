@@ -23,7 +23,9 @@ export interface BlockOptions {
   issue: string;
   evidenceRefs?: readonly string[];
   attemptId?: string;
-  itemId?: string;
+  // The item the decision is about: always named by the caller, never assumed (a run has several items). A block before any unit names the item that
+  // would run first.
+  itemId: string;
   finding?: { check: string; paths?: readonly string[] };
   // Short IDs and codes for the transition event.
   data?: Readonly<Record<string, unknown>>;
@@ -41,7 +43,7 @@ export function blockRun(ctx: RunStageContext, options: BlockOptions): Result<Ru
   if (!stored.ok) return stored;
   if (stored.value === null) return err({ kind: 'internal', cause: `run ${ctx.runId} has no stored contract` });
   const contract = stored.value.body as RunContract;
-  const itemId = options.itemId ?? 'A';
+  const { itemId } = options;
 
   if (options.finding !== undefined) {
     const event = deps.ledger.appendEvent({

@@ -174,9 +174,9 @@ function markInterruptedChecks(ctx: RunStageContext, row: RunRow, contract: RunC
   for (const { spec } of checksToRun(contract)) {
     // The pass runs only checks that passed validation (ONB-10): one that was never going to run is not an interrupted check.
     if (verdicts.value.get(spec.name)?.verdict !== 'active' || finished.has(spec.name)) continue;
+    // The final pass proves the whole run, so its rows name no item (the rows the pass itself writes name none either).
     const recorded = deps.ledger.recordEvidence({
       attemptId: attempt.attemptId,
-      workItem: 'A',
       kind: 'check',
       name: spec.name,
       status: 'inconclusive',
@@ -246,8 +246,10 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   const { deps } = ctx;
   const items = deps.ledger.listWorkItems(ctx.runId);
   if (!items.ok) return items;
-  const item = items.value[0];
-  const inFlight = item !== undefined && (item.state === 'delegated' || item.state === 'gated');
+  // Items run one at a time, so at most one is in flight (delegated or gated): that one is reconciled. More than one is a ledger the scheduler never wrote.
+  const flying = items.value.filter((i) => i.state === 'delegated' || i.state === 'gated');
+  if (flying.length > 1) return err({ kind: 'internal', cause: `run ${ctx.runId} has ${flying.length} work items in flight (${flying.map((i) => i.itemId).join(', ')}); items run one at a time` });
+  const item = flying.at(0);
 
   let current = run;
   if (item?.state === 'delegated' && current.state === 'running') {
@@ -256,7 +258,7 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
     current = paused.value;
   }
   let outcome: string = 'none';
-  if (inFlight) {
+  if (item !== undefined) {
     const reconciled = reconcileItem(ctx, current, item.itemId);
     if (!reconciled.ok) return reconciled;
     outcome = reconciled.value;
@@ -293,7 +295,7 @@ async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
     // A previous reconcile paused the run and was killed before it put it back: the item's state says which way back it was going.
     const items = ctx.deps.ledger.listWorkItems(ctx.runId);
     if (!items.ok) return items;
-    return items.value[0]?.state === 'done' ? reconcileVerifying(ctx, run) : reconcileRunning(ctx, run);
+    return items.value.length > 0 && items.value.every((i) => i.state === 'done') ? reconcileVerifying(ctx, run) : reconcileRunning(ctx, run);
   }
   // contract_ready: the stage repeats the actions whose step is not recorded, and a fresh run has nothing to reap.
   return ok(undefined);

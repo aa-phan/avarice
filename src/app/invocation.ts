@@ -304,6 +304,8 @@ export interface PrepareRunOptions {
   // The attempt (CON-16 ordinal) and the work item this invocation serves.
   attemptId: string;
   itemId: string;
+  // The session ID of the invocation when the caller chose it first (it records it on the work item when it delegates it, D-08); a fresh one otherwise.
+  sessionId?: string;
   // Clone-relative files the invocation is expected to leave; none by default (a run is judged from the clone, not from a file list).
   expectedFiles?: readonly string[];
 }
@@ -416,7 +418,7 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
     scope,
     extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
     expectedFiles: [...(options.expectedFiles ?? [])],
-    sessionId: randomUUID(),
+    sessionId: options.sessionId ?? randomUUID(),
     ownerKind: 'run',
     ownerId: run.runId,
   };

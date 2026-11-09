@@ -195,10 +195,13 @@ registerContractReadyAction(
     if (!recorded.ok) return recorded;
     const failure = result.value.failure;
     if (failure === undefined) return ok('next');
+    const itemId = firstItemToRun(deps, ctx.runId);
+    if (!itemId.ok) return itemId;
     const blocked = blockRun(ctx, {
       reason: failure.reason,
       decisionClass: failure.decisionClass,
       issue: failure.issue,
+      itemId: itemId.value,
       data: { gate: 'deps:install' },
       place: { workspacePath: workspace.value.path, branch: workspace.value.branch },
     });
@@ -234,7 +237,9 @@ registerContractReadyAction(
       const failure = install.result?.failure;
       if (failure === undefined) return report;
       deps.ledger.recordRunStep(ctx.runId, { step: VALIDATE_STEP, status: 'failed', result: { install: installSummary(install.result as InstallResult) }, nowMs: startedMs, completedAtMs: deps.clock.nowMs() });
-      const blocked = blockRun(ctx, { reason: failure.reason, decisionClass: failure.decisionClass, issue: `in the validation clone: ${failure.issue}`, data: { gate: 'checks:validate', step: 'deps:install' }, place });
+      const itemId = firstItemToRun(deps, ctx.runId);
+      if (!itemId.ok) return itemId;
+      const blocked = blockRun(ctx, { reason: failure.reason, decisionClass: failure.decisionClass, issue: `in the validation clone: ${failure.issue}`, itemId: itemId.value, data: { gate: 'checks:validate', step: 'deps:install' }, place });
       return blocked.ok ? ok('moved') : blocked;
     }
     const blocking = report.value.outcomes.filter((o) => o.verdict !== 'active' && (o.required || o.target));
@@ -254,10 +259,13 @@ registerContractReadyAction(
     if (blocking.length === 0) return ok('next');
 
     const why = blocking.map(blockingOf);
+    const itemId = firstItemToRun(deps, ctx.runId);
+    if (!itemId.ok) return itemId;
     const blocked = blockRun(ctx, {
       reason: why.some((w) => w.reason === 'enforcement_failure') ? 'enforcement_failure' : 'decision',
       decisionClass: 'permission',
       issue: why.map((w) => w.issue).join('; '),
+      itemId: itemId.value,
       data: { gate: 'checks:validate', checks: blocking.map((o) => o.name).join(',') },
       place,
     });

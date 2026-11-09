@@ -18,6 +18,7 @@
 //
 // The GSD records of the unit (`.planning/quick/**`, `.planning/STATE.md`) are artifacts (D-17): they never reach the review branch.
 // The host's own outcome `kind` is not read here (spike S2-B: both live rounds ended `denied` on improvised shell lines, with the unit done).
+import { randomUUID } from 'node:crypto';
 import { digestOf, sha256Hex } from '../../domain/digest.ts';
 import { baselineDelta, revisionOf } from '../../domain/evidence.ts';
 import { evaluateG2 } from '../../domain/gates.ts';
@@ -580,7 +581,9 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
       : deps.ledger.recordRunAttempt(ctx.runId, { reason: mine.value.length === 0 ? 'initial' : RETRY_REASON, itemId: unit.item.itemId, nowMs: deps.clock.nowMs() });
   if (!attempt.ok) return attempt;
   const attemptId = attempt.value.attemptId;
-  const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId });
+  // The session ID is chosen here so the work item carries it from the moment it is delegated (D-08, RC-8): a decision's answer resumes that session.
+  const sessionId = randomUUID();
+  const delegated = deps.ledger.transitionWorkItem(ctx.runId, unit.item.itemId, { fence: ctx.fence }, { to: 'delegated', nowMs: deps.clock.nowMs(), attemptId, gsdSession: sessionId });
   if (!delegated.ok) return delegated;
 
   // The previous item's commit took `.planning/config.json` out of the clone (D-17): this item's unit gets the GSD settings again, before its snapshot,
@@ -608,7 +611,7 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
   }
   const current = deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;
-  const prepared = prepareRunInvocation(deps, current.value, prompt, { attemptId, itemId: unit.item.itemId });
+  const prepared = prepareRunInvocation(deps, current.value, prompt, { attemptId, itemId: unit.item.itemId, sessionId });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) {
     const blocked = blockRun(ctx, { reason: 'budget_exhausted', decisionClass: 'permission', issue: `the ${prepared.value.budget} budget is spent, so the unit was not started`, attemptId, itemId: unit.item.itemId, data: { budget: prepared.value.budget } });
