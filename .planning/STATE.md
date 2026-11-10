@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Halted 03-29 at Task 1 (D-03 stop, run 1 two pause decisions)
-last_updated: "2026-11-09T23:56:10.941Z"
+stopped_at: Completed 03-40-PLAN.md
+last_updated: "2026-11-10T00:42:49.084Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 40213cab7ad65bff42093771df24de8cb067fd71
+state_head: bd02c8b174b44000e45a1ee80e817aaf0c9f8bc5
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 100
-  completed_plans: 96
+  total_plans: 103
+  completed_plans: 97
 ---
 
 # Project State
@@ -149,6 +149,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P38 | 1h 15m | 1 tasks | 8 files |
 | Phase 03 P39 | 50 min | 3 tasks | 12 files |
 | Phase 03 P28 | continuation | 2 tasks | 10 files |
+| Phase 03 P40 | 100 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -345,6 +346,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-28: item A stays small (haiku) in all three exit briefs
 - [Phase 03]: Owner decision 2026-11-09 after the 03-29 D-03 stop (run_01M71BDV8MWGEG7XSAWH1GZ80W: item A's unit finished and verified its own work, then repeated item B's open numbered choice; detectPause parked A, giving two decisions instead of one): fix BOTH (1) prompt scope — each item's unit sees only its own item's brief text, not other items' open choices — and (2) pause attribution — a numbered choice that belongs to another item's open decision does not pause a unit whose own work is done and verified; src/ change with docs/system update and offline tests; then repeat all three exit runs (D-03)
 - [Phase 03]: Owner decision 2026-11-09: the repeated exit's per-run cap is 5.62 USD (lower-only from 5.67; 16.8830 USD headroom fits three runs); ceiling stays 25 USD; host pin 2.1.319 unchanged. Run 1 of 03-29 stays open in the owner's profile until the owner cancels it; Claude never answers or cancels a portfolio run
+- [Phase 03]: 03-40: an item prompt carries only its own item's Behavior paragraphs (labelled 'Item <id>:' or 'Work item <id>:') and the shared ones, no run title; a Behavior with no labelled paragraph is given whole — Exit run 1: item A's unit read item B's owner choice and ended with it
+- [Phase 03]: 03-40: a numbered choice is attributed to another item only for a verified, otherwise progressed unit whose every choice line equals one other owner-choice item's options and none of its own or shared options; any doubt keeps the pause — Fail-closed attribution; classify records pauseAttributedTo and never the question text
 
 ### Pending Todos
 
@@ -403,6 +406,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T23:56:10.705Z
-Stopped at: Halted 03-29 at Task 1 (D-03 stop, run 1 two pause decisions)
+Last session: 2026-11-10T00:42:48.872Z
+Stopped at: Completed 03-40-PLAN.md
 Resume file: None

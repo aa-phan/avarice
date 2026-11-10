@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 34/42 plans executed (17 waves, with 9 gap-closure plans)
+**Plans:** 36/42 plans executed (17 waves, with 9 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -273,8 +273,8 @@ Plans:
 - [x] 03-28-PLAN.md — Exit briefs drafted and dry-run against the portfolio pin; owner checkpoint for briefs and spend (D-04)
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 03-29-PLAN.md — Exit part 1: run 1 block and resume to ready_for_review; run 2 started and blocked (halted at Task 1: run 1 stopped on two pause decisions, item A parked; resumed by 03-42)
-- [ ] 03-40-PLAN.md — Gap closure after the 03-29 stop: each item's unit sees only its own part of the brief, and a numbered choice that belongs to another item does not pause a verified unit (fail closed); offline reproduction of run 1; docs/system
+- [x] 03-29-PLAN.md — Exit part 1: run 1 block and resume to ready_for_review; run 2 started and blocked (halted at Task 1: run 1 stopped on two pause decisions, item A parked; resumed by 03-42)
+- [x] 03-40-PLAN.md — Gap closure after the 03-29 stop: each item's unit sees only its own part of the brief, and a numbered choice that belongs to another item does not pause a verified unit (fail closed); offline reproduction of run 1; docs/system
 
 **Wave 12** *(gap closure, blocked on 03-40)*
 - [ ] 03-41-PLAN.md — Exit repeat prepared with no spend: superseded evidence on the record, dry run with the fixed code, the 5.62 USD authorization; the owner cancels the stopped run 1 and confirms
@@ -387,7 +387,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 34/39 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 36/42 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
