@@ -35,7 +35,21 @@
   },
   "itemA": "stays small (haiku) in all three briefs; no brief change",
   "supersedes": "03-44-exit-authorization.json",
-  "ownerConfirmedAt": null,
+  "ownerConfirmedAt": "2026-11-10T22:20:30Z",
+  "ownerConfirmation": {
+    "reply": "cancelled; authorization approved",
+    "repliedOn": "2026-11-10",
+    "recordedAt": "2026-11-10T22:20:30Z",
+    "ledgerCheck": {
+      "readBy": "the tools' read-only read model (createDeps readOnly), no owner command run",
+      "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
+      "state": "cancelled",
+      "stateAt": "2026-11-10T08:26:25.857Z",
+      "decisions": "dec_01M722AMGKSDC2RPA5SZ1VE7N6 answered; dec_01M7274XVDJAH8MC3XZ6M89DR4 withdrawn; none open"
+    },
+    "portfolioCheck": "the portfolio snapshot taken after the cancel equals the dry run's: composite sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67, HEAD 9f63d9114c5d3d720b8496b08cec85382cfaa357, 6 refs",
+    "note": "The owner cancelled run_01M7220WKE6WAP7N0FTPSH95RV in their own terminal window before replying; Claude ran neither the cancel nor any other owner command, and read the ledger and the portfolio read-only."
+  },
   "notes": [
     "D-03: the third exit attempt (plan 03-45) stopped on run 1 (run_01M7220WKE6WAP7N0FTPSH95RV) at the finish: the resumed unit wrote its VERIFICATION without the frontmatter fences and G2 read gaps_found. Plan 03-46 fixed the product (the records sentence states the fenced VERIFICATION shape) and the finish (--finish judges and records a second stop instead of exiting 2). This authorization repeats all three runs, one `avarice start` each, from run 1 on a new evidence file (03-48-evidence-exit.json) whose supersedes block names the halted 03-45-evidence-exit.json.",
     "The per-run cap is 4.95 USD, the owner's decision 3 (STATE.md f3ac20c). Phase 3 stands at 10.1294 of 25 USD, so the headroom is 14.8706 USD. Three runs at 4.95 USD cap 14.85 USD, so the three runs end at most at 24.9794 USD. There is no room for another repeat, and nothing else may spend in Phase 3 before the exit's three runs.",

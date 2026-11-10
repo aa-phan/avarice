@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "plan": "03-48",
+  "decision": "D-03, D-05",
+  "updatedAt": "2026-11-10T22:20:30Z",
+  "supersedes": {
+    "file": "03-45-evidence-exit.json",
+    "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
+    "state": "cancelled",
+    "stateAt": "2026-11-10T08:26:25.857Z",
+    "reason": "D-03 stop of plan 03-45: B's resumed unit wrote its VERIFICATION without the frontmatter fences and G2 read gaps_found; fixed by plan 03-46; owner decisions STATE.md f3ac20c"
+  },
+  "runs": []
+}
