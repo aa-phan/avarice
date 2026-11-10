@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 43/48 plans executed (21 waves, with 15 gap-closure plans)
+**Plans:** 44/48 plans executed (21 waves, with 15 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -294,7 +294,7 @@ Plans:
 - [x] 03-47-PLAN.md — Exit repeat prepared with no spend: dry run with the fixed code, the 4.95 USD authorization, the superseded evidence; the owner cancels the stopped run 1 in their own terminal window and confirms
 
 **Wave 17** *(gap closure, blocked on 03-47)*
-- [ ] 03-48-PLAN.md — Exit part 1 for the fourth time at 4.95 USD (run 1 to ready_for_review with the delegated session resumed and B's G2 passing, run 2 started and blocked); resumes 03-29, 03-42 and 03-45
+- [x] 03-48-PLAN.md — Exit part 1 for the fourth time at 4.95 USD (run 1 to ready_for_review with the delegated session resumed and B's G2 passing, run 2 started and blocked); resumes 03-29, 03-42 and 03-45 (halted at Task 2: B's delegated session resumed correctly and B passed G2, but item C parked on a pause because the e2e spec asserting the old fallback sentence is outside the brief's write paths; run 1 blocked on a new decision, run 2 not started, 03-29, 03-42 and 03-45 still halted)
 
 **Wave 18** *(blocked on 03-48, 03-45, 03-42 and 03-29)*
 - [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict (reads the fourth attempt's evidence and the 4.95 USD authorization)
@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 43/48 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 44/48 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |

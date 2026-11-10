@@ -5,8 +5,8 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-47-PLAN.md
-last_updated: "2026-11-10T22:21:30.597Z"
+stopped_at: Halted at 03-48-PLAN.md Task 2 (D-03)
+last_updated: "2026-11-10T22:58:00.000Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 03 execution started
 state_head: 94522d59b2a247ff94c5479f94678fb4766ecf57
@@ -14,7 +14,7 @@ progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 109
-  completed_plans: 104
+  completed_plans: 105
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — executing; plan 03-47 complete
-Plan: 03-47 complete (the fourth exit attempt prepared: script default 03-48-evidence-exit.json, no-spend dry run, owner-confirmed 4.95 USD authorization, run_01M7220WKE6WAP7N0FTPSH95RV cancelled by the owner, 03-48-evidence-exit.json seeded). Next: 03-48 (exit part 1, live, 3 runs), then 03-30 (exit part 2)
-Status: Ready for 03-48. Phase 3 spend 10.1294 of 25 USD; three runs at 4.95 USD cap 14.85, so no further repeat fits. 03-29, 03-42 and 03-45 stay halted records
-Last activity: 2026-11-10 - plan 03-47 complete: owner cancelled run 1 and confirmed the 4.95 USD authorization, evidence file seeded, 0 USD spent, portfolio unchanged
+Phase: 03 (Decisions, independent work and amendments) — HALTED at plan 03-48 (D-03 stop)
+Plan: 03-48 halted at Task 2 (run_01M73RX3RF0ZJETYWVF52WFZ5B: A committed, owner answered option 2, B's delegated session 9673ee64 resumed under /Users/aphan/.claude-edu with no fresh attempt, B passed G2 and committed 0db1f45; item C then parked on dec_01M73THARNM0VENR94QDX62BJ3 because tests/e2e/copy-email.spec.ts, which asserts the old fallback sentence, is outside the brief's write paths)
+Status: Blocked on the owner. Run 2 not started; 03-29, 03-42 and 03-45 stay halted, 03-30 stays blocked. Phase 3 spend 11.1923 of 25 USD (03-48 1.0629). Owner decides: answer or cancel the open decision, add the e2e spec to run 1's Write list (and check runs 2 and 3 for the same pattern), and whether to authorize another attempt
+Last activity: 2026-11-10 - plan 03-48 halted under D-03: resume and G2 proven, C stop diagnosed, spend rows appended, portfolio unchanged
 
 Progress: [███░░░░░░░] 25%
 
@@ -154,6 +154,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P44 | 3h | 2 tasks | 7 files |
 | Phase 03 P46 | 60 min | 2 tasks | 6 files |
 | Phase 03 P47 | 3h | 2 tasks | 5 files |
+| Phase 03 P48 | 40 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -362,6 +363,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 4.95 USD (lower-only; 14.8706 USD headroom at 10.1294 spent; worst case 14.85 keeps Phase 3 within 25; no further repeat fits); ceiling 25; host pin 2.1.319. run_01M7220WKE6WAP7N0FTPSH95RV stays open until the owner cancels it in their own terminal; Claude never answers or cancels a portfolio run
 - [Phase 03]: 03-46: the records sentence states the fenced VERIFICATION shape (parser and gates unchanged); --finish exits 2 only while a start-stage pause decision is open and records a second stop with exit 1
 - [Phase 03]: 03-47: the exit script defaults to 03-48-evidence-exit.json; the owner cancelled run_01M7220WKE6WAP7N0FTPSH95RV in their own terminal and confirmed the 4.95 USD per-run authorization (ownerConfirmedAt 2026-11-10T22:20:30Z); 03-48-evidence-exit.json is seeded with runs [] and a supersedes block; authorize passes on the pinned 2.1.319 host; 0 USD spent, portfolio unchanged (composite sha256:36b38e48...), three runs at 4.95 cap 14.85 of 14.8706 headroom so no further repeat fits
+- [Phase 03]: 03-48 (D-03 stop at Task 2): the resume is proven (B's delegated session 9673ee64 requested and reported by five init events, no fresh answer attempt, B G2 passed, B committed 0db1f45) but item C parked on dec_01M73THARNM0VENR94QDX62BJ3 because removing COPY_FALLBACK breaks tests/e2e/copy-email.spec.ts, outside the brief's Write list; run 2 not started; 03-29, 03-42 and 03-45 untouched; Phase 3 at 11.1923 of 25 USD; nothing answered, cancelled or retried by Claude
 
 ### Pending Todos
 
@@ -421,6 +423,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T22:21:30.370Z
-Stopped at: Completed 03-47-PLAN.md
+Last session: 2026-11-10T22:58:00.000Z
+Stopped at: Halted at 03-48-PLAN.md Task 2 (D-03)
 Resume file: None
