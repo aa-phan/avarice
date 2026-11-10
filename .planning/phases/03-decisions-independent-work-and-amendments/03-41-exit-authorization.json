@@ -35,7 +35,14 @@
   },
   "itemA": "stays small (haiku) in all three briefs; no brief change",
   "supersedes": "03-28-exit-authorization.json",
-  "ownerConfirmedAt": null,
+  "ownerConfirmedAt": "2026-11-10T01:45:20Z",
+  "ownerConfirmation": {
+    "reply": "cancelled; authorization approved",
+    "repliedOn": "2026-11-09",
+    "recordedAt": "2026-11-10T01:45:20Z",
+    "cancelledRun": "run_01M71BDV8MWGEG7XSAWH1GZ80W",
+    "ledgerCheck": "read-only read of the owner's ledger at recordedAt: run state cancelled (updatedAt 2026-11-10T01:44:08.992Z), decisions dec_01M71BQWZ8FAH7WA93VARR9PR0 and dec_01M71BR2T1RTDA0QTAAQB1BW7J withdrawn, none open; portfolio checkout digest sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67, HEAD 9f63d91, 6 refs, equal to the dry run's"
+  },
   "notes": [
     "D-03: the first exit attempt (plan 03-29) stopped on run 1 (two pause decisions, item A parked). Plan 03-40 fixed the product; this authorization repeats all three runs, one `avarice start` each, from run 1 on a new evidence file (03-42-evidence-exit.json) whose supersedes block names the halted 03-29-evidence-exit.json.",
     "The per-run cap is 5.62 USD, the owner's decision 2 (STATE.md a7d7f0b). Three runs at 5.62 USD cap 16.86 USD of the 16.883 USD headroom (Phase 3 stands at 8.117 of 25 USD), so nothing else may spend in Phase 3 before the exit's three runs.",

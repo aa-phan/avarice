@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "plan": "03-42",
+  "decision": "D-03, D-05",
+  "updatedAt": "2026-11-10T01:45:20Z",
+  "runs": [],
+  "supersedes": {
+    "file": "03-29-evidence-exit.json",
+    "runId": "run_01M71BDV8MWGEG7XSAWH1GZ80W",
+    "state": "cancelled",
+    "stateAt": "2026-11-10T01:44:08.992Z",
+    "reason": "D-03 stop of plan 03-29: two pause decisions, item A parked; fixed by plan 03-40; owner decisions STATE.md a7d7f0b"
+  }
+}
