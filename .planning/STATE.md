@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-46-PLAN.md
-last_updated: "2026-11-10T08:30:30.307Z"
+stopped_at: Completed 03-47-PLAN.md
+last_updated: "2026-11-10T22:21:30.597Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 03 execution started
-state_head: f1aeb6e8fc739a1725e5946d723267ce9306e450
+state_head: 94522d59b2a247ff94c5479f94678fb4766ecf57
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 109
-  completed_plans: 103
+  completed_plans: 104
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — HALTED at plan 03-45 (D-03 stop)
-Plan: 03-45 halted at Task 2 (run_01M7220WKE6WAP7N0FTPSH95RV: A committed, owner answered option 2, B's delegated session 4006c6cb resumed under the recorded directory with no fresh attempt; gate G2 then failed because the resumed session's VERIFICATION.md had `status: passed` without `---` fences; run blocked_on_decision on dec_01M7274XVDJAH8MC3XZ6M89DR4)
-Status: Blocked on the owner. Run 2 not started; 03-29 and 03-42 stay halted, 03-30 stays blocked. Phase 3 spend 10.1294 of 25 USD (03-45 0.9443). Owner decides: answer or cancel the open decision, fix the VERIFICATION wording (run-shell-rules) or parser, and use the remaining headroom
-Last activity: 2026-11-10 - plan 03-45 halted under D-03: resume proven, G2 stop diagnosed, spend row appended, portfolio HEAD unchanged
+Phase: 03 (Decisions, independent work and amendments) — executing; plan 03-47 complete
+Plan: 03-47 complete (the fourth exit attempt prepared: script default 03-48-evidence-exit.json, no-spend dry run, owner-confirmed 4.95 USD authorization, run_01M7220WKE6WAP7N0FTPSH95RV cancelled by the owner, 03-48-evidence-exit.json seeded). Next: 03-48 (exit part 1, live, 3 runs), then 03-30 (exit part 2)
+Status: Ready for 03-48. Phase 3 spend 10.1294 of 25 USD; three runs at 4.95 USD cap 14.85, so no further repeat fits. 03-29, 03-42 and 03-45 stay halted records
+Last activity: 2026-11-10 - plan 03-47 complete: owner cancelled run 1 and confirmed the 4.95 USD authorization, evidence file seeded, 0 USD spent, portfolio unchanged
 
 Progress: [███░░░░░░░] 25%
 
@@ -153,6 +153,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P41 | 120 min | 2 tasks | 7 files |
 | Phase 03 P44 | 3h | 2 tasks | 7 files |
 | Phase 03 P46 | 60 min | 2 tasks | 6 files |
+| Phase 03 P47 | 3h | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -360,6 +361,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-10 after the 03-45 D-03 stop (run_01M7220WKE6WAP7N0FTPSH95RV: 03-40 and 03-43 proven live — A committed, only B blocked, B's delegated session 4006c6cb-… resumed with no fresh attempt; but B's resumed unit wrote VERIFICATION.md with a bare 'status: passed' first line and no '---' fences, the gate parser failed closed to gaps_found, and G2 parked B on dec_01M7274XVDJAH8MC3XZ6M89DR4): FIX THE WORDING — the unit prompt's records sentence states the exact VERIFICATION.md shape (a '---' line, 'status: <value>', a '---' line) with an offline test that the stated shape passes the real gate parser; the parser stays fail-closed; ALSO fix the exit tool's --finish so a second stop is judged and recorded instead of exiting 2; src/ + docs/system + offline tests; then repeat all three exit runs (D-03)
 - [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 4.95 USD (lower-only; 14.8706 USD headroom at 10.1294 spent; worst case 14.85 keeps Phase 3 within 25; no further repeat fits); ceiling 25; host pin 2.1.319. run_01M7220WKE6WAP7N0FTPSH95RV stays open until the owner cancels it in their own terminal; Claude never answers or cancels a portfolio run
 - [Phase 03]: 03-46: the records sentence states the fenced VERIFICATION shape (parser and gates unchanged); --finish exits 2 only while a start-stage pause decision is open and records a second stop with exit 1
+- [Phase 03]: 03-47: the exit script defaults to 03-48-evidence-exit.json; the owner cancelled run_01M7220WKE6WAP7N0FTPSH95RV in their own terminal and confirmed the 4.95 USD per-run authorization (ownerConfirmedAt 2026-11-10T22:20:30Z); 03-48-evidence-exit.json is seeded with runs [] and a supersedes block; authorize passes on the pinned 2.1.319 host; 0 USD spent, portfolio unchanged (composite sha256:36b38e48...), three runs at 4.95 cap 14.85 of 14.8706 headroom so no further repeat fits
 
 ### Pending Todos
 
@@ -419,6 +421,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T08:30:30.088Z
-Stopped at: Completed 03-46-PLAN.md
+Last session: 2026-11-10T22:21:30.370Z
+Stopped at: Completed 03-47-PLAN.md
 Resume file: None
