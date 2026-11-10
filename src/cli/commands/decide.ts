@@ -13,7 +13,9 @@
 // It refuses inside a run (AVARICE_RUN), without a terminal on standard input and output, and from the process tree of a run, before the profile is
 // resolved, so a refusal creates nothing (CS-11), and then for a profile that is not the user's own. Exit 0 answered, withdrawn or an identical answer
 // ignored; 3 an answer that was not applied for the state of the decision or the run (closed, stale, answered differently, to be made by an amendment);
-// 64 a usage error, an unknown decision, an option or text the record does not allow, a refusal; 70 an internal failure. `--wait` follows a supervisor
+// 64 a usage error, an unknown decision, an option or text the record does not allow, a refusal; 70 an internal failure. An open decision whose run recorded a
+// host configuration directory that is missing or unreadable is not answered either (exit 3, before anything is written): the supervisor this command starts runs
+// the host under that directory. `--wait` follows a supervisor
 // this command started to where the run stops.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { planAmendment } from '../../app/amend.ts';
@@ -25,6 +27,7 @@ import type { DecisionOption } from '../../domain/decision-policy.ts';
 import type { PortError } from '../../domain/result.ts';
 import type { DecisionRow } from '../../ports/ledger.ts';
 import type { Io, ParsedArgs } from '../args.ts';
+import { unhonouredHostConfigDir } from '../host-config-dir.ts';
 import { ownsProfile, refuseOutsideTerminal, responderName } from '../identity.ts';
 import type { IdentityContext } from '../identity.ts';
 import { renderDecision } from '../render/decision-view.ts';
@@ -194,6 +197,14 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   if (!ownsProfile(deps.profile.dataRoot)) {
     io.err(`${errorLine('decide', 'only the user who owns the profile answers a decision')}\n`);
     return EXIT_USAGE;
+  }
+  // An open decision whose run recorded a host configuration directory that cannot be used now is not answered from here (plan 03-43): the supervisor this
+  // command starts would run the host under that directory, and the paused session lives there. Nothing is written and nothing is started; the decision stays open.
+  const located = findDecision(deps, decisionId);
+  const unusable = located.ok && located.value.state === 'open' ? unhonouredHostConfigDir(deps, located.value.runId) : undefined;
+  if (unusable !== undefined) {
+    io.err(`${errorLine('decide', `not applied: ${unusable}`)}\n`);
+    return EXIT_NOT_APPLIED;
   }
   // No answer given: print the record, then ask when an open decision can be answered here (D-13). The question goes to whoever supplied the io (the
   // shell's prompt, a test) or, on a real terminal, to standard input. With no way to ask, or for a decision that is not open, the record and the way

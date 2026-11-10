@@ -213,6 +213,8 @@ contract: <preset> v<version> <digest>
 stored at: <path of the contract file under the data root>
 ```
 
+Before it spawns the supervisor, the command records the host configuration directory it runs under as the step `host:config-dir`. That directory is the value of `CLAUDE_CONFIG_DIR` when it is set and not empty, otherwise `.claude` in the home directory, made absolute and resolved to its real path when it exists. The step holds the directory and where it came from (`CLAUDE_CONFIG_DIR` or `default`). The host keeps its sessions, its skills and the GSD installation in that directory and looks for a session nowhere else, so every supervisor of the run is later started with the recorded directory as its `CLAUDE_CONFIG_DIR`, whichever terminal answers a decision or resumes the run. A step that cannot be recorded is exit 70 (`run <id> is stored but its host configuration directory could not be recorded: ...`) and no supervisor is started.
+
 Without `--wait`, the command spawns the supervisor, records its process ID as the step `supervisor:spawn` and exits 0. The supervisor runs in its own process group with its streams ignored and the data root as working directory, so closing the shell or killing `start` leaves it running. It receives the three profile roots the command resolved and otherwise the command's environment.
 
 With `--wait`, the command then polls the ledger every 250 milliseconds, for at most the contract's wall-clock minutes plus 15 minutes, and prints one result block after the summary:
@@ -229,7 +231,7 @@ The spawn is refused when the CLI entry script is not an absolute path that exis
 
 Exit: 0 the run is stored and the supervisor started (with `--wait`, `ready_for_review`); 3 refused, or with `--wait` any other ending; 64 usage; 70 internal.
 
-Side effects: writes the run, its first contract version, its budget rows and its single work item in one transaction. Writes the contract file (mode 0600) under the data root, records the steps `start:preflight` and `supervisor:spawn`, and starts a process. Takes no lease itself. Not read-only, not offline: the spawned supervisor may launch the contained host.
+Side effects: writes the run, its first contract version, its budget rows and its single work item in one transaction. Writes the contract file (mode 0600) under the data root, records the steps `start:preflight`, `host:config-dir` and `supervisor:spawn`, and starts a process. Takes no lease itself. Not read-only, not offline: the spawned supervisor may launch the contained host.
 
 ## supervise
 
@@ -245,7 +247,9 @@ There are no flags and no `--json` form.
 
 Output (stdout): `run <id>: <state>` with ` (<reason>)` when the run has one, then one line with the supervisor's last note when it left one. A run already in a stop state takes no lease and is only reported.
 
-Exit: 0 when the run is `ready_for_review`. 3 for any other stop state, a state with no stage, or a lease another supervisor still holds (`run <id> is held by another supervisor; its lease must expire first`). 64 usage or no such run. 70 failure (`run <id> did not finish: ...`), including a prelude that could not complete.
+A run that recorded a host configuration directory at start is supervised only under that directory. When the directory this process would run the host under (by the rule `start` records) differs from the recorded one, the command prints `avarice supervise: run <id> was started under the host configuration directory <recorded>, but this process runs the host under <effective>; ...` and exits 70 before it takes the lease or writes anything. `start`, `decide` and `resume` start the supervisor with the recorded directory, so they never produce the difference; it arises when an operator runs `supervise` by hand from another environment. A run without the recorded step is not checked.
+
+Exit: 0 when the run is `ready_for_review`. 3 for any other stop state, a state with no stage, or a lease another supervisor still holds (`run <id> is held by another supervisor; its lease must expire first`). 64 usage or no such run. 70 failure (`run <id> did not finish: ...`), including a prelude that could not complete, and a host configuration directory that differs from the recorded one.
 
 Side effects: as the run flow it drives, including the contained agent host. Takes the lease (default lifetime 180 seconds, override `AVARICE_LEASE_TTL_MS`, see [config-reference.md](config-reference.md)). Not read-only, not offline.
 
@@ -375,12 +379,13 @@ Side effects: as `onboard` after registration; also appends `invocation.reaped` 
 
 - A run in a stop state, or in a state `resume` does not continue (`waiting_external`, `awaiting_review`), is only reported: `run <id>: <state>` with the reason, no lease, nothing changed. Exit 0 for `ready_for_review`, otherwise 3. The one stop state that is continued is a run blocked on a decision whose answer made an item ready (or left no decision open): it takes the path below, because `decide` starts no supervisor while a live lease is held, and a supervisor that died holding it would otherwise leave the answer waiting for nobody.
 - A run whose lease is held by a live supervisor is refused with exit 3 (`run <id> is held by another supervisor; its lease must expire first`), nothing changed.
+- A run the command would hand to a supervisor is refused with exit 3 when the host configuration directory recorded at start is missing, is not a directory or cannot be read: `avarice resume: not applied: the run's host configuration directory <dir>, recorded when it started, is missing; restore it, or run this from an environment where it exists` (or `is not a directory`, `is unreadable`). Nothing is written and no supervisor starts. A run without the recorded step is never refused. The supervisor the command starts runs the host under the recorded directory, not under the environment of the command.
 - Otherwise the command prints `run <id>: resuming from <state>`, with ` (next: <action>)` when a checkpoint exists. When a step was in flight it then prints `interrupted attempt <attempt> at <step>` (or `interrupted at <step>`).
 - It then spawns a detached supervisor exactly as `start` does and records the step `supervisor:resume`. The supervisor takes the lease, reaps what the dead supervisor left running, reconciles and goes on. Without `--wait` the command then exits 0.
 
 With `--wait` the command polls every 250 milliseconds for at most 24 hours and prints the same result block as `start --wait`. A blocked run is already in a stop state when its supervisor starts, so the wait first lets the supervisor take the run up. The exit codes are the same. Exit 0 is `ready_for_review`. Exit 3 is any other stop state, an interrupted supervisor or the wait bound. Exit 70 is a run that cannot be read. One case differs. When the supervisor stopped because its own reconcile failed (a failed reap, or a reconcile that could not read the repository), the command prints `avarice resume: run <id> could not be resumed: <reason>` on stderr, prints no result block, and exits 70. A reconcile failure is told from a second death by a new failed reconcile step on the run.
 
-Exit: 0 `ready_for_review`, or the supervisor was spawned without `--wait`. 3 stopped elsewhere, lease held, or the wait ended unfinished. 64 usage or no such run. 70 failure, including a supervisor that could not be started or whose spawn step could not be recorded (`run <id> was not resumed: ...`).
+Exit: 0 `ready_for_review`, or the supervisor was spawned without `--wait`. 3 stopped elsewhere, lease held, the recorded host configuration directory unusable, or the wait ended unfinished. 64 usage or no such run. 70 failure, including a supervisor that could not be started or whose spawn step could not be recorded (`run <id> was not resumed: ...`).
 
 Side effects: starts a process and records the step `supervisor:resume`; the supervisor does the rest. Not read-only.
 

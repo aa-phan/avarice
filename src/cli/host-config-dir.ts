@@ -76,7 +76,16 @@ export function hostConfigDirProblem(dir: string): 'missing' | 'not a directory'
   return undefined;
 }
 
-// The one sentence the refusals share: names the directory, says it was recorded when the run started, and what to do.
-export function hostConfigDirRefusal(dir: string, problem: string): string {
-  return `the run's host configuration directory ${dir}, recorded when it started, is ${problem}; restore it, or answer from an environment where it exists`;
+// The refusal `decide` and `resume` share, or undefined when the run has no recorded directory or the recorded one can be used. It names the directory, says
+// it was recorded when the run started, and says what to do.
+export function unhonouredHostConfigDir(deps: AppDeps, runId: string): string | undefined {
+  const dir = recordedHostConfigDir(deps, runId);
+  if (dir === undefined) return undefined;
+  const problem = hostConfigDirProblem(dir);
+  return problem === undefined ? undefined : `the run's host configuration directory ${dir}, recorded when it started, is ${problem}; restore it, or run this from an environment where it exists`;
+}
+
+// The directory the calling process would run the host under (the environment of this process, the home of the composition).
+export function processHostConfigDir(deps: AppDeps, env: NodeJS.ProcessEnv = process.env): string {
+  return effectiveHostConfigDir(env, homeOf(deps, env));
 }

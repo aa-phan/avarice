@@ -2,13 +2,14 @@
 // The supervisor of one run: `start` spawns it detached (D-18), and an operator can start it by hand to continue a run. It takes the
 // run lease, runs the checkpointed stages until the run stops, and releases the lease. Exit 0 when the run is `ready_for_review`,
 // 3 for any other stop state, a state with no stage yet, or a lease another supervisor still holds, 64 for a usage error or an
-// unknown run, 70 for an internal failure.
+// unknown run, 70 for an internal failure or a host configuration directory that differs from the one the run recorded at start (nothing is written, no lease taken).
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { notifyRunStop } from '../../app/notify.ts';
 import { reconcileRun } from '../../app/run-resume.ts';
 import { runSupervisor } from '../../app/run-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
+import { processHostConfigDir, recordedHostConfigDir } from '../host-config-dir.ts';
 import { errorLine, outcomeLines } from '../render/style.ts';
 
 const EXIT_NOT_READY = 3;
@@ -30,6 +31,17 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   if (runId === undefined) {
     io.err(`${errorLine('supervise', usage(args) ?? USAGE)}\n`);
     return EXIT_USAGE;
+  }
+  // A run is supervised under the host configuration directory it recorded at start (plan 03-43): the host finds a session only in the directory of the
+  // process that launches it. `start`, `decide` and `resume` launch the supervisor with it; one started by hand from another environment is refused before
+  // it takes the lease or writes anything.
+  const recorded = recordedHostConfigDir(deps, runId);
+  if (recorded !== undefined) {
+    const effective = processHostConfigDir(deps);
+    if (effective !== recorded) {
+      io.err(`${errorLine('supervise', `run ${runId} was started under the host configuration directory ${recorded}, but this process runs the host under ${effective}; supervise it from an environment that uses ${recorded}`)}\n`);
+      return EXIT_INTERNAL;
+    }
   }
   // Always the reconcile prelude (plan 02-17): a fresh run has nothing to reap or reconcile, and a run being resumed (or supervised by hand after
   // its supervisor died) must not go on beside a surviving host or on an interrupted unit.

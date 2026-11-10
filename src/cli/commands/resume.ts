@@ -7,12 +7,14 @@
 // changed), prints the state and next action it resumes from and, when an attempt was open, which one was interrupted, then spawns the detached
 // supervisor (as `start` does), which takes the lease, reaps what the dead supervisor left running, reconciles, and goes on. `--wait` follows the run
 // to where it stops: exit 0 at `ready_for_review`, 3 at any other stop state or when the supervisor died again, 70 when the supervisor could not
-// reconcile (a failed reap, for one). A run in a stop state is only reported; no lease is taken. Any other ID takes the Phase 1 onboarding path.
+// reconcile (a failed reap, for one). A run in a stop state is only reported; no lease is taken. A run that would be handed to a supervisor is refused with exit 3,
+// before anything is written, when the host configuration directory it recorded at start is missing or unreadable. Any other ID takes the Phase 1 onboarding path.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { resumeOnboarding } from '../../app/resume.ts';
 import { RECONCILE_STEP, resumeRun } from '../../app/run-resume.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
+import { unhonouredHostConfigDir } from '../host-config-dir.ts';
 import { errorLine, outcomeLines, resultLine, stripControl } from '../render/style.ts';
 import { isProcessAlive, spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import { renderWait } from './start.ts';
@@ -87,6 +89,14 @@ async function resumeRunCommand(deps: AppDeps, io: Io, runId: string, wait: bool
   if (found.kind === 'stopped') {
     io.out(`${resultLine(`run ${runId}`, found.run.state, found.run.reason)}\n`);
     return found.run.state === 'ready_for_review' ? 0 : EXIT_NOT_ACTIVE;
+  }
+
+  // A run this command would hand to a new supervisor is not resumed when the host configuration directory it recorded at start cannot be used (plan 03-43):
+  // the supervisor would run the host under it, and the paused session lives there. Nothing has been written or started yet.
+  const unusable = unhonouredHostConfigDir(deps, runId);
+  if (unusable !== undefined) {
+    io.err(`${errorLine('resume', `not applied: ${unusable}`)}\n`);
+    return EXIT_NOT_ACTIVE;
   }
 
   io.out(`${resultLine(`run ${runId}`, `resuming from ${found.run.state}`, found.nextAction === null ? null : `next: ${found.nextAction}`)}\n`);
