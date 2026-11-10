@@ -952,3 +952,35 @@ describe('dry run: the write-set check of a brief (plan 03-49)', () => {
     assert.equal(status(), before);
   });
 });
+
+// The authorization file of a plan whose checkpoint offered in-place options records the owner's option as its selection (plan 03-49); the tools read it
+// like an approval, and still refuse a selection that is not an approval.
+describe('authorization selection', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const pick = (selection: string): { status: number | null; stdout: string; stderr: string } => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-selection-'));
+    dirs.push(dir);
+    const auth = join(dir, 'auth.json');
+    writeFileSync(auth, JSON.stringify({ selection, perRunCapUsd: 4.95, ceilingUsd: 25, host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' }, briefs: [] }));
+    return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'scripts', 'exit-run-phase3-tools.ts'), 'field', '--authorization-file', auth, '--pick', 'perRunCapUsd'], { encoding: 'utf8', timeout: 30_000 });
+  };
+
+  for (const selection of ['approve', 'answer-2-in-place', 'amend-unprotected-path']) {
+    it(`reads the cap of an authorization whose selection is ${selection}`, () => {
+      const run = pick(selection);
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.stdout.trim(), '4.95');
+    });
+  }
+
+  for (const selection of ['stop', 'new-conventions-new-run', 'product-change', '']) {
+    it(`refuses an authorization whose selection is ${JSON.stringify(selection)}`, () => {
+      const run = pick(selection);
+      assert.equal(run.status, 2);
+      assert.match(run.stderr, /the authorization selection is/);
+    });
+  }
+});
