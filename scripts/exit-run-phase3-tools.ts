@@ -36,6 +36,7 @@ import { pathToFileURL } from 'node:url';
 import { phase3Ceiling, phase3LedgerPath, phase3Spent } from '../test/helpers/live-harness.ts';
 import { getRunStatuses } from '../src/app/run-status.ts';
 import { createDeps } from '../src/cli/composition.ts';
+import { HOST_CONFIG_DIR_STEP } from '../src/cli/host-config-dir.ts';
 import { isRunStopState, isRunTerminal } from '../src/domain/run-lifecycle.ts';
 import type { RunState } from '../src/domain/run-lifecycle.ts';
 import { itemBehavior, itemChoiceOptions, normalizeOption } from '../src/domain/item-scope.ts';
@@ -656,9 +657,14 @@ function recordSpendDelta(runId: string, briefPath: string, costUsd: number, cla
   return { recordedUsd: recorded, appendedUsd: delta, line };
 }
 
-// The host configuration directory a run recorded at start (plan 03-43): the latest completed `host:config-dir` step's { claudeConfigDir, source }.
-export function hostConfigDirOf(_steps: ReadonlyArray<{ step: string; status: string; result: unknown }>): Json | null {
-  return null;
+// The host configuration directory a run recorded at start (plan 03-43): the latest completed `host:config-dir` step's { claudeConfigDir, source }, or null
+// for a run that has none (started before the fix) or whose step carries no directory.
+export function hostConfigDirOf(steps: ReadonlyArray<{ step: string; status: string; result: unknown }>): Json | null {
+  const latest = steps.filter((s) => s.step === HOST_CONFIG_DIR_STEP && s.status === 'completed').at(-1);
+  if (latest === undefined || !isObject(latest.result)) return null;
+  const dir = latest.result['claudeConfigDir'];
+  if (typeof dir !== 'string' || dir === '') return null;
+  return { claudeConfigDir: dir, source: latest.result['source'] ?? null };
 }
 
 interface Facts {
@@ -694,6 +700,7 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
   const steps = read('the steps', deps.ledger.getRunSteps(runId)) ?? [];
   const costRow = budgetRows.find((b) => b.name === 'costUsd');
   const costUsd = costRow?.used ?? 0;
+  const hostConfigDir = hostConfigDirOf(steps);
 
   // The park steps (the block descriptors) and the invocations (session, cost, transcript) of the run, from its steps.
   const parkSteps = steps.filter((s) => s.step === 'park' && isObject(s.result) && isObject(s.result['block']));
@@ -796,6 +803,7 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
     commit: status?.commit ?? null,
     clean: status?.clean ?? null,
     costUsd,
+    hostConfigDir,
     budgets: budgetRows.map((b) => ({ name: b.name, used: b.used, reserved: b.reserved, limit: b.limit })),
     items,
     attempts,
@@ -816,7 +824,7 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
 
 // What the start stage expects of a run that has to stop on the planted decision (D-02, D-03): the pause-origin decision of the owner-choice item is open at
 // contract version 1, the items independent of it are done, the items that wait for it have not been delegated, and one notification was queued.
-export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number; hostConfigDir?: Json | null }): string[] {
+export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number; hostConfigDir: Json | null | undefined }): string[] {
   const problems: string[] = [];
   if (facts.state !== 'blocked_on_decision') problems.push(`the run stopped ${facts.state}${facts.reason !== null ? ` (${facts.reason})` : ''}, not blocked_on_decision (D-03)`);
   else if (facts.reason !== 'decision') problems.push(`the run is blocked for ${facts.reason}, not for a decision`);
@@ -850,11 +858,16 @@ export function judgeStart(facts: { state: string; reason: string | null; items:
   }
   if (facts.notifications.length !== 1) problems.push(`the run has ${facts.notifications.length} notification row(s), not one`);
   if (facts.askUserQuestion !== 0) problems.push(`the transcripts have ${facts.askUserQuestion} AskUserQuestion call(s) (S-12)`);
+  // Plan 03-43: a run started by the fixed code records the host configuration directory every later supervisor uses; without it the resume would depend on the
+  // owner's terminal environment again.
+  const dir = facts.hostConfigDir?.['claudeConfigDir'];
+  if (typeof dir !== 'string' || dir === '') problems.push('the run recorded no host configuration directory (the fix of plan 03-43 did not run)');
   return problems;
 }
 
 // What the finish stage expects after the owner's answer: the owner-choice item resumed its own session, every item is done and committed, and the run is
-// ready for review on verified evidence (D-03 run 1, SC1, SC3).
+// ready for review on verified evidence (D-03 run 1, SC1, SC3). The resume facts carry the run's recorded host configuration directory (plan 03-43); the session
+// checks do not depend on it.
 export function judgeFinish(facts: {
   state: string;
   items: Json[];
@@ -877,7 +890,7 @@ export function judgeFinish(facts: {
   const answered = facts.decisions.filter((d) => d['state'] === 'answered');
   if (answered.length !== 1) problems.push(`${answered.length} decision(s) are answered, not one`);
   const decision = answered[0];
-  const resume: Json = { resumed: false };
+  const resume: Json = { resumed: false, hostConfigDir: facts.hostConfigDir ?? null };
   if (decision !== undefined) {
     if (decision['answerChannel'] !== 'terminal') problems.push(`the answer arrived on channel ${JSON.stringify(decision['answerChannel'])}, not terminal`);
     if (decision['answeredBy'] !== `owner:${facts.owner}`) problems.push(`the answer was given by ${JSON.stringify(decision['answeredBy'])}, not owner:${facts.owner}`);
@@ -1054,7 +1067,7 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         ...(startErr !== '' ? { startStderrTail: startErr.slice(-2500) } : {}),
         checkoutBeforeSnapshot: before,
       });
-      problems.push(...judgeStart({ state, reason: facts.run.reason, items: facts.items, decisions: facts.decisions, attempts: facts.attempts, notifications: asObjects(facts.entry['notifications']), askUserQuestion: Number(facts.entry['askUserQuestion']) }));
+      problems.push(...judgeStart({ state, reason: facts.run.reason, items: facts.items, decisions: facts.decisions, attempts: facts.attempts, notifications: asObjects(facts.entry['notifications']), askUserQuestion: Number(facts.entry['askUserQuestion']), hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null }));
       const checkout = checkoutOf(before, after, runId, false);
       problems.push(...checkout.problems);
       entry['checkout'] = checkout.view;
@@ -1084,6 +1097,7 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         commits: asObjects(facts.entry['commits']),
         askUserQuestion: Number(facts.entry['askUserQuestion']),
         owner: userInfo().username,
+        hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null,
       });
       problems.push(...judged.problems);
       entry['resume'] = judged.resume;

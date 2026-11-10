@@ -27,11 +27,13 @@
 # Environment: AVARICE_NODE (the node to run with, default `node`), AVARICE_PORTFOLIO (the owner's checkout, default ~/aa-phan-portfolio-v2;
 # only ever read by this script, written only by the supervisor's create-only hand-off of the run branch), AVARICE_PHASE3_LEDGER and
 # AVARICE_PHASE3_CEILING_USD (the ledger and a ceiling that can only be lowered), AVARICE_PHASE3_PLAN (the plan the spend and the evidence are recorded
-# under, default 03-42), EXIT_EVIDENCE_FILE (default 03-42-evidence-exit.json) and EXIT_RUN_OUT_DIR (the runs' captured output).
+# under, default 03-42), EXIT_EVIDENCE_FILE (default 03-45-evidence-exit.json) and EXIT_RUN_OUT_DIR (the runs' captured output).
 #
-# The repeated exit (plan 03-41 prepares it, plans 03-42 and 03-30 run it): 03-29-evidence-exit.json is the halted first attempt (the record of the D-03
-# stop of plan 03-29) and is never written again. The repeat writes the file above, which names the halted file, the cancelled run and the reason in its
-# `supersedes` block; `authorize` refuses a start while that run is not failed, cancelled or closed in the owner's ledger.
+# The repeated exit (plan 03-41 prepares it, plans 03-42 and 03-30 run it; plan 03-44 prepares the third attempt, plans 03-45 and 03-30 run it):
+# 03-29-evidence-exit.json is the halted first attempt and 03-42-evidence-exit.json the halted second attempt (the records of the D-03 stops of plans 03-29
+# and 03-42); neither is written again. The third attempt writes 03-45-evidence-exit.json, which names the halted 03-42 file, the cancelled run and the reason
+# in its `supersedes` block; `authorize` refuses a start while that run is not failed, cancelled or closed in the owner's ledger. Each run's evidence entry
+# carries the host configuration directory the run recorded at start (plan 03-43), and the start stage lists a problem when it is missing.
 set -u
 
 HERE="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -43,7 +45,7 @@ TOOLS=("$NODE" --disable-warning=ExperimentalWarning "$HERE/scripts/exit-run-pha
 CONFIG="$HERE/test/benchmark/portfolio/avarice-config.json"
 BRIEFS=("$HERE/test/benchmark/phase3/p3-run1-copy-fallback.md" "$HERE/test/benchmark/phase3/p3-run2-graduation-label.md" "$HERE/test/benchmark/phase3/p3-run3-theme-toggle.md")
 DRY_OUT_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-28-dry-run.json"
-EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-42-evidence-exit.json"
+EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-45-evidence-exit.json"
 
 usage() {
   echo "usage: scripts/exit-run-phase3.sh --dry-run [--source REPO]" >&2
