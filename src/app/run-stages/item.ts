@@ -27,7 +27,7 @@ import type { DeltaBlocking } from '../../domain/evidence.ts';
 import { evaluateG1, evaluateG2, evaluateG3, g1PathBreaches, integrityFailures } from '../../domain/gates.ts';
 import type { G1Facts, GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
-import { hasOwnerChoice, itemChoiceOptions, sharedChoiceOptions } from '../../domain/item-scope.ts';
+import { hasOwnerChoice, itemBehavior, itemChoiceOptions, sharedChoiceOptions } from '../../domain/item-scope.ts';
 import { attributeNumberedChoice, choiceLines, classifyOutcome, detectPause } from '../../domain/outcome.ts';
 import type { Attribution, ClassifiedKind, OutcomeFacts, PauseSignal } from '../../domain/outcome.ts';
 import { countPruneEntries, parseQuickPlan, parseQuickVerification, quickRecordKind, storedText } from '../../domain/quick-record.ts';
@@ -126,7 +126,10 @@ function promptItemOf(contract: RunContract, itemId: string): RunPromptItem | un
   const owned = new Set(item.acceptance);
   const acceptance = contract.intent.acceptance.filter((c) => owned.has(c.id)).map((c) => `${c.id}: ${c.text}`);
   const explicit = !item.spec.derived.includes('files') && item.spec.files.length > 0;
-  return { id: item.id, task: item.task, acceptance, ...(explicit ? { specFiles: item.spec.files } : {}) };
+  // Only the item's own part of the brief's Behavior: the paragraphs labelled for it and the shared ones (exit run 1: another item's owner choice, in the
+  // shared Behavior, was read by this unit and asked as its own).
+  const behavior = itemBehavior(contract.intent.behavior, item.id, contract.intent.workItems.map((i) => i.id));
+  return { id: item.id, task: item.task, acceptance, behavior, ...(explicit ? { specFiles: item.spec.files } : {}) };
 }
 
 // The latest decision of the item, when the owner answered it: the item is the first of the decision's affected items. `firstUse` is false once a

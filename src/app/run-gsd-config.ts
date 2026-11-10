@@ -2,6 +2,9 @@
 // unit of work starts from (plan 02-08; RC-4, RC-5, D-03, T-02-25). Plan 02-09's spike observes the real quick workflow and refines
 // both; every value here is the one the plan names, and a key nobody has verified is not in the list.
 //
+// Plan 03-40 (exit run 1): a unit of one item among several is shown only its own part of the brief (its own and the shared Behavior paragraphs, its own
+// criteria, no run title). Item A's unit had read item B's owner choice in the shared Behavior and ended its final text asking it as its own.
+//
 // Plan 03-34: the prompt also states the run's shell rules as the hook enforces them, the read-only commands it admits, and what to do about the quick
 // workflow's own shell steps (plan 03-27's haiku unit stopped on the contradiction; spikes/phase-3-wave-0/S3-B-small-unit-haiku.md).
 import { READ_ONLY_COMMANDS } from '../domain/invocation-scope.ts';
@@ -111,8 +114,9 @@ function contractText(contract: RunPromptContract, item?: RunPromptItem, ownerAn
   const { intent, files, execution } = contract;
   const specFiles = item?.specFiles ?? [];
   return [
-    `Task: ${flatten(intent.title)}`,
-    `Behavior: ${flatten(intent.behavior)}`,
+    // A unit of one item among several is told its own item and only its own part of the brief: no run title and no other item's paragraph.
+    ...(item === undefined ? [`Task: ${flatten(intent.title)}`] : []),
+    `Behavior: ${flatten(item?.behavior ?? intent.behavior)}`,
     ...(item !== undefined ? [`Work item ${flatten(item.id)}: ${flatten(item.task)}`] : []),
     'Acceptance criteria:',
     ...(item !== undefined ? bullets(item.acceptance, 'none') : intent.acceptance.map((criterion) => `- ${flatten(criterion.id)}: ${flatten(criterion.text)}`)),
