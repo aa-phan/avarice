@@ -111,7 +111,7 @@ The outcome kind comes from facts only (the host's final result, the exit, the H
 6. Every expected file present is `progressed`. A run invocation names no expected files by default, so the adapter alone never classifies one as `progressed`.
 7. Any host permission denial or hook denial is `denied`; otherwise `no_progress`.
 
-A run's unit stage classifies the unit again with its own facts, the pause signal and the clone's changes, so for runs the adapter's kind is an input, not the final word. Stage handling of each kind belongs to [onboarding.md](onboarding.md) and [runs.md](runs.md).
+A run's unit stage classifies the unit again with its own facts, the pause signal and the clone's changes, so for runs the adapter's kind is an input, not the final word. In a run with several items that stage may attribute a numbered choice to another item, and then does not treat it as a pause, but only for a unit whose own work is verified and only when every choice line matches the options of exactly one other item that owns a choice; any doubt keeps the pause. The rule is in [runs.md](runs.md). Stage handling of each kind belongs to [onboarding.md](onboarding.md) and [runs.md](runs.md).
 
 ## Purposes and their scopes
 
