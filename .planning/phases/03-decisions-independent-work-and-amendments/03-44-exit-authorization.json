@@ -35,7 +35,21 @@
   },
   "itemA": "stays small (haiku) in all three briefs; no brief change",
   "supersedes": "03-41-exit-authorization.json",
-  "ownerConfirmedAt": null,
+  "ownerConfirmedAt": "2026-11-10T06:20:42Z",
+  "ownerConfirmation": {
+    "reply": "cancelled; authorization approved",
+    "repliedOn": "2026-11-10",
+    "recordedAt": "2026-11-10T06:20:42Z",
+    "ledgerCheck": {
+      "readBy": "the tools' read-only read model (createDeps readOnly), no owner command run",
+      "runId": "run_01M71J9AVJ3N1BEKC4EM2P0GGF",
+      "state": "cancelled",
+      "stateAt": "2026-11-10T06:18:59.148Z",
+      "decisions": "dec_01M71JMC67N5M4NVZ329CHNBGV answered (owner:aphan, terminal); dec_01M71M4PB9EQJFNH0S75HTYWSR withdrawn; none open"
+    },
+    "portfolioCheck": "the portfolio snapshot taken after the cancel equals the dry run's: composite sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67, HEAD 9f63d9114c5d3d720b8496b08cec85382cfaa357, 6 refs",
+    "note": "The owner's first attempt at the cancel, through the Claude session's `!` shell (not a terminal), was refused by the identity rule and changed nothing; the owner then ran the cancel in their own terminal, and the orchestrator confirmed through `avarice status` that the run is cancelled."
+  },
   "notes": [
     "D-03: the second exit attempt (plan 03-42) stopped on run 1 (run_01M71J9AVJ3N1BEKC4EM2P0GGF): the resume found no session under the owner's terminal environment, and the fresh fallback failed G2 for want of a VERIFICATION record. Plan 03-43 fixed the product (the run records its host configuration directory at start; the unit prompt names the records the gates read). This authorization repeats all three runs, one `avarice start` each, from run 1 on a new evidence file (03-45-evidence-exit.json) whose supersedes block names the halted 03-42-evidence-exit.json.",
     "The per-run cap is 5.27 USD, the owner's decision 2 (STATE.md 29abaeb). Three runs at 5.27 USD cap 15.81 USD of the 15.8149 USD headroom (Phase 3 stands at 9.1851 of 25 USD), so the three runs end at most at 24.9951 USD. There is no room for another repeat, and nothing else may spend in Phase 3 before the exit's three runs.",

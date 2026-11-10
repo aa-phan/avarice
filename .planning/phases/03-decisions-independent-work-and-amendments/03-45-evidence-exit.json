@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "plan": "03-45",
+  "decision": "D-03, D-05",
+  "updatedAt": "2026-11-10T06:20:42Z",
+  "supersedes": {
+    "file": "03-42-evidence-exit.json",
+    "runId": "run_01M71J9AVJ3N1BEKC4EM2P0GGF",
+    "state": "cancelled",
+    "stateAt": "2026-11-10T06:18:59.148Z",
+    "reason": "D-03 stop of plan 03-42: the resume found no session under the owner's terminal environment and the fresh fallback failed G2; fixed by plan 03-43; owner decisions STATE.md 29abaeb"
+  },
+  "runs": []
+}
