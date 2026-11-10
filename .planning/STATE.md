@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "Halted 03-45-PLAN.md at Task 2 (D-03 stop: G2 failed on VERIFICATION without frontmatter fences)"
-last_updated: "2026-11-10T07:59:55.019Z"
+stopped_at: Completed 03-46-PLAN.md
+last_updated: "2026-11-10T08:30:30.307Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 03 execution started
-state_head: 2c66104ff6467d4875d59c1df9801a95d529be91
+state_head: f1aeb6e8fc739a1725e5946d723267ce9306e450
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 106
-  completed_plans: 102
+  total_plans: 109
+  completed_plans: 103
 ---
 
 # Project State
@@ -152,6 +152,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P40 | 100 min | 3 tasks | 14 files |
 | Phase 03 P41 | 120 min | 2 tasks | 7 files |
 | Phase 03 P44 | 3h | 2 tasks | 7 files |
+| Phase 03 P46 | 60 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -358,6 +359,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Plan 03-44: the exit evidence entry carries hostConfigDir (the run's recorded host:config-dir) and the start judge requires it; 03-45-evidence-exit.json supersedes the cancelled run_01M71J9AVJ3N1BEKC4EM2P0GGF; the owner confirmed the 5.27 USD per-run authorization (ownerConfirmedAt 2026-11-10T06:20:42Z) after cancelling run 1 in their own terminal (a first attempt through the session's ! shell was refused by the identity rule) - D-03 repeat from run 1; 0 USD spent, portfolio unchanged
 - [Phase 03]: Owner decision 2026-11-10 after the 03-45 D-03 stop (run_01M7220WKE6WAP7N0FTPSH95RV: 03-40 and 03-43 proven live — A committed, only B blocked, B's delegated session 4006c6cb-… resumed with no fresh attempt; but B's resumed unit wrote VERIFICATION.md with a bare 'status: passed' first line and no '---' fences, the gate parser failed closed to gaps_found, and G2 parked B on dec_01M7274XVDJAH8MC3XZ6M89DR4): FIX THE WORDING — the unit prompt's records sentence states the exact VERIFICATION.md shape (a '---' line, 'status: <value>', a '---' line) with an offline test that the stated shape passes the real gate parser; the parser stays fail-closed; ALSO fix the exit tool's --finish so a second stop is judged and recorded instead of exiting 2; src/ + docs/system + offline tests; then repeat all three exit runs (D-03)
 - [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 4.95 USD (lower-only; 14.8706 USD headroom at 10.1294 spent; worst case 14.85 keeps Phase 3 within 25; no further repeat fits); ceiling 25; host pin 2.1.319. run_01M7220WKE6WAP7N0FTPSH95RV stays open until the owner cancels it in their own terminal; Claude never answers or cancels a portfolio run
+- [Phase 03]: 03-46: the records sentence states the fenced VERIFICATION shape (parser and gates unchanged); --finish exits 2 only while a start-stage pause decision is open and records a second stop with exit 1
 
 ### Pending Todos
 
@@ -417,6 +419,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T07:59:53.696Z
-Stopped at: Halted 03-45-PLAN.md at Task 2 (D-03 stop: G2 failed on VERIFICATION without frontmatter fences)
+Last session: 2026-11-10T08:30:30.088Z
+Stopped at: Completed 03-46-PLAN.md
 Resume file: None
