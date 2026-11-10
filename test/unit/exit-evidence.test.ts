@@ -34,6 +34,7 @@ import {
 } from '../../scripts/exit-run-phase3-tools.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { cancelCli, startBlockedS17 } from '../helpers/cancel-cli.ts';
+import { runMain } from '../helpers/decide-cli.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 
@@ -826,6 +827,39 @@ describe('exit evidence: the relax record is written by a subcommand, and only i
       ],
     );
     assert.deepEqual(contractDiff(before, before), []);
+  });
+});
+
+describe('exit evidence: the contract of a run read from a real ledger, amended once (plan 03-49)', () => {
+  const cleanup: string[] = [];
+  after(() => {
+    for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('collect carries the version, the owner, the reason and a diff that leaves out the version number and the compile time', { timeout: 120_000 }, async () => {
+    const { f, runId } = startBlockedS17(cleanup);
+    const read = (): Json => {
+      const composed = createDeps(profileEnv(f.roots), {}, { readOnly: true });
+      assert.ok(composed.ok);
+      try {
+        const collected = collect(composed.value.deps, runId);
+        assert.ok(collected.facts, collected.problems.join('; '));
+        return collected.facts.entry['contract'] as Json;
+      } finally {
+        composed.value.close();
+      }
+    };
+    const first = read();
+    assert.equal(first['version'], 1);
+    assert.equal('diff' in first, false, 'version 1 is no amendment');
+
+    const amended = await runMain(f.roots, ['contract', 'amend', runId, '--budget', 'costUsdPerRun=11', '--reason', 'room to finish'], { answers: ['y'] });
+    assert.equal(amended.code, 0, amended.err + amended.out);
+    const second = read();
+    assert.equal(second['version'], 2);
+    assert.equal(second['reason'], 'room to finish');
+    assert.match(String(second['authorizedBy']), /^owner:/);
+    assert.deepEqual(second['diff'], [{ path: 'budgets.costUsd.perRun', from: 10, to: 11 }]);
   });
 });
 

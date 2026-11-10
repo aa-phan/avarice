@@ -50,6 +50,7 @@ import { parseBrief } from '../src/domain/brief.ts';
 import type { Brief } from '../src/domain/brief.ts';
 import { parseConventions } from '../src/domain/conventions.ts';
 import type { Conventions } from '../src/domain/conventions.ts';
+import { matchesAny } from '../src/domain/glob.ts';
 import { compileRunContract } from '../src/domain/run-contract.ts';
 import type { RunContract } from '../src/domain/run-contract.ts';
 import { compositeOf, preflight, snapshot } from './exit-run-phase2-tools.ts';
@@ -152,6 +153,8 @@ interface BriefReport {
   budgets?: Json;
   budgetsAtFittingCap?: Json;
   promptScope?: Record<string, { otherItemOptions: number }>;
+  // Plan 03-49: the files outside the brief's Write list that hold something the brief changes or removes.
+  writeSet?: { needles: WriteSetNeedle[]; findings: WriteSetFinding[]; lines: string[]; truncated: Record<string, number> };
 }
 
 function budgetsOf(c: RunContract): Json {
@@ -188,6 +191,141 @@ function hostSelection(): Json {
     installedAndAdmittedByName: names.filter((n) => ADMITTED_CLAUDE_VERSIONS.includes(n)),
     installedButNotAdmittedByName: names.filter((n) => !ADMITTED_CLAUDE_VERSIONS.includes(n)),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The write-set check of a brief (plan 03-49): the defect that stopped exit run 1. Item C removed COPY_FALLBACK, whose value is the sentence a protected e2e spec
+// asserts; the spec was outside the Write list, so a correct unit could not satisfy its criterion inside the contract and parked on a second decision.
+// The check reads the brief's Behavior for the code names it puts in backticks (and the strings it quotes), reads the string value each name holds in the source at
+// the pin, and lists every tracked file outside the Write list that holds a name or a value. A finding is a problem when the file is protected or outside the
+// conventions' write set (the run could never be given it); otherwise it is a warning. Git objects only: nothing in the working tree or the index is read or written.
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface WriteSetNeedle {
+  name: string;
+  kind: 'identifier' | 'literal';
+  // The string the identifier holds at the pin (searched as a literal when it is long enough to mean something), or undefined.
+  value?: string;
+  definedAt?: string;
+}
+
+export interface WriteSetFinding {
+  path: string;
+  line: number;
+  needle: string;
+  kind: 'identifier' | 'value' | 'literal';
+  text: string;
+  protected: boolean;
+  insideConventions: boolean;
+  problem: boolean;
+}
+
+export interface WriteSetInput {
+  behavior: string;
+  writeGlobs: readonly string[];
+  itemFiles: readonly string[];
+  protectedGlobs: readonly string[];
+  conventionsWrite: readonly string[];
+}
+
+const MIN_VALUE_CHARS = 8;
+const MAX_FINDINGS_PER_NEEDLE = 25;
+// Prose and planning files are not read by any check, so a name in them breaks nothing.
+const NOT_CODE = /(^\.planning\/)|(\.mdx?$)|(^|\/)package-lock\.json$|\.lock$/;
+const CAMEL_OR_PASCAL = /^(?=.*[a-z])(?=.*[A-Z])[A-Za-z_$][A-Za-z0-9_$]*$/;
+const SCREAMING = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/;
+const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/;
+
+const isCodeName = (name: string): boolean => name.length >= 4 && (CAMEL_OR_PASCAL.test(name) || SCREAMING.test(name) || KEBAB.test(name));
+
+// The names the Behavior puts in backticks (a call or a signature is read as its leading name) and the strings it quotes with double quotes.
+export function behaviorNeedles(behavior: string): WriteSetNeedle[] {
+  const needles: WriteSetNeedle[] = [];
+  const seen = new Set<string>();
+  const add = (needle: WriteSetNeedle): void => {
+    const key = `${needle.kind}:${needle.name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    needles.push(needle);
+  };
+  for (const match of behavior.matchAll(/`([^`\n]+)`/g)) {
+    const token = (match[1] as string).trim();
+    const call = /^([A-Za-z_$][\w$]*)\s*\(/.exec(token);
+    const name = call !== null ? (call[1] as string) : /^[A-Za-z_$][\w$-]*$/.test(token) ? token : undefined;
+    if (name !== undefined && isCodeName(name)) add({ name, kind: 'identifier' });
+  }
+  for (const match of behavior.matchAll(/"([^"\n]{6,80})"/g)) add({ name: match[1] as string, kind: 'literal' });
+  return needles;
+}
+
+interface GrepHit {
+  path: string;
+  line: number;
+  text: string;
+}
+
+// `git grep` over the objects of one revision: fixed string, binary files skipped. No hit is not an error (exit 1).
+function grepObjects(repo: string, rev: string, needle: string, word: boolean): GrepHit[] {
+  const ran = readGit(repo, ['grep', '-n', '-I', '-F', ...(word ? ['-w'] : []), '-e', needle, rev, '--']);
+  if (ran.status !== 0 && ran.status !== 1) throw new Error(`git grep failed: ${ran.stderr.trim()}`);
+  const prefix = `${rev}:`;
+  const hits: GrepHit[] = [];
+  for (const line of ran.stdout.split('\n')) {
+    if (!line.startsWith(prefix)) continue;
+    const parsed = /^(.+?):(\d+):(.*)$/.exec(line.slice(prefix.length));
+    if (parsed !== null) hits.push({ path: parsed[1] as string, line: Number(parsed[2]), text: (parsed[3] as string).trim().slice(0, 200) });
+  }
+  return hits;
+}
+
+// The string an identifier is assigned in one line of source (`export const NAME = '...'`), or undefined.
+function stringValueOf(name: string, text: string): string | undefined {
+  const escaped = name.replace(/[$]/g, '\\$&');
+  return new RegExp(`\\b(?:const|let|var)\\s+${escaped}\\b[^=]*=\\s*(['"\`])((?:\\\\.|(?!\\1).)*)\\1`).exec(text)?.[2];
+}
+
+export function writeSetCheck(repo: string, rev: string, input: WriteSetInput): { needles: WriteSetNeedle[]; findings: WriteSetFinding[]; lines: string[]; truncated: Record<string, number> } {
+  const needles = behaviorNeedles(input.behavior);
+  const findings: WriteSetFinding[] = [];
+  const truncated: Record<string, number> = {};
+  const counts = new Map<string, number>();
+  const seen = new Set<string>();
+  const own = new Set(input.itemFiles);
+  const report = (hit: GrepHit, needle: string, kind: WriteSetFinding['kind']): void => {
+    if (matchesAny(hit.path, input.writeGlobs) || own.has(hit.path) || NOT_CODE.test(hit.path)) return;
+    const key = `${hit.path}:${hit.line}:${needle}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const n = (counts.get(needle) ?? 0) + 1;
+    counts.set(needle, n);
+    if (n > MAX_FINDINGS_PER_NEEDLE) {
+      truncated[needle] = n - MAX_FINDINGS_PER_NEEDLE;
+      return;
+    }
+    const isProtected = matchesAny(hit.path, input.protectedGlobs);
+    const inside = matchesAny(hit.path, input.conventionsWrite);
+    findings.push({ path: hit.path, line: hit.line, needle, kind, text: hit.text, protected: isProtected, insideConventions: inside, problem: isProtected || !inside });
+  };
+  for (const needle of needles) {
+    if (needle.kind === 'literal') {
+      for (const hit of grepObjects(repo, rev, needle.name, false)) report(hit, needle.name, 'literal');
+      continue;
+    }
+    for (const hit of grepObjects(repo, rev, needle.name, true)) {
+      const value = needle.value === undefined ? stringValueOf(needle.name, hit.text) : undefined;
+      if (value !== undefined) {
+        needle.definedAt = `${hit.path}:${hit.line}`;
+        if (value.length >= MIN_VALUE_CHARS) needle.value = value;
+      }
+      report(hit, needle.name, 'identifier');
+    }
+    if (needle.value !== undefined) for (const hit of grepObjects(repo, rev, needle.value, false)) report(hit, needle.name, 'value');
+  }
+  const lines = findings.map((f) => {
+    const what = f.kind === 'identifier' ? f.needle : f.kind === 'value' ? `${f.needle}'s value "${needles.find((n) => n.name === f.needle)?.value ?? ''}"` : `"${f.needle}"`;
+    return `${f.path}:${f.line} holds ${what} (writable: no, protected: ${f.protected ? 'yes' : 'no'})`;
+  });
+  return { needles, findings, lines, truncated };
 }
 
 function dryRun(argv: readonly string[]): number {
@@ -319,6 +457,21 @@ function dryRun(argv: readonly string[]): number {
         if (scope.otherItemOptions > 0) problems.push(`${rel}: item ${itemId}'s prompt Behavior carries ${scope.otherItemOptions} owner-choice option(s) of another item`);
       }
 
+      // Plan 03-49: a file outside the Write list that holds a name or value the brief changes or removes, which the run could not be given (run 1's e2e spec).
+      const checked = writeSetCheck(source, pin, {
+        behavior: c.intent.behavior,
+        writeGlobs: c.files.write,
+        itemFiles: c.intent.workItems.flatMap((i) => i.spec.files),
+        protectedGlobs: c.files.protected,
+        conventionsWrite: conventions.paths.write,
+      });
+      entry.writeSet = checked;
+      for (const finding of checked.findings) {
+        const line = checked.lines[checked.findings.indexOf(finding)] as string;
+        if (finding.problem) problems.push(`${rel}: write-set check: ${line}`);
+        else warnings.push(`${rel}: write-set check: ${line}`);
+      }
+
       if (decisionRefs.length !== 1) problems.push(`${rel}: ${decisionRefs.length} decision: criteria (D-02 wants exactly one planted choice)`);
       if (entry.expectedDecisions !== 1) problems.push(`${rel}: expectedDecisions is ${entry.expectedDecisions}, not 1`);
       const independent = entry.items.filter((i) => i.role === 'independent');
@@ -361,6 +514,7 @@ function dryRun(argv: readonly string[]): number {
     out(`\n${b.path}: ${b.compiled ? 'compiled' : `NOT compiled (${b.problem ?? '?'})`}${b.digest !== undefined ? `, digest ${b.digest.slice(0, 19)}...` : ''}\n`);
     for (const i of b.items ?? []) out(`  item ${i.id} ${i.role.padEnd(11)} ${i.size.padEnd(6)} ${i.model.padEnd(6)} depends on [${i.dependsOn.join(',')}]  criteria ${i.acceptance.join(',')}  files ${i.files.join(', ')}\n`);
     if (b.promptScope !== undefined) out(`  prompt scope (another item's options in this item's Behavior): ${Object.entries(b.promptScope).map(([id, s]) => `${id}=${s.otherItemOptions}`).join(', ')}\n`);
+    if (b.writeSet !== undefined) out(`  write-set check: ${b.writeSet.needles.length} name(s) read from the Behavior, ${b.writeSet.findings.length} file(s) outside the Write list hold one, ${b.writeSet.findings.filter((f) => f.problem).length} protected or outside the conventions\n`);
     if (b.decisionKeys !== undefined) out(`  decision keys: ${b.decisionKeys.join(', ')}; expected decisions ${b.expectedDecisions}; write set: ${(b.write ?? []).join(', ')}\n`);
     if (b.budgets !== undefined) out(`  budgets: invocations ${String(b.budgets['invocations'])}, per run ${String(b.budgets['costUsdPerRun'])} USD, per invocation ${String(b.budgets['costUsdPerInvocation'])} USD, wall clock ${String(b.budgets['wallClockMinutes'])} min\n`);
   }
@@ -436,6 +590,169 @@ export function promptScopeOf(contract: ScopeContract): Record<string, { otherIt
     scope[id] = { otherItemOptions: [...foreign].filter((option) => option !== '' && !own.has(option) && shown.includes(option)).length };
   }
   return scope;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The owner's relaxation of D-03 for one run (plan 03-49)
+// ---------------------------------------------------------------------------------------------------------------
+
+// The field-level difference of two contract bodies, by field path: a list that gained or lost entries reads `{ path, added, removed }`, a changed scalar
+// `{ path, from, to }`. The ledger port exposes no stored diff, so the finish derives one from the contract files of the two versions.
+export function contractDiff(before: unknown, after: unknown, path = ''): Json[] {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const flat = (list: unknown[]): string[] => list.map((v) => JSON.stringify(v));
+    const was = flat(before);
+    const now = flat(after);
+    if (was.length === now.length && was.every((v, n) => v === now[n])) return [];
+    const added = after.filter((v) => !was.includes(JSON.stringify(v)));
+    const removed = before.filter((v) => !now.includes(JSON.stringify(v)));
+    if (added.length === 0 && removed.length === 0) return [{ path, from: before, to: after }];
+    return [{ path, ...(added.length > 0 ? { added } : {}), ...(removed.length > 0 ? { removed } : {}) }];
+  }
+  if (isObject(before) && isObject(after)) {
+    const keys = [...Object.keys(after), ...Object.keys(before).filter((k) => !(k in after))];
+    return keys.flatMap((key) => contractDiff(before[key], after[key], path === '' ? key : `${path}.${key}`));
+  }
+  return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ path, from: before ?? null, to: after ?? null }];
+}
+
+export interface RelaxRecord {
+  by: string;
+  ref: string;
+  decisions: string[];
+  at: string;
+}
+
+// The evidence file with a relax record set on the entry of one run; every other key of the file and of every entry is as it was. Undefined when the
+// file has no entry for the run.
+export function withRelax(file: Json, runId: string, record: RelaxRecord): Json | undefined {
+  const runs = asObjects(file['runs']);
+  if (!runs.some((r) => r['runId'] === runId)) return undefined;
+  return { ...file, runs: runs.map((r) => (r['runId'] === runId ? { ...r, relax: record } : r)) };
+}
+
+const DECISION_ID = /^dec_[0-9A-Za-z]+$/;
+
+// The relax record of an entry, validated: `{ record }` when it is the owner's with a reference and decision IDs, `{}` when there is none, and `{ problem }`
+// (with no record, so nothing is relaxed) when there is one and it is not valid.
+export function relaxOf(raw: unknown): { record?: RelaxRecord; problem?: string } {
+  if (raw === undefined || raw === null) return {};
+  const invalid = (why: string): { problem: string } => ({ problem: `the relax record is not valid: ${why}` });
+  if (!isObject(raw)) return invalid('it is not an object');
+  if (raw['by'] !== 'owner') return invalid(`by is ${JSON.stringify(raw['by'] ?? null)}, not owner`);
+  if (typeof raw['ref'] !== 'string' || raw['ref'].trim() === '') return invalid('it names no reference to the owner decision');
+  const ids = raw['decisions'];
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === 'string' && DECISION_ID.test(id))) return invalid('decisions must be a non-empty list of decision IDs');
+  if (typeof raw['at'] !== 'string' || raw['at'] === '') return invalid('it records no time');
+  return { record: { by: 'owner', ref: raw['ref'], decisions: [...(ids as string[])], at: raw['at'] } };
+}
+
+// `relax --evidence F --run-id R --decision D [--decision D2 ...] --ref TEXT --by owner`: records, in the run's entry of the evidence file, that the owner relaxed
+// D-03 for this run and which decisions beyond the one that paused it they answered. The finish judge accepts an extra decision only through this record.
+// It writes nothing else. Claude runs it only after the owner's decision is recorded in STATE.md; the record names that decision as its reference.
+function relaxCommand(argv: readonly string[]): number {
+  const { named, many } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: relax: ${text}`);
+    return 2;
+  };
+  const evidence = named['evidence'];
+  const runId = named['run-id'];
+  const decisions = many['decision'] ?? [];
+  if (evidence === undefined || runId === undefined) return refuse('usage: relax --evidence F --run-id R --decision D [--decision D2] --ref TEXT --by owner');
+  if (named['by'] !== 'owner') return refuse('--by must be owner: only the owner relaxes D-03');
+  const ref = named['ref']?.trim() ?? '';
+  if (ref === '') return refuse('--ref is required: name the owner decision that relaxed D-03 (for example "STATE.md 5ed69e0")');
+  if (decisions.length === 0) return refuse('name at least one --decision');
+  const bad = decisions.find((d) => !DECISION_ID.test(d));
+  if (bad !== undefined) return refuse(`${JSON.stringify(bad)} is not a decision ID (dec_...)`);
+  const path = resolve(evidence);
+  const file = readJson(path);
+  if (file === undefined) return refuse(`${evidence} is not an evidence file`);
+  const next = withRelax(file, runId, { by: 'owner', ref, decisions: [...new Set(decisions)], at: new Date().toISOString() });
+  if (next === undefined) return refuse(`the evidence file holds no entry for ${runId}`);
+  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
+  out(`relax recorded for ${runId}: decisions ${decisions.join(', ')} (ref ${ref})\n`);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// brief-check: the write-set check of each brief at the pin, without the rest of the dry run (plan 03-49)
+// ---------------------------------------------------------------------------------------------------------------
+
+function briefCheck(argv: readonly string[]): number {
+  const { named, many } = flags(argv);
+  const source = resolve(named['source'] ?? join(homedir(), 'aa-phan-portfolio-v2'));
+  const briefPaths = (many['brief'] ?? []).map((p) => resolve(p));
+  const outPath = named['out'];
+  const pinRef = named['pin'] ?? DEFAULT_PIN;
+  if (briefPaths.length === 0 || outPath === undefined) {
+    errOut('usage: brief-check --source REPO --brief F [--brief F ...] --out F [--pin SHA]');
+    return 2;
+  }
+  const before = portfolioState(source);
+  const pin = mustRead(source, ['rev-parse', '--verify', `${pinRef}^{commit}`]).trim();
+  const gitSource = new GitRunSource();
+  const head = gitSource.head(source);
+  if (!head.ok) throw new Error(`cannot read the HEAD of ${source}: ${describeError(head.error)}`);
+  const found = gitSource.conventionsAt(source, pin, head.value);
+  if (!found.ok) throw new Error(`no committed conventions: ${describeError(found.error)}`);
+  const committed = parseConventions(found.value.text);
+  if (!committed.ok) throw new Error(`the committed conventions do not parse: ${describeError(committed.error)}`);
+  const conventions = committed.value;
+  const files = mustRead(source, ['ls-tree', '-r', '--name-only', pin]).split('\n').filter((l) => l !== '');
+  const briefs: Record<string, Json> = {};
+  let problems = 0;
+  let n = 0;
+  for (const path of briefPaths) {
+    n += 1;
+    const key = (path.split('/').pop() as string).replace(/\.md$/, '');
+    const parsed = parseBrief(readFileSync(path, 'utf8'), { kind: 'file', id: path.split('/').pop() as string });
+    if (!parsed.ok) {
+      briefs[key] = { path: relative(REPO_ROOT, path), problem: `does not parse: ${describeError(parsed.error)}` };
+      problems += 1;
+      continue;
+    }
+    const compiled = compileRunContract({ runId: `run_Phase3BriefCheck${n}`, projectId: 'portfolio', baseRevision: pin, conventionsRevision: found.value.revision, brief: parsed.value, conventions, nowIso: new Date().toISOString(), policy: 'routine', indexFacts: { files, symbolsByFile: {} } });
+    if (!compiled.ok) {
+      briefs[key] = { path: relative(REPO_ROOT, path), digest: parsed.value.digest, problem: `does not compile: ${JSON.stringify(compiled.error)}` };
+      problems += 1;
+      continue;
+    }
+    const c = compiled.value.contract;
+    const checked = writeSetCheck(source, pin, { behavior: c.intent.behavior, writeGlobs: c.files.write, itemFiles: c.intent.workItems.flatMap((i) => i.spec.files), protectedGlobs: c.files.protected, conventionsWrite: conventions.paths.write });
+    // The files that hold each name, one entry per file with its lines: what an owner reads to judge whether the brief changes or removes the name.
+    const byNeedle: Record<string, Array<{ path: string; lines: number[]; kind: string; protected: boolean; insideConventions: boolean; problem: boolean }>> = {};
+    for (const f of checked.findings) {
+      const files = (byNeedle[f.needle] ??= []);
+      const known = files.find((x) => x.path === f.path && x.kind === f.kind);
+      if (known !== undefined) known.lines.push(f.line);
+      else files.push({ path: f.path, lines: [f.line], kind: f.kind, protected: f.protected, insideConventions: f.insideConventions, problem: f.problem });
+    }
+    problems += checked.findings.filter((f) => f.problem).length;
+    briefs[key] = {
+      path: relative(REPO_ROOT, path),
+      digest: parsed.value.digest,
+      write: c.files.write,
+      needles: checked.needles,
+      findings: checked.findings,
+      lines: checked.lines,
+      truncated: checked.truncated,
+      problems: checked.findings.filter((f) => f.problem).length,
+      byNeedle,
+    };
+  }
+  const after = portfolioState(source);
+  const unchanged = sameState(before, after);
+  const report: Json = { schema: 1, plan: '03-49', checkedAt: new Date().toISOString(), source: source.replace(homedir(), '~'), pin, conventionsRevision: found.value.revision, readOnly: true, modelHostLaunched: false, spentUsd: 0, portfolio: { before: summaryOf(before), after: summaryOf(after), unchanged }, briefs };
+  mkdirSync(dirname(resolve(outPath)), { recursive: true });
+  writeFileSync(resolve(outPath), `${JSON.stringify(report, null, 2)}\n`);
+  for (const [key, b] of Object.entries(briefs)) {
+    out(`${key}: ${String(b['problem'] ?? `${(b['findings'] as unknown[]).length} finding(s), ${String(b['problems'])} protected or outside the conventions`)}\n`);
+    for (const line of (b['lines'] as string[] | undefined) ?? []) out(`  ${line}\n`);
+  }
+  out(`brief-check: ${problems} finding(s) protected or outside the conventions in all; portfolio ${unchanged ? 'unchanged' : 'DIFFERENT'}; spent 0 USD; ${resolve(outPath)}\n`);
+  return unchanged ? 0 : 1;
 }
 
 const EXIT_CEILING = 75;
@@ -716,6 +1033,18 @@ interface Facts {
   budgetLimitUsd: number;
 }
 
+// What contract version `version` changed against the version before it: the field-level diff of the two contract files the amendment kept under the run's
+// directory (the later one is the ledger's own body). Empty when the earlier file cannot be read.
+function amendmentDiffOf(dataRoot: string, runId: string, version: number, body: unknown): Json[] {
+  try {
+    const earlier: unknown = JSON.parse(readFileSync(join(dataRoot, 'runs', runId, `contract-v${version - 1}.json`), 'utf8'));
+    // The version number and the compile time change with every amendment; they are not what it changed.
+    return contractDiff(earlier, body).filter((d) => d['path'] !== 'contractVersion' && d['path'] !== 'compiledAt');
+  } catch {
+    return [];
+  }
+}
+
 export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: string[] } {
   const problems: string[] = [];
   const run = deps.ledger.getRun(runId);
@@ -729,6 +1058,17 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
   const status = statuses?.find((s) => s.runId === runId);
   const contractRow = read('the contract', deps.ledger.getRunContract(runId));
   const contract = contractRow !== undefined && contractRow !== null ? (contractRow.body as RunContract) : undefined;
+  // Plan 03-49: the latest contract version, who authorized it, why, and what it changed against the version before (read from the contract files; the ledger
+  // port has no stored diff). A version above 1 is an amendment, which the finish judge accepts only under the owner's relax record.
+  const contractFact: Json | null =
+    contractRow === undefined || contractRow === null
+      ? null
+      : {
+          version: contractRow.version,
+          authorizedBy: contractRow.authorizedBy,
+          reason: contractRow.reason,
+          ...(contractRow.version > 1 ? { diff: amendmentDiffOf(deps.profile.dataRoot, runId, contractRow.version, contractRow.body) } : {}),
+        };
   const workItems = read('the work items', deps.ledger.listWorkItems(runId)) ?? [];
   const attemptRows = read('the attempts', deps.ledger.listRunAttempts(runId)) ?? [];
   const decisionRows = read('the decisions', deps.ledger.listDecisions({ runId })) ?? [];
@@ -843,6 +1183,7 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
     clean: status?.clean ?? null,
     costUsd,
     hostConfigDir,
+    contract: contractFact,
     budgets: budgetRows.map((b) => ({ name: b.name, used: b.used, reserved: b.reserved, limit: b.limit })),
     items,
     attempts,
@@ -925,18 +1266,49 @@ export function judgeFinish(facts: {
   hostConfigDir?: Json | null;
   // The decisions that paused the run at the start stage; an open decision outside them is a second stop (plan 03-46). Absent: every open decision is one.
   pauseDecisionIds?: readonly string[];
+  // Plan 03-49: the owner's relaxation of D-03 for this run, as the `relax` subcommand wrote it into the entry: `{ by: 'owner', ref, decisions, at }`. Only through
+  // it is a decision beyond the one that paused the run accepted, and then only when the owner answered it on the terminal.
+  relax?: unknown;
+  // The latest contract of the run: `{ version, authorizedBy, reason, diff }`. A version above 1 is an amendment, accepted only under a valid relax record, as
+  // contract version 2, authorized by the owner, with a reason and a diff. Absent: nothing about amendments is judged.
+  contract?: { version?: unknown; authorizedBy?: unknown; reason?: unknown; diff?: unknown } | null;
 }): { problems: string[]; resume: Json } {
   const problems: string[] = [];
+  const relaxed = relaxOf(facts.relax);
+  if (relaxed.problem !== undefined) problems.push(relaxed.problem);
+  const relaxedIds = new Set(relaxed.record?.decisions ?? []);
   if (facts.state !== 'ready_for_review') problems.push(`the run ended ${facts.state}, not ready_for_review (D-03)`);
   // A run the owner answered that stopped again on another open decision (plan 03-46, the 03-45 run 1 stop at G2): the stop is named, and the judgement goes on.
   for (const d of facts.decisions.filter((x) => x['state'] === 'open' && !(facts.pauseDecisionIds ?? []).includes(String(x['decisionId'])))) {
     const origin = isObject(d['origin']) ? String(d['origin']['origin']) : 'unknown';
     problems.push(`the run stopped again on decision ${String(d['decisionId'])} (${String(d['class'])}, origin ${origin}) after the owner's answer`);
   }
-  const answered = facts.decisions.filter((d) => d['state'] === 'answered');
+  // The decisions the owner's relax record names are judged by their own rules; the rest are counted as before.
+  if (relaxed.record !== undefined) {
+    const named = relaxed.record.decisions.map((id) => ({ id, decision: facts.decisions.find((d) => d['decisionId'] === id) }));
+    for (const { id, decision: d } of named) {
+      if (d === undefined) problems.push(`the relax record names decision ${id}, which the run does not have`);
+      else if (d['state'] !== 'answered' && d['state'] !== 'stale') problems.push(`the relaxed decision ${id} is ${String(d['state'])}, not answered by the owner`);
+      else if (d['answeredBy'] !== `owner:${facts.owner}`) problems.push(`the relaxed decision ${id} was answered by ${JSON.stringify(d['answeredBy'])}, not owner:${facts.owner}`);
+      else if (d['answerChannel'] !== 'terminal') problems.push(`the relaxed decision ${id} was answered on channel ${JSON.stringify(d['answerChannel'])}, not terminal`);
+    }
+    if (named.every((n) => n.decision !== undefined) && !named.some((n) => n.decision?.['state'] === 'answered')) problems.push('the relax record names no decision the owner answered');
+  }
+  if (facts.contract !== undefined && facts.contract !== null && Number(facts.contract.version) > 1) {
+    const version = Number(facts.contract.version);
+    if (relaxed.record === undefined) problems.push(`the contract was amended (version ${version}) without a valid relax record: an amendment is accepted only when the owner relaxed D-03 for this run`);
+    else {
+      if (version !== 2) problems.push(`the contract was amended to version ${version}: an amendment is accepted only as contract version 2`);
+      if (facts.contract.authorizedBy !== `owner:${facts.owner}`) problems.push(`the amendment's authorized_by is ${JSON.stringify(facts.contract.authorizedBy ?? null)}, not owner:${facts.owner}`);
+      if (typeof facts.contract.reason !== 'string' || facts.contract.reason.trim() === '') problems.push('the amendment records no reason');
+      if (!Array.isArray(facts.contract.diff) || facts.contract.diff.length === 0) problems.push('the amendment records no diff');
+    }
+  }
+  const answered = facts.decisions.filter((d) => d['state'] === 'answered' && !relaxedIds.has(String(d['decisionId'])));
   if (answered.length !== 1) problems.push(`${answered.length} decision(s) are answered, not one`);
   const decision = answered[0];
   const resume: Json = { resumed: false, hostConfigDir: facts.hostConfigDir ?? null };
+  if (relaxed.record !== undefined) resume['relax'] = relaxed.record;
   if (decision !== undefined) {
     if (decision['answerChannel'] !== 'terminal') problems.push(`the answer arrived on channel ${JSON.stringify(decision['answerChannel'])}, not terminal`);
     if (decision['answeredBy'] !== `owner:${facts.owner}`) problems.push(`the answer was given by ${JSON.stringify(decision['answeredBy'])}, not owner:${facts.owner}`);
@@ -1148,6 +1520,9 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         owner: userInfo().username,
         hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null,
         pauseDecisionIds,
+        // The owner's relaxation of D-03 for this run, written into its entry by the `relax` subcommand (plan 03-49), and the contract the run ended on.
+        relax: (prior as Json)['relax'],
+        contract: isObject(facts.entry['contract']) ? facts.entry['contract'] : null,
       });
       problems.push(...judged.problems);
       entry['resume'] = judged.resume;
@@ -1202,6 +1577,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'authorize') return authorize(rest);
   if (command === 'snapshot') return snapshotCommand(rest);
   if (command === 'evidence') return evidenceCommand(rest);
+  if (command === 'relax') return relaxCommand(rest);
+  if (command === 'brief-check') return briefCheck(rest);
   if (command === 'preflight') {
     const { named } = flags(rest);
     if (named['repo'] === undefined || named['config'] === undefined) {
@@ -1212,7 +1589,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | preflight | field | authorize | snapshot | evidence) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check | preflight | field | authorize | snapshot | evidence | relax) ...');
   return 2;
 }
 
