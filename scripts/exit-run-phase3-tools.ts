@@ -867,10 +867,14 @@ interface Authorization {
   briefs: Json[];
 }
 
+// The selections that authorize a start: an approval, and the two in-place options the owner's checkpoint of plan 03-49 offered (the other options
+// there stop or re-plan, so no file records them as an authorization).
+const AUTHORIZING_SELECTIONS: readonly string[] = ['approve', 'answer-2-in-place', 'amend-unprotected-path'];
+
 function authorizationOf(path: string): Authorization | string {
   const auth = readJson(resolve(path));
   if (auth === undefined) return `${path} is not the owner's authorization file`;
-  if (auth['selection'] !== 'approve') return `the authorization selection is ${JSON.stringify(auth['selection'])}, not "approve"`;
+  if (!AUTHORIZING_SELECTIONS.includes(auth['selection'] as string)) return `the authorization selection is ${JSON.stringify(auth['selection'])}, not one of ${AUTHORIZING_SELECTIONS.map((s) => `"${s}"`).join(', ')}`;
   const perRunCapUsd = Number(auth['perRunCapUsd']);
   const ceilingUsd = Number(auth['ceilingUsd']);
   if (!(Number.isFinite(perRunCapUsd) && perRunCapUsd > 0 && Number.isFinite(ceilingUsd) && ceilingUsd > 0)) return 'the authorization names no finite positive per-run cap and ceiling';
