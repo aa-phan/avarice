@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   collect,
+  contractDiff,
   earlierJudgementsOf,
   evidenceFileBody,
   hostConfigDirOf,
@@ -28,10 +29,13 @@ import {
   spendGuard,
   supersededRunRefusal,
   toolUseCounts,
+  withRelax,
+  writeSetCheck,
 } from '../../scripts/exit-run-phase3-tools.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { cancelCli, startBlockedS17 } from '../helpers/cancel-cli.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
+import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 
 type Json = Record<string, unknown>;
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -625,5 +629,292 @@ describe('exit evidence: the superseded run read from a real ledger (plan 03-41)
     assert.doesNotMatch(passed.stderr, /cannot be read/);
     // It stops later, at the host pin: the test profile has no pinned host, and nothing is started.
     assert.match(passed.stderr, /AVARICE_CLAUDE_BIN is/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-49: an owner-relaxed finish (D-03 relaxed for one run) and the dry run's write-set check
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('exit evidence: the finish of a run the owner relaxed under D-03 (plan 03-49)', () => {
+  const SESSION = '11111111-2222-4333-8444-555555555555';
+  const EXTRA = 'dec_EXTRA';
+  const pause = pauseDecision({ state: 'answered', answeredBy: 'owner:tester', answerChannel: 'terminal', answer: '2' });
+  const extra = (over: Json = {}): Json =>
+    pauseDecision({ decisionId: EXTRA, state: 'answered', class: 'acceptance', affectedItems: ['C'], answeredBy: 'owner:tester', answerChannel: 'terminal', answer: '2', origin: { origin: 'pause' }, parkAttemptId: 'att_C1', ...over });
+  const RELAX = { by: 'owner', ref: 'STATE.md 5ed69e0', decisions: [EXTRA], at: '2026-11-10T23:40:00Z' };
+  const finished = (over: Json = {}): Parameters<typeof judgeFinish>[0] =>
+    ({
+      state: 'ready_for_review',
+      items: [
+        { itemId: 'A', state: 'done', gsdSession: 'a' },
+        { itemId: 'B', state: 'done', gsdSession: SESSION },
+        { itemId: 'C', state: 'done', gsdSession: 'c' },
+      ],
+      decisions: [pause, extra()],
+      attempts: [
+        { attemptId: 'att_B1', itemId: 'B', reason: 'initial' },
+        { attemptId: 'att_B2', itemId: 'B', reason: 'resume' },
+        { attemptId: 'att_C1', itemId: 'C', reason: 'initial' },
+        { attemptId: 'att_C2', itemId: 'C', reason: 'resume' },
+      ],
+      invocations: [{ attemptId: 'att_B2', requestedSession: SESSION, initSessions: [SESSION], answeredDecisionId: 'dec_AAAA' }],
+      pauseSessions: { A: 'a', B: SESSION, C: null },
+      requiredChecks: [{ name: 'test', status: 'passed' }],
+      acceptance: [{ id: 'AC1', satisfied: true }],
+      commit: 'abc',
+      clean: true,
+      gates: [{ gate: 'G4', passed: true }],
+      commits: [{ itemId: 'A' }, { itemId: 'B' }, { itemId: 'C' }],
+      askUserQuestion: 0,
+      owner: 'tester',
+      pauseDecisionIds: ['dec_AAAA'],
+      ...over,
+    }) as Parameters<typeof judgeFinish>[0];
+  const amended = (over: Json = {}): Json => ({ version: 2, authorizedBy: 'owner:tester', reason: 'the e2e spec asserts the old toast text', diff: [{ path: 'files.write', added: ['tests/unit/x.ts'] }], ...over });
+
+  it('without a relax record an extra answered decision is refused as before', () => {
+    const judged = judgeFinish(finished());
+    assert.ok(judged.problems.some((p) => p.includes('2 decision(s) are answered, not one')), judged.problems.join(' | '));
+  });
+
+  it('accepts the extra decision when the relax record names it and the owner answered it on the terminal', () => {
+    const judged = judgeFinish(finished({ relax: RELAX }));
+    assert.deepEqual(judged.problems, []);
+    assert.equal(judged.resume['resumed'], true, 'the resume of the paused item is still judged');
+    assert.deepEqual(judged.resume['relax'], RELAX);
+  });
+
+  it('refuses a relaxed decision that the owner did not answer on the terminal, one the run does not have, and one still open', () => {
+    const other = judgeFinish(finished({ relax: RELAX, decisions: [pause, extra({ answeredBy: 'owner:someone-else' })] }));
+    assert.ok(other.problems.some((p) => p.includes(EXTRA) && p.includes('owner:tester')), other.problems.join(' | '));
+    const inbox = judgeFinish(finished({ relax: RELAX, decisions: [pause, extra({ answerChannel: 'inbox' })] }));
+    assert.ok(inbox.problems.some((p) => p.includes(EXTRA) && p.includes('terminal')), inbox.problems.join(' | '));
+    const unknown = judgeFinish(finished({ relax: { ...RELAX, decisions: ['dec_NOPE'] } }));
+    assert.ok(unknown.problems.some((p) => p.includes('dec_NOPE') && p.includes('does not have')), unknown.problems.join(' | '));
+    const open = judgeFinish(finished({ relax: RELAX, decisions: [pause, extra({ state: 'open', answeredBy: null, answerChannel: null })] }));
+    assert.ok(open.problems.some((p) => p.includes(EXTRA) && p.includes('open')), open.problems.join(' | '));
+  });
+
+  it('does not relax what the record does not name: a second extra decision is still refused', () => {
+    const judged = judgeFinish(finished({ relax: RELAX, decisions: [pause, extra(), extra({ decisionId: 'dec_OTHER' })] }));
+    assert.ok(judged.problems.some((p) => p.includes('2 decision(s) are answered, not one')), judged.problems.join(' | '));
+  });
+
+  it("refuses a relax record that is not the owner's, has no reference or names no decision, and then relaxes nothing", () => {
+    for (const bad of [{ ...RELAX, by: 'claude' }, { ...RELAX, ref: '' }, { ...RELAX, decisions: [] }, { ...RELAX, decisions: [7] }, 'owner']) {
+      const judged = judgeFinish(finished({ relax: bad as never }));
+      assert.ok(judged.problems.some((p) => p.includes('relax record is not valid')), JSON.stringify(bad));
+      assert.ok(judged.problems.some((p) => p.includes('2 decision(s) are answered, not one')), 'nothing was relaxed');
+    }
+  });
+
+  it('accepts a stale decision and its answered successor when both are named and the owner answered both on the terminal', () => {
+    const stale = extra({ decisionId: 'dec_OLD', state: 'stale', contractVersion: 1 });
+    const successor = extra({ decisionId: EXTRA, contractVersion: 2, supersedes: 'dec_OLD' });
+    const judged = judgeFinish(finished({ relax: { ...RELAX, decisions: ['dec_OLD', EXTRA] }, decisions: [pause, stale, successor], contract: amended() as never }));
+    assert.deepEqual(judged.problems, []);
+  });
+
+  it('accepts an amendment only as contract version 2 with the owner, a reason and a diff, and only with a relax record', () => {
+    assert.deepEqual(judgeFinish(finished({ relax: RELAX, contract: amended() as never })).problems, []);
+    assert.deepEqual(judgeFinish(finished({ contract: { version: 1 } as never, relax: RELAX })).problems, [], 'version 1 is no amendment');
+    for (const [over, part] of [
+      [{ version: 3 }, 'version 2'],
+      [{ authorizedBy: 'owner:someone-else' }, 'authorized_by'],
+      [{ reason: '' }, 'reason'],
+      [{ diff: [] }, 'diff'],
+    ] as Array<[Json, string]>) {
+      const judged = judgeFinish(finished({ relax: RELAX, contract: amended(over) as never }));
+      assert.ok(judged.problems.some((p) => p.includes('amend') && p.includes(part)), `${part}: ${judged.problems.join(' | ')}`);
+    }
+    const without = judgeFinish(finished({ decisions: [pause], contract: amended() as never }));
+    assert.ok(without.problems.some((p) => p.includes('amended') && p.includes('relax record')), without.problems.join(' | '));
+  });
+
+  it('keeps every other finish check', () => {
+    const bad = judgeFinish(finished({ relax: RELAX, requiredChecks: [{ name: 'test', status: 'failed' }], clean: false, commit: null, gates: [] }));
+    for (const part of ['required check test', 'clean tree', 'no handed-off commit', 'G4']) assert.ok(bad.problems.some((p) => p.includes(part)), part);
+    const items = judgeFinish(finished({ relax: RELAX, items: [{ itemId: 'A', state: 'done' }, { itemId: 'B', state: 'done', gsdSession: SESSION }, { itemId: 'C', state: 'blocked_on_decision' }] }));
+    assert.ok(items.problems.some((p) => p.includes('item C is blocked_on_decision, not done')));
+  });
+});
+
+describe('exit evidence: the relax record is written by a subcommand, and only into the entry it names (plan 03-49)', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const tools = (args: string[]) =>
+    spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'scripts', 'exit-run-phase3-tools.ts'), ...args], { encoding: 'utf8', timeout: 60_000 });
+  const evidenceFile = (): { dir: string; file: string; body: Json } => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-relax-'));
+    dirs.push(dir);
+    const body: Json = {
+      schema: 1,
+      plan: '03-48',
+      decision: 'D-03, D-05',
+      updatedAt: '2026-11-10T22:51:22Z',
+      runs: [
+        { runId: 'run_AAAA', title: 'one', problems: ['x'], decisions: [{ decisionId: 'dec_1' }] },
+        { runId: 'run_BBBB', title: 'two', problems: [] },
+      ],
+      supersedes: { file: '03-45-evidence-exit.json', runId: 'run_OLD' },
+    };
+    const file = join(dir, 'evidence.json');
+    writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`);
+    return { dir, file, body };
+  };
+  const RECORD = { by: 'owner', ref: 'STATE.md 5ed69e0', decisions: ['dec_01M73THARNM0VENR94QDX62BJ3'], at: '2026-11-10T23:40:00Z' };
+
+  it('withRelax sets the record on the named run and changes nothing else', () => {
+    const { body } = evidenceFile();
+    const next = withRelax(body, 'run_AAAA', RECORD) as Json;
+    const runs = next['runs'] as Json[];
+    assert.deepEqual(runs[0]?.['relax'], RECORD);
+    assert.deepEqual({ ...runs[0], relax: undefined }, { ...(body['runs'] as Json[])[0], relax: undefined });
+    assert.deepEqual(runs[1], (body['runs'] as Json[])[1]);
+    assert.deepEqual({ ...next, runs: undefined }, { ...body, runs: undefined });
+    assert.equal(withRelax(body, 'run_ZZZZ', RECORD), undefined, 'an unknown run has no entry to write into');
+  });
+
+  it('relax writes { by, ref, decisions, at } into the entry of the run and keeps every other key', () => {
+    const { file, body } = evidenceFile();
+    const ran = tools(['relax', '--evidence', file, '--run-id', 'run_AAAA', '--decision', 'dec_01M73THARNM0VENR94QDX62BJ3', '--decision', 'dec_01M73THARNM0VENR94QDX62BJ4', '--ref', 'STATE.md 5ed69e0', '--by', 'owner']);
+    assert.equal(ran.status, 0, ran.stderr);
+    const written = JSON.parse(readFileSync(file, 'utf8')) as Json;
+    const entry = (written['runs'] as Json[])[0] as Json;
+    const relax = entry['relax'] as Json;
+    assert.deepEqual(Object.keys(relax).sort(), ['at', 'by', 'decisions', 'ref']);
+    assert.equal(relax['by'], 'owner');
+    assert.equal(relax['ref'], 'STATE.md 5ed69e0');
+    assert.deepEqual(relax['decisions'], ['dec_01M73THARNM0VENR94QDX62BJ3', 'dec_01M73THARNM0VENR94QDX62BJ4']);
+    assert.match(String(relax['at']), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/);
+    assert.deepEqual(written['supersedes'], body['supersedes']);
+    assert.deepEqual((written['runs'] as Json[])[1], (body['runs'] as Json[])[1]);
+    assert.deepEqual(written['updatedAt'], body['updatedAt'], 'the file is not otherwise re-stamped');
+  });
+
+  it('relax refuses an unknown run, a missing reference, a decision ID that is not one and a by other than owner, and writes nothing', () => {
+    const { file } = evidenceFile();
+    const before = readFileSync(file, 'utf8');
+    const common = ['--evidence', file, '--run-id', 'run_AAAA', '--ref', 'STATE.md 5ed69e0', '--by', 'owner'];
+    const cases: string[][] = [
+      ['relax', '--evidence', file, '--run-id', 'run_ZZZZ', '--decision', 'dec_X1', '--ref', 'r', '--by', 'owner'],
+      ['relax', '--evidence', file, '--run-id', 'run_AAAA', '--decision', 'dec_X1', '--by', 'owner'],
+      ['relax', ...common, '--decision', 'not-a-decision'],
+      ['relax', ...common],
+      ['relax', '--evidence', file, '--run-id', 'run_AAAA', '--decision', 'dec_X1', '--ref', 'r', '--by', 'claude'],
+    ];
+    for (const args of cases) {
+      const ran = tools(args);
+      assert.equal(ran.status, 2, `${args.join(' ')}: ${ran.stderr}`);
+    }
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('contractDiff lists what an amendment added, removed or changed, by field path', () => {
+    const before = { files: { write: ['src/a.ts'], create: ['src/a.ts'], protected: ['tests/e2e/**'] }, budgets: { invocations: 7 }, contractVersion: 1 };
+    const after = { files: { write: ['src/a.ts', 'tests/unit/x.ts'], create: ['src/a.ts', 'tests/unit/x.ts'], protected: ['tests/e2e/**'] }, budgets: { invocations: 9 }, contractVersion: 2 };
+    const diff = contractDiff(before, after);
+    assert.deepEqual(
+      diff.filter((d) => d['path'] !== 'contractVersion'),
+      [
+        { path: 'files.write', added: ['tests/unit/x.ts'] },
+        { path: 'files.create', added: ['tests/unit/x.ts'] },
+        { path: 'budgets.invocations', from: 7, to: 9 },
+      ],
+    );
+    assert.deepEqual(contractDiff(before, before), []);
+  });
+});
+
+describe('dry run: the write-set check of a brief (plan 03-49)', () => {
+  const repos: Array<{ dispose(): void }> = [];
+  after(() => {
+    for (const r of repos) r.dispose();
+  });
+  const FALLBACK_TEXT = 'Could not copy the address. Opening your mail app instead.';
+  const make = () => {
+    const repo = makeScratchRepo({
+      files: {
+        'src/lib/copy.ts': `export const COPY_SUCCESS = 'Email copied to clipboard'\nexport const COPY_FALLBACK = '${FALLBACK_TEXT}'\nexport const SHORT_LABEL = 'ok'\n`,
+        'src/components/useCopy.ts': "import { COPY_FALLBACK } from '../lib/copy'\nexport const useCopy = () => COPY_FALLBACK\n",
+        'src/other/Unrelated.tsx': 'export const nothing = 1\n',
+        'tests/unit/copy.test.ts': "import { COPY_FALLBACK } from '../../src/lib/copy'\n",
+        'tests/e2e/copy.spec.ts': `import { test } from '@playwright/test'\n\nconst x = 1\nconst FALLBACK = '${FALLBACK_TEXT}'\n`,
+        'docs/notes.md': `The toast says ${FALLBACK_TEXT}\n`,
+        '.planning/phases/03/PLAN.md': `COPY_FALLBACK = '${FALLBACK_TEXT}'\n`,
+      },
+    });
+    repos.push(repo);
+    return repo;
+  };
+  const input = (over: Record<string, unknown> = {}) => ({
+    behavior: 'Item C: `useCopy` shows `copyFallback(address)` instead of `COPY_FALLBACK`, and `COPY_FALLBACK` is removed from `src/lib/copy.ts` with every import of it. The label `SHORT_LABEL` is not touched, `string` is a type.',
+    writeGlobs: ['src/lib/copy.ts', 'tests/unit/copy.test.ts', 'src/components/useCopy.ts'],
+    itemFiles: ['src/lib/copy.ts', 'src/components/useCopy.ts'],
+    protectedGlobs: ['tests/e2e/**', 'scripts/**'],
+    conventionsWrite: ['src/**', 'tests/unit/**', 'docs/**'],
+    ...over,
+  });
+
+  it('flags the e2e spec that holds the value of a removed constant, as protected, with its line', () => {
+    const repo = make();
+    const checked = writeSetCheck(repo.path, repo.head, input());
+    const hit = checked.findings.find((f) => f.path === 'tests/e2e/copy.spec.ts');
+    assert.ok(hit, JSON.stringify(checked.findings));
+    assert.equal(hit.line, 4);
+    assert.equal(hit.protected, true);
+    assert.equal(hit.problem, true);
+    assert.ok(checked.lines.includes(`tests/e2e/copy.spec.ts:4 holds COPY_FALLBACK's value "${FALLBACK_TEXT}" (writable: no, protected: yes)`), checked.lines.join('\n'));
+  });
+
+  it("reports a file inside the conventions that is outside the brief's Write list, as not protected and not a problem", () => {
+    const repo = make();
+    const checked = writeSetCheck(repo.path, repo.head, input({ writeGlobs: ['src/lib/copy.ts', 'tests/unit/copy.test.ts'], itemFiles: ['src/lib/copy.ts'] }));
+    const hit = checked.findings.find((f) => f.path === 'src/components/useCopy.ts' && f.line === 1);
+    assert.ok(hit, JSON.stringify(checked.findings));
+    assert.deepEqual([hit.protected, hit.problem, hit.insideConventions], [false, false, true]);
+    assert.ok(checked.lines.some((l) => l.startsWith('src/components/useCopy.ts:1 holds COPY_FALLBACK (writable: no, protected: no)')), checked.lines.join('\n'));
+  });
+
+  it("reports nothing for files in the Write list or an item's own files, and skips prose and planning files", () => {
+    const repo = make();
+    const checked = writeSetCheck(repo.path, repo.head, input());
+    const paths = new Set(checked.findings.map((f) => f.path));
+    assert.equal(paths.has('src/lib/copy.ts'), false);
+    assert.equal(paths.has('tests/unit/copy.test.ts'), false);
+    assert.equal(paths.has('src/components/useCopy.ts'), false);
+    assert.equal(paths.has('docs/notes.md'), false, 'prose is not tested by any check');
+    assert.equal(paths.has('.planning/phases/03/PLAN.md'), false);
+    assert.equal(paths.has('src/other/Unrelated.tsx'), false);
+  });
+
+  it('a file outside the write set of the conventions is a problem even when it is not protected', () => {
+    const repo = make();
+    const checked = writeSetCheck(repo.path, repo.head, input({ protectedGlobs: [], conventionsWrite: ['src/**', 'docs/**'] }));
+    const hit = checked.findings.find((f) => f.path === 'tests/e2e/copy.spec.ts');
+    assert.ok(hit);
+    assert.deepEqual([hit.protected, hit.insideConventions, hit.problem], [false, false, true]);
+  });
+
+  it('reads the needles from backticks only, skips plain words and types, and ignores a value that is too short to mean anything', () => {
+    const repo = make();
+    const checked = writeSetCheck(repo.path, repo.head, input());
+    const names = checked.needles.map((n) => n.name);
+    assert.ok(names.includes('COPY_FALLBACK'));
+    assert.equal(names.includes('string'), false);
+    assert.equal(names.includes('src/lib/copy.ts'), false);
+    assert.ok(names.includes('SHORT_LABEL'));
+    assert.equal(checked.needles.find((n) => n.name === 'SHORT_LABEL')?.value, undefined, 'a value of two characters is not searched');
+  });
+
+  it("reads git objects only: the repository's working tree and index are not touched", () => {
+    const repo = make();
+    const status = (): string => spawnSync('git', ['-C', repo.path, 'status', '--porcelain=v2', '--untracked-files=all'], { encoding: 'utf8' }).stdout;
+    const before = status();
+    writeSetCheck(repo.path, repo.head, input());
+    assert.equal(status(), before);
   });
 });
