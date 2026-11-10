@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-45",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T06:29:03.632Z",
+  "updatedAt": "2026-11-10T07:58:32.071Z",
   "runs": [
     {
       "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
@@ -1174,5 +1174,87 @@
     "state": "cancelled",
     "stateAt": "2026-11-10T06:18:59.148Z",
     "reason": "D-03 stop of plan 03-42: the resume found no session under the owner's terminal environment and the fresh fallback failed G2; fixed by plan 03-43; owner decisions STATE.md 29abaeb"
+  },
+  "halt": {
+    "at": "2026-11-10T07:58:32.071Z",
+    "decision": "D-03",
+    "plan": "03-45",
+    "stage": "finish (task 2)",
+    "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
+    "runState": "blocked_on_decision",
+    "expected": "ready_for_review after the owner answer and the resume of item B",
+    "finishTool": "scripts/exit-run-phase3.sh --finish exited 2 and recorded nothing: decision dec_01M7274XVDJAH8MC3XZ6M89DR4 is open, which the tool reads as the owner not having answered",
+    "ownerAnswer": {
+      "decisionId": "dec_01M722AMGKSDC2RPA5SZ1VE7N6",
+      "answeredAt": "2026-11-10T07:51:14.649Z",
+      "answeredBy": "owner:aphan",
+      "channel": "terminal",
+      "option": "2",
+      "wording": "Couldn’t copy the address. Opening your mail app to <address>."
+    },
+    "resume": {
+      "attemptId": "att_01M72715PHHMNVN22VQCWJ1PN8",
+      "ordinal": 3,
+      "reason": "resume",
+      "itemId": "B",
+      "sessionAtPause": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+      "itemSessionAfter": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+      "invocationId": "inv_01M727160SFTY813HAKHDN8QWQ",
+      "invocationInitSessions": [
+        "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+        "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+        "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+        "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+        "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8"
+      ],
+      "resultSession": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+      "transcript": "sha256:4074db99ba6c54181582fcd1fef032f77d4b955ecb75e8345dfabf28e3d4b026",
+      "outcomeRecorded": "denied",
+      "hookDenies": 2,
+      "permissionDenials": 0,
+      "freshAnswerAttempt": false,
+      "costUsd": 0.8064030000000002,
+      "toolCounts": {
+        "Read": 13,
+        "Agent": 4,
+        "Write": 3,
+        "Edit": 3,
+        "Bash": 17,
+        "Grep": 1
+      }
+    },
+    "stop": {
+      "gate": "G2",
+      "itemId": "B",
+      "g1Passed": true,
+      "failure": "GSD VERIFICATION status is gaps_found, not passed",
+      "newDecisionId": "dec_01M7274XVDJAH8MC3XZ6M89DR4",
+      "newDecisionOpenedAt": "2026-11-10T07:53:18.445Z",
+      "newDecisionOptions": [
+        {
+          "key": "text",
+          "kind": "text",
+          "label": "free text"
+        }
+      ],
+      "affectedItems": [
+        "B",
+        "C"
+      ],
+      "itemC": "ready, no attempt"
+    },
+    "cause": "The resumed session wrote .planning/quick/20261110-copy-fallback-names-address/VERIFICATION.md with its first line \"status: passed\" and no \"---\" frontmatter fences, and its text reports every check green. The gate parser (src/domain/quick-record.ts, readFrontmatter) reads only a \"---\" block, finds no status and fails closed to gaps_found. Item A, resumed by the same prompt rules in the same run, wrote the fences and passed G2. The run-shell rule text (src/domain/run-shell-rules.ts) says the file \"starts with a frontmatter line\", which does not say that the line sits between \"---\" lines.",
+    "handling": "D-03: nothing retried, no decision answered by hand, no run 2 started, 03-29-SUMMARY.md and 03-42-SUMMARY.md untouched. Any further step is the owner’s decision (owner decision 2 of 2026-11-10: no ceiling room for another repeat).",
+    "checkoutAfterHalt": {
+      "portfolioHead": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "headUnchanged": true,
+      "note": "read-only check after the stop: HEAD equals the start-stage snapshot; the run branch is not handed off"
+    },
+    "spend": {
+      "runTotalUsd": 0.944266635,
+      "recordedBeforeUsd": 0.13786363499999998,
+      "appendedUsd": 0.806403,
+      "case": "exit-p3-run1-copy-fallback-run_01M7220WKE6WAP7N0FTPSH95RV-finish"
+    }
   }
 }
