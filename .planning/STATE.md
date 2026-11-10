@@ -343,6 +343,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-28: owner approved the three exit briefs with a per-run cap of 5.67 USD (ceiling stays 25 USD)
 - [Phase 03]: 03-28: exit runs pinned to host 2.1.319; plans 03-29 and 03-30 run every avarice start, and every owner-terminal decide or resume, with AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319; ADMITTED_CLAUDE_VERSIONS and the default binary unchanged
 - [Phase 03]: 03-28: item A stays small (haiku) in all three exit briefs
+- [Phase 03]: Owner decision 2026-11-09 after the 03-29 D-03 stop (run_01M71BDV8MWGEG7XSAWH1GZ80W: item A's unit finished and verified its own work, then repeated item B's open numbered choice; detectPause parked A, giving two decisions instead of one): fix BOTH (1) prompt scope — each item's unit sees only its own item's brief text, not other items' open choices — and (2) pause attribution — a numbered choice that belongs to another item's open decision does not pause a unit whose own work is done and verified; src/ change with docs/system update and offline tests; then repeat all three exit runs (D-03)
+- [Phase 03]: Owner decision 2026-11-09: the repeated exit's per-run cap is 5.62 USD (lower-only from 5.67; 16.8830 USD headroom fits three runs); ceiling stays 25 USD; host pin 2.1.319 unchanged. Run 1 of 03-29 stays open in the owner's profile until the owner cancels it; Claude never answers or cancels a portfolio run
 
 ### Pending Todos
 
