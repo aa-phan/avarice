@@ -287,7 +287,7 @@ Plans:
 - [x] 03-44-PLAN.md — Exit repeat prepared with no spend: the evidence carries each run's recorded directory, dry run with the fixed code, the 5.27 USD authorization; the owner cancels the stopped run 1 and confirms
 
 **Wave 15** *(gap closure, blocked on 03-44)*
-- [ ] 03-45-PLAN.md — Exit part 1 for the third time at 5.27 USD (run 1 to ready_for_review with the delegated session resumed, run 2 started and blocked); resumes 03-29 and 03-42
+- [x] 03-45-PLAN.md — Exit part 1 for the third time at 5.27 USD (run 1 to ready_for_review with the delegated session resumed, run 2 started and blocked); resumes 03-29 and 03-42 (halted at Task 2: B's delegated session resumed correctly, but gate G2 failed on a VERIFICATION.md without `---` fences; run 1 blocked on a new decision, run 2 not started, 03-29 and 03-42 still halted)
 
 **Wave 16** *(blocked on 03-45, 03-42 and 03-29)*
 - [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict (reads the third attempt's evidence and the 5.27 USD authorization)

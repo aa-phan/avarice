@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-44-PLAN.md
-last_updated: "2026-11-10T06:22:09.374Z"
+stopped_at: "Halted 03-45-PLAN.md at Task 2 (D-03 stop: G2 failed on VERIFICATION without frontmatter fences)"
+last_updated: "2026-11-10T07:59:55.019Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 03 execution started
-state_head: ce725654488a6af966c29e9b74a88731f5f58a5a
+state_head: 2c66104ff6467d4875d59c1df9801a95d529be91
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 106
-  completed_plans: 101
+  completed_plans: 102
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-44 complete (the exit evidence records each run's recorded host configuration directory; no-spend dry run with the fixed code; the owner cancelled run_01M71J9AVJ3N1BEKC4EM2P0GGF and confirmed the 5.27 USD authorization; 03-45-evidence-exit.json seeded; 03-45 next)
-Status: Ready to execute plan 03-45 (exit part 1, third attempt, spends): ownerConfirmedAt 2026-11-10T06:20:42Z, authorize passes on pinned 2.1.319; Phase 3 spend 9.1851 of 25 USD, three runs at 5.27 cap 15.81 of 15.8149 headroom, no room for another repeat
-Last activity: 2026-11-10 - plan 03-44 complete: run 1 cancelled by the owner in their terminal (ledger read read-only, no open decision), portfolio unchanged, 0 USD spent
+Phase: 03 (Decisions, independent work and amendments) — HALTED at plan 03-45 (D-03 stop)
+Plan: 03-45 halted at Task 2 (run_01M7220WKE6WAP7N0FTPSH95RV: A committed, owner answered option 2, B's delegated session 4006c6cb resumed under the recorded directory with no fresh attempt; gate G2 then failed because the resumed session's VERIFICATION.md had `status: passed` without `---` fences; run blocked_on_decision on dec_01M7274XVDJAH8MC3XZ6M89DR4)
+Status: Blocked on the owner. Run 2 not started; 03-29 and 03-42 stay halted, 03-30 stays blocked. Phase 3 spend 10.1294 of 25 USD (03-45 0.9443). Owner decides: answer or cancel the open decision, fix the VERIFICATION wording (run-shell-rules) or parser, and use the remaining headroom
+Last activity: 2026-11-10 - plan 03-45 halted under D-03: resume proven, G2 stop diagnosed, spend row appended, portfolio HEAD unchanged
 
 Progress: [███░░░░░░░] 25%
 
@@ -415,6 +415,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T06:22:09.123Z
-Stopped at: Completed 03-44-PLAN.md
+Last session: 2026-11-10T07:59:53.696Z
+Stopped at: Halted 03-45-PLAN.md at Task 2 (D-03 stop: G2 failed on VERIFICATION without frontmatter fences)
 Resume file: None
