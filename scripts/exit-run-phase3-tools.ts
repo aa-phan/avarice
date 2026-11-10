@@ -667,6 +667,17 @@ export function hostConfigDirOf(steps: ReadonlyArray<{ step: string; status: str
   return { claudeConfigDir: dir, source: latest.result['source'] ?? null };
 }
 
+// RED scaffold (plan 03-46): the three readers of a second stop, before they read anything.
+export function pauseDecisionIdsOf(_prior: Json | undefined): string[] {
+  return [];
+}
+export function openPauseDecisionOf(_pauseIds: readonly string[], openIds: readonly string[]): string | undefined {
+  return openIds[0];
+}
+export function secondStopOf(_decisions: readonly Json[], _pauseIds: readonly string[], state: string, reason: string | null): Json {
+  return { answeredDecision: null, newDecision: null, stop: { state, reason } };
+}
+
 interface Facts {
   run: RunRow;
   entry: Json;

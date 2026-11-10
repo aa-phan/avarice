@@ -4,7 +4,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -16,12 +16,15 @@ import {
   judgeFinish,
   judgeStart,
   livePlan,
+  openPauseDecisionOf,
   originOf,
   ownerChoiceItemOf,
   parkStepFor,
+  pauseDecisionIdsOf,
   pinnedByOf,
   promptScopeOf,
   runStateOf,
+  secondStopOf,
   spendGuard,
   supersededRunRefusal,
   toolUseCounts,
@@ -277,6 +280,102 @@ describe('exit evidence: the finish after the owner answered', () => {
   });
 });
 
+describe('exit evidence: a second stop after the owner answered (plan 03-46)', () => {
+  const SESSION = '11111111-2222-4333-8444-555555555555';
+  const answered = pauseDecision({ state: 'answered', answeredBy: 'owner:tester', answerChannel: 'terminal', answer: '2', answeredAt: '2026-11-10T07:51:14Z', issue: 'which wording?' });
+  const g2Stop = pauseDecision({
+    decisionId: 'dec_BBBB',
+    state: 'open',
+    class: 'acceptance',
+    affectedItems: ['B', 'C'],
+    issue: 'GSD VERIFICATION status is gaps_found, not passed',
+    origin: { origin: 'G2:gsd-verification', signalKind: 'gate', pauseSignal: null, gate: 'G2', rules: 'gsd-verification' },
+    parkAttemptId: 'att_B2',
+  });
+  const secondStop = (over: Json = {}): Parameters<typeof judgeFinish>[0] =>
+    ({
+      state: 'blocked_on_decision',
+      items: [
+        { itemId: 'A', state: 'done', gsdSession: 'a' },
+        { itemId: 'B', state: 'blocked_on_decision', gsdSession: SESSION },
+        { itemId: 'C', state: 'ready', gsdSession: null },
+      ],
+      decisions: [answered, g2Stop],
+      attempts: [{ attemptId: 'att_B1', itemId: 'B', reason: 'initial' }, { attemptId: 'att_B2', itemId: 'B', reason: 'resume' }],
+      invocations: [{ attemptId: 'att_B2', requestedSession: SESSION, initSessions: [SESSION], answeredDecisionId: 'dec_AAAA' }],
+      pauseSessions: { A: 'a', B: SESSION, C: null },
+      requiredChecks: [],
+      acceptance: [],
+      commit: null,
+      clean: null,
+      gates: [],
+      commits: [{ itemId: 'A' }],
+      askUserQuestion: 0,
+      owner: 'tester',
+      pauseDecisionIds: ['dec_AAAA'],
+      ...over,
+    }) as Parameters<typeof judgeFinish>[0];
+
+  it("reads the start stage's open decisions as the pause decisions, and keeps the ones an earlier finish already recorded", () => {
+    assert.deepEqual(pauseDecisionIdsOf({ decisions: [pauseDecision(), pauseDecision({ decisionId: 'dec_OLD', state: 'answered' })] }), ['dec_AAAA']);
+    assert.deepEqual(pauseDecisionIdsOf({ pauseDecisionIds: ['dec_AAAA'], decisions: [answered, g2Stop] }), ['dec_AAAA']);
+    assert.deepEqual(pauseDecisionIdsOf(undefined), []);
+  });
+
+  it('finds the pause decision among the open ones, and reads any open decision as the pause decision when the start recorded none', () => {
+    assert.equal(openPauseDecisionOf(['dec_AAAA'], ['dec_AAAA']), 'dec_AAAA');
+    assert.equal(openPauseDecisionOf(['dec_AAAA'], ['dec_BBBB']), undefined);
+    assert.equal(openPauseDecisionOf(['dec_AAAA'], []), undefined);
+    assert.equal(openPauseDecisionOf([], ['dec_BBBB']), 'dec_BBBB');
+  });
+
+  it('judges a run blocked again on another decision: the named problem, the resume facts of the answered item, and the run not ready for review', () => {
+    const judged = judgeFinish(secondStop());
+    assert.ok(judged.problems.includes("the run stopped again on decision dec_BBBB (acceptance, origin G2:gsd-verification) after the owner's answer"), judged.problems.join(' | '));
+    assert.ok(judged.problems.some((p) => p.includes('not ready_for_review')));
+    assert.equal(judged.resume['resumed'], true);
+    assert.equal(judged.resume['itemId'], 'B');
+  });
+
+  it('names no second stop when the only open decision is the pause decision, or none is open', () => {
+    assert.equal(judgeFinish(secondStop({ decisions: [pauseDecision()] })).problems.some((p) => p.includes('stopped again')), false);
+    assert.equal(judgeFinish(secondStop({ decisions: [answered] })).problems.some((p) => p.includes('stopped again')), false);
+  });
+
+  it('a run ready for review after the answer is judged as before', () => {
+    const judged = judgeFinish(
+      secondStop({
+        state: 'ready_for_review',
+        decisions: [answered],
+        items: [{ itemId: 'A', state: 'done' }, { itemId: 'B', state: 'done', gsdSession: SESSION }],
+        commits: [{ itemId: 'A' }, { itemId: 'B' }],
+        requiredChecks: [{ name: 'test', status: 'passed' }],
+        acceptance: [{ id: 'AC1', satisfied: true }],
+        commit: 'abc',
+        clean: true,
+        gates: [{ gate: 'G4', passed: true }],
+      }),
+    );
+    assert.deepEqual(judged.problems, []);
+  });
+
+  it('records the answered decision, the new open decision and the stop state of the run', () => {
+    const record = secondStopOf([answered, g2Stop] as Json[], ['dec_AAAA'], 'blocked_on_decision', 'decision');
+    assert.deepEqual(record['answeredDecision'], { decisionId: 'dec_AAAA', class: 'human', answer: '2', answerChannel: 'terminal', answeredBy: 'owner:tester', answeredAt: '2026-11-10T07:51:14Z', origin: { origin: 'pause' } });
+    assert.deepEqual(record['newDecision'], {
+      decisionId: 'dec_BBBB',
+      class: 'acceptance',
+      origin: { origin: 'G2:gsd-verification', signalKind: 'gate', pauseSignal: null, gate: 'G2', rules: 'gsd-verification' },
+      issue: 'GSD VERIFICATION status is gaps_found, not passed',
+      affectedItems: ['B', 'C'],
+    });
+    assert.deepEqual(record['stop'], { state: 'blocked_on_decision', reason: 'decision' });
+    const clear = secondStopOf([answered] as Json[], ['dec_AAAA'], 'ready_for_review', null);
+    assert.equal(clear['newDecision'], null);
+    assert.deepEqual(clear['stop'], { state: 'ready_for_review', reason: null });
+  });
+});
+
 describe('exit evidence: the spend guard and the transcript readers', () => {
   it('fits only while the recorded spend plus the cap stays within the lower of the two ceilings', () => {
     assert.equal(spendGuard(7.9739, 5.67, { ledger: 25, authorized: 25 }).fits, true);
@@ -452,6 +551,58 @@ describe('exit evidence: the superseded run read from a real ledger (plan 03-41)
     } finally {
       composed.value.close();
     }
+  });
+
+  describe('--finish against the ledger of a run that is blocked_on_decision (plan 03-46)', () => {
+    const finishArgs = (dir: string, runId: string, repo: string, evidence: string): string[] => {
+      const auth = join(dir, 'auth.json');
+      writeFileSync(auth, JSON.stringify({ selection: 'approve', perRunCapUsd: 5.27, ceilingUsd: 25, host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' }, briefs: [] }));
+      return ['evidence', '--stage', 'finish', '--run-id', runId, '--brief', join(dir, 'b.md'), '--repo', repo, '--authorization-file', auth, '--out', evidence, '--wait-max-minutes', '1'];
+    };
+    const startRecord = (runId: string, repo: string, pauseDecisionIds: string[]): Json => {
+      const snap = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'scripts', 'exit-run-phase3-tools.ts'), 'snapshot', '--repo', repo], { encoding: 'utf8', timeout: 60_000 });
+      assert.equal(snap.status, 0, snap.stderr);
+      return { runId, atPause: { at: '2026-11-10T06:23:43Z', state: 'blocked_on_decision', items: [] }, checkoutBeforeSnapshot: JSON.parse(snap.stdout), decisions: pauseDecisionIds.map((decisionId) => ({ decisionId, state: 'open' })) };
+    };
+
+    it('exits 2 and writes nothing while the decision that paused the run is still open', { timeout: 60_000 }, () => {
+      const dir = mkdtempSync(join(tmpdir(), 'exit-finish-open-'));
+      dirs.push(dir);
+      const { f, runId, decisionId } = state.s as ReturnType<typeof startBlockedS17>;
+      const evidence = join(dir, 'evidence.json');
+      const before = `${JSON.stringify({ schema: 1, plan: '03-46', runs: [startRecord(runId, f.repo.path, [decisionId])] })}\n`;
+      writeFileSync(evidence, before);
+      const ledger = join(dir, 'ledger.jsonl');
+      const ran = tools({ ...profileEnv(f.roots), AVARICE_PHASE3_LEDGER: ledger }, finishArgs(dir, runId, f.repo.path, evidence));
+      assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+      assert.match(ran.stderr, new RegExp(`decision ${decisionId} of ${runId} is still open: the owner has not answered it yet`));
+      assert.equal(readFileSync(evidence, 'utf8'), before, 'the evidence file is untouched');
+      assert.equal(existsSync(ledger), false, 'no spend line was written');
+    });
+
+    it('judges and records the stop, and exits 1, when the open decision is not the one that paused the run', { timeout: 60_000 }, () => {
+      const dir = mkdtempSync(join(tmpdir(), 'exit-finish-second-'));
+      dirs.push(dir);
+      const { f, runId, decisionId } = state.s as ReturnType<typeof startBlockedS17>;
+      const evidence = join(dir, 'evidence.json');
+      writeFileSync(evidence, `${JSON.stringify({ schema: 1, plan: '03-46', keepMe: { k: 1 }, runs: [{ runId: 'run_OTHER', marker: 'untouched' }, startRecord(runId, f.repo.path, ['dec_PAUSE_ANSWERED'])] })}\n`);
+      const ledger = join(dir, 'ledger.jsonl');
+      const ran = tools({ ...profileEnv(f.roots), AVARICE_PHASE3_LEDGER: ledger }, finishArgs(dir, runId, f.repo.path, evidence));
+      assert.equal(ran.status, 1, ran.stderr + ran.stdout);
+      assert.match(ran.stdout, /PROBLEM: the run stopped again on decision dec_[0-9A-Z]+ \(\w+, origin [^)]+\) after the owner's answer/);
+      const body = JSON.parse(readFileSync(evidence, 'utf8')) as Json;
+      assert.deepEqual(body['keepMe'], { k: 1 });
+      const runs = body['runs'] as Json[];
+      assert.deepEqual(runs.find((r) => r['runId'] === 'run_OTHER'), { runId: 'run_OTHER', marker: 'untouched' });
+      const entry = runs.find((r) => r['runId'] === runId) as Json;
+      assert.equal(entry['passed'], false);
+      assert.equal(entry['finalState'], 'blocked_on_decision');
+      assert.deepEqual(entry['pauseDecisionIds'], ['dec_PAUSE_ANSWERED']);
+      assert.equal((entry['newDecision'] as Json)['decisionId'], decisionId);
+      assert.deepEqual(entry['stop'], { state: 'blocked_on_decision', reason: 'decision' });
+      assert.ok('answeredDecision' in entry && 'resume' in entry && 'spend' in entry);
+      assert.ok((entry['problems'] as string[]).some((p) => p.includes(`the run stopped again on decision ${decisionId}`)));
+    });
   });
 
   it('authorize refuses a run it cannot read, and moves past the check once the owner has cancelled the run', { timeout: 60_000 }, async () => {
