@@ -114,3 +114,26 @@ export function detectPause(input: PauseInput): PauseDetection {
   if (input.finalTextTail !== undefined && endsInNumberedChoice(input.finalTextTail)) return { paused: true, signal: 'numbered-choice' };
   return { paused: false, signal: null };
 }
+
+// The trailing choice lines of a final text that ends in a numbered choice (the shape detectPause reads), as the trimmed lines; empty when the text does not end in one.
+export function choiceLines(_tail: string): string[] {
+  return [];
+}
+
+export interface AttributionInput {
+  signal: PauseSignal | null;
+  choiceLines: readonly string[];
+  ownItemId: string;
+  itemIds: readonly string[];
+  ownOptions: readonly string[];
+  sharedOptions: readonly string[];
+  optionsByItem: Readonly<Record<string, readonly string[]>>;
+  ownerChoiceItems: readonly string[];
+  verified: boolean;
+}
+
+export type Attribution = { attributedTo: string } | { attributedTo: null; reason: string };
+
+export function attributeNumberedChoice(_input: AttributionInput): Attribution {
+  return { attributedTo: null, reason: 'not implemented' };
+}
