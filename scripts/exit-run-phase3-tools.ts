@@ -667,15 +667,43 @@ export function hostConfigDirOf(steps: ReadonlyArray<{ step: string; status: str
   return { claudeConfigDir: dir, source: latest.result['source'] ?? null };
 }
 
-// RED scaffold (plan 03-46): the three readers of a second stop, before they read anything.
-export function pauseDecisionIdsOf(_prior: Json | undefined): string[] {
-  return [];
+// The decisions that paused the run at the start stage (plan 03-46): the ones its start-stage record holds open. A finish that recorded a second stop keeps
+// them in `pauseDecisionIds`, so a later finish reads the same ones and not the decision the second stop opened.
+export function pauseDecisionIdsOf(prior: Json | undefined): string[] {
+  if (prior === undefined) return [];
+  if (Array.isArray(prior['pauseDecisionIds'])) return prior['pauseDecisionIds'].filter((id): id is string => typeof id === 'string');
+  return asObjects(prior['decisions'])
+    .filter((d) => d['state'] === 'open' && typeof d['decisionId'] === 'string')
+    .map((d) => String(d['decisionId']));
 }
-export function openPauseDecisionOf(_pauseIds: readonly string[], openIds: readonly string[]): string | undefined {
-  return openIds[0];
+
+// The pause decision that is still open, which is the only reason --finish refuses (exit 2). A start that recorded no pause decision keeps the old reading:
+// any open decision is one the owner has not answered.
+export function openPauseDecisionOf(pauseIds: readonly string[], openIds: readonly string[]): string | undefined {
+  return pauseIds.length === 0 ? openIds[0] : openIds.find((id) => pauseIds.includes(id));
 }
-export function secondStopOf(_decisions: readonly Json[], _pauseIds: readonly string[], state: string, reason: string | null): Json {
-  return { answeredDecision: null, newDecision: null, stop: { state, reason } };
+
+// What a finish records of the stops of a run after the owner's answer: the answered pause decision, the decision the run is blocked on now, and the stop state.
+export function secondStopOf(decisions: readonly Json[], pauseIds: readonly string[], state: string, reason: string | null): Json {
+  const answered = decisions.find((d) => d['state'] === 'answered' && (pauseIds.length === 0 || pauseIds.includes(String(d['decisionId'])))) ?? decisions.find((d) => d['state'] === 'answered');
+  const open = decisions.find((d) => d['state'] === 'open' && !pauseIds.includes(String(d['decisionId'])));
+  return {
+    answeredDecision:
+      answered === undefined
+        ? null
+        : {
+            decisionId: answered['decisionId'],
+            class: answered['class'],
+            answer: answered['answer'] ?? null,
+            answerChannel: answered['answerChannel'] ?? null,
+            answeredBy: answered['answeredBy'] ?? null,
+            answeredAt: answered['answeredAt'] ?? null,
+            origin: answered['origin'] ?? null,
+          },
+    newDecision:
+      open === undefined ? null : { decisionId: open['decisionId'], class: open['class'], origin: open['origin'] ?? null, issue: open['issue'] ?? null, affectedItems: open['affectedItems'] ?? [] },
+    stop: { state, reason },
+  };
 }
 
 interface Facts {
@@ -895,9 +923,16 @@ export function judgeFinish(facts: {
   askUserQuestion: number;
   owner: string;
   hostConfigDir?: Json | null;
+  // The decisions that paused the run at the start stage; an open decision outside them is a second stop (plan 03-46). Absent: every open decision is one.
+  pauseDecisionIds?: readonly string[];
 }): { problems: string[]; resume: Json } {
   const problems: string[] = [];
   if (facts.state !== 'ready_for_review') problems.push(`the run ended ${facts.state}, not ready_for_review (D-03)`);
+  // A run the owner answered that stopped again on another open decision (plan 03-46, the 03-45 run 1 stop at G2): the stop is named, and the judgement goes on.
+  for (const d of facts.decisions.filter((x) => x['state'] === 'open' && !(facts.pauseDecisionIds ?? []).includes(String(x['decisionId'])))) {
+    const origin = isObject(d['origin']) ? String(d['origin']['origin']) : 'unknown';
+    problems.push(`the run stopped again on decision ${String(d['decisionId'])} (${String(d['class'])}, origin ${origin}) after the owner's answer`);
+  }
   const answered = facts.decisions.filter((d) => d['state'] === 'answered');
   if (answered.length !== 1) problems.push(`${answered.length} decision(s) are answered, not one`);
   const decision = answered[0];
@@ -1042,11 +1077,13 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
   let state = 'unknown';
   try {
     if (stage === 'finish') {
-      // The owner has answered, and the supervisor the decide command started takes the run on. A decision still open means the owner has not answered yet.
+      // The owner has answered, and the supervisor the decide command started takes the run on. The decision that paused the run at the start stage still
+      // open means the owner has not answered yet; another open decision is a second stop, and it is judged and recorded below (plan 03-46).
       const stillOpen = deps.ledger.listDecisions({ runId, state: 'open' });
       const current = deps.ledger.getRun(runId);
-      if (current.ok && current.value.state === 'blocked_on_decision' && stillOpen.ok && stillOpen.value.length > 0) {
-        errOut(`exit-run: decision ${stillOpen.value[0]?.decisionId ?? '?'} of ${runId} is still open: the owner has not answered it yet`);
+      const unanswered = stillOpen.ok ? openPauseDecisionOf(pauseDecisionIdsOf(prior), stillOpen.value.map((d) => d.decisionId)) : undefined;
+      if (current.ok && current.value.state === 'blocked_on_decision' && unanswered !== undefined) {
+        errOut(`exit-run: decision ${unanswered} of ${runId} is still open: the owner has not answered it yet`);
         return 2;
       }
       await waitForNextStop(deps, runId, Number(named['wait-max-minutes'] ?? STOP_WAIT_MAX_MINUTES), problems);
@@ -1091,6 +1128,7 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
       entry['stopOk'] = problems.length === 0;
     } else {
       const atPause = (prior as Json)['atPause'] as Json;
+      const pauseDecisionIds = pauseDecisionIdsOf(prior);
       const pauseSessions: Record<string, string | null> = {};
       for (const i of asObjects(atPause['items'])) pauseSessions[String(i['itemId'])] = typeof i['gsdSession'] === 'string' ? i['gsdSession'] : null;
       const judged = judgeFinish({
@@ -1109,9 +1147,12 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         askUserQuestion: Number(facts.entry['askUserQuestion']),
         owner: userInfo().username,
         hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null,
+        pauseDecisionIds,
       });
       problems.push(...judged.problems);
       entry['resume'] = judged.resume;
+      entry['pauseDecisionIds'] = pauseDecisionIds;
+      Object.assign(entry, secondStopOf(facts.decisions, pauseDecisionIds, state, facts.run.reason));
       entry['finalState'] = state;
       entry['resumed'] = judged.resume['resumed'] === true;
       const branchRef = `refs/heads/avarice/${runId}`;
