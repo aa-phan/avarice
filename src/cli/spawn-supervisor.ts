@@ -42,7 +42,7 @@ export function spawnSupervisor(request: SpawnRequest): SpawnResult {
 }
 
 // The supervisor reads the same three profile roots the spawning command resolved, whatever else its environment says.
-export function supervisorEnv(deps: AppDeps): NodeJS.ProcessEnv {
+export function supervisorEnv(deps: AppDeps, _runId?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     AVARICE_CONFIG_HOME: deps.profile.configHome,

@@ -10,7 +10,7 @@
 // a loop of denied calls, a flood of tool calls, and a different behaviour per attempt.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
@@ -103,6 +103,11 @@ export interface FakeRunOptions {
   // The text of the quick PLAN.md the unit leaves (written through the hook like the SUMMARY). It is written even when the unit writes no SUMMARY, as a
   // unit that stopped to ask after it planned would leave it. Absent: the default plan, written only together with the SUMMARY.
   planText?: string;
+  // Plan 03-43. The host keeps each session it starts under `<effective config dir>/fake-sessions/<session id>`, where the effective directory is the
+  // CLAUDE_CONFIG_DIR of the process the host runs in (else HOME/.claude), and a resumed call whose session is not under the launching process's directory
+  // ends as a missing session. This is how the real host behaves: it does not look across configuration directories. Off by default, so a test that runs
+  // the host in this process never writes under the real home.
+  sessionsPerConfigDir?: boolean;
 }
 
 // The item line of a unit or resume prompt: a line that starts `Work item <ID>:`, or the first line of the quoted task text. A phrase of that shape
@@ -130,6 +135,13 @@ export function selectFakeOptions(base: FakeRunOptions, request: Pick<Invocation
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
+
+// The configuration directory of the process the fake host runs in: CLAUDE_CONFIG_DIR when set and not empty, else HOME/.claude (the real host's rule).
+function effectiveConfigDir(): string {
+  const set = process.env['CLAUDE_CONFIG_DIR'];
+  if (set !== undefined && set !== '') return set;
+  return join(process.env['HOME'] !== undefined && process.env['HOME'] !== '' ? process.env['HOME'] : homedir(), '.claude');
+}
 
 interface HookRun {
   denied: string | null;
@@ -186,6 +198,13 @@ export class FakeRunHost implements AgentHost {
     const o = selectFakeOptions(this.options, req, freshIndex);
     // The session the unit runs under: a resumed session wins over a fresh one (as the real adapter does), else the caller's, else a made-up one.
     const sessionId = req.resumeSessionId ?? req.sessionId ?? `fake-run-session-${this.calls.length}`;
+    // The session store of this process's configuration directory (plan 03-43): a session is kept where it was started, and only there.
+    const sessionsDir = o.sessionsPerConfigDir === true ? join(effectiveConfigDir(), 'fake-sessions') : undefined;
+    const unknownHere = sessionsDir !== undefined && req.resumeSessionId !== undefined && !existsSync(join(sessionsDir, req.resumeSessionId));
+    if (sessionsDir !== undefined && !unknownHere) {
+      mkdirSync(sessionsDir, { recursive: true });
+      writeFileSync(join(sessionsDir, sessionId), '');
+    }
     if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
     const startedMs = Date.now();
@@ -203,7 +222,7 @@ export class FakeRunHost implements AgentHost {
 
     // A session the CLI does not know: spike S3-A measured that it prints a result event (`error_during_execution`, an error, no turns, no cost) and exits 1,
     // before it touches anything. The adapter reports it as kind `failed` and drops the host's own message.
-    if (req.resumeSessionId !== undefined && o.missingSession === true) {
+    if (req.resumeSessionId !== undefined && (o.missingSession === true || unknownHere)) {
       return ok({
         sessionId,
         kind: 'failed',
