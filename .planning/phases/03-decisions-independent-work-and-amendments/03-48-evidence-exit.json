@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-48",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T22:29:48.486Z",
+  "updatedAt": "2026-11-10T22:51:25.151Z",
   "runs": [
     {
       "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
@@ -11,10 +11,10 @@
       "reason": "decision",
       "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
       "branch": "avarice/run_01M73RX3RF0ZJETYWVF52WFZ5B",
-      "updatedAt": "2026-11-10T22:29:47.661Z",
+      "updatedAt": "2026-11-10T22:51:22.263Z",
       "commit": null,
       "clean": false,
-      "costUsd": 0.17728218,
+      "costUsd": 1.062910355,
       "hostConfigDir": {
         "claudeConfigDir": "/Users/aphan/.claude-edu",
         "source": "CLAUDE_CONFIG_DIR"
@@ -22,31 +22,31 @@
       "budgets": [
         {
           "name": "costUsd",
-          "used": 0.17728218,
+          "used": 1.062910355,
           "reserved": 0,
           "limit": 4.95
         },
         {
           "name": "invocations",
-          "used": 2,
+          "used": 4,
           "reserved": 0,
           "limit": 7
         },
         {
           "name": "subagentsTotal",
-          "used": 6,
+          "used": 13,
           "reserved": 0,
           "limit": 30
         },
         {
           "name": "toolCalls",
-          "used": 66,
+          "used": 167,
           "reserved": 0,
           "limit": 1200
         },
         {
           "name": "wallClockMs",
-          "used": 364203,
+          "used": 791574,
           "reserved": 0,
           "limit": 7200000
         }
@@ -63,23 +63,23 @@
         },
         {
           "itemId": "B",
-          "state": "blocked_on_decision",
+          "state": "done",
           "size": "medium",
           "model": "sonnet",
           "dependsOn": [],
-          "attempts": 1,
+          "attempts": 2,
           "gsdSession": "9673ee64-b2ab-4652-8bc0-c562238a7445"
         },
         {
           "itemId": "C",
-          "state": "ready",
+          "state": "blocked_on_decision",
           "size": "small",
           "model": "haiku",
           "dependsOn": [
             "B"
           ],
-          "attempts": 0,
-          "gsdSession": null
+          "attempts": 1,
+          "gsdSession": "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89"
         }
       ],
       "attempts": [
@@ -100,13 +100,31 @@
           "outcome": "blocked:decision",
           "startedAt": "2026-11-10T22:29:42.312Z",
           "endedAt": "2026-11-10T22:29:47.660Z"
+        },
+        {
+          "attemptId": "att_01M73T3HZ08S8P5SQQHZ7K09KR",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "committed",
+          "startedAt": "2026-11-10T22:43:50.880Z",
+          "endedAt": "2026-11-10T22:46:41.780Z"
+        },
+        {
+          "attemptId": "att_01M73T8S4BD9D8E4HAQS7RVX5M",
+          "ordinal": 4,
+          "reason": "initial",
+          "itemId": "C",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-10T22:46:42.059Z",
+          "endedAt": "2026-11-10T22:51:22.261Z"
         }
       ],
       "decisions": [
         {
           "decisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
           "class": "acceptance",
-          "state": "open",
+          "state": "answered",
           "urgency": "blocking",
           "contractVersion": 1,
           "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
@@ -135,6 +153,51 @@
           "evidenceRefs": [],
           "authorizedDefault": null,
           "openedAt": "2026-11-10T22:29:47.659Z",
+          "answeredAt": "2026-11-10T22:43:50.371Z",
+          "answeredBy": "owner:aphan",
+          "answer": "2",
+          "answerChannel": "terminal",
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M73S9N98Q79BS919Z7EX6SYH"
+        },
+        {
+          "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "C"
+          ],
+          "issue": "AC4 is met in the source, but the run's gate is not clean: the e2e spec still expects the old fallback sentence, and that file is outside the allowed paths. The verifier's status is `gaps_found`.\n\n**What changed (uncommitted, for the supervisor):**\n- `src/components/ui/useCopyEmail.ts`: the failure branch now shows `copyFallback(address)`. The `openMail` call and the success branch are unchanged.\n- `src/lib/copy.ts`: `COPY_FALLBACK` is removed. `COPY_SUCCESS` and `copyFallback` are unchanged.\n- `tests/unit/copy.test.ts`: the `COPY_FALLBACK` import and assertion are removed. The `it` title is renamed to `'uses the contracted success wording'`. The existing `copyFallback` test still pins the U+2019 sentence.\n\n**Checks:** `npm run typecheck` passes, `npm run lint` passes (no output, so the exit code wasn't displayed), prettier passes, and `tests/unit/copy.test.ts` passes 7 of 7.\n\n**Not verified:**\n- A repo-wide search for `COPY_FALLBACK` was not possible here. Grep isn't available and the",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "Yes, allow the one-line e2e change and re-verify."
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "No, leave the e2e spec failing and let you handle it separately."
+            }
+          ],
+          "consequences": {
+            "1": "item C resumes with this answer",
+            "2": "item C resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-10T22:51:22.261Z",
           "answeredAt": null,
           "answeredBy": null,
           "answer": null,
@@ -147,7 +210,7 @@
             "gate": null,
             "rules": null
           },
-          "parkAttemptId": "att_01M73S9N98Q79BS919Z7EX6SYH"
+          "parkAttemptId": "att_01M73T8S4BD9D8E4HAQS7RVX5M"
         }
       ],
       "notifications": [
@@ -163,6 +226,19 @@
           "lastError": null,
           "createdAt": "2026-11-10T22:29:47.660Z",
           "deliveredAt": "2026-11-10T22:29:47.780Z"
+        },
+        {
+          "notificationId": "ntf_01M73THARP6J2B5BV14DYJBE3H",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M73THARNM0VENR94QDX62BJ3"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-10T22:51:22.262Z",
+          "deliveredAt": "2026-11-10T22:51:22.357Z"
         }
       ],
       "gates": [
@@ -186,80 +262,94 @@
           "passed": true,
           "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
           "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "failures": []
         }
       ],
       "requiredChecks": [
         {
           "name": "typecheck",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "lint",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "format:check",
           "status": "failed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false,
           "preExisting": true
         },
         {
           "name": "test",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:case",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:colors",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:contrast",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "build",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:meta",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:budget",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:no-phone",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         },
         {
           "name": "check:images",
           "status": "passed",
-          "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "clean": false
         }
       ],
@@ -287,6 +377,15 @@
               "independence": "deterministic",
               "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
               "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
               "phase": "item"
             }
           ],
@@ -334,6 +433,24 @@
               "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
+              "phase": "item"
             }
           ],
           "satisfied": true
@@ -362,6 +479,15 @@
               "independence": "deterministic",
               "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
               "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
               "phase": "item"
             }
           ],
@@ -427,6 +553,33 @@
               "independence": "deterministic",
               "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
               "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+              "workItem": "B",
               "phase": "item"
             }
           ],
@@ -740,6 +893,160 @@
           "workItem": "A",
           "acceptance": [],
           "phase": "item"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
         }
       ],
       "commits": [
@@ -747,6 +1054,12 @@
           "commit": "b4bc4c0bce98785b9d9fe28bdb8dd83e3f1aaead",
           "attemptId": "att_01M73RX6T4Y98C0JQCPERGQMN9",
           "itemId": "A",
+          "paths": 2
+        },
+        {
+          "commit": "0db1f455e3ee4ea3e96fa7c67ddca3d2880653e5",
+          "attemptId": "att_01M73T3HZ08S8P5SQQHZ7K09KR",
+          "itemId": "B",
           "paths": 2
         }
       ],
@@ -801,15 +1114,75 @@
             "9673ee64-b2ab-4652-8bc0-c562238a7445"
           ],
           "toolCounts": {}
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M73T3HZ08S8P5SQQHZ7K09KR",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M73T3J6NRGKQKMQ6691P6Y0P",
+          "requestedSession": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "answeredDecisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.7960185000000002,
+          "costChargedUsd": 0.7960185000000002,
+          "transcript": "sha256:1ccb463afb8d66bb420cb596ec4da0dfc1b1239da5157a9888d41ac4d0ee1648",
+          "initSessions": [
+            "9673ee64-b2ab-4652-8bc0-c562238a7445",
+            "9673ee64-b2ab-4652-8bc0-c562238a7445",
+            "9673ee64-b2ab-4652-8bc0-c562238a7445",
+            "9673ee64-b2ab-4652-8bc0-c562238a7445",
+            "9673ee64-b2ab-4652-8bc0-c562238a7445"
+          ],
+          "toolCounts": {
+            "Read": 15,
+            "Agent": 4,
+            "Write": 3,
+            "Edit": 3,
+            "Bash": 18
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M73T8S4BD9D8E4HAQS7RVX5M",
+          "itemId": "C",
+          "model": "haiku",
+          "invocationId": "inv_01M73T8S8PNNT8Y6QKGATAW556",
+          "requestedSession": "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89",
+          "answeredDecisionId": null,
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.08960967499999999,
+          "costChargedUsd": 0.08960967499999999,
+          "transcript": "sha256:5e15dbb8d02fe87880e23bc21a057f363ad552734fb6a9accdb3d3d1aa75ea63",
+          "initSessions": [
+            "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89",
+            "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89",
+            "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89",
+            "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89"
+          ],
+          "toolCounts": {
+            "Bash": 20,
+            "Read": 41,
+            "Grep": 5,
+            "Agent": 3,
+            "Write": 3,
+            "Edit": 5,
+            "Glob": 1
+          }
         }
       ],
       "toolCounts": {
-        "Read": 26,
-        "Agent": 6,
-        "Grep": 1,
-        "Bash": 36,
-        "Write": 3,
-        "Edit": 4
+        "Read": 82,
+        "Agent": 13,
+        "Grep": 6,
+        "Bash": 74,
+        "Write": 9,
+        "Edit": 12,
+        "Glob": 1
       },
       "askUserQuestion": 0,
       "statusView": {
@@ -818,10 +1191,10 @@
         "state": "blocked_on_decision",
         "reason": "decision",
         "lastCheckpoint": {
-          "seq": 18,
+          "seq": 32,
           "nextAction": "park",
-          "revision": "b4bc4c0bce98785b9d9fe28bdb8dd83e3f1aaead",
-          "at": "2026-11-10T22:29:47.255Z"
+          "revision": "0db1f455e3ee4ea3e96fa7c67ddca3d2880653e5",
+          "at": "2026-11-10T22:51:21.993Z"
         },
         "branch": "avarice/run_01M73RX3RF0ZJETYWVF52WFZ5B",
         "commit": null,
@@ -831,21 +1204,21 @@
             "name": "typecheck",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "lint",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "format:check",
             "kind": "check",
             "status": "failed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false,
             "preExisting": true
           },
@@ -853,63 +1226,63 @@
             "name": "test",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:case",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:colors",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:contrast",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "build",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:meta",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:budget",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:no-phone",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           },
           {
             "name": "check:images",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1",
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
             "clean": false
           }
         ],
@@ -922,39 +1295,39 @@
           {
             "gate": "G1",
             "passed": true,
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1"
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c"
           },
           {
             "gate": "G2",
             "passed": true,
-            "revision": "tree:sha256:b07a826942feaf88a537a1231509e77efdeabeabdb13fc3ecc6bbdd620d4ebb1"
+            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c"
           }
         ],
         "openDecisions": 1,
         "budgets": [
           {
             "name": "costUsd",
-            "used": 0.17728218,
+            "used": 1.062910355,
             "limit": 4.95
           },
           {
             "name": "invocations",
-            "used": 2,
+            "used": 4,
             "limit": 7
           },
           {
             "name": "subagentsTotal",
-            "used": 6,
+            "used": 13,
             "limit": 30
           },
           {
             "name": "toolCalls",
-            "used": 66,
+            "used": 167,
             "limit": 1200
           },
           {
             "name": "wallClockMs",
-            "used": 364203,
+            "used": 791574,
             "limit": 7200000
           }
         ],
@@ -981,30 +1354,40 @@
           },
           {
             "itemId": "B",
-            "state": "blocked_on_decision",
+            "state": "done",
             "size": "medium",
             "model": "sonnet",
             "dependsOn": [],
-            "attempts": 1
+            "attempts": 2
           },
           {
             "itemId": "C",
-            "state": "ready",
+            "state": "blocked_on_decision",
             "size": "small",
             "model": "haiku",
             "dependsOn": [
               "B"
             ],
-            "attempts": 0
+            "attempts": 1
           }
         ],
         "decisions": [
           {
             "decisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
             "class": "acceptance",
-            "state": "open",
+            "state": "answered",
             "affectedItems": [
               "B",
+              "C"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
               "C"
             ],
             "supersedes": null,
@@ -1012,7 +1395,7 @@
           }
         ],
         "notifications": {
-          "delivered": 1,
+          "delivered": 2,
           "pending": 0,
           "held": 0,
           "failed": 0,
@@ -1101,7 +1484,7 @@
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "after": {
-          "takenAt": "2026-11-10T22:29:48.272Z",
+          "takenAt": "2026-11-10T22:51:25.092Z",
           "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
           "branch": "gsd/phase-02-deployed-themed-skeleton",
           "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
@@ -1149,23 +1532,101 @@
       },
       "stopOk": true,
       "spend": {
-        "recordedUsd": 0,
-        "appendedUsd": 0.17728218,
+        "recordedUsd": 0.17728218,
+        "appendedUsd": 0.8856281750000001,
         "line": {
           "plan": "03-48",
-          "case": "exit-p3-run1-copy-fallback-run_01M73RX3RF0ZJETYWVF52WFZ5B-start",
-          "costUsd": 0.17728218,
+          "case": "exit-p3-run1-copy-fallback-run_01M73RX3RF0ZJETYWVF52WFZ5B-finish",
+          "costUsd": 0.8856281750000001,
           "claudeVersion": "2.1.319",
-          "at": "2026-11-10T22:29:48.486Z"
+          "at": "2026-11-10T22:51:25.150Z"
         }
       },
-      "phase3SpentUsd": 10.306692354999997,
+      "phase3SpentUsd": 11.192320529999998,
       "spendGuardAfterStage": {
-        "remainingRunCapUsd": 4.77271782,
+        "remainingRunCapUsd": 3.887089645,
         "ceilingUsd": 25,
         "fits": true
       },
-      "problems": []
+      "problems": [
+        "the run ended blocked_on_decision, not ready_for_review (D-03)",
+        "the run stopped again on decision dec_01M73THARNM0VENR94QDX62BJ3 (acceptance, origin pause) after the owner's answer",
+        "item C is blocked_on_decision, not done",
+        "item C has no commit step",
+        "the final evidence was not taken on a clean tree",
+        "no handed-off commit",
+        "gate G4 did not pass"
+      ],
+      "resume": {
+        "resumed": true,
+        "hostConfigDir": {
+          "claudeConfigDir": "/Users/aphan/.claude-edu",
+          "source": "CLAUDE_CONFIG_DIR"
+        },
+        "itemId": "B",
+        "sessionAtPause": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "sessionAfter": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "attempt": {
+          "attemptId": "att_01M73T3HZ08S8P5SQQHZ7K09KR",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "committed",
+          "startedAt": "2026-11-10T22:43:50.880Z",
+          "endedAt": "2026-11-10T22:46:41.780Z"
+        },
+        "invocationRequestedSession": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "invocationInitSessions": [
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445"
+        ],
+        "answeredDecisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM"
+      },
+      "pauseDecisionIds": [
+        "dec_01M73S9TGB7KVJZWGVCZ1H8CQM"
+      ],
+      "answeredDecision": {
+        "decisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
+        "class": "acceptance",
+        "answer": "2",
+        "answerChannel": "terminal",
+        "answeredBy": "owner:aphan",
+        "answeredAt": "2026-11-10T22:43:50.371Z",
+        "origin": {
+          "origin": "pause",
+          "signalKind": "pause",
+          "pauseSignal": "numbered-choice",
+          "gate": null,
+          "rules": null
+        }
+      },
+      "newDecision": {
+        "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+        "class": "acceptance",
+        "origin": {
+          "origin": "pause",
+          "signalKind": "pause",
+          "pauseSignal": "numbered-choice",
+          "gate": null,
+          "rules": null
+        },
+        "issue": "AC4 is met in the source, but the run's gate is not clean: the e2e spec still expects the old fallback sentence, and that file is outside the allowed paths. The verifier's status is `gaps_found`.\n\n**What changed (uncommitted, for the supervisor):**\n- `src/components/ui/useCopyEmail.ts`: the failure branch now shows `copyFallback(address)`. The `openMail` call and the success branch are unchanged.\n- `src/lib/copy.ts`: `COPY_FALLBACK` is removed. `COPY_SUCCESS` and `copyFallback` are unchanged.\n- `tests/unit/copy.test.ts`: the `COPY_FALLBACK` import and assertion are removed. The `it` title is renamed to `'uses the contracted success wording'`. The existing `copyFallback` test still pins the U+2019 sentence.\n\n**Checks:** `npm run typecheck` passes, `npm run lint` passes (no output, so the exit code wasn't displayed), prettier passes, and `tests/unit/copy.test.ts` passes 7 of 7.\n\n**Not verified:**\n- A repo-wide search for `COPY_FALLBACK` was not possible here. Grep isn't available and the",
+        "affectedItems": [
+          "C"
+        ]
+      },
+      "stop": {
+        "state": "blocked_on_decision",
+        "reason": "decision"
+      },
+      "finalState": "blocked_on_decision",
+      "resumed": true,
+      "branchRefCommit": null,
+      "finishedAt": "2026-11-10T22:51:25.150Z",
+      "passed": false
     }
   ],
   "supersedes": {
