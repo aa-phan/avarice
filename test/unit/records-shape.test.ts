@@ -12,7 +12,7 @@ import { RUN_RECORDS_SENTENCE } from '../../src/domain/run-shell-rules.ts';
 function statedShape(): { open: string; statuses: string[]; close: string } {
   const clause = /VERIFICATION\.md (?:begins|starts) with[^.]*\./.exec(RUN_RECORDS_SENTENCE);
   assert.ok(clause !== null, 'the sentence has a clause that says how the VERIFICATION.md begins');
-  const quoted = [...clause[0].matchAll(/'([^']*)'/g)].map((m) => m[1] as string);
+  const quoted = [...clause[0].matchAll(/'(---|status: \w+)'/g)].map((m) => m[1] as string);
   assert.equal(quoted.length, 5, `the clause names five quoted lines, found ${JSON.stringify(quoted)}`);
   return { open: quoted[0] as string, statuses: quoted.slice(1, 4), close: quoted[4] as string };
 }
