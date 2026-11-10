@@ -2,13 +2,1177 @@
   "schema": 1,
   "plan": "03-45",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T06:20:42Z",
+  "updatedAt": "2026-11-10T06:29:03.632Z",
+  "runs": [
+    {
+      "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
+      "title": "The copy fallback names the address",
+      "state": "blocked_on_decision",
+      "reason": "decision",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M7220WKE6WAP7N0FTPSH95RV",
+      "updatedAt": "2026-11-10T06:29:02.615Z",
+      "commit": null,
+      "clean": false,
+      "costUsd": 0.13786363499999998,
+      "hostConfigDir": {
+        "claudeConfigDir": "/Users/aphan/.claude-edu",
+        "source": "CLAUDE_CONFIG_DIR"
+      },
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 0.13786363499999998,
+          "reserved": 0,
+          "limit": 5.27
+        },
+        {
+          "name": "invocations",
+          "used": 2,
+          "reserved": 0,
+          "limit": 7
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "reserved": 0,
+          "limit": 30
+        },
+        {
+          "name": "toolCalls",
+          "used": 37,
+          "reserved": 0,
+          "limit": 1200
+        },
+        {
+          "name": "wallClockMs",
+          "used": 253992,
+          "reserved": 0,
+          "limit": 7200000
+        }
+      ],
+      "items": [
+        {
+          "itemId": "A",
+          "state": "done",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec"
+        },
+        {
+          "itemId": "B",
+          "state": "blocked_on_decision",
+          "size": "medium",
+          "model": "sonnet",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8"
+        },
+        {
+          "itemId": "C",
+          "state": "ready",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [
+            "B"
+          ],
+          "attempts": 0,
+          "gsdSession": null
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M7221090CHZYEV0KWN5E396F",
+          "ordinal": 1,
+          "reason": "initial",
+          "itemId": "A",
+          "outcome": "committed",
+          "startedAt": "2026-11-10T06:23:46.976Z",
+          "endedAt": "2026-11-10T06:28:56.229Z"
+        },
+        {
+          "attemptId": "att_01M722AEKVWNXPGNXZXEXVWGH3",
+          "ordinal": 2,
+          "reason": "initial",
+          "itemId": "B",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-10T06:28:56.571Z",
+          "endedAt": "2026-11-10T06:29:02.613Z"
+        }
+      ],
+      "decisions": [
+        {
+          "decisionId": "dec_01M722AMGKSDC2RPA5SZ1VE7N6",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "B",
+            "C"
+          ],
+          "issue": "I'm pausing before I start the workflow. Item B needs a wording choice from you, and the two options aren't equivalent. Option 2 says the app is opening the mail app, which implies behavior `useCopyEmail` would have to provide. Option 1 only tells the visitor the address. I haven't written any files, and I haven't started the planner, checker, executor or verifier.\n\nOnce you choose, I'll run the full validate workflow with that wording. It will add `copyFallback(address)` to `src/lib/copy.ts` and the `copyFallback names the address` test to `tests/unit/copy.test.ts`. `COPY_FALLBACK` stays exported and unchanged.\n\nWhich wording should `copyFallback` return?\n1. `Couldn’t copy. Email me at <address>.`\n2. `Couldn’t copy the address. Opening your mail app to <address>.`",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "`Couldn’t copy. Email me at <address>.`"
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "`Couldn’t copy the address. Opening your mail app to <address>.`"
+            }
+          ],
+          "consequences": {
+            "1": "item B resumes with this answer",
+            "2": "item B resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-10T06:29:02.611Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M722AEKVWNXPGNXZXEXVWGH3"
+        }
+      ],
+      "notifications": [
+        {
+          "notificationId": "ntf_01M722AMGP0MRJG0MNYJ6QAQBB",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M722AMGKSDC2RPA5SZ1VE7N6"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-10T06:29:02.614Z",
+          "deliveredAt": "2026-11-10T06:29:02.767Z"
+        }
+      ],
+      "gates": [
+        {
+          "gate": "G0",
+          "workItem": null,
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "A",
+          "passed": true,
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "A",
+          "passed": true,
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "failures": []
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "preExisting": true
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:isIsoYearMonth"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "decision:fallback-wording",
+            "check:test",
+            "test:copyFallback names the address"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC4",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint",
+            "check:test"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+              "workItem": "A",
+              "phase": "item"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "item"
+        }
+      ],
+      "commits": [
+        {
+          "commit": "1ed1aac4aa920eef42da0fee30e3da5c5d08b8c4",
+          "attemptId": "att_01M7221090CHZYEV0KWN5E396F",
+          "itemId": "A",
+          "paths": 2
+        }
+      ],
+      "invocations": [
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M7221090CHZYEV0KWN5E396F",
+          "itemId": "A",
+          "model": "haiku",
+          "invocationId": "inv_01M7221V7R10TMDMFV9X68Z96Q",
+          "requestedSession": "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec",
+          "answeredDecisionId": null,
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.06754643499999999,
+          "costChargedUsd": 0.06754643499999999,
+          "transcript": "sha256:bf60f352bc6b5749aad84b9644223ba8a4f0fe3f0db3db1f18454838db5a3f19",
+          "initSessions": [
+            "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec",
+            "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec",
+            "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec",
+            "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec",
+            "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec"
+          ],
+          "toolCounts": {
+            "Bash": 18,
+            "Read": 14,
+            "Grep": 1,
+            "Glob": 1,
+            "Agent": 4,
+            "Write": 3,
+            "Edit": 4
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M722AEKVWNXPGNXZXEXVWGH3",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M722AET01AARWNJWV8ZCKT9B",
+          "requestedSession": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8",
+          "answeredDecisionId": null,
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.0703172,
+          "costChargedUsd": 0.0703172,
+          "transcript": "sha256:3e3b024866bf96c89ebea69e8442ec864f196f56be47a74683351a0d346ff1ad",
+          "initSessions": [
+            "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8"
+          ],
+          "toolCounts": {}
+        }
+      ],
+      "toolCounts": {
+        "Bash": 18,
+        "Read": 14,
+        "Grep": 1,
+        "Glob": 1,
+        "Agent": 4,
+        "Write": 3,
+        "Edit": 4
+      },
+      "askUserQuestion": 0,
+      "statusView": {
+        "runId": "run_01M7220WKE6WAP7N0FTPSH95RV",
+        "title": "The copy fallback names the address",
+        "state": "blocked_on_decision",
+        "reason": "decision",
+        "lastCheckpoint": {
+          "seq": 18,
+          "nextAction": "park",
+          "revision": "1ed1aac4aa920eef42da0fee30e3da5c5d08b8c4",
+          "at": "2026-11-10T06:29:02.228Z"
+        },
+        "branch": "avarice/run_01M7220WKE6WAP7N0FTPSH95RV",
+        "commit": null,
+        "clean": false,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false,
+            "preExisting": true
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706",
+            "clean": false
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          },
+          {
+            "gate": "G1",
+            "passed": true,
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706"
+          },
+          {
+            "gate": "G2",
+            "passed": true,
+            "revision": "tree:sha256:547d317a0f807abfbcc1f080f9b17957a4c01660282ba2fad2c2bee6780f9706"
+          }
+        ],
+        "openDecisions": 1,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0.13786363499999998,
+            "limit": 5.27
+          },
+          {
+            "name": "invocations",
+            "used": 2,
+            "limit": 7
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 30
+          },
+          {
+            "name": "toolCalls",
+            "used": 37,
+            "limit": 1200
+          },
+          {
+            "name": "wallClockMs",
+            "used": 253992,
+            "limit": 7200000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "p3-run1-copy-fallback.md",
+            "revision": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "done",
+            "size": "small",
+            "model": "haiku",
+            "dependsOn": [],
+            "attempts": 1
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          },
+          {
+            "itemId": "C",
+            "state": "ready",
+            "size": "small",
+            "model": "haiku",
+            "dependsOn": [
+              "B"
+            ],
+            "attempts": 0
+          }
+        ],
+        "decisions": [
+          {
+            "decisionId": "dec_01M722AMGKSDC2RPA5SZ1VE7N6",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "B",
+              "C"
+            ],
+            "supersedes": null,
+            "successor": null
+          }
+        ],
+        "notifications": {
+          "delivered": 1,
+          "pending": 0,
+          "held": 0,
+          "failed": 0,
+          "lastError": null
+        }
+      },
+      "brief": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "briefDigest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0",
+      "plan": "03-45",
+      "host": {
+        "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+        "claudeVersion": "2.1.319",
+        "pinnedBy": "03-44-exit-authorization.json",
+        "liveAdmitVariableSet": false
+      },
+      "perRunCapUsd": 5.27,
+      "startExit": 3,
+      "startedAt": "2026-11-10T06:23:42Z",
+      "startStdoutTail": "run run_01M7220WKE6WAP7N0FTPSH95RV: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: The copy fallback names the address\nacceptance: 4 criteria\nwrite paths: src/lib/dates.ts, tests/unit/dates.test.ts, src/lib/copy.ts, tests/unit/copy.test.ts, src/components/ui/useCopyEmail.ts\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 5.27 USD per run, 2.00 USD per invocation; 120 min, 7 invocations, 1200 tool calls\nindex: used (3 files, 0 symbols)\nitem A: small, haiku (from size); files src/lib/dates.ts (derived)\nitem B: medium, sonnet (from size); files src/lib/copy.ts (derived)\nitem C: small, haiku (from size); depends on B; files src/components/ui/useCopyEmail.ts (derived)\ncontract: routine v1 sha256:60763247c8eb3c5c921bd21feacfe1cdb6596082710526b472470c7c2120effe\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M7220WKE6WAP7N0FTPSH95RV/contract-v1.json\nrun run_01M7220WKE6WAP7N0FTPSH95RV: blocked_on_decision (decision)\n",
+      "checkoutBeforeSnapshot": {
+        "schema": 1,
+        "takenAt": "2026-11-10T06:23:42.045Z",
+        "repo": "/Users/aphan/aa-phan-portfolio-v2",
+        "digest": {
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          }
+        },
+        "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+        "refs": [
+          {
+            "ref": "refs/heads/avarice/run_01M6SE68ZTSJPBARR0DVKDKAMR",
+            "object": "0c4b58dffe2864f1521216fc87e7b7a0f0e3ece4"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+            "object": "c093ca053c949863220e150c4f98168d439e9ac5"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+            "object": "54b250016cd436fd2b340795b13c2cfadad6599f"
+          },
+          {
+            "ref": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+            "object": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          },
+          {
+            "ref": "refs/heads/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          },
+          {
+            "ref": "refs/remotes/origin/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          }
+        ]
+      },
+      "checkout": {
+        "before": {
+          "takenAt": "2026-11-10T06:23:42.045Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "after": {
+          "takenAt": "2026-11-10T06:29:03.307Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "equal": true,
+        "newRefs": [],
+        "removedOrChangedRefs": [],
+        "newRefObjects": []
+      },
+      "atPause": {
+        "at": "2026-11-10T06:29:03.630Z",
+        "state": "blocked_on_decision",
+        "items": [
+          {
+            "itemId": "A",
+            "state": "done",
+            "attempts": 1,
+            "gsdSession": "9bb4e172-51c7-4906-9e3d-7a8b65e9f5ec"
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "4006c6cb-a791-4b83-a8a3-5bfb2a1ab6e8"
+          },
+          {
+            "itemId": "C",
+            "state": "ready",
+            "attempts": 0,
+            "gsdSession": null
+          }
+        ]
+      },
+      "stopOk": true,
+      "spend": {
+        "recordedUsd": 0,
+        "appendedUsd": 0.13786363499999998,
+        "line": {
+          "plan": "03-45",
+          "case": "exit-p3-run1-copy-fallback-run_01M7220WKE6WAP7N0FTPSH95RV-start",
+          "costUsd": 0.13786363499999998,
+          "claudeVersion": "2.1.319",
+          "at": "2026-11-10T06:29:03.632Z"
+        }
+      },
+      "phase3SpentUsd": 9.323007174999997,
+      "spendGuardAfterStage": {
+        "remainingRunCapUsd": 5.132136364999999,
+        "ceilingUsd": 25,
+        "fits": true
+      },
+      "problems": []
+    }
+  ],
   "supersedes": {
     "file": "03-42-evidence-exit.json",
     "runId": "run_01M71J9AVJ3N1BEKC4EM2P0GGF",
     "state": "cancelled",
     "stateAt": "2026-11-10T06:18:59.148Z",
     "reason": "D-03 stop of plan 03-42: the resume found no session under the owner's terminal environment and the fresh fallback failed G2; fixed by plan 03-43; owner decisions STATE.md 29abaeb"
-  },
-  "runs": []
+  }
 }
