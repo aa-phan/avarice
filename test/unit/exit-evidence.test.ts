@@ -489,11 +489,11 @@ describe('exit evidence: the per-item prompt scope of a compiled brief (plan 03-
 
 describe('exit-run-phase3.sh: the default evidence file of the repeated exit (plan 03-41, plan 03-44)', () => {
   const script = readFileSync(join(ROOT, 'scripts', 'exit-run-phase3.sh'), 'utf8');
-  it('defaults to 03-45-evidence-exit.json; 03-29 and 03-42 are named only as history in the header', () => {
-    assert.match(script, /^EVID_DEFAULT=.*03-45-evidence-exit\.json"$/m);
+  it('defaults to 03-48-evidence-exit.json; 03-29, 03-42 and 03-45 are named only as history in the header', () => {
+    assert.match(script, /^EVID_DEFAULT=.*03-48-evidence-exit\.json"$/m);
     assert.match(script, /^\s*export AVARICE_PHASE3_PLAN="\$\{AVARICE_PHASE3_PLAN:-03-42\}"$/m);
     const lines = script.split('\n');
-    for (const history of ['03-29-evidence-exit.json', '03-42-evidence-exit.json']) {
+    for (const history of ['03-29-evidence-exit.json', '03-42-evidence-exit.json', '03-45-evidence-exit.json']) {
       assert.equal(lines.filter((l) => !l.startsWith('#') && l.includes(history)).length, 0, history);
       assert.ok(lines.some((l) => l.startsWith('#') && l.includes(history)), history);
     }
