@@ -518,6 +518,29 @@ export function originOf(block: Json | undefined): { origin: string; signalKind:
   return { origin, signalKind, pauseSignal, gate, rules };
 }
 
+// The item that asked, read from the attempt that parked for the decision. A decision lists every item it affects (the item that asked and the items that
+// wait for its answer), so neither the first affected item nor all of them are the owner-choice item. Undefined when no attempt of the run parked for the
+// decision, or when that attempt belongs to an item the decision does not list.
+export function ownerChoiceItemOf(decision: Json, attempts: readonly Json[]): string | undefined {
+  const parked = typeof decision['parkAttemptId'] === 'string' ? attempts.find((a) => a['attemptId'] === decision['parkAttemptId']) : undefined;
+  const itemId = parked === undefined ? undefined : parked['itemId'];
+  return typeof itemId === 'string' && (decision['affectedItems'] as string[]).includes(itemId) ? itemId : undefined;
+}
+
+// The park step (the block descriptor) that opened a decision: the latest one before the decision opened, of one of the items it affects. An item that only
+// waits for the answer was never delegated, so it has no park step and the one found is the item that asked.
+export function parkStepFor<T extends { startedAt: string; result: unknown }>(parkSteps: readonly T[], affectedItems: readonly string[], openedAt: string): T | undefined {
+  return parkSteps.filter((s) => isObject(s.result) && typeof s.result['itemId'] === 'string' && affectedItems.includes(s.result['itemId']) && s.startedAt <= openedAt).at(-1);
+}
+
+// A start judged again on the same run keeps what the earlier judgement concluded, so a corrected judge never erases the verdict it replaces.
+export function earlierJudgementsOf(prior: Json | undefined, reason: string | undefined, now: string): Json[] {
+  if (prior === undefined || !Array.isArray(prior['problems'])) return Array.isArray(prior?.['earlierJudgements']) ? (prior['earlierJudgements'] as Json[]) : [];
+  const atPause = isObject(prior['atPause']) ? prior['atPause'] : {};
+  const earlier = Array.isArray(prior['earlierJudgements']) ? (prior['earlierJudgements'] as Json[]) : [];
+  return [...earlier, { judgedAt: atPause['at'] ?? null, supersededAt: now, supersededBecause: reason ?? null, problems: prior['problems'], stopOk: prior['stopOk'] ?? null }];
+}
+
 interface Authorization {
   perRunCapUsd: number;
   ceilingUsd: number;
@@ -706,8 +729,7 @@ function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: strin
   }
 
   const decisions: Json[] = decisionRows.map((d) => {
-    const item = d.affectedItems[0];
-    const park = parkSteps.filter((s) => isObject(s.result) && s.result['itemId'] === item && s.startedAt <= d.openedAt).at(-1);
+    const park = parkStepFor(parkSteps, d.affectedItems, d.openedAt);
     const block = park !== undefined && isObject(park.result) && isObject(park.result['block']) ? park.result['block'] : undefined;
     return {
       decisionId: d.decisionId,
@@ -789,15 +811,18 @@ function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: strin
 
 // What the start stage expects of a run that has to stop on the planted decision (D-02, D-03): the pause-origin decision of the owner-choice item is open at
 // contract version 1, the items independent of it are done, the items that wait for it have not been delegated, and one notification was queued.
-export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; notifications: Json[]; askUserQuestion: number }): string[] {
+export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number }): string[] {
   const problems: string[] = [];
   if (facts.state !== 'blocked_on_decision') problems.push(`the run stopped ${facts.state}${facts.reason !== null ? ` (${facts.reason})` : ''}, not blocked_on_decision (D-03)`);
   else if (facts.reason !== 'decision') problems.push(`the run is blocked for ${facts.reason}, not for a decision`);
   const open = facts.decisions.filter((d) => d['state'] === 'open');
   if (facts.decisions.length !== 1 || open.length !== 1) problems.push(`the run has ${facts.decisions.length} decision(s), ${open.length} open; D-02 wants exactly one, open`);
   const decision = open[0] ?? facts.decisions[0];
-  const planted = decision === undefined ? [] : (decision['affectedItems'] as string[]);
+  // The decision lists the owner-choice item and the items that wait for its answer; only the item that asked has to be blocked on it.
+  const asked = decision === undefined ? undefined : ownerChoiceItemOf(decision, facts.attempts);
+  const planted = asked === undefined ? [] : [asked];
   if (decision !== undefined) {
+    if (asked === undefined) problems.push(`cannot tell which item asked: no attempt of the run parked for decision ${String(decision['decisionId'])} on an item it affects`);
     const origin = isObject(decision['origin']) ? decision['origin'] : {};
     if (origin['origin'] !== 'pause') problems.push(`the decision's origin is ${JSON.stringify(origin['origin'])}, not the unit's own pause (a silent pick caught by G1 is an exit failure, D-02)`);
     if (decision['contractVersion'] !== 1) problems.push(`the decision is at contract version ${String(decision['contractVersion'])}, not 1`);
@@ -850,7 +875,8 @@ export function judgeFinish(facts: {
   if (decision !== undefined) {
     if (decision['answerChannel'] !== 'terminal') problems.push(`the answer arrived on channel ${JSON.stringify(decision['answerChannel'])}, not terminal`);
     if (decision['answeredBy'] !== `owner:${facts.owner}`) problems.push(`the answer was given by ${JSON.stringify(decision['answeredBy'])}, not owner:${facts.owner}`);
-    const itemId = (decision['affectedItems'] as string[])[0] as string;
+    const itemId = ownerChoiceItemOf(decision, facts.attempts) ?? '?';
+    if (itemId === '?') problems.push(`cannot tell which item asked: no attempt of the run parked for decision ${String(decision['decisionId'])} on an item it affects`);
     const pauseSession = facts.pauseSessions[itemId] ?? null;
     const item = facts.items.find((i) => i['itemId'] === itemId);
     const attempt = facts.attempts.filter((a) => a['itemId'] === itemId && a['reason'] === 'resume').at(-1);
@@ -951,7 +977,7 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
   const missing = need.filter((k) => named[k] === undefined);
   const stageName = named['stage'];
   if (missing.length > 0 || (stageName !== 'start' && stageName !== 'finish') || (stageName === 'start' && (named['before'] === undefined || named['after'] === undefined))) {
-    errOut(`usage: evidence --stage start|finish needs --${need.join(' --')} (start also --before --after --start-exit --start-out [--start-err] [--started-at]; finish waits for the next stop and then takes the checkout snapshot itself)`);
+    errOut(`usage: evidence --stage start|finish needs --${need.join(' --')} (start also --before --after --start-exit --start-out [--start-err] [--started-at] [--rejudge-reason TEXT: judge a run already recorded again and keep the earlier judgement as history]; finish waits for the next stop and then takes the checkout snapshot itself)`);
     return 2;
   }
   const stage: 'start' | 'finish' = stageName;
@@ -1022,12 +1048,16 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         ...(startErr !== '' ? { startStderrTail: startErr.slice(-2500) } : {}),
         checkoutBeforeSnapshot: before,
       });
-      problems.push(...judgeStart({ state, reason: facts.run.reason, items: facts.items, decisions: facts.decisions, notifications: asObjects(facts.entry['notifications']), askUserQuestion: Number(facts.entry['askUserQuestion']) }));
+      problems.push(...judgeStart({ state, reason: facts.run.reason, items: facts.items, decisions: facts.decisions, attempts: facts.attempts, notifications: asObjects(facts.entry['notifications']), askUserQuestion: Number(facts.entry['askUserQuestion']) }));
       const checkout = checkoutOf(before, after, runId, false);
       problems.push(...checkout.problems);
       entry['checkout'] = checkout.view;
       // What the finish stage compares the resumed session with: the session each item carried when the run stopped.
-      entry['atPause'] = { at: new Date().toISOString(), state, items: facts.items.map((i) => ({ itemId: i['itemId'], state: i['state'], attempts: i['attempts'], gsdSession: i['gsdSession'] })) };
+      const judgedAt = new Date().toISOString();
+      const earlier = earlierJudgementsOf(prior, named['rejudge-reason'], judgedAt);
+      if (earlier.length > 0) entry['earlierJudgements'] = earlier;
+      const pausedAt = isObject(prior?.['atPause']) && typeof prior['atPause']['at'] === 'string' ? prior['atPause']['at'] : judgedAt;
+      entry['atPause'] = { at: pausedAt, ...(pausedAt !== judgedAt ? { judgedAgainAt: judgedAt } : {}), state, items: facts.items.map((i) => ({ itemId: i['itemId'], state: i['state'], attempts: i['attempts'], gsdSession: i['gsdSession'] })) };
       entry['stopOk'] = problems.length === 0;
     } else {
       const atPause = (prior as Json)['atPause'] as Json;

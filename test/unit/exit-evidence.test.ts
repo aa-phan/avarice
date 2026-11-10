@@ -8,12 +8,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  earlierJudgementsOf,
   evidenceFileBody,
   initSessions,
   judgeFinish,
   judgeStart,
   livePlan,
   originOf,
+  ownerChoiceItemOf,
+  parkStepFor,
   pinnedByOf,
   promptScopeOf,
   runStateOf,
@@ -123,6 +126,43 @@ describe('exit evidence: the stop of a start', () => {
       const elsewhere = judgeStart(stopped({ decisions: [both({ parkAttemptId: 'att_A1' })] }));
       assert.ok(elsewhere.some((p) => p.includes('which item asked')), elsewhere.join('; '));
     });
+  });
+});
+
+describe('exit evidence: which item asked, and what a corrected judgement keeps', () => {
+  const attempts = attemptsAtStop();
+
+  it('reads the owner-choice item from the attempt that parked, whatever the order of the affected items', () => {
+    assert.equal(ownerChoiceItemOf(pauseDecision({ affectedItems: ['B', 'C'] }), attempts), 'B');
+    assert.equal(ownerChoiceItemOf(pauseDecision({ affectedItems: ['C', 'B'] }), attempts), 'B');
+  });
+
+  it('names no item when no attempt parked, the attempt is unknown, or the parked item is not one the decision affects', () => {
+    assert.equal(ownerChoiceItemOf(pauseDecision({ parkAttemptId: null }), attempts), undefined);
+    assert.equal(ownerChoiceItemOf(pauseDecision({ parkAttemptId: 'att_missing' }), attempts), undefined);
+    assert.equal(ownerChoiceItemOf(pauseDecision({ parkAttemptId: 'att_A1', affectedItems: ['B', 'C'] }), attempts), undefined);
+  });
+
+  it('finds the park step of the item that asked among the items a decision affects, and only one before the decision opened', () => {
+    const steps = [
+      { startedAt: '2026-01-01T00:00:01Z', result: { itemId: 'A', attemptId: 'att_A1' } },
+      { startedAt: '2026-01-01T00:00:02Z', result: { itemId: 'B', attemptId: 'att_B1' } },
+      { startedAt: '2026-01-01T00:00:09Z', result: { itemId: 'B', attemptId: 'att_B2' } },
+    ];
+    assert.equal(parkStepFor(steps, ['C', 'B'], '2026-01-01T00:00:05Z')?.result.attemptId, 'att_B1');
+    assert.equal(parkStepFor(steps, ['B', 'C'], '2026-01-01T00:00:05Z')?.result.attemptId, 'att_B1');
+    assert.equal(parkStepFor(steps, ['C'], '2026-01-01T00:00:05Z'), undefined);
+  });
+
+  it('appends the judgement a start replaces, with the reason, and keeps the ones before it', () => {
+    assert.deepEqual(earlierJudgementsOf(undefined, 'why', 'T2'), []);
+    const first = { problems: ['item C (the owner-choice item) is ready, not blocked_on_decision'], stopOk: false, atPause: { at: 'T0' } };
+    const once = earlierJudgementsOf(first, 'owner decision', 'T1');
+    assert.deepEqual(once, [{ judgedAt: 'T0', supersededAt: 'T1', supersededBecause: 'owner decision', problems: first.problems, stopOk: false }]);
+    const twice = earlierJudgementsOf({ problems: [], stopOk: true, atPause: { at: 'T0' }, earlierJudgements: once }, undefined, 'T2');
+    assert.equal(twice.length, 2);
+    assert.deepEqual(twice[0], once[0]);
+    assert.equal(twice[1]?.['supersededBecause'], null);
   });
 });
 
