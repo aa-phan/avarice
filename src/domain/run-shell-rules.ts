@@ -47,8 +47,12 @@ export function shellRuleReason(rule: string, lists: ShellAdmitted): string | un
 // their refusals count toward the same loop limit, and their GSD prompts tell them to run gsd-tools, mkdir and git steps the hook refuses.
 export const AVARICE_RUN_SHELL_ADDENDUM = `${RUN_SHELL_RULES_SENTENCE} ${readOnlyCommandsSentence(READ_ONLY_COMMANDS)} Do not run gsd-tools, mkdir or a git command that changes the repository; create files with the Write tool, which creates missing directories.`;
 
-// RED stub (plan 03-43): the text is written in the next commit.
-export const RUN_RECORDS_SENTENCE = '';
+// The records the run's gates read (plan 03-43; the 03-42 run 1 fallback). The prompt above tells the unit to skip the quick workflow's own gsd-tools steps, which
+// are the steps that name the record files, so without this line the unit chooses its own: the fresh unit of run 1 left a PLAN and a SUMMARY and no VERIFICATION, and
+// gate G2 stopped on 'GSD VERIFICATION status is missing, not passed'. The host also refuses a subagent a Write of a report file (its executor was refused the
+// SUMMARY, and the unit wrote it), so the unit writes those two records itself from what the subagents return. The names are the ones quickRecordKind reads.
+export const RUN_RECORDS_SENTENCE =
+  "Records the run's gates read, in the quick task's directory under .planning/quick/: a PLAN.md, a SUMMARY.md and a VERIFICATION.md. A subagent may be refused when it writes a report file, so tell the executor and the verifier to return their findings as text, and write the SUMMARY.md and the VERIFICATION.md yourself with the Write tool from what they return. The VERIFICATION.md starts with a frontmatter line 'status: passed', 'status: gaps_found' or 'status: human_needed', as the verifier's findings say. A task with no VERIFICATION.md fails the run's gate.";
 
 // The quick workflow's own shell steps are outside the run's command list, and a unit that reads both instructions literally stops (haiku, run 2 of plan
 // 03-27). It does that work with the file tools and the agents instead, and still runs the four stages.

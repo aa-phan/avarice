@@ -135,6 +135,7 @@ function contractText(contract: RunPromptContract, item?: RunPromptItem, ownerAn
     RUN_SHELL_RULES_SENTENCE,
     readOnlyCommandsSentence(READ_ONLY_COMMANDS),
     RUN_WORKFLOW_SHELL_SENTENCE,
+    RUN_RECORDS_SENTENCE,
     RUN_DECISION_SENTENCE(contract.decisions),
     RUN_WORKFLOW_SENTENCE,
     RUN_NO_COMMIT_SENTENCE,
