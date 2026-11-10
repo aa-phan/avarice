@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "plan": "03-41",
+  "decidedAt": "2026-11-09",
+  "decidedBy": "owner",
+  "decisionRef": "STATE.md a7d7f0b, owner decision 2 after the 03-29 exit stop",
+  "selection": "approve",
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:4019f32906cc1ad90571389b14cd2bee47d71b1e6853d78d36f1411ebc78631b"
+    }
+  ],
+  "perRunCapUsd": 5.62,
+  "perRunCapFlag": "--budget costUsdPerRun=5.62",
+  "ceilingUsd": 25,
+  "spentUsdSoFar": 8.117,
+  "headroomUsd": 16.883,
+  "dryRun": "03-41-dry-run.json",
+  "host": {
+    "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+    "claudeVersion": "2.1.319",
+    "pin": "every exit `avarice start` in plans 03-42 and 03-30 runs with AVARICE_CLAUDE_BIN set to claudeBin",
+    "ownerTerminalRequirement": "every owner-terminal `avarice decide` and `avarice resume` is given with the same AVARICE_CLAUDE_BIN=<claudeBin>; plans 03-42 and 03-30 print the exact command for the owner",
+    "admittedClaudeVersionsChanged": false,
+    "defaultBinaryChanged": false
+  },
+  "itemA": "stays small (haiku) in all three briefs; no brief change",
+  "supersedes": "03-28-exit-authorization.json",
+  "ownerConfirmedAt": null,
+  "notes": [
+    "D-03: the first exit attempt (plan 03-29) stopped on run 1 (two pause decisions, item A parked). Plan 03-40 fixed the product; this authorization repeats all three runs, one `avarice start` each, from run 1 on a new evidence file (03-42-evidence-exit.json) whose supersedes block names the halted 03-29-evidence-exit.json.",
+    "The per-run cap is 5.62 USD, the owner's decision 2 (STATE.md a7d7f0b). Three runs at 5.62 USD cap 16.86 USD of the 16.883 USD headroom (Phase 3 stands at 8.117 of 25 USD), so nothing else may spend in Phase 3 before the exit's three runs.",
+    "The three briefs are unchanged: their digests equal those of 03-28-exit-authorization.json, and the 03-41 dry run recomputed them with parseBrief.",
+    "The dry run (03-41-dry-run.json) spent 0 USD, listed no problem, showed no item's prompt carrying another item's owner-choice options, and left the portfolio unchanged.",
+    "ownerConfirmedAt is null until the owner's blocking-human confirmation at Task 2 of plan 03-41; plan 03-42 starts nothing while it is null."
+  ]
+}
