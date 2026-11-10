@@ -47,6 +47,9 @@ export function shellRuleReason(rule: string, lists: ShellAdmitted): string | un
 // their refusals count toward the same loop limit, and their GSD prompts tell them to run gsd-tools, mkdir and git steps the hook refuses.
 export const AVARICE_RUN_SHELL_ADDENDUM = `${RUN_SHELL_RULES_SENTENCE} ${readOnlyCommandsSentence(READ_ONLY_COMMANDS)} Do not run gsd-tools, mkdir or a git command that changes the repository; create files with the Write tool, which creates missing directories.`;
 
+// RED stub (plan 03-43): the text is written in the next commit.
+export const RUN_RECORDS_SENTENCE = '';
+
 // The quick workflow's own shell steps are outside the run's command list, and a unit that reads both instructions literally stops (haiku, run 2 of plan
 // 03-27). It does that work with the file tools and the agents instead, and still runs the four stages.
 export const RUN_WORKFLOW_SHELL_SENTENCE =

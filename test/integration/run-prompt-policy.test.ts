@@ -9,7 +9,7 @@ import { realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalAbsolute } from '../../src/adapters/fs/canonical-path.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
-import { RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE } from '../../src/app/run-gsd-config.ts';
+import { RUN_RECORDS_SENTENCE, RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE } from '../../src/app/run-gsd-config.ts';
 import type { BriefItem } from '../../src/domain/brief.ts';
 import { decideToolCall, normalizeToolCall } from '../../src/domain/hook-decision.ts';
 import type { HookDecision, HookPolicy } from '../../src/domain/hook-decision.ts';
@@ -94,7 +94,8 @@ describe('the unit prompt and the hook policy of one invocation (plan 03-34, T-0
   });
 
   it('carries the three shell lines of a small item', () => {
-    for (const text of [RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE]) assert.ok(played.prompt.includes(text));
+    for (const text of [RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, RUN_RECORDS_SENTENCE]) assert.ok(played.prompt.includes(text));
+    assert.ok(RUN_RECORDS_SENTENCE.includes('VERIFICATION.md'), 'the records sentence names the record the gates read');
     assert.match(played.prompt, /read-only commands/);
   });
 

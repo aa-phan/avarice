@@ -9,11 +9,11 @@
 // workflow's own shell steps (plan 03-27's haiku unit stopped on the contradiction; spikes/phase-3-wave-0/S3-B-small-unit-haiku.md).
 import { READ_ONLY_COMMANDS } from '../domain/invocation-scope.ts';
 import type { RunContract } from '../domain/run-contract.ts';
-import { RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence } from '../domain/run-shell-rules.ts';
+import { RUN_RECORDS_SENTENCE, RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence } from '../domain/run-shell-rules.ts';
 import type { GsdSetting } from '../ports/gsd-onboarding.ts';
 import { printable } from './context.ts';
 
-export { RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence };
+export { RUN_RECORDS_SENTENCE, RUN_SHELL_RULES_SENTENCE, RUN_WORKFLOW_SHELL_SENTENCE, readOnlyCommandsSentence };
 
 // Applied with `config-set` by AVARICE, outside any invocation, as step `gsd:configure` (RESEARCH Pitfall 2): no human prompt
 // (`text_mode`, both gates off), no worktree and no branch (the run's clone is the workspace and the supervisor owns git), no commit by

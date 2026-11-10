@@ -9,6 +9,7 @@ import {
   RUN_GSD_SETTINGS,
   RUN_NO_COMMIT_SENTENCE,
   RUN_PROMPT_MAX_BYTES,
+  RUN_RECORDS_SENTENCE,
   RUN_SHELL_RULES_SENTENCE,
   RUN_WORKFLOW_SENTENCE,
   RUN_WORKFLOW_SHELL_SENTENCE,
@@ -292,12 +293,29 @@ describe('the run shell rules in the unit prompt (plan 03-34; the 03-27 small-un
       const rules = lines.indexOf(RUN_SHELL_RULES_SENTENCE);
       const readOnly = lines.indexOf(READ_ONLY);
       const workflow = lines.indexOf(RUN_WORKFLOW_SHELL_SENTENCE);
+      const records = lines.indexOf(RUN_RECORDS_SENTENCE);
       const decision = lines.indexOf(RUN_DECISION_SENTENCE(CONTRACT.decisions));
       assert.ok(last !== -1 && rules === last + 1, 'the rules line follows the last command bullet');
       assert.equal(readOnly, rules + 1);
       assert.equal(workflow, readOnly + 1);
-      assert.equal(decision, workflow + 1);
+      assert.equal(records, workflow + 1, 'the records sentence follows the workflow shell sentence');
+      assert.equal(decision, records + 1);
     }
+  });
+
+  it('names the records the gates read in the quick task directory, and who writes them (plan 03-43: a subagent is refused a report file)', () => {
+    for (const word of ['PLAN.md', 'SUMMARY.md', 'VERIFICATION.md', '.planning/quick/', 'status: passed', 'status: gaps_found', 'status: human_needed', 'Write tool', 'executor', 'verifier', 'as text']) {
+      assert.ok(RUN_RECORDS_SENTENCE.includes(word), word);
+    }
+    assert.match(RUN_RECORDS_SENTENCE, /yourself/);
+    assert.match(RUN_RECORDS_SENTENCE, /no VERIFICATION\.md fails/);
+  });
+
+  it('is one line with no double quote, backslash, absolute path or command of its own, so it fits the quoted prompt and grants nothing', () => {
+    assert.ok(RUN_RECORDS_SENTENCE.length > 0 && !RUN_RECORDS_SENTENCE.includes('\n'));
+    assert.equal(/["\\]/.test(RUN_RECORDS_SENTENCE), false);
+    assert.equal(/(^|\s)\//.test(RUN_RECORDS_SENTENCE), false);
+    for (const forbidden of [';', '&&', '||', '$(', '`']) assert.equal(RUN_RECORDS_SENTENCE.includes(forbidden), false, forbidden);
   });
 
   it('states one plain command per call, the refused forms and relative paths', () => {
@@ -338,13 +356,13 @@ describe('the run shell rules in the unit prompt (plan 03-34; the 03-27 small-un
     const baseBytes = new TextEncoder().encode(runUnitPrompt(withBehavior('x'), '', ITEM_B)).length;
     const exact = runUnitPrompt(withBehavior('x'.repeat(RUN_PROMPT_MAX_BYTES - baseBytes + 1)), '', ITEM_B);
     assert.equal(new TextEncoder().encode(exact).length, RUN_PROMPT_MAX_BYTES);
-    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE]) assert.ok(exact.includes(text));
+    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE, RUN_RECORDS_SENTENCE]) assert.ok(exact.includes(text));
     assert.throws(() => runUnitPrompt(withBehavior('x'.repeat(RUN_PROMPT_MAX_BYTES - baseBytes + 2)), '', ITEM_B), RangeError);
   });
 
   it('leaves the resume prompt alone: a resumed session keeps the rules of its original prompt', () => {
     const resume = runResumePrompt('1', ITEM_B);
-    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE]) assert.equal(resume.includes(text), false);
+    for (const text of [RUN_SHELL_RULES_SENTENCE, READ_ONLY, RUN_WORKFLOW_SHELL_SENTENCE, RUN_RECORDS_SENTENCE]) assert.equal(resume.includes(text), false);
   });
 });
 
@@ -415,6 +433,7 @@ const SINGLE_ITEM_PROMPT = [
   "Shell rules: run one plain command per Bash call. A call is refused if it contains ';', '&&', '||', a redirection such as '2>&1', '$(...)', backticks, a word that starts with '~', and an unquoted '*', '?', '[' or '{'. Write every path relative to the working directory, which is the repository root.",
   "You may also run these read-only commands, one per call, on paths inside the repository: ls, cat, head, tail, wc, find, git ls-files, git log, git rev-parse, git status, git show. Read files with the Read tool and search with the Grep and Glob tools.",
   "Do not run the quick workflow's gsd-tools queries, its mkdir steps or its git steps that change the repository (add, commit, switch, checkout), and do not stop because of them. Choose the quick task's directory under .planning/quick/ yourself, create every file with the Write tool (it creates missing directories), and start the planner, plan-checker, executor and verifier with the Agent tool, giving each the paths, commands, shell rules and acceptance criteria above.",
+  "Records the run's gates read, in the quick task's directory under .planning/quick/: a PLAN.md, a SUMMARY.md and a VERIFICATION.md. A subagent may be refused when it writes a report file, so tell the executor and the verifier to return their findings as text, and write the SUMMARY.md and the VERIFICATION.md yourself with the Write tool from what they return. The VERIFICATION.md starts with a frontmatter line 'status: passed', 'status: gaps_found' or 'status: human_needed', as the verifier's findings say. A task with no VERIFICATION.md fails the run's gate.",
   "Stop and ask the owner before you decide any of these: user-visible behavior changes; new dependencies; public API changes; scope expansion; acceptance criteria changes. To ask, end your final message with one question line that ends in a question mark, followed by choice lines that start with '1.' and '2.' (more numbers if needed), with nothing after them, and then stop. You may decide these yourself without asking: internal naming; test structure; refactors inside write paths.",
   "Run the whole quick workflow in validate mode: its planner, plan-checker, executor and verifier steps, ending with the verifier. Do not make the change by hand instead of the workflow.",
   "Edit files only. The supervisor commits. Do not run git add or git commit.\"",
@@ -466,6 +485,7 @@ describe('runUnitPrompt scoped to one item (plan 03-40)', () => {
       RUN_SHELL_RULES_SENTENCE,
       readOnlyCommandsSentence(READ_ONLY_COMMANDS),
       RUN_WORKFLOW_SHELL_SENTENCE,
+      RUN_RECORDS_SENTENCE,
       RUN_DECISION_SENTENCE(CONTRACT.decisions),
       RUN_WORKFLOW_SENTENCE,
       RUN_NO_COMMIT_SENTENCE,
