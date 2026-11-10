@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 39/45 plans executed (19 waves, with 12 gap-closure plans)
+**Plans:** 40/45 plans executed (19 waves, with 12 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -284,7 +284,7 @@ Plans:
 - [x] 03-43-PLAN.md — Gap closure after the 03-42 stop: a run records its host configuration directory at start and every later supervisor uses it; decide, resume and supervise refuse visibly when it cannot be honoured; the fallback's missing VERIFICATION diagnosed and the records the gates read named in the prompt; docs/system
 
 **Wave 14** *(gap closure, blocked on 03-43)*
-- [ ] 03-44-PLAN.md — Exit repeat prepared with no spend: the evidence carries each run's recorded directory, dry run with the fixed code, the 5.27 USD authorization; the owner cancels the stopped run 1 and confirms
+- [x] 03-44-PLAN.md — Exit repeat prepared with no spend: the evidence carries each run's recorded directory, dry run with the fixed code, the 5.27 USD authorization; the owner cancels the stopped run 1 and confirms
 
 **Wave 15** *(gap closure, blocked on 03-44)*
 - [ ] 03-45-PLAN.md — Exit part 1 for the third time at 5.27 USD (run 1 to ready_for_review with the delegated session resumed, run 2 started and blocked); resumes 03-29 and 03-42
@@ -394,7 +394,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 39/45 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 40/45 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |

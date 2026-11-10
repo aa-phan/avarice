@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-43-PLAN.md
-last_updated: "2026-11-10T03:16:48.079Z"
-last_activity: 2026-11-09
+stopped_at: Completed 03-44-PLAN.md
+last_updated: "2026-11-10T06:22:09.374Z"
+last_activity: 2026-11-10
 last_activity_desc: Phase 03 execution started
-state_head: 2f9d1865c6bc05c30f9f782a44406499d40a9f34
+state_head: ce725654488a6af966c29e9b74a88731f5f58a5a
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 106
-  completed_plans: 100
+  completed_plans: 101
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-43 complete (the run's host configuration directory recorded at start and honoured by every supervisor; decide, resume and supervise refuse when it cannot be; the records sentence in the unit prompt; 03-44 next)
-Status: Ready to execute plan 03-44 — offline fix done, nothing spent; the repeat of the exit (03-44, 03-45, 03-30) is next, with the owner's 5.27 USD per-run cap
-Last activity: 2026-11-10 — plan 03-43 complete: cross-environment resume proved offline, refusals tested, the VERIFICATION diagnosis recorded in 03-43-SUMMARY.md, docs/system updated; Phase 3 spend unchanged at 9.1851 of 25 USD
+Plan: 03-44 complete (the exit evidence records each run's recorded host configuration directory; no-spend dry run with the fixed code; the owner cancelled run_01M71J9AVJ3N1BEKC4EM2P0GGF and confirmed the 5.27 USD authorization; 03-45-evidence-exit.json seeded; 03-45 next)
+Status: Ready to execute plan 03-45 (exit part 1, third attempt, spends): ownerConfirmedAt 2026-11-10T06:20:42Z, authorize passes on pinned 2.1.319; Phase 3 spend 9.1851 of 25 USD, three runs at 5.27 cap 15.81 of 15.8149 headroom, no room for another repeat
+Last activity: 2026-11-10 - plan 03-44 complete: run 1 cancelled by the owner in their terminal (ledger read read-only, no open decision), portfolio unchanged, 0 USD spent
 
 Progress: [███░░░░░░░] 25%
 
@@ -151,6 +151,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P28 | continuation | 2 tasks | 10 files |
 | Phase 03 P40 | 100 min | 3 tasks | 14 files |
 | Phase 03 P41 | 120 min | 2 tasks | 7 files |
+| Phase 03 P44 | 3h | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -354,6 +355,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 5.27 USD (lower-only; 15.8149 USD headroom at 9.1851 spent fits three runs, no room for a further repeat); ceiling stays 25 USD; host pin 2.1.319 unchanged. run_01M71J9AVJ3N1BEKC4EM2P0GGF stays open (blocked on gate decision dec_01M71M4PB9EQJFNH0S75HTYWSR) until the owner cancels it; Claude never answers or cancels a portfolio run
 - [Phase 03]: Plan 03-43: a run records its host configuration directory as the run step host:config-dir at start; supervisorEnv(deps, runId) launches every supervisor with it; decide and resume refuse (exit 3) and supervise refuses (exit 70) when it cannot be honoured — claude -p --resume finds a session only in the launching process's configuration directory; no column or migration needed, the run step table keys facts by run and step
 - [Phase 03]: Plan 03-43: the unit prompt's records sentence has the unit, not the verifier, write SUMMARY.md and VERIFICATION.md from the subagents' returned text — The transcripts show the host refusing a subagent a report file (the executor's SUMMARY.md); the fresh fallback's verifier was also told not to write files, so G2 read the verification status as missing
+- [Phase 03]: Plan 03-44: the exit evidence entry carries hostConfigDir (the run's recorded host:config-dir) and the start judge requires it; 03-45-evidence-exit.json supersedes the cancelled run_01M71J9AVJ3N1BEKC4EM2P0GGF; the owner confirmed the 5.27 USD per-run authorization (ownerConfirmedAt 2026-11-10T06:20:42Z) after cancelling run 1 in their own terminal (a first attempt through the session's ! shell was refused by the identity rule) - D-03 repeat from run 1; 0 USD spent, portfolio unchanged
 
 ### Pending Todos
 
@@ -413,6 +415,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T03:16:41.022Z
-Stopped at: Completed 03-43-PLAN.md
+Last session: 2026-11-10T06:22:09.123Z
+Stopped at: Completed 03-44-PLAN.md
 Resume file: None
