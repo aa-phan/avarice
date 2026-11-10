@@ -108,8 +108,11 @@ describe('ordering: open decisions are withdrawn in decision-ID order, each with
   const ids: string[] = [];
 
   it('is blocked on two open decisions, one per item that asked', () => {
-    // B asks and so does C: two independent items, two decisions, and D waits behind B.
-    const host: FakeRunOptions = { perItem: { A: unitOf('A'), B: unitOf('B', { question: S17_QUESTION }), C: unitOf('C', { question: S17_QUESTION }), D: unitOf('D') } };
+    // B asks and so does C, each its own question: two independent items, two decisions, and D waits behind B. C's choice must not be B's
+    // options, or the numbered-choice attribution would (correctly) give it to B and C would not pause.
+    const host: FakeRunOptions = {
+      perItem: { A: unitOf('A'), B: unitOf('B', { question: S17_QUESTION }), C: unitOf('C', { question: 'Which helper name?\n1. toSlug\n2. makeSlug' }), D: unitOf('D') },
+    };
     const ran = startWithFakeRunHost(f.roots, f.repo, f.brief, host as Record<string, unknown>);
     assert.equal(ran.code, 3, ran.stdout + ran.stderr);
     runId = (/^run (run_[0-9A-Z]{26}): /m.exec(ran.stdout) as RegExpExecArray)[1] as string;
