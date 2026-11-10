@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-40-PLAN.md
-last_updated: "2026-11-10T00:42:49.084Z"
+stopped_at: Completed 03-41-PLAN.md
+last_updated: "2026-11-10T01:47:28.608Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: bd02c8b174b44000e45a1ee80e817aaf0c9f8bc5
+state_head: 360c0d66be42debb654183125b3ca678f62b1ecf
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 103
-  completed_plans: 97
+  completed_plans: 98
 ---
 
 # Project State
@@ -150,6 +150,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P39 | 50 min | 3 tasks | 12 files |
 | Phase 03 P28 | continuation | 2 tasks | 10 files |
 | Phase 03 P40 | 100 min | 3 tasks | 14 files |
+| Phase 03 P41 | 120 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -348,6 +349,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-09: the repeated exit's per-run cap is 5.62 USD (lower-only from 5.67; 16.8830 USD headroom fits three runs); ceiling stays 25 USD; host pin 2.1.319 unchanged. Run 1 of 03-29 stays open in the owner's profile until the owner cancels it; Claude never answers or cancels a portfolio run
 - [Phase 03]: 03-40: an item prompt carries only its own item's Behavior paragraphs (labelled 'Item <id>:' or 'Work item <id>:') and the shared ones, no run title; a Behavior with no labelled paragraph is given whole — Exit run 1: item A's unit read item B's owner choice and ended with it
 - [Phase 03]: 03-40: a numbered choice is attributed to another item only for a verified, otherwise progressed unit whose every choice line equals one other owner-choice item's options and none of its own or shared options; any doubt keeps the pause — Fail-closed attribution; classify records pauseAttributedTo and never the question text
+- [Phase 03]: 03-41: the exit tools refuse a start while the run an evidence file supersedes is not failed, cancelled or closed in the owner's ledger; the repeated exit records under 03-42-evidence-exit.json and the halted 03-29 file stays untouched — D-03 no silent repeat; the owner cancelled run_01M71BDV8MWGEG7XSAWH1GZ80W and confirmed the 5.62 USD authorization (ownerConfirmedAt 2026-11-10T01:45:20Z), portfolio unchanged, 0 USD spent
 
 ### Pending Todos
 
@@ -406,6 +408,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T00:42:48.872Z
-Stopped at: Completed 03-40-PLAN.md
+Last session: 2026-11-10T01:47:28.389Z
+Stopped at: Completed 03-41-PLAN.md
 Resume file: None
