@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-41-PLAN.md
-last_updated: "2026-11-10T01:47:28.608Z"
+stopped_at: "Halted 03-42 at Task 2 (D-03): run 1 finish did not reach ready_for_review"
+last_updated: "2026-11-10T02:22:43.767Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 360c0d66be42debb654183125b3ca678f62b1ecf
+state_head: 3c4b98475c6d6e8ddd1155c2bb2bec6ffcb09214
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 103
-  completed_plans: 98
+  completed_plans: 99
 ---
 
 # Project State
@@ -388,6 +388,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - Plan 03-37 halted at s21 (NOT EXERCISED twice on pinned 2.1.319: the harness tamper ran, the haiku unit's planner stopped with an acceptance decision before any gate); cs5, s52 and s17-s51 not run; 03-27 and 03-36 stay halted, 03-28..03-33 blocked; owner decision needed on the s21 brief [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
 - Plan 03-38 halted at s21 (FAIL on pinned 2.1.319: the combined harness tamper cannot produce the removed-test, new-skip-marker and repeated_failure results the judge asserts); cs5, s52 and s17-s51 not run; 03-27, 03-36 and 03-37 stay halted, 03-28..03-33 blocked; owner decision needed on S-21's tamper, judge or scenario text [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
 - Phase 3 exit run 1 (03-29) stopped under D-03: item A asked B's owner-choice question and was parked uncommitted, so two pause decisions opened (run_01M71BDV8MWGEG7XSAWH1GZ80W, left blocked, unanswered). Needs a fix plan and a repeat of all three runs; owner decides the cap or ceiling for the repeat (16.88 USD headroom).
+- Plan 03-42 halted (D-03): run 1's resume found no session under the owner's terminal environment (CLAUDE_CONFIG_DIR ~/.claude-edu vs ~/.claude); a fresh session failed gate G2. Run 2 not started; 03-29 stays halted, 03-30 blocked. Owner decides the fix and spend (Phase 3 at 9.1851 of 25 USD).
 
 ### Quick Tasks Completed
 
@@ -408,6 +409,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T01:47:28.389Z
-Stopped at: Completed 03-41-PLAN.md
+Last session: 2026-11-10T02:22:43.554Z
+Stopped at: Halted 03-42 at Task 2 (D-03): run 1 finish did not reach ready_for_review
 Resume file: None
