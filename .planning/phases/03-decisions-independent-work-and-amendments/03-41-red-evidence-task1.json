@@ -1,0 +1,16 @@
+{
+  "command": "node --test --test-reporter=tap test/unit/exit-evidence.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# file:///Users/aphan/avarice/.claude/worktrees/phase-03/test/unit/exit-evidence.test.ts:11\n#   evidenceFileBody,\n#   ^^^^^^^^^^^^^^^^\n# SyntaxError: The requested module '../../scripts/exit-run-phase3-tools.ts' does not provide an export named 'evidenceFileBody'\n# Subtest: test/unit/exit-evidence.test.ts\nnot ok 1 - test/unit/exit-evidence.test.ts\n  failureType: 'testCodeFailure'\n# tests 1\n# pass 0\n# fail 1\n",
+  "targetFile": "test/unit/exit-evidence.test.ts",
+  "targetTests": [
+    "the plan that spend and evidence are recorded under (livePlan, pinnedByOf)",
+    "rewriting the evidence file keeps what it was given (evidenceFileBody)",
+    "a start is refused while the superseded run is not terminal (supersededRunRefusal, runStateOf, authorize)",
+    "the per-item prompt scope of a compiled brief (promptScopeOf)",
+    "exit-run-phase3.sh: the default evidence file of the repeated exit"
+  ],
+  "expected": "the exit tools label spend and evidence by AVARICE_PHASE3_PLAN, name the authorization file given as the pin's source, keep extra top-level keys of the evidence file, refuse authorize while the superseded run is not failed, cancelled or closed, and count another item's owner-choice options in each item's Behavior; the script defaults to 03-42-evidence-exit.json",
+  "actual": "scripts/exit-run-phase3-tools.ts exports none of evidenceFileBody, livePlan, pinnedByOf, promptScopeOf, runStateOf or supersededRunRefusal, so the test file does not link and every case, including the existing cases of the file, fails to run",
+  "semanticAssessment": "The failure is the missing deliverable the tests assert on (the named exports and the script default). It is not a syntax, fixture or environment error: the imports of the helpers (cancel-cli, run-fixtures) and of the tools' existing exports resolve, and the only unresolved binding is the first new export."
+}
