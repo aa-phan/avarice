@@ -26,8 +26,12 @@
 #
 # Environment: AVARICE_NODE (the node to run with, default `node`), AVARICE_PORTFOLIO (the owner's checkout, default ~/aa-phan-portfolio-v2;
 # only ever read by this script, written only by the supervisor's create-only hand-off of the run branch), AVARICE_PHASE3_LEDGER and
-# AVARICE_PHASE3_CEILING_USD (the ledger and a ceiling that can only be lowered), EXIT_EVIDENCE_FILE (default 03-29-evidence-exit.json) and
-# EXIT_RUN_OUT_DIR (the runs' captured output).
+# AVARICE_PHASE3_CEILING_USD (the ledger and a ceiling that can only be lowered), AVARICE_PHASE3_PLAN (the plan the spend and the evidence are recorded
+# under, default 03-42), EXIT_EVIDENCE_FILE (default 03-42-evidence-exit.json) and EXIT_RUN_OUT_DIR (the runs' captured output).
+#
+# The repeated exit (plan 03-41 prepares it, plans 03-42 and 03-30 run it): 03-29-evidence-exit.json is the halted first attempt (the record of the D-03
+# stop of plan 03-29) and is never written again. The repeat writes the file above, which names the halted file, the cancelled run and the reason in its
+# `supersedes` block; `authorize` refuses a start while that run is not failed, cancelled or closed in the owner's ledger.
 set -u
 
 HERE="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -39,7 +43,7 @@ TOOLS=("$NODE" --disable-warning=ExperimentalWarning "$HERE/scripts/exit-run-pha
 CONFIG="$HERE/test/benchmark/portfolio/avarice-config.json"
 BRIEFS=("$HERE/test/benchmark/phase3/p3-run1-copy-fallback.md" "$HERE/test/benchmark/phase3/p3-run2-graduation-label.md" "$HERE/test/benchmark/phase3/p3-run3-theme-toggle.md")
 DRY_OUT_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-28-dry-run.json"
-EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-29-evidence-exit.json"
+EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-42-evidence-exit.json"
 
 usage() {
   echo "usage: scripts/exit-run-phase3.sh --dry-run [--source REPO]" >&2
@@ -73,7 +77,7 @@ live_setup() {
   # The pin is explicit here: every host this script launches is the authorized one, and the admission is never widened.
   unset AVARICE_LIVE_ADMIT_CLAUDE_VERSION
   export AVARICE_CLAUDE_BIN="$CLAUDE_BIN"
-  export AVARICE_PHASE3_PLAN=03-29
+  export AVARICE_PHASE3_PLAN="${AVARICE_PHASE3_PLAN:-03-42}"
   REAL_TMP="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
   case "$REAL_TMP/" in "$HOME"/.claude*) REAL_TMP="$(cd /tmp && pwd -P)" ;; esac
   RUN_OUT="${EXIT_RUN_OUT_DIR:-$(mktemp -d "$REAL_TMP/avarice-exit-run-XXXXXX")}"

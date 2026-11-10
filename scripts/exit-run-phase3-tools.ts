@@ -10,6 +10,11 @@
 //   preflight --repo REPO --config F [--pin SHA]
 //       Read-only: `conventions: ok|FAIL` and `staleness: ok|FAIL` lines exactly as the Phase 2 tools print them; exit 1 on a FAIL.
 //
+// Plan 03-41 adds, for the repeated exit: the plan the spend and evidence are recorded under comes from AVARICE_PHASE3_PLAN (default 03-29), the evidence
+// names the authorization file it was given as the pin's source, a rewrite keeps the evidence file's extra top-level keys (a `supersedes` block), `authorize`
+// refuses while the run the evidence supersedes is not failed, cancelled or closed in the owner's ledger, and the dry run counts, per item, the options of
+// another item found in its prompt Behavior (`promptScope`; above 0 is a problem).
+//
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
 //       Prints one scalar of the owner's authorization (host.claudeBin, perRunCapUsd, ceilingUsd).
@@ -26,12 +31,15 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
-import { delimiter, dirname, join, relative, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { phase3Ceiling, phase3LedgerPath, phase3Spent } from '../test/helpers/live-harness.ts';
 import { getRunStatuses } from '../src/app/run-status.ts';
 import { createDeps } from '../src/cli/composition.ts';
-import { isRunStopState } from '../src/domain/run-lifecycle.ts';
+import { isRunStopState, isRunTerminal } from '../src/domain/run-lifecycle.ts';
+import type { RunState } from '../src/domain/run-lifecycle.ts';
+import { itemBehavior, itemChoiceOptions, normalizeOption } from '../src/domain/item-scope.ts';
+import type { ScopeContract } from '../src/domain/item-scope.ts';
 import type { AppDeps } from '../src/app/deps.ts';
 import type { Result } from '../src/domain/result.ts';
 import type { RunRow } from '../src/ports/ledger.ts';
@@ -142,6 +150,7 @@ interface BriefReport {
   acceptance?: Array<{ id: string; item: string; verifiedBy: string[] }>;
   budgets?: Json;
   budgetsAtFittingCap?: Json;
+  promptScope?: Record<string, { otherItemOptions: number }>;
 }
 
 function budgetsOf(c: RunContract): Json {
@@ -194,7 +203,9 @@ function dryRun(argv: readonly string[]): number {
   const problems: string[] = [];
   const warnings: string[] = [];
   const startedAt = Date.now();
-  const report: Json = { schema: 1, plan: PLAN, startedAt: new Date(startedAt).toISOString(), source: source.replace(homedir(), '~'), pin: pinRef, node: process.version, spentUsd: 0, installs: false, modelHostLaunched: false, readOnly: true };
+  // The record names the plan whose dry run it is: the `NN-NN-` prefix of the file it is written to (03-41-dry-run.json), else the first one's.
+  const recordPlan = /^(\d{2}-\d{2})-/.exec(basename(outPath))?.[1] ?? PLAN;
+  const report: Json = { schema: 1, plan: recordPlan, startedAt: new Date(startedAt).toISOString(), source: source.replace(homedir(), '~'), pin: pinRef, node: process.version, spentUsd: 0, installs: false, modelHostLaunched: false, readOnly: true };
 
   const before = portfolioState(source);
   try {
@@ -301,6 +312,12 @@ function dryRun(argv: readonly string[]): number {
         role: planted === undefined ? 'other' : i.id === planted.id ? 'planted' : dependsOnPath(items, i.id, planted.id) ? 'dependent' : 'independent',
       }));
 
+      // Plan 03-41: no item's prompt carries another item's owner-choice options (the unit must not be shown a choice that is not its own).
+      entry.promptScope = promptScopeOf(c);
+      for (const [itemId, scope] of Object.entries(entry.promptScope)) {
+        if (scope.otherItemOptions > 0) problems.push(`${rel}: item ${itemId}'s prompt Behavior carries ${scope.otherItemOptions} owner-choice option(s) of another item`);
+      }
+
       if (decisionRefs.length !== 1) problems.push(`${rel}: ${decisionRefs.length} decision: criteria (D-02 wants exactly one planted choice)`);
       if (entry.expectedDecisions !== 1) problems.push(`${rel}: expectedDecisions is ${entry.expectedDecisions}, not 1`);
       const independent = entry.items.filter((i) => i.role === 'independent');
@@ -342,6 +359,7 @@ function dryRun(argv: readonly string[]): number {
   for (const b of (report['briefs'] ?? []) as BriefReport[]) {
     out(`\n${b.path}: ${b.compiled ? 'compiled' : `NOT compiled (${b.problem ?? '?'})`}${b.digest !== undefined ? `, digest ${b.digest.slice(0, 19)}...` : ''}\n`);
     for (const i of b.items ?? []) out(`  item ${i.id} ${i.role.padEnd(11)} ${i.size.padEnd(6)} ${i.model.padEnd(6)} depends on [${i.dependsOn.join(',')}]  criteria ${i.acceptance.join(',')}  files ${i.files.join(', ')}\n`);
+    if (b.promptScope !== undefined) out(`  prompt scope (another item's options in this item's Behavior): ${Object.entries(b.promptScope).map(([id, s]) => `${id}=${s.otherItemOptions}`).join(', ')}\n`);
     if (b.decisionKeys !== undefined) out(`  decision keys: ${b.decisionKeys.join(', ')}; expected decisions ${b.expectedDecisions}; write set: ${(b.write ?? []).join(', ')}\n`);
     if (b.budgets !== undefined) out(`  budgets: invocations ${String(b.budgets['invocations'])}, per run ${String(b.budgets['costUsdPerRun'])} USD, per invocation ${String(b.budgets['costUsdPerInvocation'])} USD, wall clock ${String(b.budgets['wallClockMinutes'])} min\n`);
   }
@@ -362,7 +380,63 @@ function dryRun(argv: readonly string[]): number {
 // The live exit (plan 03-29; D-03, D-05, D-14)
 // ---------------------------------------------------------------------------------------------------------------
 
-const LIVE_PLAN = '03-29';
+// The plan the spend line and the evidence file are recorded under (plan 03-41): AVARICE_PHASE3_PLAN, the variable the live harness reads for its own
+// spend lines too; 03-29 when it is unset or empty, so the first attempt's tools behave as they did.
+export function livePlan(env: NodeJS.ProcessEnv = process.env): string {
+  const named = env['AVARICE_PHASE3_PLAN'];
+  return named !== undefined && named !== '' ? named : '03-29';
+}
+
+// The authorization file the host pin came from, as the evidence names it: the file the tools were given, not a fixed name.
+export const pinnedByOf = (authorizationPath: string): string => basename(authorizationPath);
+
+// The evidence file as it is rewritten: this tool's own keys replace the file's, and every other top-level key it holds (the `supersedes` block of a
+// repeated exit among them) is kept as it was read.
+export function evidenceFileBody(existing: Json | undefined, plan: string, runs: readonly Json[], updatedAt: string): Json {
+  const own = new Set(['schema', 'plan', 'decision', 'updatedAt', 'runs']);
+  const kept = Object.fromEntries(Object.entries(existing ?? {}).filter(([key]) => !own.has(key)));
+  return { schema: 1, plan, decision: 'D-03, D-05', updatedAt, runs, ...kept };
+}
+
+// D-03: the run an evidence file says it supersedes must already be over. `readState` is the owner's ledger read model; undefined means the run is not
+// there to read. Returns the refusal text, or undefined when the file supersedes nothing or the superseded run is failed, cancelled or closed.
+export function supersededRunRefusal(evidence: Json | undefined, readState: (runId: string) => string | undefined): string | undefined {
+  const block = evidence?.['supersedes'];
+  if (!isObject(block) || typeof block['runId'] !== 'string') return undefined;
+  const runId = block['runId'];
+  const state = readState(runId);
+  if (state === undefined) return `run ${runId} cannot be read from the owner's ledger; the owner cancels it first (D-03, no silent repeat)`;
+  if (isRunTerminal(state as RunState)) return undefined;
+  return `run ${runId} is ${state}; the owner cancels it first (D-03, no silent repeat)`;
+}
+
+// The state of one run in the owner's profile, read through the read-only read model (no migration, no write); undefined when the profile or the run
+// cannot be read.
+export function runStateOf(env: NodeJS.ProcessEnv, runId: string): string | undefined {
+  const composed = createDeps(env, {}, { readOnly: true });
+  if (!composed.ok) return undefined;
+  try {
+    const run = composed.value.deps.ledger.getRun(runId);
+    return run.ok ? run.value.state : undefined;
+  } finally {
+    composed.value.close();
+  }
+}
+
+// What each item's unit is shown of the other items' owner choices (plan 03-40): for every item, how many of the options another item owns (its numbered
+// lines and its open-decision wording, normalized) are found in the Behavior that item's prompt carries. Options this item owns itself are not counted.
+export function promptScopeOf(contract: ScopeContract): Record<string, { otherItemOptions: number }> {
+  const ids = contract.intent.workItems.map((i) => i.id);
+  const scope: Record<string, { otherItemOptions: number }> = {};
+  for (const id of ids) {
+    const shown = normalizeOption(itemBehavior(contract.intent.behavior, id, ids));
+    const own = new Set(itemChoiceOptions(contract, id, []));
+    const foreign = new Set(ids.filter((other) => other !== id).flatMap((other) => itemChoiceOptions(contract, other, [])));
+    scope[id] = { otherItemOptions: [...foreign].filter((option) => option !== '' && !own.has(option) && shown.includes(option)).length };
+  }
+  return scope;
+}
+
 const EXIT_CEILING = 75;
 const EPS = 1e-9;
 const STOP_WAIT_MAX_MINUTES = 130;
@@ -498,6 +572,10 @@ function authorize(argv: readonly string[]): number {
   const parsed = authorizationOf(named['authorization-file'] as string);
   if (typeof parsed === 'string') return refuse(`refusing to spend: ${parsed}`);
 
+  // D-03, plan 03-41: an evidence file that supersedes a stopped run starts only once the owner has cancelled that run (or it failed or closed).
+  const superseded = supersededRunRefusal(readJson(resolve(named['evidence'] as string)), (runId) => runStateOf(process.env, runId));
+  if (superseded !== undefined) return refuse(superseded);
+
   // The host pin (the owner's decision of plan 03-28): the binary the authorization names, admitted by the unchanged list, never the widening variable.
   if (process.env['AVARICE_LIVE_ADMIT_CLAUDE_VERSION'] !== undefined) return refuse('AVARICE_LIVE_ADMIT_CLAUDE_VERSION is set: the exit never widens the admitted hosts');
   if (process.env['AVARICE_CLAUDE_BIN'] !== parsed.claudeBin) return refuse(`AVARICE_CLAUDE_BIN is ${JSON.stringify(process.env['AVARICE_CLAUDE_BIN'] ?? null)}, not the pinned ${parsed.claudeBin}`);
@@ -550,7 +628,7 @@ function recordSpendDelta(runId: string, briefPath: string, costUsd: number, cla
   const delta = Math.max(0, costUsd - recorded);
   if (delta <= EPS) return { recordedUsd: recorded, appendedUsd: 0 };
   const name = (briefPath.split('/').pop() ?? 'brief').replace(/\.md$/, '');
-  const line = { plan: LIVE_PLAN, case: `exit-${name}-${runId}-${stage}`, costUsd: delta, claudeVersion, at: new Date().toISOString() };
+  const line = { plan: livePlan(), case: `exit-${name}-${runId}-${stage}`, costUsd: delta, claudeVersion, at: new Date().toISOString() };
   appendFileSync(ledger, `${JSON.stringify(line)}\n`);
   return { recordedUsd: recorded, appendedUsd: delta, line };
 }
@@ -935,8 +1013,8 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
       Object.assign(entry, {
         brief: briefPath.replace(`${REPO_ROOT}/`, ''),
         briefDigest: briefDigestOf(briefPath) ?? null,
-        plan: LIVE_PLAN,
-        host: { claudeBin: process.env['AVARICE_CLAUDE_BIN'] ?? null, claudeVersion: hostVersion, pinnedBy: '03-28-exit-authorization.json', liveAdmitVariableSet: process.env['AVARICE_LIVE_ADMIT_CLAUDE_VERSION'] !== undefined },
+        plan: livePlan(),
+        host: { claudeBin: process.env['AVARICE_CLAUDE_BIN'] ?? null, claudeVersion: hostVersion, pinnedBy: pinnedByOf(named['authorization-file'] as string), liveAdmitVariableSet: process.env['AVARICE_LIVE_ADMIT_CLAUDE_VERSION'] !== undefined },
         perRunCapUsd: auth.perRunCapUsd,
         startExit: Number(named['start-exit'] ?? Number.NaN),
         startedAt: named['started-at'] ?? null,
@@ -997,7 +1075,7 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
   }
   entry['problems'] = problems;
   const runs = [...priorRuns.filter((r) => r['runId'] !== runId), entry];
-  const result = { schema: 1, plan: LIVE_PLAN, decision: 'D-03, D-05', updatedAt: new Date().toISOString(), runs };
+  const result = evidenceFileBody(readJson(outPath), livePlan(), runs, new Date().toISOString());
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`);
 
