@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "Halted 03-42 at Task 2 (D-03): run 1 finish did not reach ready_for_review"
-last_updated: "2026-11-10T02:22:43.767Z"
+stopped_at: Completed 03-43-PLAN.md
+last_updated: "2026-11-10T03:16:48.079Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 03 execution started
-state_head: 3c4b98475c6d6e8ddd1155c2bb2bec6ffcb09214
+state_head: 2f9d1865c6bc05c30f9f782a44406499d40a9f34
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 103
-  completed_plans: 99
+  total_plans: 106
+  completed_plans: 100
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 03-28 complete (exit briefs approved, 5.67 USD per-run cap, host pinned to 2.1.319; 03-29 and 03-30 next)
-Status: Ready to execute plan 03-29 — the owner authorization 03-28-exit-authorization.json is recorded; every exit start and owner-terminal decide or resume uses AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319
-Last activity: 2026-11-09 — plan 03-28 complete: three exit briefs approved as written, dry run exit 0 at 0 USD (portfolio unchanged), per-run cap 5.67 USD, Phase 3 spend 7.9739 of 25 USD
+Plan: 03-43 complete (the run's host configuration directory recorded at start and honoured by every supervisor; decide, resume and supervise refuse when it cannot be; the records sentence in the unit prompt; 03-44 next)
+Status: Ready to execute plan 03-44 — offline fix done, nothing spent; the repeat of the exit (03-44, 03-45, 03-30) is next, with the owner's 5.27 USD per-run cap
+Last activity: 2026-11-10 — plan 03-43 complete: cross-environment resume proved offline, refusals tested, the VERIFICATION diagnosis recorded in 03-43-SUMMARY.md, docs/system updated; Phase 3 spend unchanged at 9.1851 of 25 USD
 
 Progress: [███░░░░░░░] 25%
 
@@ -352,6 +352,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-41: the exit tools refuse a start while the run an evidence file supersedes is not failed, cancelled or closed in the owner's ledger; the repeated exit records under 03-42-evidence-exit.json and the halted 03-29 file stays untouched — D-03 no silent repeat; the owner cancelled run_01M71BDV8MWGEG7XSAWH1GZ80W and confirmed the 5.62 USD authorization (ownerConfirmedAt 2026-11-10T01:45:20Z), portfolio unchanged, 0 USD spent
 - [Phase 03]: Owner decision 2026-11-10 after the 03-42 D-03 stop (run_01M71J9AVJ3N1BEKC4EM2P0GGF: the run was started under CLAUDE_CONFIG_DIR=/Users/aphan/.claude-edu, the owner's decide started the supervisor under the default ~/.claude, so claude -p --resume a8cdde62-… found no conversation; the fresh fallback session 9ea84e6b-… cost 0.8280 USD and failed G2 with "GSD VERIFICATION status is missing, not passed"): FIX IN PRODUCT — a run records its host config directory at start and every later launch of that run (the supervisor started by decide or resume) uses it; decide and resume refuse visibly when it cannot be honoured; diagnose the fallback's G2 VERIFICATION-missing failure offline; src/ change with docs/system and offline tests; then repeat all three exit runs (D-03)
 - [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 5.27 USD (lower-only; 15.8149 USD headroom at 9.1851 spent fits three runs, no room for a further repeat); ceiling stays 25 USD; host pin 2.1.319 unchanged. run_01M71J9AVJ3N1BEKC4EM2P0GGF stays open (blocked on gate decision dec_01M71M4PB9EQJFNH0S75HTYWSR) until the owner cancels it; Claude never answers or cancels a portfolio run
+- [Phase 03]: Plan 03-43: a run records its host configuration directory as the run step host:config-dir at start; supervisorEnv(deps, runId) launches every supervisor with it; decide and resume refuse (exit 3) and supervise refuses (exit 70) when it cannot be honoured — claude -p --resume finds a session only in the launching process's configuration directory; no column or migration needed, the run step table keys facts by run and step
+- [Phase 03]: Plan 03-43: the unit prompt's records sentence has the unit, not the verifier, write SUMMARY.md and VERIFICATION.md from the subagents' returned text — The transcripts show the host refusing a subagent a report file (the executor's SUMMARY.md); the fresh fallback's verifier was also told not to write files, so G2 read the verification status as missing
 
 ### Pending Todos
 
@@ -411,6 +413,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T02:22:43.554Z
-Stopped at: Halted 03-42 at Task 2 (D-03): run 1 finish did not reach ready_for_review
+Last session: 2026-11-10T03:16:41.022Z
+Stopped at: Completed 03-43-PLAN.md
 Resume file: None
