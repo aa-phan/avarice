@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 40/45 plans executed (19 waves, with 12 gap-closure plans)
+**Plans:** 40/48 plans executed (21 waves, with 15 gap-closure plans)
 
 Plans:
 **Wave 1**
@@ -287,18 +287,25 @@ Plans:
 - [x] 03-44-PLAN.md — Exit repeat prepared with no spend: the evidence carries each run's recorded directory, dry run with the fixed code, the 5.27 USD authorization; the owner cancels the stopped run 1 and confirms
 
 **Wave 15** *(gap closure, blocked on 03-44)*
-- [x] 03-45-PLAN.md — Exit part 1 for the third time at 5.27 USD (run 1 to ready_for_review with the delegated session resumed, run 2 started and blocked); resumes 03-29 and 03-42 (halted at Task 2: B's delegated session resumed correctly, but gate G2 failed on a VERIFICATION.md without `---` fences; run 1 blocked on a new decision, run 2 not started, 03-29 and 03-42 still halted)
+- [x] 03-45-PLAN.md — Exit part 1 for the third time at 5.27 USD (run 1 to ready_for_review with the delegated session resumed, run 2 started and blocked); resumes 03-29 and 03-42 (halted at Task 2: B's delegated session resumed correctly, but gate G2 failed on a VERIFICATION.md without `---` fences; run 1 blocked on a new decision, run 2 not started, 03-29 and 03-42 still halted; resumed by 03-48)
+- [ ] 03-46-PLAN.md — Gap closure after the 03-45 stop: the records sentence states the fenced VERIFICATION shape, proven against the real parser and gate (parser unchanged); the exit tool's --finish records a second stop; docs/system
 
-**Wave 16** *(blocked on 03-45, 03-42 and 03-29)*
-- [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict (reads the third attempt's evidence and the 5.27 USD authorization)
+**Wave 16** *(gap closure, blocked on 03-46)*
+- [ ] 03-47-PLAN.md — Exit repeat prepared with no spend: dry run with the fixed code, the 4.95 USD authorization, the superseded evidence; the owner cancels the stopped run 1 in their own terminal window and confirms
 
-**Wave 17** *(blocked on Wave 16 completion)*
-- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs, data model and processes with three diagrams, from the code
+**Wave 17** *(gap closure, blocked on 03-47)*
+- [ ] 03-48-PLAN.md — Exit part 1 for the fourth time at 4.95 USD (run 1 to ready_for_review with the delegated session resumed and B's G2 passing, run 2 started and blocked); resumes 03-29, 03-42 and 03-45
 
-**Wave 18** *(blocked on Wave 17 completion)*
-- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence, containment, integrations, overview, from the code
+**Wave 18** *(blocked on 03-48, 03-45, 03-42 and 03-29)*
+- [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict (reads the fourth attempt's evidence and the 4.95 USD authorization)
 
 **Wave 19** *(blocked on Wave 18 completion)*
+- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs, data model and processes with three diagrams, from the code
+
+**Wave 20** *(blocked on Wave 19 completion)*
+- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence, containment, integrations, overview, from the code
+
+**Wave 21** *(blocked on Wave 20 completion)*
 - [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings, fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
