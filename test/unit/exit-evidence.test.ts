@@ -36,6 +36,7 @@ const pauseDecision = (over: Json = {}): Json => ({
   affectedItems: ['B'],
   options: [choice('1'), choice('2'), { key: 'text', label: 'free text', kind: 'text' }],
   origin: { origin: 'pause' },
+  parkAttemptId: 'att_B1',
   ...over,
 });
 const items = (over: Record<string, Json> = {}): Json[] => [
@@ -43,7 +44,12 @@ const items = (over: Record<string, Json> = {}): Json[] => [
   { itemId: 'B', state: 'blocked_on_decision', dependsOn: [], attempts: 1, ...(over['B'] ?? {}) },
   { itemId: 'C', state: 'ready', dependsOn: ['B'], attempts: 0, ...(over['C'] ?? {}) },
 ];
-const stopped = (over: Json = {}): Parameters<typeof judgeStart>[0] => ({ state: 'blocked_on_decision', reason: 'decision', items: items(), decisions: [pauseDecision()], notifications: [{}], askUserQuestion: 0, ...over }) as Parameters<typeof judgeStart>[0];
+const attemptsAtStop = (): Json[] => [
+  { attemptId: 'att_A1', itemId: 'A', reason: 'initial', outcome: 'committed' },
+  { attemptId: 'att_B1', itemId: 'B', reason: 'initial', outcome: 'blocked:decision' },
+];
+const stopped = (over: Json = {}): Parameters<typeof judgeStart>[0] =>
+  ({ state: 'blocked_on_decision', reason: 'decision', items: items(), decisions: [pauseDecision()], attempts: attemptsAtStop(), notifications: [{}], askUserQuestion: 0, ...over }) as Parameters<typeof judgeStart>[0];
 
 describe('exit evidence: where a decision came from', () => {
   it('reads a unit pause from the block descriptor and a G1 catch from its gate data', () => {
@@ -78,6 +84,46 @@ describe('exit evidence: the stop of a start', () => {
     const chain = [...items(), { itemId: 'D', state: 'ready', dependsOn: ['C'], attempts: 0 }];
     assert.deepEqual(judgeStart(stopped({ items: chain })), []);
   });
+
+  // Run 1 of plan 03-42 (run_01M71J9AVJ3N1BEKC4EM2P0GGF): the decision's affected items are the owner-choice item B and its dependent C, and the judge
+  // wrongly asked C to be blocked_on_decision too. The decision names the item that asked through the attempt that parked (D-02: the planted item).
+  describe('a decision that affects the owner-choice item and the item waiting for it', () => {
+    const both = (over: Json = {}): Json => pauseDecision({ affectedItems: ['B', 'C'], ...over });
+
+    it('accepts the planted item blocked and its dependent waiting without an attempt, in either order of the affected items', () => {
+      assert.deepEqual(judgeStart(stopped({ decisions: [both()] })), []);
+      assert.deepEqual(judgeStart(stopped({ decisions: [both({ affectedItems: ['C', 'B'] })] })), []);
+    });
+
+    it('accepts the same stop with a dependent that is still pending', () => {
+      assert.deepEqual(judgeStart(stopped({ decisions: [both()], items: items({ C: { state: 'pending' } }) })), []);
+    });
+
+    it('still refuses a planted item that is not blocked on the decision', () => {
+      const problems = judgeStart(stopped({ decisions: [both()], items: items({ B: { state: 'ready' } }) }));
+      assert.ok(problems.some((p) => p.includes('item B (the owner-choice item) is ready, not blocked_on_decision')), problems.join('; '));
+    });
+
+    it('still refuses a dependent that was delegated, has an attempt, or is already done', () => {
+      for (const over of [{ attempts: 1, state: 'delegated' }, { attempts: 1, state: 'ready' }, { attempts: 0, state: 'done' }]) {
+        const problems = judgeStart(stopped({ decisions: [both()], items: items({ C: over }) }));
+        assert.ok(problems.some((p) => p.includes('item C waits for the decision')), JSON.stringify(over));
+      }
+    });
+
+    it('still refuses an independent item that is not done, a second open decision and a decision a gate caught', () => {
+      assert.ok(judgeStart(stopped({ decisions: [both()], items: items({ A: { state: 'ready', attempts: 0 } }) })).some((p) => p.includes('item A is independent of the decision')));
+      assert.ok(judgeStart(stopped({ decisions: [both(), both({ decisionId: 'dec_BBBB' })] })).some((p) => p.includes('exactly one')));
+      assert.ok(judgeStart(stopped({ decisions: [both({ origin: { origin: 'G1:owner-choice-unasked' } })] })).some((p) => p.includes('silent pick caught by G1')));
+    });
+
+    it('does not guess the owner-choice item when no attempt parked for the decision or the parked item is not one it affects', () => {
+      const none = judgeStart(stopped({ decisions: [both({ parkAttemptId: null })] }));
+      assert.ok(none.some((p) => p.includes('which item asked')), none.join('; '));
+      const elsewhere = judgeStart(stopped({ decisions: [both({ parkAttemptId: 'att_A1' })] }));
+      assert.ok(elsewhere.some((p) => p.includes('which item asked')), elsewhere.join('; '));
+    });
+  });
 });
 
 describe('exit evidence: the finish after the owner answered', () => {
@@ -109,6 +155,15 @@ describe('exit evidence: the finish after the owner answered', () => {
     const judged = judgeFinish(finished());
     assert.deepEqual(judged.problems, []);
     assert.equal(judged.resume['resumed'], true);
+  });
+
+  it('judges the resume of the item that asked when the decision also lists the item waiting for it, in either order', () => {
+    for (const affectedItems of [['B', 'C'], ['C', 'B']]) {
+      const judged = judgeFinish(finished({ decisions: [pauseDecision({ state: 'answered', answeredBy: 'owner:tester', answerChannel: 'terminal', affectedItems })] }));
+      assert.deepEqual(judged.problems, [], affectedItems.join(','));
+      assert.equal(judged.resume['itemId'], 'B');
+      assert.equal(judged.resume['resumed'], true);
+    }
   });
 
   it('does not count a fresh unit that merely carries the answer as a resume', () => {
