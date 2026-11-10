@@ -204,6 +204,28 @@ describe('exit run 1 offline: A is verified and ends with B’s numbered choice,
   });
 });
 
+describe('exit run 1 offline: each unit is shown only its own item’s part of the brief', () => {
+  const s = start(RUN1_HOST);
+  const prompt = (id: string): string => (JSON.parse(readFileSync(s.records[id] as string, 'utf8')) as { prompt: string }).prompt;
+
+  it('shows A neither of B’s wordings, B’s paragraph or AC2, and no run title', () => {
+    const a = prompt('A');
+    for (const wording of [WORDING_1, WORDING_2]) assert.equal(a.includes(wording), false, wording);
+    assert.equal(a.includes('Item B'), false);
+    assert.equal(a.includes('stop and ask which one'), false);
+    assert.equal(a.includes('AC2'), false);
+    assert.equal(a.includes('Status wording in three items'), false);
+    assert.ok(a.includes(PARAGRAPH_A) && a.includes('Work item A: Collapse repeated dashes') && a.includes('AC1:'));
+  });
+
+  it('shows B both wordings and its own criterion, and nothing of A’s or C’s paragraphs', () => {
+    const b = prompt('B');
+    for (const wording of [WORDING_1, WORDING_2]) assert.ok(b.includes(wording), wording);
+    assert.ok(b.includes('Work item B: Map a status code') && b.includes('AC2:'));
+    assert.equal(b.includes(PARAGRAPH_A) || b.includes(PARAGRAPH_C), false);
+  });
+});
+
 // The controls: every case the rule cannot settle pauses the unit as it did before.
 interface Control {
   name: string;

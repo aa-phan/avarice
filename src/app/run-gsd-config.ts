@@ -58,6 +58,8 @@ export interface RunPromptItem {
   task: string;
   acceptance: readonly string[];
   specFiles?: readonly string[];
+  // The part of the brief's Behavior that belongs to this item (its own labelled paragraphs and the shared ones). Absent: the brief's whole Behavior.
+  behavior?: string;
 }
 
 // The most characters of the owner's answer a resume prompt carries.

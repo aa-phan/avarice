@@ -392,3 +392,132 @@ describe('runResumePrompt (D-08, T-03-14)', () => {
     assert.throws(() => runResumePrompt('1', { ...ITEM_B, task: 'x'.repeat(RUN_PROMPT_MAX_BYTES) }), RangeError);
   });
 });
+
+// ---- plan 03-40: an item's unit sees only its own part of the brief ---------------------------------------------------------------------------------
+
+// What a single-item prompt was before plan 03-40, recorded line by line for CONTRACT with no context pack: it must not change byte for byte.
+const SINGLE_ITEM_PROMPT = [
+  "/gsd-quick --validate --text \"Task: Swipe step",
+  "Behavior: The swipe hook advances one step per swipe.",
+  "Acceptance criteria:",
+  "- AC-1: A swipe right advances the step",
+  "- AC-2: A swipe at the last step stays on it",
+  "Exclusions (do not do these):",
+  "- Do not change the stepper markup",
+  "Paths you may edit or create (relative to the repository root):",
+  "- src/hooks/useSwipeStep.ts",
+  "- tests/unit/swipe-step.test.ts",
+  "Records you may write (not part of the change):",
+  "- .planning/quick/**",
+  "Commands you may run, exactly as written:",
+  "- npm test",
+  "- npx vitest run <paths>",
+  "Shell rules: run one plain command per Bash call. A call is refused if it contains ';', '&&', '||', a redirection such as '2>&1', '$(...)', backticks, a word that starts with '~', and an unquoted '*', '?', '[' or '{'. Write every path relative to the working directory, which is the repository root.",
+  "You may also run these read-only commands, one per call, on paths inside the repository: ls, cat, head, tail, wc, find, git ls-files, git log, git rev-parse, git status, git show. Read files with the Read tool and search with the Grep and Glob tools.",
+  "Do not run the quick workflow's gsd-tools queries, its mkdir steps or its git steps that change the repository (add, commit, switch, checkout), and do not stop because of them. Choose the quick task's directory under .planning/quick/ yourself, create every file with the Write tool (it creates missing directories), and start the planner, plan-checker, executor and verifier with the Agent tool, giving each the paths, commands, shell rules and acceptance criteria above.",
+  "Stop and ask the owner before you decide any of these: user-visible behavior changes; new dependencies; public API changes; scope expansion; acceptance criteria changes. To ask, end your final message with one question line that ends in a question mark, followed by choice lines that start with '1.' and '2.' (more numbers if needed), with nothing after them, and then stop. You may decide these yourself without asking: internal naming; test structure; refactors inside write paths.",
+  "Run the whole quick workflow in validate mode: its planner, plan-checker, executor and verifier steps, ending with the verifier. Do not make the change by hand instead of the workflow.",
+  "Edit files only. The supervisor commits. Do not run git add or git commit.\"",
+].join('\n');
+
+const BEHAVIOR_A = 'Item A: collapse repeated separators to one dash.';
+const BEHAVIOR_B = ['Item B: map a status code. The wording is the owner’s choice; stop and ask which one before writing it:', '1. `Couldn’t map. Try again later.`', '2. `Couldn’t map the status. Contact support.`'].join('\n');
+const BEHAVIOR_C = 'Item C: use the status mapping in the helper.';
+const BEHAVIOR_SHARED = 'Keep every export of the module unchanged.';
+const RUN1_CONTRACT: RunPromptContract = {
+  ...CONTRACT,
+  intent: {
+    ...CONTRACT.intent,
+    title: 'Status wording in three items',
+    behavior: [BEHAVIOR_A, BEHAVIOR_B, BEHAVIOR_SHARED, BEHAVIOR_C].join('\n\n'),
+    acceptance: [
+      { id: 'AC1', text: 'Repeated separators collapse to one dash', verifiedBy: ['check:test'] },
+      { id: 'AC3', text: 'A status is mapped with the wording the owner chose', verifiedBy: ['decision:status-wording', 'check:test'] },
+      { id: 'AC4', text: 'The helper module exists', verifiedBy: ['check:test'] },
+    ],
+  },
+};
+const itemOf = (id: string, task: string, criterion: string, behavior: string): RunPromptItem => ({ id, task, acceptance: [criterion], behavior });
+const SCOPED_A = itemOf('A', 'Collapse repeated dashes', 'AC1: Repeated separators collapse to one dash', [BEHAVIOR_A, BEHAVIOR_SHARED].join('\n\n'));
+const SCOPED_B = itemOf('B', 'Map a status code', 'AC3: A status is mapped with the wording the owner chose', [BEHAVIOR_B, BEHAVIOR_SHARED].join('\n\n'));
+const SCOPED_C = itemOf('C', 'Add a helper module', 'AC4: The helper module exists', [BEHAVIOR_SHARED, BEHAVIOR_C].join('\n\n'));
+const WORDINGS = ['Couldn’t map. Try again later.', 'Couldn’t map the status. Contact support.'];
+
+describe('runUnitPrompt scoped to one item (plan 03-40)', () => {
+  it('writes the item’s own Behavior in place of the brief’s, and no run title', () => {
+    const prompt = runUnitPrompt(CONTRACT, '', { ...ITEM_B, behavior: 'Only item B’s part.' });
+    assert.match(prompt, QUOTED);
+    assert.ok(prompt.includes('Behavior: Only item B’s part.'));
+    assert.equal(prompt.includes('The swipe hook advances one step per swipe.'), false, 'the brief’s whole Behavior is not written');
+    assert.equal(prompt.includes('Task:'), false);
+    assert.equal(prompt.includes('Swipe step'), false, 'the run’s title is not written');
+  });
+
+  it('still carries the item line, its criteria, the exclusions, the paths, the records, the commands, the shell rules and the fixed sentences', () => {
+    const prompt = runUnitPrompt(CONTRACT, '', { ...ITEM_B, behavior: 'Only item B’s part.' });
+    for (const text of [
+      'Work item B: Clamp the step at the last position',
+      'AC-2: A swipe at the last step stays on it',
+      'Do not change the stepper markup',
+      '- src/hooks/useSwipeStep.ts',
+      '- tests/unit/swipe-step.test.ts',
+      '- .planning/quick/**',
+      '- npm test',
+      RUN_SHELL_RULES_SENTENCE,
+      readOnlyCommandsSentence(READ_ONLY_COMMANDS),
+      RUN_WORKFLOW_SHELL_SENTENCE,
+      RUN_DECISION_SENTENCE(CONTRACT.decisions),
+      RUN_WORKFLOW_SENTENCE,
+      RUN_NO_COMMIT_SENTENCE,
+    ]) {
+      assert.ok(prompt.includes(text), text);
+    }
+  });
+
+  it('falls back to the brief’s Behavior when the item carries none, still without the run title', () => {
+    const prompt = runUnitPrompt(CONTRACT, '', ITEM_B);
+    assert.ok(prompt.includes('Behavior: The swipe hook advances one step per swipe.'));
+    assert.equal(prompt.includes('Task:'), false);
+  });
+
+  it('keeps the line of the item on a line of its own, where the fake host and the owner read it', () => {
+    const prompt = runUnitPrompt(CONTRACT, '', { ...ITEM_B, behavior: 'Only item B’s part.' });
+    assert.ok(prompt.split('\n').includes('Work item B: Clamp the step at the last position'));
+  });
+
+  it('gives a run with one item the prompt it always had, byte for byte', () => {
+    assert.equal(runUnitPrompt(CONTRACT, ''), SINGLE_ITEM_PROMPT);
+    assert.equal(runUnitPrompt(CONTRACT, '', undefined), SINGLE_ITEM_PROMPT);
+  });
+
+  it('shows item A none of B’s wordings, B’s paragraph or AC3, and keeps the shared paragraph', () => {
+    const a = runUnitPrompt(RUN1_CONTRACT, '', SCOPED_A);
+    for (const wording of WORDINGS) assert.equal(a.includes(wording), false, wording);
+    assert.equal(a.includes('Item B'), false);
+    assert.equal(a.includes('AC3'), false);
+    assert.equal(a.includes('stop and ask which one'), false);
+    assert.ok(a.includes(BEHAVIOR_A) && a.includes(BEHAVIOR_SHARED) && a.includes('AC1: Repeated separators collapse'));
+    assert.equal(a.includes('Status wording in three items'), false, 'no run title');
+  });
+
+  it('shows item B both wordings and AC3, and item C its own paragraph and AC4 with none of B’s wordings', () => {
+    const b = runUnitPrompt(RUN1_CONTRACT, '', SCOPED_B);
+    for (const wording of WORDINGS) assert.ok(b.includes(wording), wording);
+    assert.ok(b.includes('AC3: A status is mapped with the wording the owner chose'));
+    assert.equal(b.includes('Item A'), false);
+    const c = runUnitPrompt(RUN1_CONTRACT, '', SCOPED_C);
+    for (const wording of WORDINGS) assert.equal(c.includes(wording), false, wording);
+    assert.ok(c.includes(BEHAVIOR_C) && c.includes('AC4: The helper module exists'));
+    assert.equal(c.includes('AC3'), false);
+  });
+
+  it('leaves the resume prompt and the answer and repair lines as they were', () => {
+    const resume = runResumePrompt('2', SCOPED_B);
+    assert.equal(resume.includes('Behavior:'), false);
+    assert.ok(resume.includes('Work item B: Map a status code'));
+    const answered = runUnitPrompt(CONTRACT, '', ITEM_B, 'Which clamp?\n1. last\n2. first\nThe owner’s answer: 2. first');
+    assert.ok(answered.includes(RUN_ANSWER_DATA_LINE) && answered.includes('The owner’s answer: 2. first'));
+    const repaired = runUnitPrompt(CONTRACT, '', ITEM_B, undefined, 'check test failed');
+    assert.ok(repaired.includes('This is your one repair.') && repaired.includes('Fix the code. Do not delete, skip or change the failing test.'));
+  });
+});
