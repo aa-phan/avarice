@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "plan": "03-44",
+  "decidedAt": "2026-11-10",
+  "decidedBy": "owner",
+  "decisionRef": "STATE.md 29abaeb, owner decision 2 after the 03-42 exit stop",
+  "selection": "approve",
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:4019f32906cc1ad90571389b14cd2bee47d71b1e6853d78d36f1411ebc78631b"
+    }
+  ],
+  "perRunCapUsd": 5.27,
+  "perRunCapFlag": "--budget costUsdPerRun=5.27",
+  "ceilingUsd": 25,
+  "spentUsdSoFar": 9.1851,
+  "headroomUsd": 15.8149,
+  "dryRun": "03-44-dry-run.json",
+  "host": {
+    "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+    "claudeVersion": "2.1.319",
+    "pin": "every exit `avarice start` in plans 03-45 and 03-30 runs with AVARICE_CLAUDE_BIN set to claudeBin",
+    "ownerTerminalRequirement": "every owner-terminal `avarice decide` and `avarice resume` is given with the same AVARICE_CLAUDE_BIN=<claudeBin> and no CLAUDE_CONFIG_DIR (the run records its host configuration directory at start, plan 03-43, and every later supervisor uses it); plans 03-45 and 03-30 print the exact command for the owner",
+    "admittedClaudeVersionsChanged": false,
+    "defaultBinaryChanged": false
+  },
+  "itemA": "stays small (haiku) in all three briefs; no brief change",
+  "supersedes": "03-41-exit-authorization.json",
+  "ownerConfirmedAt": null,
+  "notes": [
+    "D-03: the second exit attempt (plan 03-42) stopped on run 1 (run_01M71J9AVJ3N1BEKC4EM2P0GGF): the resume found no session under the owner's terminal environment, and the fresh fallback failed G2 for want of a VERIFICATION record. Plan 03-43 fixed the product (the run records its host configuration directory at start; the unit prompt names the records the gates read). This authorization repeats all three runs, one `avarice start` each, from run 1 on a new evidence file (03-45-evidence-exit.json) whose supersedes block names the halted 03-42-evidence-exit.json.",
+    "The per-run cap is 5.27 USD, the owner's decision 2 (STATE.md 29abaeb). Three runs at 5.27 USD cap 15.81 USD of the 15.8149 USD headroom (Phase 3 stands at 9.1851 of 25 USD), so the three runs end at most at 24.9951 USD. There is no room for another repeat, and nothing else may spend in Phase 3 before the exit's three runs.",
+    "The three briefs are unchanged: their paths and digests equal those of 03-41-exit-authorization.json (and so of 03-28's), and the 03-44 dry run recomputed them with parseBrief.",
+    "The dry run (03-44-dry-run.json) was made with the fixed code: conventions ok, staleness ok, no problem, promptScope 0 for every item, a largest per-run cap that fits three runs of 5.27 USD, 0 USD spent, no model host launched, and the portfolio's HEAD, status, refs and checkout digest unchanged.",
+    "The exit evidence now records each run's recorded host configuration directory (hostConfigDir), and the start judge lists a problem for a run that has none; the finish judge still requires the resume attempt's session to equal the session recorded at the pause.",
+    "ownerConfirmedAt is null until the owner's blocking-human confirmation at Task 2 of plan 03-44 (the cancel of run_01M71J9AVJ3N1BEKC4EM2P0GGF and the approval of this file); plan 03-45 starts nothing while it is null."
+  ]
+}
