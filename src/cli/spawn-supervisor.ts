@@ -8,6 +8,7 @@ import { isAbsolute } from 'node:path';
 import type { AppDeps } from '../app/deps.ts';
 import { isRunStopState } from '../domain/run-lifecycle.ts';
 import type { RunRow } from '../ports/ledger.ts';
+import { recordedHostConfigDir } from './host-config-dir.ts';
 
 export interface SpawnRequest {
   // Absolute path of the CLI entry script (process.argv[1] of the command that spawns).
@@ -41,14 +42,18 @@ export function spawnSupervisor(request: SpawnRequest): SpawnResult {
   }
 }
 
-// The supervisor reads the same three profile roots the spawning command resolved, whatever else its environment says.
-export function supervisorEnv(deps: AppDeps, _runId?: string): NodeJS.ProcessEnv {
+// The supervisor reads the same three profile roots the spawning command resolved, whatever else its environment says. Given the run, it also runs the host
+// under the configuration directory the run recorded at start (plan 03-43): the host finds a session only in the directory of the process that launches it, so
+// every supervisor of a run, whichever terminal started it, uses the start's. A run with no recorded directory keeps the environment of the command.
+export function supervisorEnv(deps: AppDeps, runId?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     AVARICE_CONFIG_HOME: deps.profile.configHome,
     AVARICE_DATA_ROOT: deps.profile.dataRoot,
     AVARICE_WORK_ROOT: deps.profile.workRoot,
   };
+  const recorded = runId === undefined ? undefined : recordedHostConfigDir(deps, runId);
+  if (recorded !== undefined) env['CLAUDE_CONFIG_DIR'] = recorded;
   // Under `node --test` this variable would make a spawned test entry do nothing.
   delete env['NODE_TEST_CONTEXT'];
   return env;

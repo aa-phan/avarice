@@ -90,7 +90,7 @@ function rejectedExit(outcome: DecideOutcome): number {
 }
 
 async function startSupervisor(deps: AppDeps, io: Io, runId: string, wait: boolean): Promise<number> {
-  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps), cwd: deps.profile.dataRoot });
+  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps, runId), cwd: deps.profile.dataRoot });
   if (!spawned.ok) {
     io.err(`${errorLine('decide', `run ${runId} was not continued: ${spawned.message}`)}\n`);
     return EXIT_INTERNAL;

@@ -93,7 +93,7 @@ async function resumeRunCommand(deps: AppDeps, io: Io, runId: string, wait: bool
   if (found.step !== null) io.out(`${found.attemptId === null ? 'interrupted' : `interrupted attempt ${stripControl(found.attemptId)}`} at ${stripControl(found.step)}\n`);
 
   const failuresBefore = reconcileFailures(deps, runId).count;
-  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps), cwd: deps.profile.dataRoot });
+  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps, runId), cwd: deps.profile.dataRoot });
   if (!spawned.ok) {
     io.err(`${errorLine('resume', `run ${runId} was not resumed: ${spawned.message}`)}\n`);
     return EXIT_INTERNAL;

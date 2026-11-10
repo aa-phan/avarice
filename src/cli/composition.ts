@@ -132,6 +132,7 @@ function productionHost(inputs: HostInputs): AgentHost {
   const hookEntry = env['AVARICE_HOOK_ENTRY'] !== undefined && env['AVARICE_HOOK_ENTRY'] !== '' ? env['AVARICE_HOOK_ENTRY'] : fileURLToPath(new URL('../hook/pre-tool-use.ts', import.meta.url));
   const preamble = fingerprintGsdPreamble(located.gsdCoreDir);
   if (!preamble.ok) return new UnavailableAgentHost('the GSD shim preamble was not found in the located gsd-core');
+  // The same rule as effectiveHostConfigDir (src/cli/host-config-dir.ts), which a run records at start and every supervisor of it is launched with; the two must agree.
   const configDir = env['CLAUDE_CONFIG_DIR'] !== undefined && env['CLAUDE_CONFIG_DIR'] !== '' ? env['CLAUDE_CONFIG_DIR'] : join(home, '.claude');
   const adapter = new ClaudeHostAdapter({
     claudeBin,

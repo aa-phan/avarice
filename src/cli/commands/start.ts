@@ -9,6 +9,8 @@
 // the supervisor died with the run unfinished, printing the final result line and, when interrupted, how to continue.
 import { collectIndexFacts, startTerms } from '../../app/derive-spec.ts';
 import { startRun } from '../../app/run-start.ts';
+import { describeError } from '../../adapters/sqlite/db.ts';
+import { recordRunHostConfigDir } from '../host-config-dir.ts';
 import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import type { WaitResult } from '../spawn-supervisor.ts';
 import type { RunStartOutcome } from '../../app/run-start.ts';
@@ -151,7 +153,14 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
 // Spawns the detached supervisor, records its PID as step `supervisor:spawn`, and with --wait follows the run to where it stops.
 async function supervise(deps: AppDeps, io: Io, started: RunStartOutcome, wait: boolean): Promise<number> {
   const { runId } = started;
-  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps), cwd: deps.profile.dataRoot });
+  // The directory this process runs the host under, recorded before any supervisor exists: every later launch of the run uses it, whichever terminal
+  // answers or resumes the run (plan 03-43).
+  const hostDir = recordRunHostConfigDir(deps, runId);
+  if (!hostDir.ok) {
+    io.err(`${errorLine('start', `run ${runId} is stored but its host configuration directory could not be recorded: ${describeError(hostDir.error)}`)}\n`);
+    return EXIT_INTERNAL;
+  }
+  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps, runId), cwd: deps.profile.dataRoot });
   if (!spawned.ok) {
     io.err(`${errorLine('start', `run ${runId} is stored but its supervisor was not started: ${spawned.message}`)}\n`);
     return EXIT_INTERNAL;
