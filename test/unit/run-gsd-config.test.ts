@@ -311,6 +311,11 @@ describe('the run shell rules in the unit prompt (plan 03-34; the 03-27 small-un
     assert.match(RUN_RECORDS_SENTENCE, /no VERIFICATION\.md fails/);
   });
 
+  it('states the VERIFICATION.md opening as a --- line, a status line and a --- line, and says that anything else counts as gaps_found (plan 03-46)', () => {
+    assert.match(RUN_RECORDS_SENTENCE, /VERIFICATION\.md begins with exactly three lines: '---', then 'status: passed', 'status: gaps_found' or 'status: human_needed'[^.]*, then '---'/);
+    assert.match(RUN_RECORDS_SENTENCE, /does not begin that way counts as gaps_found/);
+  });
+
   it('is one line with no double quote, backslash, absolute path or command of its own, so it fits the quoted prompt and grants nothing', () => {
     assert.ok(RUN_RECORDS_SENTENCE.length > 0 && !RUN_RECORDS_SENTENCE.includes('\n'));
     assert.equal(/["\\]/.test(RUN_RECORDS_SENTENCE), false);
@@ -508,6 +513,15 @@ describe('runUnitPrompt scoped to one item (plan 03-40)', () => {
   it('gives a run with one item the prompt it always had, byte for byte', () => {
     assert.equal(runUnitPrompt(CONTRACT, ''), SINGLE_ITEM_PROMPT);
     assert.equal(runUnitPrompt(CONTRACT, '', undefined), SINGLE_ITEM_PROMPT);
+  });
+
+  it('differs from the single-item prompt of plan 03-43 only in the records sentence (plan 03-46)', () => {
+    const OLD_RECORDS = "Records the run's gates read, in the quick task's directory under .planning/quick/: a PLAN.md, a SUMMARY.md and a VERIFICATION.md. A subagent may be refused when it writes a report file, so tell the executor and the verifier to return their findings as text, and write the SUMMARY.md and the VERIFICATION.md yourself with the Write tool from what they return. The VERIFICATION.md starts with a frontmatter line 'status: passed', 'status: gaps_found' or 'status: human_needed', as the verifier's findings say. A task with no VERIFICATION.md fails the run's gate.";
+    const without = (prompt: string, sentence: string): string => prompt.split('\n').filter((line) => line !== sentence).join('\n');
+    const old = SINGLE_ITEM_PROMPT.replace(RUN_RECORDS_SENTENCE, OLD_RECORDS);
+    assert.notEqual(old, SINGLE_ITEM_PROMPT);
+    assert.ok(old.includes(OLD_RECORDS) && !old.includes(RUN_RECORDS_SENTENCE));
+    assert.equal(without(old, OLD_RECORDS), without(SINGLE_ITEM_PROMPT, RUN_RECORDS_SENTENCE));
   });
 
   it('shows item A none of B’s wordings, B’s paragraph or AC3, and keeps the shared paragraph', () => {
