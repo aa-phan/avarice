@@ -14,10 +14,12 @@ import { createDeps } from '../../src/cli/composition.ts';
 import { effectiveHostConfigDir, hostConfigDirProblem } from '../../src/cli/host-config-dir.ts';
 import { supervisorEnv } from '../../src/cli/spawn-supervisor.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
-import { decideMain, resumedHost, startBlocked, withSupervisorEntry } from '../helpers/decide-cli.ts';
-import type { Blocked } from '../helpers/decide-cli.ts';
-import { attemptsOfRun, itemStatesOf, runRowOf, s17Host } from '../helpers/independent-work.ts';
+import { decideMain, resumedHost, runMain, startBlocked, withSupervisorEntry } from '../helpers/decide-cli.ts';
+import type { Blocked, Ran } from '../helpers/decide-cli.ts';
+import { TEST_CLI } from '../helpers/fault-run.ts';
+import { attemptsOfRun, decisionsOf, itemStatesOf, runRowOf, s17Host } from '../helpers/independent-work.ts';
 import { ledgerRows, profileEnv } from '../helpers/run-fixtures.ts';
+import { runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 
 const cleanup: string[] = [];
@@ -188,5 +190,118 @@ describe('control: a run with no recorded directory answered from directory B re
       ['B', 'answer', 'committed'],
     ]);
     assert.equal(ledgerRows(b.f.roots, "SELECT 1 FROM run_steps WHERE run_id = ? AND step = 'resume:fallback'", b.runId).length, 1, 'the fallback was recorded');
+  });
+});
+
+// ---- the refusals -------------------------------------------------------------------------------------------------------------------------
+
+// Everything a refusal must leave as it was: the run row (state, lease), its decisions, its events and its steps.
+const snapshotOf = (roots: CliRoots, runId: string): string =>
+  JSON.stringify({
+    run: runRowOf(roots, runId),
+    decisions: ledgerRows(roots, 'SELECT * FROM decisions WHERE run_id = ? ORDER BY decision_id', runId),
+    events: ledgerRows(roots, 'SELECT count(*) AS n FROM events WHERE run_id = ?', runId),
+    steps: ledgerRows(roots, 'SELECT step, attempt, status FROM run_steps WHERE run_id = ? ORDER BY rowid', runId),
+  });
+
+const noSupervisorStarted = (roots: CliRoots, runId: string): void => {
+  assert.equal(ledgerRows(roots, "SELECT 1 FROM run_steps WHERE run_id = ? AND step IN ('supervisor:decide', 'supervisor:resume')", runId).length, 0, 'no supervisor was spawned');
+  assert.equal(runRowOf(roots, runId).lease_holder, null, 'no lease was taken');
+};
+
+describe('decide refuses, before it writes anything, when the directory the run recorded cannot be honoured', () => {
+  const dirA = tempDir('A');
+  const b = startUnder(dirA);
+  const answer = (): Promise<Ran> => withSupervisorEntry(resumedHost(join(b.f.roots.base, 'never.json')), () => decideMain(b.f.roots, [b.decisionId, '1']), { CLAUDE_CONFIG_DIR: tempDir('B') });
+
+  it('unreadable (mode 000): exit 3, the directory named, the decision still open and byte-identical, no event, no supervisor', async () => {
+    const before = snapshotOf(b.f.roots, b.runId);
+    chmodSync(dirA, 0o000);
+    let refused: Ran;
+    try {
+      refused = await answer();
+    } finally {
+      chmodSync(dirA, 0o700);
+    }
+    assert.equal(refused.code, 3, refused.err + refused.out);
+    assert.ok(refused.err.includes(`avarice decide: not applied: the run's host configuration directory ${dirA}, recorded when it started, is unreadable;`), refused.err);
+    assert.equal(snapshotOf(b.f.roots, b.runId), before);
+    noSupervisorStarted(b.f.roots, b.runId);
+  });
+
+  it('missing: exit 3, the directory named, nothing written, no supervisor', async () => {
+    const before = snapshotOf(b.f.roots, b.runId);
+    rmSync(dirA, { recursive: true, force: true });
+    const refused = await answer();
+    assert.equal(refused.code, 3, refused.err + refused.out);
+    assert.ok(refused.err.includes(`avarice decide: not applied: the run's host configuration directory ${dirA}, recorded when it started, is missing;`), refused.err);
+    assert.equal(snapshotOf(b.f.roots, b.runId), before);
+    noSupervisorStarted(b.f.roots, b.runId);
+    assert.equal(decisionsOf(b.f.roots, b.runId).filter((d) => d.state === 'open').length, 1, 'the decision stays open');
+  });
+
+  it('the prompt path refuses the same way, before it asks', async () => {
+    const asked = await withSupervisorEntry(resumedHost(join(b.f.roots.base, 'never.json')), () => decideMain(b.f.roots, [b.decisionId], { answers: ['1'] }), { CLAUDE_CONFIG_DIR: tempDir('B') });
+    assert.equal(asked.code, 3, asked.err + asked.out);
+    assert.deepEqual(asked.questions, [], 'the owner is not asked a question that cannot be carried out');
+    assert.match(asked.err, /host configuration directory .* is missing/);
+  });
+});
+
+describe('supervise refuses a directory other than the recorded one: exit 70, no lease, nothing written', () => {
+  const dirA = tempDir('A');
+  const b = startUnder(dirA);
+
+  it('names both directories', () => {
+    const before = snapshotOf(b.f.roots, b.runId);
+    const other = tempDir('other');
+    const refused = runCli(['supervise', b.runId], { roots: b.f.roots, entry: TEST_CLI, env: { CLAUDE_CONFIG_DIR: other } });
+    assert.equal(refused.code, 70, refused.stdout + refused.stderr);
+    assert.ok(refused.stderr.includes(dirA) && refused.stderr.includes(other), refused.stderr);
+    assert.equal(snapshotOf(b.f.roots, b.runId), before);
+  });
+});
+
+describe('resume refuses before it spawns or writes a step; a run it would only report is not refused', () => {
+  const dirA = tempDir('A');
+  const b = startUnder(dirA);
+
+  it('a blocked run with its decision still open is only reported, with the directory gone', async () => {
+    rmSync(dirA, { recursive: true, force: true });
+    const reported = await runMain(b.f.roots, ['resume', b.runId]);
+    assert.equal(reported.code, 3, reported.err + reported.out);
+    assert.match(reported.out, /blocked_on_decision/);
+    assert.ok(!/host configuration directory/.test(reported.err + reported.out));
+  });
+
+  it('a run an answer has made continuable is refused: exit 3, the directory named, no spawn, no step', async () => {
+    const composed = createDeps(profileEnv(b.f.roots));
+    assert.ok(composed.ok, 'composition');
+    try {
+      const answered = composed.value.deps.ledger.answerDecision({ runId: b.runId, decisionId: b.decisionId, answer: '2', answeredBy: 'owner', channel: 'terminal', expectContractVersion: 1, nowMs: Date.now() });
+      assert.ok(answered.ok, JSON.stringify(answered));
+    } finally {
+      composed.value.close();
+    }
+    const before = snapshotOf(b.f.roots, b.runId);
+    const refused = await withSupervisorEntry(resumedHost(join(b.f.roots.base, 'never.json')), () => runMain(b.f.roots, ['resume', b.runId]));
+    assert.equal(refused.code, 3, refused.err + refused.out);
+    assert.ok(refused.err.includes(`avarice resume: not applied: the run's host configuration directory ${dirA}, recorded when it started, is missing;`), refused.err);
+    assert.equal(snapshotOf(b.f.roots, b.runId), before);
+    noSupervisorStarted(b.f.roots, b.runId);
+  });
+});
+
+describe('a run with no recorded directory is never refused by these checks', () => {
+  const dirA = tempDir('A');
+  const dirB = tempDir('B');
+  const b = startUnder(dirA);
+
+  it('is answered and finished from another environment although its start directory is gone', async () => {
+    forgetHostDir(b.f.roots, b.runId);
+    rmSync(dirA, { recursive: true, force: true });
+    const answered = await withSupervisorEntry(resumedHost(join(b.f.roots.base, 'unit-B-resumed.json')), () => decideMain(b.f.roots, [b.decisionId, '2', '--wait']), { CLAUDE_CONFIG_DIR: dirB });
+    assert.equal(answered.code, 0, answered.err + answered.out);
+    assert.equal(runRowOf(b.f.roots, b.runId).state, 'ready_for_review');
   });
 });
