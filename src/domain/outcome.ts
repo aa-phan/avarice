@@ -19,6 +19,8 @@
 // `paused` is driven only by `pauseSignal`, a structural fact the caller derives with detectPause from a
 // waiting-JSON file, a GSD VERIFICATION status of human_needed, a STATE that needs a human, or the numbered-choice
 // shape of the final text (02-RESEARCH Pitfall 11). With pauseSignal absent every outcome is as in Phase 1.
+import { normalizeChoice } from './item-scope.ts';
+
 export type ClassifiedKind = 'progressed' | 'denied' | 'budget_exhausted' | 'failed' | 'no_progress' | 'inconclusive' | 'paused';
 
 export interface OutcomeFacts {
@@ -92,17 +94,19 @@ const TAIL_CAP = 2000;
 const CHOICE_LINE = /^(\d+)\.\s+\S/;
 
 // The final text ends in a question line followed by at least two `N. ` choice lines numbered 1, 2, ...
-function endsInNumberedChoice(tail: string): boolean {
+function trailingChoices(tail: string): string[] {
   const lines = tail.slice(-TAIL_CAP).split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
   let first = lines.length;
   while (first > 0 && CHOICE_LINE.test(lines[first - 1] as string)) first -= 1;
   const choices = lines.slice(first);
-  if (choices.length < 2 || first === 0) return false;
+  if (choices.length < 2 || first === 0) return [];
   for (let i = 0; i < choices.length; i += 1) {
-    if (Number((CHOICE_LINE.exec(choices[i] as string) as RegExpExecArray)[1]) !== i + 1) return false;
+    if (Number((CHOICE_LINE.exec(choices[i] as string) as RegExpExecArray)[1]) !== i + 1) return [];
   }
-  return (lines[first - 1] as string).endsWith('?');
+  return (lines[first - 1] as string).endsWith('?') ? choices : [];
 }
+
+const endsInNumberedChoice = (tail: string): boolean => trailingChoices(tail).length > 0;
 
 // Pure over structural facts. The structural signals are checked first, in a fixed order; the text shape is the
 // last resort. A pause only ever blocks (it routes to a decision), so a crafted text can cost a needless decision
@@ -116,10 +120,20 @@ export function detectPause(input: PauseInput): PauseDetection {
 }
 
 // The trailing choice lines of a final text that ends in a numbered choice (the shape detectPause reads), as the trimmed lines; empty when the text does not end in one.
-export function choiceLines(_tail: string): string[] {
-  return [];
+export function choiceLines(tail: string): string[] {
+  return trailingChoices(tail);
 }
 
+// Plan 03-40 (AUT-3; exit run 1). A unit of item A that finished its own verified work and then printed the numbered choice that belongs to item B
+// (it had read B's paragraph of the brief) was parked on it as its own pause, and A's work was never committed. The rule below says when a numbered
+// choice is another item's. It fails closed: anything it cannot establish means "not attributed", and the unit pauses as before.
+//
+// The caller passes the options as normalized by src/domain/item-scope.ts:
+//   ownOptions        the options of the unit's own item, including those of its own decisions
+//   sharedOptions     the numbered lines of the Behavior paragraphs no item is labelled for
+//   optionsByItem     the options each item owns (its labelled paragraphs, its `decision:` criteria, its open decisions)
+//   ownerChoiceItems  the items with a `decision:` criterion or an open decision
+//   verified          the unit's VERIFICATION passed, a SUMMARY is present, it changed something in scope, and it classifies progressed without the pause
 export interface AttributionInput {
   signal: PauseSignal | null;
   choiceLines: readonly string[];
@@ -134,6 +148,25 @@ export interface AttributionInput {
 
 export type Attribution = { attributedTo: string } | { attributedTo: null; reason: string };
 
-export function attributeNumberedChoice(_input: AttributionInput): Attribution {
-  return { attributedTo: null, reason: 'not implemented' };
+export function attributeNumberedChoice(input: AttributionInput): Attribution {
+  const no = (reason: string): Attribution => ({ attributedTo: null, reason });
+  // A structural pause signal is the unit's own, and only the text shape is ever attributed.
+  if (input.signal !== 'numbered-choice') return no('the signal is not a numbered choice');
+  if (!input.verified) return no('the unit is not verified');
+  if (input.itemIds.length < 2 || !input.itemIds.includes(input.ownItemId)) return no('the run does not have this item among several');
+  const lines = input.choiceLines.map(normalizeChoice);
+  if (lines.length === 0 || lines.some((line) => line === '')) return no('a choice line is empty');
+
+  const optionsOf = (id: string): ReadonlySet<string> => new Set(input.optionsByItem[id] ?? []);
+  const ownSide = new Set([...input.ownOptions, ...optionsOf(input.ownItemId), ...input.sharedOptions]);
+  if (lines.some((line) => ownSide.has(line))) return no("a choice line is the unit's own or shared");
+
+  const others = input.itemIds.filter((id) => id !== input.ownItemId);
+  const owners = others.filter((id) => lines.every((line) => optionsOf(id).has(line)));
+  if (owners.length === 0) return no('no other item owns every choice line');
+  if (owners.length > 1) return no('more than one other item owns the choice lines');
+  const owner = owners[0] as string;
+  if (others.some((id) => id !== owner && lines.some((line) => optionsOf(id).has(line)))) return no("a choice line is also another item's option");
+  if (!input.ownerChoiceItems.includes(owner)) return no('the item has no owner choice or open decision');
+  return { attributedTo: owner };
 }

@@ -207,6 +207,8 @@ describe('exit run 1 offline: A is verified and ends with B’s numbered choice,
 // The controls: every case the rule cannot settle pauses the unit as it did before.
 interface Control {
   name: string;
+  // Why the rule did not attribute, as the classify step records it.
+  reason: RegExp;
   host: Readonly<Record<string, FakeRunOptions>>;
   behavior?: string;
 }
@@ -214,15 +216,18 @@ interface Control {
 const CONTROLS: readonly Control[] = [
   {
     name: 'A ends with a numbered choice whose options its own Behavior paragraph lists',
+    reason: /the unit's own or shared/,
     behavior: [`${PARAGRAPH_A} Ask which one before you start:\n1. Collapse to one dash\n2. Keep two dashes`, '', PARAGRAPH_B, '', PARAGRAPH_C].join('\n'),
     host: { ...RUN1_HOST, A: unitOf('A', { question: 'Which rule should item A follow?\n1. Collapse to one dash\n2. Keep two dashes' }) },
   },
   {
     name: 'A ends with B’s wordings but its VERIFICATION is gaps_found',
+    reason: /not verified/,
     host: { ...RUN1_HOST, A: unitOf('A', { verification: 'gaps_found', question: `Item A is not done.\n\n${QUESTION}` }) },
   },
   {
     name: 'A ends with one of B’s wordings and one paraphrase',
+    reason: /no other item owns every choice line/,
     host: { ...RUN1_HOST, A: unitOf('A', { question: `Item A is done.\n\nWhich wording should item B use?\n1. ${WORDING_1}\n2. \`Couldn’t map it. Please try later.\`` }) },
   },
 ];
@@ -243,6 +248,9 @@ for (const control of CONTROLS) {
       assert.equal(a.result['kind'], 'paused');
       assert.equal(a.result['pauseAttributedTo'], undefined);
       assert.equal(a.result['pauseSignal'], 'numbered-choice');
+      const attribution = a.result['pauseAttribution'] as { signal: string; attributedTo: string | null; reason: string };
+      assert.deepEqual([attribution.signal, attribution.attributedTo], ['numbered-choice', null]);
+      assert.match(attribution.reason, control.reason);
       const own = decisionsOf(f.roots, runId).filter((d) => (JSON.parse(d.affected_items_json) as string[])[0] === 'A');
       assert.equal(own.length, 1, 'A’s decision is open');
     });

@@ -4,7 +4,9 @@
 //   context-pack  an index-first pack (intel, then graph) for the prompt; the step keeps item references and a digest, never text (S-41)
 //   launch:run    attempt, item ready -> delegated, a snapshot of the clone, one contained invocation of the unit
 //   classify      resultSeen, is_error, exit, signal, timeout, denials, clone HEAD before and after, a quick SUMMARY, in-scope changes since the
-//                 snapshot, a structural pause signal, a hook loop-limit stop; model text decides nothing (AUT-7). Anything but `progressed` ends in a
+//                 snapshot, a structural pause signal, a hook loop-limit stop; model text decides nothing (AUT-7). A numbered choice that is another
+//                 item's, in a unit that is verified and otherwise progressed, is attributed to that item and is no pause (plan 03-40; fails closed).
+//                 Anything but `progressed` ends in a
 //                 decision, except a crashed or timed-out unit with no moved HEAD: it is discarded to its snapshot and retried once (CON-16)
 //   discard-attempt  the CON-16 recovery (discard.ts), then the retry attempt goes straight on to `launch:run`
 //   gate:g2       scope, deletions, GSD verification status, overrides, PRUNE entries, and the required checks on the working tree
@@ -25,8 +27,9 @@ import type { DeltaBlocking } from '../../domain/evidence.ts';
 import { evaluateG1, evaluateG2, evaluateG3, g1PathBreaches, integrityFailures } from '../../domain/gates.ts';
 import type { G1Facts, GateVerdict } from '../../domain/gates.ts';
 import { matchesAny } from '../../domain/glob.ts';
-import { classifyOutcome, detectPause } from '../../domain/outcome.ts';
-import type { ClassifiedKind, OutcomeFacts, PauseSignal } from '../../domain/outcome.ts';
+import { hasOwnerChoice, itemChoiceOptions, sharedChoiceOptions } from '../../domain/item-scope.ts';
+import { attributeNumberedChoice, choiceLines, classifyOutcome, detectPause } from '../../domain/outcome.ts';
+import type { Attribution, ClassifiedKind, OutcomeFacts, PauseSignal } from '../../domain/outcome.ts';
 import { countPruneEntries, parseQuickPlan, parseQuickVerification, quickRecordKind, storedText } from '../../domain/quick-record.ts';
 import type { QuickPlan, QuickVerification } from '../../domain/quick-record.ts';
 import { err, ok } from '../../domain/result.ts';
@@ -286,6 +289,9 @@ interface Classified {
   summaryPresent: boolean;
   inScope: number;
   pauseSignal: string | null;
+  // A numbered choice the unit ended with, judged by attributeNumberedChoice: the signal, the item it was attributed to (null when it stays the unit's own
+  // pause) and, when it was not attributed, a fixed reason. Null when the unit ended with no numbered choice. Never holds the question text.
+  pauseAttribution: { signal: PauseSignal; attributedTo: string | null; reason?: string } | null;
   // The pause text the host captured, stored as data by the decision.
   question: string | undefined;
   hostError: PortError | undefined;
@@ -321,6 +327,32 @@ function readRecord(unit: Unit, rel: string | undefined): Result<string | null> 
   if (read === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
   if (!read.ok && read.error.kind === 'invalid') return ok('---\nstatus: gaps_found\n---\n');
   return read;
+}
+
+// Whether a numbered choice the unit ended with is another item's (plan 03-40). The options each item owns come from the brief and from the run's open
+// decisions; the rule itself is pure (attributeNumberedChoice) and fails closed, and so does this: decisions that cannot be read mean no attribution.
+function attributionOf(unit: Unit, tail: string, verified: boolean): Attribution {
+  const { ctx, contract } = unit;
+  const decisions = ctx.deps.ledger.listDecisions({ runId: ctx.runId });
+  if (!decisions.ok) return { attributedTo: null, reason: 'the decisions could not be read' };
+  const itemIds = contract.intent.workItems.map((i) => i.id);
+  const labelsOf = (id: string, wanted: (d: DecisionRow) => boolean): string[] =>
+    decisions.value.filter((d) => d.affectedItems[0] === id && wanted(d)).flatMap((d) => optionsOf(d.options).filter((o) => o.kind === 'choice').map((o) => o.label));
+  const own = unit.item.itemId;
+  const optionsByItem: Record<string, string[]> = {};
+  for (const id of itemIds) optionsByItem[id] = itemChoiceOptions(contract, id, labelsOf(id, (d) => d.state === 'open'));
+  return attributeNumberedChoice({
+    signal: 'numbered-choice',
+    choiceLines: choiceLines(tail),
+    ownItemId: own,
+    itemIds,
+    // The unit's own side counts the options of its decisions in every state: a choice it asked and was answered is still its own.
+    ownOptions: itemChoiceOptions(contract, own, labelsOf(own, () => true)),
+    sharedOptions: sharedChoiceOptions(contract.intent.behavior, itemIds),
+    optionsByItem,
+    ownerChoiceItems: itemIds.filter((id) => hasOwnerChoice(contract, id) || decisions.value.some((d) => d.state === 'open' && d.affectedItems[0] === id)),
+    verified,
+  });
 }
 
 function classify(unit: Unit, prepared: { request: { invocationId: string } }, outcome: Result<InvocationOutcome>, snapshot: WorkspaceSnapshot): Result<Classified> {
@@ -371,6 +403,19 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
     expectedFilesPresent: summaryPresent && inScope > 0,
     pauseSignal: pause.paused,
   };
+  // A numbered choice that is another item's (plan 03-40): only the text shape is ever attributed, and only for a unit whose own work is verified and would
+  // otherwise be progressed. An attributed choice changes this classification only; nothing is opened, answered or withdrawn by it.
+  let pauseAttribution: Classified['pauseAttribution'] = null;
+  if (pause.signal === 'numbered-choice' && question !== undefined) {
+    const verified = verification.status === 'passed' && summaryPresent && inScope > 0 && classifyOutcome({ ...facts, pauseSignal: false }).kind === 'progressed';
+    const attribution = attributionOf(unit, question, verified);
+    pauseAttribution =
+      attribution.attributedTo !== null
+        ? { signal: 'numbered-choice', attributedTo: attribution.attributedTo }
+        : { signal: 'numbered-choice', attributedTo: null, reason: attribution.reason };
+    if (attribution.attributedTo !== null) facts.pauseSignal = false;
+  }
+  const attributed = pauseAttribution?.attributedTo != null;
   const cls = classifyOutcome(facts);
   return ok({
     kind: cls.kind,
@@ -382,8 +427,9 @@ function classify(unit: Unit, prepared: { request: { invocationId: string } }, o
     pruneEntries: prune,
     summaryPresent,
     inScope,
-    pauseSignal: pause.signal,
-    question,
+    pauseSignal: attributed ? null : pause.signal,
+    pauseAttribution,
+    question: attributed ? undefined : question,
     hostError: outcome.ok ? undefined : outcome.error,
     loopLimit: loopLimit.value,
     sessionGone:
@@ -996,6 +1042,8 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
       overrides: c.verification.overrides,
       pruneEntries: c.pruneEntries,
       pauseSignal: c.pauseSignal,
+      ...(c.pauseAttribution !== null ? { pauseAttribution: c.pauseAttribution } : {}),
+      ...(c.pauseAttribution?.attributedTo != null ? { pauseAttributedTo: c.pauseAttribution.attributedTo } : {}),
       loopLimit: c.loopLimit === null ? null : c.loopLimit.reason,
       ...(c.hostError !== undefined ? { hostError: c.hostError.kind } : {}),
     },
