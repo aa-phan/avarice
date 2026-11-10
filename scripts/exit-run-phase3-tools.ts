@@ -538,7 +538,7 @@ export function earlierJudgementsOf(prior: Json | undefined, reason: string | un
   if (prior === undefined || !Array.isArray(prior['problems'])) return Array.isArray(prior?.['earlierJudgements']) ? (prior['earlierJudgements'] as Json[]) : [];
   const atPause = isObject(prior['atPause']) ? prior['atPause'] : {};
   const earlier = Array.isArray(prior['earlierJudgements']) ? (prior['earlierJudgements'] as Json[]) : [];
-  return [...earlier, { judgedAt: atPause['at'] ?? null, supersededAt: now, supersededBecause: reason ?? null, problems: prior['problems'], stopOk: prior['stopOk'] ?? null }];
+  return [...earlier, { judgedAt: atPause['at'] ?? null, supersededAt: now, supersededBecause: reason ?? null, problems: prior['problems'], stopOk: prior['stopOk'] ?? null, spend: prior['spend'] ?? null }];
 }
 
 interface Authorization {

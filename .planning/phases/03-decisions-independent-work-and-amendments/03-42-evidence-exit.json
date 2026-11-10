@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-42",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T01:54:45.216Z",
+  "updatedAt": "2026-11-10T02:05:37.784Z",
   "runs": [
     {
       "runId": "run_01M71J9AVJ3N1BEKC4EM2P0GGF",
@@ -1119,6 +1119,7 @@
       },
       "atPause": {
         "at": "2026-11-10T01:54:45.215Z",
+        "judgedAgainAt": "2026-11-10T02:05:37.783Z",
         "state": "blocked_on_decision",
         "items": [
           {
@@ -1141,17 +1142,10 @@
           }
         ]
       },
-      "stopOk": false,
+      "stopOk": true,
       "spend": {
-        "recordedUsd": 0,
-        "appendedUsd": 0.24020591000000008,
-        "line": {
-          "plan": "03-42",
-          "case": "exit-p3-run1-copy-fallback-run_01M71J9AVJ3N1BEKC4EM2P0GGF-start",
-          "costUsd": 0.24020591000000008,
-          "claudeVersion": "2.1.319",
-          "at": "2026-11-10T01:54:45.216Z"
-        }
+        "recordedUsd": 0.24020591000000008,
+        "appendedUsd": 0
       },
       "phase3SpentUsd": 8.357176239999998,
       "spendGuardAfterStage": {
@@ -1159,8 +1153,28 @@
         "ceilingUsd": 25,
         "fits": true
       },
-      "problems": [
-        "item C (the owner-choice item) is ready, not blocked_on_decision"
+      "problems": [],
+      "earlierJudgements": [
+        {
+          "judgedAt": "2026-11-10T01:54:45.215Z",
+          "supersededAt": "2026-11-10T02:05:37.783Z",
+          "supersededBecause": "the start judge took every item the decision affects as the owner-choice item and flagged the waiting dependent C; judge fixed (commit 947b889) and run 1 judged again at zero cost on the kept snapshots; owner decision 2026-11-10: fix the judge, re-judge, continue",
+          "problems": [
+            "item C (the owner-choice item) is ready, not blocked_on_decision"
+          ],
+          "stopOk": false,
+          "spend": {
+            "recordedUsd": 0,
+            "appendedUsd": 0.24020591000000008,
+            "line": {
+              "plan": "03-42",
+              "case": "exit-p3-run1-copy-fallback-run_01M71J9AVJ3N1BEKC4EM2P0GGF-start",
+              "costUsd": 0.24020591000000008,
+              "claudeVersion": "2.1.319",
+              "at": "2026-11-10T01:54:45.216Z"
+            }
+          }
+        }
       ]
     }
   ],

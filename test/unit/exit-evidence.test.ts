@@ -156,9 +156,9 @@ describe('exit evidence: which item asked, and what a corrected judgement keeps'
 
   it('appends the judgement a start replaces, with the reason, and keeps the ones before it', () => {
     assert.deepEqual(earlierJudgementsOf(undefined, 'why', 'T2'), []);
-    const first = { problems: ['item C (the owner-choice item) is ready, not blocked_on_decision'], stopOk: false, atPause: { at: 'T0' } };
+    const first = { problems: ['item C (the owner-choice item) is ready, not blocked_on_decision'], stopOk: false, spend: { appendedUsd: 0.24 }, atPause: { at: 'T0' } };
     const once = earlierJudgementsOf(first, 'owner decision', 'T1');
-    assert.deepEqual(once, [{ judgedAt: 'T0', supersededAt: 'T1', supersededBecause: 'owner decision', problems: first.problems, stopOk: false }]);
+    assert.deepEqual(once, [{ judgedAt: 'T0', supersededAt: 'T1', supersededBecause: 'owner decision', problems: first.problems, stopOk: false, spend: { appendedUsd: 0.24 } }]);
     const twice = earlierJudgementsOf({ problems: [], stopOk: true, atPause: { at: 'T0' }, earlierJudgements: once }, undefined, 'T2');
     assert.equal(twice.length, 2);
     assert.deepEqual(twice[0], once[0]);
