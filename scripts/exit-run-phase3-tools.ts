@@ -656,6 +656,11 @@ function recordSpendDelta(runId: string, briefPath: string, costUsd: number, cla
   return { recordedUsd: recorded, appendedUsd: delta, line };
 }
 
+// The host configuration directory a run recorded at start (plan 03-43): the latest completed `host:config-dir` step's { claudeConfigDir, source }.
+export function hostConfigDirOf(_steps: ReadonlyArray<{ step: string; status: string; result: unknown }>): Json | null {
+  return null;
+}
+
 interface Facts {
   run: RunRow;
   entry: Json;
@@ -666,7 +671,7 @@ interface Facts {
   budgetLimitUsd: number;
 }
 
-function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: string[] } {
+export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: string[] } {
   const problems: string[] = [];
   const run = deps.ledger.getRun(runId);
   if (!run.ok) return { problems: [`the run ${runId} is not in the ledger: ${describeError(run.error)}`] };
@@ -811,7 +816,7 @@ function collect(deps: AppDeps, runId: string): { facts?: Facts; problems: strin
 
 // What the start stage expects of a run that has to stop on the planted decision (D-02, D-03): the pause-origin decision of the owner-choice item is open at
 // contract version 1, the items independent of it are done, the items that wait for it have not been delegated, and one notification was queued.
-export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number }): string[] {
+export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number; hostConfigDir?: Json | null }): string[] {
   const problems: string[] = [];
   if (facts.state !== 'blocked_on_decision') problems.push(`the run stopped ${facts.state}${facts.reason !== null ? ` (${facts.reason})` : ''}, not blocked_on_decision (D-03)`);
   else if (facts.reason !== 'decision') problems.push(`the run is blocked for ${facts.reason}, not for a decision`);
@@ -865,6 +870,7 @@ export function judgeFinish(facts: {
   commits: Json[];
   askUserQuestion: number;
   owner: string;
+  hostConfigDir?: Json | null;
 }): { problems: string[]; resume: Json } {
   const problems: string[] = [];
   if (facts.state !== 'ready_for_review') problems.push(`the run ended ${facts.state}, not ready_for_review (D-03)`);

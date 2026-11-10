@@ -8,8 +8,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  collect,
   earlierJudgementsOf,
   evidenceFileBody,
+  hostConfigDirOf,
   initSessions,
   judgeFinish,
   judgeStart,
@@ -24,12 +26,14 @@ import {
   supersededRunRefusal,
   toolUseCounts,
 } from '../../scripts/exit-run-phase3-tools.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import { cancelCli, startBlockedS17 } from '../helpers/cancel-cli.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
 
 type Json = Record<string, unknown>;
 const ROOT = resolve(import.meta.dirname, '../..');
 
+const RECORDED_DIR: Json = { claudeConfigDir: '/Users/owner/.claude', source: 'default' };
 const choice = (key: string): Json => ({ key, label: `wording ${key}`, kind: 'choice' });
 const pauseDecision = (over: Json = {}): Json => ({
   decisionId: 'dec_AAAA',
@@ -52,7 +56,7 @@ const attemptsAtStop = (): Json[] => [
   { attemptId: 'att_B1', itemId: 'B', reason: 'initial', outcome: 'blocked:decision' },
 ];
 const stopped = (over: Json = {}): Parameters<typeof judgeStart>[0] =>
-  ({ state: 'blocked_on_decision', reason: 'decision', items: items(), decisions: [pauseDecision()], attempts: attemptsAtStop(), notifications: [{}], askUserQuestion: 0, ...over }) as Parameters<typeof judgeStart>[0];
+  ({ state: 'blocked_on_decision', reason: 'decision', items: items(), decisions: [pauseDecision()], attempts: attemptsAtStop(), notifications: [{}], askUserQuestion: 0, hostConfigDir: RECORDED_DIR, ...over }) as Parameters<typeof judgeStart>[0];
 
 describe('exit evidence: where a decision came from', () => {
   it('reads a unit pause from the block descriptor and a G1 catch from its gate data', () => {
@@ -126,6 +130,40 @@ describe('exit evidence: the stop of a start', () => {
       const elsewhere = judgeStart(stopped({ decisions: [both({ parkAttemptId: 'att_A1' })] }));
       assert.ok(elsewhere.some((p) => p.includes('which item asked')), elsewhere.join('; '));
     });
+  });
+});
+
+describe('exit evidence: the host configuration directory a run recorded (plan 03-44; plan 03-43)', () => {
+  const NO_DIR = 'the run recorded no host configuration directory (the fix of plan 03-43 did not run)';
+
+  it('lists the one problem for a run that recorded no directory, and none for a run that recorded it', () => {
+    assert.deepEqual(judgeStart(stopped()), []);
+    assert.deepEqual(judgeStart(stopped({ hostConfigDir: null })), [NO_DIR]);
+    assert.deepEqual(judgeStart(stopped({ hostConfigDir: undefined })), [NO_DIR]);
+    assert.deepEqual(judgeStart(stopped({ hostConfigDir: { source: 'default' } })), [NO_DIR]);
+    assert.deepEqual(judgeStart(stopped({ hostConfigDir: { claudeConfigDir: '', source: 'default' } })), [NO_DIR]);
+  });
+
+  it('leaves the rest of the start judgement unchanged when the directory is missing', () => {
+    const problems = judgeStart(stopped({ hostConfigDir: null, state: 'ready_for_review', reason: null }));
+    assert.ok(problems.includes(NO_DIR), problems.join('; '));
+    assert.ok(problems.some((p) => p.includes('not blocked_on_decision')), problems.join('; '));
+    assert.equal(problems.filter((p) => p !== NO_DIR).length, judgeStart(stopped({ state: 'ready_for_review', reason: null })).length);
+  });
+
+  it('reads the latest completed host:config-dir step as { claudeConfigDir, source }, and nothing when there is none', () => {
+    const step = (name: string, status: string, result: unknown) => ({ step: name, status, result });
+    assert.equal(hostConfigDirOf([]), null);
+    assert.equal(hostConfigDirOf([step('park', 'completed', { block: {} })]), null);
+    assert.equal(hostConfigDirOf([step('host:config-dir', 'failed', { claudeConfigDir: '/x', source: 'default' })]), null);
+    assert.equal(hostConfigDirOf([step('host:config-dir', 'completed', 'not an object')]), null);
+    assert.equal(hostConfigDirOf([step('host:config-dir', 'completed', { source: 'default' })]), null);
+    const steps = [
+      step('host:config-dir', 'completed', { claudeConfigDir: '/a', source: 'default' }),
+      step('park', 'completed', {}),
+      step('host:config-dir', 'completed', { claudeConfigDir: '/b', source: 'CLAUDE_CONFIG_DIR' }),
+    ];
+    assert.deepEqual(hostConfigDirOf(steps), { claudeConfigDir: '/b', source: 'CLAUDE_CONFIG_DIR' });
   });
 });
 
@@ -219,6 +257,18 @@ describe('exit evidence: the finish after the owner answered', () => {
     assert.ok(who.problems.some((p) => p.includes('not owner:tester')));
     const channel = judgeFinish(finished({ decisions: [pauseDecision({ state: 'answered', answeredBy: 'owner:tester', answerChannel: 'inbox' })] }));
     assert.ok(channel.problems.some((p) => p.includes('not terminal')));
+  });
+
+  it("records the run's host configuration directory beside the resume facts, and keeps the session checks", () => {
+    const judged = judgeFinish(finished({ hostConfigDir: RECORDED_DIR }));
+    assert.deepEqual(judged.problems, []);
+    assert.deepEqual(judged.resume['hostConfigDir'], RECORDED_DIR);
+    assert.equal(judgeFinish(finished()).resume['hostConfigDir'], null);
+    const other = judgeFinish(finished({ hostConfigDir: RECORDED_DIR, invocations: [{ attemptId: 'att_B2', requestedSession: SESSION, initSessions: ['99999999-2222-4333-8444-555555555555'] }] }));
+    assert.ok(other.problems.some((p) => p.includes('does not equal the session recorded')));
+    assert.deepEqual(other.resume['hostConfigDir'], RECORDED_DIR);
+    const requested = judgeFinish(finished({ hostConfigDir: RECORDED_DIR, invocations: [{ attemptId: 'att_B2', requestedSession: 'other', initSessions: [SESSION] }] }));
+    assert.ok(requested.problems.some((p) => p.includes('does not equal the session recorded')));
   });
 
   it('refuses a failed required check, an unsatisfied criterion, a dirty tree and a missing G4 or commit', () => {
@@ -338,14 +388,16 @@ describe('exit evidence: the per-item prompt scope of a compiled brief (plan 03-
   });
 });
 
-describe('exit-run-phase3.sh: the default evidence file of the repeated exit (plan 03-41)', () => {
+describe('exit-run-phase3.sh: the default evidence file of the repeated exit (plan 03-41, plan 03-44)', () => {
   const script = readFileSync(join(ROOT, 'scripts', 'exit-run-phase3.sh'), 'utf8');
-  it('defaults to 03-42-evidence-exit.json and records under plan 03-42; 03-29 is named only as history in the header', () => {
-    assert.match(script, /^EVID_DEFAULT=.*03-42-evidence-exit\.json"$/m);
+  it('defaults to 03-45-evidence-exit.json; 03-29 and 03-42 are named only as history in the header', () => {
+    assert.match(script, /^EVID_DEFAULT=.*03-45-evidence-exit\.json"$/m);
     assert.match(script, /^\s*export AVARICE_PHASE3_PLAN="\$\{AVARICE_PHASE3_PLAN:-03-42\}"$/m);
     const lines = script.split('\n');
-    assert.equal(lines.filter((l) => !l.startsWith('#') && l.includes('03-29-evidence-exit.json')).length, 0);
-    assert.ok(lines.some((l) => l.startsWith('#') && l.includes('03-29-evidence-exit.json')));
+    for (const history of ['03-29-evidence-exit.json', '03-42-evidence-exit.json']) {
+      assert.equal(lines.filter((l) => !l.startsWith('#') && l.includes(history)).length, 0, history);
+      assert.ok(lines.some((l) => l.startsWith('#') && l.includes(history)), history);
+    }
   });
 });
 
@@ -383,6 +435,23 @@ describe('exit evidence: the superseded run read from a real ledger (plan 03-41)
     assert.equal(refused.status, 2, refused.stderr);
     assert.match(refused.stderr, new RegExp(`exit-run: run ${runId} is blocked_on_decision; the owner cancels it first \\(D-03, no silent repeat\\)`));
     assert.equal(JSON.parse(readFileSync(evidence, 'utf8')).runs.length, 0, 'nothing was written');
+  });
+
+  it('collect carries the host configuration directory the run recorded at start into its evidence entry', { timeout: 60_000 }, () => {
+    const { f, runId } = state.s as ReturnType<typeof startBlockedS17>;
+    const composed = createDeps(profileEnv(f.roots), {}, { readOnly: true });
+    assert.ok(composed.ok);
+    try {
+      const collected = collect(composed.value.deps, runId);
+      assert.ok(collected.facts, collected.problems.join('; '));
+      const recorded = collected.facts.entry['hostConfigDir'] as { claudeConfigDir?: unknown; source?: unknown } | null | undefined;
+      assert.ok(recorded !== null && recorded !== undefined, 'the entry has hostConfigDir');
+      assert.equal(typeof recorded.claudeConfigDir, 'string');
+      assert.ok(String(recorded.claudeConfigDir).startsWith('/'), 'an absolute directory');
+      assert.ok(recorded.source === 'default' || recorded.source === 'CLAUDE_CONFIG_DIR');
+    } finally {
+      composed.value.close();
+    }
   });
 
   it('authorize refuses a run it cannot read, and moves past the check once the owner has cancelled the run', { timeout: 60_000 }, async () => {
