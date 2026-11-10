@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-42",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T02:05:37.784Z",
+  "updatedAt": "2026-11-10T02:21:08.786Z",
   "runs": [
     {
       "runId": "run_01M71J9AVJ3N1BEKC4EM2P0GGF",
@@ -11,38 +11,38 @@
       "reason": "decision",
       "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
       "branch": "avarice/run_01M71J9AVJ3N1BEKC4EM2P0GGF",
-      "updatedAt": "2026-11-10T01:54:44.553Z",
+      "updatedAt": "2026-11-10T02:21:07.819Z",
       "commit": null,
       "clean": false,
-      "costUsd": 0.24020591000000008,
+      "costUsd": 1.0681732099999999,
       "budgets": [
         {
           "name": "costUsd",
-          "used": 0.24020591000000008,
+          "used": 1.0681732099999999,
           "reserved": 0,
           "limit": 5.62
         },
         {
           "name": "invocations",
-          "used": 2,
+          "used": 4,
           "reserved": 0,
           "limit": 7
         },
         {
           "name": "subagentsTotal",
-          "used": 4,
+          "used": 8,
           "reserved": 0,
           "limit": 30
         },
         {
           "name": "toolCalls",
-          "used": 60,
+          "used": 99,
           "reserved": 0,
           "limit": 1200
         },
         {
           "name": "wallClockMs",
-          "used": 308404,
+          "used": 522704,
           "reserved": 0,
           "limit": 7200000
         }
@@ -63,8 +63,8 @@
           "size": "medium",
           "model": "sonnet",
           "dependsOn": [],
-          "attempts": 1,
-          "gsdSession": "a8cdde62-fe5d-43e8-b962-3c22c3ff027e"
+          "attempts": 3,
+          "gsdSession": "9ea84e6b-56e8-4514-a727-a4d4da28984e"
         },
         {
           "itemId": "C",
@@ -96,13 +96,31 @@
           "outcome": "blocked:decision",
           "startedAt": "2026-11-10T01:54:37.284Z",
           "endedAt": "2026-11-10T01:54:44.551Z"
+        },
+        {
+          "attemptId": "att_01M71KY36PHFBNMET4BYQE2MAV",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "discarded",
+          "startedAt": "2026-11-10T02:17:31.606Z",
+          "endedAt": "2026-11-10T02:17:33.228Z"
+        },
+        {
+          "attemptId": "att_01M71KY4ZPXYV8V5MJ73AM68X5",
+          "ordinal": 4,
+          "reason": "answer",
+          "itemId": "B",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-10T02:17:33.430Z",
+          "endedAt": "2026-11-10T02:21:07.817Z"
         }
       ],
       "decisions": [
         {
           "decisionId": "dec_01M71JMC67N5M4NVZ329CHNBGV",
           "class": "acceptance",
-          "state": "open",
+          "state": "answered",
           "urgency": "blocking",
           "contractVersion": 1,
           "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
@@ -131,10 +149,10 @@
           "evidenceRefs": [],
           "authorizedDefault": null,
           "openedAt": "2026-11-10T01:54:44.551Z",
-          "answeredAt": null,
-          "answeredBy": null,
-          "answer": null,
-          "answerChannel": null,
+          "answeredAt": "2026-11-10T02:17:31.096Z",
+          "answeredBy": "owner:aphan",
+          "answer": "2",
+          "answerChannel": "terminal",
           "supersedes": null,
           "origin": {
             "origin": "pause",
@@ -144,6 +162,46 @@
             "rules": null
           },
           "parkAttemptId": "att_01M71JM534ZGZGKHJJXDV3Y2MK"
+        },
+        {
+          "decisionId": "dec_01M71M4PB9EQJFNH0S75HTYWSR",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "B",
+            "C"
+          ],
+          "issue": "gate G2 failed: GSD VERIFICATION status is missing, not passed",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "text",
+              "kind": "text",
+              "label": "free text"
+            }
+          ],
+          "consequences": {
+            "text": "item B resumes with your text answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-10T02:21:07.817Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "G2:gsd-verification",
+            "signalKind": "pause",
+            "pauseSignal": null,
+            "gate": "G2",
+            "rules": "gsd-verification"
+          },
+          "parkAttemptId": "att_01M71KY4ZPXYV8V5MJ73AM68X5"
         }
       ],
       "notifications": [
@@ -159,6 +217,19 @@
           "lastError": null,
           "createdAt": "2026-11-10T01:54:44.552Z",
           "deliveredAt": "2026-11-10T01:54:44.676Z"
+        },
+        {
+          "notificationId": "ntf_01M71M4PBAH77MQG4ZA5FQ895Y",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M71M4PB9EQJFNH0S75HTYWSR"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-10T02:21:07.818Z",
+          "deliveredAt": "2026-11-10T02:21:07.938Z"
         }
       ],
       "gates": [
@@ -182,6 +253,25 @@
           "passed": true,
           "revision": "tree:sha256:a454533d873191db090860b46ffd153036615dde297cb755658a664315d312d3",
           "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:acd732460ccc2cdea71f3a723c425173ae7f43c098b6ab55fbf8c952621e6686",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "B",
+          "passed": false,
+          "revision": "tree:sha256:acd732460ccc2cdea71f3a723c425173ae7f43c098b6ab55fbf8c952621e6686",
+          "failures": [
+            {
+              "detail": "GSD VERIFICATION status is missing, not passed",
+              "rule": "gsd-verification"
+            }
+          ]
         }
       ],
       "requiredChecks": [
@@ -795,15 +885,64 @@
             "a8cdde62-fe5d-43e8-b962-3c22c3ff027e"
           ],
           "toolCounts": {}
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M71KY36PHFBNMET4BYQE2MAV",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M71KY3DVJQ64M4BXKW5ESC1R",
+          "requestedSession": "a8cdde62-fe5d-43e8-b962-3c22c3ff027e",
+          "answeredDecisionId": "dec_01M71JMC67N5M4NVZ329CHNBGV",
+          "kind": "failed",
+          "error": null,
+          "costUsd": 0,
+          "costChargedUsd": 0,
+          "transcript": "sha256:6646a642d41c4d0f2aa2e333ee4d8004d74c0b16742e18d4d10d83f43bc5937a",
+          "initSessions": [],
+          "toolCounts": {}
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M71KY4ZPXYV8V5MJ73AM68X5",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M71KY53ZA9N9WTCBKDTEMW0F",
+          "requestedSession": "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+          "answeredDecisionId": "dec_01M71JMC67N5M4NVZ329CHNBGV",
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.8279672999999999,
+          "costChargedUsd": 0.8279672999999999,
+          "transcript": "sha256:3e12460be145daf7e75de7786d77682b70aba879da39b5835ffe023949a2c3bf",
+          "initSessions": [
+            "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+            "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+            "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+            "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+            "9ea84e6b-56e8-4514-a727-a4d4da28984e"
+          ],
+          "toolCounts": {
+            "Read": 15,
+            "Agent": 4,
+            "Glob": 1,
+            "Bash": 20,
+            "Write": 3,
+            "Edit": 3,
+            "Grep": 1
+          }
         }
       ],
       "toolCounts": {
-        "Bash": 27,
-        "Read": 30,
-        "Agent": 4,
-        "Grep": 1,
-        "Write": 3,
-        "Edit": 4
+        "Bash": 47,
+        "Read": 45,
+        "Agent": 8,
+        "Grep": 2,
+        "Write": 6,
+        "Edit": 7,
+        "Glob": 1
       },
       "askUserQuestion": 0,
       "statusView": {
@@ -812,10 +951,10 @@
         "state": "blocked_on_decision",
         "reason": "decision",
         "lastCheckpoint": {
-          "seq": 18,
+          "seq": 30,
           "nextAction": "park",
           "revision": "107679f5f4bf21619e3a48937655d9b84509fa6a",
-          "at": "2026-11-10T01:54:44.315Z"
+          "at": "2026-11-10T02:21:07.549Z"
         },
         "branch": "avarice/run_01M71J9AVJ3N1BEKC4EM2P0GGF",
         "commit": null,
@@ -916,39 +1055,39 @@
           {
             "gate": "G1",
             "passed": true,
-            "revision": "tree:sha256:a454533d873191db090860b46ffd153036615dde297cb755658a664315d312d3"
+            "revision": "tree:sha256:acd732460ccc2cdea71f3a723c425173ae7f43c098b6ab55fbf8c952621e6686"
           },
           {
             "gate": "G2",
-            "passed": true,
-            "revision": "tree:sha256:a454533d873191db090860b46ffd153036615dde297cb755658a664315d312d3"
+            "passed": false,
+            "revision": "tree:sha256:acd732460ccc2cdea71f3a723c425173ae7f43c098b6ab55fbf8c952621e6686"
           }
         ],
         "openDecisions": 1,
         "budgets": [
           {
             "name": "costUsd",
-            "used": 0.24020591000000008,
+            "used": 1.0681732099999999,
             "limit": 5.62
           },
           {
             "name": "invocations",
-            "used": 2,
+            "used": 4,
             "limit": 7
           },
           {
             "name": "subagentsTotal",
-            "used": 4,
+            "used": 8,
             "limit": 30
           },
           {
             "name": "toolCalls",
-            "used": 60,
+            "used": 99,
             "limit": 1200
           },
           {
             "name": "wallClockMs",
-            "used": 308404,
+            "used": 522704,
             "limit": 7200000
           }
         ],
@@ -979,7 +1118,7 @@
             "size": "medium",
             "model": "sonnet",
             "dependsOn": [],
-            "attempts": 1
+            "attempts": 3
           },
           {
             "itemId": "C",
@@ -996,6 +1135,17 @@
           {
             "decisionId": "dec_01M71JMC67N5M4NVZ329CHNBGV",
             "class": "acceptance",
+            "state": "answered",
+            "affectedItems": [
+              "B",
+              "C"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M71M4PB9EQJFNH0S75HTYWSR",
+            "class": "acceptance",
             "state": "open",
             "affectedItems": [
               "B",
@@ -1006,7 +1156,7 @@
           }
         ],
         "notifications": {
-          "delivered": 1,
+          "delivered": 2,
           "pending": 0,
           "held": 0,
           "failed": 0,
@@ -1095,7 +1245,7 @@
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "after": {
-          "takenAt": "2026-11-10T01:54:44.997Z",
+          "takenAt": "2026-11-10T02:21:08.710Z",
           "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
           "branch": "gsd/phase-02-deployed-themed-skeleton",
           "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
@@ -1145,15 +1295,32 @@
       "stopOk": true,
       "spend": {
         "recordedUsd": 0.24020591000000008,
-        "appendedUsd": 0
+        "appendedUsd": 0.8279672999999999,
+        "line": {
+          "plan": "03-42",
+          "case": "exit-p3-run1-copy-fallback-run_01M71J9AVJ3N1BEKC4EM2P0GGF-finish",
+          "costUsd": 0.8279672999999999,
+          "claudeVersion": "2.1.319",
+          "at": "2026-11-10T02:21:08.785Z"
+        }
       },
-      "phase3SpentUsd": 8.357176239999998,
+      "phase3SpentUsd": 9.185143539999997,
       "spendGuardAfterStage": {
-        "remainingRunCapUsd": 5.37979409,
+        "remainingRunCapUsd": 4.55182679,
         "ceilingUsd": 25,
         "fits": true
       },
-      "problems": [],
+      "problems": [
+        "the run ended blocked_on_decision, not ready_for_review (D-03)",
+        "the resume attempt's session does not equal the session recorded at delegation (a8cdde62-fe5d-43e8-b962-3c22c3ff027e): item 9ea84e6b-56e8-4514-a727-a4d4da28984e, requested a8cdde62-fe5d-43e8-b962-3c22c3ff027e, host init []",
+        "item B is blocked_on_decision, not done",
+        "item B has no commit step",
+        "item C is ready, not done",
+        "item C has no commit step",
+        "the final evidence was not taken on a clean tree",
+        "no handed-off commit",
+        "gate G4 did not pass"
+      ],
       "earlierJudgements": [
         {
           "judgedAt": "2026-11-10T01:54:45.215Z",
@@ -1175,7 +1342,30 @@
             }
           }
         }
-      ]
+      ],
+      "resume": {
+        "resumed": false,
+        "itemId": "B",
+        "sessionAtPause": "a8cdde62-fe5d-43e8-b962-3c22c3ff027e",
+        "sessionAfter": "9ea84e6b-56e8-4514-a727-a4d4da28984e",
+        "attempt": {
+          "attemptId": "att_01M71KY36PHFBNMET4BYQE2MAV",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "discarded",
+          "startedAt": "2026-11-10T02:17:31.606Z",
+          "endedAt": "2026-11-10T02:17:33.228Z"
+        },
+        "invocationRequestedSession": "a8cdde62-fe5d-43e8-b962-3c22c3ff027e",
+        "invocationInitSessions": [],
+        "answeredDecisionId": "dec_01M71JMC67N5M4NVZ329CHNBGV"
+      },
+      "finalState": "blocked_on_decision",
+      "resumed": false,
+      "branchRefCommit": null,
+      "finishedAt": "2026-11-10T02:21:08.784Z",
+      "passed": false
     }
   ],
   "supersedes": {
