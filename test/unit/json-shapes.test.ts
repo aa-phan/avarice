@@ -255,6 +255,14 @@ describe('the Phase 2 status snapshots are a frozen prefix of the current ones (
     assert.deepEqual(keys.slice(-3), ['items', 'decisions', 'notifications']);
   });
 
+  it('status-runs.json carries no `checksNotRun` key: every check of its run is required or a target (D-35)', () => {
+    const [entry] = read('status-runs.json') as Array<{ runs: Array<Record<string, unknown>> }>;
+    for (const run of (entry as { runs: Array<Record<string, unknown>> }).runs) {
+      assert.ok(!('checksNotRun' in run));
+      assert.deepEqual(Object.keys(run).slice(-3), ['items', 'decisions', 'notifications']);
+    }
+  });
+
   describe('the check itself', () => {
     const baseline = { a: 1, list: [{ x: 1, y: 'two' }], nested: { k: null } };
     it('accepts a key appended to an object, at any depth', () => {

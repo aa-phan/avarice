@@ -330,7 +330,9 @@ describe('a blocked run is listed before a ready run, and the inbox lists its de
     assert.equal(view.decisions[0]?.['runId'], blockedId);
     assert.equal(view.decisions[0]?.['class'], 'acceptance');
     assert.equal(view.reviews.length, 1);
-    assert.deepEqual(Object.keys(view.reviews[0] as object), ['runId', 'title', 'branch', 'commit', 'repository']);
+    const reviewKeys = Object.keys(view.reviews[0] as object);
+    assert.deepEqual(reviewKeys.slice(0, 5), ['runId', 'title', 'branch', 'commit', 'repository'], 'the Phase 2 keys come first');
+    assert.ok(reviewKeys.length === 5 || (reviewKeys.length === 6 && reviewKeys[5] === 'checksNotRun'), `only checksNotRun may follow: ${reviewKeys.join(', ')}`);
     assert.equal(view.reviews[0]?.['runId'], readyId);
     assert.match(String(view.reviews[0]?.['commit']), /^[0-9a-f]{40}$/);
     assert.match(String(view.reviews[0]?.['repository']), /\/repo$/);

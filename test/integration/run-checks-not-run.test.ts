@@ -79,6 +79,25 @@ describe('a declared check that is not required is reported as not run, and is s
     assert.match(ran.stdout, /^ {2}evidence: .*e2e not run: not required/m);
   });
 
+  it('inbox --json gives the review entry `checksNotRun` as its last key', () => {
+    const ran = runCli(['inbox', '--json'], { roots: f.roots, entry: PRODUCTION_ENTRY });
+    assert.equal(ran.code, 0, ran.stderr);
+    const view = JSON.parse(ran.stdout) as { reviews: Array<Record<string, unknown>> };
+    assert.equal(view.reviews.length, 1);
+    const review = view.reviews[0] as Record<string, unknown>;
+    assert.deepEqual(Object.keys(review), ['runId', 'title', 'branch', 'commit', 'repository', 'checksNotRun']);
+    assert.equal(review['runId'], f.runId);
+    assert.deepEqual(review['checksNotRun'], NOT_RUN);
+  });
+
+  it('inbox (text) prints a `checks <runId>:` line after the reviews table', () => {
+    const ran = runCli(['inbox'], { roots: f.roots, entry: PRODUCTION_ENTRY });
+    assert.equal(ran.code, 0, ran.stderr);
+    const lines = ran.stdout.split('\n');
+    const line = lines.indexOf(`checks ${f.runId}: e2e not run: not required`);
+    assert.ok(line > lines.indexOf('reviews:'), `the checks line follows the reviews table:\n${ran.stdout}`);
+  });
+
   it('the ledger holds no evidence row named e2e, and G4 passed for the handed-off commit', () => {
     const evidence = ledgerRows<{ name: string }>(f.roots, 'SELECT e.name FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ?', f.runId);
     assert.ok(evidence.length > 0, 'the required check left evidence');

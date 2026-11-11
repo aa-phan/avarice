@@ -396,6 +396,20 @@ describe('run details (OPS-7, FR-11)', () => {
     assert.doesNotMatch(bare, /last checkpoint|budget|references/);
   });
 
+  it('names a declared check that is not required after the measured evidence entries (D-35)', () => {
+    const notRun = [{ name: 'e2e', reason: 'not required' as const }];
+    assert.match(renderRunDetails(runStatus({ checksNotRun: notRun }), NOW, 100), /^ {2}evidence: test passed, e2e not run: not required$/m);
+    assert.match(renderRunDetails(runStatus({ evidence: [], checksNotRun: notRun }), NOW, 100), /^ {2}evidence: e2e not run: not required$/m);
+    assert.match(renderRunDetails(runStatus({ evidence: [], checksNotRun: [] }), NOW, 100), /^ {2}evidence: none$/m);
+    assert.match(renderRunDetails(runStatus({ evidence: [] }), NOW, 100), /^ {2}evidence: none$/m);
+  });
+
+  it('prints a not-run check name without an escape sequence (T-03-125)', () => {
+    const text = renderRunDetails(runStatus({ checksNotRun: [{ name: 'e\x1b[31m2\x1b[0m\x1b]0;t\x07e', reason: 'not required' }] }), NOW, 100);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    assert.match(text, /^ {2}evidence: test passed, e2e not run: not required$/m);
+  });
+
   it('shows an interrupted run as paused with its attempt, step and the command that continues it', () => {
     const run = runStatus({
       state: 'verifying',
@@ -537,6 +551,21 @@ describe('inbox (OPS-7, FR-11)', () => {
     const long = text.split('\n').find((l) => l.startsWith('  option 2: ')) ?? '';
     assert.equal(Array.from(long).length, 60);
     assert.ok(long.endsWith('…'));
+  });
+
+  it('prints a `checks <runId>:` line under the reviews table for a review that carries not-run checks, and none for one that does not (D-35)', () => {
+    const withChecks = { ...review, checksNotRun: [{ name: 'e2e', reason: 'not required' as const }, { name: 'perf', reason: 'not required' as const }] };
+    const text = renderInbox({ decisions: [], reviews: [withChecks] }, NOW, 100);
+    assert.match(text, /^checks run_01JR2: e2e not run: not required, perf not run: not required$/m);
+    assert.ok(text.indexOf('reviews:') < text.indexOf('checks run_01JR2:'));
+    assert.doesNotMatch(renderInbox({ decisions: [], reviews: [review] }, NOW, 100), /^checks /m);
+  });
+
+  it('prints a run ID and a not-run check name in the inbox without an escape sequence (T-03-125)', () => {
+    const odd = { ...review, runId: 'run_\x1b[31m01\x1b[0m', checksNotRun: [{ name: 'e\x1b]0;t\x072e', reason: 'not required' as const }] };
+    const text = renderInbox({ decisions: [], reviews: [odd] }, NOW, 100);
+    assert.ok(!text.includes('\x1b') && !text.includes('\x07'));
+    assert.match(text, /^checks run_01: e2e not run: not required$/m);
   });
 
   it('prints each review with its branch, a short commit and the repository cut from the start', () => {
