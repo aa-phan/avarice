@@ -28,6 +28,10 @@ export interface FakeRunOptions {
   summary?: boolean;
   // The `status:` of the quick VERIFICATION (default `passed`); `none` writes no VERIFICATION.
   verification?: 'passed' | 'gaps_found' | 'human_needed' | 'none';
+  // Plan 03-61. The status of the quick VERIFICATION depends on the prompt the unit was given: `passed` when the prompt holds a line equal to `marker` followed
+  // by a bullet line `- <check>` (a bullet list of the lines that start `- `), `otherwise` when it does not. It stands in for the 03-57 unit, which escalated a
+  // required check it was never told was pre-existing. When present it takes precedence over `verification`. JSON-serializable, like every option here.
+  verificationByPrompt?: { marker: string; check: string; otherwise: 'human_needed' | 'gaps_found' };
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -115,6 +119,17 @@ export interface FakeRunOptions {
 const ITEM_LINE = /(?:^|--text ")Work item ([A-Z][A-Za-z0-9_-]{0,31}):/m;
 
 export const itemOfPrompt = (prompt: string): string | undefined => ITEM_LINE.exec(prompt)?.[1];
+
+// Whether the prompt has a line equal to `marker` and, right after it, a run of bullet lines (`- ...`) that holds `- <check>`.
+export function promptNames(prompt: string, marker: string, check: string): boolean {
+  const lines = prompt.split('\n');
+  const at = lines.indexOf(marker);
+  if (at < 0) return false;
+  for (let i = at + 1; i < lines.length && (lines[i] as string).startsWith('- '); i += 1) {
+    if (lines[i] === `- ${check}`) return true;
+  }
+  return false;
+}
 
 // The options without the keys that select options: what a selected layer contributes to the merged options.
 function withoutSelectors(options: FakeRunOptions | undefined): FakeRunOptions {
@@ -349,7 +364,7 @@ export class FakeRunHost implements AgentHost {
     }
     if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
-      const status = o.verification ?? 'passed';
+      const status = o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed');
       if (status !== 'none') {
         const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
