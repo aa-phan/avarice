@@ -4,9 +4,10 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import {
   collect,
   contractDiff,
@@ -32,14 +33,51 @@ import {
   withRelax,
   writeSetCheck,
 } from '../../scripts/exit-run-phase3-tools.ts';
+// The exports of plan 03-52 (the D-31 gate, the authorization writer and the D-28 rules) are read through the namespace so the cases that call them fail
+// on the missing function, not on loading the whole file.
+import * as exitTools from '../../scripts/exit-run-phase3-tools.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { cancelCli, startBlockedS17 } from '../helpers/cancel-cli.ts';
 import { runMain } from '../helpers/decide-cli.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
-import { makeScratchRepo } from '../helpers/scratch-repo.ts';
+import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
 
 type Json = Record<string, unknown>;
 const ROOT = resolve(import.meta.dirname, '../..');
+const TOOLS_SCRIPT = join(ROOT, 'scripts', 'exit-run-phase3-tools.ts');
+const CONFIG_DRAFT = join(ROOT, 'test', 'benchmark', 'portfolio', 'avarice-config.json');
+
+const runTools = (args: string[], env: NodeJS.ProcessEnv = process.env): { status: number | null; stdout: string; stderr: string } =>
+  spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', TOOLS_SCRIPT, ...args], { encoding: 'utf8', env, timeout: 120_000 });
+const sha256Of = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
+const CHECKED_AT = '2026-11-10T12:00:00.000Z';
+const CONFIRMED_AT = '2026-11-10T12:05:00.000Z';
+
+// An authorization file in the shape `write-authorization` writes, built by hand for the cases that only need `authorizationOf` to accept it (plan 03-52, D-28).
+function writeFreshAuthorization(dir: string, over: Json = {}): string {
+  const classification = join(dir, 'classification.json');
+  writeFileSync(classification, JSON.stringify({ schema: 1, checkedAt: CHECKED_AT, briefs: {} }));
+  const auth = join(dir, 'auth.json');
+  writeFileSync(
+    auth,
+    JSON.stringify({
+      selection: 'approve',
+      exitRules: 'D-26..D-35',
+      decisionRef: 'STATE.md test approval',
+      briefs: [],
+      order: [],
+      perRunCapUsd: 4.5,
+      perRunCapFlag: '--budget costUsdPerRun=4.5',
+      ceilingUsd: 25,
+      host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' },
+      briefCheck: { path: classification, sha256: sha256Of(classification), checkedAt: CHECKED_AT },
+      ownerConfirmedAt: CONFIRMED_AT,
+      plan: '03-52',
+      ...over,
+    }),
+  );
+  return auth;
+}
 
 const RECORDED_DIR: Json = { claudeConfigDir: '/Users/owner/.claude', source: 'default' };
 const choice = (key: string): Json => ({ key, label: `wording ${key}`, kind: 'choice' });
@@ -522,8 +560,7 @@ describe('exit evidence: the superseded run read from a real ledger (plan 03-41)
   const tools = (env: NodeJS.ProcessEnv, args: string[]) =>
     spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'scripts', 'exit-run-phase3-tools.ts'), ...args], { encoding: 'utf8', env, timeout: 60_000 });
   const authorizeArgs = (dir: string, evidence: string): string[] => {
-    const auth = join(dir, 'auth.json');
-    writeFileSync(auth, JSON.stringify({ selection: 'approve', perRunCapUsd: 5.62, ceilingUsd: 25, host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' }, briefs: [] }));
+    const auth = writeFreshAuthorization(dir);
     return ['authorize', '--authorization-file', auth, '--brief', join(dir, 'b.md'), '--repo', dir, '--config', join(dir, 'c.json'), '--evidence', evidence];
   };
 
@@ -560,8 +597,7 @@ describe('exit evidence: the superseded run read from a real ledger (plan 03-41)
 
   describe('--finish against the ledger of a run that is blocked_on_decision (plan 03-46)', () => {
     const finishArgs = (dir: string, runId: string, repo: string, evidence: string): string[] => {
-      const auth = join(dir, 'auth.json');
-      writeFileSync(auth, JSON.stringify({ selection: 'approve', perRunCapUsd: 5.27, ceilingUsd: 25, host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' }, briefs: [] }));
+      const auth = writeFreshAuthorization(dir);
       return ['evidence', '--stage', 'finish', '--run-id', runId, '--brief', join(dir, 'b.md'), '--repo', repo, '--authorization-file', auth, '--out', evidence, '--wait-max-minutes', '1'];
     };
     const startRecord = (runId: string, repo: string, pauseDecisionIds: string[]): Json => {
@@ -950,6 +986,388 @@ describe('dry run: the write-set check of a brief (plan 03-49)', () => {
     const before = status();
     writeSetCheck(repo.path, repo.head, input());
     assert.equal(status(), before);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-52: the D-31 gate on a classification file, and the authorization writer that depends on it (D-28, D-30, D-31, D-33)
+// ---------------------------------------------------------------------------------------------------------------
+
+interface ExitFixture {
+  repo: ReturnType<typeof makeScratchRepo>;
+  dir: string;
+  run1: string;
+  run2: string;
+  // The uncapped brief-check report of both briefs, as `brief-check --all` wrote it.
+  all: Json;
+}
+
+const GATE_FALLBACK = 'Could not copy the address. Opening your mail app instead.';
+
+// A temporary git repository with the draft conventions committed, a constant a brief removes, a file outside the brief's Write list that uses it (inside the
+// conventions) and a protected e2e spec that asserts its value on line 5; plus two briefs that compile against it (the run 1 brief of Phase 3, and a copy).
+function makeExitFixture(): ExitFixture {
+  const repo = makeScratchRepo({
+    files: {
+      '.avarice/config.json': readFileSync(CONFIG_DRAFT, 'utf8'),
+      'src/lib/dates.ts': 'export const monthYear = (v: string) => v\n',
+      'src/lib/copy.ts': `export const COPY_SUCCESS = 'Email copied to clipboard'\nexport const COPY_FALLBACK = '${GATE_FALLBACK}'\n`,
+      'src/components/ui/useCopyEmail.ts': "import { COPY_FALLBACK } from '../../lib/copy'\nexport const useCopyEmail = () => COPY_FALLBACK\n",
+      'src/other/Banner.ts': "import { COPY_FALLBACK } from '../lib/copy'\nexport const banner = COPY_FALLBACK\n",
+      'tests/unit/dates.test.ts': 'export {}\n',
+      'tests/unit/copy.test.ts': 'export {}\n',
+      'tests/e2e/copy-email.spec.ts': `import { test } from '@playwright/test'\n\ntest('x', async () => {\n  const a = 1\n  await expect(page).toHaveText('${GATE_FALLBACK}')\n})\n`,
+    },
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'exit-gate-'));
+  const text = readFileSync(join(ROOT, 'test', 'benchmark', 'phase3', 'p3-run1-copy-fallback.md'), 'utf8').replace('baseRevision: 9f1cd8d', `baseRevision: ${repo.head.slice(0, 7)}`);
+  const run1 = join(dir, 'run1.md');
+  const run2 = join(dir, 'run2.md');
+  writeFileSync(run1, text);
+  writeFileSync(run2, text.replace('title: The copy fallback names the address', 'title: The copy fallback names the address, second'));
+  const reportPath = join(dir, 'all.json');
+  const ran = runTools(['brief-check', '--all', '--source', repo.path, '--pin', repo.head, '--brief', run1, '--brief', run2, '--out', reportPath]);
+  assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+  return { repo, dir, run1, run2, all: JSON.parse(readFileSync(reportPath, 'utf8')) as Json };
+}
+
+const briefsOf = (report: Json): Record<string, Json> => report['briefs'] as Record<string, Json>;
+const findingsOf = (report: Json, key: string): Json[] => (briefsOf(report)[key] as Json)['findings'] as Json[];
+const findingAt = (report: Json, key: string, path: string, line: number): Json => {
+  const found = findingsOf(report, key).find((f) => f['path'] === path && f['line'] === line);
+  assert.ok(found, `${path}:${line} in ${key}`);
+  return found;
+};
+
+// The reviewed file a classification starts from: every finding of the report classified `kept` at its own location; `mutate` then edits the copy.
+function classifiedCopy(report: Json, mutate: (c: Json) => void = () => undefined): Json {
+  const copy = JSON.parse(JSON.stringify(report)) as Json;
+  copy['checkedAt'] = CHECKED_AT;
+  for (const key of Object.keys(briefsOf(copy))) {
+    for (const f of findingsOf(copy, key)) Object.assign(f, { classification: 'kept', assertedAt: `${f['path']}:${f['line']}`, reason: 'The brief leaves this line as it is.' });
+  }
+  mutate(copy);
+  return copy;
+}
+
+const only = (problems: string[], ...parts: string[]): void => {
+  assert.equal(problems.length, 1, problems.join(' | '));
+  for (const part of parts) assert.ok((problems[0] as string).includes(part), `${JSON.stringify(part)} in ${problems[0]}`);
+};
+
+const repoState = (repo: string): string => [git(repo, ['rev-parse', 'HEAD']), git(repo, ['status', '--porcelain=v2', '--untracked-files=all']), git(repo, ['for-each-ref', '--format=%(refname) %(objectname)'])].join('\n--\n');
+
+describe('flags, writeSetCheck and brief-check --all (plan 03-52)', () => {
+  const fixtures: ExitFixture[] = [];
+  const repos: Array<{ dispose(): void }> = [];
+  after(() => {
+    for (const fx of fixtures) {
+      fx.repo.dispose();
+      rmSync(fx.dir, { recursive: true, force: true });
+    }
+    for (const r of repos) r.dispose();
+  });
+
+  it('flags records a flag given without a value in `bools`, and parses valued flags as before', () => {
+    const parsed = exitTools.flags(['brief-check', '--all', '--source', 'R']);
+    assert.deepEqual([...parsed.bools], ['all']);
+    assert.equal(parsed.named['source'], 'R');
+    assert.equal(parsed.named['all'], undefined);
+    const many = exitTools.flags(['--brief', 'a', '--cap', '4.5', '--brief', 'b', '--dry']);
+    assert.deepEqual(many.many['brief'], ['a', 'b']);
+    assert.equal(many.named['cap'], '4.5');
+    assert.deepEqual([...many.bools], ['dry']);
+  });
+
+  it('writeSetCheck without options keeps the cap of 25 findings per needle; limitPerNeedle Infinity lists every finding and an empty `truncated`', () => {
+    const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`src/many/f${i}.ts`, `export const x${i} = COPY_FALLBACK\n`]));
+    const repo = makeScratchRepo({ files: { 'src/lib/copy.ts': "export const COPY_FALLBACK = 'x'\n", ...many } });
+    repos.push(repo);
+    const input = { behavior: 'Remove `COPY_FALLBACK`.', writeGlobs: ['src/lib/copy.ts'], itemFiles: ['src/lib/copy.ts'], protectedGlobs: [], conventionsWrite: ['src/**'] };
+    const capped = writeSetCheck(repo.path, repo.head, input);
+    assert.equal(capped.findings.length, 25);
+    assert.deepEqual(capped.truncated, { COPY_FALLBACK: 5 });
+    const uncapped = writeSetCheck(repo.path, repo.head, input, { limitPerNeedle: Infinity });
+    assert.equal(uncapped.findings.length, 30);
+    assert.deepEqual(uncapped.truncated, {});
+    assert.deepEqual(uncapped.findings.slice(0, 25), capped.findings, 'the first 25 findings are the capped ones, in the same order');
+  });
+
+  it('brief-check --all records an uncapped report; the default brief-check report carries neither the marker nor the extra keys', () => {
+    const fx = makeExitFixture();
+    fixtures.push(fx);
+    assert.equal(fx.all['uncapped'], true);
+    const run1 = briefsOf(fx.all)['run1'] as Json;
+    assert.deepEqual(run1['protectedGlobs'] as string[], ['scripts/**', 'tests/e2e/**', 'tests/fixtures/**', 'tests/setup.ts', 'vite.config.ts', 'vitest.config.ts', 'playwright.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'tsconfig.scripts.json', 'tsconfig.test.json', '.oxlintrc.json', '.oxlintignore', 'prettier.config.mjs', '.prettierignore']);
+    const plain = join(fx.dir, 'plain.json');
+    const ran = runTools(['brief-check', '--source', fx.repo.path, '--pin', fx.repo.head, '--brief', fx.run1, '--out', plain]);
+    assert.equal(ran.status, 0, ran.stderr);
+    const report = JSON.parse(readFileSync(plain, 'utf8')) as Json;
+    assert.equal('uncapped' in report, false);
+    assert.deepEqual(Object.keys(briefsOf(report)['run1'] as Json), ['path', 'digest', 'write', 'needles', 'findings', 'lines', 'truncated', 'problems', 'byNeedle']);
+    assert.deepEqual(findingsOf(report, 'run1'), findingsOf(fx.all, 'run1'));
+  });
+});
+
+describe('the D-31 gate: gateClassification and gateForBrief (plan 03-52)', () => {
+  const state: { fx?: ExitFixture } = {};
+  before(
+    () => {
+      state.fx = makeExitFixture();
+    },
+    { timeout: 120_000 },
+  );
+  after(() => {
+    if (state.fx !== undefined) {
+      state.fx.repo.dispose();
+      rmSync(state.fx.dir, { recursive: true, force: true });
+    }
+  });
+  const fresh = (mutate: (r: Json) => void = () => undefined): Json => {
+    const copy = JSON.parse(JSON.stringify((state.fx as ExitFixture).all)) as Json;
+    mutate(copy);
+    return copy;
+  };
+  const classified = (mutate: (c: Json) => void = () => undefined): Json => classifiedCopy((state.fx as ExitFixture).all, mutate);
+  const BANNER = 'src/other/Banner.ts';
+  const SPEC = 'tests/e2e/copy-email.spec.ts';
+
+  it('the fixture holds the three findings of run 1: two unprotected inside the conventions, one protected spec', () => {
+    const found = findingsOf((state.fx as ExitFixture).all, 'run1').map((f) => `${f['path']}:${f['line']}:${f['protected']}`);
+    assert.deepEqual(found, [`${BANNER}:1:false`, `${BANNER}:2:false`, `${SPEC}:5:true`]);
+  });
+
+  it('passes a classification that classifies every fresh finding kept at its own path and line', () => {
+    assert.deepEqual(exitTools.gateClassification(classified(), fresh()), []);
+  });
+
+  it('passes a changed finding in an unprotected file inside the conventions write set', () => {
+    const c = classified((x) => Object.assign(findingAt(x, 'run1', BANNER, 1), { classification: 'changed' }));
+    assert.deepEqual(exitTools.gateClassification(c, fresh()), []);
+  });
+
+  it('fails a fresh finding the file leaves out, naming the brief, the finding and D-31', () => {
+    const c = classified((x) => {
+      ((briefsOf(x)['run1'] as Json)['findings'] as Json[]).splice(1, 1);
+    });
+    only(exitTools.gateClassification(c, fresh()), 'run1', `${BANNER}:2`, 'COPY_FALLBACK', 'D-31');
+  });
+
+  it('fails a finding in the file that the fresh check does not report', () => {
+    const c = classified((x) => {
+      findingsOf(x, 'run1').push({ path: 'src/gone.ts', line: 9, needle: 'COPY_FALLBACK', kind: 'identifier', classification: 'kept', assertedAt: 'src/gone.ts:9' });
+    });
+    only(exitTools.gateClassification(c, fresh()), 'run1', 'src/gone.ts:9', 'COPY_FALLBACK', 'D-31');
+  });
+
+  it('fails a finding with no classification, or one that is neither kept nor changed', () => {
+    for (const value of [undefined, 'keep', 'maybe', '', 7]) {
+      const c = classified((x) => {
+        const f = findingAt(x, 'run1', BANNER, 1);
+        if (value === undefined) delete f['classification'];
+        else f['classification'] = value;
+      });
+      only(exitTools.gateClassification(c, fresh()), 'run1', `${BANNER}:1`, 'classification', 'D-31');
+    }
+  });
+
+  it("fails an assertedAt that is not the finding's own path and line", () => {
+    for (const wrong of [`${BANNER}:2`, 'tests/unit/copy.test.ts:1', '', `${BANNER}`]) {
+      const c = classified((x) => {
+        findingAt(x, 'run1', BANNER, 1)['assertedAt'] = wrong;
+      });
+      only(exitTools.gateClassification(c, fresh()), 'run1', `${BANNER}:1`, 'assertedAt', 'D-31');
+    }
+  });
+
+  it('fails a changed finding in a protected file, and still fails it when the file says the finding is not protected', () => {
+    const honest = classified((x) => Object.assign(findingAt(x, 'run1', SPEC, 5), { classification: 'changed' }));
+    only(exitTools.gateClassification(honest, fresh()), 'run1', `${SPEC}:5`, 'protected', 'D-30');
+    const forged = classified((x) => Object.assign(findingAt(x, 'run1', SPEC, 5), { classification: 'changed', protected: false, problem: false, insideConventions: true }));
+    only(exitTools.gateClassification(forged, fresh()), 'run1', `${SPEC}:5`, 'protected', 'D-30');
+  });
+
+  it('passes a kept finding in a protected file: the brief leaves the spec as it is', () => {
+    assert.deepEqual(exitTools.gateClassification(classified(), fresh()), []);
+  });
+
+  it("fails a changed finding the fresh check puts outside the conventions' write set, whatever the file says", () => {
+    const c = classified((x) => Object.assign(findingAt(x, 'run1', BANNER, 1), { classification: 'changed', insideConventions: true }));
+    const moved = fresh((r) => {
+      findingAt(r, 'run1', BANNER, 1)['insideConventions'] = false;
+    });
+    only(exitTools.gateClassification(c, moved), 'run1', `${BANNER}:1`, 'write set', 'D-31');
+  });
+
+  it('fails a brief whose digest differs from the fresh parse', () => {
+    const c = classified((x) => {
+      (briefsOf(x)['run1'] as Json)['digest'] = 'sha256:0000';
+    });
+    only(exitTools.gateClassification(c, fresh()), 'run1', 'digest', 'D-31');
+  });
+
+  it('fails a pin or a conventions revision that differs from the fresh check', () => {
+    only(exitTools.gateClassification(classified((x) => void (x['pin'] = 'a'.repeat(40))), fresh()), 'pin', 'D-31');
+    only(exitTools.gateClassification(classified((x) => void (x['conventionsRevision'] = 'b'.repeat(40))), fresh()), 'conventions', 'D-31');
+  });
+
+  it('fails while the fresh check reports a truncation: a capped check cannot be fully classified', () => {
+    const capped = fresh((r) => void ((briefsOf(r)['run1'] as Json)['truncated'] = { COPY_FALLBACK: 3 }));
+    only(exitTools.gateClassification(classified(), capped), 'run1', 'truncated', 'COPY_FALLBACK', 'D-31');
+  });
+
+  it('fails a compiled Write-list entry that matches a protected glob (D-30)', () => {
+    const bad = fresh((r) => void (((briefsOf(r)['run1'] as Json)['write'] as string[]).push(SPEC)));
+    only(exitTools.gateClassification(classified(), bad), 'run1', SPEC, 'D-30');
+  });
+
+  it('fails a brief the fresh check could not parse or compile, a brief the file lacks and a brief the file invents', () => {
+    const broken = fresh((r) => {
+      briefsOf(r)['run2'] = { path: 'x', digest: 'sha256:1', problem: 'does not compile: nope' };
+    });
+    assert.ok(exitTools.gateClassification(classified(), broken).some((p) => p.includes('run2') && p.includes('does not compile: nope')));
+    const lacking = classified((x) => void delete briefsOf(x)['run2']);
+    assert.ok(exitTools.gateClassification(lacking, fresh()).some((p) => p.includes('run2') && p.includes('D-31')));
+    const invented = classified((x) => void (briefsOf(x)['run9'] = { path: 'x', digest: 'sha256:9', findings: [] }));
+    assert.ok(exitTools.gateClassification(invented, fresh()).some((p) => p.includes('run9') && p.includes('D-31')));
+  });
+
+  it('gateForBrief judges the top-level facts and one brief only', () => {
+    const c = classified((x) => {
+      ((briefsOf(x)['run1'] as Json)['findings'] as Json[]).splice(0, 1);
+    });
+    assert.deepEqual(exitTools.gateForBrief(c, fresh(), 'run2'), []);
+    only(exitTools.gateForBrief(c, fresh(), 'run1'), 'run1', `${BANNER}:1`, 'D-31');
+    assert.equal(exitTools.gateClassification(c, fresh()).length, 1);
+    assert.ok(exitTools.gateForBrief(c, fresh(), 'run9').some((p) => p.includes('run9')), 'a brief the fresh check does not hold is refused');
+    const wrongPin = classified((x) => void (x['pin'] = 'a'.repeat(40)));
+    only(exitTools.gateForBrief(wrongPin, fresh(), 'run2'), 'pin');
+  });
+});
+
+describe('brief-gate and write-authorization on a temporary repository (plan 03-52)', () => {
+  const state: { fx?: ExitFixture } = {};
+  before(
+    () => {
+      state.fx = makeExitFixture();
+    },
+    { timeout: 120_000 },
+  );
+  after(() => {
+    if (state.fx !== undefined) {
+      state.fx.repo.dispose();
+      rmSync(state.fx.dir, { recursive: true, force: true });
+    }
+  });
+  const fx = (): ExitFixture => state.fx as ExitFixture;
+  const writeClassification = (name: string, mutate: (c: Json) => void = () => undefined): string => {
+    const path = join(fx().dir, name);
+    writeFileSync(path, `${JSON.stringify(classifiedCopy(fx().all, mutate), null, 2)}\n`);
+    return path;
+  };
+  const dropBanner2 = (c: Json): void => void ((briefsOf(c)['run1'] as Json)['findings'] as Json[]).splice(1, 1);
+  const gateArgs = (cls: string): string[] => ['brief-gate', '--classification', cls, '--source', fx().repo.path, '--pin', fx().repo.head];
+
+  it('brief-gate exits 1 on a dropped finding and prints one FAIL line for it; the repository is as it was', () => {
+    const before = repoState(fx().repo.path);
+    const failed = runTools(gateArgs(writeClassification('dropped.json', dropBanner2)));
+    assert.equal(failed.status, 1, failed.stderr + failed.stdout);
+    assert.match(failed.stdout, /^brief-gate: FAIL run1: src\/other\/Banner\.ts:2 COPY_FALLBACK: .*D-31/m);
+    assert.equal(failed.stdout.split('\n').filter((l) => l.startsWith('brief-gate: FAIL')).length, 1);
+    assert.equal(repoState(fx().repo.path), before);
+  });
+
+  it('brief-gate exits 0 and prints pass with the number of findings classified once every finding is classified; the repository is as it was', () => {
+    const before = repoState(fx().repo.path);
+    const passed = runTools(gateArgs(writeClassification('complete.json')));
+    assert.equal(passed.status, 0, passed.stderr + passed.stdout);
+    assert.match(passed.stdout, /^brief-gate: pass.*6 finding/m);
+    assert.equal(repoState(fx().repo.path), before);
+  });
+
+  it('brief-gate fails the forged file: a protected finding marked changed and unprotected', () => {
+    const forged = writeClassification('forged.json', (c) => void Object.assign(findingAt(c, 'run1', 'tests/e2e/copy-email.spec.ts', 5), { classification: 'changed', protected: false, problem: false, insideConventions: true }));
+    const failed = runTools(gateArgs(forged));
+    assert.equal(failed.status, 1, failed.stderr + failed.stdout);
+    assert.match(failed.stdout, /^brief-gate: FAIL run1: tests\/e2e\/copy-email\.spec\.ts:5 COPY_FALLBACK: .*protected/m);
+  });
+
+  it('brief-gate exits 2 without --classification or on a file that is not a classification', () => {
+    assert.equal(runTools(['brief-gate', '--source', fx().repo.path]).status, 2);
+    const junk = join(fx().dir, 'junk.json');
+    writeFileSync(junk, '[]');
+    assert.equal(runTools(gateArgs(junk)).status, 2);
+  });
+
+  const authArgs = (cls: string, out: string, over: Record<string, string> = {}): string[] => {
+    const v: Record<string, string> = { cap: '4.5', ceiling: '25', 'claude-bin': '/nonexistent/claude', 'claude-version': '2.1.319', 'decision-ref': 'STATE.md D-28 approval', 'owner-confirmed-at': CONFIRMED_AT, ...over };
+    return [
+      'write-authorization',
+      '--classification', cls,
+      '--brief', fx().run2, '--run', 'run-b', '--expects', 'amend-stale',
+      '--brief', fx().run1, '--run', 'run-a', '--expects', 'block-resume',
+      ...Object.entries(v).flatMap(([k, x]) => [`--${k}`, x]),
+      '--out', out,
+      '--source', fx().repo.path,
+      '--pin', fx().repo.head,
+    ];
+  };
+  const env = { ...process.env, AVARICE_PHASE3_PLAN: '03-52' };
+
+  it('write-authorization exits 2 and writes nothing while the gate fails', () => {
+    const out = join(fx().dir, 'auth-gate-fail.json');
+    const ran = runTools(authArgs(writeClassification('dropped2.json', dropBanner2), out), env);
+    assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+    assert.match(ran.stdout + ran.stderr, /brief-gate: FAIL run1: src\/other\/Banner\.ts:2/);
+    assert.equal(existsSync(out), false);
+  });
+
+  it('write-authorization exits 2 and writes nothing for a cap above 4.50, a ceiling above 25, an empty decision reference and an owner time that is early or not a time', () => {
+    const cls = writeClassification('complete2.json');
+    const cases: Array<[Record<string, string>, RegExp]> = [
+      [{ cap: '4.95' }, /D-33/],
+      [{ ceiling: '30' }, /D-05/],
+      [{ 'decision-ref': '' }, /decision/],
+      [{ 'owner-confirmed-at': '2026-11-10T11:59:59.000Z' }, /owner-confirmed-at/],
+      [{ 'owner-confirmed-at': 'yesterday' }, /owner-confirmed-at/],
+    ];
+    for (const [over, pattern] of cases) {
+      const out = join(fx().dir, `auth-refused-${Object.keys(over)[0]}.json`);
+      const ran = runTools(authArgs(cls, out, over), env);
+      assert.equal(ran.status, 2, `${JSON.stringify(over)}: ${ran.stderr}${ran.stdout}`);
+      assert.match(ran.stdout + ran.stderr, pattern, JSON.stringify(over));
+      assert.equal(existsSync(out), false, JSON.stringify(over));
+    }
+  });
+
+  it('write-authorization writes the approval once the gate passes: the fields, the order of the briefs, the cap flag and the digest of the classification file', () => {
+    const cls = writeClassification('complete3.json');
+    const out = join(fx().dir, 'auth-ok.json');
+    const before = repoState(fx().repo.path);
+    const ran = runTools(authArgs(cls, out), env);
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const file = JSON.parse(readFileSync(out, 'utf8')) as Json;
+    assert.deepEqual(Object.keys(file), ['selection', 'exitRules', 'decisionRef', 'briefs', 'order', 'perRunCapUsd', 'perRunCapFlag', 'ceilingUsd', 'host', 'briefCheck', 'ownerConfirmedAt', 'plan']);
+    assert.equal(file['selection'], 'approve');
+    assert.equal(file['exitRules'], 'D-26..D-35');
+    assert.equal(file['decisionRef'], 'STATE.md D-28 approval');
+    const digests = (key: string): unknown => (briefsOf(fx().all)[key] as Json)['digest'];
+    assert.deepEqual(file['briefs'], [
+      { path: relative(ROOT, fx().run2), digest: digests('run2'), run: 'run-b', expects: 'amend-stale' },
+      { path: relative(ROOT, fx().run1), digest: digests('run1'), run: 'run-a', expects: 'block-resume' },
+    ]);
+    assert.deepEqual(file['order'], ['run-b', 'run-a']);
+    assert.equal(file['perRunCapUsd'], 4.5);
+    assert.equal(file['perRunCapFlag'], '--budget costUsdPerRun=4.5');
+    assert.equal(file['ceilingUsd'], 25);
+    assert.deepEqual(file['host'], { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' });
+    const check = file['briefCheck'] as Json;
+    assert.equal(resolve(ROOT, String(check['path'])), cls);
+    assert.equal(check['sha256'], sha256Of(cls));
+    assert.equal(check['checkedAt'], CHECKED_AT);
+    assert.equal(file['ownerConfirmedAt'], CONFIRMED_AT);
+    assert.equal(file['plan'], '03-52');
+    assert.equal(repoState(fx().repo.path), before);
   });
 });
 
