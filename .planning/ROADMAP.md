@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 46/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
+**Plans:** 47/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
 
 Plans:
 **Wave 1**
@@ -306,7 +306,7 @@ Plans:
 **Exit replanned under D-26 to D-35** *(the halted attempts 03-29, 03-42, 03-45, 03-48 and 03-50 are marked superseded by 03-55)*
 
 **Wave 18**
-- [ ] 03-51-PLAN.md — D-35: a declared check that is neither required nor a target is reported "not run: not required" in status, the inbox's review entry and the evidence line; optional `checksNotRun` key, no gate change
+- [x] 03-51-PLAN.md — D-35: a declared check that is neither required nor a target is reported "not run: not required" in status, the inbox's review entry and the evidence line; optional `checksNotRun` key, no gate change
 
 **Wave 19** *(blocked on 03-51)*
 - [ ] 03-52-PLAN.md — Exit tools: the D-31 brief gate over a per-finding classification file, the gate-enforced authorization writer, fresh approval only (D-28), cap 4.50 (D-33)
@@ -437,7 +437,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 46/50 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 47/59 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
