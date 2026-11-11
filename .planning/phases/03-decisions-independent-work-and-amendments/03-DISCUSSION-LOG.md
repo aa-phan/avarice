@@ -124,3 +124,28 @@ Parallel item execution; push notifiers and other reply channels (Phase 6); the 
 ## Deferred Ideas (session 2)
 
 Running declared non-required checks as non-gating evidence; a structured `Keep` section read by `brief-check`; letting briefs or amendments write protected test paths.
+
+---
+
+# Session 3 (2026-11-11): D-29 re-decided after run 2's second product-defect stop
+
+Trigger: plan 03-63 halted. Run 2 failed twice, and the owner ruled both stops product defects (baseline-red `format:check`, fixed in 03-61; the check `env` not reaching the unit, fixed in 03-64 and checked for parity in 03-65). D-29 refused a third start with exit 75. Context choice: **Update it**.
+
+Areas offered: D-29 for run 2 / Proof before spend / Budget fit / Order and cleanup. Selected: **D-29 for run 2**.
+
+## D-29 for run 2
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| How the stop-loss treats run 2 | Reset per fixed defect / One-off third attempt / Raise limit to 3 / Keep 2, stop exit | Reset per fixed defect |
+| What proves a fix for a reset | Repro + parity + owner / Also full fake-host rehearsal / Repro + owner only | Repro + parity + owner |
+| Cap on resets | Budget only / 2 resets per run / 3 product defects total | Budget only |
+| Applying the rule to run 2 now | Reset at a no-spend checkpoint / Reset now, recorded in this discussion | Reset at a no-spend checkpoint |
+
+**Recorded as:** D-36 to D-39. D-29's "in any epoch" counting is superseded. The 25 USD ceiling, D-26's re-run rule and D-33's cap and order are unchanged.
+
+**Not discussed:** budget fit (13.3390 USD left against 3 × 4.50 = 13.50; arithmetic noted in Specifics), run order and the blocked run's cleanup (the owner cancels `run_01M75NPTEF7FKDNW8ABQ9Q16WS`; noted in D-39), and the fuller pre-spend rehearsal (deferred).
+
+## Deferred Ideas (session 3)
+
+A fake-host rehearsal of a whole exit brief up to its planted pause as a further pre-spend guard.

@@ -1,8 +1,8 @@
 # Phase 3: Decisions, independent work and amendments - Context
 
 **Gathered:** 2026-11-08
-**Updated:** 2026-11-10 (exit criteria re-discussed after plan 03-50 halted; D-03 superseded by D-26 to D-35)
-**Status:** Ready for planning (replan the exit: new plans replace 03-30; 03-31 to 03-33 stay, re-checked against D-35)
+**Updated:** 2026-11-10 (exit criteria re-discussed after plan 03-50 halted; D-03 superseded by D-26 to D-35); 2026-11-11 (D-29 re-decided after run 2's second product-defect stop in 03-63; D-29's "in any epoch" superseded by D-36 to D-39)
+**Status:** Ready for planning (replan the exit's run 2 path under D-36 to D-39: a no-spend reset checkpoint and the tools' stop-loss change come before 03-57's third attempt; 03-58 to 03-60 and 03-31 to 03-33 stay)
 
 <domain>
 ## Phase Boundary
@@ -37,13 +37,22 @@ Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45
 - **D-26: Classify each unexpected stop.** Every stop that is not the brief's planted pause is classified, with evidence, as a **product defect** or a **brief/harness defect**. A product defect means fix it and re-run all three runs (as D-03). A brief/harness defect means fix the brief or the harness and re-run only that run. 3 of 3 still means three clean runs, each reaching its expected end from one `avarice start`.
 - **D-27: Claude proposes, the owner rules.** Claude writes the classification with evidence: the file:line, the gate or check that stopped the run, and whether AVARICE behaved as `docs/system/` documents. The owner confirms it at a checkpoint before any re-run spend, the same pattern as D-04.
 - **D-28: A correct stop is evidence, not a pass.** A run that stopped on a brief defect while AVARICE behaved correctly does not count toward 3 of 3. It is recorded in the exit evidence as live proof that the integrity gates and containment hold. **The relax path from plan 03-49 (`relax` record, relaxed finish judge) is not used for the exit.** Selections `answer-2-in-place` and `amend-unprotected-path` no longer authorize an exit start; only a fresh approval does.
-- **D-29: Stop-loss.** The 25 USD ceiling stays (D-05). Separately, after **2 failed attempts of the same run** from here on, execution stops and returns to the owner before spending again, whatever the classification.
+- **D-29: Stop-loss.** The 25 USD ceiling stays (D-05). Separately, after **2 failed attempts of the same run** from here on, execution stops and returns to the owner before spending again, whatever the classification. **Superseded 2026-11-11 for its counting scope by D-36 to D-39:** the two-failure stop now counts within the current epoch, and a proven, owner-confirmed product defect resets it. The 25 USD ceiling is unchanged.
 - **D-30: Briefs must not change guarded behavior.** No item in an exit brief may change text or behavior that a protected file asserts at the pin (for example a protected e2e spec's literal). Briefs may not put protected paths in their Write list, and containment stays as built: amend refuses protected paths with exit 64.
 - **D-31: The brief-check is a hard pre-authorization gate.** Before the owner's D-04 approval, `brief-check` runs at the pin for every exit brief. Claude writes a per-finding classification file (each finding marked `kept` or `changed`, with the asserting file:line), the shape of `03-49-brief-check-after.json`. The gate fails, and no authorization can be written, while any finding is unclassified or any finding is `changed` and in a protected file or outside the conventions' write set. The owner reviews the classification file at the checkpoint. No new parser that reads "keep" from briefs is built.
 - **D-32: Run 1 is redrafted.** Claude drafts a new run 1 that keeps the shape (independent A, B asks a real user-visible question, C depends on B) and in which C changes nothing a protected file asserts. The owner approves it at the D-04 checkpoint. Runs 2 and 3 (digests `sha256:f0c9395b...` and `sha256:fe8742f4...`) are re-checked through the D-31 gate and redrafted only if they fail it. The exit stays on `~/aa-phan-portfolio-v2` at pin `9f1cd8d` (D-01).
 - **D-33: Spend and order.** The **per-run cap is 4.50 USD** (3 × 4.50 = 13.50, inside the 13.7014 left), applied with `--budget`, which can only lower. **Runs go in the order 2, 3, then 1.** Runs 2 and 3 have never run live, and a product defect means re-running all three, so they go first. Each run starts only after the previous run's outcome is recorded.
 - **D-34: The old run 1 is cancelled and superseded.** The owner cancels `run_01M73RX3RF0ZJETYWVF52WFZ5B` in their own terminal; Claude does not. Its live facts go into the exit record as supplementary evidence, not a pass: A independent and committed, B's exact delegated session resumed under the recorded config directory, G2 passing a resumed unit, the protected-write refusal, and the honest `gaps_found` stop. The halted SUMMARYs of 03-29, 03-42, 03-45, 03-48 and 03-50 are marked superseded and point to the new exit plans. The new exit plans replace 03-30. Plans 03-31 to 03-33 (documentation) stay and depend on the new exit plans.
 - **D-35: Declared checks that were not run are reported, not run.** Status, the review summary and the run's evidence list each check that `execution.checks` declares but the run did not execute because it is neither required nor target, as "not run: not required". This changes no gate. `--json` shapes stay frozen, with optional keys appended only. It lands before the exit runs so they exercise it. `docs/system/checks-and-evidence.md` and `findings.md` record it in the documentation plans. Today `checksToRun` (`src/app/checks.ts:88`) keeps only required and target checks, so `test:e2e` is skipped silently. — **Reversibility:** reversible — a reporting addition with optional keys.
+
+### Stop-loss re-decided, 2026-11-11 (supersede D-29's counting scope)
+
+Background: run 2 failed twice under the replanned exit, and the owner ruled both stops product defects. Attempt 1 (03-57, `run_01M74RNSAHDTSHE8JDEZ5XW6F9`) stopped on a baseline-red `format:check`. Plans 03-61 (scenario R) and 03-62 fixed it. Attempt 2 (03-63, `run_01M75NPTEF7FKDNW8ABQ9Q16WS`) stopped because the check `env` the conventions declare (`VITE_SITE_ORIGIN`) never reached the unit's allowed commands. Plan 03-64 (scenario E) fixed it, and 03-65 recorded `parity: true` for all twelve required checks at pin `9f1cd8d`. Under D-29 as written, the tools refuse a third start of run 2 with exit 75 (`scripts/exit-run-phase3-tools.ts:915` counts failed attempts in any epoch). Phase 3 has spent 11.6610 of 25 USD.
+
+- **D-36: A proven product-defect fix resets the run's counter.** When the owner confirms a stop as a product defect and its fix is proven (D-37), that run's failed-attempt counter returns to 0 and a new epoch begins. The two-failure stop of D-29 still applies within each epoch, whatever the classification, so a brief/harness defect or a repeat of the same failure still counts. The rule caps repeated failure of a fix, not the discovery of new defects. D-26 is unchanged: a product defect still means all three runs must pass again in the new epoch.
+- **D-37: What counts as proven.** All three are required, and none costs anything: (1) an offline scenario that reproduces the live stop, red before the fix and green after it (as scenario R in 03-61 and E in 03-64); (2) the parity check (`exit-run-phase3-tools.ts parity`, 03-65) re-run at the pin with `parity: true` and no problems; (3) the owner's confirmation at a checkpoint that the fix addresses the stop (the D-27 pattern). Claude proposes the reset with the three pieces of evidence, and only the owner's checkpoint reply writes it.
+- **D-38: No count cap on resets.** The only bound beyond D-36's per-epoch stop is the 25 USD Phase 3 ceiling (D-05), which still only an environment variable can lower. Each reset already needs the owner's checkpoint. A new product defect found live counts as the exit doing its job.
+- **D-39: Run 2 resets at a no-spend checkpoint before attempt 3.** The replan adds a no-spend step before 03-57's flow runs again. It re-runs parity at the pin, records the 03-61, 03-64 and 03-65 proof for run 2's two defects, and presents the reset for the owner's confirmation. The tools change with it: the exit-75 stop-loss counts failed attempts only within the current epoch, and a new epoch begins only from a recorded, owner-confirmed reset (D-36, D-37). Tests cover a refused third failure within an epoch, an admitted start after a recorded reset, and a reset refused when any of the three proofs is missing. Run 2's attempt 3 then follows 03-57's flow (D-26, D-27, D-28, D-33). The owner cancels the blocked `run_01M75NPTEF7FKDNW8ABQ9Q16WS` in their own terminal first; Claude never cancels. — **Reversibility:** reversible — an exit-tool rule over evidence entries; no product behavior changes.
 
 ### Work items in the brief
 - **D-06:** A brief declares items in its frontmatter as **`items: [{id, title, dependsOn, size?, model?, acceptance: [...], spec?}]`**. Every acceptance criterion belongs to exactly one item. A brief without `items` compiles to the single item `A`, so Phase 2 briefs and their digests keep working unchanged. — **Reversibility:** costly — the brief format is user-authored input and later briefs depend on it.
@@ -125,6 +134,14 @@ Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45
 - Portfolio pin `9f1cd8d`: `tests/e2e/copy-email.spec.ts` (line 5, the `FALLBACK` literal) and `.avarice/config.json` (protected paths, declared checks), read through `git -C ~/aa-phan-portfolio-v2 show 9f1cd8d:<path>`
 - `src/app/checks.ts:88` (`checksToRun`): the reason declared non-required checks never run (D-35)
 
+### Stop-loss reset (read before replanning run 2, D-36 to D-39)
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-63-SUMMARY.md`: run 2 attempt 2's stop, the defect with file:line, the owner's product-defect ruling, and the halt that sent D-29 back to the owner
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-57-SUMMARY.md` and `03-57-evidence-exit.json`: run 2's attempts 1 and 2, their classifications and the owner's rulings
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-61-SUMMARY.md` (scenario R) and `03-64-SUMMARY.md` (scenario E): the red-to-green repro proof for each defect (D-37 item 1)
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-65-SUMMARY.md` and `03-65-parity.json`: the parity tool and its recorded verdict (D-37 item 2)
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-57-PLAN.md`: run 2's attempt flow, which attempt 3 reuses; `03-58-PLAN.md` to `03-60-PLAN.md`: runs 3 and 1 and the exit record, blocked behind run 2
+- `scripts/exit-run-phase3-tools.ts` (~:41-48 header, ~:757 attempts, ~:903-931 `authorize` refusal, ~:915 the exit-75 rule): where the per-epoch count and the recorded reset land (D-39)
+
 ### Prior phase context
 - `.planning/phases/02-contained-unattended-run-of-one-work-item/02-CONTEXT.md`: D-01..D-19 (clone, supervisor commits, hand-off, checks, baseline, budgets, detach, frozen JSON)
 - `.planning/STATE.md` § Decisions: Phase 2 kernel decisions (lease and fence, transitionRun, blockRun, routeOutcome order, reservation and settlement)
@@ -173,6 +190,8 @@ Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45
 - Spend accounting follows `test/containment/LIVE-CASES.md` style, with a separate Phase 3 ledger file.
 - For the new run 1 (D-32), a candidate C uses B's `copyFallback` on a surface that no protected spec asserts. The planted question in B must stay a genuine user-visible wording choice. The protected e2e spec asserts the toast text itself, not only the constant's name, so any C that shows the new wording in the toast collides whichever option the owner picks.
 - The attempt counter in D-29 starts at zero for each run under the new exit plans. Old run 1's five attempts do not count against the new run 1.
+- Budget fit, not re-decided (2026-11-11): 25 − 11.6610 = 13.3390 USD remain, less than D-33's 3 × 4.50 = 13.50. D-33's 4.50 cap and its order 2, 3, 1 still stand. Real spend so far is 0.15 to 1.1 USD per attempt, so the shortfall matters only if runs spend near their caps. The ledger refuses a start that does not fit (exit 75, D-05). The planner should show the headroom before each start, as 03-63 did, and return to the owner if run 1 would not fit.
+- Run 2's attempt 3 is the first attempt of a new epoch once the D-39 reset is confirmed. Runs 3 and 1 have no attempts yet, so D-26's "all three again" adds nothing beyond the current order.
 
 </specifics>
 
@@ -184,6 +203,7 @@ Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45
 - Running declared non-required checks (for example `test:e2e` with Playwright inside the sandbox) once before `ready_for_review` as non-gating evidence. Phase 3 only reports them as not run (D-35).
 - A structured `Keep` section in briefs that `brief-check` reads to filter kept names. Phase 3 uses a reviewed classification file instead (D-31).
 - Letting a brief or an amendment write protected test paths. Rejected for the exit; it would be a containment change (D-30).
+- A fake-host rehearsal of a whole exit brief, from start to its planted pause, on a scratch copy of the pin, as a further pre-spend guard against other unit-vs-gate gaps. Not required for a reset (D-37). Raised 2026-11-11, not discussed.
 - Open items carried from STATE.md that this discussion did not settle: the Node 26.x support statement; validating `CLAUDE_CONFIG_DIR` against the `~/.claude-edu` / `~/.claude` split; backlog 999.4 and 999.5 owner decisions.
 
 </deferred>
@@ -191,4 +211,4 @@ Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45
 ---
 
 *Phase: 03-decisions-independent-work-and-amendments*
-*Context gathered: 2026-11-08; exit criteria updated 2026-11-10*
+*Context gathered: 2026-11-08; exit criteria updated 2026-11-10; stop-loss re-decided 2026-11-11*
