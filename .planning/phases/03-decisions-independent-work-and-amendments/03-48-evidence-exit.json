@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "plan": "03-48",
+  "plan": "03-50",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-10T22:51:25.151Z",
+  "updatedAt": "2026-11-11T01:08:36.137Z",
   "runs": [
     {
       "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
@@ -11,10 +11,10 @@
       "reason": "decision",
       "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
       "branch": "avarice/run_01M73RX3RF0ZJETYWVF52WFZ5B",
-      "updatedAt": "2026-11-10T22:51:22.263Z",
+      "updatedAt": "2026-11-11T01:05:39.307Z",
       "commit": null,
       "clean": false,
-      "costUsd": 1.062910355,
+      "costUsd": 1.1691696500000002,
       "hostConfigDir": {
         "claudeConfigDir": "/Users/aphan/.claude-edu",
         "source": "CLAUDE_CONFIG_DIR"
@@ -22,13 +22,13 @@
       "budgets": [
         {
           "name": "costUsd",
-          "used": 1.062910355,
+          "used": 1.1691696500000002,
           "reserved": 0,
           "limit": 4.95
         },
         {
           "name": "invocations",
-          "used": 4,
+          "used": 5,
           "reserved": 0,
           "limit": 7
         },
@@ -46,7 +46,7 @@
         },
         {
           "name": "wallClockMs",
-          "used": 791574,
+          "used": 797102,
           "reserved": 0,
           "limit": 7200000
         }
@@ -78,7 +78,7 @@
           "dependsOn": [
             "B"
           ],
-          "attempts": 1,
+          "attempts": 2,
           "gsdSession": "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89"
         }
       ],
@@ -118,6 +118,15 @@
           "outcome": "blocked:decision",
           "startedAt": "2026-11-10T22:46:42.059Z",
           "endedAt": "2026-11-10T22:51:22.261Z"
+        },
+        {
+          "attemptId": "att_01M74270FAH4D0VQV7QS5TQFPD",
+          "ordinal": 5,
+          "reason": "resume",
+          "itemId": "C",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-11T01:05:32.650Z",
+          "endedAt": "2026-11-11T01:05:39.306Z"
         }
       ],
       "decisions": [
@@ -170,7 +179,7 @@
         {
           "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
           "class": "acceptance",
-          "state": "open",
+          "state": "answered",
           "urgency": "blocking",
           "contractVersion": 1,
           "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
@@ -198,10 +207,10 @@
           "evidenceRefs": [],
           "authorizedDefault": null,
           "openedAt": "2026-11-10T22:51:22.261Z",
-          "answeredAt": null,
-          "answeredBy": null,
-          "answer": null,
-          "answerChannel": null,
+          "answeredAt": "2026-11-11T01:05:32.177Z",
+          "answeredBy": "owner:aphan",
+          "answer": "2",
+          "answerChannel": "terminal",
           "supersedes": null,
           "origin": {
             "origin": "pause",
@@ -211,6 +220,45 @@
             "rules": null
           },
           "parkAttemptId": "att_01M73T8S4BD9D8E4HAQS7RVX5M"
+        },
+        {
+          "decisionId": "dec_01M74276ZA17K36XWT9GJHRWDW",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "C"
+          ],
+          "issue": "gate G2 failed: GSD VERIFICATION status is gaps_found, not passed",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "text",
+              "kind": "text",
+              "label": "free text"
+            }
+          ],
+          "consequences": {
+            "text": "item C resumes with your text answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-11T01:05:39.306Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "G2:gsd-verification",
+            "signalKind": "pause",
+            "pauseSignal": null,
+            "gate": "G2",
+            "rules": "gsd-verification"
+          },
+          "parkAttemptId": "att_01M74270FAH4D0VQV7QS5TQFPD"
         }
       ],
       "notifications": [
@@ -239,6 +287,19 @@
           "lastError": null,
           "createdAt": "2026-11-10T22:51:22.262Z",
           "deliveredAt": "2026-11-10T22:51:22.357Z"
+        },
+        {
+          "notificationId": "ntf_01M74276ZBTDQHP2DXMW6FXBGS",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M74276ZA17K36XWT9GJHRWDW"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-11T01:05:39.306Z",
+          "deliveredAt": "2026-11-11T01:05:39.404Z"
         }
       ],
       "gates": [
@@ -276,6 +337,25 @@
           "passed": true,
           "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c",
           "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "C",
+          "passed": true,
+          "revision": "tree:sha256:ab054ce70ef6cc4070f4287df907dcaabd0b3cd4765aab6de7d4f59594c6119b",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "C",
+          "passed": false,
+          "revision": "tree:sha256:ab054ce70ef6cc4070f4287df907dcaabd0b3cd4765aab6de7d4f59594c6119b",
+          "failures": [
+            {
+              "detail": "GSD VERIFICATION status is gaps_found, not passed",
+              "rule": "gsd-verification"
+            }
+          ]
         }
       ],
       "requiredChecks": [
@@ -1173,6 +1253,25 @@
             "Edit": 5,
             "Glob": 1
           }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M74270FAH4D0VQV7QS5TQFPD",
+          "itemId": "C",
+          "model": "haiku",
+          "invocationId": "inv_01M74270VR7Q0KHK0TJB3NKG0Q",
+          "requestedSession": "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89",
+          "answeredDecisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.10625929499999999,
+          "costChargedUsd": 0.10625929499999999,
+          "transcript": "sha256:cc242bbc086948f0a6883c4f8de922865f9b35fa31d552b07a39767508047739",
+          "initSessions": [
+            "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89"
+          ],
+          "toolCounts": {}
         }
       ],
       "toolCounts": {
@@ -1191,10 +1290,10 @@
         "state": "blocked_on_decision",
         "reason": "decision",
         "lastCheckpoint": {
-          "seq": 32,
+          "seq": 41,
           "nextAction": "park",
           "revision": "0db1f455e3ee4ea3e96fa7c67ddca3d2880653e5",
-          "at": "2026-11-10T22:51:21.993Z"
+          "at": "2026-11-11T01:05:39.076Z"
         },
         "branch": "avarice/run_01M73RX3RF0ZJETYWVF52WFZ5B",
         "commit": null,
@@ -1295,24 +1394,24 @@
           {
             "gate": "G1",
             "passed": true,
-            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c"
+            "revision": "tree:sha256:ab054ce70ef6cc4070f4287df907dcaabd0b3cd4765aab6de7d4f59594c6119b"
           },
           {
             "gate": "G2",
-            "passed": true,
-            "revision": "tree:sha256:d41f61cfc3519467e536e5762890f345725d6b52b27fcf88916378b9bb858b8c"
+            "passed": false,
+            "revision": "tree:sha256:ab054ce70ef6cc4070f4287df907dcaabd0b3cd4765aab6de7d4f59594c6119b"
           }
         ],
         "openDecisions": 1,
         "budgets": [
           {
             "name": "costUsd",
-            "used": 1.062910355,
+            "used": 1.1691696500000002,
             "limit": 4.95
           },
           {
             "name": "invocations",
-            "used": 4,
+            "used": 5,
             "limit": 7
           },
           {
@@ -1327,7 +1426,7 @@
           },
           {
             "name": "wallClockMs",
-            "used": 791574,
+            "used": 797102,
             "limit": 7200000
           }
         ],
@@ -1368,7 +1467,7 @@
             "dependsOn": [
               "B"
             ],
-            "attempts": 1
+            "attempts": 2
           }
         ],
         "decisions": [
@@ -1386,6 +1485,16 @@
           {
             "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
             "class": "acceptance",
+            "state": "answered",
+            "affectedItems": [
+              "C"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M74276ZA17K36XWT9GJHRWDW",
+            "class": "acceptance",
             "state": "open",
             "affectedItems": [
               "C"
@@ -1395,7 +1504,7 @@
           }
         ],
         "notifications": {
-          "delivered": 2,
+          "delivered": 3,
           "pending": 0,
           "held": 0,
           "failed": 0,
@@ -1484,7 +1593,7 @@
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "after": {
-          "takenAt": "2026-11-10T22:51:25.092Z",
+          "takenAt": "2026-11-11T01:08:36.079Z",
           "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
           "branch": "gsd/phase-02-deployed-themed-skeleton",
           "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
@@ -1532,25 +1641,26 @@
       },
       "stopOk": true,
       "spend": {
-        "recordedUsd": 0.17728218,
-        "appendedUsd": 0.8856281750000001,
+        "recordedUsd": 1.062910355,
+        "appendedUsd": 0.10625929500000009,
         "line": {
-          "plan": "03-48",
+          "plan": "03-50",
           "case": "exit-p3-run1-copy-fallback-run_01M73RX3RF0ZJETYWVF52WFZ5B-finish",
-          "costUsd": 0.8856281750000001,
+          "costUsd": 0.10625929500000009,
           "claudeVersion": "2.1.319",
-          "at": "2026-11-10T22:51:25.150Z"
+          "at": "2026-11-11T01:08:36.136Z"
         }
       },
-      "phase3SpentUsd": 11.192320529999998,
+      "phase3SpentUsd": 11.298579824999997,
       "spendGuardAfterStage": {
-        "remainingRunCapUsd": 3.887089645,
+        "remainingRunCapUsd": 3.78083035,
         "ceilingUsd": 25,
         "fits": true
       },
       "problems": [
         "the run ended blocked_on_decision, not ready_for_review (D-03)",
-        "the run stopped again on decision dec_01M73THARNM0VENR94QDX62BJ3 (acceptance, origin pause) after the owner's answer",
+        "the run stopped again on decision dec_01M74276ZA17K36XWT9GJHRWDW (acceptance, origin G2:gsd-verification) after the owner's answer",
+        "2 decision(s) are answered, not one",
         "item C is blocked_on_decision, not done",
         "item C has no commit step",
         "the final evidence was not taken on a clean tree",
@@ -1604,16 +1714,16 @@
         }
       },
       "newDecision": {
-        "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+        "decisionId": "dec_01M74276ZA17K36XWT9GJHRWDW",
         "class": "acceptance",
         "origin": {
-          "origin": "pause",
+          "origin": "G2:gsd-verification",
           "signalKind": "pause",
-          "pauseSignal": "numbered-choice",
-          "gate": null,
-          "rules": null
+          "pauseSignal": null,
+          "gate": "G2",
+          "rules": "gsd-verification"
         },
-        "issue": "AC4 is met in the source, but the run's gate is not clean: the e2e spec still expects the old fallback sentence, and that file is outside the allowed paths. The verifier's status is `gaps_found`.\n\n**What changed (uncommitted, for the supervisor):**\n- `src/components/ui/useCopyEmail.ts`: the failure branch now shows `copyFallback(address)`. The `openMail` call and the success branch are unchanged.\n- `src/lib/copy.ts`: `COPY_FALLBACK` is removed. `COPY_SUCCESS` and `copyFallback` are unchanged.\n- `tests/unit/copy.test.ts`: the `COPY_FALLBACK` import and assertion are removed. The `it` title is renamed to `'uses the contracted success wording'`. The existing `copyFallback` test still pins the U+2019 sentence.\n\n**Checks:** `npm run typecheck` passes, `npm run lint` passes (no output, so the exit code wasn't displayed), prettier passes, and `tests/unit/copy.test.ts` passes 7 of 7.\n\n**Not verified:**\n- A repo-wide search for `COPY_FALLBACK` was not possible here. Grep isn't available and the",
+        "issue": "gate G2 failed: GSD VERIFICATION status is gaps_found, not passed",
         "affectedItems": [
           "C"
         ]
@@ -1625,8 +1735,13 @@
       "finalState": "blocked_on_decision",
       "resumed": true,
       "branchRefCommit": null,
-      "finishedAt": "2026-11-10T22:51:25.150Z",
-      "passed": false
+      "finishedAt": "2026-11-11T01:08:36.136Z",
+      "passed": false,
+      "contract": {
+        "version": 1,
+        "authorizedBy": "cli:start",
+        "reason": null
+      }
     }
   ],
   "supersedes": {
