@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "plan": "03-57",
+  "plan": "03-63",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-11T07:44:14.789Z",
+  "updatedAt": "2026-11-11T16:10:02.817Z",
   "runs": [
     {
       "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
@@ -959,6 +959,950 @@
           "overrides": "brief-harness-defect",
           "ref": "The owner reply at the 03-57 Task 3 decision checkpoint: product-defect (D-26, D-27: ruled a product defect, overriding the brief-harness-defect proposal)",
           "at": "2026-11-11T15:20:24.680Z"
+        }
+      }
+    },
+    {
+      "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+      "title": "Graduation label for the education entry",
+      "state": "blocked_on_decision",
+      "reason": "decision",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+      "updatedAt": "2026-11-11T16:10:02.094Z",
+      "commit": null,
+      "clean": false,
+      "costUsd": 0.14515885500000003,
+      "hostConfigDir": {
+        "claudeConfigDir": "/Users/aphan/.claude-edu",
+        "source": "CLAUDE_CONFIG_DIR"
+      },
+      "contract": {
+        "version": 1,
+        "authorizedBy": "cli:start",
+        "reason": null
+      },
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 0.14515885500000003,
+          "reserved": 0,
+          "limit": 4.5
+        },
+        {
+          "name": "invocations",
+          "used": 2,
+          "reserved": 0,
+          "limit": 5
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "reserved": 0,
+          "limit": 20
+        },
+        {
+          "name": "toolCalls",
+          "used": 44,
+          "reserved": 0,
+          "limit": 800
+        },
+        {
+          "name": "wallClockMs",
+          "used": 236562,
+          "reserved": 0,
+          "limit": 7200000
+        }
+      ],
+      "items": [
+        {
+          "itemId": "A",
+          "state": "blocked_on_decision",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "598203c8-5064-4c6c-8aad-0ab2d8cf36ef"
+        },
+        {
+          "itemId": "B",
+          "state": "blocked_on_decision",
+          "size": "medium",
+          "model": "sonnet",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "fc7a32f1-472a-47b6-9595-e696fcd85030"
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M75NQ5AG2HAYGFZDE6CTFPSW",
+          "ordinal": 1,
+          "reason": "initial",
+          "itemId": "A",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-11T16:05:39.280Z",
+          "endedAt": "2026-11-11T16:09:56.243Z"
+        },
+        {
+          "attemptId": "att_01M75NZ0H31PEERG85JZTSWZ63",
+          "ordinal": 2,
+          "reason": "initial",
+          "itemId": "B",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-11T16:09:56.515Z",
+          "endedAt": "2026-11-11T16:10:02.093Z"
+        }
+      ],
+      "decisions": [
+        {
+          "decisionId": "dec_01M75NZ08K3RYRX1V6HFX7N6FA",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "A"
+          ],
+          "issue": "The quick task is implemented and verified. The verifier's status is `human_needed`, because two checks can't run in this sandbox without `VITE_SITE_ORIGIN`. Nothing is committed; the supervisor will commit.\n\n**What changed**\n- `src/lib/theme.ts` line 35: `isTheme` is now exported. Signature and body are unchanged.\n- `tests/unit/theme.test.ts`: `isTheme` added to the import, and a new test `isTheme accepts only light and dark` added. It checks `'light'` and `'dark'` are accepted and `'purple'`, `'Dark'`, `''`, `null`, `undefined` and `1` are rejected.\n- Nothing in `src/content`, rendered dates, `dates.ts` or `dates.test.ts` was touched.\n\n**Checks**\n- Pass: the theme test file (14/14), oxlint, prettier on the two edited files, typecheck, lint, the full unit suite (409 tests), and check:case.\n- Fail, pre-existing: `format:check` reports `index.html` only, which this change did not touch.\n- Fail, environmental: `npm run build` and `npm run check:meta` both stop at config load with `VITE_S",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "text",
+              "kind": "text",
+              "label": "free text"
+            }
+          ],
+          "consequences": {
+            "text": "item A resumes with your text answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-11T16:09:56.243Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "verification-human-needed",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M75NQ5AG2HAYGFZDE6CTFPSW"
+        },
+        {
+          "decisionId": "dec_01M75NZ5ZDY47BAM3BYNH1FE07",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "B"
+          ],
+          "issue": "I haven't started the workflow, because the wording for the end month onward is your decision and the instructions say to ask before writing it. Before the end month, `graduationLabel` will return `Expected <Month YYYY>` using `monthYear(end)`. For example, `graduationLabel(\"2026-12\", \"2026-11\")` returns `Expected December 2026`.\n\nOnce you choose, I'll run the planner, plan-checker, executor and verifier. The edits will stay inside `src/lib/dates.ts` and `tests/unit/dates.test.ts`, with a new `describe('graduationLabel')` block in the test file.\n\nWhich wording should `graduationLabel` return from the end month on?\n1. `<Month YYYY>` (for example `December 2026`)\n2. `Graduated <Month YYYY>` (for example `Graduated December 2026`)",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "`<Month YYYY>` (for example `December 2026`)"
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "`Graduated <Month YYYY>` (for example `Graduated December 2026`)"
+            }
+          ],
+          "consequences": {
+            "1": "item B resumes with this answer",
+            "2": "item B resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-11T16:10:02.093Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M75NZ0H31PEERG85JZTSWZ63"
+        }
+      ],
+      "notifications": [
+        {
+          "notificationId": "ntf_01M75NZ08MNDXTDR517R8PECQM",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M75NZ08K3RYRX1V6HFX7N6FA"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-11T16:09:56.244Z",
+          "deliveredAt": "2026-11-11T16:10:02.215Z"
+        },
+        {
+          "notificationId": "ntf_01M75NZ5ZEV0D4PBFFV2D5AZ2K",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M75NZ5ZDY47BAM3BYNH1FE07"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-11T16:10:02.094Z",
+          "deliveredAt": "2026-11-11T16:10:02.215Z"
+        }
+      ],
+      "gates": [
+        {
+          "gate": "G0",
+          "workItem": null,
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:isTheme accepts only light and dark"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test",
+            "test:graduationLabel"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "decision:graduation-wording",
+            "check:test",
+            "check:typecheck"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        }
+      ],
+      "commits": [],
+      "invocations": [
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M75NQ5AG2HAYGFZDE6CTFPSW",
+          "itemId": "A",
+          "model": "haiku",
+          "invocationId": "inv_01M75NQXJ2CR0TFC2Y1TYF83GR",
+          "requestedSession": "598203c8-5064-4c6c-8aad-0ab2d8cf36ef",
+          "answeredDecisionId": null,
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.07312565500000001,
+          "costChargedUsd": 0.07312565500000001,
+          "transcript": "sha256:f39a54a0e9480e451d0636d4b968ea1c3576f83e78e6d4adf608eab65b64df46",
+          "initSessions": [
+            "598203c8-5064-4c6c-8aad-0ab2d8cf36ef",
+            "598203c8-5064-4c6c-8aad-0ab2d8cf36ef",
+            "598203c8-5064-4c6c-8aad-0ab2d8cf36ef",
+            "598203c8-5064-4c6c-8aad-0ab2d8cf36ef",
+            "598203c8-5064-4c6c-8aad-0ab2d8cf36ef"
+          ],
+          "toolCounts": {
+            "Bash": 24,
+            "Read": 15,
+            "Agent": 4,
+            "Grep": 2,
+            "Write": 3,
+            "Edit": 3
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M75NZ0H31PEERG85JZTSWZ63",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M75NZ0N14YF8VBYCZNSRZYPA",
+          "requestedSession": "fc7a32f1-472a-47b6-9595-e696fcd85030",
+          "answeredDecisionId": null,
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.0720332,
+          "costChargedUsd": 0.0720332,
+          "transcript": "sha256:be34ecb6262379104ed6f18693dc8ca2428296ef00dadc726be306a77d044682",
+          "initSessions": [
+            "fc7a32f1-472a-47b6-9595-e696fcd85030"
+          ],
+          "toolCounts": {}
+        }
+      ],
+      "toolCounts": {
+        "Bash": 24,
+        "Read": 15,
+        "Agent": 4,
+        "Grep": 2,
+        "Write": 3,
+        "Edit": 3
+      },
+      "askUserQuestion": 0,
+      "statusView": {
+        "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+        "title": "Graduation label for the education entry",
+        "state": "blocked_on_decision",
+        "reason": "decision",
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "park",
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "at": "2026-11-11T16:10:01.881Z"
+        },
+        "branch": "avarice/run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+        "commit": null,
+        "clean": false,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          }
+        ],
+        "openDecisions": 2,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0.14515885500000003,
+            "limit": 4.5
+          },
+          {
+            "name": "invocations",
+            "used": 2,
+            "limit": 5
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 20
+          },
+          {
+            "name": "toolCalls",
+            "used": 44,
+            "limit": 800
+          },
+          {
+            "name": "wallClockMs",
+            "used": 236562,
+            "limit": 7200000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "p3-run2-graduation-label.md",
+            "revision": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "size": "small",
+            "model": "haiku",
+            "dependsOn": [],
+            "attempts": 1
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          }
+        ],
+        "decisions": [
+          {
+            "decisionId": "dec_01M75NZ08K3RYRX1V6HFX7N6FA",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "A"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M75NZ5ZDY47BAM3BYNH1FE07",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "B"
+            ],
+            "supersedes": null,
+            "successor": null
+          }
+        ],
+        "notifications": {
+          "delivered": 2,
+          "pending": 0,
+          "held": 0,
+          "failed": 0,
+          "lastError": null
+        },
+        "checksNotRun": [
+          {
+            "name": "test:e2e",
+            "reason": "not required"
+          }
+        ]
+      },
+      "checksNotRunExpected": [
+        "test:e2e"
+      ],
+      "brief": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "briefDigest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "run": "run2",
+      "attempt": 2,
+      "expects": "amend-stale",
+      "plan": "03-63",
+      "host": {
+        "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+        "claudeVersion": "2.1.319",
+        "pinnedBy": "03-56-exit-authorization.json",
+        "liveAdmitVariableSet": false
+      },
+      "perRunCapUsd": 4.5,
+      "startExit": 3,
+      "startedAt": "2026-11-11T16:05:27Z",
+      "startStdoutTail": "run run_01M75NPTEF7FKDNW8ABQ9Q16WS: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: Graduation label for the education entry\nacceptance: 3 criteria\nwrite paths: src/lib/theme.ts, tests/unit/theme.test.ts, src/lib/dates.ts, tests/unit/dates.test.ts\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 4.50 USD per run, 2.00 USD per invocation; 120 min, 5 invocations, 800 tool calls\nindex: used (2 files, 0 symbols)\nitem A: small, haiku (from size); files src/lib/theme.ts (derived)\nitem B: medium, sonnet (from size); files src/lib/dates.ts (derived)\ncontract: routine v1 sha256:fd857a78b22a74f6621ce8f98617b1a17a29874ff95a8695b3789187dcceabae\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M75NPTEF7FKDNW8ABQ9Q16WS/contract-v1.json\nrun run_01M75NPTEF7FKDNW8ABQ9Q16WS: blocked_on_decision (decision)\n",
+      "checkoutBeforeSnapshot": {
+        "schema": 1,
+        "takenAt": "2026-11-11T16:05:27.294Z",
+        "repo": "/Users/aphan/aa-phan-portfolio-v2",
+        "digest": {
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          }
+        },
+        "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+        "refs": [
+          {
+            "ref": "refs/heads/avarice/run_01M6SE68ZTSJPBARR0DVKDKAMR",
+            "object": "0c4b58dffe2864f1521216fc87e7b7a0f0e3ece4"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+            "object": "c093ca053c949863220e150c4f98168d439e9ac5"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+            "object": "54b250016cd436fd2b340795b13c2cfadad6599f"
+          },
+          {
+            "ref": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+            "object": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          },
+          {
+            "ref": "refs/heads/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          },
+          {
+            "ref": "refs/remotes/origin/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          }
+        ]
+      },
+      "checkout": {
+        "before": {
+          "takenAt": "2026-11-11T16:05:27.294Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "after": {
+          "takenAt": "2026-11-11T16:10:02.622Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "equal": true,
+        "newRefs": [],
+        "removedOrChangedRefs": [],
+        "newRefObjects": []
+      },
+      "atPause": {
+        "at": "2026-11-11T16:10:02.815Z",
+        "state": "blocked_on_decision",
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "598203c8-5064-4c6c-8aad-0ab2d8cf36ef"
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "fc7a32f1-472a-47b6-9595-e696fcd85030"
+          }
+        ]
+      },
+      "stopOk": false,
+      "spend": {
+        "recordedUsd": 0,
+        "appendedUsd": 0.14515885500000003,
+        "line": {
+          "plan": "03-63",
+          "case": "exit-p3-run2-graduation-label-run_01M75NPTEF7FKDNW8ABQ9Q16WS-start",
+          "costUsd": 0.14515885500000003,
+          "claudeVersion": "2.1.319",
+          "at": "2026-11-11T16:10:02.816Z"
+        }
+      },
+      "phase3SpentUsd": 11.661008504999998,
+      "spendGuardAfterStage": {
+        "remainingRunCapUsd": 4.354841145,
+        "ceilingUsd": 25,
+        "fits": true
+      },
+      "problems": [
+        "the run has 2 decision(s), 2 open; D-02 wants exactly one, open",
+        "the decision lists 0 choice option(s), not the two wordings",
+        "item B is independent of the decision and is blocked_on_decision, not done",
+        "the run has 2 notification row(s), not one"
+      ],
+      "classification": {
+        "proposed": {
+          "by": "claude",
+          "class": "product-defect",
+          "stoppedBy": "item A's own VERIFICATION status human_needed (pause signal verification-human-needed), not a gate: the unit and its verifier ran build and check:meta as the prompt lists them (npm run build, npm run check:meta) in the unit's shell, which has no VITE_SITE_ORIGIN, so both stopped at config load; the supervisor runs those two checks with that variable (the conventions' env) and recorded both passed. format:check was reported pre-existing (plan 03-61's fix held).",
+          "at": [
+            "src/domain/run-contract.ts:635",
+            "src/app/run-gsd-config.ts:143",
+            "src/domain/outcome.ts:116",
+            "src/app/run-stages/item.ts:390",
+            "src/app/checks.ts:216"
+          ],
+          "docsSystem": {
+            "conformant": true,
+            "ref": "docs/system/runs.md"
+          },
+          "summary": "Run 2's attempt 2 stopped blocked_on_decision on two open pause decisions (A: dec_01M75NZ08K3RYRX1V6HFX7N6FA, verification-human-needed; B: dec_01M75NZ5ZDY47BAM3BYNH1FE07, the planted numbered choice), not the one the brief expects: item A not done and two notifications queued. The 03-61 fix held for format:check (the unit reported it as pre-existing and not blocking). A second cause surfaced: the unit's allowed command list is built from each check's argv alone (run-contract.ts:635), so the env the conventions give build and check:meta (VITE_SITE_ORIGIN) reaches only the supervisor's own check runs (checks.ts:216), never the unit's shell; the unit told to run 'npm run build' exactly as written cannot make it pass, and its verifier reported human_needed. docs/system/runs.md (The unit) and checks-and-evidence.md do not say the unit's commands carry the check env, so AVARICE behaved as documented; this is the same kind of gap the owner ruled a product defect on attempt 1 (the unit is not told what the gate already knows). Alternative reading for the owner: brief-harness-defect, if the owner holds that the conventions should not require build/check:meta env the unit cannot supply, but the env is declared by the owner's own conventions and the unit has no permitted way to set it. Evidence: the unit's decision text, build and check:meta rows passed in the supervisor's required checks, 0.1452 USD spent.",
+          "proposedAt": "2026-11-11T16:12:45.766Z"
         }
       }
     }
