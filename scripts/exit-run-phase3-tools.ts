@@ -66,6 +66,13 @@
 //       Copies a superseded run's facts from OTHER into F's top-level `supplementary` list, marked `countsToward3of3: false` (D-34). Exit 2, the file byte-identical, for a run
 //       that is an entry of F, a run OTHER does not hold, a second supplement of the same run, an empty note or a file that is not an evidence file.
 //
+// Plan 03-65 adds the pre-spend parity guard (scripts/exit-parity.ts; it starts no model host, installs nothing and never writes to the owner's checkout):
+//   parity --source REPO --config F --brief B [--brief B ...] --out F [--pin SHA] [--node-modules-from DIR] [--gsd-core-bin DIR] [--with-pre-fix]
+//          [--anchor-evidence F --anchor-run-id R] [--keep]
+//       Runs every required and target check the unit is told to run, in fresh temporary clones of the pin, once exactly as the unit would run it (the contract's listed command,
+//       judged by the real hook, under the host's environment) and once as the supervisor runs it, and writes a JSON report whose `parity` is true only when every check is listed,
+//       admitted by the hook and gives the same status in both forms. Exit 0 then, 1 on a mismatch or a problem, 2 (nothing written) on a refused input.
+//
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
 //       Prints one scalar of the owner's authorization (host.claudeBin, perRunCapUsd, ceilingUsd).
@@ -109,6 +116,7 @@ import type { Conventions } from '../src/domain/conventions.ts';
 import { matchesAny } from '../src/domain/glob.ts';
 import { compileRunContract } from '../src/domain/run-contract.ts';
 import type { RunContract } from '../src/domain/run-contract.ts';
+import { parityCommand } from './exit-parity.ts';
 import { compositeOf, preflight, snapshot } from './exit-run-phase2-tools.ts';
 
 type Json = Record<string, unknown>;
@@ -2675,6 +2683,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'brief-check') return briefCheck(rest);
   if (command === 'brief-gate') return briefGate(rest);
   if (command === 'write-authorization') return writeAuthorizationCommand(rest);
+  if (command === 'parity') {
+    const { named, many, bools } = flags(rest);
+    return parityCommand(named, many, bools);
+  }
   if (command === 'preflight') {
     const { named } = flags(rest);
     if (named['repo'] === undefined || named['config'] === undefined) {
@@ -2685,7 +2697,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify | silence | verdict | supplement) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | parity | preflight | field | authorize | snapshot | evidence | relax | classify | silence | verdict | supplement) ...');
   return 2;
 }
 

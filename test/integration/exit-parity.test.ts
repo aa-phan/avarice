@@ -127,7 +127,7 @@ const evidenceFile = (f: Fixture, runId: string, rows: Record<string, string>): 
 describe('fixture B: a check that needs its declared environment agrees in both forms', () => {
   const f = fixture(CONVENTIONS_B);
   const before = checkoutFacts(f.repo);
-  const ran = parity(f, ['--keep']);
+  const ran = parity(f);
   const report = ran.report as ParityResult;
 
   it('exits 0 and writes a report with parity true and no problem', () => {
