@@ -530,13 +530,13 @@ describe('exit evidence: the per-item prompt scope of a compiled brief (plan 03-
   });
 });
 
-describe('exit-run-phase3.sh: the default evidence file of the repeated exit (plan 03-41, plan 03-44)', () => {
+describe('exit-run-phase3.sh: the default evidence file of the replanned exit (plan 03-54; plans 03-41 and 03-44 introduced the variable)', () => {
   const script = readFileSync(join(ROOT, 'scripts', 'exit-run-phase3.sh'), 'utf8');
-  it('defaults to 03-48-evidence-exit.json; 03-29, 03-42 and 03-45 are named only as history in the header', () => {
-    assert.match(script, /^EVID_DEFAULT=.*03-48-evidence-exit\.json"$/m);
-    assert.match(script, /^\s*export AVARICE_PHASE3_PLAN="\$\{AVARICE_PHASE3_PLAN:-03-42\}"$/m);
+  it('defaults to 03-57-evidence-exit.json and plan 03-57; 03-29, 03-42, 03-45 and 03-48 are named only as history in the header', () => {
+    assert.match(script, /^EVID_DEFAULT=.*03-57-evidence-exit\.json"$/m);
+    assert.match(script, /^\s*export AVARICE_PHASE3_PLAN="\$\{AVARICE_PHASE3_PLAN:-03-57\}"$/m);
     const lines = script.split('\n');
-    for (const history of ['03-29-evidence-exit.json', '03-42-evidence-exit.json', '03-45-evidence-exit.json']) {
+    for (const history of ['03-29-evidence-exit.json', '03-42-evidence-exit.json', '03-45-evidence-exit.json', '03-48-evidence-exit.json']) {
       assert.equal(lines.filter((l) => !l.startsWith('#') && l.includes(history)).length, 0, history);
       assert.ok(lines.some((l) => l.startsWith('#') && l.includes(history)), history);
     }
@@ -2167,5 +2167,226 @@ describe('exit evidence: the finish stage records the expected not-run list besi
     const problems = entry['problems'] as string[];
     assert.equal(problems.some((p) => p.includes('D-35')), false, problems.join(' | '));
     assert.equal(problems.some((p) => p.includes('only run 2 expects an amendment')), false, problems.join(' | '));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-54 Task 2: run 3's silence. A failed banner, a failed digest and the passing of time are not an answer (AUT-4); the decision stays open and listed (AUT-6, SC2).
+// The new exports are read through casts so a missing one fails its own case and not the loading of the file.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe("exit evidence: judgeSilence judges run 3's silence from the rows the owner's ledger holds (plan 03-54; SC2, AUT-4, AUT-6, T-03-136)", () => {
+  const judgeSilence = (facts: Json): string[] => (exitTools as unknown as { judgeSilence: (f: Json) => string[] }).judgeSilence(facts);
+  const banner = (over: Json = {}): Json => ({ notificationId: 'ntf_B1', kind: 'decisions', state: 'failed', lastError: 'osascript-missing', attempts: 3, ...over });
+  const digestRow = (over: Json = {}): Json => ({ notificationId: 'ntf_D1', kind: 'digest', state: 'failed', lastError: 'osascript-missing', attempts: 3, createdAt: '2026-11-10T12:30:00.000Z', ...over });
+  const silent = (over: Json = {}): Json => ({
+    notifications: [banner()],
+    digestRows: [digestRow()],
+    decision: { decisionId: 'dec_S', state: 'open', answeredAt: null, answeredBy: null, answer: null, answerChannel: null },
+    inboxDecision: { decisionId: 'dec_S', notification: { state: 'failed', attempts: 3, lastError: 'osascript-missing' } },
+    statusState: 'blocked_on_decision',
+    elapsedSeconds: 76,
+    batchWindowMinutes: 1,
+    ...over,
+  });
+
+  it('lists no problem when every blocking banner and the digest failed, the decision is open and unanswered, inbox lists it with a failed banner and status shows it blocked', () => {
+    assert.deepEqual(judgeSilence(silent()), []);
+  });
+
+  it('judges the batch window plus 15 seconds from the block: 75 seconds pass for a one minute window, 74 do not', () => {
+    assert.deepEqual(judgeSilence(silent({ elapsedSeconds: 75 })), []);
+    const early = judgeSilence(silent({ elapsedSeconds: 74 }));
+    assert.equal(early.length, 1, early.join(' | '));
+    assert.match(early[0] as string, /74 s .*75 s|75 s/);
+    assert.equal(judgeSilence(silent({ batchWindowMinutes: 10, elapsedSeconds: 614 })).length, 1);
+    assert.deepEqual(judgeSilence(silent({ batchWindowMinutes: 10, elapsedSeconds: 615 })), []);
+  });
+
+  const refusals: Array<[string, Json, RegExp]> = [
+    ['a delivered banner', { notifications: [banner({ state: 'delivered', lastError: null })] }, /delivered/],
+    ['a pending banner', { notifications: [banner({ state: 'pending', lastError: null, attempts: 0 })] }, /pending/],
+    ['a banner that failed for another reason than the missing osascript', { notifications: [banner({ lastError: 'osascript-failed' })] }, /osascript-failed/],
+    ['no blocking banner row at all', { notifications: [] }, /no blocking banner/],
+    ['a delivered banner among failed ones', { notifications: [banner(), banner({ notificationId: 'ntf_B2', state: 'delivered', lastError: null })] }, /delivered/],
+    ['an answered decision', { decision: { decisionId: 'dec_S', state: 'answered', answeredAt: '2026-11-10T12:31:00.000Z', answeredBy: 'owner:tester', answer: '1', answerChannel: 'terminal' } }, /not open and unanswered/],
+    ['an open decision whose answer columns are not null', { decision: { decisionId: 'dec_S', state: 'open', answeredAt: null, answeredBy: null, answer: '1', answerChannel: null } }, /answer/],
+    ['a decision row that cannot be read', { decision: undefined }, /decision/],
+    ['no digest row', { digestRows: [] }, /no digest row/],
+    ['a digest row that was delivered', { digestRows: [digestRow({ state: 'delivered', lastError: null })] }, /digest/],
+    ['an inbox that does not list the decision', { inboxDecision: undefined }, /inbox does not list/],
+    ['an inbox that shows the banner as delivered', { inboxDecision: { decisionId: 'dec_S', notification: { state: 'delivered', attempts: 1 } } }, /notification state delivered/],
+    ['a run that is no longer blocked on the decision', { statusState: 'ready_for_review' }, /ready_for_review.*blocked_on_decision|blocked_on_decision/],
+  ];
+  for (const [name, over, pattern] of refusals) {
+    it(`lists one problem for ${name}`, () => {
+      const problems = judgeSilence(silent(over));
+      assert.equal(problems.length, 1, problems.join(' | '));
+      assert.match(problems[0] as string, pattern);
+    });
+  }
+
+  it('judges the latest digest row when more than one covers the decision, and only banners of kind decisions as blocking banners', () => {
+    const earlierDelivered = digestRow({ notificationId: 'ntf_D0', state: 'delivered', lastError: null, createdAt: '2026-11-10T11:30:00.000Z' });
+    assert.deepEqual(judgeSilence(silent({ digestRows: [earlierDelivered, digestRow()] })), []);
+    assert.equal(judgeSilence(silent({ digestRows: [digestRow(), { ...earlierDelivered, createdAt: '2026-11-10T13:00:00.000Z' }] })).length, 1);
+    assert.deepEqual(judgeSilence(silent({ notifications: [banner(), { notificationId: 'ntf_R', kind: 'review', state: 'delivered', lastError: null, attempts: 1 }] })), []);
+  });
+});
+
+describe('exit evidence: runSilence waits for the banners to be final and the window to pass, runs the digest once, and answers nothing (plan 03-54; AUT-4)', () => {
+  type Seams = {
+    read: () => Json;
+    digest: () => { exit: number | null; stdout: string; stderr: string };
+    nowMs: () => number;
+    pause: (ms: number) => Promise<void>;
+  };
+  const runSilence = (seams: Seams, options: Json): Promise<{ block: Json; problems: string[] }> =>
+    (exitTools as unknown as { runSilence: (s: Seams, o: Json) => Promise<{ block: Json; problems: string[] }> }).runSilence(seams, options);
+  const BLOCKED_AT = Date.parse('2026-11-10T12:00:00.000Z');
+  const row = (state: string, lastError: string | null): Json => ({ notificationId: 'ntf_B1', kind: 'decisions', state, lastError, attempts: state === 'pending' ? 0 : 3 });
+  const facts = (bannerState: string, digestRows: Json[] = []): Json => ({
+    notifications: [row(bannerState, bannerState === 'failed' ? 'osascript-missing' : null)],
+    digestRows,
+    decision: { decisionId: 'dec_S', state: 'open', openedAt: '2026-11-10T12:00:00.000Z', answeredAt: null, answeredBy: null, answer: null, answerChannel: null },
+    inboxDecision: { decisionId: 'dec_S', notification: { state: bannerState, attempts: 3, lastError: 'osascript-missing' } },
+    statusState: 'blocked_on_decision',
+    batchWindowMinutes: 1,
+  });
+  const failedDigest: Json = { notificationId: 'ntf_D1', kind: 'digest', state: 'failed', lastError: 'osascript-missing', attempts: 3, createdAt: '2026-11-10T12:02:00.000Z' };
+  // A clock the pauses move: every poll advances it by the pause asked for, so no test waits.
+  const harness = (reads: Array<(digested: boolean) => Json>): { seams: Seams; log: string[]; digests: () => number } => {
+    let now = BLOCKED_AT + 5_000;
+    let digested = 0;
+    let n = 0;
+    const log: string[] = [];
+    const seams: Seams = {
+      read: () => {
+        const make = reads[Math.min(n, reads.length - 1)] as (d: boolean) => Json;
+        n += 1;
+        return make(digested > 0);
+      },
+      digest: () => {
+        digested += 1;
+        log.push('digest');
+        return { exit: 70, stdout: '', stderr: 'exit-run: digest failed: the banner was not delivered (osascript-missing)' };
+      },
+      nowMs: () => now,
+      pause: (ms) => {
+        log.push(`pause ${ms}`);
+        now += ms;
+        return Promise.resolve();
+      },
+    };
+    return { seams, log, digests: () => digested };
+  };
+
+  it('polls every 3 seconds until the banner row is final and 75 seconds have passed since the block, runs the digest once, and records the block', async () => {
+    const h = harness([() => facts('pending'), () => facts('pending'), (d) => facts('failed', d ? [failedDigest] : [])]);
+    const { block, problems } = await runSilence(h.seams, { maxWaitMs: 600_000 });
+    assert.deepEqual(problems, []);
+    assert.equal(h.digests(), 1);
+    const pauses = h.log.filter((l) => l.startsWith('pause'));
+    assert.ok(pauses.length >= 2 && pauses.every((p) => p === 'pause 3000'), h.log.join(','));
+    assert.equal(h.log.at(-1), 'digest', 'the digest is the last thing the step does before it reads the rows again');
+    assert.ok(Number(block['elapsedSeconds']) >= 75, String(block['elapsedSeconds']));
+    assert.equal(block['digestExit'], 70);
+    assert.equal(block['decisionOpen'], true);
+    assert.equal(block['answerColumnsNull'], true);
+    assert.equal(block['inboxNotificationState'], 'failed');
+    assert.equal(block['statusState'], 'blocked_on_decision');
+    assert.deepEqual(block['problems'], []);
+    assert.equal((block['digestRow'] as Json)['state'], 'failed');
+    assert.equal((block['notifications'] as Json[]).length, 1);
+    assert.match(String(block['waitedUntil']), /^\d{4}-\d\d-\d\dT/);
+  });
+
+  it('does not run the digest before the window has passed, even when the banner is already final', async () => {
+    const h = harness([() => facts('failed'), () => facts('failed'), (d) => facts('failed', d ? [failedDigest] : [])]);
+    await runSilence(h.seams, { maxWaitMs: 600_000 });
+    const first = h.log.indexOf('digest');
+    assert.ok(first > 0, 'it waited before the digest');
+    assert.ok(h.log.slice(0, first).every((l) => l.startsWith('pause')));
+  });
+
+  it('gives up after the longest wait, still runs the digest once, and lists the banner that never became final as a problem', async () => {
+    const h = harness([() => facts('pending')]);
+    const { block, problems } = await runSilence(h.seams, { maxWaitMs: 12_000 });
+    assert.equal(h.digests(), 1);
+    assert.ok(problems.some((p) => p.includes('pending')), problems.join(' | '));
+    assert.deepEqual(block['problems'], problems);
+    assert.equal(block['decisionOpen'], true, 'it answered nothing');
+  });
+
+  it('records an answered decision as a problem and never calls anything that answers: the seams hold no way to', async () => {
+    const h = harness([(d) => ({ ...facts('failed', d ? [failedDigest] : []), decision: { decisionId: 'dec_S', state: 'answered', openedAt: '2026-11-10T12:00:00.000Z', answeredAt: 'x', answeredBy: 'owner:tester', answer: '1', answerChannel: 'terminal' } })]);
+    const { block, problems } = await runSilence(h.seams, { maxWaitMs: 600_000 });
+    assert.ok(problems.some((p) => p.includes('not open and unanswered')), problems.join(' | '));
+    assert.equal(block['decisionOpen'], false);
+    assert.equal(block['answerColumnsNull'], false);
+    assert.deepEqual(Object.keys(h.seams).sort(), ['digest', 'nowMs', 'pause', 'read']);
+  });
+});
+
+describe('exit evidence: the silence subcommand refuses before it reads any profile (plan 03-54)', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const setup = (entry: Json | undefined): { auth: string; evidence: string; before: string } => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-silence-'));
+    dirs.push(dir);
+    const auth = writeFreshAuthorization(dir);
+    const evidence = join(dir, 'evidence.json');
+    writeFileSync(evidence, `${JSON.stringify({ schema: 1, plan: '03-54', runs: entry === undefined ? [] : [entry] }, null, 2)}\n`);
+    return { auth, evidence, before: sha256Of(evidence) };
+  };
+  const started = (over: Json = {}): Json => ({ runId: 'run_S', run: 'run3', attempt: 1, expects: 'silence', atPause: { at: '2026-11-10T12:00:00Z', state: 'blocked_on_decision', items: [] }, checkoutBeforeSnapshot: { digest: {} }, decisions: [{ decisionId: 'dec_S', state: 'open' }], ...over });
+  // An environment whose profile cannot exist: a refusal that reached the ledger would fail on it, and one that does not never looks.
+  const noProfile = (dir: string): NodeJS.ProcessEnv => ({ ...process.env, AVARICE_DATA_ROOT: join(dir, 'no-data'), AVARICE_CONFIG_HOME: join(dir, 'no-config'), AVARICE_WORK_ROOT: join(dir, 'no-work') });
+
+  it('exits 2 for missing flags, and for an authorization that authorizes nothing', () => {
+    const s = setup(started());
+    assert.equal(runTools(['silence', '--run-id', 'run_S', '--out', s.evidence]).status, 2);
+    const bad = runTools(['silence', '--run-id', 'run_S', '--authorization-file', join(tmpdir(), 'no-such-authorization.json'), '--out', s.evidence]);
+    assert.equal(bad.status, 2, bad.stderr);
+    assert.equal(sha256Of(s.evidence), s.before);
+  });
+
+  const refusals: Array<[string, Json | undefined, RegExp]> = [
+    ['a run the evidence file has no entry for', undefined, /no entry|no start-stage record/],
+    ['an entry that does not expect silence', started({ expects: 'block-resume' }), /expects/],
+    ['an entry that records no expectation', started({ expects: undefined }), /expects/],
+    ['an entry with no start-stage record', { runId: 'run_S', run: 'run3', expects: 'silence' }, /start-stage record/],
+  ];
+  for (const [name, entry, pattern] of refusals) {
+    it(`exits 2 and leaves the evidence file byte-identical for ${name}`, () => {
+      const s = setup(entry);
+      const ran = runTools(['silence', '--run-id', 'run_S', '--authorization-file', s.auth, '--out', s.evidence], noProfile(join(s.evidence, '..')));
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, pattern);
+      assert.equal(sha256Of(s.evidence), s.before);
+    });
+  }
+});
+
+describe('exit-run-phase3.sh --silence (plan 03-54)', () => {
+  const script = join(ROOT, 'scripts', 'exit-run-phase3.sh');
+  it('refuses to spend without the authorization file, exits 2 and starts nothing', () => {
+    const ran = spawnSync('bash', [script, '--silence', 'run_00000000000000000000000000'], { encoding: 'utf8', env: { ...process.env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' } });
+    assert.equal(ran.status, 2, ran.stderr);
+    assert.match(ran.stderr, /refusing to spend without --authorization-file/);
+  });
+
+  it('exits 2 with the usage line when it is given no run ID', () => {
+    const ran = spawnSync('bash', [script, '--silence'], { encoding: 'utf8' });
+    assert.equal(ran.status, 2, ran.stderr);
+    assert.match(ran.stderr, /usage:/);
+  });
+
+  it('names --silence in the usage and in the header', () => {
+    const text = readFileSync(script, 'utf8');
+    assert.match(text, /^# {3}scripts\/exit-run-phase3\.sh --silence RUNID --authorization-file F$/m);
+    assert.match(text, /echo "\s+scripts\/exit-run-phase3\.sh --silence RUNID --authorization-file F/);
   });
 });
