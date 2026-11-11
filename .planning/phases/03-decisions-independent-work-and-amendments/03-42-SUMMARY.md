@@ -2,7 +2,9 @@
 phase: 03-decisions-independent-work-and-amendments
 plan: 42
 subsystem: exit-benchmark
-status: halted
+status: superseded
+superseded_by: ["03-55", "03-56", "03-57", "03-58", "03-59", "03-60"]
+superseded_note: "Marked superseded on 2026-11-10 under D-34: the exit was replanned as plans 03-55 to 03-60, and this halted attempt is kept as evidence."
 tags: [exit-run, portfolio, d-03-stop, resume, claude-config-dir, start-judge]
 
 requires:
@@ -144,3 +146,7 @@ Files exist: `.planning/phases/03-decisions-independent-work-and-amendments/03-4
 ---
 *Phase: 03-decisions-independent-work-and-amendments*
 *Completed: 2026-11-10 (halted at Task 2)*
+
+## Superseded by the replanned exit
+
+This attempt halted at Task 2. The re-discussion classified that stop as a product defect, fixed by plan 03-43 (D-26, D-27). Its live facts stay on record as evidence and do not count toward 3 of 3 (D-28). The exit was replanned under D-26 to D-35 as plans 03-55 to 03-60, with run 1 redrafted (D-32); the owner cancels old run 1 and its facts are kept as supplementary evidence (D-34). This summary's status is `superseded`, so it no longer blocks the documentation plans; the replanned exit's own plans gate them.
