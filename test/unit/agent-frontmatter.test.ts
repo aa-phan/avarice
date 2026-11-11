@@ -8,9 +8,15 @@ import { join } from 'node:path';
 
 import { parseAgentFile } from '../../src/adapters/gsd/agent-frontmatter.ts';
 import { AVARICE_EXECUTOR_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
+import * as agentsJsonModule from '../../src/adapters/gsd/agents-json.ts';
 import { PURPOSE_EXTENSIONS, buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
 import { READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 import { AVARICE_RUN_SHELL_ADDENDUM } from '../../src/domain/run-shell-rules.ts';
+
+// The verifier's closing note (plan 03-61), read through the namespace so a missing export fails the cases that use it and not the load of this file.
+const VERIFIER_ADDENDUM: string = (agentsJsonModule as { AVARICE_VERIFIER_ADDENDUM?: string }).AVARICE_VERIFIER_ADDENDUM ?? '(AVARICE_VERIFIER_ADDENDUM is not exported)';
+const VERIFIER_SENTENCE =
+  'AVARICE run: a required check that the task lists as already failing when the work item began is pre-existing. Report it, and report any failure it shows in a file the task changed; a pre-existing failure alone does not make the status human_needed or gaps_found.';
 
 const MAPPER = `---
 name: gsd-codebase-mapper
@@ -226,8 +232,14 @@ describe('buildAgentsJson', () => {
       const prompt: string = json[name].prompt;
       assert.match(prompt, new RegExp(`You are ${name}\\.`));
       assert.equal(prompt.split(AVARICE_RUN_SHELL_ADDENDUM).length, 2, `${name}: the shell addendum appears once`);
-      const closing = name === 'gsd-executor' ? `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n\n${AVARICE_EXECUTOR_ADDENDUM}\n` : `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n`;
-      assert.equal(prompt.endsWith(closing), true, `${name}: the prompt closes with ${name === 'gsd-executor' ? 'the shell addendum, then the commit addendum' : 'the shell addendum'}`);
+      const closing =
+        name === 'gsd-executor'
+          ? `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n\n${AVARICE_EXECUTOR_ADDENDUM}\n`
+          : name === 'gsd-verifier'
+            ? `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n\n${VERIFIER_ADDENDUM}\n`
+            : `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n`;
+      assert.equal(prompt.endsWith(closing), true, `${name}: the prompt closes with ${name === 'gsd-executor' ? 'the shell addendum, then the commit addendum' : name === 'gsd-verifier' ? 'the shell addendum, then the pre-existing note' : 'the shell addendum'}`);
+      assert.equal(prompt.includes(VERIFIER_SENTENCE), name === 'gsd-verifier', `${name}: the pre-existing note belongs to the verifier alone`);
       assert.equal(prompt.includes(AVARICE_EXECUTOR_ADDENDUM), name === 'gsd-executor', `${name}: the commit addendum belongs to the executor alone`);
     }
     for (const name of ['gsd-codebase-mapper', 'gsd-intel-updater']) {
@@ -235,6 +247,15 @@ describe('buildAgentsJson', () => {
       assert.equal(json[name].prompt.includes(AVARICE_EXECUTOR_ADDENDUM), false, `${name}: no commit addendum`);
     }
     assert.equal(json['gsd-intel-updater'].prompt, 'body of the intel updater', 'an agent outside the run keeps its prompt as the parser reads it');
+  });
+
+  it('writes a verifier note that says a required check the task lists as already failing is pre-existing and alone does not make the status human_needed or gaps_found (plan 03-61)', () => {
+    assert.equal(VERIFIER_ADDENDUM, VERIFIER_SENTENCE);
+    assert.match(VERIFIER_ADDENDUM, /already failing/);
+    assert.match(VERIFIER_ADDENDUM, /is pre-existing/);
+    assert.match(VERIFIER_ADDENDUM, /does not make the status human_needed or gaps_found/);
+    assert.match(VERIFIER_ADDENDUM, /file the task changed/);
+    assert.equal(VERIFIER_ADDENDUM.includes('\n'), false);
   });
 
   it('writes an addendum that states the rules: one plain command per call, every read-only command, the file tools, and no gsd-tools, mkdir or repository-changing git', () => {

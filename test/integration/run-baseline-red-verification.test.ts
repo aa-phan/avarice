@@ -2,7 +2,7 @@
 // run 2's attempt 1, D-26, D-27). Scenario R is run 2's stop offline: the required `format` check is red at the pin on a file the unit never edits, and a unit that is not
 // told the check was already failing reports human_needed (as the 03-57 unit did). With the list in the prompt the unit reports passed, G2 flags `format` pre-existing and
 // the item is committed. The fake run host plays the unit; git, the sandboxed checks, the ledger, the gates and the supervisor are real. No test calls a real model.
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,9 +11,14 @@ import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { decisionsOf } from '../helpers/independent-work.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
+import { MARKER_CHECK, MARKER_SCRIPT, attemptsDb, cloneCommits, gatesOf, runScenario, scenario, workspaceOf } from '../helpers/repair-scenarios.ts';
+import type { Ran } from '../helpers/repair-scenarios.ts';
 import {
   FIXED_SLUG,
+  FORMAT_CHECK,
+  FORMAT_CHECK_SCRIPT,
   RUN_BRIEF,
+  RUN_CONVENTIONS,
   RUN_CONVENTIONS_WITH_FORMAT,
   commitConventions,
   ledgerRows,
@@ -107,5 +112,52 @@ describe('scenario R: a required check red at the pin on a file the unit never e
 
   it('gave the unit a prompt that lists `format` under the data line, and not the target `test`', () => {
     assert.deepEqual(listedUnder(recordedPrompt(f)), ['- format']);
+  });
+});
+
+// Scenario M: nothing is masked. `format` is red at the pin and the unit is told so; `marker` is green at the pin, the unit breaks it, and the list never names it. The item
+// gets its one repair, the repair leaves the marker broken, and the run stops on a repeated_failure decision (AUT-10, AUT-16; threat T-03-162).
+describe('scenario M: a check that passed at the pin, broken beside a baseline-red check, still gets one repair and then a decision', () => {
+  const cleanupM: string[] = [];
+  after(() => {
+    for (const dir of cleanupM) rmSync(dir, { recursive: true, force: true });
+  });
+  const s = scenario(cleanupM, {
+    files: { 'scripts/format-check.mjs': FORMAT_CHECK_SCRIPT, 'scripts/marker-check.mjs': MARKER_SCRIPT, 'src/marker.txt': 'ok\n' },
+    conventions: { ...RUN_CONVENTIONS, checks: [...RUN_CONVENTIONS.checks, FORMAT_CHECK, MARKER_CHECK], agentCommands: ['npm test'] },
+    briefText: RUN_BRIEF,
+  });
+  // The first unit breaks the marker and reports passed only when its prompt lists `format` as already failing (it does); the repair leaves the marker broken.
+  const unit: FakeRunOptions = {
+    edits: { 'src/marker.txt': 'bad\n' },
+    summary: true,
+    verificationByPrompt: { marker: DATA_LINE, check: 'format', otherwise: 'human_needed' },
+    perAttempt: [{}, { edits: {}, quickId: '261105-fk2-repair', summary: true }],
+  };
+  let ran: Ran;
+  before(async () => {
+    ran = await runScenario(s, unit);
+  });
+
+  it('ends blocked on one repeated_failure decision, after exactly one repair and with nothing committed', () => {
+    assert.equal(ran.state, 'blocked_on_decision', `ended ${ran.state} (${ran.reason ?? 'no reason'})`);
+    assert.deepEqual(attemptsDb(s.roots, ran.runId).map((a) => a.reason), ['initial', 'repair'], 'one repair, and no second one');
+    assert.equal(ran.host.calls.length, 2);
+    assert.deepEqual(decisionsOf(s.roots, ran.runId).map((d) => d.class), ['repeated_failure']);
+    const base = (ledgerRows<{ base_revision: string }>(s.roots, 'SELECT base_revision FROM runs WHERE run_id = ?', ran.runId)[0] as { base_revision: string }).base_revision;
+    assert.equal(cloneCommits(workspaceOf(s.roots, ran.runId), base).length, 0, 'no commit of the item is on the run branch');
+  });
+
+  it("holds G2's last row as failed, with checks-delta naming `marker` regressed and not `format`", () => {
+    const last = gatesOf(s.roots, ran.runId).filter((g) => g.gate === 'G2').at(-1);
+    assert.equal(last?.passed, 0);
+    const failures = JSON.parse(last?.failures_json ?? '[]') as Array<{ rule: string; detail: string }>;
+    assert.deepEqual(failures.map((f) => f.rule), ['checks-delta']);
+    assert.match(failures[0]?.detail ?? '', /marker \(regressed\)/);
+    assert.equal((failures[0]?.detail ?? '').includes('format'), false, 'the baseline-red check is not charged');
+  });
+
+  it('gave the first unit a prompt that lists `format` and not `marker` under the data line', () => {
+    assert.deepEqual(listedUnder((ran.host.calls[0] as { prompt: string }).prompt), ['- format']);
   });
 });
