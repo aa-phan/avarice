@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 57/64 plans executed (32 waves, with 22 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; run 2's next attempt waits for the owner's D-29 re-decision)
+**Plans:** 58/64 plans executed (32 waves, with 22 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; run 2's next attempt waits for the owner's D-29 re-decision)
 
 Plans:
 **Wave 1**
@@ -333,7 +333,7 @@ Plans:
 
 **Wave 26** *(blocked on 03-62; 03-65 on 03-64)*
 - [x] 03-63-PLAN.md — Gap closure: exit run 2, attempt 2 of 2 (D-29): start, the owner's amendment and answers, finish, the owner's ruling; 03-57 marked superseded
-- [ ] 03-65-PLAN.md — Gap closure: the exit tools' offline `parity` subcommand (each check run exactly as the unit would and as the supervisor does, no spend, no host) and the recorded parity of the portfolio's twelve required checks at 9f1cd8d
+- [x] 03-65-PLAN.md — Gap closure: the exit tools' offline `parity` subcommand (each check run exactly as the unit would and as the supervisor does, no spend, no host) and the recorded parity of the portfolio's twelve required checks at 9f1cd8d
 
 **Wave 27** *(blocked on 03-57 and 03-63)*
 - [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
@@ -446,7 +446,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 57/64 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 58/64 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
