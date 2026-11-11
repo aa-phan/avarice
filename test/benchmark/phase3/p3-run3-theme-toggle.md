@@ -10,9 +10,9 @@ items: [
 ## Behavior
 Item A: `src/lib/theme.ts` spells the attribute name `data-theme` in several places. Export `THEME_ATTRIBUTE = 'data-theme'` and use it everywhere in that file. Behaviour does not change.
 
-Item B: `ThemeToggle` is a toggle button with `aria-pressed` and the fixed name "Dark theme". Two accessible patterns are acceptable and the choice is the owner's; stop and ask which one before changing anything:
+Item B: `ThemeToggle` is a toggle button with `aria-pressed` and the fixed name "Dark theme". Two accessible variants of the toggle-button pattern are acceptable and the choice is the owner's; stop and ask which one before changing anything. In both, the name "Dark theme" and `aria-pressed` stay exactly as they are:
 1. Keep the toggle-button pattern: the fixed name "Dark theme" with `aria-pressed`.
-2. An action button: no `aria-pressed`, and the name "Switch to dark theme" or "Switch to light theme" by the current theme.
+2. The same toggle button with a spoken description added: the name "Dark theme" and `aria-pressed` as in option 1, plus a visually hidden description "Switches between the light and dark theme", linked with `aria-describedby`. The toggle is rendered in two bars, so each instance needs its own unique id for the description.
 Add `tests/unit/theme-toggle.test.tsx` with a test named `theme toggle accessible name` that pins the chosen pattern.
 
 ## Acceptance criteria
@@ -27,6 +27,7 @@ Add `tests/unit/theme-toggle.test.tsx` with a test named `theme toggle accessibl
 - src/lib/theme.ts
 - src/components/ui/ThemeToggle.tsx
 - tests/unit/theme-toggle.test.tsx
+- tests/unit/use-theme.test.tsx
 
 ## Target checks
 - test
