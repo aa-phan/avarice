@@ -952,6 +952,13 @@
           },
           "summary": "Run 2 stopped blocked_on_decision on two open pause decisions (A: dec_01M74S0V3JFCE404VF02YMY034, verification-human-needed; B: dec_01M74S116V4TRTNPAZN3R94BD5, numbered-choice, the planted one), not the one the brief expects, so item A was not done and two notifications were queued. AVARICE behaved as docs/system documents: runs.md (Pause signals) routes a unit whose VERIFICATION status is human_needed to a pause decision, and checks-and-evidence.md (The baseline) says a failing baseline check blocks nothing and G2 treats a required check failing at baseline and again as pre-existing. The cause is outside AVARICE: the portfolio's format:check is red at base on index.html (confirmed read-only with the portfolio's own prettier --check index.html), the conventions make format:check required, and the brief and the dry run never established or neutralized that baseline fact, so A's verifier asked a human. The same red check appeared in 03-45. Alternative reading for the owner: the unit prompt does not tell the unit that a baseline-red required check is tolerated, which is a product prompt gap if the owner wants it closed (docs/system does not say the prompt tells it).",
           "proposedAt": "2026-11-11T07:46:11.545Z"
+        },
+        "confirmed": {
+          "by": "owner",
+          "class": "product-defect",
+          "overrides": "brief-harness-defect",
+          "ref": "The owner reply at the 03-57 Task 3 decision checkpoint: product-defect (D-26, D-27: ruled a product defect, overriding the brief-harness-defect proposal)",
+          "at": "2026-11-11T15:20:24.680Z"
         }
       }
     }
