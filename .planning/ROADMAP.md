@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 52/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
+**Plans:** 52/62 plans executed (32 waves, with 20 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63)
 
 Plans:
 **Wave 1**
@@ -324,25 +324,32 @@ Plans:
 - [x] 03-56-PLAN.md — Owner checkpoints: readiness without spend, the owner cancels old run 1 (D-34), D-04 approval of the briefs and classification, fresh authorization at 4.50 USD per run
 
 **Wave 24** *(blocked on 03-56)*
-- [ ] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29)
+- [ ] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29) *(halted: attempt 1 stopped on a verification-human-needed pause from a required check already red at the pin; the owner ruled a product defect; 03-63 marks it superseded)*
+- [ ] 03-61-PLAN.md — Gap closure: a required check already failing when an item begins is named to the unit and its verifier as pre-existing, so it no longer pauses the unit by itself; gates, pause detection and `--json` shapes unchanged; run 2's stop reproduced offline (red before, ready_for_review after) and a baseline-green regression still repaired then escalated
 
-**Wave 25** *(blocked on 03-57)*
+**Wave 25** *(blocked on 03-61)*
+- [ ] 03-62-PLAN.md — Gap closure: run 2's re-run made ready without spend (the fix applied to attempt 1's baseline, authorize, the spend arithmetic) and the owner cancels attempt 1 (D-34)
+
+**Wave 26** *(blocked on 03-62)*
+- [ ] 03-63-PLAN.md — Gap closure: exit run 2, attempt 2 of 2 (D-29): start, the owner's amendment and answers, finish, the owner's ruling; 03-57 marked superseded
+
+**Wave 27** *(blocked on 03-57 and 03-63)*
 - [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
 
-**Wave 26** *(blocked on 03-58)*
-- [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling
+**Wave 28** *(blocked on 03-58)*
+- [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling (refused with exit 75 for the owner if runs 2 and 3 together spent more than the D-05 headroom)
 
-**Wave 27** *(blocked on 03-59)*
+**Wave 29** *(blocked on 03-59)*
 - [ ] 03-60-PLAN.md — Exit record: the tools' verdict (3 of 3 or n/3 with the pending re-runs), correct stops as evidence (D-28), old run 1 as supplementary evidence (D-34), LIVE-CASES.md and spend
 
-**Wave 28** *(blocked on Wave 27 completion)*
-- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs, data model and processes with three diagrams, from the code
-
-**Wave 29** *(blocked on Wave 28 completion)*
-- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35), containment, integrations, overview, from the code
-
 **Wave 30** *(blocked on Wave 29 completion)*
-- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35), fresh reviews of every new or changed document (success criterion 6)
+- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61), data model and processes with three diagrams, from the code
+
+**Wave 31** *(blocked on Wave 30 completion)*
+- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35 and the baseline rule of 03-61), containment, integrations, overview, from the code
+
+**Wave 32** *(blocked on Wave 31 completion)*
+- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35 and the residual of 03-61), fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
 
