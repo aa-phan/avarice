@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 55/62 plans executed (32 waves, with 20 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63)
+**Plans:** 56/64 plans executed (32 waves, with 22 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; run 2's next attempt waits for the owner's D-29 re-decision)
 
 Plans:
 **Wave 1**
@@ -329,9 +329,11 @@ Plans:
 
 **Wave 25** *(blocked on 03-61)*
 - [x] 03-62-PLAN.md — Gap closure: run 2's re-run made ready without spend (the fix applied to attempt 1's baseline, authorize, the spend arithmetic) and the owner cancels attempt 1 (D-34)
+- [ ] 03-64-PLAN.md — Gap closure: each check the unit is told to run carries the check's declared environment as leading NAME=value words, matched exactly by the hook; no leading assignment hides a refused command; run 2's attempt 2 reproduced offline (red before, ready_for_review after) and every other environment refused; host environment, settings, gates and `--json` shapes unchanged
 
-**Wave 26** *(blocked on 03-62)*
+**Wave 26** *(blocked on 03-62; 03-65 on 03-64)*
 - [ ] 03-63-PLAN.md — Gap closure: exit run 2, attempt 2 of 2 (D-29): start, the owner's amendment and answers, finish, the owner's ruling; 03-57 marked superseded
+- [ ] 03-65-PLAN.md — Gap closure: the exit tools' offline `parity` subcommand (each check run exactly as the unit would and as the supervisor does, no spend, no host) and the recorded parity of the portfolio's twelve required checks at 9f1cd8d
 
 **Wave 27** *(blocked on 03-57 and 03-63)*
 - [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
@@ -343,13 +345,13 @@ Plans:
 - [ ] 03-60-PLAN.md — Exit record: the tools' verdict (3 of 3 or n/3 with the pending re-runs), correct stops as evidence (D-28), old run 1 as supplementary evidence (D-34), LIVE-CASES.md and spend
 
 **Wave 30** *(blocked on Wave 29 completion)*
-- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61), data model and processes with three diagrams, from the code
+- [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61 and the check environment of 03-64), data model and processes with three diagrams, from the code
 
 **Wave 31** *(blocked on Wave 30 completion)*
-- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35 and the baseline rule of 03-61), containment, integrations, overview, from the code
+- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35, the baseline rule of 03-61 and the check environment of 03-64), containment (with the command-identity rule of 03-64), integrations, overview, from the code
 
 **Wave 32** *(blocked on Wave 31 completion)*
-- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35 and the residual of 03-61), fresh reviews of every new or changed document (success criterion 6)
+- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35, the residual of 03-61 and the lines of 03-64 and 03-65), fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
 
