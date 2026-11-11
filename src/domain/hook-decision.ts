@@ -8,7 +8,7 @@
 //
 // What `allow` means: for the blanket and narrow strategies it is "defer to the host's permission rules" (the
 // hook prints nothing); `explicit: true` (hook-allow strategy, shell only) makes the hook print an allow.
-import { isRefusedAgentCommand } from './conventions.ts';
+import { assignmentRefusal, isRefusedAgentCommand, programWords } from './conventions.ts';
 import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
@@ -166,6 +166,14 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
 // ---------------------------------------------------------------------------------------------------------
 
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
+// An agent command entry may begin with NAME=value words (a check's environment, plan 03-64). Each must name a non-reserved upper-case variable and hold
+// a plain value, and a program word must follow them: anything else is a malformed policy, so the hook fails closed.
+function assignmentsWellFormed(words: readonly string[]): boolean {
+  const program = programWords(words);
+  if (program.length === 0) return false;
+  return words.slice(0, words.length - program.length).every((word) => assignmentRefusal(word) === null);
+}
+
 const STRATEGIES: readonly string[] = ['blanket-bash-hook-identity', 'narrow-rules', 'hook-allow', 'none'];
 const PURPOSES: readonly string[] = ['map', 'intel', 'knowledge', 'run'];
 
@@ -202,7 +210,9 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   }
   const agentCommands = raw['agentCommands'];
   if (agentCommands !== undefined) {
-    const wellFormed = Array.isArray(agentCommands) && agentCommands.every((c) => isObject(c) && isStrings(c['words']) && c['words'].length > 0 && typeof c['paths'] === 'boolean');
+    const wellFormed =
+      Array.isArray(agentCommands) &&
+      agentCommands.every((c) => isObject(c) && isStrings(c['words']) && c['words'].length > 0 && typeof c['paths'] === 'boolean' && assignmentsWellFormed(c['words']));
     if (!wellFormed) return bad('has malformed agentCommands');
   }
   if (!(typeof raw['subagentsConcurrent'] === 'number' && Number.isInteger(raw['subagentsConcurrent']) && raw['subagentsConcurrent'] >= 0)) {
@@ -450,7 +460,8 @@ interface LineSeen {
 function matchAgentCommand(words: readonly string[], expands: boolean, call: Extract<NormalizedToolCall, { kind: 'shell' }>, policy: HookPolicy, canon: Canon): string | null | undefined {
   let refusal: string | undefined;
   for (const entry of policy.agentCommands ?? []) {
-    if (isRefusedAgentCommand(entry.words[0] as string)) continue;
+    // The word judged is the first after the entry's leading assignments: an assignment never hides a never-granted program (plan 03-64).
+    if (isRefusedAgentCommand(entry.words.join(' '))) continue;
     const exact = entry.words.length === words.length && entry.words.every((word, i) => words[i] === word);
     if (!exact && !(entry.paths && startsWithWords(words, entry.words))) continue;
     if (expands) {
