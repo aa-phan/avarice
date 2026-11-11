@@ -1903,6 +1903,12 @@
           },
           "summary": "Run 2's attempt 2 stopped blocked_on_decision on two open pause decisions (A: dec_01M75NZ08K3RYRX1V6HFX7N6FA, verification-human-needed; B: dec_01M75NZ5ZDY47BAM3BYNH1FE07, the planted numbered choice), not the one the brief expects: item A not done and two notifications queued. The 03-61 fix held for format:check (the unit reported it as pre-existing and not blocking). A second cause surfaced: the unit's allowed command list is built from each check's argv alone (run-contract.ts:635), so the env the conventions give build and check:meta (VITE_SITE_ORIGIN) reaches only the supervisor's own check runs (checks.ts:216), never the unit's shell; the unit told to run 'npm run build' exactly as written cannot make it pass, and its verifier reported human_needed. docs/system/runs.md (The unit) and checks-and-evidence.md do not say the unit's commands carry the check env, so AVARICE behaved as documented; this is the same kind of gap the owner ruled a product defect on attempt 1 (the unit is not told what the gate already knows). Alternative reading for the owner: brief-harness-defect, if the owner holds that the conventions should not require build/check:meta env the unit cannot supply, but the env is declared by the owner's own conventions and the unit has no permitted way to set it. Evidence: the unit's decision text, build and check:meta rows passed in the supervisor's required checks, 0.1452 USD spent.",
           "proposedAt": "2026-11-11T16:12:45.766Z"
+        },
+        "confirmed": {
+          "by": "owner",
+          "class": "product-defect",
+          "ref": "The owner replied \"product-defect\" at the Task 3 checkpoint of plan 03-63, ruling a product defect (D-26, D-27); D-29 is exhausted for run 2",
+          "at": "2026-11-11T16:15:57.822Z"
         }
       }
     }

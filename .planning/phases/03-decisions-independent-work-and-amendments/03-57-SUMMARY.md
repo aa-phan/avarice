@@ -34,7 +34,9 @@ requirements-completed: []
 
 duration: resumed in two sessions
 completed: 2026-11-11
-status: halted
+status: superseded
+superseded_by: ["03-61", "03-62", "03-63"]
+superseded_note: "Marked superseded on 2026-11-11 after the owner ruled run 2 attempt 1 a product defect (D-26, D-27) and plan 03-63 recorded attempt 2: the halted attempt is kept as evidence."
 ---
 
 # Phase 3 Plan 57: Run 2 started once, stopped unexpectedly, ruled a product defect Summary
@@ -88,3 +90,7 @@ None.
 ## Threat Flags
 
 None.
+
+## Superseded by the gap plans
+
+Attempt 1 stopped on two open pause decisions at item A, and the owner ruled the stop a product defect (D-26, D-27). Plan 03-61 fixed it so that the unit is told a required check already red at the pin is pre-existing, and plan 03-62 recorded the owner's cancel of attempt 1. Plan 03-63 ran attempt 2: the fix held for `format:check`, but item A stopped again on verification-human-needed because the unit's allowed commands carry no check env, and the owner ruled that a product defect too, leaving D-29 exhausted for run 2. Attempt 1's facts stay as evidence and do not count toward 3 of 3 (D-28).
