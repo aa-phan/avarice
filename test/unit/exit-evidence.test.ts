@@ -1980,3 +1980,192 @@ describe('exit evidence: the order 2, 3, 1, the product-defect epoch, the two-fa
     });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-54: each run's expectations are judged by code. Run 2 (`expects: amend-stale`) is the one run whose amendment and stale original are its expected path
+// (SC3, SC4); any other amendment is refused (D-28); D-35's `not run: not required` report is judged live at both stages.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe("exit evidence: run 2's amendment and stale original are its expected path, and no other run's (plan 03-54; D-28, SC3, SC4)", () => {
+  const SESSION = '11111111-2222-4333-8444-555555555555';
+  const OWNER = 'owner:tester';
+  const staleOriginal = (over: Json = {}): Json => pauseDecision({ decisionId: 'dec_OLD', state: 'stale', contractVersion: 1, answeredBy: OWNER, answerChannel: 'terminal', answer: '1', ...over });
+  const successor = (over: Json = {}): Json =>
+    pauseDecision({ decisionId: 'dec_NEW', state: 'answered', contractVersion: 2, supersedes: 'dec_OLD', answeredBy: OWNER, answerChannel: 'terminal', answer: '2', ...over });
+  const amended = (over: Json = {}): Json => ({ version: 2, authorizedBy: OWNER, reason: 'the stale answer named a wording the amendment replaced', diff: [{ path: 'files.write', added: ['src/lib/graduation.ts'] }], ...over });
+  const finished = (over: Json = {}): Parameters<typeof judgeFinish>[0] =>
+    ({
+      state: 'ready_for_review',
+      items: [
+        { itemId: 'A', state: 'done', gsdSession: 'a' },
+        { itemId: 'B', state: 'done', gsdSession: SESSION },
+        { itemId: 'C', state: 'done', gsdSession: 'c' },
+      ],
+      decisions: [pauseDecision({ state: 'answered', answeredBy: OWNER, answerChannel: 'terminal', answer: '1' })],
+      attempts: [{ attemptId: 'att_B1', itemId: 'B', reason: 'initial' }, { attemptId: 'att_B2', itemId: 'B', reason: 'resume' }],
+      invocations: [{ attemptId: 'att_B2', requestedSession: SESSION, initSessions: [SESSION], answeredDecisionId: 'dec_NEW' }],
+      pauseSessions: { A: 'a', B: SESSION, C: null },
+      requiredChecks: [{ name: 'test', status: 'passed' }],
+      acceptance: [{ id: 'AC1', satisfied: true }],
+      commit: 'abc',
+      clean: true,
+      gates: [{ gate: 'G4', passed: true }],
+      commits: [{ itemId: 'A' }, { itemId: 'B' }, { itemId: 'C' }],
+      askUserQuestion: 0,
+      owner: 'tester',
+      pauseDecisionIds: ['dec_OLD'],
+      ...over,
+    }) as Parameters<typeof judgeFinish>[0];
+  const run2 = (over: Json = {}): Parameters<typeof judgeFinish>[0] => finished({ expects: 'amend-stale', contract: amended(), decisions: [staleOriginal(), successor()], ...over });
+
+  it('accepts the expected path: version 2 by the owner with a reason and a files.write diff, the stale original with its answer kept, one answered successor, the resumed session', () => {
+    const judged = judgeFinish(run2());
+    assert.deepEqual(judged.problems, []);
+    assert.equal(judged.resume['resumed'], true);
+    assert.equal(judged.resume['itemId'], 'B');
+  });
+
+  const refusals: Array<[string, Json, RegExp]> = [
+    ['no amendment (contract version 1)', { contract: { version: 1 } }, /no amendment/],
+    ['no contract to read', { contract: null }, /no amendment/],
+    ['version 3', { contract: amended({ version: 3 }) }, /version 3/],
+    ['an amendment authorized by someone other than the owner', { contract: amended({ authorizedBy: 'owner:someone-else' }) }, /authorized_by/],
+    ['an amendment with an empty reason', { contract: amended({ reason: '  ' }) }, /no reason/],
+    ['a diff that does not name files.write', { contract: amended({ diff: [{ path: 'budgets.costUsd', from: 1, to: 2 }] }) }, /files\.write/],
+    ['no stale decision', { decisions: [successor()] }, /no decision is stale/],
+    ['a stale decision whose answer was not kept', { decisions: [staleOriginal({ answer: null }), successor()] }, /answer/],
+    ['a successor that does not supersede the stale decision', { decisions: [staleOriginal(), successor({ supersedes: null })] }, /supersede/],
+    ['a successor answered by someone other than the owner', { decisions: [staleOriginal(), successor({ answeredBy: 'owner:someone-else' })] }, /not owner:tester/],
+    ['a successor answered on the inbox and not the terminal', { decisions: [staleOriginal(), successor({ answerChannel: 'inbox' })] }, /not terminal/],
+    ['two answered decisions', { decisions: [staleOriginal(), successor(), successor({ decisionId: 'dec_EXTRA' })] }, /2 decision\(s\) are answered, not one/],
+  ];
+  for (const [name, over, pattern] of refusals) {
+    it(`lists one problem for ${name}`, () => {
+      const problems = judgeFinish(run2(over)).problems;
+      assert.equal(problems.length, 1, problems.join(' | '));
+      assert.match(problems[0] as string, pattern);
+    });
+  }
+
+  it('still judges the resume of the successor: a fresh unit that merely carries the answer is not a resume', () => {
+    const problems = judgeFinish(run2({ attempts: [{ attemptId: 'att_B1', itemId: 'B', reason: 'initial' }, { attemptId: 'att_B2', itemId: 'B', reason: 'answer' }] })).problems;
+    assert.ok(problems.some((p) => p.includes('no attempt with reason resume')), problems.join(' | '));
+  });
+
+  it('keeps every other finish check for run 2', () => {
+    const bad = judgeFinish(run2({ requiredChecks: [{ name: 'test', status: 'failed' }], clean: false, commit: null, gates: [] }));
+    for (const part of ['required check test', 'clean tree', 'no handed-off commit', 'G4']) assert.ok(bad.problems.some((p) => p.includes(part)), part);
+  });
+
+  it('refuses a contract above version 1 for the runs that expect block-resume or silence, and passes version 1', () => {
+    for (const expects of ['block-resume', 'silence']) {
+      const problems = judgeFinish(finished({ expects, contract: amended() })).problems;
+      assert.deepEqual(problems, ['the contract was amended (version 2); only run 2 expects an amendment (D-28)'], expects);
+      assert.deepEqual(judgeFinish(finished({ expects, contract: { version: 1 } })).problems, [], `${expects}: version 1`);
+    }
+  });
+
+  it('never accepts a relax record under an expectation, for any run', () => {
+    const relax = { by: 'owner', ref: 'STATE.md', decisions: ['dec_EXTRA'], at: '2026-11-10T23:40:00Z' };
+    assert.deepEqual(judgeFinish(finished({ expects: 'block-resume', relax })).problems, ['a relax record is not accepted in the exit (D-28)']);
+    assert.deepEqual(judgeFinish(run2({ relax })).problems, ['a relax record is not accepted in the exit (D-28)']);
+  });
+
+  it('judges as before when no expectation is given: the relaxed amendment still needs its relax record', () => {
+    const problems = judgeFinish(finished({ contract: amended(), decisions: [pauseDecision({ state: 'answered', answeredBy: OWNER, answerChannel: 'terminal' })] })).problems;
+    assert.ok(problems.some((p) => p.includes('amended') && p.includes('relax record')), problems.join(' | '));
+  });
+});
+
+describe('exit evidence: the status reports the declared checks that do not run as not run (plan 03-54; D-35, T-03-139)', () => {
+  const E2E = { checksNotRunExpected: ['test:e2e'] };
+  const reports = (...names: string[]): Json => ({ statusView: { checksNotRun: names.map((name) => ({ name, reason: 'not required' })) } });
+  const D35 = 'status does not report test:e2e as not run: not required (D-35)';
+  const SESSION = '11111111-2222-4333-8444-555555555555';
+  const finished = (over: Json = {}): Parameters<typeof judgeFinish>[0] =>
+    ({
+      state: 'ready_for_review',
+      items: [{ itemId: 'A', state: 'done' }, { itemId: 'B', state: 'done', gsdSession: SESSION }],
+      decisions: [pauseDecision({ state: 'answered', answeredBy: 'owner:tester', answerChannel: 'terminal', answer: '1' })],
+      attempts: [{ attemptId: 'att_B1', itemId: 'B', reason: 'initial' }, { attemptId: 'att_B2', itemId: 'B', reason: 'resume' }],
+      invocations: [{ attemptId: 'att_B2', requestedSession: SESSION, initSessions: [SESSION], answeredDecisionId: 'dec_AAAA' }],
+      pauseSessions: { A: 'a', B: SESSION },
+      requiredChecks: [{ name: 'test', status: 'passed' }],
+      acceptance: [{ id: 'AC1', satisfied: true }],
+      commit: 'abc',
+      clean: true,
+      gates: [{ gate: 'G4', passed: true }],
+      commits: [{ itemId: 'A' }, { itemId: 'B' }],
+      askUserQuestion: 0,
+      owner: 'tester',
+      ...over,
+    }) as Parameters<typeof judgeFinish>[0];
+
+  for (const [stage, judge] of [
+    ['start', (over: Json): string[] => judgeStart(stopped(over))],
+    ['finish', (over: Json): string[] => judgeFinish(finished(over)).problems],
+  ] as Array<[string, (over: Json) => string[]]>) {
+    it(`${stage}: lists no problem when the status names exactly the expected checks as not run`, () => {
+      assert.deepEqual(judge({ ...E2E, ...reports('test:e2e') }), []);
+    });
+
+    it(`${stage}: names D-35 when the status carries no checksNotRun key, none of the expected name, or a null status view`, () => {
+      assert.deepEqual(judge({ ...E2E, statusView: {} }), [D35]);
+      assert.deepEqual(judge({ ...E2E, ...reports('lint') }).length, 1);
+      assert.match(judge({ ...E2E, ...reports('lint') })[0] as string, /\(D-35\)$/);
+      assert.deepEqual(judge({ ...E2E, statusView: null }), [D35]);
+      assert.deepEqual(judge({ ...E2E }), [D35]);
+    });
+
+    it(`${stage}: names D-35 when the status reports a check that is not in the expected list, and for a contract that runs every check`, () => {
+      assert.deepEqual(judge({ ...E2E, ...reports('test:e2e', 'lint') }), ['status reports test:e2e, lint as not run, but the contract expects test:e2e (D-35)']);
+      assert.deepEqual(judge({ checksNotRunExpected: [], statusView: {} }), []);
+      assert.deepEqual(judge({ checksNotRunExpected: [], ...reports('test:e2e') }), ['status reports test:e2e as not run, but the contract expects none (D-35)']);
+    });
+
+    it(`${stage}: judges nothing about D-35 when no expected list is given`, () => {
+      assert.deepEqual(judge({}), []);
+      assert.deepEqual(judge({ statusView: {} }), []);
+    });
+  }
+});
+
+describe('exit evidence: the finish stage records the expected not-run list beside the status view, from the run\'s own contract (plan 03-54; D-35)', () => {
+  const cleanup: string[] = [];
+  const dirs: string[] = [];
+  const state: { s?: ReturnType<typeof startBlockedS17> } = {};
+  before(
+    () => {
+      state.s = startBlockedS17(cleanup);
+    },
+    { timeout: 300_000 },
+  );
+  after(() => {
+    for (const dir of [...cleanup, ...dirs]) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('writes checksNotRunExpected, equal to what the live status reports, and judges no D-35 or amendment problem for a run that expects block-resume', { timeout: 120_000 }, () => {
+    const { f, runId } = state.s as ReturnType<typeof startBlockedS17>;
+    const dir = mkdtempSync(join(tmpdir(), 'exit-d35-'));
+    dirs.push(dir);
+    const auth = writeFreshAuthorization(dir);
+    const snap = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', TOOLS_SCRIPT, 'snapshot', '--repo', f.repo.path], { encoding: 'utf8', timeout: 60_000 });
+    assert.equal(snap.status, 0, snap.stderr);
+    const evidence = join(dir, 'evidence.json');
+    const record = { runId, run: 'run3', attempt: 1, expects: 'block-resume', atPause: { at: '2026-11-10T06:23:43Z', state: 'blocked_on_decision', items: [] }, checkoutBeforeSnapshot: JSON.parse(snap.stdout), decisions: [{ decisionId: 'dec_PAUSE_ANSWERED', state: 'open' }] };
+    writeFileSync(evidence, `${JSON.stringify({ schema: 1, plan: '03-54', runs: [record] })}\n`);
+    const ran = runTools(['evidence', '--stage', 'finish', '--run-id', runId, '--brief', join(dir, 'b.md'), '--repo', f.repo.path, '--authorization-file', auth, '--out', evidence, '--wait-max-minutes', '1'], {
+      ...profileEnv(f.roots),
+      AVARICE_PHASE3_LEDGER: join(dir, 'ledger.jsonl'),
+    });
+    assert.equal(ran.status, 1, ran.stderr + ran.stdout);
+    const entry = ((JSON.parse(readFileSync(evidence, 'utf8')) as Json)['runs'] as Json[]).find((r) => r['runId'] === runId) as Json;
+    const expected = entry['checksNotRunExpected'] as string[];
+    assert.ok(Array.isArray(expected), 'the entry records checksNotRunExpected');
+    const reported = (((entry['statusView'] as Json)['checksNotRun'] as Array<{ name: string }> | undefined) ?? []).map((c) => c.name);
+    assert.deepEqual(expected, reported, 'the live status reports exactly the checks the contract does not run');
+    const problems = entry['problems'] as string[];
+    assert.equal(problems.some((p) => p.includes('D-35')), false, problems.join(' | '));
+    assert.equal(problems.some((p) => p.includes('only run 2 expects an amendment')), false, problems.join(' | '));
+  });
+});
