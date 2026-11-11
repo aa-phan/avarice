@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
+import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
 import { PURPOSE_EXTENSIONS } from '../../src/domain/invocation-scope.ts';
 import { err, ok } from '../../src/domain/result.ts';
@@ -32,6 +33,13 @@ export interface FakeRunOptions {
   // by a bullet line `- <check>` (a bullet list of the lines that start `- `), `otherwise` when it does not. It stands in for the 03-57 unit, which escalated a
   // required check it was never told was pre-existing. When present it takes precedence over `verification`. JSON-serializable, like every option here.
   verificationByPrompt?: { marker: string; check: string; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-64. The fake unit stands in for the 03-63 unit, which ran `npm run build` exactly as its prompt listed it and without VITE_SITE_ORIGIN. It takes the first bullet
+  // under the prompt line 'Commands you may run, exactly as written:' whose text equals `command` or ends with a space and `command` (a check command carries its environment
+  // first), calls the real hook with that bullet as a Bash command and, when the hook admits it, runs it in the clone under the environment the real host adapter builds
+  // (buildInvocationEnv, with this node's directory appended to PATH so the fixture's `node` is found). The VERIFICATION status is `passed` when it exits 0 and `otherwise` when
+  // it exits non-zero, is refused, or no bullet matches. It takes precedence over `verification` and `verificationByPrompt`. With `recordTo`, the record gains
+  // `listed: { command, denied, exitCode }` (exitCode null when the command did not run). JSON-serializable, like every option here.
+  runListedCommand?: { command: string; otherwise: 'human_needed' | 'gaps_found' };
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -117,6 +125,18 @@ export interface FakeRunOptions {
 // The item line of a unit or resume prompt: a line that starts `Work item <ID>:`, or the first line of the quoted task text. A phrase of that shape
 // in the middle of a line (a brief title) is not an item line.
 const ITEM_LINE = /(?:^|--text ")Work item ([A-Z][A-Za-z0-9_-]{0,31}):/m;
+
+const COMMANDS_LINE = 'Commands you may run, exactly as written:';
+
+// The bullets (without the `- `) of the run of `- ` lines right after the 'Commands you may run, exactly as written:' line.
+export function listedCommandsOf(prompt: string): string[] {
+  const lines = prompt.split('\n');
+  const at = lines.indexOf(COMMANDS_LINE);
+  const out: string[] = [];
+  if (at < 0) return out;
+  for (let i = at + 1; i < lines.length && (lines[i] as string).startsWith('- '); i += 1) out.push((lines[i] as string).slice(2));
+  return out;
+}
 
 export const itemOfPrompt = (prompt: string): string | undefined => ITEM_LINE.exec(prompt)?.[1];
 
@@ -224,13 +244,12 @@ export class FakeRunHost implements AgentHost {
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
     const startedMs = Date.now();
     const cwd = realpathSync(req.cwd);
+    let record: Record<string, unknown> | undefined;
     if (o.recordTo !== undefined) {
       const observed: Record<string, string | null> = {};
       for (const rel of o.observe ?? []) observed[rel] = existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null;
-      writeFileSync(
-        o.recordTo,
-        JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, sessionId, resumeSessionId: req.resumeSessionId, observed }),
-      );
+      record = { prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, sessionId, resumeSessionId: req.resumeSessionId, observed };
+      writeFileSync(o.recordTo, JSON.stringify(record));
     }
     if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
@@ -354,6 +373,29 @@ export class FakeRunHost implements AgentHost {
       tool('Write', { file_path: target, content: 'outside the write set\n' }, () => write(o.deniedEdit as string, 'outside the write set\n'));
     }
 
+    // Plan 03-64: the command the prompt lists for a check, run as the unit would run it (see `runListedCommand`).
+    let listedStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    if (o.runListedCommand !== undefined) {
+      const wanted = o.runListedCommand.command;
+      const bullet = listedCommandsOf(req.prompt).find((b) => b === wanted || b.endsWith(` ${wanted}`));
+      const seen: { command: string; denied: boolean; exitCode: number | null } = { command: bullet ?? wanted, denied: false, exitCode: null };
+      if (bullet !== undefined) {
+        const hostEnv = buildInvocationEnv(process.env, {
+          gsdCoreBin: join(tmpdir(), 'avarice-fake-run-no-such-gsd-core-bin'),
+          onboardingId: req.onboardingId,
+          marker: req.runId,
+          ...(req.scope.scratchDir !== undefined ? { scratchDir: req.scope.scratchDir } : {}),
+          extraPath: [dirname(process.execPath)],
+        });
+        const admitted = tool('Bash', { command: bullet }, () => {
+          seen.exitCode = spawnSync('/bin/sh', ['-c', bullet], { cwd, env: hostEnv, encoding: 'utf8', timeout: 60_000 }).status;
+        });
+        seen.denied = !admitted;
+      }
+      listedStatus = seen.exitCode === 0 ? 'passed' : o.runListedCommand.otherwise;
+      if (o.recordTo !== undefined) writeFileSync(o.recordTo, JSON.stringify({ ...record, listed: seen }));
+    }
+
     const quick = o.quickId ?? FAKE_QUICK_ID;
     const wroteEdits = Object.keys(edits).length > 0;
     const base = `.planning/quick/${quick}`;
@@ -364,7 +406,7 @@ export class FakeRunHost implements AgentHost {
     }
     if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
-      const status = o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed');
+      const status = listedStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
       if (status !== 'none') {
         const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
