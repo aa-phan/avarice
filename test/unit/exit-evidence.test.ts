@@ -1523,11 +1523,48 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
     });
 
     it('passes the gate for a fully classified brief and reaches the spend guard', () => {
+      // run1 is the second run of this authorization's order (D-33), so the first run's pass is on record.
       const evidence = join(fx().dir, 'evidence-gate-pass.json');
+      writeFileSync(evidence, `${JSON.stringify({ schema: 1, runs: [{ runId: 'run_B1', run: 'run-b', attempt: 1, startedAt: minute53(1), passed: true, finishedAt: minute53(4) }] })}\n`);
       const ran = runTools(authorizeArgs(state.auth as string, fx().run1, evidence), authorizeEnv());
       assert.doesNotMatch(ran.stderr, /D-31/, ran.stderr + ran.stdout);
       assert.equal(ran.status, 0, ran.stderr + ran.stdout);
-      assert.match(ran.stdout, /authorized: /);
+      assert.match(ran.stdout, /authorized: .*run-a attempt 1/);
+    });
+
+    describe('authorize applies startRefusal: the order, the previous attempt and the stop-loss (plan 03-53)', () => {
+      const evidenceWith = (name: string, runs: Json[]): { path: string; before: string } => {
+        const path = join(fx().dir, name);
+        const before = `${JSON.stringify({ schema: 1, runs })}\n`;
+        writeFileSync(path, before);
+        return { path, before };
+      };
+
+      it('exits 2 and starts nothing when the run before it in the order has no recorded outcome (D-33)', () => {
+        const { path, before } = evidenceWith('evidence-order.json', []);
+        const ran = runTools(authorizeArgs(state.auth as string, fx().run1, path), authorizeEnv());
+        assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+        assert.match(ran.stderr, /run-a starts only after run-b's outcome is recorded \(D-33\)/);
+        assert.doesNotMatch(ran.stdout, /authorized:/);
+        assert.equal(readFileSync(path, 'utf8'), before);
+      });
+
+      it("exits 75, 'stop and ask the owner', for a run that has failed twice, whatever the digests and the classification (D-29)", () => {
+        const stopped = (n: number, digest: string): Json => ({ runId: `run_A${n}`, run: 'run-a', attempt: n, briefDigest: digest, startedAt: minute53(n * 10), passed: false, finishedAt: minute53(n * 10 + 3) });
+        const { path, before } = evidenceWith('evidence-stop-loss.json', [stopped(1, 'sha256:an-older-draft'), stopped(2, 'sha256:another-draft')]);
+        const ran = runTools(authorizeArgs(state.auth as string, fx().run1, path), authorizeEnv());
+        assert.equal(ran.status, 75, ran.stderr + ran.stdout);
+        assert.match(ran.stderr, /stop-loss \(D-29\): run-a has failed twice; return to the owner before spending again/);
+        assert.doesNotMatch(ran.stdout, /authorized:/);
+        assert.equal(readFileSync(path, 'utf8'), before);
+      });
+
+      it("exits 2 for a re-run whose previous attempt the owner confirmed but whose run the owner's ledger cannot show over", () => {
+        const { path } = evidenceWith('evidence-rerun.json', [{ runId: 'run_B1', run: 'run-b', attempt: 1, startedAt: minute53(1), passed: false, finishedAt: minute53(4), classification: ruled53('brief-harness-defect', 8) }]);
+        const ran = runTools(authorizeArgs(state.auth as string, fx().run2, path), authorizeEnv());
+        assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+        assert.match(ran.stderr, /run-b's previous attempt run_B1 cannot be read from the owner's ledger; the owner cancels it first \(D-34\)/);
+      });
     });
   });
 });
@@ -1822,5 +1859,124 @@ describe("exit evidence: startRefusal admits one re-run of a stopped attempt, an
   it("admits a run after an attempt the owner confirmed as a product defect: the confirmation starts a new epoch, so the run's earlier attempt no longer blocks it", () => {
     const stopped = failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) });
     assert.equal(refusalOf(evidence53(stopped), 'run2', { run_run2_1: 'cancelled' }), undefined);
+  });
+});
+
+describe('exit evidence: the order 2, 3, 1, the product-defect epoch, the two-failure stop-loss and the run-role invariant (plan 03-53; D-26, D-29, D-33)', () => {
+  const epochOf = (evidence: Json): string | null => (exitTools as unknown as { epochOf: (e: Json) => string | null }).epochOf(evidence);
+  const CANCELLED_ALL = new Proxy({} as Record<string, string>, { get: () => 'cancelled' });
+
+  describe('the order of the authorization (D-33)', () => {
+    it('refuses run3 while run2 has no entry, and while its only entry has no recorded outcome', () => {
+      for (const file of [evidence53(), evidence53(attempt53('run2', 1, 1)), evidence53(failed53('run2', 1, 1))]) {
+        const refused = refusalOf(file, 'run3');
+        assert.equal(refused?.code, 2);
+        assert.match(refused?.text ?? '', /run3 starts only after run2's outcome is recorded \(D-33\)/);
+      }
+    });
+
+    it("admits run3 once run2 passed, or once run2's stop is owner-confirmed as a brief/harness defect", () => {
+      assert.equal(refusalOf(evidence53(passed53('run2', 1, 1)), 'run3'), undefined);
+      assert.equal(refusalOf(evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) })), 'run3'), undefined);
+    });
+
+    it('needs the outcome of the latest attempt of the earlier run, not of its first', () => {
+      const file = evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) }), attempt53('run2', 2, 10));
+      assert.match(refusalOf(file, 'run3')?.text ?? '', /run3 starts only after run2's outcome is recorded/);
+    });
+
+    it('needs the outcomes of both run2 and run3 before run1, naming the first run of the order that lacks one', () => {
+      assert.match(refusalOf(evidence53(passed53('run2', 1, 1)), 'run1')?.text ?? '', /run1 starts only after run3's outcome is recorded/);
+      assert.match(refusalOf(evidence53(passed53('run3', 1, 1)), 'run1')?.text ?? '', /run1 starts only after run2's outcome is recorded/);
+      assert.equal(refusalOf(evidence53(passed53('run2', 1, 1), passed53('run3', 1, 5)), 'run1'), undefined);
+    });
+  });
+
+  describe('a confirmed product defect starts a new epoch (D-26, T-03-135)', () => {
+    it('epochOf is null with no confirmed product defect, a proposal alone and a brief/harness confirmation start none, and the latest confirmation wins', () => {
+      assert.equal(epochOf(evidence53()), null);
+      assert.equal(epochOf(evidence53(failed53('run2', 1, 1, { classification: { proposed: ruled53('product-defect', 8)['proposed'] as Json } }))), null);
+      assert.equal(epochOf(evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) }))), null);
+      assert.equal(epochOf(evidence53(failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }))), minute53(8));
+      assert.equal(epochOf(evidence53(failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run3', 1, 10, { classification: ruled53('product-defect', 20) }))), minute53(20));
+    });
+
+    it('lets a run that passed before the epoch start again, and judges the order again over the entries started after it', () => {
+      const file = evidence53(passed53('run2', 1, 1), failed53('run3', 1, 5, { classification: ruled53('product-defect', 20) }));
+      assert.equal(refusalOf(file, 'run2', CANCELLED_ALL), undefined, 'run2 passed before the epoch, so it is run again');
+      const run3 = refusalOf(file, 'run3', CANCELLED_ALL);
+      assert.equal(run3?.code, 2);
+      assert.match(run3?.text ?? '', /run3 starts only after run2's outcome is recorded \(D-33\)/, "run2's pass before the epoch satisfies nothing");
+      const again = evidence53(passed53('run2', 1, 1), failed53('run3', 1, 5, { classification: ruled53('product-defect', 20) }), passed53('run2', 2, 25));
+      assert.equal(refusalOf(again, 'run3', CANCELLED_ALL), undefined, 'run2 passed again after the epoch, and run3 may start its next attempt');
+    });
+
+    it('refuses a run that already passed after the epoch, and not one that passed before it', () => {
+      const file = evidence53(passed53('run2', 1, 1), failed53('run3', 1, 5, { classification: ruled53('product-defect', 20) }), passed53('run2', 2, 25));
+      const refused = refusalOf(file, 'run2', CANCELLED_ALL);
+      assert.equal(refused?.code, 2);
+      assert.match(refused?.text ?? '', /run2 already passed in this exit; a run is never repeated by hand \(D-03\)/);
+    });
+  });
+
+  describe('already passed (D-26, D-03)', () => {
+    it('refuses a run that passed in the current epoch, whatever its place in the order', () => {
+      for (const [role, file] of [
+        ['run2', evidence53(passed53('run2', 1, 1))],
+        ['run3', evidence53(passed53('run2', 1, 1), passed53('run3', 1, 5))],
+        ['run2', evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) }), passed53('run2', 2, 10))],
+      ] as Array<[string, Json]>) {
+        const refused = refusalOf(file, role, CANCELLED_ALL);
+        assert.equal(refused?.code, 2, role);
+        assert.equal(refused?.text, `${role} already passed in this exit; a run is never repeated by hand (D-03)`);
+      }
+    });
+  });
+
+  describe('the stop-loss (D-29)', () => {
+    const STOP_LOSS = 'stop-loss (D-29): run2 has failed twice; return to the owner before spending again';
+
+    it('refuses with code 75 the third start of a run whose two attempts both failed and were confirmed as brief/harness defects', () => {
+      const file = evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('brief-harness-defect', 18) }));
+      assert.deepEqual(refusalOf(file, 'run2', CANCELLED_ALL), { code: 75, text: STOP_LOSS });
+    });
+
+    it('counts across a product-defect epoch: a failure before it and one after it are two', () => {
+      const file = evidence53(failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('brief-harness-defect', 18) }));
+      assert.deepEqual(refusalOf(file, 'run2', CANCELLED_ALL), { code: 75, text: STOP_LOSS });
+    });
+
+    it('applies whatever the classification, and before the missing-confirmation rule', () => {
+      assert.deepEqual(refusalOf(evidence53(failed53('run2', 1, 1), failed53('run2', 2, 10)), 'run2', CANCELLED_ALL), { code: 75, text: STOP_LOSS });
+      const stopped = failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) });
+      assert.deepEqual(refusalOf(evidence53(stopped, failed53('run2', 2, 10, { classification: ruled53('product-defect', 18) })), 'run2', CANCELLED_ALL), { code: 75, text: STOP_LOSS });
+    });
+
+    it('counts failed attempts only: one stop and one attempt still running is not two failures', () => {
+      const file = evidence53(failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) }), attempt53('run2', 2, 10));
+      assert.equal(refusalOf(file, 'run2', CANCELLED_ALL)?.code, 2);
+    });
+
+    it("counts a run's own failures: another run's two failures do not stop it", () => {
+      const file = evidence53(failed53('run3', 1, 1), failed53('run3', 2, 10));
+      assert.equal(refusalOf(file, 'run2', CANCELLED_ALL), undefined);
+    });
+  });
+
+  describe('the run role is the identity, not the brief digest (assumption delta invariant)', () => {
+    it('refuses the third start of run1 under a new digest Z after two failures under digests X and Y, by the stop-loss', () => {
+      const redrafted = { ...AUTH53, briefs: [...AUTH53.briefs.filter((b) => b['run'] !== 'run1'), { path: 'b1.md', digest: 'sha256:Z', run: 'run1', expects: 'park' }] };
+      const file = evidence53(
+        passed53('run2', 1, 1),
+        passed53('run3', 1, 5),
+        failed53('run1', 1, 10, { briefDigest: 'sha256:X', classification: ruled53('brief-harness-defect', 16) }),
+        failed53('run1', 2, 18, { briefDigest: 'sha256:Y', classification: ruled53('brief-harness-defect', 24) }),
+      );
+      const identity = (exitTools as unknown as { attemptFor: (a: typeof AUTH53, d: string, r: Json[], id: string) => { run: string; attempt: number } | undefined }).attemptFor(redrafted, 'sha256:Z', file['runs'] as Json[], '');
+      assert.deepEqual(identity && { run: identity.run, attempt: identity.attempt }, { run: 'run1', attempt: 3 });
+      const refused = refusalOf(file, identity?.run ?? '', CANCELLED_ALL, redrafted);
+      assert.equal(refused?.code, 75);
+      assert.match(refused?.text ?? '', /stop-loss \(D-29\): run1 has failed twice/);
+    });
   });
 });
