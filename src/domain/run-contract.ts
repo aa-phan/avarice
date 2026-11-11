@@ -8,9 +8,10 @@ import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import type { Brief, BriefItem } from './brief.ts';
-import { isRefusedAgentCommand } from './conventions.ts';
+import { SUPERVISOR_CHECK_ENV_NAMES, assignmentRefusal, isRefusedAgentCommand } from './conventions.ts';
 import type { CheckSpec, Conventions } from './conventions.ts';
 import { matchesGlob } from './glob.ts';
+import { redactSecrets } from './secret-patterns.ts';
 
 export const ROUTINE_POLICY = 'routine';
 
@@ -577,11 +578,16 @@ function compileWorkItems(
 
 // The command a declared check is listed under for the agent (execution.commands): the check's environment written as NAME=value words, sorted by
 // name, then its argument vector, joined by single spaces. A check without environment is listed as its argument vector alone.
+// The names the supervisor's check sandbox sets itself (SUPERVISOR_CHECK_ENV_NAMES) are left out, so the agent never gets a value the supervisor does not use.
 export function checkAgentCommand(check: Pick<CheckSpec, 'argv' | 'env'>): string {
-  const assignments = Object.keys(check.env)
+  return [...checkEnvAssignments(check), ...check.argv].join(' ');
+}
+
+function checkEnvAssignments(check: Pick<CheckSpec, 'env'>): string[] {
+  return Object.keys(check.env)
+    .filter((name) => !SUPERVISOR_CHECK_ENV_NAMES.includes(name))
     .sort()
     .map((name) => `${name}=${check.env[name] as string}`);
-  return [...assignments, ...check.argv].join(' ');
 }
 
 const RUN_ID = /^run_[0-9A-Za-z]{4,64}$/;
@@ -643,6 +649,19 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
   }
   if (write.length === 0) return invalid('files.write', 'the run would have no writable path: the conventions declare no write set');
 
+  // A check's environment is printed to the agent as NAME=value words: each value must be a plain word and must not look like a secret.
+  for (const [index, check] of conventions.checks.entries()) {
+    for (const name of Object.keys(check.env).filter((key) => !SUPERVISOR_CHECK_ENV_NAMES.includes(key)).sort()) {
+      const value = check.env[name] as string;
+      const refusal = assignmentRefusal(`${name}=${value}`);
+      if (refusal !== null) {
+        return invalid(`conventions.checks[${index}].env`, `${refusal}: the value of ${name} cannot be given to the agent exactly as written, and check environment must be non-secret and plain`);
+      }
+      if (redactSecrets(value) !== value) {
+        return invalid(`conventions.checks[${index}].env`, `the value of ${name} looks like a secret: check environment must be non-secret, since it is committed and printed to the agent`);
+      }
+    }
+  }
   // The never-granted refusal judges each conventions agent command as written and each check by its argument vector, never the rendered string.
   for (const command of [...conventions.agentCommands, ...conventions.checks.map((check) => check.argv.join(' '))]) {
     if (isRefusedAgentCommand(command)) {

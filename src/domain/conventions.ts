@@ -5,6 +5,7 @@
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
+import { redactSecrets } from './secret-patterns.ts';
 
 export interface CheckSpec {
   name: string;
@@ -204,9 +205,31 @@ export function programWords(words: readonly string[]): string[] {
   return words.slice(start);
 }
 
-// A command word is refused by its last path segment, without regard to case, so `/usr/bin/git` and `GIT` are refused too.
+// A value written as one shell word that nothing in it expands, splits or quotes: letters, digits and `_@%+=:,./-` (possibly empty). A
+// check's environment value is printed to the agent as `NAME=value` words and compared by the hook word for word, so it must need no quoting.
+export const PLAIN_ENV_VALUE = /^[A-Za-z0-9_@%+=:,./-]*$/;
+
+// The names the supervisor's check sandbox sets itself (src/app/checks.ts sandboxSetup); they override a check's `env` for the supervisor
+// (docs config-reference), so the agent's command leaves them out. A unit test pins this list to sandboxSetup's environment.
+export const SUPERVISOR_CHECK_ENV_NAMES: readonly string[] = ['PATH', 'HOME', 'TMPDIR', 'npm_config_cache', 'CI', 'LANG'];
+
+// Whether `word` is an assignment an agent command may begin with: NAME=value, NAME a non-reserved upper-case variable and the value a plain
+// word, the rules a check's `env` is held to. Null when it is; otherwise a short reason that names the variable.
+export function assignmentRefusal(word: string): string | null {
+  const eq = word.indexOf('=');
+  if (eq <= 0) return `${JSON.stringify(word)} is not a NAME=value word`;
+  const name = word.slice(0, eq);
+  const value = word.slice(eq + 1);
+  if (isReservedEnv(name)) return `variable ${JSON.stringify(name)} is reserved: an assignment may not set it`;
+  if (!ENV_KEY_PATTERN.test(name)) return `variable name ${JSON.stringify(name)} must match [A-Z_][A-Z0-9_]*`;
+  if (!PLAIN_ENV_VALUE.test(value)) return `value of ${name} is not a plain word (letters, digits and _@%+=:,./-), so it cannot be written as one shell word`;
+  return null;
+}
+
+// A command word is refused by its last path segment, without regard to case, so `/usr/bin/git` and `GIT` are refused too. The word judged
+// is the first one after the leading NAME=value words: an assignment never hides the program (plan 03-64).
 export function isRefusedAgentCommand(command: string): boolean {
-  const first = command.trimStart().split(/\s/)[0] ?? '';
+  const first = programWords(command.trimStart().split(/\s/))[0] ?? '';
   const base = (first.split('/').pop() ?? '').toLowerCase();
   return REFUSED_AGENT_COMMAND_WORDS.includes(base);
 }
@@ -224,8 +247,17 @@ function readAgentCommand(field: string, raw: unknown): Result<string> {
       return invalid(field, `token ${JSON.stringify(token)} is not allowed: only a single trailing <paths> is`);
     }
   }
+  // Leading assignments are held to the check-env rules, and a value that matches a secret pattern is refused: every value that can be
+  // printed into the unit prompt passes the non-secret rule (plan 03-64).
+  const program = programWords(tokens);
+  for (const word of tokens.slice(0, tokens.length - program.length)) {
+    const refusal = assignmentRefusal(word);
+    if (refusal !== null) return invalid(field, `leading assignment ${JSON.stringify(word)} is not allowed: ${refusal}`);
+    if (redactSecrets(word) !== word) return invalid(field, `leading assignment ${JSON.stringify(word.slice(0, word.indexOf('=')))} holds a value that looks like a secret: command environment must be non-secret`);
+  }
+  if (program.length === 0 || program[0] === '<paths>') return invalid(field, 'a command must have a program word after its leading assignments');
   if (isRefusedAgentCommand(raw)) {
-    return invalid(field, `commands starting with ${JSON.stringify(tokens[0])} are never granted to the agent`);
+    return invalid(field, `commands starting with ${JSON.stringify(program[0])} are never granted to the agent`);
   }
   return ok(raw);
 }
