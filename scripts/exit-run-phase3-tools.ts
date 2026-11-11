@@ -27,6 +27,10 @@
 //   write-authorization --classification F --brief B --run R --expects E ... --cap USD --ceiling USD --claude-bin P --claude-version V --decision-ref TEXT
 //                       --owner-confirmed-at ISO --out F [--source REPO] [--pin SHA]
 //       Writes the owner's fresh approval (D-28) only when that gate passes, the cap is at most 4.50 USD (D-33) and the ceiling at most 25 USD (D-05); otherwise exit 2.
+//   From then on only such an approval authorizes a start: `field`, `authorize` and `evidence` refuse every other selection and every authorization without
+//   `exitRules: D-26..D-35` (the files of plans 03-28 to 03-49 authorize nothing; they stay on disk as history). `authorize` runs the gate again for the brief it starts.
+//   The `relax` subcommand and the relaxed finish judge stay for the history of plan 03-49, but `relax` refuses an evidence file marked `exitRules: D-26..D-35` and the
+//   evidence stage judges a relax record in an entry as a problem.
 //
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
@@ -694,6 +698,8 @@ function relaxCommand(argv: readonly string[]): number {
   const path = resolve(evidence);
   const file = readJson(path);
   if (file === undefined) return refuse(`${evidence} is not an evidence file`);
+  // D-28, plan 03-52: the relax path stays in the tool for the history of plan 03-49 but cannot act in the exit that carries the rules D-26..D-35.
+  if (file['exitRules'] === EXIT_RULES) return refuse(`${evidence} is the evidence file of the exit under ${EXIT_RULES}: relax cannot act there, a second answered decision is a failure of the run (D-28)`);
   const next = withRelax(file, runId, { by: 'owner', ref, decisions: [...new Set(decisions)], at: new Date().toISOString() });
   if (next === undefined) return refuse(`the evidence file holds no entry for ${runId}`);
   writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
@@ -1112,30 +1118,65 @@ export function earlierJudgementsOf(prior: Json | undefined, reason: string | un
   return [...earlier, { judgedAt: atPause['at'] ?? null, supersededAt: now, supersededBecause: reason ?? null, problems: prior['problems'], stopOk: prior['stopOk'] ?? null, spend: prior['spend'] ?? null }];
 }
 
-interface Authorization {
+export interface Authorization {
   perRunCapUsd: number;
   ceilingUsd: number;
   claudeBin: string;
   claudeVersion: string;
+  // Each approved brief: { path, digest, run, expects }.
   briefs: Json[];
+  // The runs of the briefs, in the order they start.
+  order: string[];
+  // The classification file the approval's D-31 gate passed on, as the authorization names it (read against the checkout the tools live in).
+  briefCheckPath: string;
 }
 
-// The selections that authorize a start: an approval, and the two in-place options the owner's checkpoint of plan 03-49 offered (the other options
-// there stop or re-plan, so no file records them as an authorization).
-const AUTHORIZING_SELECTIONS: readonly string[] = ['approve', 'answer-2-in-place', 'amend-unprotected-path'];
+// The only selection that authorizes a start is a fresh approval (D-28, plan 03-52). The in-place selections of plan 03-49 and the approvals of plans 03-28 to 03-49
+// authorize nothing any more; their files stay on disk as history.
+const AUTHORIZING_SELECTIONS: readonly string[] = ['approve'];
 
-function authorizationOf(path: string): Authorization | string {
+// The classification file an authorization names, read as JSON; undefined when it cannot be.
+function classificationOfAuthorization(absolutePath: string): Json | undefined {
+  try {
+    return readJson(absolutePath);
+  } catch {
+    return undefined;
+  }
+}
+
+// What a fresh approval is (D-28): selection `approve`, `exitRules: D-26..D-35`, a per-run cap of at most 4.50 USD (D-33) and a ceiling of at most 25 USD (D-05), a
+// `briefCheck` record naming a readable classification file whose sha256 matches, an `ownerConfirmedAt` no earlier than that file's `checkedAt`, and an `order` that
+// holds the run of each brief exactly once. Returns the authorization, or the reason the file authorizes nothing.
+export function authorizationOf(path: string): Authorization | string {
   const auth = readJson(resolve(path));
   if (auth === undefined) return `${path} is not the owner's authorization file`;
-  if (!AUTHORIZING_SELECTIONS.includes(auth['selection'] as string)) return `the authorization selection is ${JSON.stringify(auth['selection'])}, not one of ${AUTHORIZING_SELECTIONS.map((s) => `"${s}"`).join(', ')}`;
+  if (!AUTHORIZING_SELECTIONS.includes(auth['selection'] as string)) return `the authorization selection is ${JSON.stringify(auth['selection'])}, not ${AUTHORIZING_SELECTIONS.map((s) => `"${s}"`).join(' or ')}: only a fresh approval authorizes a start (D-28)`;
+  if (auth['exitRules'] !== EXIT_RULES) return `the authorization names exitRules ${JSON.stringify(auth['exitRules'] ?? null)}, not ${EXIT_RULES}: only an approval written by write-authorization after the re-discussion starts a run (D-28)`;
   const perRunCapUsd = Number(auth['perRunCapUsd']);
   const ceilingUsd = Number(auth['ceilingUsd']);
   if (!(Number.isFinite(perRunCapUsd) && perRunCapUsd > 0 && Number.isFinite(ceilingUsd) && ceilingUsd > 0)) return 'the authorization names no finite positive per-run cap and ceiling';
+  if (perRunCapUsd > EXIT_RUN_CAP_USD + EPS) return `the authorization's per-run cap ${perRunCapUsd} USD is above ${EXIT_RUN_CAP_USD.toFixed(2)} USD (D-33)`;
+  if (ceilingUsd > EXIT_CEILING_USD + EPS) return `the authorization's ceiling ${ceilingUsd} USD is above ${EXIT_CEILING_USD} USD (D-05, D-33)`;
   const host = isObject(auth['host']) ? auth['host'] : {};
   const claudeBin = typeof host['claudeBin'] === 'string' ? host['claudeBin'] : '';
   const claudeVersion = typeof host['claudeVersion'] === 'string' ? host['claudeVersion'] : '';
   if (claudeBin === '' || claudeVersion === '') return 'the authorization names no host pin (host.claudeBin, host.claudeVersion)';
-  return { perRunCapUsd, ceilingUsd, claudeBin, claudeVersion, briefs: asObjects(auth['briefs']) };
+  const check = isObject(auth['briefCheck']) ? auth['briefCheck'] : {};
+  const briefCheckPath = typeof check['path'] === 'string' ? check['path'] : '';
+  const classificationPath = resolve(REPO_ROOT, briefCheckPath);
+  if (briefCheckPath === '' || !existsSync(classificationPath)) return `the authorization's briefCheck file ${JSON.stringify(briefCheckPath)} cannot be read: an approval names the classification file its gate passed on (D-28, D-31)`;
+  if (check['sha256'] !== createHash('sha256').update(readFileSync(classificationPath)).digest('hex')) return `the briefCheck file ${briefCheckPath} does not match the sha256 the approval recorded: it changed after the approval (D-28, D-31)`;
+  const confirmedAt = auth['ownerConfirmedAt'];
+  if (!isIsoTime(confirmedAt)) return `the authorization's ownerConfirmedAt ${JSON.stringify(confirmedAt ?? null)} is not an ISO time (D-28)`;
+  const checkedAt = classificationOfAuthorization(classificationPath)?.['checkedAt'];
+  if (!isIsoTime(checkedAt)) return `the briefCheck file ${briefCheckPath} records no checkedAt time (D-28, D-31)`;
+  if (Date.parse(confirmedAt) < Date.parse(checkedAt)) return `the owner's confirmation ${confirmedAt} is earlier than the classification's checkedAt ${checkedAt}: the owner approved before the check (D-28)`;
+  const briefs = asObjects(auth['briefs']);
+  const runs = briefs.map((b) => b['run']);
+  const order: unknown[] = Array.isArray(auth['order']) ? auth['order'] : [];
+  const named = (list: unknown[]): list is string[] => list.every((r) => typeof r === 'string' && r !== '');
+  if (!named(runs) || !named(order) || order.length !== runs.length || new Set(order).size !== order.length || !runs.every((r) => order.includes(r))) return "the authorization's order must hold the run of each approved brief exactly once (D-28)";
+  return { perRunCapUsd, ceilingUsd, claudeBin, claudeVersion, briefs, order: [...order], briefCheckPath };
 }
 
 function fieldCommand(argv: readonly string[]): number {
@@ -1153,6 +1194,23 @@ function fieldCommand(argv: readonly string[]): number {
   }
   out(`${String(value)}\n`);
   return 0;
+}
+
+// The refusal text when the D-31 gate finds a problem with the one brief about to start, or undefined when it passes. Read-only: git objects of the source at the pin.
+function gateRefusalOf(briefCheckPath: string, briefPath: string, source: string, pinRef: string): string | undefined {
+  const classification = readClassification(resolve(REPO_ROOT, briefCheckPath));
+  if (typeof classification === 'string') return `refusing to start: ${classification} (D-31)`;
+  const key = basename(briefPath).replace(/\.md$/, '');
+  const before = portfolioState(source);
+  let fresh: Json;
+  try {
+    fresh = briefCheckReport(source, [briefPath], pinRef, { limitPerNeedle: Infinity });
+  } catch (cause) {
+    return `refusing to start ${key}: the fresh write-set check failed: ${cause instanceof Error ? cause.message : String(cause)} (D-31)`;
+  }
+  const problems = gateForBrief(classification, fresh, key);
+  if (!sameState(before, portfolioState(source))) problems.push('(file): the repository HEAD, status, refs or checkout digest changed during the gate (D-31)');
+  return problems.length === 0 ? undefined : `refusing to start ${key}: the D-31 gate found ${problems.length} problem(s): ${problems.join('; ')}`;
 }
 
 function authorize(argv: readonly string[]): number {
@@ -1187,6 +1245,11 @@ function authorize(argv: readonly string[]): number {
   const entry = parsed.briefs.find((b) => b['digest'] === digest);
   if (entry === undefined) return refuse(`the brief ${named['brief']} (digest ${digest}) is not one of the briefs the owner approved: stop and report`);
   if (typeof entry['path'] === 'string' && resolve(REPO_ROOT, entry['path']) !== briefPath) return refuse(`the approved digest ${digest} belongs to ${entry['path']}, not ${named['brief']}`);
+
+  // D-31, plan 03-52: the gate again, for this brief, against a fresh uncapped write-set check at the pin. The classification file the approval names is a claim;
+  // a finding of this brief that it leaves out, or changes in a protected file or outside the conventions' write set, stops the start before any spend.
+  const gate = gateRefusalOf(parsed.briefCheckPath, briefPath, resolve(named['repo'] as string), named['pin'] ?? DEFAULT_PIN);
+  if (gate !== undefined) return refuse(gate);
 
   // D-03: no run is repeated by hand, and no fourth run is started.
   const existing = readJson(resolve(named['evidence'] as string));
@@ -1526,12 +1589,17 @@ export function judgeFinish(facts: {
   // Plan 03-49: the owner's relaxation of D-03 for this run, as the `relax` subcommand wrote it into the entry: `{ by: 'owner', ref, decisions, at }`. Only through
   // it is a decision beyond the one that paused the run accepted, and then only when the owner answered it on the terminal.
   relax?: unknown;
+  // Plan 03-52 (D-28): false in the exit under D-26..D-35. A relax record in the entry is then a problem and relaxes nothing: every decision and amendment is judged as if
+  // there were none. Absent (or true): the plan 03-49 rules above.
+  relaxAllowed?: boolean;
   // The latest contract of the run: `{ version, authorizedBy, reason, diff }`. A version above 1 is an amendment, accepted only under a valid relax record, as
   // contract version 2, authorized by the owner, with a reason and a diff. Absent: nothing about amendments is judged.
   contract?: { version?: unknown; authorizedBy?: unknown; reason?: unknown; diff?: unknown } | null;
 }): { problems: string[]; resume: Json } {
   const problems: string[] = [];
-  const relaxed = relaxOf(facts.relax);
+  const relaxAllowed = facts.relaxAllowed !== false;
+  if (!relaxAllowed && facts.relax !== undefined && facts.relax !== null) problems.push('a relax record is not accepted in the exit (D-28)');
+  const relaxed: { record?: RelaxRecord; problem?: string } = relaxAllowed ? relaxOf(facts.relax) : {};
   if (relaxed.problem !== undefined) problems.push(relaxed.problem);
   const relaxedIds = new Set(relaxed.record?.decisions ?? []);
   if (facts.state !== 'ready_for_review') problems.push(`the run ended ${facts.state}, not ready_for_review (D-03)`);
@@ -1779,6 +1847,8 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         pauseDecisionIds,
         // The owner's relaxation of D-03 for this run, written into its entry by the `relax` subcommand (plan 03-49), and the contract the run ended on.
         relax: (prior as Json)['relax'],
+        // D-28 (plan 03-52): the relax record cannot count in the exit under D-26..D-35: the evidence stage judges a record as a problem.
+        relaxAllowed: false,
         contract: isObject(facts.entry['contract']) ? facts.entry['contract'] : null,
       });
       problems.push(...judged.problems);
