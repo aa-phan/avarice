@@ -182,7 +182,7 @@ describe('the three R1 briefs (D-06)', () => {
 const CONVENTIONS_COMMIT = '9f63d91';
 const PHASE3_DIR = join(ROOT, 'test', 'benchmark', 'phase3');
 const PHASE3_BRIEFS = [
-  { file: 'p3-run1-copy-fallback.md', key: 'fallback-wording', planted: 'B', independent: 'A', dependent: 'C', created: [] as string[] },
+  { file: 'p3-run1-copy-fallback.md', key: 'fallback-wording', planted: 'B', independent: 'A', dependent: 'C', created: ['tests/unit/contact-fallback.test.tsx'] },
   { file: 'p3-run2-graduation-label.md', key: 'graduation-wording', planted: 'B', independent: 'A', dependent: undefined, created: [] as string[] },
   { file: 'p3-run3-theme-toggle.md', key: 'toggle-pattern', planted: 'B', independent: 'A', dependent: undefined, created: ['tests/unit/theme-toggle.test.tsx'] },
 ];
@@ -331,9 +331,9 @@ describe('the three Phase 3 exit briefs (plan 03-28, D-02 to D-04)', () => {
     assert.deepEqual(committed.value, conventions());
   });
 
-  // The latest dry run: the owner changed run 3's brief on 2026-11-10 (plan 03-49), so the dry runs of 03-28 to 03-47 name its earlier digest.
-  it('the recorded dry run (03-49-dry-run.json) names the digest of each brief file as it is now', () => {
-    const record = join(ROOT, '.planning', 'phases', '03-decisions-independent-work-and-amendments', '03-49-dry-run.json');
+  // The latest dry run: plan 03-55 redrafted run 1 (D-32), so the dry runs of 03-28 to 03-49 name its earlier digest.
+  it('the recorded dry run (03-55-dry-run.json) names the digest of each brief file as it is now', () => {
+    const record = join(ROOT, '.planning', 'phases', '03-decisions-independent-work-and-amendments', '03-55-dry-run.json');
     assert.ok(existsSync(record), 'run scripts/exit-run-phase3.sh --dry-run with EXIT_DRY_RUN_OUT set to this file');
     const dry = JSON.parse(readFileSync(record, 'utf8')) as { briefs: Array<{ path: string; digest: string; compiled: boolean }>; spentUsd: number };
     assert.equal(dry.spentUsd, 0);

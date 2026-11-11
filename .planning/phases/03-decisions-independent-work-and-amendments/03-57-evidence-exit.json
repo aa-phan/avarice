@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "plan": "03-55",
+  "exitRules": "D-26..D-35",
+  "decision": "D-26 to D-35",
+  "updatedAt": "2026-11-11T03:33:15.000Z",
+  "runs": [],
+  "supersedes": {
+    "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
+    "evidenceFile": "03-48-evidence-exit.json",
+    "reason": "the owner's D-34 decision: old run 1 is cancelled by the owner in their own terminal and superseded; its live facts are supplementary evidence, not a pass (D-28)"
+  }
+}

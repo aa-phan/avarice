@@ -1030,7 +1030,9 @@ interface ExitFixture {
 const GATE_FALLBACK = 'Could not copy the address. Opening your mail app instead.';
 
 // A temporary git repository with the draft conventions committed, a constant a brief removes, a file outside the brief's Write list that uses it (inside the
-// conventions) and a protected e2e spec that asserts its value on line 5; plus two briefs that compile against it (the run 1 brief of Phase 3, and a copy).
+// conventions) and a protected e2e spec that asserts its value on line 5; plus two briefs that compile against it (the run 1 brief as plan 03-52 knew it, and a
+// copy). The brief is the frozen copy test/fixtures/exit-gate-run1-brief.md, not the live brief: plan 03-55 redrafted the live one (D-32), and these cases
+// need the fixture to keep exactly the three findings below.
 function makeExitFixture(): ExitFixture {
   const repo = makeScratchRepo({
     files: {
@@ -1047,7 +1049,7 @@ function makeExitFixture(): ExitFixture {
     },
   });
   const dir = mkdtempSync(join(tmpdir(), 'exit-gate-'));
-  const text = readFileSync(join(ROOT, 'test', 'benchmark', 'phase3', 'p3-run1-copy-fallback.md'), 'utf8').replace('baseRevision: 9f1cd8d', `baseRevision: ${repo.head.slice(0, 7)}`);
+  const text = readFileSync(join(ROOT, 'test', 'fixtures', 'exit-gate-run1-brief.md'), 'utf8').replace('baseRevision: 9f1cd8d', `baseRevision: ${repo.head.slice(0, 7)}`);
   const run1 = join(dir, 'run1.md');
   const run2 = join(dir, 'run2.md');
   writeFileSync(run1, text);
