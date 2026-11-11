@@ -84,11 +84,26 @@ export function canonical(path: string): string {
   }
 }
 
-// The checks to run, in declaration order: every required check and every target check.
-export function checksToRun(contract: RunContract): Array<{ spec: RunContract['execution']['checks'][number]; required: boolean; target: boolean }> {
+// Whether a declared check runs: it is required or a target. The one predicate checksToRun and checksNotRun share, so the two lists partition the declared checks.
+function runsCheck(contract: Pick<RunContract, 'verification'>): (name: string) => boolean {
   const required = new Set(contract.verification.requiredChecks);
   const targets = new Set(contract.verification.targetChecks);
-  return contract.execution.checks.filter((check) => required.has(check.name) || targets.has(check.name)).map((spec) => ({ spec, required: required.has(spec.name), target: targets.has(spec.name) }));
+  return (name) => required.has(name) || targets.has(name);
+}
+
+// The checks to run, in declaration order: every required check and every target check.
+export function checksToRun(contract: RunContract): Array<{ spec: RunContract['execution']['checks'][number]; required: boolean; target: boolean }> {
+  const runs = runsCheck(contract);
+  const required = new Set(contract.verification.requiredChecks);
+  const targets = new Set(contract.verification.targetChecks);
+  return contract.execution.checks.filter((check) => runs(check.name)).map((spec) => ({ spec, required: required.has(spec.name), target: targets.has(spec.name) }));
+}
+
+// The D-35 list: the declared checks that are neither required nor a target, in declaration order. They are reported as `not run: not required`; this changes nothing
+// that runs and no gate judges differently.
+export function checksNotRun(contract: Pick<RunContract, 'execution' | 'verification'>): string[] {
+  const runs = runsCheck(contract);
+  return contract.execution.checks.map((check) => check.name).filter((name) => !runs(name));
 }
 
 // ---- the sandbox every check, install and list command runs in -----------------------------------------------------------------

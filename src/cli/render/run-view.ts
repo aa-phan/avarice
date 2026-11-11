@@ -1,7 +1,7 @@
 // Human-readable run views (OPS-7; plan 02-15): the runs part of `status` and the whole of `inbox`. Pure functions over the read models of
 // src/app/run-status.ts: the caller passes the time and the terminal width in, and every recorded string (a title, a branch, a decision
 // issue, a path) passes through stripControl before it is printed (T-02-49). The `--json` paths never come through here.
-import type { InboxDecision, InboxNotification, InboxReview, InboxView, RunDecisionView, RunItemView, RunNotificationView, RunStatus } from '../../app/run-status.ts';
+import type { InboxDecision, InboxNotification, InboxReview, InboxView, RunCheckNotRunView, RunDecisionView, RunItemView, RunNotificationView, RunStatus } from '../../app/run-status.ts';
 import { orderRuns } from '../../app/run-status.ts';
 import { duration, localTime, resultLine, stateWord, stripControl, usd } from './style.ts';
 import { renderTable } from './table.ts';
@@ -92,6 +92,9 @@ function notificationsLine(n: RunNotificationView): string | null {
   return `notifications: ${parts.join(', ')}`;
 }
 
+// `e2e not run: not required`: a declared check the run does not execute (D-35). The name is repository-authored text, so it passes stripControl.
+const notRunEntry = (c: RunCheckNotRunView): string => `${stripControl(c.name)} not run: ${stripControl(c.reason)}`;
+
 // The detail lines of one run, each indented two spaces and ending with a newline. The first line is the result line.
 export function renderRunDetails(run: RunStatus, nowMs: number, _width: number): string {
   const lines: string[] = [resultLine(`run ${run.runId}`, run.interrupted !== undefined ? run.interrupted.presentedAs : run.state, run.interrupted !== undefined ? run.interrupted.reason : run.reason)];
@@ -105,11 +108,12 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
   if (run.lastCheckpoint !== null) detail(`last checkpoint: ${stripControl(run.lastCheckpoint.nextAction)} (${localTime(Date.parse(run.lastCheckpoint.at), nowMs)})`);
   const branch = branchLine(run);
   if (branch !== null) detail(branch);
-  detail(
-    run.evidence.length === 0
-      ? 'evidence: none'
-      : `evidence: ${run.evidence.map((e) => `${stripControl(e.name)} ${stripControl(e.status)}${e.preExisting === true ? ' (pre-existing)' : ''}`).join(', ')}`,
-  );
+  // The measured entries, then the declared checks the run never executes because they are neither required nor a target (D-35).
+  const evidenceEntries = [
+    ...run.evidence.map((e) => `${stripControl(e.name)} ${stripControl(e.status)}${e.preExisting === true ? ' (pre-existing)' : ''}`),
+    ...(run.checksNotRun ?? []).map(notRunEntry),
+  ];
+  detail(evidenceEntries.length === 0 ? 'evidence: none' : `evidence: ${evidenceEntries.join(', ')}`);
   detail(run.gates.length === 0 ? 'gates: none' : `gates: ${run.gates.map((g) => `${stripControl(g.gate)} ${g.passed ? 'passed' : 'failed'}`).join(', ')}`);
   for (const item of run.items ?? []) detail(itemLine(run, item));
   if (run.openDecisions > 0) detail(`decisions: ${run.openDecisions} open (see avarice inbox)`);

@@ -4,6 +4,8 @@
 // project entry) and of `inbox --json`; the human renderers live in src/cli/render/run-view.ts.
 import { ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import type { RunContract } from '../domain/run-contract.ts';
+import { checksNotRun } from './checks.ts';
 import { amendCommandOf, isAmendOnly, optionsOf } from '../domain/decision-policy.ts';
 import type { DecisionOption } from '../domain/decision-policy.ts';
 import { isRunResumable } from '../domain/run-lifecycle.ts';
@@ -90,6 +92,12 @@ export interface RunInterrupted {
   resumeCommand: string;
 }
 
+// A declared check the run does not execute because it is neither required nor a target (D-35). The reason is always `not required`.
+export interface RunCheckNotRunView {
+  name: string;
+  reason: 'not required';
+}
+
 export interface RunStatus {
   runId: string;
   title: string;
@@ -115,6 +123,8 @@ export interface RunStatus {
   notifications?: RunNotificationView;
   // Present only when the owner asked for the run to be cancelled and the request still stands.
   cancelRequestedAt?: string;
+  // Appended under the frozen-shapes rule (D-35): the declared checks that are neither required nor a target, so the run never runs them. Present only when there is one.
+  checksNotRun?: RunCheckNotRunView[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -178,6 +188,27 @@ function referencesOf(body: unknown): RunReferenceView[] {
     out.push({ kind: 'conventions', id: '.avarice/config.json', revision: workspace['conventionsRevision'] });
   }
   return out;
+}
+
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === 'string');
+
+// The declared checks of a stored contract body that the run does not execute (D-35). The body is read defensively, as referencesOf reads it: anything that is not the
+// shape of a compiled contract gives an empty list.
+export function checksNotRunOf(body: unknown): RunCheckNotRunView[] {
+  if (!isObject(body)) return [];
+  const execution = body['execution'];
+  const verification = body['verification'];
+  if (!isObject(execution) || !isObject(verification)) return [];
+  const checks = execution['checks'];
+  const requiredChecks = verification['requiredChecks'];
+  const targetChecks = verification['targetChecks'];
+  if (!Array.isArray(checks) || !isStringArray(requiredChecks) || !isStringArray(targetChecks)) return [];
+  const names: Array<{ name: string }> = [];
+  for (const check of checks) {
+    if (!isObject(check) || typeof check['name'] !== 'string') return [];
+    names.push({ name: check['name'] });
+  }
+  return checksNotRun({ execution: { checks: names }, verification: { requiredChecks, targetChecks } } as Pick<RunContract, 'execution' | 'verification'>).map((name) => ({ name, reason: 'not required' as const }));
 }
 
 function interruptedOf(ledger: Ledger, run: RunRow, checkpoint: RunCheckpointRow | null, nowMs: number): Result<RunInterrupted | undefined> {
@@ -244,6 +275,7 @@ function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus>
   if (!interrupted.ok) return interrupted;
   const named = lastCheckpointOf(checkpoints.value);
   const evidence = finalEvidence(evidenceRows.value);
+  const notRun = checksNotRunOf(contract.value === null ? null : contract.value.body);
 
   return ok({
     runId: run.runId,
@@ -264,6 +296,7 @@ function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus>
     decisions: decisionsOfRun(decisionRows.value),
     notifications: notificationsOfRun(notificationRows.value),
     ...(run.cancelRequestedAt !== null ? { cancelRequestedAt: run.cancelRequestedAt } : {}),
+    ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
   });
 }
 
