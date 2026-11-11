@@ -213,6 +213,8 @@ export function renderInbox(view: InboxView, nowMs: number, width: number): stri
     return `${label}${fit(d.issue, Math.max(8, width - Array.from(label).length))}\n${decisionDetails(d, width).map((line) => `${line}\n`).join('')}`;
   });
   const decisions = view.decisions.length === 0 ? '' : `decisions:\n${renderTable(DECISION_COLUMNS, view.decisions.map((d) => decisionRow(d, nowMs)), width)}${issues.join('')}`;
-  const reviews = view.reviews.length === 0 ? '' : `reviews:\n${renderTable(REVIEW_COLUMNS, view.reviews.map(reviewRow), width)}`;
+  // A review whose run left a declared check unrun says so on its own line under the table (D-35).
+  const notRun = view.reviews.flatMap((r) => (r.checksNotRun === undefined || r.checksNotRun.length === 0 ? [] : [`checks ${stripControl(r.runId)}: ${r.checksNotRun.map(notRunEntry).join(', ')}\n`]));
+  const reviews = view.reviews.length === 0 ? '' : `reviews:\n${renderTable(REVIEW_COLUMNS, view.reviews.map(reviewRow), width)}${notRun.join('')}`;
   return `${head}${decisions}${reviews}`;
 }

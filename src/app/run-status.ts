@@ -351,6 +351,8 @@ export interface InboxReview {
   branch: string | null;
   commit: string | null;
   repository: string;
+  // Appended under the frozen-shapes rule (D-35): the declared checks the run does not execute because they are neither required nor a target. Present only when there is one.
+  checksNotRun?: RunCheckNotRunView[];
 }
 
 export interface InboxView {
@@ -416,7 +418,17 @@ export function getInbox(ledger: Ledger): Result<InboxView> {
     if (run.state !== 'ready_for_review' && run.state !== 'awaiting_review') continue;
     const steps = ledger.getRunSteps(run.runId);
     if (!steps.ok) return steps;
-    reviews.push({ runId: run.runId, title: run.title, branch: run.branch, commit: handedOffCommit(steps.value), repository: repoOf.get(run.projectId) ?? '' });
+    const contract = ledger.getRunContract(run.runId);
+    if (!contract.ok) return contract;
+    const notRun = checksNotRunOf(contract.value === null ? null : contract.value.body);
+    reviews.push({
+      runId: run.runId,
+      title: run.title,
+      branch: run.branch,
+      commit: handedOffCommit(steps.value),
+      repository: repoOf.get(run.projectId) ?? '',
+      ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
+    });
   }
   return ok({ decisions, reviews });
 }
