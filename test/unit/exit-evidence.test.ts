@@ -2390,3 +2390,300 @@ describe('exit-run-phase3.sh --silence (plan 03-54)', () => {
     assert.match(text, /echo "\s+scripts\/exit-run-phase3\.sh --silence RUNID --authorization-file F/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-54 Task 3: the exit record. `verdict` says 3 of 3 only when three clean runs exist in the current epoch (D-26); a correct stop is evidence that never counts (D-28);
+// a superseded run's facts are kept as supplementary evidence that never counts either (D-34, T-03-138). The new exports are read through casts.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('exit evidence: exitVerdict counts only clean runs of the current epoch, one per role (plan 03-54; D-26, D-28, D-34, T-03-138)', () => {
+  type Verdict = { verdict: string; counted: Array<{ role: string; runId: string; attempt: number }>; correctStops: Json[]; notCounted: Array<{ runId: string; role: string | null; attempt: number | null; reason: string }> };
+  const AUTH54 = {
+    ...AUTH53,
+    briefs: [
+      { path: 'b2.md', digest: 'sha256:run2', run: 'run2', expects: 'amend-stale' },
+      { path: 'b3.md', digest: 'sha256:run3', run: 'run3', expects: 'silence' },
+      { path: 'b1.md', digest: 'sha256:run1', run: 'run1', expects: 'block-resume' },
+    ] as Json[],
+  };
+  const exitVerdict = (evidence: Json, auth: Pick<typeof AUTH53, 'order' | 'briefs'> = AUTH54): Verdict => (exitTools as unknown as { exitVerdict: (e: Json, a: typeof AUTH54) => Verdict }).exitVerdict(evidence, auth as typeof AUTH54);
+  // One finished entry that meets every condition of its role: ready_for_review, resumed, pause-origin decisions, equal checkout digests and only its own run branch added.
+  const clean = (role: string, n: number, startMinute: number, over: Json = {}): Json => {
+    const runId = `run_${role}_${n}`;
+    const extra: Json =
+      role === 'run2'
+        ? { contract: { version: 2, authorizedBy: 'owner:tester', reason: 'r', diff: [{ path: 'files.write' }] }, decisions: [{ decisionId: 'dec_old', state: 'stale', origin: { origin: 'pause' } }, { decisionId: 'dec_new', state: 'answered', origin: { origin: 'pause' } }] }
+        : role === 'run3'
+          ? { contract: { version: 1 }, silence: { problems: [] }, decisions: [{ decisionId: 'dec_3', state: 'answered', origin: { origin: 'pause' } }] }
+          : { contract: { version: 1 }, decisions: [{ decisionId: 'dec_1', state: 'answered', origin: { origin: 'pause' } }] };
+    return passed53(role, n, startMinute, {
+      runId,
+      problems: [],
+      finalState: 'ready_for_review',
+      resumed: true,
+      checkout: { equal: true, newRefs: [`refs/heads/avarice/${runId}`], removedOrChangedRefs: [] },
+      ...extra,
+      ...over,
+    });
+  };
+  const three = (): Json[] => [clean('run2', 1, 1), clean('run3', 1, 6), clean('run1', 1, 11)];
+  const proposal = (conformant: boolean): Json => ({ by: 'claude', class: 'brief-harness-defect', stoppedBy: 'G2:gsd-verification', at: ['tests/e2e/x.spec.ts:5'], docsSystem: { conformant, ref: 'docs/system/checks-and-evidence.md' }, summary: 'the brief asked for a file the contract protects', proposedAt: minute53(1) });
+  const correctStop = (role: string, n: number, startMinute: number, over: Json = {}): Json =>
+    failed53(role, n, startMinute, { classification: { proposed: proposal(true), confirmed: { by: 'owner', class: 'brief-harness-defect', ref: 'owner reply', at: minute53(startMinute + 5) } }, ...over });
+
+  it('says exit: 3/3 ready_for_review when each role of the order has a clean run in the current epoch', () => {
+    const result = exitVerdict(evidence53(...three()));
+    assert.equal(result.verdict, 'exit: 3/3 ready_for_review');
+    assert.deepEqual(result.counted, [{ role: 'run2', runId: 'run_run2_1', attempt: 1 }, { role: 'run3', runId: 'run_run3_1', attempt: 1 }, { role: 'run1', runId: 'run_run1_1', attempt: 1 }]);
+    assert.deepEqual(result.correctStops, []);
+    assert.deepEqual(result.notCounted, []);
+  });
+
+  it('counts the latest clean attempt of a role, and lists a correct stop before it as evidence that does not count', () => {
+    const result = exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6), correctStop('run1', 1, 11), clean('run1', 2, 20)));
+    assert.equal(result.verdict, 'exit: 3/3 ready_for_review');
+    assert.deepEqual(result.counted.map((c) => `${c.role}:${c.attempt}`), ['run2:1', 'run3:1', 'run1:2']);
+    assert.deepEqual(result.correctStops.map((c) => c['runId']), ['run_run1_1']);
+    assert.equal(result.notCounted.length, 0, 'a correct stop is listed under correctStops, not twice');
+  });
+
+  it('says exit: 2/3 and lists the correct stop when a role has only a stop that the owner confirmed as a brief/harness defect with docs/system conformant', () => {
+    const result = exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6), correctStop('run1', 1, 11)));
+    assert.equal(result.verdict, 'exit: 2/3 ready_for_review');
+    assert.deepEqual(result.counted.map((c) => c.role), ['run2', 'run3']);
+    assert.equal(result.correctStops.length, 1);
+    const stop = result.correctStops[0] as Json;
+    assert.equal(stop['runId'], 'run_run1_1');
+    assert.equal(stop['role'], 'run1');
+    assert.equal(stop['class'], 'brief-harness-defect');
+    assert.equal(stop['stoppedBy'], 'G2:gsd-verification');
+    assert.deepEqual(stop['at'], ['tests/e2e/x.spec.ts:5']);
+    assert.equal(stop['docsRef'], 'docs/system/checks-and-evidence.md');
+  });
+
+  it('lists a stop that is not a correct stop under notCounted with its reason: unconfirmed, a product defect, or a proposal that does not say docs/system conformant', () => {
+    const unconfirmed = exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6), failed53('run1', 1, 11)));
+    assert.equal(unconfirmed.verdict, 'exit: 2/3 ready_for_review');
+    assert.deepEqual(unconfirmed.correctStops, []);
+    assert.match(unconfirmed.notCounted[0]?.reason ?? '', /no owner-confirmed classification/);
+    const product = exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6), failed53('run1', 1, 11, { classification: ruled53('product-defect', 16) })));
+    assert.deepEqual(product.correctStops, []);
+    assert.match(product.notCounted.find((n) => n.runId === 'run_run1_1')?.reason ?? '', /product defect/);
+    const nonconformant = exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6), correctStop('run1', 1, 11, { classification: { proposed: proposal(false), confirmed: { by: 'owner', class: 'brief-harness-defect', ref: 'r', at: minute53(16) } } })));
+    assert.deepEqual(nonconformant.correctStops, []);
+    assert.match(nonconformant.notCounted[0]?.reason ?? '', /docs\/system/);
+  });
+
+  it('does not count a pass from before the latest owner-confirmed product defect: the epoch starts at the confirmation, and every role passes again', () => {
+    const file = evidence53(clean('run2', 1, 1), clean('run3', 1, 6), failed53('run1', 1, 11, { classification: ruled53('product-defect', 20) }));
+    const result = exitVerdict(file);
+    assert.equal(result.verdict, 'exit: 0/3 ready_for_review');
+    assert.deepEqual(result.counted, []);
+    assert.ok(result.notCounted.some((n) => n.runId === 'run_run2_1' && /before the epoch/.test(n.reason)), JSON.stringify(result.notCounted));
+    const again = exitVerdict(evidence53(...(file['runs'] as Json[]), clean('run2', 2, 30), clean('run3', 2, 35), clean('run1', 2, 40)));
+    assert.equal(again.verdict, 'exit: 3/3 ready_for_review');
+    assert.deepEqual(again.counted.map((c) => `${c.role}:${c.attempt}`), ['run2:2', 'run3:2', 'run1:2']);
+  });
+
+  const unmet: Array<[string, string, Json, RegExp]> = [
+    ['an entry that did not pass', 'run1', { passed: false }, /no owner-confirmed classification/],
+    ['an entry with problems', 'run1', { problems: ['required check test is failed at the final revision'] }, /problem/],
+    ['a run that did not end ready_for_review', 'run1', { finalState: 'blocked_on_decision' }, /ready_for_review/],
+    ['a run whose paused item did not resume its own session', 'run1', { resumed: false }, /resume/],
+    ['a decision that did not come from the unit pausing', 'run1', { decisions: [{ decisionId: 'dec_1', state: 'answered', origin: { origin: 'G1:owner-choice-unasked' } }] }, /pause/],
+    ['checkout digests that differ', 'run1', { checkout: { equal: false, newRefs: ['refs/heads/avarice/run_run1_1'], removedOrChangedRefs: [] } }, /checkout/],
+    ['a ref added other than the run branch', 'run1', { checkout: { equal: true, newRefs: ['refs/heads/avarice/run_run1_1', 'refs/heads/other'], removedOrChangedRefs: [] } }, /branch|ref/],
+    ['no run branch added', 'run1', { checkout: { equal: true, newRefs: [], removedOrChangedRefs: [] } }, /branch|ref/],
+    ['run 2 with no amendment', 'run2', { contract: { version: 1 } }, /version 2/],
+    ['run 2 with no stale decision', 'run2', { decisions: [{ decisionId: 'dec_new', state: 'answered', origin: { origin: 'pause' } }] }, /stale/],
+    ['run 3 with no silence block', 'run3', { silence: undefined }, /silence/],
+    ['run 3 with a silence block that lists a problem', 'run3', { silence: { problems: ['only 10 s have passed'] } }, /silence/],
+  ];
+  for (const [name, role, over, pattern] of unmet) {
+    it(`does not count ${name}, and says why`, () => {
+      const runs = three().map((r) => (r['run'] === role ? { ...r, ...over } : r));
+      const result = exitVerdict(evidence53(...runs));
+      assert.equal(result.verdict, 'exit: 2/3 ready_for_review');
+      assert.ok(!result.counted.some((c) => c.role === role), JSON.stringify(result.counted));
+      const reason = result.notCounted.find((n) => n.role === role)?.reason ?? '';
+      assert.match(reason, pattern);
+    });
+  }
+
+  it('reads the expectation of a role from the authorization, not from its name', () => {
+    const swapped = { ...AUTH54, briefs: AUTH54.briefs.map((b) => (b['run'] === 'run1' ? { ...b, expects: 'silence' } : b)) };
+    const result = exitVerdict(evidence53(...three()), swapped);
+    assert.equal(result.verdict, 'exit: 2/3 ready_for_review', 'run1 now expects a silence block it does not have');
+  });
+
+  it('says n/3 for a file with no run at all, and never 3/3 for an order of fewer than three roles', () => {
+    assert.equal(exitVerdict(evidence53()).verdict, 'exit: 0/3 ready_for_review');
+    const two = { ...AUTH54, order: ['run2', 'run3'], briefs: AUTH54.briefs.slice(0, 2) };
+    assert.equal(exitVerdict(evidence53(clean('run2', 1, 1), clean('run3', 1, 6)), two).verdict, 'exit: 2/3 ready_for_review');
+  });
+
+  it('ignores the supplementary list: a supplementary run counts toward nothing', () => {
+    const file = { ...evidence53(clean('run2', 1, 1), clean('run3', 1, 6)), supplementary: [{ runId: 'run_OLD', countsToward3of3: false, resume: { resumed: true } }] };
+    const result = exitVerdict(file);
+    assert.equal(result.verdict, 'exit: 2/3 ready_for_review');
+    assert.equal(result.notCounted.some((n) => n.runId === 'run_OLD'), false);
+  });
+});
+
+describe('exit evidence: verdict writes the exit record and supplement keeps a superseded run as evidence that never counts (plan 03-54; D-28, D-34)', () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  const BRIEFS = [
+    { path: 'b2.md', digest: 'sha256:run2', run: 'run2', expects: 'amend-stale' },
+    { path: 'b3.md', digest: 'sha256:run3', run: 'run3', expects: 'silence' },
+    { path: 'b1.md', digest: 'sha256:run1', run: 'run1', expects: 'block-resume' },
+  ];
+  const cleanEntry = (role: string, startMinute: number, over: Json = {}): Json => {
+    const runId = `run_${role}_1`;
+    return {
+      ...passed53(role, 1, startMinute, { runId }),
+      problems: [],
+      finalState: 'ready_for_review',
+      resumed: true,
+      checkout: { equal: true, newRefs: [`refs/heads/avarice/${runId}`], removedOrChangedRefs: [] },
+      contract: { version: role === 'run2' ? 2 : 1 },
+      decisions: [...(role === 'run2' ? [{ decisionId: 'dec_old', state: 'stale', origin: { origin: 'pause' } }] : []), { decisionId: `dec_${role}`, state: 'answered', origin: { origin: 'pause' } }],
+      ...(role === 'run3' ? { silence: { problems: [] } } : {}),
+      ...over,
+    };
+  };
+  const make = (runs: Json[], extra: Json = {}): { dir: string; auth: string; evidence: string } => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-verdict-'));
+    dirs.push(dir);
+    const auth = writeFreshAuthorization(dir, { briefs: BRIEFS, order: ['run2', 'run3', 'run1'] });
+    const evidence = join(dir, 'evidence.json');
+    writeFileSync(evidence, `${JSON.stringify({ schema: 1, plan: '03-57', decision: 'D-26..D-35', updatedAt: '2026-11-10T12:00:00.000Z', exitRules: 'D-26..D-35', runs, supersedes: { file: '03-48-evidence-exit.json', runId: 'run_OLD' }, ...extra }, null, 2)}\n`);
+    return { dir, auth, evidence };
+  };
+  const read = (file: string): Json => JSON.parse(readFileSync(file, 'utf8')) as Json;
+
+  it('verdict writes verdict, verdictRuns, correctStops and verdictAt, keeps every other key, and exits 0 for 3/3', () => {
+    const { auth, evidence } = make([cleanEntry('run2', 1), cleanEntry('run3', 6), cleanEntry('run1', 11)]);
+    const before = read(evidence);
+    const ran = runTools(['verdict', '--evidence', evidence, '--authorization-file', auth]);
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const after = read(evidence);
+    assert.equal(after['verdict'], 'exit: 3/3 ready_for_review');
+    assert.deepEqual(after['verdictRuns'], [{ role: 'run2', runId: 'run_run2_1', attempt: 1 }, { role: 'run3', runId: 'run_run3_1', attempt: 1 }, { role: 'run1', runId: 'run_run1_1', attempt: 1 }]);
+    assert.deepEqual(after['correctStops'], []);
+    assert.match(String(after['verdictAt']), /^\d{4}-\d\d-\d\dT/);
+    for (const key of ['schema', 'plan', 'decision', 'exitRules', 'runs', 'supersedes']) assert.deepEqual(after[key], before[key], key);
+    assert.match(ran.stdout, /exit: 3\/3 ready_for_review/);
+  });
+
+  it('verdict writes exit: 2/3 with the correct stop listed and exits 1', () => {
+    const stop = failed53('run1', 1, 11, {
+      runId: 'run_stop',
+      classification: { proposed: { by: 'claude', class: 'brief-harness-defect', stoppedBy: 'G2', at: ['a.ts:1'], docsSystem: { conformant: true, ref: 'docs/system/x.md' }, summary: 's', proposedAt: minute53(12) }, confirmed: { by: 'owner', class: 'brief-harness-defect', ref: 'r', at: minute53(15) } },
+    });
+    const { auth, evidence } = make([cleanEntry('run2', 1), cleanEntry('run3', 6), stop]);
+    const ran = runTools(['verdict', '--evidence', evidence, '--authorization-file', auth]);
+    assert.equal(ran.status, 1, ran.stderr + ran.stdout);
+    const after = read(evidence);
+    assert.equal(after['verdict'], 'exit: 2/3 ready_for_review');
+    assert.deepEqual((after['verdictRuns'] as Json[]).map((r) => r['role']), ['run2', 'run3']);
+    assert.deepEqual((after['correctStops'] as Json[]).map((c) => c['runId']), ['run_stop']);
+    assert.match(ran.stdout, /exit: 2\/3 ready_for_review/);
+  });
+
+  it('verdict exits 2 and leaves the file byte-identical for an unreadable evidence file or an authorization that authorizes nothing', () => {
+    const { auth, evidence } = make([]);
+    const before = sha256Of(evidence);
+    assert.equal(runTools(['verdict', '--evidence', join(tmpdir(), 'no-such-evidence.json'), '--authorization-file', auth]).status, 2);
+    assert.equal(runTools(['verdict', '--evidence', evidence, '--authorization-file', join(tmpdir(), 'no-such-authorization.json')]).status, 2);
+    assert.equal(runTools(['verdict', '--evidence', evidence]).status, 2);
+    assert.equal(sha256Of(evidence), before);
+  });
+
+  // The facts of old run 1 as plan 03-48 recorded them, in the keys supplement copies.
+  const OLD_RUN: Json = {
+    runId: 'run_OLD',
+    brief: 'test/benchmark/phase3/p3-run1-copy-fallback.md',
+    briefDigest: 'sha256:old',
+    items: [{ itemId: 'A', state: 'done' }, { itemId: 'B', state: 'done' }],
+    decisions: [{ decisionId: 'dec_OLD', class: 'acceptance', state: 'answered', answeredBy: 'owner:tester', answerChannel: 'terminal', origin: { origin: 'pause', signalKind: 'pause' }, issue: 'which wording?' }],
+    resume: { resumed: true, itemId: 'B' },
+    problems: ['the run stopped again on decision dec_NEXT'],
+    checkout: { equal: true, newRefs: [] },
+    costUsd: 1.17,
+    passed: false,
+    state: 'blocked_on_decision',
+  };
+  const makeOther = (dir: string, runs: Json[] = [OLD_RUN]): string => {
+    const other = join(dir, 'other-evidence.json');
+    writeFileSync(other, `${JSON.stringify({ schema: 1, plan: '03-48', runs })}\n`);
+    return other;
+  };
+  const supplementArgs = (evidence: string, other: string, runId = 'run_OLD'): string[] => ['supplement', '--evidence', evidence, '--from', other, '--run-id', runId, '--note', 'old run 1: B resumed its own session; stopped at G2'];
+
+  it('supplement appends the superseded run to supplementary, marked countsToward3of3 false, and keeps every other byte of the file', () => {
+    const { dir, evidence } = make([cleanEntry('run2', 1)]);
+    const before = read(evidence);
+    const other = makeOther(dir);
+    const ran = runTools(supplementArgs(evidence, other));
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const after = read(evidence);
+    const list = after['supplementary'] as Json[];
+    assert.equal(list.length, 1);
+    const record = list[0] as Json;
+    assert.deepEqual(Object.keys(record).sort(), ['brief', 'briefDigest', 'checkout', 'costUsd', 'countsToward3of3', 'decisions', 'fromFile', 'items', 'note', 'problems', 'resume', 'runId']);
+    assert.equal(record['runId'], 'run_OLD');
+    assert.equal(record['countsToward3of3'], false);
+    assert.equal(record['brief'], OLD_RUN['brief']);
+    assert.equal(record['briefDigest'], 'sha256:old');
+    assert.deepEqual(record['items'], OLD_RUN['items']);
+    assert.deepEqual(record['decisions'], [{ id: 'dec_OLD', state: 'answered', class: 'acceptance', origin: 'pause', answeredBy: 'owner:tester', answerChannel: 'terminal' }]);
+    assert.deepEqual(record['resume'], OLD_RUN['resume']);
+    assert.deepEqual(record['problems'], OLD_RUN['problems']);
+    assert.deepEqual(record['checkout'], OLD_RUN['checkout']);
+    assert.equal(record['costUsd'], 1.17);
+    assert.equal(record['note'], 'old run 1: B resumed its own session; stopped at G2');
+    assert.match(String(record['fromFile']), /other-evidence\.json$/);
+    for (const key of ['schema', 'plan', 'decision', 'exitRules', 'runs', 'supersedes']) assert.deepEqual(after[key], before[key], key);
+  });
+
+  it('a supplementary run is never counted: the verdict after a supplement is the verdict before it', () => {
+    const { dir, auth, evidence } = make([cleanEntry('run2', 1), cleanEntry('run3', 6)]);
+    assert.equal(runTools(supplementArgs(evidence, makeOther(dir))).status, 0);
+    const ran = runTools(['verdict', '--evidence', evidence, '--authorization-file', auth]);
+    assert.equal(ran.status, 1, ran.stderr + ran.stdout);
+    assert.equal(read(evidence)['verdict'], 'exit: 2/3 ready_for_review');
+    assert.equal((read(evidence)['supplementary'] as Json[]).length, 1);
+  });
+
+  const supplementRefusals: Array<[string, (dir: string, evidence: string) => string[], RegExp, Json[]?]> = [
+    ['a run ID that is an entry of the file', (dir, evidence) => supplementArgs(evidence, makeOther(dir), 'run_run2_1'), /is an entry of/],
+    ['a run ID the other file does not hold', (dir, evidence) => supplementArgs(evidence, makeOther(dir), 'run_ABSENT'), /holds no entry|not in/],
+    ['an empty note', (dir, evidence) => [...supplementArgs(evidence, makeOther(dir)).slice(0, -1), '  '], /--note/],
+    ['an evidence file that is not one', (dir, evidence) => supplementArgs(evidence, join(dir, 'missing.json')), /not an evidence file/],
+    ['a missing flag', (_dir, evidence) => ['supplement', '--evidence', evidence, '--run-id', 'run_OLD', '--note', 'n'], /--from/],
+  ];
+  for (const [name, args, pattern] of supplementRefusals) {
+    it(`supplement exits 2 and leaves the file byte-identical for ${name}`, () => {
+      const { dir, evidence } = make([cleanEntry('run2', 1)]);
+      const before = sha256Of(evidence);
+      const ran = runTools(args(dir, evidence));
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, pattern);
+      assert.equal(sha256Of(evidence), before);
+    });
+  }
+
+  it('supplement refuses a second supplement of the same run and leaves the file byte-identical', () => {
+    const { dir, evidence } = make([cleanEntry('run2', 1)]);
+    const other = makeOther(dir);
+    assert.equal(runTools(supplementArgs(evidence, other)).status, 0);
+    const before = sha256Of(evidence);
+    const again = runTools(supplementArgs(evidence, other));
+    assert.equal(again.status, 2, again.stdout + again.stderr);
+    assert.match(again.stderr, /already/);
+    assert.equal(sha256Of(evidence), before);
+  });
+});
