@@ -1,0 +1,44 @@
+{
+  "selection": "approve",
+  "exitRules": "D-26..D-35",
+  "decisionRef": "Owner reply at the D-04 checkpoint: `approve` (approves the three briefs as gated in plan 03-55, order 2, 3, 1, 4.50 USD per run; exit rules D-26 to D-35)",
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "run": "run2",
+      "expects": "amend-stale"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+      "run": "run3",
+      "expects": "silence"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:2183c31788bce25a7b14e5b961e6ec3518c50b6a5f0b4240151ae54bdd4eeb55",
+      "run": "run1",
+      "expects": "block-resume"
+    }
+  ],
+  "order": [
+    "run2",
+    "run3",
+    "run1"
+  ],
+  "perRunCapUsd": 4.5,
+  "perRunCapFlag": "--budget costUsdPerRun=4.5",
+  "ceilingUsd": 25,
+  "host": {
+    "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+    "claudeVersion": "2.1.319"
+  },
+  "briefCheck": {
+    "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-55-brief-classification.json",
+    "sha256": "255ca0a0018697da2a922e074af274cfcadfaefe9598c65fa9344c4a742be1cd",
+    "checkedAt": "2026-11-11T03:29:46.682Z"
+  },
+  "ownerConfirmedAt": "2026-11-11T07:35:45Z",
+  "plan": "03-29"
+}
