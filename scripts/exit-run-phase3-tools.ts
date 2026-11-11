@@ -15,6 +15,19 @@
 // refuses while the run the evidence supersedes is not failed, cancelled or closed in the owner's ledger, and the dry run counts, per item, the options of
 // another item found in its prompt Behavior (`promptScope`; above 0 is a problem).
 //
+// Plan 03-49 adds `brief-check --source REPO --brief F [--brief F ...] --out F [--pin SHA]` (the write-set check of each brief at the pin) and `relax`.
+//
+// Plan 03-52 adds the D-31 gate and D-28's fresh-approval rule (read-only subcommands; nothing starts a model):
+//   brief-check --all ...
+//       The same report with the check uncapped (every finding, `truncated` empty, `uncapped: true`, each brief's protected globs): what a classification file starts from.
+//   brief-gate --classification F [--source REPO] [--pin SHA]
+//       Runs the write-set check again at the pin, uncapped, and judges the reviewed classification file against it: exit 0 only when every fresh finding of every brief
+//       is classified `kept` or `changed` at its own path and line and no `changed` finding is in a protected file or outside the conventions' write set (D-31). Exit 1
+//       with one `brief-gate: FAIL` line per problem.
+//   write-authorization --classification F --brief B --run R --expects E ... --cap USD --ceiling USD --claude-bin P --claude-version V --decision-ref TEXT
+//                       --owner-confirmed-at ISO --out F [--source REPO] [--pin SHA]
+//       Writes the owner's fresh approval (D-28) only when that gate passes, the cap is at most 4.50 USD (D-33) and the ceiling at most 25 USD (D-05); otherwise exit 2.
+//
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
 //       Prints one scalar of the owner's authorization (host.claudeBin, perRunCapUsd, ceilingUsd).
@@ -29,7 +42,8 @@
 //       writes the run's record into the exit evidence JSON. Stage `start` expects a stop on a pause-origin decision with the independent items
 //       done; stage `finish` waits for the next stop state after the owner's answer and expects ready_for_review with the resumed session.
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { basename, delimiter, dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -60,12 +74,20 @@ const DEFAULT_PIN = '9f1cd8d';
 const REPO_ROOT = resolve(import.meta.dirname, '..');
 const PLAN = '03-28';
 
+// The rules of the repeated exit (plan 03-52): an authorization names them, and only an authorization that does is a fresh approval (D-28). The per-run cap
+// (D-33) and the ceiling (D-05) an authorization may name are at most these.
+export const EXIT_RULES = 'D-26..D-35';
+export const EXIT_RUN_CAP_USD = 4.5;
+export const EXIT_CEILING_USD = 25;
+
 const out = (text: string): void => void process.stdout.write(text);
 const errOut = (text: string): void => void process.stderr.write(`${text}\n`);
 
-function flags(argv: readonly string[]): { named: Record<string, string>; many: Record<string, string[]> } {
+// `named` holds the last value of each valued flag, `many` every value in order, and `bools` every flag that no value follows (plan 03-52: `brief-check --all`).
+export function flags(argv: readonly string[]): { named: Record<string, string>; many: Record<string, string[]>; bools: Set<string> } {
   const named: Record<string, string> = {};
   const many: Record<string, string[]> = {};
+  const bools = new Set<string>();
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i] as string;
     if (!word.startsWith('--')) continue;
@@ -75,9 +97,9 @@ function flags(argv: readonly string[]): { named: Record<string, string>; many: 
       named[key] = next;
       (many[key] ??= []).push(next);
       i += 1;
-    }
+    } else bools.add(key);
   }
-  return { named, many };
+  return { named, many, bools };
 }
 
 function describeError(error: { kind: string } & Record<string, unknown>): string {
@@ -284,7 +306,10 @@ function stringValueOf(name: string, text: string): string | undefined {
   return new RegExp(`\\b(?:const|let|var)\\s+${escaped}\\b[^=]*=\\s*(['"\`])((?:\\\\.|(?!\\1).)*)\\1`).exec(text)?.[2];
 }
 
-export function writeSetCheck(repo: string, rev: string, input: WriteSetInput): { needles: WriteSetNeedle[]; findings: WriteSetFinding[]; lines: string[]; truncated: Record<string, number> } {
+// `options.limitPerNeedle` replaces the cap of 25 findings per needle; `Infinity` lists every finding and leaves `truncated` empty (plan 03-52: the classification
+// of D-31 is complete only against an uncapped check).
+export function writeSetCheck(repo: string, rev: string, input: WriteSetInput, options: { limitPerNeedle?: number } = {}): { needles: WriteSetNeedle[]; findings: WriteSetFinding[]; lines: string[]; truncated: Record<string, number> } {
+  const limit = options.limitPerNeedle ?? MAX_FINDINGS_PER_NEEDLE;
   const needles = behaviorNeedles(input.behavior);
   const findings: WriteSetFinding[] = [];
   const truncated: Record<string, number> = {};
@@ -298,8 +323,8 @@ export function writeSetCheck(repo: string, rev: string, input: WriteSetInput): 
     seen.add(key);
     const n = (counts.get(needle) ?? 0) + 1;
     counts.set(needle, n);
-    if (n > MAX_FINDINGS_PER_NEEDLE) {
-      truncated[needle] = n - MAX_FINDINGS_PER_NEEDLE;
+    if (n > limit) {
+      truncated[needle] = n - limit;
       return;
     }
     const isProtected = matchesAny(hit.path, input.protectedGlobs);
@@ -680,16 +705,11 @@ function relaxCommand(argv: readonly string[]): number {
 // brief-check: the write-set check of each brief at the pin, without the rest of the dry run (plan 03-49)
 // ---------------------------------------------------------------------------------------------------------------
 
-function briefCheck(argv: readonly string[]): number {
-  const { named, many } = flags(argv);
-  const source = resolve(named['source'] ?? join(homedir(), 'aa-phan-portfolio-v2'));
-  const briefPaths = (many['brief'] ?? []).map((p) => resolve(p));
-  const outPath = named['out'];
-  const pinRef = named['pin'] ?? DEFAULT_PIN;
-  if (briefPaths.length === 0 || outPath === undefined) {
-    errOut('usage: brief-check --source REPO --brief F [--brief F ...] --out F [--pin SHA]');
-    return 2;
-  }
+// The report `brief-check` writes, returned as an object (plan 03-52): the findings of the write-set check of each brief at the pin. With `limitPerNeedle: Infinity`
+// the check lists every finding and the report is marked `uncapped`; it then also carries each brief's protected globs, which the D-31 gate reads (the default
+// report keeps its keys and its cap of 25 findings per needle).
+export function briefCheckReport(source: string, briefPaths: readonly string[], pinRef: string, options: { limitPerNeedle?: number } = {}): Json {
+  const uncapped = options.limitPerNeedle === Infinity;
   const before = portfolioState(source);
   const pin = mustRead(source, ['rev-parse', '--verify', `${pinRef}^{commit}`]).trim();
   const gitSource = new GitRunSource();
@@ -702,7 +722,6 @@ function briefCheck(argv: readonly string[]): number {
   const conventions = committed.value;
   const files = mustRead(source, ['ls-tree', '-r', '--name-only', pin]).split('\n').filter((l) => l !== '');
   const briefs: Record<string, Json> = {};
-  let problems = 0;
   let n = 0;
   for (const path of briefPaths) {
     n += 1;
@@ -710,17 +729,15 @@ function briefCheck(argv: readonly string[]): number {
     const parsed = parseBrief(readFileSync(path, 'utf8'), { kind: 'file', id: path.split('/').pop() as string });
     if (!parsed.ok) {
       briefs[key] = { path: relative(REPO_ROOT, path), problem: `does not parse: ${describeError(parsed.error)}` };
-      problems += 1;
       continue;
     }
     const compiled = compileRunContract({ runId: `run_Phase3BriefCheck${n}`, projectId: 'portfolio', baseRevision: pin, conventionsRevision: found.value.revision, brief: parsed.value, conventions, nowIso: new Date().toISOString(), policy: 'routine', indexFacts: { files, symbolsByFile: {} } });
     if (!compiled.ok) {
       briefs[key] = { path: relative(REPO_ROOT, path), digest: parsed.value.digest, problem: `does not compile: ${JSON.stringify(compiled.error)}` };
-      problems += 1;
       continue;
     }
     const c = compiled.value.contract;
-    const checked = writeSetCheck(source, pin, { behavior: c.intent.behavior, writeGlobs: c.files.write, itemFiles: c.intent.workItems.flatMap((i) => i.spec.files), protectedGlobs: c.files.protected, conventionsWrite: conventions.paths.write });
+    const checked = writeSetCheck(source, pin, { behavior: c.intent.behavior, writeGlobs: c.files.write, itemFiles: c.intent.workItems.flatMap((i) => i.spec.files), protectedGlobs: c.files.protected, conventionsWrite: conventions.paths.write }, options);
     // The files that hold each name, one entry per file with its lines: what an owner reads to judge whether the brief changes or removes the name.
     const byNeedle: Record<string, Array<{ path: string; lines: number[]; kind: string; protected: boolean; insideConventions: boolean; problem: boolean }>> = {};
     for (const f of checked.findings) {
@@ -729,7 +746,6 @@ function briefCheck(argv: readonly string[]): number {
       if (known !== undefined) known.lines.push(f.line);
       else files.push({ path: f.path, lines: [f.line], kind: f.kind, protected: f.protected, insideConventions: f.insideConventions, problem: f.problem });
     }
-    problems += checked.findings.filter((f) => f.problem).length;
     briefs[key] = {
       path: relative(REPO_ROOT, path),
       digest: parsed.value.digest,
@@ -740,11 +756,29 @@ function briefCheck(argv: readonly string[]): number {
       truncated: checked.truncated,
       problems: checked.findings.filter((f) => f.problem).length,
       byNeedle,
+      ...(uncapped ? { protectedGlobs: c.files.protected } : {}),
     };
   }
   const after = portfolioState(source);
   const unchanged = sameState(before, after);
-  const report: Json = { schema: 1, plan: '03-49', checkedAt: new Date().toISOString(), source: source.replace(homedir(), '~'), pin, conventionsRevision: found.value.revision, readOnly: true, modelHostLaunched: false, spentUsd: 0, portfolio: { before: summaryOf(before), after: summaryOf(after), unchanged }, briefs };
+  return { schema: 1, plan: '03-49', checkedAt: new Date().toISOString(), source: source.replace(homedir(), '~'), pin, conventionsRevision: found.value.revision, readOnly: true, modelHostLaunched: false, spentUsd: 0, portfolio: { before: summaryOf(before), after: summaryOf(after), unchanged }, briefs, ...(uncapped ? { uncapped: true } : {}) };
+}
+
+function briefCheck(argv: readonly string[]): number {
+  const { named, many, bools } = flags(argv);
+  const source = resolve(named['source'] ?? join(homedir(), 'aa-phan-portfolio-v2'));
+  const briefPaths = (many['brief'] ?? []).map((p) => resolve(p));
+  const outPath = named['out'];
+  const pinRef = named['pin'] ?? DEFAULT_PIN;
+  if (briefPaths.length === 0 || outPath === undefined) {
+    errOut('usage: brief-check [--all] --source REPO --brief F [--brief F ...] --out F [--pin SHA]');
+    return 2;
+  }
+  const report = briefCheckReport(source, briefPaths, pinRef, bools.has('all') ? { limitPerNeedle: Infinity } : {});
+  const briefs = report['briefs'] as Record<string, Json>;
+  // A brief that does not parse or compile is one problem; otherwise its protected or outside-the-conventions findings.
+  const problems = Object.values(briefs).reduce((sum, b) => sum + (typeof b['problem'] === 'string' ? 1 : Number(b['problems'])), 0);
+  const unchanged = (report['portfolio'] as Json)['unchanged'] === true;
   mkdirSync(dirname(resolve(outPath)), { recursive: true });
   writeFileSync(resolve(outPath), `${JSON.stringify(report, null, 2)}\n`);
   for (const [key, b] of Object.entries(briefs)) {
@@ -753,6 +787,225 @@ function briefCheck(argv: readonly string[]): number {
   }
   out(`brief-check: ${problems} finding(s) protected or outside the conventions in all; portfolio ${unchanged ? 'unchanged' : 'DIFFERENT'}; spent 0 USD; ${resolve(outPath)}\n`);
   return unchanged ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The D-31 gate (plan 03-52): a brief starts a run only when every finding of its write-set check was classified in a reviewed file, and the file holds no
+// `changed` finding in a protected file or outside the conventions' write set. The file is a claim: every fact the gate judges (what the findings are, where, whether
+// the file is protected or inside the conventions, the brief's digest, the pin) comes from a fresh uncapped check at the pin, never from the file. Nothing here reads
+// a classification from a brief's text (D-31).
+// ---------------------------------------------------------------------------------------------------------------
+
+const showValue = (value: unknown): string => JSON.stringify(value ?? null);
+const briefsRecord = (report: Json): Record<string, Json> => (isObject(report['briefs']) ? (report['briefs'] as Record<string, Json>) : {});
+const findingKey = (f: Json): string => `${String(f['path'])}:${String(f['line'])}:${String(f['needle'])}`;
+
+// The problems that concern the file as a whole: the pin and the conventions revision it was made at, and a repository that moved during the fresh check.
+function gateTop(classification: Json, fresh: Json): string[] {
+  const problems: string[] = [];
+  if (classification['pin'] !== fresh['pin']) problems.push(`(file): the classification was made at pin ${showValue(classification['pin'])}, the fresh check ran at pin ${showValue(fresh['pin'])} (D-31)`);
+  if (classification['conventionsRevision'] !== fresh['conventionsRevision']) problems.push(`(file): the classification was made against conventions ${showValue(classification['conventionsRevision'])}, the fresh check read conventions ${showValue(fresh['conventionsRevision'])} (D-31)`);
+  if (isObject(fresh['portfolio']) && fresh['portfolio']['unchanged'] === false) problems.push('(file): the repository changed during the fresh check (D-31)');
+  return problems;
+}
+
+// The problems of one brief: the fresh parse and compile, the digest, a capped check, a Write-list entry under a protected glob (D-30), and each finding.
+function gateBrief(key: string, filed: Json | undefined, fresh: Json | undefined): string[] {
+  if (fresh === undefined) return [`${key}: the fresh check holds no brief of this name (D-31)`];
+  if (typeof fresh['problem'] === 'string') return [`${key}: the brief does not pass the fresh check: ${fresh['problem']} (D-31)`];
+  if (filed === undefined) return [`${key}: the classification file holds no entry for this brief (D-31)`];
+  const problems: string[] = [];
+  if (filed['digest'] !== fresh['digest']) problems.push(`${key}: the digest ${showValue(filed['digest'])} in the file differs from the fresh parse ${showValue(fresh['digest'])}: the brief changed after it was classified (D-31)`);
+  const truncated = isObject(fresh['truncated']) ? Object.entries(fresh['truncated']) : [];
+  if (truncated.length > 0) problems.push(`${key}: the fresh check was capped (truncated ${JSON.stringify(Object.fromEntries(truncated))}), so its findings cannot all be classified (D-31)`);
+  if (!Array.isArray(fresh['protectedGlobs'])) problems.push(`${key}: the fresh check carries no protected globs, so the Write list cannot be judged (D-30)`);
+  else {
+    for (const path of Array.isArray(fresh['write']) ? (fresh['write'] as unknown[]).map(String) : []) {
+      if (matchesAny(path, (fresh['protectedGlobs'] as unknown[]).map(String))) problems.push(`${key}: the Write list names ${path}, which matches a protected glob (D-30)`);
+    }
+  }
+  const freshFindings = new Map(asObjects(fresh['findings']).map((f) => [findingKey(f), f]));
+  const seen = new Set<string>();
+  for (const f of asObjects(filed['findings'])) {
+    const id = findingKey(f);
+    const label = `${key}: ${String(f['path'])}:${String(f['line'])} ${String(f['needle'])}`;
+    if (seen.has(id)) {
+      problems.push(`${label}: listed twice in the file (D-31)`);
+      continue;
+    }
+    seen.add(id);
+    const found = freshFindings.get(id);
+    if (found === undefined) {
+      problems.push(`${label}: the fresh check does not report this finding (D-31)`);
+      continue;
+    }
+    const classification = f['classification'];
+    if (classification !== 'kept' && classification !== 'changed') {
+      problems.push(`${label}: the classification is ${showValue(classification)}, not kept or changed (D-31)`);
+      continue;
+    }
+    const own = `${String(found['path'])}:${String(found['line'])}`;
+    if (f['assertedAt'] !== own) problems.push(`${label}: assertedAt is ${showValue(f['assertedAt'])}, not the finding's own location ${own} (D-31)`);
+    if (classification === 'changed') {
+      if (found['protected'] === true) problems.push(`${label}: classified changed, but the file is protected and no run may write it (D-30, D-31)`);
+      else if (found['insideConventions'] !== true) problems.push(`${label}: classified changed, but the file is outside the conventions' write set and no run may write it (D-31)`);
+    }
+  }
+  for (const [id, found] of freshFindings) {
+    if (!seen.has(id)) problems.push(`${key}: ${String(found['path'])}:${String(found['line'])} ${String(found['needle'])}: missing from the classification file, so unclassified (D-31)`);
+  }
+  return problems;
+}
+
+// The whole gate: the file as a whole, every brief of the fresh check, and every brief the file holds that the fresh check does not.
+export function gateClassification(classification: Json, fresh: Json): string[] {
+  const filed = briefsRecord(classification);
+  const checked = briefsRecord(fresh);
+  const problems = gateTop(classification, fresh);
+  if (Object.keys(checked).length === 0) problems.push('(file): the fresh check holds no brief, so nothing was classified (D-31)');
+  for (const key of Object.keys(checked)) problems.push(...gateBrief(key, filed[key], checked[key]));
+  for (const key of Object.keys(filed)) {
+    if (!(key in checked)) problems.push(`${key}: the file classifies a brief the fresh check does not hold (D-31)`);
+  }
+  return problems;
+}
+
+// The gate for the one brief a start is about to begin: the file as a whole and that brief's own findings.
+export function gateForBrief(classification: Json, fresh: Json, briefKey: string): string[] {
+  return [...gateTop(classification, fresh), ...gateBrief(briefKey, briefsRecord(classification)[briefKey], briefsRecord(fresh)[briefKey])];
+}
+
+const gateFindingCount = (fresh: Json): number => Object.values(briefsRecord(fresh)).reduce((sum, b) => sum + asObjects(b['findings']).length, 0);
+
+// The classification file, or the reason it cannot be read as one.
+function readClassification(path: string): Json | string {
+  if (!existsSync(path)) return `${path} does not exist`;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return `${path} is not JSON`;
+  }
+  if (!isObject(parsed) || !isObject(parsed['briefs'])) return `${path} is not a classification file (a brief-check report with a briefs object)`;
+  return parsed;
+}
+
+// The fresh uncapped check of the briefs a classification file names, at the pin. A brief path of the file is read against the checkout the tools live in.
+function freshCheckOf(classification: Json, source: string, pinRef: string): Json | string {
+  const paths = Object.values(briefsRecord(classification)).map((b) => resolve(REPO_ROOT, String(b['path'] ?? '')));
+  const missing = paths.find((p) => !existsSync(p));
+  if (paths.length === 0) return 'the classification file names no brief';
+  if (missing !== undefined) return `the brief ${missing} named by the classification file does not exist`;
+  return briefCheckReport(source, paths, pinRef, { limitPerNeedle: Infinity });
+}
+
+// `brief-gate --classification F [--source REPO] [--pin SHA]`: read-only. Exit 0 and `brief-gate: pass` when the gate finds no problem, 1 with one `brief-gate: FAIL`
+// line per problem, 2 on usage.
+function briefGate(argv: readonly string[]): number {
+  const { named } = flags(argv);
+  if (named['classification'] === undefined) {
+    errOut('usage: brief-gate --classification F [--source REPO] [--pin SHA]');
+    return 2;
+  }
+  const classification = readClassification(resolve(named['classification']));
+  if (typeof classification === 'string') {
+    errOut(`exit-run: brief-gate: ${classification}`);
+    return 2;
+  }
+  const source = resolve(named['source'] ?? join(homedir(), 'aa-phan-portfolio-v2'));
+  const before = portfolioState(source);
+  const fresh = freshCheckOf(classification, source, named['pin'] ?? DEFAULT_PIN);
+  if (typeof fresh === 'string') {
+    errOut(`exit-run: brief-gate: ${fresh}`);
+    return 2;
+  }
+  const problems = gateClassification(classification, fresh);
+  if (!sameState(before, portfolioState(source))) problems.push('(file): the repository HEAD, status, refs or checkout digest changed during the gate (D-31)');
+  for (const problem of problems) out(`brief-gate: FAIL ${problem}\n`);
+  if (problems.length > 0) return 1;
+  out(`brief-gate: pass: ${gateFindingCount(fresh)} finding(s) classified in ${Object.keys(briefsRecord(fresh)).length} brief(s); repository unchanged\n`);
+  return 0;
+}
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const isIsoTime = (value: unknown): value is string => typeof value === 'string' && ISO_TIME.test(value) && Number.isFinite(Date.parse(value));
+
+// `write-authorization --classification F --brief B --run R --expects E [--brief B --run R --expects E ...] --cap USD --ceiling USD --claude-bin P --claude-version V
+// --decision-ref TEXT --owner-confirmed-at ISO --out F [--source REPO] [--pin SHA]`: the fresh approval of D-28. It writes the authorization file only when the D-31 gate
+// passes and the cap is at most 4.50 USD (D-33), the ceiling at most 25 USD (D-05), the decision reference is not empty and the owner confirmed no earlier than the
+// classification was checked. Otherwise it exits 2 and writes nothing. Claude runs it only after the owner's reply to the re-discussion checkpoint.
+function writeAuthorizationCommand(argv: readonly string[]): number {
+  const { named, many } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: write-authorization: refusing: ${text}`);
+    return 2;
+  };
+  const need = ['classification', 'cap', 'ceiling', 'claude-bin', 'claude-version', 'decision-ref', 'owner-confirmed-at', 'out'];
+  const missing = need.filter((k) => named[k] === undefined);
+  const briefs = many['brief'] ?? [];
+  const runs = many['run'] ?? [];
+  const expects = many['expects'] ?? [];
+  if (missing.length > 0 || briefs.length === 0) return refuse(`usage: needs --${missing.join(' --')}${briefs.length === 0 ? ' and at least one --brief B --run R --expects E' : ''}`);
+  if (runs.length !== briefs.length || expects.length !== briefs.length) return refuse(`${briefs.length} --brief, ${runs.length} --run and ${expects.length} --expects: each brief takes one of each, in order`);
+  if (new Set(runs).size !== runs.length) return refuse('a run name is given to two briefs');
+  const cap = Number(named['cap']);
+  const ceiling = Number(named['ceiling']);
+  if (!(Number.isFinite(cap) && cap > 0 && cap <= EXIT_RUN_CAP_USD + EPS)) return refuse(`--cap ${named['cap']} is not a positive amount of at most ${EXIT_RUN_CAP_USD.toFixed(2)} USD per run (D-33)`);
+  if (!(Number.isFinite(ceiling) && ceiling > 0 && ceiling <= EXIT_CEILING_USD + EPS)) return refuse(`--ceiling ${named['ceiling']} is not a positive amount of at most ${EXIT_CEILING_USD} USD (D-05, D-33)`);
+  const decisionRef = (named['decision-ref'] as string).trim();
+  if (decisionRef === '') return refuse('--decision-ref is empty: name the owner decision that approved the briefs after the re-discussion (D-28)');
+  const confirmedAt = named['owner-confirmed-at'] as string;
+  if (!isIsoTime(confirmedAt)) return refuse(`--owner-confirmed-at ${JSON.stringify(confirmedAt)} is not an ISO time (D-28)`);
+  const claudeBin = named['claude-bin'] as string;
+  const claudeVersion = named['claude-version'] as string;
+  if (claudeBin === '' || claudeVersion === '') return refuse('--claude-bin and --claude-version name the pinned host: neither may be empty');
+
+  const classificationPath = resolve(named['classification'] as string);
+  const classification = readClassification(classificationPath);
+  if (typeof classification === 'string') return refuse(classification);
+  if (!isIsoTime(classification['checkedAt'])) return refuse('the classification file records no checkedAt time (D-31)');
+  if (Date.parse(confirmedAt) < Date.parse(classification['checkedAt'])) return refuse(`--owner-confirmed-at ${confirmedAt} is earlier than the classification's checkedAt ${classification['checkedAt']}: the owner confirmed before the check the file records (D-28)`);
+
+  const source = resolve(named['source'] ?? join(homedir(), 'aa-phan-portfolio-v2'));
+  const before = portfolioState(source);
+  const fresh = freshCheckOf(classification, source, named['pin'] ?? DEFAULT_PIN);
+  if (typeof fresh === 'string') return refuse(fresh);
+  const problems = gateClassification(classification, fresh);
+  if (!sameState(before, portfolioState(source))) problems.push('(file): the repository HEAD, status, refs or checkout digest changed during the gate (D-31)');
+  if (problems.length > 0) {
+    for (const problem of problems) errOut(`brief-gate: FAIL ${problem}`);
+    return refuse(`the D-31 gate found ${problems.length} problem(s); no authorization was written`);
+  }
+
+  const entries: Json[] = [];
+  for (const [n, brief] of briefs.entries()) {
+    const abs = resolve(brief);
+    const key = Object.entries(briefsRecord(classification)).find(([, b]) => resolve(REPO_ROOT, String(b['path'] ?? '')) === abs)?.[0];
+    const digest = key === undefined ? undefined : (briefsRecord(fresh)[key] as Json)['digest'];
+    if (typeof digest !== 'string') return refuse(`${brief} is not a brief of the classification file (D-31)`);
+    entries.push({ path: relative(REPO_ROOT, abs), digest, run: runs[n] as string, expects: expects[n] as string });
+  }
+  const body: Json = {
+    selection: 'approve',
+    exitRules: EXIT_RULES,
+    decisionRef,
+    briefs: entries,
+    order: [...runs],
+    perRunCapUsd: cap,
+    perRunCapFlag: `--budget costUsdPerRun=${cap}`,
+    ceilingUsd: ceiling,
+    host: { claudeBin, claudeVersion },
+    briefCheck: { path: relative(REPO_ROOT, classificationPath), sha256: createHash('sha256').update(readFileSync(classificationPath)).digest('hex'), checkedAt: classification['checkedAt'] },
+    ownerConfirmedAt: confirmedAt,
+    plan: livePlan(),
+  };
+  const outPath = resolve(named['out'] as string);
+  mkdirSync(dirname(outPath), { recursive: true });
+  const temporary = `${outPath}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`);
+  renameSync(temporary, outPath);
+  out(`write-authorization: ${entries.length} brief(s), order ${runs.join(', ')}, cap ${cap} USD per run, ceiling ${ceiling} USD; gate passed on ${gateFindingCount(fresh)} finding(s); ${outPath}\n`);
+  return 0;
 }
 
 const EXIT_CEILING = 75;
@@ -1583,6 +1836,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'evidence') return evidenceCommand(rest);
   if (command === 'relax') return relaxCommand(rest);
   if (command === 'brief-check') return briefCheck(rest);
+  if (command === 'brief-gate') return briefGate(rest);
+  if (command === 'write-authorization') return writeAuthorizationCommand(rest);
   if (command === 'preflight') {
     const { named } = flags(rest);
     if (named['repo'] === undefined || named['config'] === undefined) {
@@ -1593,7 +1848,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check | preflight | field | authorize | snapshot | evidence | relax) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax) ...');
   return 2;
 }
 

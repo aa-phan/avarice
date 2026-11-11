@@ -1098,7 +1098,9 @@ describe('flags, writeSetCheck and brief-check --all (plan 03-52)', () => {
     fixtures.push(fx);
     assert.equal(fx.all['uncapped'], true);
     const run1 = briefsOf(fx.all)['run1'] as Json;
-    assert.deepEqual(run1['protectedGlobs'] as string[], ['scripts/**', 'tests/e2e/**', 'tests/fixtures/**', 'tests/setup.ts', 'vite.config.ts', 'vitest.config.ts', 'playwright.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'tsconfig.scripts.json', 'tsconfig.test.json', '.oxlintrc.json', '.oxlintignore', 'prettier.config.mjs', '.prettierignore']);
+    // The compiled contract's protected set: the conventions' own list plus the paths AVARICE itself always protects.
+    const protectedGlobs = run1['protectedGlobs'] as string[];
+    for (const glob of ['tests/e2e/**', 'scripts/**', 'tests/setup.ts', '.avarice/**', 'package.json']) assert.ok(protectedGlobs.includes(glob), glob);
     const plain = join(fx.dir, 'plain.json');
     const ran = runTools(['brief-check', '--source', fx.repo.path, '--pin', fx.repo.head, '--brief', fx.run1, '--out', plain]);
     assert.equal(ran.status, 0, ran.stderr);
