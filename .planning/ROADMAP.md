@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 52/62 plans executed (32 waves, with 20 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63)
+**Plans:** 54/62 plans executed (32 waves, with 20 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63)
 
 Plans:
 **Wave 1**
@@ -324,8 +324,8 @@ Plans:
 - [x] 03-56-PLAN.md — Owner checkpoints: readiness without spend, the owner cancels old run 1 (D-34), D-04 approval of the briefs and classification, fresh authorization at 4.50 USD per run
 
 **Wave 24** *(blocked on 03-56)*
-- [ ] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29) *(halted: attempt 1 stopped on a verification-human-needed pause from a required check already red at the pin; the owner ruled a product defect; 03-63 marks it superseded)*
-- [ ] 03-61-PLAN.md — Gap closure: a required check already failing when an item begins is named to the unit and its verifier as pre-existing, so it no longer pauses the unit by itself; gates, pause detection and `--json` shapes unchanged; run 2's stop reproduced offline (red before, ready_for_review after) and a baseline-green regression still repaired then escalated
+- [x] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29) *(halted: attempt 1 stopped on a verification-human-needed pause from a required check already red at the pin; the owner ruled a product defect; 03-63 marks it superseded)*
+- [x] 03-61-PLAN.md — Gap closure: a required check already failing when an item begins is named to the unit and its verifier as pre-existing, so it no longer pauses the unit by itself; gates, pause detection and `--json` shapes unchanged; run 2's stop reproduced offline (red before, ready_for_review after) and a baseline-green regression still repaired then escalated
 
 **Wave 25** *(blocked on 03-61)*
 - [ ] 03-62-PLAN.md — Gap closure: run 2's re-run made ready without spend (the fix applied to attempt 1's baseline, authorize, the spend arithmetic) and the owner cancels attempt 1 (D-34)
@@ -444,7 +444,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 52/59 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 54/62 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
