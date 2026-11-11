@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import {
@@ -40,7 +40,7 @@ import { createDeps } from '../../src/cli/composition.ts';
 import { cancelCli, startBlockedS17 } from '../helpers/cancel-cli.ts';
 import { runMain } from '../helpers/decide-cli.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
-import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
+import { git, makeScratchRepo, writeExecutable } from '../helpers/scratch-repo.ts';
 
 type Json = Record<string, unknown>;
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -769,6 +769,19 @@ describe('exit evidence: the finish of a run the owner relaxed under D-03 (plan 
     assert.ok(without.problems.some((p) => p.includes('amended') && p.includes('relax record')), without.problems.join(' | '));
   });
 
+  it('with relaxAllowed false a relax record is a problem and relaxes nothing, and with the option absent the record counts as before (plan 03-52, D-28)', () => {
+    const closed = judgeFinish(finished({ relax: RELAX, relaxAllowed: false }));
+    assert.ok(closed.problems.includes('a relax record is not accepted in the exit (D-28)'), closed.problems.join(' | '));
+    assert.ok(closed.problems.some((p) => p.includes('2 decision(s) are answered, not one')), 'the extra decision is judged as if there were no record');
+    assert.equal('relax' in closed.resume, false);
+    const amendedClosed = judgeFinish(finished({ relax: RELAX, relaxAllowed: false, decisions: [pause], contract: amended() as never }));
+    assert.ok(amendedClosed.problems.some((p) => p.includes('amended') && p.includes('relax record')), amendedClosed.problems.join(' | '));
+    const noRecord = judgeFinish(finished({ decisions: [pause], relaxAllowed: false }));
+    assert.deepEqual(noRecord.problems, [], 'nothing to refuse without a record');
+    assert.deepEqual(judgeFinish(finished({ relax: RELAX })).problems, [], 'the option absent: the plan 03-49 case passes');
+    assert.deepEqual(judgeFinish(finished({ relax: RELAX, relaxAllowed: true })).problems, []);
+  });
+
   it('keeps every other finish check', () => {
     const bad = judgeFinish(finished({ relax: RELAX, requiredChecks: [{ name: 'test', status: 'failed' }], clean: false, commit: null, gates: [] }));
     for (const part of ['required check test', 'clean tree', 'no handed-off commit', 'G4']) assert.ok(bad.problems.some((p) => p.includes(part)), part);
@@ -848,6 +861,18 @@ describe('exit evidence: the relax record is written by a subcommand, and only i
       assert.equal(ran.status, 2, `${args.join(' ')}: ${ran.stderr}`);
     }
     assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('relax refuses an evidence file marked exitRules D-26..D-35, naming D-28, and leaves it byte-identical (plan 03-52)', () => {
+    const { dir, body } = evidenceFile();
+    const file = join(dir, 'exit-rules-evidence.json');
+    writeFileSync(file, `${JSON.stringify({ ...body, exitRules: 'D-26..D-35' }, null, 2)}\n`);
+    const before = sha256Of(file);
+    const ran = tools(['relax', '--evidence', file, '--run-id', 'run_AAAA', '--decision', 'dec_X1', '--ref', 'STATE.md 5ed69e0', '--by', 'owner']);
+    assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+    assert.match(ran.stderr, /D-28/);
+    assert.equal(sha256Of(file), before);
+    assert.equal('relax' in ((JSON.parse(readFileSync(file, 'utf8')) as Json)['runs'] as Json[])[0]!, false);
   });
 
   it('contractDiff lists what an amendment added, removed or changed, by field path', () => {
@@ -1010,6 +1035,8 @@ function makeExitFixture(): ExitFixture {
   const repo = makeScratchRepo({
     files: {
       '.avarice/config.json': readFileSync(CONFIG_DRAFT, 'utf8'),
+      // The preflight of `authorize` reads the staleness rules; a planning roadmap at the pin is what lets it pass.
+      '.planning/ROADMAP.md': '# Roadmap\n',
       'src/lib/dates.ts': 'export const monthYear = (v: string) => v\n',
       'src/lib/copy.ts': `export const COPY_SUCCESS = 'Email copied to clipboard'\nexport const COPY_FALLBACK = '${GATE_FALLBACK}'\n`,
       'src/components/ui/useCopyEmail.ts': "import { COPY_FALLBACK } from '../../lib/copy'\nexport const useCopyEmail = () => COPY_FALLBACK\n",
@@ -1373,34 +1400,134 @@ describe('brief-gate and write-authorization on a temporary repository (plan 03-
   });
 });
 
-// The authorization file of a plan whose checkpoint offered in-place options records the owner's option as its selection (plan 03-49); the tools read it
-// like an approval, and still refuse a selection that is not an approval.
-describe('authorization selection', () => {
-  const dirs: string[] = [];
+// D-28 (plan 03-52): only a fresh approval authorizes a start. The authorization `write-authorization` wrote after the D-31 gate is the only file the tools read as one;
+// the in-place selections of plan 03-49 and every file without `exitRules: D-26..D-35` are refused, whatever else they hold.
+describe('authorization: only a fresh approval authorizes a start (plan 03-52, D-28)', () => {
+  const state: { fx?: ExitFixture; auth?: string; bin?: string } = {};
+  before(
+    () => {
+      const fx = makeExitFixture();
+      state.fx = fx;
+      const cls = join(fx.dir, 'classification.json');
+      writeFileSync(cls, `${JSON.stringify(classifiedCopy(fx.all), null, 2)}\n`);
+      state.bin = writeExecutable(join(fx.dir, 'claude'), '#!/bin/sh\necho "2.1.319 (Claude Code)"\n');
+      const auth = join(fx.dir, 'fresh-auth.json');
+      const ran = runTools(['write-authorization', '--classification', cls, '--brief', fx.run2, '--run', 'run-b', '--expects', 'amend-stale', '--brief', fx.run1, '--run', 'run-a', '--expects', 'block-resume', '--cap', '4.5', '--ceiling', '25', '--claude-bin', state.bin, '--claude-version', '2.1.319', '--decision-ref', 'STATE.md D-28 approval', '--owner-confirmed-at', CONFIRMED_AT, '--out', auth, '--source', fx.repo.path, '--pin', fx.repo.head]);
+      assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+      state.auth = auth;
+    },
+    { timeout: 120_000 },
+  );
   after(() => {
-    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+    if (state.fx !== undefined) {
+      state.fx.repo.dispose();
+      rmSync(state.fx.dir, { recursive: true, force: true });
+    }
   });
-  const pick = (selection: string): { status: number | null; stdout: string; stderr: string } => {
-    const dir = mkdtempSync(join(tmpdir(), 'exit-selection-'));
-    dirs.push(dir);
-    const auth = join(dir, 'auth.json');
-    writeFileSync(auth, JSON.stringify({ selection, perRunCapUsd: 4.95, ceilingUsd: 25, host: { claudeBin: '/nonexistent/claude', claudeVersion: '2.1.319' }, briefs: [] }));
-    return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'scripts', 'exit-run-phase3-tools.ts'), 'field', '--authorization-file', auth, '--pick', 'perRunCapUsd'], { encoding: 'utf8', timeout: 30_000 });
+  const fx = (): ExitFixture => state.fx as ExitFixture;
+  const mutated = (name: string, edit: (a: Json) => void): string => {
+    const body = JSON.parse(readFileSync(state.auth as string, 'utf8')) as Json;
+    edit(body);
+    const path = join(fx().dir, name);
+    writeFileSync(path, JSON.stringify(body));
+    return path;
   };
+  const field = (auth: string, pick = 'perRunCapUsd'): { status: number | null; stdout: string; stderr: string } => runTools(['field', '--authorization-file', auth, '--pick', pick]);
 
-  for (const selection of ['approve', 'answer-2-in-place', 'amend-unprotected-path']) {
-    it(`reads the cap of an authorization whose selection is ${selection}`, () => {
-      const run = pick(selection);
-      assert.equal(run.status, 0, run.stderr);
-      assert.equal(run.stdout.trim(), '4.95');
+  it('accepts the file write-authorization produced: field prints the cap, and the Authorization value carries the order, the runs and the classification path', () => {
+    const run = field(state.auth as string);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), '4.5');
+    assert.equal(field(state.auth as string, 'ceilingUsd').stdout.trim(), '25');
+    const parsed = exitTools.authorizationOf(state.auth as string);
+    assert.equal(typeof parsed, 'object', String(parsed));
+    const auth = parsed as unknown as { order: string[]; briefs: Json[]; briefCheckPath: string; perRunCapUsd: number; claudeBin: string };
+    assert.deepEqual(auth.order, ['run-b', 'run-a']);
+    assert.deepEqual(auth.briefs.map((b) => [b['run'], b['expects']]), [['run-b', 'amend-stale'], ['run-a', 'block-resume']]);
+    assert.equal(resolve(ROOT, auth.briefCheckPath), join(fx().dir, 'classification.json'));
+    assert.equal(auth.perRunCapUsd, 4.5);
+    assert.equal(auth.claudeBin, state.bin);
+  });
+
+  const refusals: Array<[string, (a: Json) => void, RegExp]> = [
+    ['selection answer-2-in-place', (a) => void (a['selection'] = 'answer-2-in-place'), /D-28/],
+    ['selection amend-unprotected-path', (a) => void (a['selection'] = 'amend-unprotected-path'), /D-28/],
+    ['selection stop', (a) => void (a['selection'] = 'stop'), /the authorization selection is/],
+    ['selection new-conventions-new-run', (a) => void (a['selection'] = 'new-conventions-new-run'), /the authorization selection is/],
+    ['selection empty', (a) => void (a['selection'] = ''), /the authorization selection is/],
+    ['approve without exitRules', (a) => void delete a['exitRules'], /D-28/],
+    ['approve with other exitRules', (a) => void (a['exitRules'] = 'D-26..D-34'), /D-28/],
+    ['a briefCheck file that is missing', (a) => void ((a['briefCheck'] as Json)['path'] = '/nonexistent/classification.json'), /D-28/],
+    ['a briefCheck sha256 that does not match the file', (a) => void ((a['briefCheck'] as Json)['sha256'] = '0'.repeat(64)), /D-28/],
+    ['a per-run cap of 4.95', (a) => void (a['perRunCapUsd'] = 4.95), /D-33/],
+    ['a ceiling of 30', (a) => void (a['ceilingUsd'] = 30), /D-33/],
+    ['an ownerConfirmedAt that is not an ISO time', (a) => void (a['ownerConfirmedAt'] = 'tomorrow'), /D-28/],
+    ['an ownerConfirmedAt before the classification was checked', (a) => void (a['ownerConfirmedAt'] = '2026-11-10T11:00:00.000Z'), /D-28/],
+    ['an order that lacks a run of the briefs', (a) => void (a['order'] = ['run-b']), /D-28/],
+    ['an order that names a run twice', (a) => void (a['order'] = ['run-b', 'run-b']), /D-28/],
+  ];
+  for (const [name, edit, pattern] of refusals) {
+    it(`refuses an authorization with ${name}, exit 2`, () => {
+      const run = field(mutated(`refused-${name.replace(/\W+/g, '-')}.json`, edit));
+      assert.equal(run.status, 2, run.stdout + run.stderr);
+      assert.match(run.stderr, pattern);
     });
   }
 
-  for (const selection of ['stop', 'new-conventions-new-run', 'product-change', '']) {
-    it(`refuses an authorization whose selection is ${JSON.stringify(selection)}`, () => {
-      const run = pick(selection);
-      assert.equal(run.status, 2);
-      assert.match(run.stderr, /the authorization selection is/);
+  it('refuses every authorization file of plans 03-28 to 03-49 and the 03-49 answer-2-in-place file in particular; they stay on disk as history', () => {
+    const phaseDir = join(ROOT, '.planning', 'phases', '03-decisions-independent-work-and-amendments');
+    const older = readdirSync(phaseDir).filter((f) => /^03-(2[89]|3\d|4\d)-exit-authorization\.json$/.test(f));
+    assert.ok(older.includes('03-49-exit-authorization.json'), older.join(', '));
+    for (const file of older) {
+      const run = field(join(phaseDir, file));
+      assert.equal(run.status, 2, `${file}: ${run.stdout}${run.stderr}`);
+    }
+  });
+
+  describe('authorize runs the gate for the brief it is about to start (D-31)', () => {
+    const authorizeEnv = (): NodeJS.ProcessEnv => {
+      const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CLAUDE_BIN: state.bin as string, AVARICE_PHASE3_LEDGER: join(fx().dir, 'ledger.jsonl') };
+      delete env['AVARICE_LIVE_ADMIT_CLAUDE_VERSION'];
+      return env;
+    };
+    const authorizeArgs = (auth: string, brief: string, evidence: string): string[] => ['authorize', '--authorization-file', auth, '--brief', brief, '--repo', fx().repo.path, '--config', CONFIG_DRAFT, '--evidence', evidence, '--pin', fx().repo.head];
+    const digestOf = (key: string): string => String((briefsOf(fx().all)[key] as Json)['digest']);
+    // An authorization built by hand over a classification file that leaves a finding of run 1 out: the gate, not the authorization, must catch it.
+    const forgedAuthorization = (name: string, runKey: 'run1' | 'run2'): string => {
+      const cls = join(fx().dir, `${name}-classification.json`);
+      writeFileSync(cls, `${JSON.stringify(classifiedCopy(fx().all, (c) => void ((briefsOf(c)['run1'] as Json)['findings'] as Json[]).splice(1, 1)), null, 2)}\n`);
+      const dir = join(fx().dir, name);
+      mkdirSync(dir, { recursive: true });
+      return writeFreshAuthorization(dir, {
+        briefs: [{ path: relative(ROOT, runKey === 'run1' ? fx().run1 : fx().run2), digest: digestOf(runKey), run: 'run-a', expects: 'x' }],
+        order: ['run-a'],
+        briefCheck: { path: cls, sha256: sha256Of(cls), checkedAt: CHECKED_AT },
+        host: { claudeBin: state.bin, claudeVersion: '2.1.319' },
+      });
+    };
+
+    it('exits 2 and starts nothing when a finding of that brief is unclassified, naming the finding', () => {
+      const evidence = join(fx().dir, 'evidence-gate-fail.json');
+      const ran = runTools(authorizeArgs(forgedAuthorization('forged-run1', 'run1'), fx().run1, evidence), authorizeEnv());
+      assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+      assert.match(ran.stderr, /D-31/);
+      assert.match(ran.stderr, /src\/other\/Banner\.ts:2 COPY_FALLBACK/);
+      assert.equal(existsSync(evidence), false);
+      assert.doesNotMatch(ran.stdout, /authorized:/);
     });
-  }
+
+    it('does not refuse another brief for a finding of this one: only the brief about to start is judged', () => {
+      const evidence = join(fx().dir, 'evidence-gate-other.json');
+      const ran = runTools(authorizeArgs(forgedAuthorization('forged-run2', 'run2'), fx().run2, evidence), authorizeEnv());
+      assert.doesNotMatch(ran.stderr, /D-31/, ran.stderr + ran.stdout);
+    });
+
+    it('passes the gate for a fully classified brief and reaches the spend guard', () => {
+      const evidence = join(fx().dir, 'evidence-gate-pass.json');
+      const ran = runTools(authorizeArgs(state.auth as string, fx().run1, evidence), authorizeEnv());
+      assert.doesNotMatch(ran.stderr, /D-31/, ran.stderr + ran.stdout);
+      assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+      assert.match(ran.stdout, /authorized: /);
+    });
+  });
 });
