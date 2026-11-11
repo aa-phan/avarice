@@ -119,3 +119,40 @@ describe('scenario E: a required check that passes only with its declared enviro
     assert.ok(hookDecisions(f, runId).some((d) => d['decision'] === 'allow' && d['rule'] === 'agent-command'), 'an allow with rule agent-command');
   });
 });
+
+// Scenario N (T-03-172): the unit tries the check under other environments through the real hook, and none of them runs. The `ls src` between them is admitted, so the hook's loop limit
+// (three denials in a row) is never reached; then the unit runs its listed command as in scenario E and the run still reaches ready_for_review.
+describe('scenario N: an environment other than the listed one is refused and never runs', () => {
+  const f = fixture();
+  const OTHER = 'SITE_ORIGIN=https://other.test node scripts/needs-env.mjs';
+  const REORDERED = 'SITE_ORIGIN=https://example.test NODE_OPTIONS=--version node scripts/needs-env.mjs';
+  const unit: FakeRunOptions = { ...unitOf(f), shellAttempts: [BARE, 'ls src', OTHER, 'ls src', REORDERED] };
+  const result = startWithFakeRunHost(f.roots, f.repo, f.brief, unit as Record<string, unknown>);
+  const runId = runIdOf(result.stdout);
+  const stop = (): string => `${result.stderr}${result.stdout}\nclassify: ${JSON.stringify(classifyOf(f, runId))}`;
+
+  it('exits 0 at ready_for_review with no decision', () => {
+    assert.equal(result.code, 0, stop());
+    assert.match(result.stdout.trim().split('\n').at(-1) as string, /ready_for_review$/);
+    assert.deepEqual(decisionsOf(f.roots, runId).map((d) => d.class), [], stop());
+  });
+
+  it('shows the three attempts denied with exit code null (they never ran), the two `ls src` admitted, and the listed command admitted and run to exit code 0', () => {
+    const record = recorded(f) as Recorded & { shell?: Array<{ command: string; denied: boolean; exitCode: number | null }> };
+    assert.deepEqual(record.shell?.map((s) => [s.command, s.denied, s.exitCode === null]), [
+      [BARE, true, true],
+      ['ls src', false, false],
+      [OTHER, true, true],
+      ['ls src', false, false],
+      [REORDERED, true, true],
+    ]);
+    assert.deepEqual(record.listed, { command: LISTED, denied: false, exitCode: 0 });
+  });
+
+  it('recorded at least three shell-not-allowed denials and no loop.limit event', () => {
+    const denies = hookDecisions(f, runId).filter((d) => d['decision'] === 'deny' && d['rule'] === 'shell-not-allowed');
+    assert.ok(denies.length >= 3, `${denies.length} shell-not-allowed denials`);
+    const loops = ledgerRows<{ n: number }>(f.roots, "SELECT count(*) AS n FROM events WHERE run_id = ? AND type = 'loop.limit'", runId);
+    assert.equal(loops[0]?.n, 0);
+  });
+});

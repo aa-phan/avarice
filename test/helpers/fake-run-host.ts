@@ -40,6 +40,10 @@ export interface FakeRunOptions {
   // it exits non-zero, is refused, or no bullet matches. It takes precedence over `verification` and `verificationByPrompt`. With `recordTo`, the record gains
   // `listed: { command, denied, exitCode }` (exitCode null when the command did not run). JSON-serializable, like every option here.
   runListedCommand?: { command: string; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-64. Shell lines the unit tries through the real hook, in order, before `runListedCommand`. A line the hook admits is run as `runListedCommand` runs its command
+  // and its exit code is recorded, never judged; a refused line is not run. With `recordTo`, the record gains `shell: [{ command, denied, exitCode }]` (exitCode null
+  // when the line did not run). It is how a test shows that an environment other than the listed one is refused and never runs. JSON-serializable.
+  shellAttempts?: readonly string[];
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -375,25 +379,38 @@ export class FakeRunHost implements AgentHost {
 
     // Plan 03-64: the command the prompt lists for a check, run as the unit would run it (see `runListedCommand`).
     let listedStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
-    if (o.runListedCommand !== undefined) {
-      const wanted = o.runListedCommand.command;
-      const bullet = listedCommandsOf(req.prompt).find((b) => b === wanted || b.endsWith(` ${wanted}`));
-      const seen: { command: string; denied: boolean; exitCode: number | null } = { command: bullet ?? wanted, denied: false, exitCode: null };
-      if (bullet !== undefined) {
-        const hostEnv = buildInvocationEnv(process.env, {
-          gsdCoreBin: join(tmpdir(), 'avarice-fake-run-no-such-gsd-core-bin'),
-          onboardingId: req.onboardingId,
-          marker: req.runId,
-          ...(req.scope.scratchDir !== undefined ? { scratchDir: req.scope.scratchDir } : {}),
-          extraPath: [dirname(process.execPath)],
-        });
-        const admitted = tool('Bash', { command: bullet }, () => {
-          seen.exitCode = spawnSync('/bin/sh', ['-c', bullet], { cwd, env: hostEnv, encoding: 'utf8', timeout: 60_000 }).status;
+    if (o.runListedCommand !== undefined || o.shellAttempts !== undefined) {
+      const hostEnv = buildInvocationEnv(process.env, {
+        gsdCoreBin: join(tmpdir(), 'avarice-fake-run-no-such-gsd-core-bin'),
+        onboardingId: req.onboardingId,
+        marker: req.runId,
+        ...(req.scope.scratchDir !== undefined ? { scratchDir: req.scope.scratchDir } : {}),
+        extraPath: [dirname(process.execPath)],
+      });
+      // One Bash call through the real hook; an admitted line runs under the environment the real host adapter builds, a refused one never runs.
+      const runShell = (command: string): { command: string; denied: boolean; exitCode: number | null } => {
+        const seen: { command: string; denied: boolean; exitCode: number | null } = { command, denied: false, exitCode: null };
+        const admitted = tool('Bash', { command }, () => {
+          seen.exitCode = spawnSync('/bin/sh', ['-c', command], { cwd, env: hostEnv, encoding: 'utf8', timeout: 60_000 }).status;
         });
         seen.denied = !admitted;
+        return seen;
+      };
+      const attempted: Array<{ command: string; denied: boolean; exitCode: number | null }> = [];
+      for (const line of o.shellAttempts ?? []) {
+        if (stopped) break;
+        attempted.push(runShell(line));
       }
-      listedStatus = seen.exitCode === 0 ? 'passed' : o.runListedCommand.otherwise;
-      if (o.recordTo !== undefined) writeFileSync(o.recordTo, JSON.stringify({ ...record, listed: seen }));
+      let listed: { command: string; denied: boolean; exitCode: number | null } | undefined;
+      if (o.runListedCommand !== undefined) {
+        const wanted = o.runListedCommand.command;
+        const bullet = listedCommandsOf(req.prompt).find((b) => b === wanted || b.endsWith(` ${wanted}`));
+        listed = bullet === undefined ? { command: wanted, denied: false, exitCode: null } : runShell(bullet);
+        listedStatus = listed.exitCode === 0 ? 'passed' : o.runListedCommand.otherwise;
+      }
+      if (o.recordTo !== undefined) {
+        writeFileSync(o.recordTo, JSON.stringify({ ...record, ...(listed !== undefined ? { listed } : {}), ...(o.shellAttempts !== undefined ? { shell: attempted } : {}) }));
+      }
     }
 
     const quick = o.quickId ?? FAKE_QUICK_ID;

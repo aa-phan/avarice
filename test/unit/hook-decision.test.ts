@@ -952,6 +952,86 @@ describe('the run purpose: glob writes (CON-2)', () => {
   });
 });
 
+// Plan 03-64 (D-26, D-27, CON-15): a check's environment is listed as leading NAME=value words and admitted only exactly as listed.
+describe('the run purpose: a contract command that begins with assignments (plan 03-64)', () => {
+  const RUN_DENIED = DENIED_COMMAND_PREFIXES.filter((p) => p !== 'npm' && p !== 'npx');
+  const LISTED = 'SITE_ORIGIN=https://example.test node scripts/needs-env.mjs';
+  const runPolicy = (agentCommands: HookPolicy['agentCommands']): HookPolicy =>
+    policy(
+      {
+        purpose: 'run',
+        writeRoots: ['/work/scratch'],
+        writeGlobs: ['src/**'],
+        protectedGlobs: ['package.json'],
+        agentCommands,
+        deniedTools: ['AskUserQuestion'],
+        denyBackgroundShell: true,
+        subagentTypes: ['gsd-executor'],
+      },
+      { gsdReadVerbs: [...GSD_READ_VERBS.run], deniedPrefixes: RUN_DENIED },
+    );
+  const withEnv = runPolicy([
+    { words: ['SITE_ORIGIN=https://example.test', 'node', 'scripts/needs-env.mjs'], paths: false },
+    { words: ['npm', 'test'], paths: false },
+  ]);
+  const run = (command: string, p: HookPolicy = withEnv) => decide(shell(command), p);
+
+  it('admits the command exactly as listed, and with the value in single quotes (the lexer removes quotes, the words are the same), under rule agent-command', () => {
+    for (const command of [LISTED, "SITE_ORIGIN='https://example.test' node scripts/needs-env.mjs", 'SITE_ORIGIN="https://example.test" node scripts/needs-env.mjs']) {
+      const d = run(command);
+      assert.deepEqual([d.decision, d.rule], ['allow', 'agent-command'], command);
+    }
+  });
+
+  it('denies every other environment with shell-not-allowed: the bare form, another value, an extra or reordered assignment, and an assignment before another command', () => {
+    for (const command of [
+      'node scripts/needs-env.mjs',
+      'SITE_ORIGIN=https://other.test node scripts/needs-env.mjs',
+      'SITE_ORIGIN=https://example.test NODE_OPTIONS=x node scripts/needs-env.mjs',
+      'X=1 SITE_ORIGIN=https://example.test node scripts/needs-env.mjs',
+      'SITE_ORIGIN=https://example.test ls src',
+      'SITE_ORIGIN=https://example.test npm test',
+      'SITE_ORIGIN=https://example.test node scripts/needs-env.mjs extra',
+    ]) {
+      const d = run(command);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-not-allowed'], command);
+    }
+  });
+
+  it('refuses an assignment whose value would expand as shell-syntax', () => {
+    const d = run('SITE_ORIGIN=$HOME node scripts/needs-env.mjs');
+    assert.deepEqual([d.decision, d.rule], ['deny', 'shell-syntax']);
+  });
+
+  it('lists the admitted command with its assignments in the refusal reason', () => {
+    const d = run('node scripts/needs-env.mjs');
+    assert.equal(d.decision, 'deny');
+    assert.ok((d.reason ?? '').includes(LISTED), d.reason);
+  });
+
+  it('never admits an entry whose program word, after its assignments, the contract may not grant, even when a policy file lists one', () => {
+    const hostile = runPolicy([
+      { words: ['X=1', 'git', 'status'], paths: false },
+      { words: ['X=1', 'Y=2', '/usr/bin/GIT', 'log'], paths: false },
+      { words: ['A=1', 'curl'], paths: true },
+    ]);
+    for (const command of ['X=1 git status', 'X=1 Y=2 /usr/bin/GIT log', 'A=1 curl x']) {
+      const d = run(command, hostile);
+      assert.deepEqual([d.decision, d.rule], ['deny', 'shell-not-allowed'], command);
+    }
+  });
+
+  it('refuses a policy whose agentCommands entry starts with a reserved, lower-case or non-plain assignment, or holds only assignments, as malformed', () => {
+    const entry = (words: string[]) => ({ ...runPolicy([{ words, paths: false }]) });
+    for (const words of [['PATH=/x', 'npm', 'test'], ['NODE_OPTIONS=x', 'npm', 'test'], ['lower=1', 'npm', 'test'], ['A=$x', 'npm', 'test'], ['A=1'], ['A=1', 'B=2']]) {
+      assert.equal(parseHookPolicy(entry(words)).ok, false, words.join(' '));
+    }
+    for (const words of [['SITE_ORIGIN=https://example.test', 'node', 'scripts/needs-env.mjs'], ['CI=1', 'npm', 'test'], ['npm', 'run', 'x', '--flag=a']]) {
+      assert.equal(parseHookPolicy(entry(words)).ok, true, words.join(' '));
+    }
+  });
+});
+
 describe('parseHookPolicy for the run purpose', () => {
   const base = (): HookPolicy => ({
     ...policy({ purpose: 'run', writeGlobs: ['src/**'], protectedGlobs: ['package.json'], agentCommands: [{ words: ['npm', 'test'], paths: false }], deniedTools: ['AskUserQuestion'], denyBackgroundShell: true }),
