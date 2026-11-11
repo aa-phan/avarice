@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 46/50 plans executed (22 waves, with 17 gap-closure plans)
+**Plans:** 46/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
 
 Plans:
 **Wave 1**
@@ -300,17 +300,49 @@ Plans:
 **Wave 18** *(gap closure, blocked on 03-49)*
 - [x] 03-50-PLAN.md — The owner finishes run 1 in place in their own terminal window (D-03 relaxed for run 1 only, recorded); run 1 to ready_for_review, run 2 started and blocked; resumes 03-29, 03-42, 03-45 and 03-48 (halted at Task 2 by the owner's stop decision of 2026-11-10/11: the owner answered C's decision, C's resumed unit finished inside the write set, but its verifier reported gaps_found because the protected tests/e2e/copy-email.spec.ts still fails and G2 parked C on a new acceptance decision; run 1 stays blocked until the owner cancels it, run 2 not started, 03-29, 03-42, 03-45 and 03-48 still halted; re-discuss the exit criteria with /gsd-discuss-phase 3)
 
-**Wave 19** *(blocked on 03-50, 03-48, 03-45, 03-42 and 03-29)*
-- [ ] 03-30-PLAN.md — Exit part 2: run 3 silence and notifier failure, run 2 amendment and stale answer, 3 of 3 verdict (reads 03-48's evidence and the 03-49 authorization)
+**Superseded** *(exit criteria re-discussed 2026-11-10, D-26 to D-35; `status: superseded`, never executed)*
+- ~~03-30-PLAN.md — Exit part 2 (runs 2 and 3, the verdict)~~ replaced by 03-52 to 03-60
 
-**Wave 20** *(blocked on Wave 19 completion)*
+**Exit replanned under D-26 to D-35** *(the halted attempts 03-29, 03-42, 03-45, 03-48 and 03-50 are marked superseded by 03-55)*
+
+**Wave 18**
+- [ ] 03-51-PLAN.md — D-35: a declared check that is neither required nor a target is reported "not run: not required" in status, the inbox's review entry and the evidence line; optional `checksNotRun` key, no gate change
+
+**Wave 19** *(blocked on 03-51)*
+- [ ] 03-52-PLAN.md — Exit tools: the D-31 brief gate over a per-finding classification file, the gate-enforced authorization writer, fresh approval only (D-28), cap 4.50 (D-33)
+
+**Wave 20** *(blocked on 03-52)*
+- [ ] 03-53-PLAN.md — Exit tools: attempts per run role, Claude's classification and the owner's ruling (D-26, D-27), order 2, 3, 1 (D-33), two-failure stop-loss (D-29)
+
+**Wave 21** *(blocked on 03-51 and 03-53)*
+- [ ] 03-54-PLAN.md — Exit tools: run 2's amendment and stale path judged, run 3's `--silence` step, D-35 judged live, `verdict` and `supplement`
+
+**Wave 22** *(blocked on 03-54)*
+- [ ] 03-55-PLAN.md — Exit preparation, no spend: run 1 redrafted (D-32), every brief-check finding classified and gated (D-31), dry run, offline suite, halted SUMMARYs superseded and the evidence file seeded (D-34)
+
+**Wave 23** *(blocked on 03-55)*
+- [ ] 03-56-PLAN.md — Owner checkpoints: readiness without spend, the owner cancels old run 1 (D-34), D-04 approval of the briefs and classification, fresh authorization at 4.50 USD per run
+
+**Wave 24** *(blocked on 03-56)*
+- [ ] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29)
+
+**Wave 25** *(blocked on 03-57)*
+- [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
+
+**Wave 26** *(blocked on 03-58)*
+- [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling
+
+**Wave 27** *(blocked on 03-59)*
+- [ ] 03-60-PLAN.md — Exit record: the tools' verdict (3 of 3 or n/3 with the pending re-runs), correct stops as evidence (D-28), old run 1 as supplementary evidence (D-34), LIVE-CASES.md and spend
+
+**Wave 28** *(blocked on Wave 27 completion)*
 - [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs, data model and processes with three diagrams, from the code
 
-**Wave 21** *(blocked on Wave 20 completion)*
-- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence, containment, integrations, overview, from the code
+**Wave 29** *(blocked on Wave 28 completion)*
+- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35), containment, integrations, overview, from the code
 
-**Wave 22** *(blocked on Wave 21 completion)*
-- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings, fresh reviews of every new or changed document (success criterion 6)
+**Wave 30** *(blocked on Wave 29 completion)*
+- [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35), fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
 
