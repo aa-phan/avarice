@@ -708,6 +708,137 @@ function relaxCommand(argv: readonly string[]): number {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The attempts of each run, the classification of a stop, and the rule that starts another attempt (plan 03-53; D-26, D-27, D-29, D-33)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const DEFECT_CLASSES: readonly string[] = ['product-defect', 'brief-harness-defect'];
+
+// The identity of one start in the evidence (plan 03-53): the role the authorization gives the brief's digest (`run1`, `run2`, ...), the attempt number (1 plus the
+// earlier entries of the role, whatever their brief digest, so a redrafted brief continues the run's count) and what the run is expected to end on. An entry the same run
+// ID already holds keeps its own number when it is judged again. Undefined when the digest is not one the authorization names.
+export function attemptFor(auth: Pick<Authorization, 'briefs'>, digest: string, runs: readonly Json[], runId: string): { run: string; attempt: number; expects: string } | undefined {
+  const approved = auth.briefs.find((b) => b['digest'] === digest);
+  const run = approved?.['run'];
+  if (approved === undefined || typeof run !== 'string' || run === '') return undefined;
+  const expects = typeof approved['expects'] === 'string' ? approved['expects'] : '';
+  const held = runs.find((r) => r['runId'] === runId && r['run'] === run);
+  if (held !== undefined && typeof held['attempt'] === 'number') return { run, attempt: held['attempt'], expects };
+  return { run, attempt: 1 + runs.filter((r) => r['runId'] !== runId && r['run'] === run).length, expects };
+}
+
+export interface ClassificationPatch {
+  proposed?: Json;
+  confirmed?: Json;
+}
+
+// The evidence file with a classification patch merged into the entry of one run; every other key of the file and of every entry is as it was. Undefined when the
+// file has no entry for the run.
+export function withClassification(file: Json, runId: string, patch: ClassificationPatch): Json | undefined {
+  const runs = asObjects(file['runs']);
+  if (!runs.some((r) => r['runId'] === runId)) return undefined;
+  const merged = (r: Json): Json => ({ ...r, classification: { ...(isObject(r['classification']) ? r['classification'] : {}), ...patch } });
+  return { ...file, runs: runs.map((r) => (r['runId'] === runId ? merged(r) : r)) };
+}
+
+const AT_REFERENCE = /^[^\s:]+:[1-9]\d*$/;
+const isDocsSystemRef = (ref: string): boolean => /^docs\/system\/\S+$/.test(ref) && !ref.split('/').includes('..');
+
+// `classify --evidence F --run-id R --propose --class C --stopped-by TEXT --at PATH:LINE [--at ...] --docs-system conformant|nonconformant --docs-ref docs/system/X
+// --summary TEXT --by claude` records Claude's D-26 classification of a stopped attempt: the class, the file:line, the gate or check that stopped the run and whether
+// AVARICE behaved as docs/system documents. `classify --evidence F --run-id R --confirm --by owner --ref TEXT [--class C]` records the owner's ruling (D-27), which
+// is the proposed class unless the owner names the other (then `overrides` names the proposed one). Each writes into the one entry and nothing else, and refuses
+// (exit 2, file untouched) on a passed entry, an unknown run, a proposal the owner already ruled on, a confirmation with no proposal and a `--by` of the wrong party.
+// Claude runs --confirm only from the owner's own checkpoint reply, which `--ref` names.
+function classifyCommand(argv: readonly string[]): number {
+  const { named, many, bools } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: classify: ${text}`);
+    return 2;
+  };
+  const proposing = bools.has('propose');
+  const confirming = bools.has('confirm');
+  if (proposing === confirming) return refuse('usage: give exactly one of --propose and --confirm (neither takes a value)');
+  const evidence = named['evidence'];
+  const runId = named['run-id'];
+  if (evidence === undefined || runId === undefined) return refuse('usage: classify --evidence F --run-id R (--propose ... | --confirm --by owner --ref TEXT [--class C])');
+  const mode = proposing ? 'proposal' : 'confirmation';
+  if (proposing && named['by'] !== 'claude') return refuse('--by must be claude: Claude proposes the classification (D-27)');
+  if (confirming && named['by'] !== 'owner') return refuse('--by must be owner: only the owner confirms a classification (D-27)');
+  const cls = named['class'];
+  if (cls !== undefined && !DEFECT_CLASSES.includes(cls)) return refuse(`--class ${JSON.stringify(cls)} is neither ${DEFECT_CLASSES.join(' nor ')} (D-26)`);
+  const stoppedBy = named['stopped-by']?.trim() ?? '';
+  const at = many['at'] ?? [];
+  const docsSystem = named['docs-system'];
+  const docsRef = named['docs-ref'] ?? '';
+  const summary = named['summary']?.trim() ?? '';
+  const ref = named['ref']?.trim() ?? '';
+  if (proposing) {
+    if (cls === undefined) return refuse(`--class is required: ${DEFECT_CLASSES.join(' or ')} (D-26)`);
+    if (stoppedBy === '') return refuse('--stopped-by is required: name the gate or check that stopped the run (D-27)');
+    if (at.length === 0) return refuse('--at is required: name the file and line as <path>:<line> (D-27)');
+    const badAt = at.find((a) => !AT_REFERENCE.test(a));
+    if (badAt !== undefined) return refuse(`--at ${JSON.stringify(badAt)} is not <path>:<line>`);
+    if (docsSystem !== 'conformant' && docsSystem !== 'nonconformant') return refuse('--docs-system must be conformant or nonconformant: whether AVARICE behaved as docs/system documents (D-27)');
+    if (!isDocsSystemRef(docsRef)) return refuse(`--docs-ref ${JSON.stringify(docsRef)} is not a document under docs/system/ (D-27)`);
+    if (summary === '') return refuse('--summary is required: say what stopped the run (D-27)');
+  } else if (ref === '') return refuse('--ref is required: name the owner reply that confirmed the classification (D-27)');
+
+  const path = resolve(evidence);
+  const file = readJson(path);
+  if (file === undefined) return refuse(`${evidence} is not an evidence file`);
+  const entry = asObjects(file['runs']).find((r) => r['runId'] === runId);
+  if (entry === undefined) return refuse(`the evidence file holds no entry for ${runId}`);
+  if (entry['passed'] === true) return refuse(`${runId} passed: a passed run has nothing to classify`);
+  const held = isObject(entry['classification']) ? entry['classification'] : {};
+  if (isObject(held['confirmed'])) return refuse(`${runId} is already ruled on by the owner (${String(held['confirmed']['class'])}): the ruling stands, and a ${mode} cannot replace it`);
+
+  const now = new Date().toISOString();
+  let patch: ClassificationPatch;
+  let said: string;
+  if (proposing) {
+    patch = { proposed: { by: 'claude', class: cls, stoppedBy, at: [...at], docsSystem: { conformant: docsSystem === 'conformant', ref: docsRef }, summary, proposedAt: now } };
+    said = `proposed ${String(cls)}`;
+  } else {
+    const proposed = isObject(held['proposed']) ? held['proposed'] : undefined;
+    if (proposed === undefined) return refuse(`${runId} has no proposal to confirm: Claude proposes first (D-27)`);
+    const ruling = cls ?? String(proposed['class']);
+    patch = { confirmed: { by: 'owner', class: ruling, ...(ruling !== proposed['class'] ? { overrides: proposed['class'] } : {}), ref, at: now } };
+    said = `confirmed ${ruling}${ruling !== proposed['class'] ? ` (overriding ${String(proposed['class'])})` : ''}`;
+  }
+  const next = withClassification(file, runId, patch);
+  if (next === undefined) return refuse(`the evidence file holds no entry for ${runId}`);
+  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
+  out(`classify: ${said} for ${runId}\n`);
+  return 0;
+}
+
+// The owner's confirmed ruling on an entry, when there is one: the class it names.
+function confirmedClassOf(entry: Json): string | undefined {
+  const classification = entry['classification'];
+  const confirmed = isObject(classification) && isObject(classification['confirmed']) ? classification['confirmed'] : undefined;
+  return confirmed !== undefined && confirmed['by'] === 'owner' && typeof confirmed['class'] === 'string' ? confirmed['class'] : undefined;
+}
+
+// Whether authorize may start another attempt of a run (D-26, D-27, D-34), judged over the entries of the evidence file. `readState` reads a run from the owner's ledger.
+// Returns the refusal (code 2) or undefined. An earlier attempt of the role that did not pass needs the owner's confirmed classification before any re-run spend, and
+// its live run must be failed, cancelled or closed: Claude never cancels it.
+export function startRefusal(evidence: Json | undefined, auth: Pick<Authorization, 'order'>, role: string, readState: (runId: string) => string | undefined): { code: 2 | 75; text: string } | undefined {
+  const refuse = (text: string): { code: 2; text: string } => ({ code: 2, text });
+  if (!auth.order.includes(role)) return refuse(`${role} is not a run of the authorization (order ${auth.order.join(', ')}) (D-28)`);
+  const mine = asObjects(evidence?.['runs']).filter((r) => r['run'] === role);
+  for (const earlier of mine.filter((r) => r['passed'] !== true)) {
+    if (confirmedClassOf(earlier) === undefined) return refuse(`${role}'s previous attempt has no owner-confirmed classification: Claude proposes it and the owner confirms it before any re-run spend (D-26, D-27)`);
+  }
+  for (const earlier of mine.filter((r) => r['passed'] !== true)) {
+    const earlierId = String(earlier['runId'] ?? '');
+    const state = readState(earlierId);
+    if (state === undefined) return refuse(`${role}'s previous attempt ${earlierId} cannot be read from the owner's ledger; the owner cancels it first (D-34)`);
+    if (!isRunTerminal(state as RunState)) return refuse(`${role}'s previous attempt ${earlierId} is ${state}; the owner cancels it first (D-34)`);
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // brief-check: the write-set check of each brief at the pin, without the rest of the dry run (plan 03-49)
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -1251,11 +1382,12 @@ function authorize(argv: readonly string[]): number {
   const gate = gateRefusalOf(parsed.briefCheckPath, briefPath, resolve(named['repo'] as string), named['pin'] ?? DEFAULT_PIN);
   if (gate !== undefined) return refuse(gate);
 
-  // D-03: no run is repeated by hand, and no fourth run is started.
+  // D-26, D-27, D-34 (plan 03-53): another attempt of a run starts only on the owner's confirmed classification of the previous one, once that run is over.
   const existing = readJson(resolve(named['evidence'] as string));
-  const runs = asObjects(existing?.['runs']);
-  if (runs.some((r) => r['briefDigest'] === digest)) return refuse(`the evidence file already records a run of ${named['brief']}: a run is never started twice by hand (D-03); stop and report`);
-  if (runs.length >= parsed.briefs.length) return refuse(`the evidence file already records ${runs.length} runs (the owner approved ${parsed.briefs.length})`);
+  const identity = attemptFor(parsed, digest, asObjects(existing?.['runs']), '');
+  if (identity === undefined) return refuse(`the brief ${named['brief']} (digest ${digest}) names no run in the authorization: stop and report`);
+  const refusal = startRefusal(existing, parsed, identity.run, (runId) => runStateOf(process.env, runId));
+  if (refusal !== undefined) return refuse(refusal.text, refusal.code === 75 ? EXIT_CEILING : 2);
 
   const report = preflight(resolve(named['repo'] as string), resolve(named['config'] as string), named['pin'] ?? DEFAULT_PIN, Date.now());
   for (const line of report.lines) out(`${line}\n`);
@@ -1264,7 +1396,7 @@ function authorize(argv: readonly string[]): number {
   const spent = phase3Spent();
   const guard = spendGuard(spent, parsed.perRunCapUsd, { ledger: phase3Ceiling(), authorized: parsed.ceilingUsd });
   if (!guard.fits) return refuse(`stop and ask the owner (D-05): recorded Phase 3 spend ${spent.toFixed(4)} USD plus this run's cap ${parsed.perRunCapUsd.toFixed(2)} USD would pass the ${guard.ceilingUsd} USD ceiling`, EXIT_CEILING);
-  out(`authorized: ${named['brief']} (${digest.slice(0, 19)}...), host ${parsed.claudeVersion}, Phase 3 spend ${spent.toFixed(4)} plus ${parsed.perRunCapUsd.toFixed(2)} fits ${guard.ceilingUsd} USD, run ${runs.length + 1} of ${parsed.briefs.length}\n`);
+  out(`authorized: ${named['brief']} (${digest.slice(0, 19)}...), host ${parsed.claudeVersion}, Phase 3 spend ${spent.toFixed(4)} plus ${parsed.perRunCapUsd.toFixed(2)} fits ${guard.ceilingUsd} USD, ${identity.run} attempt ${identity.attempt}\n`);
   return 0;
 }
 
@@ -1758,6 +1890,14 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
   const prior = priorRuns.find((r) => r['runId'] === runId);
   const problems: string[] = [];
 
+  // Plan 03-53: a start is recorded under the run and attempt the authorization gives its brief; a brief it does not name is not recorded at all.
+  const briefDigest = existsSync(briefPath) ? briefDigestOf(briefPath) : undefined;
+  const identity = attemptFor(auth, briefDigest ?? '', priorRuns, runId);
+  if (stage === 'start' && identity === undefined) {
+    errOut(`exit-run: the brief ${named['brief']} (digest ${briefDigest ?? 'none: it does not parse'}) is not one of the briefs the owner approved: nothing was recorded`);
+    return 2;
+  }
+
   if (stage === 'finish' && (prior === undefined || !isObject(prior['atPause']) || !isObject(prior['checkoutBeforeSnapshot']))) {
     errOut(`exit-run: the evidence file has no start-stage record of ${runId}: nothing to finish`);
     return 2;
@@ -1802,7 +1942,8 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
       const startErr = named['start-err'] !== undefined && existsSync(resolve(named['start-err'])) ? readFileSync(resolve(named['start-err']), 'utf8') : '';
       Object.assign(entry, {
         brief: briefPath.replace(`${REPO_ROOT}/`, ''),
-        briefDigest: briefDigestOf(briefPath) ?? null,
+        briefDigest: briefDigest ?? null,
+        ...(identity !== undefined ? { run: identity.run, attempt: identity.attempt, expects: identity.expects } : {}),
         plan: livePlan(),
         host: { claudeBin: process.env['AVARICE_CLAUDE_BIN'] ?? null, claudeVersion: hostVersion, pinnedBy: pinnedByOf(named['authorization-file'] as string), liveAdmitVariableSet: process.env['AVARICE_LIVE_ADMIT_CLAUDE_VERSION'] !== undefined },
         perRunCapUsd: auth.perRunCapUsd,
@@ -1905,6 +2046,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'snapshot') return snapshotCommand(rest);
   if (command === 'evidence') return evidenceCommand(rest);
   if (command === 'relax') return relaxCommand(rest);
+  if (command === 'classify') return classifyCommand(rest);
   if (command === 'brief-check') return briefCheck(rest);
   if (command === 'brief-gate') return briefGate(rest);
   if (command === 'write-authorization') return writeAuthorizationCommand(rest);
@@ -1918,7 +2060,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify) ...');
   return 2;
 }
 
