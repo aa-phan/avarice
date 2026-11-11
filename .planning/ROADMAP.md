@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 51/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
+**Plans:** 52/59 plans executed (30 waves, with 17 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35)
 
 Plans:
 **Wave 1**
@@ -321,7 +321,7 @@ Plans:
 - [x] 03-55-PLAN.md — Exit preparation, no spend: run 1 redrafted (D-32), every brief-check finding classified and gated (D-31), dry run, offline suite, halted SUMMARYs superseded and the evidence file seeded (D-34)
 
 **Wave 23** *(blocked on 03-55)*
-- [ ] 03-56-PLAN.md — Owner checkpoints: readiness without spend, the owner cancels old run 1 (D-34), D-04 approval of the briefs and classification, fresh authorization at 4.50 USD per run
+- [x] 03-56-PLAN.md — Owner checkpoints: readiness without spend, the owner cancels old run 1 (D-34), D-04 approval of the briefs and classification, fresh authorization at 4.50 USD per run
 
 **Wave 24** *(blocked on 03-56)*
 - [ ] 03-57-PLAN.md — Exit run 2 (stale answer): start, the owner's amendment and answers, finish, the owner's ruling (D-26 to D-29)
@@ -437,7 +437,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 51/59 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 52/59 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
