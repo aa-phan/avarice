@@ -1,10 +1,962 @@
 {
   "schema": 1,
-  "plan": "03-55",
+  "plan": "03-57",
+  "decision": "D-03, D-05",
+  "updatedAt": "2026-11-11T07:44:14.789Z",
+  "runs": [
+    {
+      "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+      "title": "Graduation label for the education entry",
+      "state": "blocked_on_decision",
+      "reason": "decision",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+      "updatedAt": "2026-11-11T07:44:14.044Z",
+      "commit": null,
+      "clean": false,
+      "costUsd": 0.21726982499999994,
+      "hostConfigDir": {
+        "claudeConfigDir": "/Users/aphan/.claude-edu",
+        "source": "CLAUDE_CONFIG_DIR"
+      },
+      "contract": {
+        "version": 1,
+        "authorizedBy": "cli:start",
+        "reason": null
+      },
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 0.21726982499999994,
+          "reserved": 0,
+          "limit": 4.5
+        },
+        {
+          "name": "invocations",
+          "used": 2,
+          "reserved": 0,
+          "limit": 5
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "reserved": 0,
+          "limit": 20
+        },
+        {
+          "name": "toolCalls",
+          "used": 63,
+          "reserved": 0,
+          "limit": 800
+        },
+        {
+          "name": "wallClockMs",
+          "used": 338019,
+          "reserved": 0,
+          "limit": 7200000
+        }
+      ],
+      "items": [
+        {
+          "itemId": "A",
+          "state": "blocked_on_decision",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2"
+        },
+        {
+          "itemId": "B",
+          "state": "blocked_on_decision",
+          "size": "medium",
+          "model": "sonnet",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "40c87ea6-a179-4193-9185-880e01097713"
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M74RNWWCG68NMZKB09AM8Y61",
+          "ordinal": 1,
+          "reason": "initial",
+          "itemId": "A",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-11T07:38:09.164Z",
+          "endedAt": "2026-11-11T07:44:07.794Z"
+        },
+        {
+          "attemptId": "att_01M74S0VBZG55KPASK6X7SK87H",
+          "ordinal": 2,
+          "reason": "initial",
+          "itemId": "B",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-11T07:44:08.063Z",
+          "endedAt": "2026-11-11T07:44:14.043Z"
+        }
+      ],
+      "decisions": [
+        {
+          "decisionId": "dec_01M74S0V3JFCE404VF02YMY034",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "A"
+          ],
+          "issue": "The quick task is implemented and verified, but the run's `format:check` gate is still red because of a file this task did not touch.\n\n**What changed**\n- `src/lib/theme.ts` line 35: `isTheme` now has the `export` keyword. The body is unchanged.\n- `tests/unit/theme.test.ts`: `isTheme` added to the import, and a top-level test `isTheme accepts only light and dark` appended. It checks `light` and `dark` are accepted and that the rejected inputs (`purple`, `Dark`, ` dark`, `''`, `system`, `null`, `undefined`) are all refused.\n- No change under `src/content`. `src/lib/dates.ts` and `tests/unit/dates.test.ts` were not edited.\n\n**Results**\n- Typecheck, lint, prettier and oxlint on the changed files pass.\n- The theme test file passes 14/14. The full suite passes 409/409 across 23 files.\n- `npm run format:check` fails on `[warn] index.html`. I did not touch that file, and it fails on the unmodified tree, so the failure predates this change.\n\n**Records**\n- `.planning/quick/261111-exp-export-is-t",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "Fix `index.html` formatting in a separate change, then rerun the gate"
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "Accept the repo-wide `format:check` as already red and proceed to commit the two-file change"
+            }
+          ],
+          "consequences": {
+            "1": "item A resumes with this answer",
+            "2": "item A resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-11T07:44:07.794Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "verification-human-needed",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M74RNWWCG68NMZKB09AM8Y61"
+        },
+        {
+          "decisionId": "dec_01M74S116V4TRTNPAZN3R94BD5",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "B"
+          ],
+          "issue": "I haven't started the workflow. From the end month on, `graduationLabel` has two possible wordings, and you said to ask before writing it. That wording is a user-visible behavior choice, so it's yours to make. AC3 and the `describe('graduationLabel')` tests depend on it.\n\nBefore the end month, the result is fixed: `Expected <Month YYYY>`, using `monthYear(end)`. For example, `graduationLabel(\"2026-12\", \"2026-11\")` returns `Expected December 2026`.\n\nOnce you answer, I'll run the planner, plan-checker, executor and verifier steps and write PLAN.md, SUMMARY.md and VERIFICATION.md.\n\nWhich wording should `graduationLabel` return from the end month on?\n1. `<Month YYYY>` (for example, `December 2026`)\n2. `Graduated <Month YYYY>` (for example, `Graduated December 2026`)",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "`<Month YYYY>` (for example, `December 2026`)"
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "`Graduated <Month YYYY>` (for example, `Graduated December 2026`)"
+            }
+          ],
+          "consequences": {
+            "1": "item B resumes with this answer",
+            "2": "item B resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-11T07:44:14.043Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M74S0VBZG55KPASK6X7SK87H"
+        }
+      ],
+      "notifications": [
+        {
+          "notificationId": "ntf_01M74S0V3KY5PNJ4SXWYSG8042",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M74S0V3JFCE404VF02YMY034"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-11T07:44:07.795Z",
+          "deliveredAt": "2026-11-11T07:44:14.143Z"
+        },
+        {
+          "notificationId": "ntf_01M74S116VB3ZW1F1FH2W5M94G",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M74S116V4TRTNPAZN3R94BD5"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-11T07:44:14.043Z",
+          "deliveredAt": "2026-11-11T07:44:14.143Z"
+        }
+      ],
+      "gates": [
+        {
+          "gate": "G0",
+          "workItem": null,
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "test:isTheme accepts only light and dark"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test",
+            "test:graduationLabel"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "decision:graduation-wording",
+            "check:test",
+            "check:typecheck"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        }
+      ],
+      "commits": [],
+      "invocations": [
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M74RNWWCG68NMZKB09AM8Y61",
+          "itemId": "A",
+          "model": "haiku",
+          "invocationId": "inv_01M74RPNRPJH9G1ZK8RTT68YSY",
+          "requestedSession": "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2",
+          "answeredDecisionId": null,
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.14562462499999995,
+          "costChargedUsd": 0.14562462499999995,
+          "transcript": "sha256:0340c0f82707ddae0deea0701b799f0aabef0a6ab8b4f9700f3798856652e157",
+          "initSessions": [
+            "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2",
+            "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2",
+            "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2",
+            "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2",
+            "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2"
+          ],
+          "toolCounts": {
+            "Bash": 33,
+            "Read": 28,
+            "Agent": 4,
+            "Grep": 2,
+            "Glob": 2,
+            "Write": 3,
+            "Edit": 3
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M74S0VBZG55KPASK6X7SK87H",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M74S0VFKC60J352SDDTWPB7Z",
+          "requestedSession": "40c87ea6-a179-4193-9185-880e01097713",
+          "answeredDecisionId": null,
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.07164519999999999,
+          "costChargedUsd": 0.07164519999999999,
+          "transcript": "sha256:3f75f027f577a7bdbf26edc8eba49aa65b8ef19bdf2d504a2ad25323454990cf",
+          "initSessions": [
+            "40c87ea6-a179-4193-9185-880e01097713"
+          ],
+          "toolCounts": {}
+        }
+      ],
+      "toolCounts": {
+        "Bash": 33,
+        "Read": 28,
+        "Agent": 4,
+        "Grep": 2,
+        "Glob": 2,
+        "Write": 3,
+        "Edit": 3
+      },
+      "askUserQuestion": 0,
+      "statusView": {
+        "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+        "title": "Graduation label for the education entry",
+        "state": "blocked_on_decision",
+        "reason": "decision",
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "park",
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "at": "2026-11-11T07:44:13.844Z"
+        },
+        "branch": "avarice/run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+        "commit": null,
+        "clean": false,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          }
+        ],
+        "openDecisions": 2,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0.21726982499999994,
+            "limit": 4.5
+          },
+          {
+            "name": "invocations",
+            "used": 2,
+            "limit": 5
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 20
+          },
+          {
+            "name": "toolCalls",
+            "used": 63,
+            "limit": 800
+          },
+          {
+            "name": "wallClockMs",
+            "used": 338019,
+            "limit": 7200000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "p3-run2-graduation-label.md",
+            "revision": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "size": "small",
+            "model": "haiku",
+            "dependsOn": [],
+            "attempts": 1
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          }
+        ],
+        "decisions": [
+          {
+            "decisionId": "dec_01M74S0V3JFCE404VF02YMY034",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "A"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M74S116V4TRTNPAZN3R94BD5",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "B"
+            ],
+            "supersedes": null,
+            "successor": null
+          }
+        ],
+        "notifications": {
+          "delivered": 2,
+          "pending": 0,
+          "held": 0,
+          "failed": 0,
+          "lastError": null
+        },
+        "checksNotRun": [
+          {
+            "name": "test:e2e",
+            "reason": "not required"
+          }
+        ]
+      },
+      "checksNotRunExpected": [
+        "test:e2e"
+      ],
+      "brief": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "briefDigest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "run": "run2",
+      "attempt": 1,
+      "expects": "amend-stale",
+      "plan": "03-57",
+      "host": {
+        "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+        "claudeVersion": "2.1.319",
+        "pinnedBy": "03-56-exit-authorization.json",
+        "liveAdmitVariableSet": false
+      },
+      "perRunCapUsd": 4.5,
+      "startExit": 3,
+      "startedAt": "2026-11-11T07:38:04Z",
+      "startStdoutTail": "run run_01M74RNSAHDTSHE8JDEZ5XW6F9: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: Graduation label for the education entry\nacceptance: 3 criteria\nwrite paths: src/lib/theme.ts, tests/unit/theme.test.ts, src/lib/dates.ts, tests/unit/dates.test.ts\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 4.50 USD per run, 2.00 USD per invocation; 120 min, 5 invocations, 800 tool calls\nindex: used (2 files, 0 symbols)\nitem A: small, haiku (from size); files src/lib/theme.ts (derived)\nitem B: medium, sonnet (from size); files src/lib/dates.ts (derived)\ncontract: routine v1 sha256:96ed2f6ae671988ba60793fc2dd8b4a5492d6ed2be9d26602351e906cc98063b\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M74RNSAHDTSHE8JDEZ5XW6F9/contract-v1.json\nrun run_01M74RNSAHDTSHE8JDEZ5XW6F9: blocked_on_decision (decision)\n",
+      "checkoutBeforeSnapshot": {
+        "schema": 1,
+        "takenAt": "2026-11-11T07:38:04.660Z",
+        "repo": "/Users/aphan/aa-phan-portfolio-v2",
+        "digest": {
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          }
+        },
+        "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+        "refs": [
+          {
+            "ref": "refs/heads/avarice/run_01M6SE68ZTSJPBARR0DVKDKAMR",
+            "object": "0c4b58dffe2864f1521216fc87e7b7a0f0e3ece4"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+            "object": "c093ca053c949863220e150c4f98168d439e9ac5"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+            "object": "54b250016cd436fd2b340795b13c2cfadad6599f"
+          },
+          {
+            "ref": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+            "object": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          },
+          {
+            "ref": "refs/heads/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          },
+          {
+            "ref": "refs/remotes/origin/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          }
+        ]
+      },
+      "checkout": {
+        "before": {
+          "takenAt": "2026-11-11T07:38:04.660Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "after": {
+          "takenAt": "2026-11-11T07:44:14.601Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "equal": true,
+        "newRefs": [],
+        "removedOrChangedRefs": [],
+        "newRefObjects": []
+      },
+      "atPause": {
+        "at": "2026-11-11T07:44:14.788Z",
+        "state": "blocked_on_decision",
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "2df2d82f-7e7e-46ec-ab5e-397e3fef7ab2"
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "40c87ea6-a179-4193-9185-880e01097713"
+          }
+        ]
+      },
+      "stopOk": false,
+      "spend": {
+        "recordedUsd": 0,
+        "appendedUsd": 0.21726982499999994,
+        "line": {
+          "plan": "03-57",
+          "case": "exit-p3-run2-graduation-label-run_01M74RNSAHDTSHE8JDEZ5XW6F9-start",
+          "costUsd": 0.21726982499999994,
+          "claudeVersion": "2.1.319",
+          "at": "2026-11-11T07:44:14.789Z"
+        }
+      },
+      "phase3SpentUsd": 11.515849649999998,
+      "spendGuardAfterStage": {
+        "remainingRunCapUsd": 4.282730175,
+        "ceilingUsd": 25,
+        "fits": true
+      },
+      "problems": [
+        "the run has 2 decision(s), 2 open; D-02 wants exactly one, open",
+        "item B is independent of the decision and is blocked_on_decision, not done",
+        "the run has 2 notification row(s), not one"
+      ],
+      "classification": {
+        "proposed": {
+          "by": "claude",
+          "class": "brief-harness-defect",
+          "stoppedBy": "item A's own VERIFICATION status human_needed (pause signal verification-human-needed): the unit ran the required format:check, which is red at the base revision on index.html (a file outside the write set), and parked A on its own pause decision; this is not a gate G2 stop",
+          "at": [
+            "src/domain/outcome.ts:116",
+            "src/app/run-stages/item.ts:390",
+            "test/benchmark/portfolio/avarice-config.json:6",
+            "test/benchmark/phase3/p3-run2-graduation-label.md:32",
+            "scripts/exit-run-phase3-tools.ts:1782"
+          ],
+          "docsSystem": {
+            "conformant": true,
+            "ref": "docs/system/runs.md"
+          },
+          "summary": "Run 2 stopped blocked_on_decision on two open pause decisions (A: dec_01M74S0V3JFCE404VF02YMY034, verification-human-needed; B: dec_01M74S116V4TRTNPAZN3R94BD5, numbered-choice, the planted one), not the one the brief expects, so item A was not done and two notifications were queued. AVARICE behaved as docs/system documents: runs.md (Pause signals) routes a unit whose VERIFICATION status is human_needed to a pause decision, and checks-and-evidence.md (The baseline) says a failing baseline check blocks nothing and G2 treats a required check failing at baseline and again as pre-existing. The cause is outside AVARICE: the portfolio's format:check is red at base on index.html (confirmed read-only with the portfolio's own prettier --check index.html), the conventions make format:check required, and the brief and the dry run never established or neutralized that baseline fact, so A's verifier asked a human. The same red check appeared in 03-45. Alternative reading for the owner: the unit prompt does not tell the unit that a baseline-red required check is tolerated, which is a product prompt gap if the owner wants it closed (docs/system does not say the prompt tells it).",
+          "proposedAt": "2026-11-11T07:46:11.545Z"
+        }
+      }
+    }
+  ],
   "exitRules": "D-26..D-35",
-  "decision": "D-26 to D-35",
-  "updatedAt": "2026-11-11T03:33:15.000Z",
-  "runs": [],
   "supersedes": {
     "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
     "evidenceFile": "03-48-evidence-exit.json",
