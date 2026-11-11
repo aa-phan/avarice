@@ -32,13 +32,29 @@
 //   The `relax` subcommand and the relaxed finish judge stay for the history of plan 03-49, but `relax` refuses an evidence file marked `exitRules: D-26..D-35` and the
 //   evidence stage judges a relax record in an entry as a problem.
 //
+// Plan 03-53 adds the bookkeeping of D-26, D-27, D-29 and D-33. An exit run is identified in the evidence by its ROLE (`run1`, `run2`, `run3`, from the authorization's
+// `briefs[].run`) and an ATTEMPT number, not by its brief digest: the start stage writes `run`, `attempt` (1 plus the earlier entries of the role) and `expects` into
+// each entry, so a redrafted brief (a new digest) continues the same run's count.
+//   classify --evidence F --run-id R --propose --class product-defect|brief-harness-defect --stopped-by TEXT --at PATH:LINE [--at ...] --docs-system conformant|nonconformant
+//            --docs-ref docs/system/X --summary TEXT --by claude
+//   classify --evidence F --run-id R --confirm --by owner --ref TEXT [--class C]
+//       Claude's classification of a stopped attempt (D-26) and the owner's ruling on it (D-27, written only from the owner's own checkpoint reply), each into the
+//       one entry as `classification.proposed` and `classification.confirmed`. Exit 2 and the file untouched on a passed entry, an unknown run, a malformed field,
+//       a wrong `--by`, a confirmation with no proposal, or an entry the owner already ruled on.
+//   startRefusal (inside `authorize`) refuses a start, starting nothing, when: the run already passed in the current epoch; a run earlier in the authorization's order
+//       (D-33: 2, 3, 1) has no recorded outcome, a pass or the owner's confirmed classification; an earlier attempt of the run has no owner-confirmed classification;
+//       or an earlier attempt's live run is not failed, cancelled or closed in the owner's ledger (D-34, read-only). A confirmed product defect starts a new EPOCH at its
+//       confirmation: an attempt started before it no longer counts as a pass or toward the order, so all three runs must pass again (D-26). The stop-loss (D-29) is
+//       exit 75: a run with two failed attempts, in any epoch and whatever their classification, is refused. Nothing lifts it but a new owner decision and a re-plan.
+//
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
 //       Prints one scalar of the owner's authorization (host.claudeBin, perRunCapUsd, ceilingUsd).
 //   authorize --authorization-file F --brief B --repo REPO --config F --evidence F [--pin SHA]
-//       Before a start: the owner's approval names this brief (parseBrief digest), the host is the pinned one and admitted, the evidence file holds no
-//       run of the brief yet, the preflight is ok and the Phase 3 guard (D-05) says the recorded spend plus the per-run cap fits the lower of the
-//       ceiling and the authorization's. Exit 0 ok, 75 when it would pass the ceiling ("stop and ask the owner"), 2 otherwise.
+//       Before a start: the owner's approval names this brief (parseBrief digest), the host is the pinned one and admitted, the D-31 gate passes, startRefusal
+//       (plan 03-53, below) admits another attempt of the brief's run, the preflight is ok and the Phase 3 guard (D-05) says the recorded spend plus the per-run
+//       cap fits the lower of the ceiling and the authorization's. Exit 0 ok, 75 when it would pass the ceiling or when the run has failed twice ("stop and ask
+//       the owner"), 2 otherwise.
 //   snapshot --repo REPO
 //       The Phase 2 checkout snapshot (digest, index digest, symbolic HEAD, every ref) of the owner's checkout, read-only.
 //   evidence --stage start|finish --run-id ID --brief B --repo REPO --out F ...
@@ -812,23 +828,77 @@ function classifyCommand(argv: readonly string[]): number {
   return 0;
 }
 
-// The owner's confirmed ruling on an entry, when there is one: the class it names.
-function confirmedClassOf(entry: Json): string | undefined {
+// The owner's confirmed ruling on an entry, when there is one: the record the owner's `classify --confirm` wrote.
+function confirmedOf(entry: Json): Json | undefined {
   const classification = entry['classification'];
   const confirmed = isObject(classification) && isObject(classification['confirmed']) ? classification['confirmed'] : undefined;
-  return confirmed !== undefined && confirmed['by'] === 'owner' && typeof confirmed['class'] === 'string' ? confirmed['class'] : undefined;
+  return confirmed !== undefined && confirmed['by'] === 'owner' && typeof confirmed['class'] === 'string' ? confirmed : undefined;
 }
 
-// Whether authorize may start another attempt of a run (D-26, D-27, D-34), judged over the entries of the evidence file. `readState` reads a run from the owner's ledger.
-// Returns the refusal (code 2) or undefined. An earlier attempt of the role that did not pass needs the owner's confirmed classification before any re-run spend, and
-// its live run must be failed, cancelled or closed: Claude never cancels it.
+// A stopped attempt: the entry did not pass and it carries a finish, a stop the start stage judged not to be the planned one, or a classification. An attempt that
+// is still waiting for the owner's answer is neither passed nor failed.
+const isFailedAttempt = (entry: Json): boolean => entry['passed'] !== true && (typeof entry['finishedAt'] === 'string' || entry['stopOk'] === false || isObject(entry['classification']));
+
+// When an attempt started, in milliseconds: its startedAt, else the pause it recorded. An entry that records neither is older than any epoch.
+function startedMs(entry: Json): number {
+  const atPause = isObject(entry['atPause']) ? entry['atPause']['at'] : undefined;
+  for (const candidate of [entry['startedAt'], atPause]) {
+    const ms = typeof candidate === 'string' ? Date.parse(candidate) : Number.NaN;
+    if (Number.isFinite(ms)) return ms;
+  }
+  return Number.NEGATIVE_INFINITY;
+}
+
+// The epoch of an evidence file (D-26): the time of the latest owner-confirmed product defect, or null when there is none. A product defect means every run must pass
+// again, so an attempt started before this time no longer counts toward the order of D-33 or as a pass.
+export function epochOf(evidence: Json | undefined): string | null {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const entry of asObjects(evidence?.['runs'])) {
+    const confirmed = confirmedOf(entry);
+    const at = confirmed?.['class'] === 'product-defect' ? confirmed['at'] : undefined;
+    const ms = typeof at === 'string' ? Date.parse(at) : Number.NaN;
+    if (typeof at === 'string' && Number.isFinite(ms) && ms > latestMs) {
+      latest = at;
+      latestMs = ms;
+    }
+  }
+  return latest;
+}
+
+// The latest attempt among entries of one role: the highest attempt number, the later entry on a tie.
+const latestAttempt = (entries: readonly Json[]): Json | undefined =>
+  entries.reduce<Json | undefined>((best, e) => (best === undefined || Number(e['attempt'] ?? 0) >= Number(best['attempt'] ?? 0) ? e : best), undefined);
+
+// Whether authorize may start an attempt of a run (D-26, D-27, D-29, D-33, D-34), judged over the entries of the evidence file. `readState` reads a run from the owner's
+// ledger. Returns the refusal, or undefined. Code 75 is the stop-loss: two failed attempts of the run, in any epoch and whatever their classification (D-29). Code 2:
+//   - the run already passed in the current epoch (D-26, D-03);
+//   - a run earlier in the authorization's order has no recorded outcome in the current epoch, an outcome being a pass or the owner's confirmed classification (D-33);
+//   - an earlier attempt of the run, in the current epoch, has no owner-confirmed classification (D-26, D-27), where a confirmed product defect starts a new epoch;
+//   - an earlier attempt's live run is not failed, cancelled or closed in the owner's ledger: Claude never cancels it (D-34).
+// No flag, variable or file edit lifts any of these; the stop-loss is lifted only by a new owner decision and a re-plan.
 export function startRefusal(evidence: Json | undefined, auth: Pick<Authorization, 'order'>, role: string, readState: (runId: string) => string | undefined): { code: 2 | 75; text: string } | undefined {
   const refuse = (text: string): { code: 2; text: string } => ({ code: 2, text });
   if (!auth.order.includes(role)) return refuse(`${role} is not a run of the authorization (order ${auth.order.join(', ')}) (D-28)`);
-  const mine = asObjects(evidence?.['runs']).filter((r) => r['run'] === role);
-  for (const earlier of mine.filter((r) => r['passed'] !== true)) {
-    if (confirmedClassOf(earlier) === undefined) return refuse(`${role}'s previous attempt has no owner-confirmed classification: Claude proposes it and the owner confirms it before any re-run spend (D-26, D-27)`);
+  const entries = asObjects(evidence?.['runs']);
+  const mine = entries.filter((r) => r['run'] === role);
+  if (mine.filter(isFailedAttempt).length >= 2) return { code: 75, text: `stop-loss (D-29): ${role} has failed twice; return to the owner before spending again` };
+
+  const epoch = epochOf(evidence);
+  const epochMs = epoch === null ? Number.NEGATIVE_INFINITY : Date.parse(epoch);
+  const currentOf = (run: string): Json[] => entries.filter((e) => e['run'] === run && startedMs(e) >= epochMs);
+  const current = currentOf(role);
+  if (current.some((e) => e['passed'] === true)) return refuse(`${role} already passed in this exit; a run is never repeated by hand (D-03)`);
+
+  for (const earlierRun of auth.order.slice(0, auth.order.indexOf(role))) {
+    const latest = latestAttempt(currentOf(earlierRun));
+    const because = `${role} starts only after ${earlierRun}'s outcome is recorded (D-33)`;
+    if (latest === undefined) return refuse(`${because}: ${earlierRun} has no attempt in this exit yet`);
+    if (latest['passed'] !== true && confirmedOf(latest) === undefined) return refuse(`${because}: its latest attempt ${String(latest['runId'] ?? '')} has neither passed nor an owner-confirmed classification`);
   }
+
+  const unruled = current.find((e) => confirmedOf(e) === undefined);
+  if (unruled !== undefined) return refuse(`${role}'s previous attempt has no owner-confirmed classification (${String(unruled['runId'] ?? '')}): Claude proposes it and the owner confirms it before any re-run spend (D-26, D-27)`);
   for (const earlier of mine.filter((r) => r['passed'] !== true)) {
     const earlierId = String(earlier['runId'] ?? '');
     const state = readState(earlierId);
