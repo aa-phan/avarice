@@ -1,6 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { sandboxSetup } from '../../src/app/checks.ts';
+import type { AppDeps } from '../../src/app/deps.ts';
+import type { RunRow } from '../../src/ports/ledger.ts';
+// A namespace import so a name this file reads from the module that does not exist yet fails its own test, not every test of the file.
+import * as conventionsApi from '../../src/domain/conventions.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { digestOf } from '../../src/domain/digest.ts';
 import { parseBrief } from '../../src/domain/brief.ts';
@@ -11,6 +19,7 @@ import {
   BUDGET_OVERRIDE_NAMES,
   ROUTINE_PRESET,
   ROUTINE_POLICY,
+  checkAgentCommand,
   checkG0Static,
   compileRunContract,
   itemCandidateTerms,
@@ -891,5 +900,72 @@ describe('planNamedSpec: RC-7 stage 2, what a quick PLAN names for the fields th
     assert.equal(named.symbols.length, 50);
     assert.deepEqual(named.symbols, [...named.symbols].sort());
     assert.deepEqual(planNamedSpec('`b` `a`', held, []).symbols, planNamedSpec('`a` `b`', held, []).symbols);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plan 03-64 (D-26, D-27): a declared check is listed for the agent with the environment the supervisor gives it.
+// ---------------------------------------------------------------------------------------------------------------------
+function withCheckEnv(env: Record<string, string>, argv: string[] = ['npm', 'test']): Conventions {
+  return conventionsWith({ checks: [{ name: 'test', argv, env }] });
+}
+
+describe('compileRunContract: a check is listed for the agent with its environment (plan 03-64)', () => {
+  it('writes the environment as NAME=value words sorted by name, then the argument vector', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ B: '2', A: '1' }) }).execution.commands, ['A=1 B=2 npm test']);
+    assert.equal(checkAgentCommand({ argv: ['npm', 'test'], env: { B: '2', A: '1' } }), 'A=1 B=2 npm test');
+    assert.equal(checkAgentCommand({ argv: ['npm', 'test'], env: {} }), 'npm test');
+  });
+
+  it('leaves out the names the supervisor sandbox sets itself, and lists a check with only those as its bare argv', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ CI: 'true', LANG: 'en', X: '1' }) }).execution.commands, ['X=1 npm test']);
+    assert.deepEqual(compile({ conventions: withCheckEnv({ CI: 'true', LANG: 'en' }) }).execution.commands, ['npm test']);
+  });
+
+  it('keeps the check env itself on execution.checks, as declared', () => {
+    const { execution } = compile({ conventions: withCheckEnv({ CI: 'true', X: '1' }) });
+    assert.deepEqual(execution.checks[0]?.env, { CI: 'true', X: '1' });
+  });
+
+  it('refuses a value that cannot be one plain shell word, with field conventions.checks[0].env and a reason naming the variable', () => {
+    for (const value of ['a b', '~', 'a*', "it's", 'say "x"', '$HOME', '{x}', 'a\nb', 'a;b', 'a|b', 'a?b', 'a[b', 'a#b', 'a\\b']) {
+      const r = refusal({ conventions: withCheckEnv({ X_ORIGIN: value }) });
+      assert.equal(r.field, 'conventions.checks[0].env', JSON.stringify(value));
+      assert.match(r.reason, /X_ORIGIN/, JSON.stringify(value));
+    }
+  });
+
+  it('refuses a value the secret patterns redact, with the same field', () => {
+    for (const value of [`ghp_${'a'.repeat(36)}`, 'AKIAABCDEFGHIJKLMNOP']) {
+      const r = refusal({ conventions: withCheckEnv({ TOKEN_X: value }) });
+      assert.equal(r.field, 'conventions.checks[0].env', value);
+      assert.match(r.reason, /TOKEN_X/);
+      assert.match(r.reason, /secret/);
+    }
+  });
+
+  it('accepts a plain URL value, as the portfolio declares', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ VITE_SITE_ORIGIN: 'https://aa-phan.github.io' }, ['npm', 'run', 'build']) }).execution.commands, [
+      'VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build',
+    ]);
+  });
+
+  it('still refuses a check whose argv starts with a never-granted word when it has env, with field execution.commands', () => {
+    const conventions = conventionsWith({ checks: [{ name: 'test', argv: ['npm', 'test'] }, { name: 'extra', argv: ['git', 'x'], env: { X: '1' } }] });
+    assert.equal(refusal({ conventions }).field, 'execution.commands');
+  });
+
+  it('pins SUPERVISOR_CHECK_ENV_NAMES to the names sandboxSetup gives every supervisor check', () => {
+    const base = mkdtempSync(join(tmpdir(), 'avarice-supervisor-env-'));
+    try {
+      const deps = { home: join(base, 'home'), profile: { dataRoot: join(base, 'data'), workRoot: join(base, 'work') } } as unknown as AppDeps;
+      mkdirSync(join(base, 'home'), { recursive: true });
+      mkdirSync(join(base, 'work'), { recursive: true });
+      const sandbox = sandboxSetup(deps, { runId: 'run_A' } as unknown as RunRow, join(base, 'clone'));
+      assert.ok(sandbox.ok, JSON.stringify(sandbox));
+      assert.deepEqual([...conventionsApi.SUPERVISOR_CHECK_ENV_NAMES].sort(), Object.keys(sandbox.value.env).sort());
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });

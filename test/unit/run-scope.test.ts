@@ -203,6 +203,21 @@ describe('computeRunScope: reads, subagents and commands', () => {
     assert.ok(scope.commands.deniedPrefixes.includes('make'));
   });
 
+  // Plan 03-64 (D-26, D-27): a leading NAME=value word does not hide the program; the entry keeps its assignment words first, so the hook compares them.
+  it('judges the program word after leading assignments: none of these is admitted, and make and pnpm stay denied', () => {
+    const scope = computeRunScope(input({ commands: ['X=1 make test', 'X=1 pnpm test', 'X=1 git status', 'X=1 /usr/bin/git log', 'A=1'] }));
+    assert.deepEqual(scope.commands.agentCommands, []);
+    assert.ok(scope.commands.deniedPrefixes.includes('make'));
+    assert.ok(scope.commands.deniedPrefixes.includes('pnpm'));
+  });
+
+  it('keeps the assignment words first in an entry, and npm leaves the denied prefixes for an entry that starts with assignments', () => {
+    const scope = computeRunScope(input({ commands: ['A=1 npm run build'] }));
+    assert.deepEqual(scope.commands.agentCommands, [{ words: ['A=1', 'npm', 'run', 'build'], paths: false }]);
+    assert.ok(!scope.commands.deniedPrefixes.includes('npm'));
+    assert.ok(scope.commands.deniedPrefixes.includes('npx'));
+  });
+
   it('loads no network domain and no subagent beyond the contract totals', () => {
     const scope = computeRunScope({ ...input(), contract: { ...input().contract, budgets: { subagentsTotal: 3, subagentsConcurrent: 1 } } });
     assert.deepEqual(scope.allowedDomains, []);
