@@ -5,11 +5,11 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "Phase 3 exit criteria re-discussed (D-26 to D-35); next: owner cancels old run 1, then /gsd-plan-phase 3 to replan the exit"
-last_updated: "2026-11-11T17:17:24.549Z"
+stopped_at: "Phase 3 stop-loss re-decided (D-36 to D-39); next: owner cancels run_01M75NPTEF7FKDNW8ABQ9Q16WS, then /gsd-plan-phase 3 to plan run 2's reset checkpoint and the per-epoch stop-loss"
+last_updated: "2026-11-11T20:02:21.757Z"
 last_activity: 2026-11-11
 last_activity_desc: Phase 03 execution started
-state_head: 8c070fa05715d2f6e8421cb3a55e9b97c3a86196
+state_head: c8dda9770412009d03488e122354f9036fa1e692
 progress:
   total_phases: 8
   completed_phases: 2
@@ -430,6 +430,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-11T01:37:34.416Z
-Stopped at: Phase 3 exit criteria re-discussed (D-26 to D-35); next: owner cancels old run 1, then /gsd-plan-phase 3 to replan the exit
+Last session: 2026-11-11T20:02:20.945Z
+Stopped at: Phase 3 stop-loss re-decided (D-36 to D-39); next: owner cancels run_01M75NPTEF7FKDNW8ABQ9Q16WS, then /gsd-plan-phase 3 to plan run 2's reset checkpoint and the per-epoch stop-loss
 Resume file: .planning/phases/03-decisions-independent-work-and-amendments/03-CONTEXT.md
