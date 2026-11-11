@@ -1531,3 +1531,296 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
     });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-53: the attempts of each run, Claude's classification of a stop and the owner's ruling, and the rule that decides whether authorize starts another attempt
+// (D-26, D-27, D-29, D-33). The new exports are read through casts so a missing one fails its own case and not the loading of the file.
+// ---------------------------------------------------------------------------------------------------------------
+
+const minute53 = (n: number): string => new Date(Date.UTC(2026, 10, 10, 12, n)).toISOString();
+const AUTH53 = {
+  perRunCapUsd: 4.5,
+  ceilingUsd: 25,
+  claudeBin: '/nonexistent/claude',
+  claudeVersion: '2.1.319',
+  briefs: [
+    { path: 'b2.md', digest: 'sha256:run2', run: 'run2', expects: 'amend-stale' },
+    { path: 'b3.md', digest: 'sha256:run3', run: 'run3', expects: 'block-resume' },
+    { path: 'b1.md', digest: 'sha256:run1', run: 'run1', expects: 'park' },
+  ] as Json[],
+  order: ['run2', 'run3', 'run1'],
+  briefCheckPath: 'classification.json',
+};
+type Refusal53 = { code: number; text: string } | undefined;
+const refusalOf = (evidence: Json | undefined, role: string, states: Record<string, string | undefined> = {}, auth = AUTH53): Refusal53 =>
+  (exitTools as unknown as { startRefusal: (e: Json | undefined, a: typeof AUTH53, r: string, read: (id: string) => string | undefined) => Refusal53 }).startRefusal(evidence, auth, role, (id) => states[id]);
+// One entry of an evidence file: the run's role, its attempt number, when it started, and what became of it.
+const attempt53 = (run: string, n: number, startMinute: number, over: Json = {}): Json => ({ runId: `run_${run}_${n}`, run, attempt: n, briefDigest: `sha256:${run}`, startedAt: minute53(startMinute), atPause: { at: minute53(startMinute) }, stopOk: true, ...over });
+const failed53 = (run: string, n: number, startMinute: number, over: Json = {}): Json => attempt53(run, n, startMinute, { finishedAt: minute53(startMinute + 3), passed: false, ...over });
+const passed53 = (run: string, n: number, startMinute: number, over: Json = {}): Json => attempt53(run, n, startMinute, { finishedAt: minute53(startMinute + 3), passed: true, ...over });
+const ruled53 = (cls: string, atMinute: number, over: Json = {}): Json => ({
+  proposed: { by: 'claude', class: cls, stoppedBy: 'G2:gsd-verification', at: ['tests/e2e/x.spec.ts:5'], docsSystem: { conformant: true, ref: 'docs/system/checks-and-evidence.md' }, summary: 'the run stopped', proposedAt: minute53(atMinute - 1) },
+  confirmed: { by: 'owner', class: cls, ref: 'owner reply', at: minute53(atMinute) },
+  ...over,
+});
+const evidence53 = (...runs: Json[]): Json => ({ schema: 1, plan: '03-53', runs });
+
+describe('exit evidence: the identity of an attempt is its run and its number (plan 03-53)', () => {
+  const attemptFor = (digest: string, runs: Json[], runId = 'run_new'): Json | undefined =>
+    (exitTools as unknown as { attemptFor: (a: typeof AUTH53, d: string, r: Json[], id: string) => Json | undefined }).attemptFor(AUTH53, digest, runs, runId);
+
+  it('names the role and the expectation the authorization gives the brief digest, as attempt 1 on an empty file', () => {
+    assert.deepEqual(attemptFor('sha256:run3', []), { run: 'run3', attempt: 1, expects: 'block-resume' });
+  });
+
+  it('counts the earlier entries of the same role, whatever their digest, and no entry of another role', () => {
+    const runs = [failed53('run3', 1, 1, { briefDigest: 'sha256:an-older-draft' }), failed53('run2', 1, 2)];
+    assert.deepEqual(attemptFor('sha256:run3', runs), { run: 'run3', attempt: 2, expects: 'block-resume' });
+    assert.deepEqual(attemptFor('sha256:run1', runs), { run: 'run1', attempt: 1, expects: 'park' });
+  });
+
+  it('keeps the number of an entry the same run ID already holds when it is judged again', () => {
+    const runs = [failed53('run3', 1, 1), attempt53('run3', 2, 5, { runId: 'run_new' })];
+    assert.deepEqual(attemptFor('sha256:run3', runs, 'run_new'), { run: 'run3', attempt: 2, expects: 'block-resume' });
+  });
+
+  it('returns nothing for a digest the authorization does not name', () => {
+    assert.equal(attemptFor('sha256:unknown', []), undefined);
+  });
+
+  it('evidence --stage start exits 2 and writes nothing when the brief maps to no entry of the authorization', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-start-unknown-'));
+    try {
+      const auth = writeFreshAuthorization(dir);
+      const empty = join(dir, 'empty.json');
+      writeFileSync(empty, '{}');
+      const evidence = join(dir, 'evidence.json');
+      const ran = runTools(['evidence', '--stage', 'start', '--run-id', 'run_X', '--brief', join(dir, 'missing.md'), '--repo', dir, '--authorization-file', auth, '--out', evidence, '--before', empty, '--after', empty]);
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, /not one of the briefs the owner approved/);
+      assert.equal(existsSync(evidence), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("exit evidence: classify records Claude's proposal and the owner's ruling in one entry (plan 03-53; D-26, D-27)", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  type WithClassification = (f: Json, id: string, p: Json) => Json | undefined;
+  const withClassification = (f: Json, id: string, p: Json): Json | undefined => (exitTools as unknown as { withClassification: WithClassification }).withClassification(f, id, p);
+  const makeFile = (): { dir: string; file: string; body: Json } => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-classify-'));
+    dirs.push(dir);
+    const body: Json = {
+      schema: 1,
+      plan: '03-53',
+      exitRules: 'D-26..D-35',
+      updatedAt: '2026-11-10T22:51:22Z',
+      runs: [failed53('run2', 1, 1, { runId: 'run_AAAA' }), passed53('run3', 1, 6, { runId: 'run_PASS' }), failed53('run1', 1, 11, { runId: 'run_CCCC' })],
+      supersedes: { file: '03-45-evidence-exit.json', runId: 'run_OLD' },
+    };
+    const file = join(dir, 'evidence.json');
+    writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`);
+    return { dir, file, body };
+  };
+  const propose = (file: string, over: string[] = []): string[] => [
+    'classify', '--evidence', file, '--run-id', 'run_AAAA', '--propose', '--class', 'brief-harness-defect', '--stopped-by', 'G2:gsd-verification', '--at', 'tests/e2e/x.spec.ts:5', '--at', 'src/a.ts:12',
+    '--docs-system', 'conformant', '--docs-ref', 'docs/system/checks-and-evidence.md', '--summary', 'the brief asked for a file the contract protects', '--by', 'claude', ...over,
+  ];
+  // The argument list without one valued flag (every occurrence), and with another given in its place.
+  const dropped = (args: string[], flag: string): string[] => {
+    const out: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === flag) i += 1;
+      else out.push(args[i] as string);
+    }
+    return out;
+  };
+  const swapped = (args: string[], flag: string, value: string): string[] => [...dropped(args, flag), flag, value];
+  const confirm = (file: string, over: string[] = []): string[] => ['classify', '--evidence', file, '--run-id', 'run_AAAA', '--confirm', '--by', 'owner', '--ref', 'owner reply 2026-11-10 12:30', ...over];
+  const read = (file: string): Json => JSON.parse(readFileSync(file, 'utf8')) as Json;
+  const runsOf = (file: string): Json[] => read(file)['runs'] as Json[];
+
+  it('withClassification sets the patch on the named run and changes nothing else; an unknown run has no entry', () => {
+    const { body } = makeFile();
+    const patch = { proposed: ruled53('product-defect', 20)['proposed'] as Json };
+    const next = withClassification(body, 'run_AAAA', patch) as Json;
+    const runs = next['runs'] as Json[];
+    assert.deepEqual((runs[0]?.['classification'] as Json)['proposed'], patch.proposed);
+    assert.deepEqual({ ...runs[0], classification: undefined }, { ...(body['runs'] as Json[])[0], classification: undefined });
+    assert.deepEqual(runs.slice(1), (body['runs'] as Json[]).slice(1));
+    assert.deepEqual({ ...next, runs: undefined }, { ...body, runs: undefined });
+    assert.equal(withClassification(body, 'run_ZZZZ', patch), undefined);
+  });
+
+  it('--propose writes classification.proposed into that entry only, with the evidence Claude gives, and every other byte of the file is as it was', () => {
+    const { file, body } = makeFile();
+    const ran = runTools(propose(file));
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const written = read(file);
+    const entry = (written['runs'] as Json[])[0] as Json;
+    const proposed = (entry['classification'] as Json)['proposed'] as Json;
+    assert.deepEqual(Object.keys(proposed).sort(), ['at', 'by', 'class', 'docsSystem', 'proposedAt', 'stoppedBy', 'summary']);
+    assert.equal(proposed['by'], 'claude');
+    assert.equal(proposed['class'], 'brief-harness-defect');
+    assert.equal(proposed['stoppedBy'], 'G2:gsd-verification');
+    assert.deepEqual(proposed['at'], ['tests/e2e/x.spec.ts:5', 'src/a.ts:12']);
+    assert.deepEqual(proposed['docsSystem'], { conformant: true, ref: 'docs/system/checks-and-evidence.md' });
+    assert.equal(proposed['summary'], 'the brief asked for a file the contract protects');
+    assert.match(String(proposed['proposedAt']), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/);
+    assert.equal('confirmed' in (entry['classification'] as Json), false);
+    assert.deepEqual({ ...entry, classification: undefined }, { ...(body['runs'] as Json[])[0], classification: undefined });
+    assert.deepEqual((written['runs'] as Json[]).slice(1), (body['runs'] as Json[]).slice(1));
+    assert.deepEqual({ ...written, runs: undefined }, { ...body, runs: undefined });
+  });
+
+  it('--propose records a nonconformant finding of docs/system when Claude says so', () => {
+    const { file } = makeFile();
+    const ran = runTools(swapped(propose(file), '--docs-system', 'nonconformant'));
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    assert.deepEqual((((runsOf(file)[0] as Json)['classification'] as Json)['proposed'] as Json)['docsSystem'], { conformant: false, ref: 'docs/system/checks-and-evidence.md' });
+  });
+
+  it('--confirm writes classification.confirmed with the proposed class, the owner and the reference, and keeps the proposal', () => {
+    const { file } = makeFile();
+    assert.equal(runTools(propose(file)).status, 0);
+    const ran = runTools(confirm(file));
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const classification = (runsOf(file)[0] as Json)['classification'] as Json;
+    const confirmed = classification['confirmed'] as Json;
+    assert.deepEqual(Object.keys(confirmed).sort(), ['at', 'by', 'class', 'ref']);
+    assert.equal(confirmed['by'], 'owner');
+    assert.equal(confirmed['class'], 'brief-harness-defect');
+    assert.equal(confirmed['ref'], 'owner reply 2026-11-10 12:30');
+    assert.match(String(confirmed['at']), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/);
+    assert.equal((classification['proposed'] as Json)['class'], 'brief-harness-defect');
+  });
+
+  it('--confirm --class overrides the proposed class and names the class it overrides', () => {
+    const { file } = makeFile();
+    assert.equal(runTools(propose(file)).status, 0);
+    const ran = runTools(confirm(file, ['--class', 'product-defect']));
+    assert.equal(ran.status, 0, ran.stderr + ran.stdout);
+    const confirmed = ((runsOf(file)[0] as Json)['classification'] as Json)['confirmed'] as Json;
+    assert.equal(confirmed['class'], 'product-defect');
+    assert.equal(confirmed['overrides'], 'brief-harness-defect');
+  });
+
+  const proposalRefusals: Array<[string, (args: string[]) => string[], RegExp]> = [
+    ['a passed entry', (a) => swapped(a, '--run-id', 'run_PASS'), /passed/],
+    ['an unknown run ID', (a) => swapped(a, '--run-id', 'run_ZZZZ'), /no entry/],
+    ['a class other than the two', (a) => swapped(a, '--class', 'flaky'), /product-defect|brief-harness-defect/],
+    ['no --at', (a) => dropped(a, '--at'), /--at/],
+    ['an --at that is not path:line', (a) => swapped(a, '--at', 'tests/e2e/x.spec.ts'), /<path>:<line>/],
+    ['an --at with a line that is not a number', (a) => swapped(a, '--at', 'tests/e2e/x.spec.ts:five'), /<path>:<line>/],
+    ['a docs-ref outside docs/system/', (a) => swapped(a, '--docs-ref', 'docs/requirements.md'), /docs\/system/],
+    ['a docs-ref that climbs out of docs/system/', (a) => swapped(a, '--docs-ref', 'docs/system/../requirements.md'), /docs\/system/],
+    ['a --by that is not claude', (a) => swapped(a, '--by', 'owner'), /claude/],
+    ['no --stopped-by', (a) => dropped(a, '--stopped-by'), /--stopped-by/],
+    ['no --summary', (a) => dropped(a, '--summary'), /--summary/],
+    ['a --docs-system that is neither conformant nor nonconformant', (a) => swapped(a, '--docs-system', 'maybe'), /conformant/],
+  ];
+  for (const [name, edit, pattern] of proposalRefusals) {
+    it(`--propose exits 2 and leaves the file byte-identical for ${name}`, () => {
+      const { file } = makeFile();
+      const before = sha256Of(file);
+      const ran = runTools(edit(propose(file)));
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, pattern);
+      assert.equal(sha256Of(file), before);
+    });
+  }
+
+  const confirmationRefusals: Array<[string, (args: string[]) => string[], RegExp]> = [
+    ['a passed entry', (a) => swapped(a, '--run-id', 'run_PASS'), /passed/],
+    ['an unknown run ID', (a) => swapped(a, '--run-id', 'run_ZZZZ'), /no entry/],
+    ['a --by that is not owner', (a) => swapped(a, '--by', 'claude'), /owner/],
+    ['no --ref', (a) => dropped(a, '--ref'), /--ref/],
+    ['a class other than the two', (a) => [...a, '--class', 'flaky'], /product-defect|brief-harness-defect/],
+  ];
+  for (const [name, edit, pattern] of confirmationRefusals) {
+    it(`--confirm exits 2 and leaves the file byte-identical for ${name}`, () => {
+      const { file } = makeFile();
+      assert.equal(runTools(propose(file)).status, 0);
+      const before = sha256Of(file);
+      const ran = runTools(edit(confirm(file)));
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, pattern);
+      assert.equal(sha256Of(file), before);
+    });
+  }
+
+  it('--confirm with no proposal exits 2 and leaves the file byte-identical', () => {
+    const { file } = makeFile();
+    const before = sha256Of(file);
+    const ran = runTools(confirm(file));
+    assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+    assert.match(ran.stderr, /no proposal/);
+    assert.equal(sha256Of(file), before);
+  });
+
+  it('an entry the owner already ruled on takes neither a second proposal nor a second confirmation', () => {
+    const { file } = makeFile();
+    assert.equal(runTools(propose(file)).status, 0);
+    assert.equal(runTools(confirm(file)).status, 0);
+    const before = sha256Of(file);
+    for (const args of [swapped(propose(file), '--class', 'product-defect'), confirm(file, ['--class', 'product-defect'])]) {
+      const ran = runTools(args);
+      assert.equal(ran.status, 2, ran.stdout + ran.stderr);
+      assert.match(ran.stderr, /already/);
+    }
+    assert.equal(sha256Of(file), before);
+  });
+
+  it('exactly one of --propose and --confirm is required', () => {
+    const { file } = makeFile();
+    const before = sha256Of(file);
+    const neither = runTools(propose(file).filter((w) => w !== '--propose'));
+    assert.equal(neither.status, 2, neither.stdout + neither.stderr);
+    const both = runTools([...propose(file), '--confirm']);
+    assert.equal(both.status, 2, both.stdout + both.stderr);
+    assert.equal(sha256Of(file), before);
+  });
+});
+
+describe("exit evidence: startRefusal admits one re-run of a stopped attempt, and only on the owner's ruling (plan 03-53; D-26, D-27, D-34)", () => {
+  it('admits the first attempt of the first run in the order on an empty file, and on no file', () => {
+    assert.equal(refusalOf(evidence53(), 'run2'), undefined);
+    assert.equal(refusalOf(undefined, 'run2'), undefined);
+  });
+
+  it('refuses a role the authorization does not order', () => {
+    const refused = refusalOf(evidence53(), 'run9');
+    assert.equal(refused?.code, 2);
+    assert.match(refused?.text ?? '', /run9/);
+  });
+
+  it('refuses the second attempt of run2 until the owner confirmed the first as a brief/harness defect', () => {
+    const stopped = failed53('run2', 1, 1);
+    const refused = refusalOf(evidence53(stopped), 'run2');
+    assert.equal(refused?.code, 2);
+    assert.match(refused?.text ?? '', /run2's previous attempt has no owner-confirmed classification/);
+
+    const proposedOnly = failed53('run2', 1, 1, { classification: { proposed: ruled53('brief-harness-defect', 5)['proposed'] as Json } });
+    assert.match(refusalOf(evidence53(proposedOnly), 'run2')?.text ?? '', /has no owner-confirmed classification/, "Claude's proposal alone admits nothing");
+  });
+
+  it("refuses while the previous attempt's run is open in the owner's ledger, naming the state, and admits it once cancelled, failed or closed", () => {
+    const stopped = failed53('run2', 1, 1, { classification: ruled53('brief-harness-defect', 8) });
+    const file = evidence53(stopped);
+    const open = refusalOf(file, 'run2', { run_run2_1: 'blocked_on_decision' });
+    assert.equal(open?.code, 2);
+    assert.match(open?.text ?? '', /is blocked_on_decision; the owner cancels it first/);
+    assert.match(refusalOf(file, 'run2', {})?.text ?? '', /cannot be read from the owner's ledger/);
+    for (const terminal of ['cancelled', 'failed', 'closed']) assert.equal(refusalOf(file, 'run2', { run_run2_1: terminal }), undefined, terminal);
+  });
+
+  it("admits a run after an attempt the owner confirmed as a product defect: the confirmation starts a new epoch, so the run's earlier attempt no longer blocks it", () => {
+    const stopped = failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) });
+    assert.equal(refusalOf(evidence53(stopped), 'run2', { run_run2_1: 'cancelled' }), undefined);
+  });
+});
