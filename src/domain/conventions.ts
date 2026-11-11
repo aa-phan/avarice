@@ -193,6 +193,17 @@ function readCheck(index: number, raw: unknown, seen: Set<string>): Result<Check
   return ok({ name, argv: argv.value, timeoutSec, required: raw.required ?? true, env: env.value, writes: writes.value });
 }
 
+// A shell assignment word: a name of letters, digits and underscores, not starting with a digit, then `=`.
+export const LEADING_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+// The words of a command after its leading assignment words. The shell always takes a leading NAME= word as an assignment, so the program is
+// the first word that is not one.
+export function programWords(words: readonly string[]): string[] {
+  let start = 0;
+  while (start < words.length && LEADING_ASSIGNMENT.test(words[start] as string)) start += 1;
+  return words.slice(start);
+}
+
 // A command word is refused by its last path segment, without regard to case, so `/usr/bin/git` and `GIT` are refused too.
 export function isRefusedAgentCommand(command: string): boolean {
   const first = command.trimStart().split(/\s/)[0] ?? '';

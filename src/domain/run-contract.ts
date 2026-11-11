@@ -2,6 +2,8 @@
 // Pure: the clock, the ids and the parsed brief and conventions are arguments. The compiler is the one place where a
 // run's authority is fixed, and it only narrows: a brief or the repository conventions never raise a budget, widen the
 // write set past the conventions, write a protected path, or grant the agent git, avarice or network commands.
+// A declared check is listed for the agent with its environment written as leading NAME=value words (plan 03-64; D-26, D-27), so the unit
+// runs it exactly as the supervisor does; the hook compares those words like any other word of the command.
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
@@ -573,6 +575,15 @@ function compileWorkItems(
   return ok(out);
 }
 
+// The command a declared check is listed under for the agent (execution.commands): the check's environment written as NAME=value words, sorted by
+// name, then its argument vector, joined by single spaces. A check without environment is listed as its argument vector alone.
+export function checkAgentCommand(check: Pick<CheckSpec, 'argv' | 'env'>): string {
+  const assignments = Object.keys(check.env)
+    .sort()
+    .map((name) => `${name}=${check.env[name] as string}`);
+  return [...assignments, ...check.argv].join(' ');
+}
+
 const RUN_ID = /^run_[0-9A-Za-z]{4,64}$/;
 const PROJECT_ID = /^[0-9A-Za-z_-]{1,64}$/;
 const REVISION = /^[0-9a-f]{7,64}$/;
@@ -632,12 +643,13 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
   }
   if (write.length === 0) return invalid('files.write', 'the run would have no writable path: the conventions declare no write set');
 
-  const commands = unique([...conventions.agentCommands, ...conventions.checks.map((check) => check.argv.join(' '))]);
-  for (const command of commands) {
+  // The never-granted refusal judges each conventions agent command as written and each check by its argument vector, never the rendered string.
+  for (const command of [...conventions.agentCommands, ...conventions.checks.map((check) => check.argv.join(' '))]) {
     if (isRefusedAgentCommand(command)) {
       return invalid('execution.commands', `${JSON.stringify(command)} would grant the agent a command that is never granted`);
     }
   }
+  const commands = unique([...conventions.agentCommands, ...conventions.checks.map(checkAgentCommand)]);
 
   const compiledItems = compileWorkItems(brief, write, protectedGlobs, input.indexFacts);
   if (!compiledItems.ok) return compiledItems;

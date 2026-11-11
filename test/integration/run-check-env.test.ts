@@ -45,7 +45,8 @@ interface Fixture {
 
 function fixture(): Fixture {
   const roots = makeRoots();
-  const repo = makeRunRepo({ 'src/slug.ts': FIXED_SLUG, 'scripts/needs-env.mjs': NEEDS_ENV_SCRIPT });
+  // The slug is not fixed at the pin: the target check `test` fails there and the unit's edit makes it pass, as in scenario R of run-baseline-red-verification.
+  const repo = makeRunRepo({ 'scripts/needs-env.mjs': NEEDS_ENV_SCRIPT });
   const scratch = mkdtempSync(join(tmpdir(), 'avarice-check-env-'));
   cleanup.push(roots.base, repo.base, scratch);
   onboardRunRepo(roots, repo);
