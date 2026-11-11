@@ -22,7 +22,7 @@
 // The host's own outcome `kind` is not read here (spike S2-B: both live rounds ended `denied` on improvised shell lines, with the unit done).
 import { randomUUID } from 'node:crypto';
 import { digestOf, sha256Hex } from '../../domain/digest.ts';
-import { baselineDelta, revisionOf } from '../../domain/evidence.ts';
+import { baselineDelta, preExistingAtStart, revisionOf } from '../../domain/evidence.ts';
 import type { DeltaBlocking } from '../../domain/evidence.ts';
 import { evaluateG1, evaluateG2, evaluateG3, g1PathBreaches, integrityFailures } from '../../domain/gates.ts';
 import type { G1Facts, GateVerdict } from '../../domain/gates.ts';
@@ -953,12 +953,21 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
   const launching = ctx.checkpoint('launch:run', { attemptId, itemId: unit.item.itemId, revision: snapshot.value.head });
   if (!launching.ok) return launching;
 
+  // The required checks that already failed when this item began (D-26, D-27): the same start statuses and the same rule gateUnit judges G2 with, so the unit is
+  // told only what G2 would call pre-existing. Read only for the prompts that carry it: a resume keeps the prompt it was launched with.
+  let preExisting: string[] = [];
+  if (!(resume !== undefined && answered !== null)) {
+    const start = itemStartStatuses(ctx, unit.item.itemId);
+    if (!start.ok) return start;
+    preExisting = preExistingAtStart(start.value, contract.verification.requiredChecks, contract.verification.targetChecks);
+  }
+
   let prompt: string;
   try {
     prompt =
       resume !== undefined && answered !== null
         ? runResumePrompt(resumeAnswerText(answered.decision), resumeItemOf(contract, unit.item.itemId))
-        : runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text);
+        : runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text, preExisting);
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
     const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: itemBase });

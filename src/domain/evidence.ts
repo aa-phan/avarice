@@ -168,3 +168,10 @@ export function mapAcceptance(
     return { id: criterion.id, satisfied: evidenceIds.size > 0, evidenceIds: [...evidenceIds].sort() };
   });
 }
+
+// Plan 03-61 (AUT-16; D-26, D-27). The required checks that already failed when an item began, as the unit is told: the checks baselineDelta would call
+// pre-existing if they failed again. It reuses baselineDelta's rule (head equal to base), so the list can never name a check that G2 would charge to the item:
+// a target, a check that passed, one that was not conclusive or not measured, and one that is not required are never in it.
+export function preExistingAtStart(start: readonly CheckOutcome[], required: readonly string[], targets: readonly string[]): string[] {
+  return baselineDelta({ base: start, head: start, required, targets }).preExisting;
+}
