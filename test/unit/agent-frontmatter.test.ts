@@ -7,14 +7,13 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseAgentFile } from '../../src/adapters/gsd/agent-frontmatter.ts';
-import { AVARICE_EXECUTOR_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
-import * as agentsJsonModule from '../../src/adapters/gsd/agents-json.ts';
+import { AVARICE_EXECUTOR_ADDENDUM, AVARICE_VERIFIER_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
 import { PURPOSE_EXTENSIONS, buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
 import { READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
 import { AVARICE_RUN_SHELL_ADDENDUM } from '../../src/domain/run-shell-rules.ts';
 
-// The verifier's closing note (plan 03-61), read through the namespace so a missing export fails the cases that use it and not the load of this file.
-const VERIFIER_ADDENDUM: string = (agentsJsonModule as { AVARICE_VERIFIER_ADDENDUM?: string }).AVARICE_VERIFIER_ADDENDUM ?? '(AVARICE_VERIFIER_ADDENDUM is not exported)';
+// The verifier's closing note (plan 03-61), as the plan words it.
+const VERIFIER_ADDENDUM = AVARICE_VERIFIER_ADDENDUM;
 const VERIFIER_SENTENCE =
   'AVARICE run: a required check that the task lists as already failing when the work item began is pre-existing. Report it, and report any failure it shows in a file the task changed; a pre-existing failure alone does not make the status human_needed or gaps_found.';
 
