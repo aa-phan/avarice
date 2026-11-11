@@ -47,6 +47,17 @@
 //       confirmation: an attempt started before it no longer counts as a pass or toward the order, so all three runs must pass again (D-26). The stop-loss (D-29) is
 //       exit 75: a run with two failed attempts, in any epoch and whatever their classification, is refused. Nothing lifts it but a new owner decision and a re-plan.
 //
+// Plan 03-54 teaches the evidence stage what each run expects, and adds run 3's silence step. The authorization's `expects` (copied into each entry by the start stage)
+// decides how the finish judges an amendment: only `amend-stale` (run 2) is amended, once, to contract version 2 by the owner with a reason and a files.write diff, with the
+// original pause decision stale (its answer kept) and its successor the one answered decision; any other expectation with a contract above version 1 is a problem, and a
+// relax record is never accepted (D-28). At both stages the run's status must list, as not run, exactly the checks its own contract does not run (D-35); the expected list is
+// recorded as `checksNotRunExpected`.
+//   silence --run-id R --authorization-file F --out EVIDENCE [--wait-max-minutes N]
+//       Run 3: waits (3 s polls, at most 10 minutes) until the run's blocking banner rows are final and the batch window plus 15 s has passed since the block, runs
+//       `avarice digest` once, and writes a `silence` block into the entry: the rows, whether the decision is open with null answer columns, the inbox's notification state,
+//       the status state and the problems judgeSilence finds. Exit 0 only with none. It reads the owner's ledger read-only and answers, amends, resumes and cancels nothing:
+//       a failed banner, a failed digest and the passing of time are no answer (AUT-4). Exit 2, writing nothing, for an entry that is not run 3's or has no start-stage record.
+//
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
 //       Prints one scalar of the owner's authorization (host.claudeBin, perRunCapUsd, ceilingUsd).
@@ -69,7 +80,9 @@ import { basename, delimiter, dirname, join, relative, resolve } from 'node:path
 import { pathToFileURL } from 'node:url';
 import { phase3Ceiling, phase3LedgerPath, phase3Spent } from '../test/helpers/live-harness.ts';
 import { checksNotRun } from '../src/app/checks.ts';
-import { getRunStatuses } from '../src/app/run-status.ts';
+import { getInbox, getRunStatuses } from '../src/app/run-status.ts';
+import { readProfileNotify } from '../src/adapters/fs/profile-config.ts';
+import { NOTIFY_DEFAULTS } from '../src/domain/notify-policy.ts';
 import { createDeps } from '../src/cli/composition.ts';
 import { HOST_CONFIG_DIR_STEP } from '../src/cli/host-config-dir.ts';
 import { isRunStopState, isRunTerminal } from '../src/domain/run-lifecycle.ts';
@@ -1943,6 +1956,223 @@ export function judgeFinish(facts: {
   return { problems, resume };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Run 3's silence (plan 03-54; SC2, AUT-4, AUT-6, T-03-136). The run blocks on its decision while the notifier is down. After the batch window and a digest, the decision must
+// still be open and unanswered, and still be listed by inbox and status: a failed banner, a failed digest and the passing of time answer nothing. The step reads the
+// owner's ledger read-only and runs `avarice digest` once; it never answers, amends, resumes or cancels anything.
+// ---------------------------------------------------------------------------------------------------------------
+
+const SILENCE_WAIT_MAX_MINUTES = 10;
+const SILENCE_MARGIN_SECONDS = 15;
+// The error code of a banner the local notifier could not deliver because osascript is not there (src/adapters/notify/local-notifier.ts).
+const BANNER_ERROR = 'osascript-missing';
+const ANSWER_COLUMNS = ['answeredAt', 'answeredBy', 'answer', 'answerChannel'] as const;
+
+const isBlockingBanner = (row: Json): boolean => row['kind'] === 'decisions';
+const answerColumnsSet = (decision: Json | undefined): string[] => ANSWER_COLUMNS.filter((key) => decision !== undefined && decision[key] !== null && decision[key] !== undefined);
+const latestByCreatedAt = (rows: readonly Json[]): Json | undefined => [...rows].sort((a, b) => String(a['createdAt'] ?? '').localeCompare(String(b['createdAt'] ?? ''))).at(-1);
+
+// What the silence judge reads: the run's notification rows, the digest rows that cover the decision, the decision row, the inbox's view of the decision, the run's status
+// state, the batch window the profile sets and the seconds that passed between the block and the digest.
+export interface SilenceFacts {
+  notifications: Json[];
+  digestRows: Json[];
+  decision: Json | undefined;
+  inboxDecision: Json | undefined;
+  statusState: string | undefined;
+  batchWindowMinutes: number;
+  elapsedSeconds: number;
+}
+
+// Run 3's expectation (SC2): every blocking banner failed with the missing osascript, the digest failed, the decision is open with all four answer columns null, inbox lists
+// it with a failed banner, status shows the run blocked on it, and at least the batch window plus 15 seconds passed since the block. [] when all of it holds.
+export function judgeSilence(facts: SilenceFacts): string[] {
+  const problems: string[] = [];
+  const banners = facts.notifications.filter(isBlockingBanner);
+  if (banners.length === 0) problems.push('the run has no blocking banner row: the stop raised none, so no failed delivery was recorded (AUT-6)');
+  for (const banner of banners) {
+    const id = String(banner['notificationId'] ?? '?');
+    if (banner['state'] === 'delivered') problems.push(`blocking banner ${id} was delivered: the notifier was not down (SC2)`);
+    else if (banner['state'] !== 'failed') problems.push(`blocking banner ${id} is ${String(banner['state'])}, not failed: its delivery attempts are not final`);
+    else if (banner['lastError'] !== BANNER_ERROR) problems.push(`blocking banner ${id} failed with ${JSON.stringify(banner['lastError'] ?? null)}, not ${BANNER_ERROR}`);
+  }
+  const digest = latestByCreatedAt(facts.digestRows);
+  if (digest === undefined) problems.push('no digest row covers the decision: the digest after the batch window recorded none (AUT-6)');
+  else if (digest['state'] !== 'failed') problems.push(`the digest row ${String(digest['notificationId'] ?? '?')} is ${String(digest['state'])}, not failed`);
+  if (facts.decision === undefined) problems.push('the decision row cannot be read from the ledger');
+  else {
+    const set = answerColumnsSet(facts.decision);
+    if (facts.decision['state'] !== 'open' || set.length > 0) problems.push(`the decision ${String(facts.decision['decisionId'] ?? '?')} is not open and unanswered: state ${String(facts.decision['state'])}, answer columns set: ${set.join(', ') || 'none'} (AUT-4)`);
+  }
+  if (facts.inboxDecision === undefined) problems.push('inbox does not list the decision (AUT-6)');
+  else {
+    const notification = isObject(facts.inboxDecision['notification']) ? facts.inboxDecision['notification'] : undefined;
+    if (notification?.['state'] !== 'failed') problems.push(`inbox lists the decision with notification state ${String(notification?.['state'] ?? 'none')}, not failed (AUT-6)`);
+  }
+  if (facts.statusState !== 'blocked_on_decision') problems.push(`status shows ${facts.statusState ?? 'no run'}, not blocked_on_decision (SC2)`);
+  const needed = facts.batchWindowMinutes * 60 + SILENCE_MARGIN_SECONDS;
+  if (!(facts.elapsedSeconds >= needed)) problems.push(`only ${Math.floor(facts.elapsedSeconds)} s have passed since the block; the batch window of ${facts.batchWindowMinutes} min plus ${SILENCE_MARGIN_SECONDS} s needs ${needed} s (SC2)`);
+  return problems;
+}
+
+// The reads and the one write (the digest the CLI runs) the step is made of, so a test can play them without a ledger, a notifier or a clock.
+export interface SilenceSeams {
+  read(): Omit<SilenceFacts, 'elapsedSeconds'>;
+  digest(): { exit: number | null; stdout: string; stderr: string };
+  nowMs(): number;
+  pause(ms: number): Promise<void>;
+}
+
+const secondsSince = (decision: Json | undefined, nowMs: number): number => {
+  const openedAt = Date.parse(String(decision?.['openedAt'] ?? ''));
+  return Number.isFinite(openedAt) ? (nowMs - openedAt) / 1000 : 0;
+};
+
+// Waits (POLL_MS polls, no shell sleep and no sub-second timer) until every blocking banner row is final and the batch window plus 15 seconds has passed since the block,
+// or the longest wait ends; runs the digest once; reads the rows again and judges them. The seconds judged are those that had passed when the digest was started.
+export async function runSilence(seams: SilenceSeams, options: { maxWaitMs: number }): Promise<{ block: Json; problems: string[] }> {
+  const giveUpAt = seams.nowMs() + options.maxWaitMs;
+  let facts = seams.read();
+  for (;;) {
+    const banners = facts.notifications.filter(isBlockingBanner);
+    const final = banners.length > 0 && banners.every((b) => b['state'] === 'failed' || b['state'] === 'delivered');
+    const due = secondsSince(facts.decision, seams.nowMs()) >= facts.batchWindowMinutes * 60 + SILENCE_MARGIN_SECONDS;
+    if ((final && due) || seams.nowMs() >= giveUpAt) break;
+    await seams.pause(POLL_MS);
+    facts = seams.read();
+  }
+  const waitedUntilMs = seams.nowMs();
+  const elapsedSeconds = Math.floor(secondsSince(facts.decision, waitedUntilMs));
+  const digest = seams.digest();
+  const after = seams.read();
+  const problems = judgeSilence({ ...after, elapsedSeconds });
+  const set = answerColumnsSet(after.decision);
+  const block: Json = {
+    waitedUntil: new Date(waitedUntilMs).toISOString(),
+    elapsedSeconds,
+    batchWindowMinutes: after.batchWindowMinutes,
+    digestExit: digest.exit,
+    digestStdoutTail: digest.stdout.slice(-500),
+    digestStderrTail: digest.stderr.slice(-500),
+    decisionId: after.decision?.['decisionId'] ?? null,
+    notifications: after.notifications,
+    digestRow: latestByCreatedAt(after.digestRows) ?? null,
+    decisionOpen: after.decision?.['state'] === 'open',
+    answerColumnsNull: after.decision !== undefined && set.length === 0,
+    inboxNotificationState: isObject(after.inboxDecision?.['notification']) ? (after.inboxDecision['notification']['state'] ?? null) : null,
+    statusState: after.statusState ?? null,
+    problems,
+  };
+  return { block, problems };
+}
+
+const notificationJson = (n: { notificationId: string; kind: string; destination: string; subjectIds: readonly string[]; state: string; attempts: number; lastError: string | null; createdAt: string; deliveredAt: string | null }): Json => ({
+  notificationId: n.notificationId,
+  kind: n.kind,
+  destination: n.destination,
+  subjectIds: [...n.subjectIds],
+  state: n.state,
+  attempts: n.attempts,
+  lastError: n.lastError,
+  createdAt: n.createdAt,
+  deliveredAt: n.deliveredAt,
+});
+
+// The rows of the owner's ledger the judge reads, through the read-only composition: nothing here writes.
+function readSilenceFacts(deps: AppDeps, projectId: string, runId: string, decisionId: string): Omit<SilenceFacts, 'elapsedSeconds'> {
+  const own = deps.ledger.listNotifications({ runId });
+  const every = deps.ledger.listNotifications();
+  const decisions = deps.ledger.listDecisions({ runId });
+  const decision = decisions.ok ? decisions.value.find((d) => d.decisionId === decisionId) : undefined;
+  const inbox = getInbox(deps.ledger);
+  const inboxDecision = inbox.ok ? inbox.value.decisions.find((d) => d.decisionId === decisionId) : undefined;
+  const statuses = getRunStatuses(deps.ledger, projectId, deps.clock.nowMs());
+  const settings = readProfileNotify(deps.profile.configHome, deps.profile.profile);
+  return {
+    notifications: own.ok ? own.value.map(notificationJson) : [],
+    digestRows: every.ok ? every.value.filter((n) => n.kind === 'digest' && n.subjectIds.includes(decisionId)).map(notificationJson) : [],
+    decision:
+      decision === undefined
+        ? undefined
+        : { decisionId: decision.decisionId, state: decision.state, openedAt: decision.openedAt, answeredAt: decision.answeredAt, answeredBy: decision.answeredBy, answer: decision.answer, answerChannel: decision.answerChannel },
+    inboxDecision: inboxDecision === undefined ? undefined : { decisionId: inboxDecision.decisionId, ...(inboxDecision.notification !== undefined ? { notification: { ...inboxDecision.notification } } : {}) },
+    statusState: statuses.ok ? statuses.value.find((s) => s.runId === runId)?.state : undefined,
+    batchWindowMinutes: settings.ok ? settings.value.batchWindowMinutes : NOTIFY_DEFAULTS.batchWindowMinutes,
+  };
+}
+
+// `avarice digest` through this checkout's CLI under the environment the script exported (the owner's profile and the pinned host): the only write the step causes is the digest
+// row it records. Its exit code and output are recorded and never judged as an answer.
+function digestOnce(): { exit: number | null; stdout: string; stderr: string } {
+  const ran = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', join(REPO_ROOT, 'bin', 'avarice.ts'), 'digest'], { encoding: 'utf8', env: process.env, cwd: REPO_ROOT, timeout: 300_000, maxBuffer: 1 << 24 });
+  return { exit: ran.status, stdout: ran.stdout ?? '', stderr: ran.stderr ?? '' };
+}
+
+// `silence --run-id R --authorization-file F --out EVIDENCE [--wait-max-minutes N]`: exit 0 only when the block it records lists no problem; 1 on a problem; 2 and nothing written
+// for a missing flag, an authorization that authorizes nothing, a run the file has no start-stage record of, or an entry whose `expects` is not `silence`. Every refusal comes
+// before the owner's profile is read.
+async function silenceCommand(argv: readonly string[]): Promise<number> {
+  const { named } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: silence: ${text}`);
+    return 2;
+  };
+  const need = ['run-id', 'authorization-file', 'out'];
+  const missing = need.filter((k) => named[k] === undefined);
+  if (missing.length > 0) return refuse(`usage: silence needs --${missing.join(' --')} [--wait-max-minutes N]`);
+  const runId = named['run-id'] as string;
+  const auth = authorizationOf(named['authorization-file'] as string);
+  if (typeof auth === 'string') return refuse(`refusing to spend: ${auth}`);
+  const outPath = resolve(named['out'] as string);
+  let file: Json | undefined;
+  try {
+    file = readJson(outPath);
+  } catch {
+    return refuse(`${named['out']} is not an evidence file`);
+  }
+  const priorRuns = asObjects(file?.['runs']);
+  const prior = priorRuns.find((r) => r['runId'] === runId);
+  if (prior === undefined) return refuse(`the evidence file holds no entry for ${runId}`);
+  if (!isObject(prior['atPause']) || !isObject(prior['checkoutBeforeSnapshot'])) return refuse(`the evidence file has no start-stage record of ${runId}: nothing to wait on`);
+  if (prior['expects'] !== 'silence') return refuse(`the entry of ${runId} expects ${JSON.stringify(prior['expects'] ?? null)}, not silence: only run 3 waits for the owner's silence`);
+  const decisionId = pauseDecisionIdsOf(prior)[0];
+  if (decisionId === undefined) return refuse(`the start-stage record of ${runId} names no pause decision to watch`);
+
+  const composed = createDeps(process.env, {}, { readOnly: true });
+  if (!composed.ok) {
+    errOut(`exit-run: cannot read the profile: ${composed.message}`);
+    return 1;
+  }
+  const deps = composed.value.deps;
+  let result: { block: Json; problems: string[] };
+  try {
+    const run = deps.ledger.getRun(runId);
+    if (!run.ok) {
+      errOut(`exit-run: the run ${runId} is not in the ledger: ${describeError(run.error)}`);
+      return 1;
+    }
+    const seams: SilenceSeams = {
+      read: () => readSilenceFacts(deps, run.value.projectId, runId, decisionId),
+      digest: digestOnce,
+      nowMs: () => Date.now(),
+      pause,
+    };
+    result = await runSilence(seams, { maxWaitMs: Number(named['wait-max-minutes'] ?? SILENCE_WAIT_MAX_MINUTES) * 60_000 });
+  } finally {
+    composed.value.close();
+  }
+  const entry: Json = { ...prior, silence: result.block };
+  const runs = priorRuns.map((r) => (r['runId'] === runId ? entry : r));
+  const body = evidenceFileBody(file, livePlan(), runs, new Date().toISOString());
+  const temporary = `${outPath}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`);
+  renameSync(temporary, outPath);
+  out(`silence ${runId}: waited until ${String(result.block['waitedUntil'])}, ${String(result.block['elapsedSeconds'])} s after the block, digest exit ${String(result.block['digestExit'])}, decision ${result.block['decisionOpen'] === true ? 'open' : 'NOT open'}, ${result.problems.length} problem(s)\n`);
+  for (const p of result.problems) out(`PROBLEM: ${p}\n`);
+  out(`evidence ${outPath}\n`);
+  return result.problems.length === 0 ? 0 : 1;
+}
+
 function snapshotCommand(argv: readonly string[]): number {
   const { named } = flags(argv);
   if (named['repo'] === undefined) {
@@ -2206,6 +2436,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'evidence') return evidenceCommand(rest);
   if (command === 'relax') return relaxCommand(rest);
   if (command === 'classify') return classifyCommand(rest);
+  if (command === 'silence') return silenceCommand(rest);
   if (command === 'brief-check') return briefCheck(rest);
   if (command === 'brief-gate') return briefGate(rest);
   if (command === 'write-authorization') return writeAuthorizationCommand(rest);
@@ -2219,7 +2450,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify | silence) ...');
   return 2;
 }
 

@@ -20,6 +20,13 @@
 #   scripts/exit-run-phase3.sh --finish RUNID --authorization-file F
 #       After the owner's `avarice decide`: waits for the run's next stop state, takes the checkout snapshot, and records the resume facts (the
 #       resume attempt and its session, the session the host's init event reports) and the final evidence with `evidence --stage finish`.
+#   scripts/exit-run-phase3.sh --silence RUNID --authorization-file F
+#       Run 3's silence step (plan 03-54; SC2, AUT-4, AUT-6). Waits with a node timer until the run's blocking banner rows are final and at least the
+#       batch window plus 15 s has passed since the block, then runs `avarice digest` once in the owner's profile and records a `silence` block (the
+#       notification rows, the digest row, whether the decision is open with null answer columns, the inbox's notification state and the run's status
+#       state) in the run's evidence entry. Exit 0 only when the decision is still open and unanswered, every blocking banner and the digest failed, inbox
+#       lists the decision with a failed banner and status shows blocked_on_decision. It answers, amends, resumes and cancels nothing: a failed banner, a
+#       failed digest and the passing of time are not an answer.
 #
 # The pinned host: the authorization file names it (host.claudeBin, 2.1.319); this script exports it as AVARICE_CLAUDE_BIN for every start and never
 # sets AVARICE_LIVE_ADMIT_CLAUDE_VERSION (it unsets it). ADMITTED_CLAUDE_VERSIONS and the default binary are not touched.
@@ -27,15 +34,14 @@
 # Environment: AVARICE_NODE (the node to run with, default `node`), AVARICE_PORTFOLIO (the owner's checkout, default ~/aa-phan-portfolio-v2;
 # only ever read by this script, written only by the supervisor's create-only hand-off of the run branch), AVARICE_PHASE3_LEDGER and
 # AVARICE_PHASE3_CEILING_USD (the ledger and a ceiling that can only be lowered), AVARICE_PHASE3_PLAN (the plan the spend and the evidence are recorded
-# under, default 03-42), EXIT_EVIDENCE_FILE (default 03-48-evidence-exit.json) and EXIT_RUN_OUT_DIR (the runs' captured output).
+# under, default 03-57), EXIT_EVIDENCE_FILE (default 03-57-evidence-exit.json) and EXIT_RUN_OUT_DIR (the runs' captured output).
 #
-# The repeated exit (plan 03-41 prepares it, plans 03-42 and 03-30 run it; plan 03-44 prepares the third attempt, plans 03-45 and 03-30 run it; plan 03-47
-# prepares the fourth attempt, plans 03-48 and 03-30 run it):
-# 03-29-evidence-exit.json is the halted first attempt, 03-42-evidence-exit.json the halted second attempt and 03-45-evidence-exit.json the halted third
-# attempt (the records of the D-03 stops of plans 03-29, 03-42 and 03-45); none is written again. The fourth attempt writes 03-48-evidence-exit.json, which
-# names the halted 03-45 file, the cancelled run and the reason in its `supersedes` block; `authorize` refuses a start while that run is not failed,
-# cancelled or closed in the owner's ledger. Each run's evidence entry
-# carries the host configuration directory the run recorded at start (plan 03-43), and the start stage lists a problem when it is missing.
+# The replanned exit (plans 03-55 to 03-60; D-26 to D-35): three runs in the order 2, 3, 1, each judged against what the owner's authorization says it
+# expects (`amend-stale`, `silence`, `block-resume`), with a correct stop kept as evidence and never counted as a pass (D-28), and the exit's one evidence
+# file, 03-57-evidence-exit.json, seeded by plan 03-55. The earlier attempts' evidence files are history and are not written again: 03-29-evidence-exit.json,
+# 03-42-evidence-exit.json, 03-45-evidence-exit.json and 03-48-evidence-exit.json (the records of the D-03 stops of plans 03-29, 03-42, 03-45 and 03-48).
+# Each run's evidence entry carries the host configuration directory the run recorded at start (plan 03-43), and the start stage lists a problem when it is
+# missing. `authorize` refuses a start while an earlier attempt's run is not failed, cancelled or closed in the owner's ledger.
 set -u
 
 HERE="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -47,21 +53,23 @@ TOOLS=("$NODE" --disable-warning=ExperimentalWarning "$HERE/scripts/exit-run-pha
 CONFIG="$HERE/test/benchmark/portfolio/avarice-config.json"
 BRIEFS=("$HERE/test/benchmark/phase3/p3-run1-copy-fallback.md" "$HERE/test/benchmark/phase3/p3-run2-graduation-label.md" "$HERE/test/benchmark/phase3/p3-run3-theme-toggle.md")
 DRY_OUT_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-28-dry-run.json"
-EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-48-evidence-exit.json"
+EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json"
 
 usage() {
   echo "usage: scripts/exit-run-phase3.sh --dry-run [--source REPO]" >&2
   echo "       scripts/exit-run-phase3.sh --run BRIEF --authorization-file F      (plan 03-29: starts a live run)" >&2
   echo "       scripts/exit-run-phase3.sh --finish RUNID --authorization-file F   (plan 03-29: after the owner's decide)" >&2
+  echo "       scripts/exit-run-phase3.sh --silence RUNID --authorization-file F  (plan 03-54: run 3's silence step, then the owner's decide)" >&2
   exit 2
 }
 
-DRY=0; RUN=0; FINISH=0; SOURCE="${AVARICE_PORTFOLIO:-$HOME/aa-phan-portfolio-v2}"; AUTH=""; RUN_BRIEF=""; FINISH_ID=""
+DRY=0; RUN=0; FINISH=0; SILENCE=0; SOURCE="${AVARICE_PORTFOLIO:-$HOME/aa-phan-portfolio-v2}"; AUTH=""; RUN_BRIEF=""; FINISH_ID=""; SILENCE_ID=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --run) RUN=1; shift; [ $# -gt 0 ] || usage; RUN_BRIEF="$1" ;;
     --finish) FINISH=1; shift; [ $# -gt 0 ] || usage; FINISH_ID="$1" ;;
+    --silence) SILENCE=1; shift; [ $# -gt 0 ] || usage; SILENCE_ID="$1" ;;
     --source) shift; [ $# -gt 0 ] || usage; SOURCE="$1" ;;
     --authorization-file) shift; [ $# -gt 0 ] || usage; AUTH="$1" ;;
     *) usage ;;
@@ -81,7 +89,7 @@ live_setup() {
   # The pin is explicit here: every host this script launches is the authorized one, and the admission is never widened.
   unset AVARICE_LIVE_ADMIT_CLAUDE_VERSION
   export AVARICE_CLAUDE_BIN="$CLAUDE_BIN"
-  export AVARICE_PHASE3_PLAN="${AVARICE_PHASE3_PLAN:-03-42}"
+  export AVARICE_PHASE3_PLAN="${AVARICE_PHASE3_PLAN:-03-57}"
   REAL_TMP="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
   case "$REAL_TMP/" in "$HOME"/.claude*) REAL_TMP="$(cd /tmp && pwd -P)" ;; esac
   RUN_OUT="${EXIT_RUN_OUT_DIR:-$(mktemp -d "$REAL_TMP/avarice-exit-run-XXXXXX")}"
@@ -138,6 +146,18 @@ if [ "$FINISH" = 1 ]; then
   ecode=$?
   if [ "$ecode" != 0 ]; then
     echo "exit-run-phase3: run $run_id did not finish as expected (evidence exit $ecode); see the diagnosis in $EVID (D-03)" >&2
+    exit "$ecode"
+  fi
+  exit 0
+fi
+
+if [ "$SILENCE" = 1 ]; then
+  [ "$DRY" = 0 ] && [ "$RUN" = 0 ] && [ "$FINISH" = 0 ] && [ -n "$SILENCE_ID" ] || usage
+  live_setup
+  "${TOOLS[@]}" silence --run-id "$SILENCE_ID" --authorization-file "$AUTH" --out "$EVID"
+  ecode=$?
+  if [ "$ecode" != 0 ]; then
+    echo "exit-run-phase3: run $SILENCE_ID did not stay silent as expected (silence exit $ecode); see the diagnosis in $EVID (D-03)" >&2
     exit "$ecode"
   fi
   exit 0
