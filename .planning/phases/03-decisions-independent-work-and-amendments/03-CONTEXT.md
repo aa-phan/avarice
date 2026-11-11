@@ -1,7 +1,8 @@
 # Phase 3: Decisions, independent work and amendments - Context
 
 **Gathered:** 2026-11-08
-**Status:** Ready for planning
+**Updated:** 2026-11-10 (exit criteria re-discussed after plan 03-50 halted; D-03 superseded by D-26 to D-35)
+**Status:** Ready for planning (replan the exit: new plans replace 03-30; 03-31 to 03-33 stay, re-checked against D-35)
 
 <domain>
 ## Phase Boundary
@@ -25,8 +26,24 @@ Excluded: push notifiers, reply channels other than the terminal, parallel execu
   2. **Stale answer.** An amendment between the question and the answer changes the state digest, and the answer is re-opened, not applied (SC3 stale path, SC4).
   3. **Silence and notifier failure, live.** The deadline passes and the banner delivery fails (forced). The decision stays open and visible in the inbox, and is then answered and finished (SC2).
   Any unexpected block or failure: diagnose, fix, and re-run all three (as Phase 2 D-08).
+  **Superseded 2026-11-10 for its failure rule, its run order and its relax path by D-26 to D-34.** The three runs and what each must show are unchanged.
 - **D-04:** Claude drafts the three briefs during planning, each with items, dependencies, the planted ambiguity and the expected decision count. **The owner approves or swaps them at a checkpoint before any live spend on the portfolio** (as Phase 2 D-06). The exit keeps Phase 2's order (D-07): offline fake-host and kill-point suites first, then live cases (S-17, S-18, S-21, S-50 to S-52, CS-5, CS-15) on a generated scratch repository, then the portfolio runs.
 - **D-05:** **The total live-model spend ceiling for Phase 3 is 25 USD**, enforced mechanically like Phase 2 D-15: a separate Phase 3 ledger whose ceiling an environment variable can only lower. Execution stops and asks the owner before exceeding it.
+
+### Exit criteria, re-discussed 2026-11-10 (supersede D-03's failure rule)
+
+Background: run 1 on the portfolio was attempted five times (03-29, 03-42, 03-45, 03-48, then in place in 03-50). Three stops were product defects, all fixed and proven live (03-40, 03-43, 03-46). The last two were brief defects: item C's change alters the fallback toast text that the protected `tests/e2e/copy-email.spec.ts` asserts at line 5 (`FALLBACK` literal), outside the brief's Write list. AVARICE behaved correctly on those stops: containment refused the protected write (amend exits 64), the verifier reported `gaps_found`, and G2 refused it. Phase 3 has spent 11.2986 of 25 USD.
+
+- **D-26: Classify each unexpected stop.** Every stop that is not the brief's planted pause is classified, with evidence, as a **product defect** or a **brief/harness defect**. A product defect means fix it and re-run all three runs (as D-03). A brief/harness defect means fix the brief or the harness and re-run only that run. 3 of 3 still means three clean runs, each reaching its expected end from one `avarice start`.
+- **D-27: Claude proposes, the owner rules.** Claude writes the classification with evidence: the file:line, the gate or check that stopped the run, and whether AVARICE behaved as `docs/system/` documents. The owner confirms it at a checkpoint before any re-run spend, the same pattern as D-04.
+- **D-28: A correct stop is evidence, not a pass.** A run that stopped on a brief defect while AVARICE behaved correctly does not count toward 3 of 3. It is recorded in the exit evidence as live proof that the integrity gates and containment hold. **The relax path from plan 03-49 (`relax` record, relaxed finish judge) is not used for the exit.** Selections `answer-2-in-place` and `amend-unprotected-path` no longer authorize an exit start; only a fresh approval does.
+- **D-29: Stop-loss.** The 25 USD ceiling stays (D-05). Separately, after **2 failed attempts of the same run** from here on, execution stops and returns to the owner before spending again, whatever the classification.
+- **D-30: Briefs must not change guarded behavior.** No item in an exit brief may change text or behavior that a protected file asserts at the pin (for example a protected e2e spec's literal). Briefs may not put protected paths in their Write list, and containment stays as built: amend refuses protected paths with exit 64.
+- **D-31: The brief-check is a hard pre-authorization gate.** Before the owner's D-04 approval, `brief-check` runs at the pin for every exit brief. Claude writes a per-finding classification file (each finding marked `kept` or `changed`, with the asserting file:line), the shape of `03-49-brief-check-after.json`. The gate fails, and no authorization can be written, while any finding is unclassified or any finding is `changed` and in a protected file or outside the conventions' write set. The owner reviews the classification file at the checkpoint. No new parser that reads "keep" from briefs is built.
+- **D-32: Run 1 is redrafted.** Claude drafts a new run 1 that keeps the shape (independent A, B asks a real user-visible question, C depends on B) and in which C changes nothing a protected file asserts. The owner approves it at the D-04 checkpoint. Runs 2 and 3 (digests `sha256:f0c9395b...` and `sha256:fe8742f4...`) are re-checked through the D-31 gate and redrafted only if they fail it. The exit stays on `~/aa-phan-portfolio-v2` at pin `9f1cd8d` (D-01).
+- **D-33: Spend and order.** The **per-run cap is 4.50 USD** (3 × 4.50 = 13.50, inside the 13.7014 left), applied with `--budget`, which can only lower. **Runs go in the order 2, 3, then 1.** Runs 2 and 3 have never run live, and a product defect means re-running all three, so they go first. Each run starts only after the previous run's outcome is recorded.
+- **D-34: The old run 1 is cancelled and superseded.** The owner cancels `run_01M73RX3RF0ZJETYWVF52WFZ5B` in their own terminal; Claude does not. Its live facts go into the exit record as supplementary evidence, not a pass: A independent and committed, B's exact delegated session resumed under the recorded config directory, G2 passing a resumed unit, the protected-write refusal, and the honest `gaps_found` stop. The halted SUMMARYs of 03-29, 03-42, 03-45, 03-48 and 03-50 are marked superseded and point to the new exit plans. The new exit plans replace 03-30. Plans 03-31 to 03-33 (documentation) stay and depend on the new exit plans.
+- **D-35: Declared checks that were not run are reported, not run.** Status, the review summary and the run's evidence list each check that `execution.checks` declares but the run did not execute because it is neither required nor target, as "not run: not required". This changes no gate. `--json` shapes stay frozen, with optional keys appended only. It lands before the exit runs so they exercise it. `docs/system/checks-and-evidence.md` and `findings.md` record it in the documentation plans. Today `checksToRun` (`src/app/checks.ts:88`) keeps only required and target checks, so `test:e2e` is skipped silently. — **Reversibility:** reversible — a reporting addition with optional keys.
 
 ### Work items in the brief
 - **D-06:** A brief declares items in its frontmatter as **`items: [{id, title, dependsOn, size?, model?, acceptance: [...], spec?}]`**. Every acceptance criterion belongs to exactly one item. A brief without `items` compiles to the single item `A`, so Phase 2 briefs and their digests keep working unchanged. — **Reversibility:** costly — the brief format is user-authored input and later briefs depend on it.
@@ -96,6 +113,18 @@ Excluded: push notifiers, reply channels other than the terminal, parallel execu
 - `docs/system/findings.md`: open entries this phase resolves (decisions answered only as open, unused `blocked_on_decision → ready` edge, every failed G4 opening `repeated_failure`, prepare blocking without a record, skill naming `contract amend`), plus the owner item on proposal edits made before the documentation rule
 - `docs/system/coverage.md`
 
+### Exit history and tools (read before replanning the exit)
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-50-SUMMARY.md`: run 1's final stop, the owner's stop decision, and the brief and supervisor findings
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-49-SUMMARY.md`: offline scenarios P, U, N and Y, the `relax` and `brief-check` tools, and run 3's changed item B
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-49-brief-check-after.json`: the classification-file shape D-31 makes mandatory
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-48-evidence-exit.json` and `03-49-finish-analysis.json`: old run 1's evidence (supplementary under D-34)
+- `.planning/phases/03-decisions-independent-work-and-amendments/03-29-SUMMARY.md`, `03-42-SUMMARY.md`, `03-45-SUMMARY.md`, `03-48-SUMMARY.md`: the halted attempts D-34 marks superseded
+- `test/benchmark/phase3/p3-run1-copy-fallback.md` (redrafted under D-32), `p3-run2-graduation-label.md`, `p3-run3-theme-toggle.md`
+- `scripts/exit-run-phase3.sh` and `scripts/exit-run-phase3-tools.ts`: `--finish`, `brief-check`, `relax` (not used by the exit under D-28), and authorization selections
+- `test/containment/live-spend-phase3.jsonl`: the Phase 3 spend ledger (11.2986 USD at 2026-11-11)
+- Portfolio pin `9f1cd8d`: `tests/e2e/copy-email.spec.ts` (line 5, the `FALLBACK` literal) and `.avarice/config.json` (protected paths, declared checks), read through `git -C ~/aa-phan-portfolio-v2 show 9f1cd8d:<path>`
+- `src/app/checks.ts:88` (`checksToRun`): the reason declared non-required checks never run (D-35)
+
 ### Prior phase context
 - `.planning/phases/02-contained-unattended-run-of-one-work-item/02-CONTEXT.md`: D-01..D-19 (clone, supervisor commits, hand-off, checks, baseline, budgets, detach, frozen JSON)
 - `.planning/STATE.md` § Decisions: Phase 2 kernel decisions (lease and fence, transitionRun, blockRun, routeOutcome order, reservation and settlement)
@@ -142,6 +171,8 @@ Excluded: push notifiers, reply channels other than the terminal, parallel execu
 - The exit's planted ambiguity should be a genuine user-visible choice in the portfolio (for example two valid copy or behavior options), not an artificial trap. Item A is independent of it.
 - Run 3 forces the banner delivery to fail (for example an unavailable `osascript` path in the test profile) and lets a short deadline pass. It then shows the decision still open in `inbox` and `status` before answering.
 - Spend accounting follows `test/containment/LIVE-CASES.md` style, with a separate Phase 3 ledger file.
+- For the new run 1 (D-32), a candidate C uses B's `copyFallback` on a surface that no protected spec asserts. The planted question in B must stay a genuine user-visible wording choice. The protected e2e spec asserts the toast text itself, not only the constant's name, so any C that shows the new wording in the toast collides whichever option the owner picks.
+- The attempt counter in D-29 starts at zero for each run under the new exit plans. Old run 1's five attempts do not count against the new run 1.
 
 </specifics>
 
@@ -150,6 +181,9 @@ Excluded: push notifiers, reply channels other than the terminal, parallel execu
 
 - Parallel execution of independent items in separate clones with supervisor merge (out of scope; sequential chosen in D-09).
 - Push notifiers and reply channels other than the terminal (Phase 6, per ROADMAP).
+- Running declared non-required checks (for example `test:e2e` with Playwright inside the sandbox) once before `ready_for_review` as non-gating evidence. Phase 3 only reports them as not run (D-35).
+- A structured `Keep` section in briefs that `brief-check` reads to filter kept names. Phase 3 uses a reviewed classification file instead (D-31).
+- Letting a brief or an amendment write protected test paths. Rejected for the exit; it would be a containment change (D-30).
 - Open items carried from STATE.md that this discussion did not settle: the Node 26.x support statement; validating `CLAUDE_CONFIG_DIR` against the `~/.claude-edu` / `~/.claude` split; backlog 999.4 and 999.5 owner decisions.
 
 </deferred>
@@ -157,4 +191,4 @@ Excluded: push notifiers, reply channels other than the terminal, parallel execu
 ---
 
 *Phase: 03-decisions-independent-work-and-amendments*
-*Context gathered: 2026-11-08*
+*Context gathered: 2026-11-08; exit criteria updated 2026-11-10*

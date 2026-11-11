@@ -68,3 +68,59 @@ Frontmatter field names, the decision-class taxonomy and significance signals, G
 ## Deferred Ideas
 
 Parallel item execution; push notifiers and other reply channels (Phase 6); the carried STATE.md items (Node 26.x, the `CLAUDE_CONFIG_DIR` split, backlog 999.4 and 999.5).
+
+---
+
+# Session 2: exit criteria re-discussed
+
+**Date:** 2026-11-10
+**Trigger:** plan 03-50 halted by the owner's stop decision after run 1's fifth attempt ended on a brief defect (protected `tests/e2e/copy-email.spec.ts:5`)
+**Areas discussed:** Pass bar (D-03), Briefs vs protected paths, Run 1's disposition, Declared non-required checks
+
+---
+
+## Pass bar (D-03)
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| Cost of an unexpected stop | Classify, then re-run (product: all three; brief: that run) / Keep strict D-03 / Per success criterion | Classify, then re-run |
+| Who classifies | Claude proposes, owner rules / Mechanical rule / Owner only | Claude proposes, owner rules |
+| Correct stop on a brief defect counts? | No, recorded as evidence / Yes, with a relax record | No, recorded as evidence |
+| Stop-loss | Ceiling plus attempt cap (2 more failures of a run) / Ceiling only / Raise the ceiling | Ceiling plus attempt cap |
+
+---
+
+## Briefs vs protected paths
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| Brief rule | No guarded behavior + hard gate / Rule only, no gate / Allow protected test edits | No guarded behavior + hard gate |
+| Run 1 brief fix | Claude redrafts, owner approves / Owner updates the portfolio and moves the pin / Drop item C's text change | Claude redrafts, owner approves |
+| Exit target | Keep the portfolio / Move to a controlled repo | Keep the portfolio |
+| Gate classification | Reviewed classification file / Teach the tool "keep" / You decide | Reviewed classification file |
+
+**Notes:** Before this area, the protected spec was read at pin `9f1cd8d`. It asserts the fallback toast text itself, so any item C that shows the new wording collides regardless of the option chosen.
+
+---
+
+## Run 1's disposition
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| Fitting three fresh runs in 13.70 USD | Lower per-run cap to 4.50 / Admit each run only if it fits / Raise the ceiling | Lower per-run cap to 4.50 |
+| Run order | Runs 2 and 3 first / Keep 1, 2, 3 | Runs 2 and 3 first |
+| Old run 1 and halted plans | Cancel, supersede, keep evidence / Cancel, leave halted | Cancel, supersede, keep evidence |
+
+---
+
+## Declared non-required checks
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| Phase 3 handling of `test:e2e`-like checks | Say so, don't run / Run once, non-gating / findings.md only | Say so, don't run |
+
+**Notes:** Confirmed in code before asking: `checksToRun` (`src/app/checks.ts:88`) keeps only required and target checks.
+
+## Deferred Ideas (session 2)
+
+Running declared non-required checks as non-gating evidence; a structured `Keep` section read by `brief-check`; letting briefs or amendments write protected test paths.
