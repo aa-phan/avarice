@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "plan": "03-62",
+  "checkedAt": "2026-11-11T16:03:44.960Z",
+  "spentUsd": 0,
+  "modelHostLaunched": false,
+  "run2Attempt1": {
+    "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+    "title": "Graduation label for the education entry",
+    "readFrom": "avarice status --json (read-only, owner profile, AVARICE_CLAUDE_BIN=2.1.319)",
+    "state": "cancelled",
+    "cancelRequestedAtPresent": true,
+    "lastCheckpoint": {
+      "seq": 16,
+      "nextAction": "park",
+      "at": "2026-11-11T07:44:13.844Z"
+    },
+    "confirmedClass": "product-defect",
+    "confirmedBy": "owner",
+    "claudeRanCancel": false
+  },
+  "fix": {
+    "plan": "03-61",
+    "summaryStatus": "complete",
+    "commits": [
+      "9785192",
+      "3476fda",
+      "c123f10",
+      "bce5093",
+      "f642cfe"
+    ]
+  },
+  "requiredChecks": [
+    "typecheck",
+    "lint",
+    "format:check",
+    "test",
+    "check:case",
+    "check:colors",
+    "check:contrast",
+    "build",
+    "check:meta",
+    "check:budget",
+    "check:no-phone",
+    "check:images"
+  ],
+  "run2TargetChecks": [
+    "test"
+  ],
+  "baseRows": [
+    {
+      "name": "typecheck",
+      "status": "passed"
+    },
+    {
+      "name": "lint",
+      "status": "passed"
+    },
+    {
+      "name": "format:check",
+      "status": "failed"
+    },
+    {
+      "name": "test",
+      "status": "passed"
+    },
+    {
+      "name": "check:case",
+      "status": "passed"
+    },
+    {
+      "name": "check:colors",
+      "status": "passed"
+    },
+    {
+      "name": "check:contrast",
+      "status": "passed"
+    },
+    {
+      "name": "build",
+      "status": "passed"
+    },
+    {
+      "name": "check:meta",
+      "status": "passed"
+    },
+    {
+      "name": "check:budget",
+      "status": "passed"
+    },
+    {
+      "name": "check:no-phone",
+      "status": "passed"
+    },
+    {
+      "name": "check:images",
+      "status": "passed"
+    }
+  ],
+  "preExistingForItemA": [
+    "format:check"
+  ],
+  "hostVersion": "2.1.319",
+  "hostVersionOutput": "2.1.319 (Claude Code)",
+  "authorize": {
+    "exitCode": 0,
+    "text": "authorized: test/benchmark/phase3/p3-run2-graduation-label.md (sha256:f0c9395bc0fd...), host 2.1.319, Phase 3 spend 11.5158 plus 4.50 fits 25 USD, run2 attempt 2"
+  },
+  "spend": {
+    "spentUsdPhase3": 11.515849649999998,
+    "ceilingUsd": 25,
+    "perRunCapUsd": 4.5,
+    "fullCapsFit": false,
+    "run1HeadroomUsd": 8.984150350000002,
+    "perStartCapOverride": false,
+    "fullCapsWorstCaseUsd": 25.01584965
+  },
+  "problems": []
+}
