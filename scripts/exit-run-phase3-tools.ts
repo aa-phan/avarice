@@ -68,6 +68,7 @@ import { homedir, userInfo } from 'node:os';
 import { basename, delimiter, dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { phase3Ceiling, phase3LedgerPath, phase3Spent } from '../test/helpers/live-harness.ts';
+import { checksNotRun } from '../src/app/checks.ts';
 import { getRunStatuses } from '../src/app/run-status.ts';
 import { createDeps } from '../src/cli/composition.ts';
 import { HOST_CONFIG_DIR_STEP } from '../src/cli/host-config-dir.ts';
@@ -1547,6 +1548,8 @@ export function secondStopOf(decisions: readonly Json[], pauseIds: readonly stri
 
 interface Facts {
   run: RunRow;
+  // The run's latest contract body, from which the D-35 list of checks that do not run is computed (plan 03-54); undefined when it cannot be read.
+  contractBody: RunContract | undefined;
   entry: Json;
   decisions: Json[];
   items: Json[];
@@ -1721,12 +1724,36 @@ export function collect(deps: AppDeps, runId: string): { facts?: Facts; problems
     askUserQuestion: totals['AskUserQuestion'] ?? 0,
     statusView: status ?? null,
   };
-  return { facts: { run: run.value, entry, decisions, items, attempts, costUsd, budgetLimitUsd: costRow?.limit ?? 0 }, problems };
+  return { facts: { run: run.value, contractBody: contract, entry, decisions, items, attempts, costUsd, budgetLimitUsd: costRow?.limit ?? 0 }, problems };
+}
+
+// D-35 judged live (plan 03-54): the run's status must list, as not run, exactly the declared checks that are neither required nor a target. `expected` is that list
+// computed from the run's own contract with checksNotRun; undefined judges nothing. Returns the problem text, or undefined when the status names the same checks.
+export function checksNotRunProblem(statusView: unknown, expected: readonly string[] | undefined): string | undefined {
+  if (expected === undefined) return undefined;
+  const listed = isObject(statusView) ? statusView['checksNotRun'] : undefined;
+  const reported = asObjects(listed).map((c) => String(c['name']));
+  if (reported.length === expected.length && [...reported].sort().join('\n') === [...expected].sort().join('\n')) return undefined;
+  if (expected.length === 0) return `status reports ${reported.join(', ')} as not run, but the contract expects none (D-35)`;
+  if (expected.every((name) => reported.includes(name))) return `status reports ${reported.join(', ')} as not run, but the contract expects ${expected.join(', ')} (D-35)`;
+  return `status does not report ${expected.join(', ')} as not run: not required (D-35)`;
 }
 
 // What the start stage expects of a run that has to stop on the planted decision (D-02, D-03): the pause-origin decision of the owner-choice item is open at
-// contract version 1, the items independent of it are done, the items that wait for it have not been delegated, and one notification was queued.
-export function judgeStart(facts: { state: string; reason: string | null; items: Json[]; decisions: Json[]; attempts: Json[]; notifications: Json[]; askUserQuestion: number; hostConfigDir: Json | null | undefined }): string[] {
+// contract version 1, the items independent of it are done, the items that wait for it have not been delegated, and one notification was queued. With
+// `checksNotRunExpected` the status must also report the checks that do not run (D-35, plan 03-54).
+export function judgeStart(facts: {
+  state: string;
+  reason: string | null;
+  items: Json[];
+  decisions: Json[];
+  attempts: Json[];
+  notifications: Json[];
+  askUserQuestion: number;
+  hostConfigDir: Json | null | undefined;
+  statusView?: unknown;
+  checksNotRunExpected?: readonly string[];
+}): string[] {
   const problems: string[] = [];
   if (facts.state !== 'blocked_on_decision') problems.push(`the run stopped ${facts.state}${facts.reason !== null ? ` (${facts.reason})` : ''}, not blocked_on_decision (D-03)`);
   else if (facts.reason !== 'decision') problems.push(`the run is blocked for ${facts.reason}, not for a decision`);
@@ -1764,6 +1791,35 @@ export function judgeStart(facts: { state: string; reason: string | null; items:
   // owner's terminal environment again.
   const dir = facts.hostConfigDir?.['claudeConfigDir'];
   if (typeof dir !== 'string' || dir === '') problems.push('the run recorded no host configuration directory (the fix of plan 03-43 did not run)');
+  const notRun = checksNotRunProblem(facts.statusView, facts.checksNotRunExpected);
+  if (notRun !== undefined) problems.push(notRun);
+  return problems;
+}
+
+// What the authorization's `expects` makes of a contract above version 1 (plan 03-54; D-28, SC3, SC4). Only run 2 (`amend-stale`) is expected to be amended, once, to
+// contract version 2 by the owner with a reason and a diff that names files.write; for every other expectation an amendment is a problem, with no relax and no
+// in-place amendment.
+export function amendmentProblemsOf(expects: string, contract: { version?: unknown; authorizedBy?: unknown; reason?: unknown; diff?: unknown } | null | undefined, owner: string): string[] {
+  const version = contract === undefined || contract === null ? 1 : Number(contract.version);
+  if (expects !== 'amend-stale') return version > 1 ? [`the contract was amended (version ${version}); only run 2 expects an amendment (D-28)`] : [];
+  if (contract === undefined || contract === null || !(version > 1)) return ["no amendment: the contract is still at version 1, and run 2 expects the owner's amendment (SC3, SC4)"];
+  const problems: string[] = [];
+  if (version !== 2) problems.push(`the contract was amended to version ${version}: run 2 expects exactly one amendment, contract version 2 (D-28)`);
+  if (contract.authorizedBy !== `owner:${owner}`) problems.push(`the amendment's authorized_by is ${JSON.stringify(contract.authorizedBy ?? null)}, not owner:${owner}`);
+  if (typeof contract.reason !== 'string' || contract.reason.trim() === '') problems.push('the amendment records no reason');
+  if (!Array.isArray(contract.diff) || !contract.diff.some((d) => isObject(d) && d['path'] === 'files.write')) problems.push("the amendment's diff does not name files.write");
+  return problems;
+}
+
+// The stale original of run 2 and its answered successor (plan 03-54; SC3, SC4): the original pause decision went stale at the amendment with its answer kept, and the one
+// answered decision supersedes it. `answered` is the decisions the owner answered; the successor is the first of them, the one whose item the resume check follows.
+function staleProblemsOf(decisions: readonly Json[], answered: readonly Json[]): string[] {
+  const stale = decisions.filter((d) => d['state'] === 'stale');
+  if (stale.length === 0) return ['no decision is stale: run 2 expects its original pause decision to go stale at the amendment (SC3)'];
+  const problems: string[] = [];
+  for (const d of stale) if (d['answer'] === null || d['answer'] === undefined) problems.push(`the stale decision ${String(d['decisionId'])} has no answer kept (SC3)`);
+  const successor = answered[0];
+  if (successor !== undefined && !stale.some((d) => d['decisionId'] === successor['supersedes'])) problems.push(`the answered decision ${String(successor['decisionId'])} does not supersede the stale decision ${stale.map((d) => String(d['decisionId'])).join(', ')} (SC3)`);
   return problems;
 }
 
@@ -1797,9 +1853,18 @@ export function judgeFinish(facts: {
   // The latest contract of the run: `{ version, authorizedBy, reason, diff }`. A version above 1 is an amendment, accepted only under a valid relax record, as
   // contract version 2, authorized by the owner, with a reason and a diff. Absent: nothing about amendments is judged.
   contract?: { version?: unknown; authorizedBy?: unknown; reason?: unknown; diff?: unknown } | null;
+  // Plan 03-54 (D-28): what the authorization expects of this run, copied into the entry by the start stage: `amend-stale` (run 2), `block-resume` (run 1) or `silence`
+  // (run 3). Present, it replaces the relax-based amendment rule with the role rule: only `amend-stale` is amended, and then once, to version 2, by the owner, with a
+  // reason and a files.write diff, the original pause decision stale with its answer kept and its successor the one answered decision. A relax record is never accepted.
+  // Absent: the plan 03-49 rules.
+  expects?: string;
+  // Plan 03-54 (D-35): the declared checks the run's contract does not run (checksNotRun), and the status view the run was read with. The status must report exactly these.
+  checksNotRunExpected?: readonly string[];
+  statusView?: unknown;
 }): { problems: string[]; resume: Json } {
   const problems: string[] = [];
-  const relaxAllowed = facts.relaxAllowed !== false;
+  const expecting = facts.expects !== undefined;
+  const relaxAllowed = facts.relaxAllowed !== false && !expecting;
   if (!relaxAllowed && facts.relax !== undefined && facts.relax !== null) problems.push('a relax record is not accepted in the exit (D-28)');
   const relaxed: { record?: RelaxRecord; problem?: string } = relaxAllowed ? relaxOf(facts.relax) : {};
   if (relaxed.problem !== undefined) problems.push(relaxed.problem);
@@ -1821,7 +1886,8 @@ export function judgeFinish(facts: {
     }
     if (named.every((n) => n.decision !== undefined) && !named.some((n) => n.decision?.['state'] === 'answered')) problems.push('the relax record names no decision the owner answered');
   }
-  if (facts.contract !== undefined && facts.contract !== null && Number(facts.contract.version) > 1) {
+  if (facts.expects !== undefined) problems.push(...amendmentProblemsOf(facts.expects, facts.contract, facts.owner));
+  else if (facts.contract !== undefined && facts.contract !== null && Number(facts.contract.version) > 1) {
     const version = Number(facts.contract.version);
     if (relaxed.record === undefined) problems.push(`the contract was amended (version ${version}) without a valid relax record: an amendment is accepted only when the owner relaxed D-03 for this run`);
     else {
@@ -1833,6 +1899,7 @@ export function judgeFinish(facts: {
   }
   const answered = facts.decisions.filter((d) => d['state'] === 'answered' && !relaxedIds.has(String(d['decisionId'])));
   if (answered.length !== 1) problems.push(`${answered.length} decision(s) are answered, not one`);
+  if (facts.expects === 'amend-stale') problems.push(...staleProblemsOf(facts.decisions, answered));
   const decision = answered[0];
   const resume: Json = { resumed: false, hostConfigDir: facts.hostConfigDir ?? null };
   if (relaxed.record !== undefined) resume['relax'] = relaxed.record;
@@ -1871,6 +1938,8 @@ export function judgeFinish(facts: {
   if (facts.commit === null) problems.push('no handed-off commit');
   if (!facts.gates.some((g) => g['gate'] === 'G4' && g['passed'] === true)) problems.push('gate G4 did not pass');
   if (facts.askUserQuestion !== 0) problems.push(`the transcripts have ${facts.askUserQuestion} AskUserQuestion call(s) (S-12)`);
+  const notRun = checksNotRunProblem(facts.statusView, facts.checksNotRunExpected);
+  if (notRun !== undefined) problems.push(notRun);
   return { problems, resume };
 }
 
@@ -2005,6 +2074,9 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
     }
     state = facts.run.state;
     entry = { ...(prior ?? {}), ...facts.entry };
+    // D-35 (plan 03-54): the checks the run's own contract does not run, which its status must report as not run. Recorded beside the status view.
+    const notRunExpected = facts.contractBody === undefined ? undefined : checksNotRun(facts.contractBody);
+    entry['checksNotRunExpected'] = notRunExpected ?? null;
     const hostVersion = claudeVersionOf(process.env['AVARICE_CLAUDE_BIN']);
 
     if (stage === 'start') {
@@ -2023,7 +2095,20 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         ...(startErr !== '' ? { startStderrTail: startErr.slice(-2500) } : {}),
         checkoutBeforeSnapshot: before,
       });
-      problems.push(...judgeStart({ state, reason: facts.run.reason, items: facts.items, decisions: facts.decisions, attempts: facts.attempts, notifications: asObjects(facts.entry['notifications']), askUserQuestion: Number(facts.entry['askUserQuestion']), hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null }));
+      problems.push(
+        ...judgeStart({
+          state,
+          reason: facts.run.reason,
+          items: facts.items,
+          decisions: facts.decisions,
+          attempts: facts.attempts,
+          notifications: asObjects(facts.entry['notifications']),
+          askUserQuestion: Number(facts.entry['askUserQuestion']),
+          hostConfigDir: isObject(facts.entry['hostConfigDir']) ? facts.entry['hostConfigDir'] : null,
+          statusView: facts.entry['statusView'],
+          ...(notRunExpected !== undefined ? { checksNotRunExpected: notRunExpected } : {}),
+        }),
+      );
       const checkout = checkoutOf(before, after, runId, false);
       problems.push(...checkout.problems);
       entry['checkout'] = checkout.view;
@@ -2061,6 +2146,10 @@ async function evidenceCommand(argv: readonly string[]): Promise<number> {
         // D-28 (plan 03-52): the relax record cannot count in the exit under D-26..D-35: the evidence stage judges a record as a problem.
         relaxAllowed: false,
         contract: isObject(facts.entry['contract']) ? facts.entry['contract'] : null,
+        // Plan 03-54: the run's role rule (D-28) from the entry the start stage wrote, and D-35's live report.
+        ...(typeof (prior as Json)['expects'] === 'string' ? { expects: (prior as Json)['expects'] as string } : {}),
+        statusView: facts.entry['statusView'],
+        ...(notRunExpected !== undefined ? { checksNotRunExpected: notRunExpected } : {}),
       });
       problems.push(...judged.problems);
       entry['resume'] = judged.resume;
