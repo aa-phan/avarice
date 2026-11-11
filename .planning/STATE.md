@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-49-PLAN.md (owner chose answer-2-in-place; plan 03-50 finishes run 1)
-last_updated: "2026-11-11T00:03:21.808Z"
+stopped_at: "Completed 03-50-PLAN.md (halted: owner stopped exit run 1; re-discuss with /gsd-discuss-phase 3)"
+last_updated: "2026-11-11T01:10:14.361Z"
 last_activity: 2026-11-11
 last_activity_desc: Phase 03 execution started
-state_head: 5015ceab8d00904b2e7dcfc345feb86265af4229
+state_head: c5904933614dce59d070c61af917803da48d9549
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 111
-  completed_plans: 106
+  completed_plans: 107
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — plan 03-49 complete; next is plan 03-50 (owner's answer to run 1's decision, then runs 2 and 3)
-Plan: 03-49 complete (offline; owner chose answer-2-in-place, 03-49-exit-authorization.json written). Earlier, 03-48 halted at Task 2 (run_01M73RX3RF0ZJETYWVF52WFZ5B: A committed, owner answered option 2, B's delegated session 9673ee64 resumed under /Users/aphan/.claude-edu with no fresh attempt, B passed G2 and committed 0db1f45; item C then parked on dec_01M73THARNM0VENR94QDX62BJ3 because tests/e2e/copy-email.spec.ts, which asserts the old fallback sentence, is outside the brief's write paths)
-Status: Waiting for the owner's own terminal: `AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 avarice decide dec_01M73THARNM0VENR94QDX62BJ3 2` (plan 03-50). Run 2 not started; 03-29, 03-42 and 03-45 stay halted, 03-30 stays blocked. Run 3's brief changed (digest sha256:fe8742f4...). Phase 3 spend 11.1923 of 25 USD (run 1 has 3.8871 of its 4.95 cap left; worst case 24.9794)
-Last activity: 2026-11-11 - plan 03-49 complete: run 1's in-place finish measured offline, relax record and write-set check added to the exit tools, run 3's brief changed with the owner's approval, authorization written; 0 USD spent, portfolio unchanged
+Phase: 03 (Decisions, independent work and amendments) — plan 03-50 halted by the owner's stop decision; next is /gsd-discuss-phase 3 to re-discuss the exit criteria
+Plan: 03-50 halted at Task 2 (2026-11-11). The owner answered dec_01M73THARNM0VENR94QDX62BJ3 with option 2 in their own terminal; item C's resumed unit finished inside the write set, but its verifier reported gaps_found because the protected tests/e2e/copy-email.spec.ts (line 5, old toast literal) still fails, so G2 parked C on dec_01M74276ZA17K36XWT9GJHRWDW. Claude's --finish recorded the stop (8 problems, 0.1063 USD, no model started); no relax record, no run 2, no run 3. Owner decision: STOP AND RE-DISCUSS
+Status: Stopped by the owner's decision. Run run_01M73RX3RF0ZJETYWVF52WFZ5B stays blocked_on_decision until the owner cancels it in their own terminal (`AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice cancel run_01M73RX3RF0ZJETYWVF52WFZ5B`). 03-29, 03-42, 03-45, 03-48 and 03-50 are halted; 03-30 stays blocked. Phase 3 spend 11.2986 of 25 USD (13.7014 unspent)
+Last activity: 2026-11-11 - plan 03-50 halted: run 1's final stop recorded as evidence; owner decided to stop live exit work and re-discuss D-03 and the briefs against protected conventions
 
 Progress: [███░░░░░░░] 25%
 
@@ -368,6 +368,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Owner decision 2026-11-10 after the 03-48 stop: FINISH RUN 1 IN PLACE — D-03 is relaxed for run 1 only: run_01M73RX3RF0ZJETYWVF52WFZ5B counts as exit run 1 with one extra, legitimate decision (item C correctly stopped because the Claude-drafted brief's Write list omitted tests/e2e/copy-email.spec.ts, whose line 5 holds the old toast literal). The owner, in their own terminal, amends the run's write set (contract amend --add-write tests/e2e/copy-email.spec.ts) and answers C's question; the run then completes. All three product fixes (03-40, 03-43, 03-46) are proven live on this run. Runs 2 and 3 proceed as planned after their briefs are checked offline (no spend) for the same pattern — a change that breaks a test literal outside the write set — with any brief change re-approved by the owner. Caps: run 1 stays under its 4.95 cap; runs 2 and 3 at 4.95 each (worst case 24.98 of 25); Claude never answers, amends or cancels a portfolio run
 - [Phase 03]: Owner decision 2026-11-10 at the 03-49 Task 3 checkpoint: run 1 is finished by answer-2-in-place (the owner runs `decide dec_01M73THARNM0VENR94QDX62BJ3 2` in their own terminal in plan 03-50; C finishes inside the write set; D-03 is relaxed for run 1 only and Claude records it with the relax record in plan 03-50; the owner updates tests/e2e/copy-email.spec.ts after review); run 2's brief stays unchanged; run 3's brief takes R3-3 and R3-1 (R3-2 dropped), new digest sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd; 03-49-exit-authorization.json (selection answer-2-in-place, cap 4.95, ceiling 25, pin 2.1.319, ownerConfirmedAt 2026-11-11T00:00:06Z) supersedes 03-47's — Plan 03-49 measured that the protected add-write is refused (exit 64, nothing written), that answering C's option 2 reaches ready_for_review inside the write set, and that run 3's option 2 collided with seven protected e2e specs. Run 3's option 2 is now the same toggle button (name "Dark theme", aria-pressed) with a visually hidden description linked by aria-describedby, and tests/unit/use-theme.test.tsx joins its Write list: no collision for either option. Worst case 11.1923 + 3.8871 (run 1 left) + 4.95 + 4.95 = 24.9794 of 25 USD
 - [Phase 03]: Finding for the documentation plans 03-31 to 03-33 and findings.md (owner decision 4, 2026-11-10): a declared, non-required check (test:e2e) is never run by the supervisor (src/app/checks.ts checksToRun runs only the required and the target checks), so a delivered tree can fail it with nothing recorded; exit run 1 under answer-2-in-place will leave tests/e2e/copy-email.spec.ts failing with no record of it — Measured in plan 03-49 scenario N: the run reached ready_for_review while test:e2e would have failed. The owner asked for the finding to be recorded; the product is unchanged (src/ untouched) and the owner decides whether the supervisor should run or record declared non-required checks
+- [Phase 03]: Owner decision 2026-11-10/11 after run 1's third stop (plan 03-50): STOP AND RE-DISCUSS. Live exit work stops now; run 2 and run 3 are not started; no relax record is written (the owner stopped instead of accepting run 1); the owner cancels run 1 in their own terminal; the exit criteria (D-03; briefs vs. protected conventions) are re-discussed with /gsd-discuss-phase 3 before any more spend; the remaining Phase 3 budget (13.7014 of 25 USD) stays unspent — Run 1's resumed C unit finished inside the write set, but tests/e2e/copy-email.spec.ts (protected, line 5, old toast literal) still fails, so its verifier reported gaps_found and G2 parked C on dec_01M74276ZA17K36XWT9GJHRWDW. AVARICE behaved correctly: containment refused the protected write, the verifier reported the real gap, G2 refused to pass it
+- [Phase 03]: 03-50 findings: three product defects fixed and proven live (03-40 item prompt scope and pause attribution; 03-43 recorded host config directory; 03-46 fenced VERIFICATION record); two brief defects (run 1's change breaks the protected e2e literal outside the write set; run 3's original option 2 collided with seven protected e2e specs, fixed in 03-49 with R3-3 and R3-1); a declared non-required check (test:e2e) is never run by the supervisor, so a delivered tree can fail it with nothing recorded (for the documentation plans and findings.md) — Recorded in 03-50-SUMMARY.md and 03-48-evidence-exit.json; no src change in this plan
 
 ### Pending Todos
 
@@ -407,6 +409,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - Plan 03-38 halted at s21 (FAIL on pinned 2.1.319: the combined harness tamper cannot produce the removed-test, new-skip-marker and repeated_failure results the judge asserts); cs5, s52 and s17-s51 not run; 03-27, 03-36 and 03-37 stay halted, 03-28..03-33 blocked; owner decision needed on S-21's tamper, judge or scenario text [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
 - Phase 3 exit run 1 (03-29) stopped under D-03: item A asked B's owner-choice question and was parked uncommitted, so two pause decisions opened (run_01M71BDV8MWGEG7XSAWH1GZ80W, left blocked, unanswered). Needs a fix plan and a repeat of all three runs; owner decides the cap or ceiling for the repeat (16.88 USD headroom).
 - Plan 03-42 halted (D-03): run 1's resume found no session under the owner's terminal environment (CLAUDE_CONFIG_DIR ~/.claude-edu vs ~/.claude); a fresh session failed gate G2. Run 2 not started; 03-29 stays halted, 03-30 blocked. Owner decides the fix and spend (Phase 3 at 9.1851 of 25 USD).
+- Phase 3 exit stopped by owner decision; re-discuss with /gsd-discuss-phase 3 before more spend. Run 1 (run_01M73RX3RF0ZJETYWVF52WFZ5B) stays blocked_on_decision on dec_01M74276ZA17K36XWT9GJHRWDW until the owner cancels it in their own terminal; 03-29, 03-42, 03-45, 03-48 and 03-50 are halted and 03-30 is blocked (Phase 3 at 11.2986 of 25 USD)
 
 ### Quick Tasks Completed
 
@@ -427,6 +430,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-11T00:01:45.208Z
-Stopped at: Completed 03-49-PLAN.md (owner chose answer-2-in-place; plan 03-50 finishes run 1)
+Last session: 2026-11-11T01:09:56.444Z
+Stopped at: Completed 03-50-PLAN.md (halted: owner stopped exit run 1; re-discuss with /gsd-discuss-phase 3)
 Resume file: None
