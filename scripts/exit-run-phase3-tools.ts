@@ -57,6 +57,14 @@
 //       `avarice digest` once, and writes a `silence` block into the entry: the rows, whether the decision is open with null answer columns, the inbox's notification state,
 //       the status state and the problems judgeSilence finds. Exit 0 only with none. It reads the owner's ledger read-only and answers, amends, resumes and cancels nothing:
 //       a failed banner, a failed digest and the passing of time are no answer (AUT-4). Exit 2, writing nothing, for an entry that is not run 3's or has no start-stage record.
+//   verdict --evidence F --authorization-file A
+//       Writes `verdict`, `verdictRuns` (role, runId, attempt), `correctStops` and `verdictAt` as top-level keys, keeping every other key. `exit: 3/3 ready_for_review` only
+//       when every run of the authorization's order has a passed entry in the current epoch that meets its role's expectation (run 2 ended on contract version 2 with a
+//       stale decision; run 3 recorded a silence block with no problem) with equal checkout digests and only its own run branch added; otherwise `exit: <n>/3 ready_for_review`
+//       and exit 1. A correct stop (an owner-confirmed brief/harness defect that Claude's proposal found docs/system conformant) is listed as evidence and never counts (D-28).
+//   supplement --evidence F --from OTHER --run-id R --note TEXT
+//       Copies a superseded run's facts from OTHER into F's top-level `supplementary` list, marked `countsToward3of3: false` (D-34). Exit 2, the file byte-identical, for a run
+//       that is an entry of F, a run OTHER does not hold, a second supplement of the same run, an empty note or a file that is not an evidence file.
 //
 // Plan 03-29 adds the subcommands of the live exit (they never start a model; `avarice start` and the owner's `avarice decide` do):
 //   field --authorization-file F --pick NAME
@@ -1957,6 +1965,231 @@ export function judgeFinish(facts: {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The exit record (plan 03-54; D-26, D-28, D-34, T-03-138). `exitVerdict` says 3 of 3 only when each role of the authorization's order has a clean run in the current epoch.
+// A correct stop is evidence and never a pass (D-28); a superseded run kept by `supplement` is supplementary and never counts (D-34).
+// ---------------------------------------------------------------------------------------------------------------
+
+const EXIT_RUN_COUNT = 3;
+
+export interface ExitVerdict {
+  verdict: string;
+  // The clean run counted for each role, in the authorization's order.
+  counted: Array<{ role: string; runId: string; attempt: number }>;
+  // Every stopped attempt the owner confirmed as a brief/harness defect while Claude's proposal said docs/system conformant: evidence that does not count.
+  correctStops: Json[];
+  // Every other entry that is not counted, with the reason.
+  notCounted: Array<{ runId: string; role: string | null; attempt: number | null; reason: string }>;
+}
+
+// What keeps a finished entry from being its role's clean run (D-26, D-28): it passed with no problem, ended ready_for_review with the paused item resumed in its own
+// session, every decision is of pause origin, the checkout digests are equal and only the run's own branch was added; run 2 (`amend-stale`) ended on contract version 2 with
+// a stale decision, run 3 (`silence`) recorded a silence block with no problem. Empty when it is clean.
+function unmetOf(entry: Json, expects: unknown): string[] {
+  const unmet: string[] = [];
+  const runId = String(entry['runId'] ?? '');
+  if (entry['passed'] !== true) unmet.push('did not pass');
+  const problems = entry['problems'];
+  if (!Array.isArray(problems) || problems.length > 0) unmet.push(`lists ${Array.isArray(problems) ? problems.length : 'unreadable'} problem(s)`);
+  if (entry['finalState'] !== 'ready_for_review') unmet.push(`ended ${String(entry['finalState'] ?? 'unrecorded')}, not ready_for_review`);
+  if (entry['resumed'] !== true) unmet.push('the paused item did not resume its own session');
+  const decisions = asObjects(entry['decisions']);
+  const notPause = decisions.filter((d) => !(isObject(d['origin']) && d['origin']['origin'] === 'pause'));
+  if (notPause.length > 0) unmet.push(`decision ${notPause.map((d) => String(d['decisionId'])).join(', ')} is not of pause origin: the unit did not ask it itself (D-02)`);
+  const checkout = isObject(entry['checkout']) ? entry['checkout'] : {};
+  const own = `refs/heads/avarice/${runId}`;
+  const added = Array.isArray(checkout['newRefs']) ? checkout['newRefs'] : [];
+  const changed = Array.isArray(checkout['removedOrChangedRefs']) ? checkout['removedOrChangedRefs'] : [];
+  if (checkout['equal'] !== true) unmet.push('the checkout digests differ before and after');
+  if (changed.length > 0) unmet.push(`refs were removed or changed: ${changed.join(', ')}`);
+  if (added.length !== 1 || added[0] !== own) unmet.push(`the refs added are ${JSON.stringify(added)}, not only the run branch ${own}`);
+  if (expects === 'amend-stale') {
+    const contract = isObject(entry['contract']) ? entry['contract'] : {};
+    if (Number(contract['version']) !== 2) unmet.push(`run 2 expects contract version 2 (amend-stale), found version ${String(contract['version'] ?? 'unrecorded')}`);
+    if (!decisions.some((d) => d['state'] === 'stale')) unmet.push('run 2 expects its original pause decision to be stale, and no decision is');
+  }
+  if (expects === 'silence') {
+    const silence = isObject(entry['silence']) ? entry['silence'] : undefined;
+    if (silence === undefined || !Array.isArray(silence['problems']) || silence['problems'].length > 0) unmet.push('run 3 expects a silence block with no problem, and the entry has none');
+  }
+  return unmet;
+}
+
+// A correct stop (D-28): a stopped attempt the owner confirmed as a brief/harness defect while Claude's proposal said AVARICE behaved as docs/system documents. It is
+// evidence of the exit, and it never counts as one of the three.
+function correctStopOf(entry: Json): Json | undefined {
+  const confirmed = confirmedOf(entry);
+  if (entry['passed'] === true || confirmed?.['class'] !== 'brief-harness-defect') return undefined;
+  const classification = entry['classification'];
+  const proposed = isObject(classification) && isObject(classification['proposed']) ? classification['proposed'] : undefined;
+  const docs = proposed !== undefined && isObject(proposed['docsSystem']) ? proposed['docsSystem'] : undefined;
+  if (proposed === undefined || docs === undefined || docs['conformant'] !== true) return undefined;
+  return {
+    runId: entry['runId'] ?? null,
+    role: entry['run'] ?? null,
+    attempt: entry['attempt'] ?? null,
+    class: confirmed['class'],
+    stoppedBy: proposed['stoppedBy'] ?? null,
+    at: proposed['at'] ?? null,
+    docsRef: docs['ref'] ?? null,
+    summary: proposed['summary'] ?? null,
+    confirmedRef: confirmed['ref'] ?? null,
+    confirmedAt: confirmed['at'] ?? null,
+  };
+}
+
+// The verdict of an evidence file against the owner's authorization (D-26, D-28, D-34). For each role of the authorization's order, the clean run counted is the latest
+// attempt started in the current epoch that meets every condition of unmetOf, judged against the expectation the authorization gives the role. The supplementary list
+// and every stop are read for nothing but their listing. `exit: 3/3 ready_for_review` only when three roles are counted.
+export function exitVerdict(evidence: Json, auth: Pick<Authorization, 'order' | 'briefs'>): ExitVerdict {
+  const entries = asObjects(evidence['runs']);
+  const epoch = epochOf(evidence);
+  const epochMs = epoch === null ? Number.NEGATIVE_INFINITY : Date.parse(epoch);
+  const expectsOf = (role: string): unknown => auth.briefs.find((b) => b['run'] === role)?.['expects'];
+  const counted: ExitVerdict['counted'] = [];
+  const countedIds = new Set<string>();
+  for (const role of auth.order) {
+    const clean = entries.filter((e) => e['run'] === role && startedMs(e) >= epochMs && unmetOf(e, expectsOf(role)).length === 0);
+    const best = latestAttempt(clean);
+    if (best !== undefined) {
+      counted.push({ role, runId: String(best['runId']), attempt: Number(best['attempt'] ?? 0) });
+      countedIds.add(String(best['runId']));
+    }
+  }
+  const correctStops: Json[] = [];
+  const notCounted: ExitVerdict['notCounted'] = [];
+  for (const entry of entries) {
+    const runId = String(entry['runId'] ?? '');
+    if (countedIds.has(runId)) continue;
+    const stop = correctStopOf(entry);
+    if (stop !== undefined) {
+      correctStops.push(stop);
+      continue;
+    }
+    const role = typeof entry['run'] === 'string' ? entry['run'] : null;
+    const attempt = typeof entry['attempt'] === 'number' ? entry['attempt'] : null;
+    let reason: string;
+    const confirmed = confirmedOf(entry);
+    if (role === null || !auth.order.includes(role)) reason = 'not a run of the authorization (D-28)';
+    else if (entry['passed'] === true) {
+      const unmet = unmetOf(entry, expectsOf(role));
+      if (startedMs(entry) < epochMs) reason = `passed before the epoch that began at ${String(epoch)}, when the owner confirmed a product defect: every run passes again (D-26)`;
+      else if (unmet.length > 0) reason = `does not count: ${unmet.join('; ')}`;
+      else reason = `a later attempt of ${role} is the one counted`;
+    } else if (confirmed === undefined) reason = isFailedAttempt(entry) ? 'stopped with no owner-confirmed classification (D-26, D-27)' : 'no outcome yet: the attempt still waits for the owner';
+    else if (confirmed['class'] === 'product-defect') reason = 'owner-confirmed product defect: it starts a new epoch and every run passes again (D-26)';
+    else reason = 'owner-confirmed brief/harness defect, but the proposal does not say docs/system is conformant, so it is not a correct stop (D-27)';
+    notCounted.push({ runId, role, attempt, reason });
+  }
+  // 3/3 needs the three roles of an order of exactly three; anything less never reads as complete, whatever else was counted.
+  const complete = counted.length === EXIT_RUN_COUNT && auth.order.length === EXIT_RUN_COUNT && counted.every((c) => auth.order.includes(c.role));
+  return { verdict: `exit: ${complete ? EXIT_RUN_COUNT : Math.min(counted.length, EXIT_RUN_COUNT - 1)}/${EXIT_RUN_COUNT} ready_for_review`, counted, correctStops, notCounted };
+}
+
+const isCompleteVerdict = (verdict: string): boolean => verdict === `exit: ${EXIT_RUN_COUNT}/${EXIT_RUN_COUNT} ready_for_review`;
+
+// An evidence file, or undefined when it is missing or not JSON of an object.
+function readEvidenceFile(path: string): Json | undefined {
+  try {
+    return readJson(path);
+  } catch {
+    return undefined;
+  }
+}
+
+// The evidence file with top-level keys set: this tool's writer keeps every other key (evidenceFileBody), the file's own plan and decision are kept as they were, and the
+// write goes through a temporary file and a rename.
+function writeEvidenceKeys(path: string, file: Json, patch: Json, now: string): void {
+  const base = evidenceFileBody(file, typeof file['plan'] === 'string' ? file['plan'] : livePlan(), asObjects(file['runs']), now);
+  if (file['decision'] !== undefined) base['decision'] = file['decision'];
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({ ...base, ...patch }, null, 2)}\n`);
+  renameSync(temporary, path);
+}
+
+// `verdict --evidence F --authorization-file A`: writes `verdict`, `verdictRuns` (role, runId, attempt), `correctStops` and `verdictAt` as top-level keys, keeping every other
+// key. Exit 0 for `exit: 3/3 ready_for_review`, 1 for any other verdict; 2 and nothing written for a missing flag, an unreadable file or an authorization that authorizes nothing.
+function verdictCommand(argv: readonly string[]): number {
+  const { named } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: verdict: ${text}`);
+    return 2;
+  };
+  const missing = ['evidence', 'authorization-file'].filter((k) => named[k] === undefined);
+  if (missing.length > 0) return refuse(`usage: verdict needs --${missing.join(' --')}`);
+  const auth = authorizationOf(named['authorization-file'] as string);
+  if (typeof auth === 'string') return refuse(auth);
+  const path = resolve(named['evidence'] as string);
+  const file = readEvidenceFile(path);
+  if (file === undefined) return refuse(`${named['evidence']} is not an evidence file`);
+  const result = exitVerdict(file, auth);
+  const now = new Date().toISOString();
+  writeEvidenceKeys(path, file, { verdict: result.verdict, verdictRuns: result.counted, correctStops: result.correctStops, verdictAt: now }, now);
+  out(`${result.verdict}\n`);
+  for (const c of result.counted) out(`counted: ${c.role} ${c.runId} (attempt ${c.attempt})\n`);
+  for (const s of result.correctStops) out(`correct stop, evidence that does not count (D-28): ${String(s['role'])} ${String(s['runId'])} stopped at ${String(s['stoppedBy'])}\n`);
+  for (const n of result.notCounted) out(`not counted: ${n.role ?? '?'} ${n.runId}: ${n.reason}\n`);
+  out(`evidence ${path}\n`);
+  return isCompleteVerdict(result.verdict) ? 0 : 1;
+}
+
+// A superseded run's facts as the supplementary record of the exit (D-34): what the run did, kept for the owner and never counted toward the three.
+export function supplementRecordOf(entry: Json, fromFile: string, note: string): Json {
+  return {
+    runId: entry['runId'],
+    fromFile,
+    brief: entry['brief'] ?? null,
+    briefDigest: entry['briefDigest'] ?? null,
+    items: Array.isArray(entry['items']) ? entry['items'] : [],
+    decisions: asObjects(entry['decisions']).map((d) => ({
+      id: d['decisionId'] ?? null,
+      state: d['state'] ?? null,
+      class: d['class'] ?? null,
+      origin: isObject(d['origin']) ? (d['origin']['origin'] ?? null) : null,
+      answeredBy: d['answeredBy'] ?? null,
+      answerChannel: d['answerChannel'] ?? null,
+    })),
+    resume: entry['resume'] ?? null,
+    problems: Array.isArray(entry['problems']) ? entry['problems'] : [],
+    checkout: entry['checkout'] ?? null,
+    costUsd: entry['costUsd'] ?? null,
+    note,
+    countsToward3of3: false,
+  };
+}
+
+// `supplement --evidence F --from OTHER --run-id R --note TEXT`: appends the facts of run R in OTHER to the top-level `supplementary` list of F, marked
+// `countsToward3of3: false`. Exit 2 and the file byte-identical for a missing flag, an empty note, a file that is not an evidence file, a run that is an entry of F, a run OTHER
+// does not hold and a run already supplementary.
+function supplementCommand(argv: readonly string[]): number {
+  const { named } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: supplement: ${text}`);
+    return 2;
+  };
+  const missing = ['evidence', 'from', 'run-id', 'note'].filter((k) => named[k] === undefined);
+  if (missing.length > 0) return refuse(`usage: supplement needs --${missing.join(' --')}`);
+  const runId = named['run-id'] as string;
+  const note = (named['note'] as string).trim();
+  if (note === '') return refuse('--note is empty: say why the run is kept as supplementary evidence (D-34)');
+  const path = resolve(named['evidence'] as string);
+  const file = readEvidenceFile(path);
+  if (file === undefined) return refuse(`${named['evidence']} is not an evidence file`);
+  const fromPath = resolve(named['from'] as string);
+  const other = readEvidenceFile(fromPath);
+  if (other === undefined) return refuse(`${named['from']} is not an evidence file`);
+  if (asObjects(file['runs']).some((r) => r['runId'] === runId)) return refuse(`${runId} is an entry of the evidence file: a run that counts is not supplementary evidence (D-34)`);
+  const entry = asObjects(other['runs']).find((r) => r['runId'] === runId);
+  if (entry === undefined) return refuse(`${named['from']} holds no entry for ${runId}`);
+  const held = asObjects(file['supplementary']);
+  if (held.some((r) => r['runId'] === runId)) return refuse(`${runId} is already supplementary evidence in the file (D-34): it is recorded once`);
+  const relativeFrom = relative(REPO_ROOT, fromPath);
+  const record = supplementRecordOf(entry, relativeFrom.startsWith('..') ? fromPath : relativeFrom, note);
+  writeEvidenceKeys(path, file, { supplementary: [...held, record] }, new Date().toISOString());
+  out(`supplement: ${runId} from ${String(record['fromFile'])} kept as supplementary evidence; it counts toward nothing (D-34)\n`);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Run 3's silence (plan 03-54; SC2, AUT-4, AUT-6, T-03-136). The run blocks on its decision while the notifier is down. After the batch window and a digest, the decision must
 // still be open and unanswered, and still be listed by inbox and status: a failed banner, a failed digest and the passing of time answer nothing. The step reads the
 // owner's ledger read-only and runs `avarice digest` once; it never answers, amends, resumes or cancels anything.
@@ -2437,6 +2670,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'relax') return relaxCommand(rest);
   if (command === 'classify') return classifyCommand(rest);
   if (command === 'silence') return silenceCommand(rest);
+  if (command === 'verdict') return verdictCommand(rest);
+  if (command === 'supplement') return supplementCommand(rest);
   if (command === 'brief-check') return briefCheck(rest);
   if (command === 'brief-gate') return briefGate(rest);
   if (command === 'write-authorization') return writeAuthorizationCommand(rest);
@@ -2450,7 +2685,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify | silence) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | preflight | field | authorize | snapshot | evidence | relax | classify | silence | verdict | supplement) ...');
   return 2;
 }
 
