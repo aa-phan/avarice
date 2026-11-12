@@ -9,9 +9,10 @@
 // never sees (a sandbox gap), a fix that leaves the check failing, and (plan 02-16) a crash or a wall-clock kill after some files were written,
 // a loop of denied calls, a flood of tool calls, and a different behaviour per attempt.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
+import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
@@ -44,6 +45,15 @@ export interface FakeRunOptions {
   // and its exit code is recorded, never judged; a refused line is not run. With `recordTo`, the record gains `shell: [{ command, denied, exitCode }]` (exitCode null
   // when the line did not run). It is how a test shows that an environment other than the listed one is refused and never runs. JSON-serializable.
   shellAttempts?: readonly string[];
+  // Plan 03-69 (D-26, D-27). The fake unit stands in for run 3's attempt-1 verifier, which could not search because the host had removed Grep. After the edits the unit
+  // starts its verifier (one Agent call, subagent_type gsd-verifier, through the real hook) and the verifier searches for `pattern` under the clone-relative `path`.
+  // Whether its session has the Grep tool is decided from the production launch line (buildLaunchArgs for this request) by `hostKeepsSearchTools`. When it has not, the
+  // Grep call fails as the host fails it (the hook never sees it) and the verifier tries `grep -rn <pattern> <path>` through the real hook; the status is `otherwise`.
+  // When it has, each `outside` path is first tried as a Grep through the real hook (a refused call never searches), then the Grep of `path` goes through the hook and,
+  // when admitted, the fake searches the files under `path` in the clone (skipping `.git`, one regular expression match per line); the status is `passed` when the sorted
+  // matched files equal the sorted `expect` and `gaps_found` otherwise. Takes precedence over `verification`, `verificationByPrompt` and `runListedCommand`. With
+  // `recordTo`, the record gains `search: { available, outside: [{ path, denied }], denied, matched, shell }` (shell null, or { command, denied }). JSON-serializable.
+  verifierSearch?: { pattern: string; path: string; expect: readonly string[]; outside?: readonly string[]; otherwise: 'human_needed' | 'gaps_found' };
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -155,6 +165,25 @@ export function promptNames(prompt: string, marker: string, check: string): bool
   return false;
 }
 
+// Whether the host keeps its Glob and Grep tools in a session launched with `argv`. This is the pinned 2.1.319 host's rule as host-search-tools.test.ts measures it on the
+// real binary: without a `--tools`, `--allowedTools` or `--allowed-tools` flag that names Glob or Grep, the host removes both tools from a session that has a shell and from
+// every agent it resolves. The flag's value is split on commas and spaces, and a parenthesized suffix (`Grep(src/**)`) is cut before the name is compared.
+export function hostKeepsSearchTools(argv: readonly string[]): boolean {
+  const flags = new Set(['--tools', '--allowedTools', '--allowed-tools']);
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i] as string;
+    const equals = token.startsWith('--') ? token.indexOf('=') : -1;
+    const flag = equals === -1 ? token : token.slice(0, equals);
+    if (!flags.has(flag)) continue;
+    const value = equals === -1 ? (argv[i + 1] ?? '') : token.slice(equals + 1);
+    for (const entry of value.split(/[,\s]+/)) {
+      const name = entry.replace(/\(.*$/, '');
+      if (name === 'Glob' || name === 'Grep') return true;
+    }
+  }
+  return false;
+}
+
 // The options without the keys that select options: what a selected layer contributes to the merged options.
 function withoutSelectors(options: FakeRunOptions | undefined): FakeRunOptions {
   if (options === undefined) return {};
@@ -246,6 +275,24 @@ export class FakeRunHost implements AgentHost {
     }
     if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
+    // Plan 03-69: the production launch line for this request, judged as the real adapter judges it (the placeholders stand for the generated files).
+    let launchArgs: string[] = [];
+    if (o.verifierSearch !== undefined) {
+      launchArgs = buildLaunchArgs({
+        prompt: req.prompt,
+        settingsFile: '/avarice-fake-run/host-settings.json',
+        pluginDir: '/avarice-fake-run/plugin',
+        agentsFile: '/avarice-fake-run/agents.json',
+        mcpFile: '/avarice-fake-run/mcp.json',
+        model: req.model,
+        costCapUsd: req.costCapUsd,
+        sessionId: req.sessionId ?? `fake-run-session-${this.calls.length}`,
+        ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+        ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
+      });
+      const safe = assertLaunchArgsSafe(launchArgs);
+      if (!safe.ok) return err({ kind: 'denied', rule: `enforcement_failure:${safe.error.kind === 'denied' ? safe.error.rule.replace(/^launch_args:/, 'launch-args:') : 'launch-args'}`, enforcer: 'avarice' });
+    }
     const startedMs = Date.now();
     const cwd = realpathSync(req.cwd);
     let record: Record<string, unknown> | undefined;
@@ -349,6 +396,49 @@ export class FakeRunHost implements AgentHost {
       if (admitted) subagentsAdmitted += 1;
     }
     for (const [rel, text] of Object.entries(edits)) edit(rel, text);
+    // Plan 03-69: the verifier the unit starts, searching the clone (see `verifierSearch`).
+    let searchStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    if (o.verifierSearch !== undefined && !stopped) {
+      const v = o.verifierSearch;
+      const verifier = { agent_id: 'agent-fake-verifier', agent_type: 'gsd-verifier' };
+      const started = tool('Agent', { subagent_type: 'gsd-verifier', description: 'verify the work', prompt: 'verify' }, () => {}, { tool_use_id: 'toolu_fake_verifier' });
+      const available = hostKeepsSearchTools(launchArgs);
+      const outside: Array<{ path: string; denied: boolean }> = [];
+      let matched: string[] = [];
+      let searchDenied = false;
+      let shell: { command: string; denied: boolean } | null = null;
+      if (started && available) {
+        for (const path of v.outside ?? []) {
+          if (stopped) break;
+          outside.push({ path, denied: !tool('Grep', { pattern: v.pattern, path }, () => {}, verifier) });
+        }
+        const found = new Set<string>();
+        const expression = new RegExp(v.pattern);
+        const walk = (dir: string): void => {
+          for (const name of readdirSync(dir).sort()) {
+            if (name === '.git') continue;
+            const full = join(dir, name);
+            if (statSync(full).isDirectory()) walk(full);
+            else if (readFileSync(full, 'utf8').split('\n').some((line) => expression.test(line))) found.add(relative(cwd, full));
+          }
+        };
+        const admitted = tool('Grep', { pattern: v.pattern, path: v.path }, () => walk(join(cwd, v.path)), verifier);
+        searchDenied = !admitted;
+        matched = [...found].sort();
+        searchStatus = admitted && JSON.stringify(matched) === JSON.stringify([...v.expect].sort()) ? 'passed' : 'gaps_found';
+      } else if (started) {
+        // The host answers the Grep call with its own error and the hook never sees it; the verifier then tries the shell.
+        const command = `grep -rn ${v.pattern} ${v.path}`;
+        shell = { command, denied: !tool('Bash', { command }, () => {}, verifier) };
+        searchStatus = v.otherwise;
+      } else {
+        searchStatus = v.otherwise;
+      }
+      if (o.recordTo !== undefined) {
+        record = { ...record, search: { available, outside, denied: searchDenied, matched, shell } };
+        writeFileSync(o.recordTo, JSON.stringify(record));
+      }
+    }
     const crashed = o.crash !== undefined || o.timeoutMs !== undefined;
     for (const rel of o.crash?.afterFiles ?? []) {
       const marker = '// partial write of a unit that stopped before it finished\n';
@@ -423,7 +513,7 @@ export class FakeRunHost implements AgentHost {
     }
     if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
-      const status = listedStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
+      const status = searchStatus ?? listedStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
       if (status !== 'none') {
         const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
