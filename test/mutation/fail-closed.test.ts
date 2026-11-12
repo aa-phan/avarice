@@ -241,7 +241,7 @@ describe('FC-7: the launch refusals hold for the --flag=value spelling', () => {
   });
 
   it('refuses --bare, --add-dir, --allowedTools and --permission-prompt-tool written with =', () => {
-    for (const flag of ['--bare=1', '--add-dir=/home/u', '--allowedTools=Bash', '--allowed-tools=Bash', '--permission-prompt-tool=mcp__x__y', '--dangerously-skip-permissions=true']) {
+    for (const flag of ['--bare=1', '--add-dir=/home/u', '--allowedTools=Bash', '--allowedTools=Glob,Grep', '--allowed-tools=Bash', '--permission-prompt-tool=mcp__x__y', '--dangerously-skip-permissions=true']) {
       const refused = assertLaunchArgsSafe([...base(), flag]);
       assert.ok(!refused.ok, flag);
       assert.equal(refused.error.kind, 'denied');

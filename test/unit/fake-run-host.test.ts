@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseBrief } from '../../src/domain/brief.ts';
 import type { BriefItem } from '../../src/domain/brief.ts';
+import { buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import { computeRunScope } from '../../src/domain/invocation-scope.ts';
 import type { InvocationScope } from '../../src/domain/invocation-scope.ts';
 import type { InvocationRequest } from '../../src/ports/agent-host.ts';
@@ -289,5 +290,29 @@ describe('subagents and planText through the real hook (G1, CON-15)', () => {
     // The stage archives the unit's quick records as artifacts (D-17): the plan the unit was told to leave is among them, byte for byte.
     const records = ledgerRows<{ digest: string }>(roots, "SELECT digest FROM artifacts WHERE run_id = ? AND kind = 'gsd-quick-record'", run.runId).map((row) => row.digest);
     assert.ok(records.includes(`sha256:${createHash('sha256').update(plan).digest('hex')}`), `the quick PLAN.md of the unit was archived, got ${records.join(', ')}`);
+  });
+});
+
+// hostKeepsSearchTools is the pinned host's rule as host-search-tools.test.ts measures it on the real binary (plan 03-69).
+describe('hostKeepsSearchTools: the host keeps Glob and Grep only when the launch line names one of them', () => {
+  it('is false for an empty line and for a flag that names neither tool', () => {
+    assert.equal(fake.hostKeepsSearchTools([]), false);
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools', 'Bash']), false);
+    assert.equal(fake.hostKeepsSearchTools(['--tools', 'default']), false);
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools', 'Read(//x/**)']), false);
+  });
+
+  it('is true when --allowedTools or --tools names Glob or Grep, in either spelling and with a parenthesized suffix', () => {
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools', 'Glob,Grep']), true);
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools', 'Grep']), true);
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools=Glob']), true);
+    assert.equal(fake.hostKeepsSearchTools(['--tools', 'Bash,Grep']), true);
+    assert.equal(fake.hostKeepsSearchTools(['--allowedTools', 'Grep(src/**)']), true);
+  });
+
+  it('is true for the production launch line, so the fake reads the line the adapter builds', () => {
+    const argv = buildLaunchArgs({ prompt: 'p', settingsFile: '/s.json', pluginDir: '/p', agentsFile: '/a.json', mcpFile: '/m.json', model: 'sonnet', costCapUsd: 1, sessionId: SESSION });
+    assert.equal(fake.hostKeepsSearchTools(argv), true);
+    assert.equal(fake.hostKeepsSearchTools(argv.filter((token, i) => token !== '--allowedTools' && argv[i - 1] !== '--allowedTools')), false);
   });
 });
