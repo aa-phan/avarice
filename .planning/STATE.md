@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Planned gap plans 03-69 (content-search route for the unit and its subagents) and 03-70 (run 3 attempt 2 of 2); next execute 03-69, then 03-70, before run 1 (03-59)
-last_updated: "2026-11-12T18:11:03.795Z"
-last_activity: 2026-11-11
-last_activity_desc: Phase 3 execution started
-state_head: eb1b90f050c60035afbb804bb437462ae2253f71
+stopped_at: Completed 03-69-PLAN.md
+last_updated: "2026-11-12T19:41:30.630Z"
+last_activity: 2026-11-12
+last_activity_desc: Phase 03 execution started
+state_head: 7133e041161271209e98ed9e44051c19d2d98132
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 130
-  completed_plans: 123
+  completed_plans: 124
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-08)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 3 — Decisions, independent work and amendments
+**Current focus:** Phase 03 — Decisions, independent work and amendments
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 5 of 67
+Phase: 03 (Decisions, independent work and amendments) — EXECUTING
+Plan: 2 of 69
 Status: Ready to execute
-Last activity: 2026-11-11 — Phase 3 execution started
+Last activity: 2026-11-12 — Phase 03 execution started
 
 Progress: [███░░░░░░░] 25%
 
@@ -158,6 +158,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P49 | continuation | 3 tasks | 10 files |
 | Phase 03 P66 | 16 min | 3 tasks | 4 files |
 | Phase 03 P67 | 12 min | 2 tasks | 5 files |
+| Phase 03 P69 | 60min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -376,6 +377,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-66: reset --confirm acts only on the run's latest reset when it has no confirmation, so a stale unconfirmed proposal cannot be confirmed behind a later one
 - [Phase 3]: 03-68: run 2's attempt 3 passed and the owner confirmed it with continue; run 2 counts toward 3 of 3. Run 1 headroom after it is 7.8582 USD (25 - 4.50 - 12.6418); 03-63-SUMMARY.md is superseded
 - [Phase 3]: 03-58: run 3's attempt 1 stopped on two open pause decisions because the unit's verifier and executor subagents had no content-search route (Grep tool absent from their sessions, shell grep denied by the hook); the owner ruled brief-harness-defect, fix first, overriding Claude's product-defect proposal. Halted; a gap plan fixes the route, then run 3's attempt 2 of 2 runs before run 1. Spend 0.2520 USD; ledger 12.8938 of 25; run 1 headroom 7.6062 USD. The owner's profile config still forces the banner failure
+- [Phase 03]: 03-69: the launch line keeps the host's search tools with --allowedTools Glob,Grep (judge admits only that pair, once); shell grep stays refused; offline probe of the pinned 2.1.319 host plus scenario S prove it
 
 ### Pending Todos
 
@@ -436,6 +438,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T16:19:26.336Z
-Stopped at: Completed 03-68-PLAN.md
+Last session: 2026-11-12T19:41:30.374Z
+Stopped at: Completed 03-69-PLAN.md
 Resume file: None
