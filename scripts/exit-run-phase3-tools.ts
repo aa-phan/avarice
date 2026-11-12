@@ -869,6 +869,110 @@ function tryReadJson(path: string): Json | undefined {
   }
 }
 
+export interface ResetProposalInput {
+  evidence: Json | undefined;
+  order: readonly string[];
+  role: string;
+  // The role's digest from the authorization's briefs, or undefined.
+  briefDigest: string | undefined;
+  pin: string;
+  // The parsed parity report, or undefined when it is missing or is not JSON.
+  parity: Json | undefined;
+  // One entry per `--defect` group: the parsed red and green proof bodies (undefined when missing or not JSON) and the sha256 of each proof file.
+  scenarios: Array<{ runId: string; test: string; testTracked: boolean; red: Json | undefined; green: Json | undefined; redSha256: string; greenSha256: string }>;
+}
+
+// A scenario's test is a relative path under test/ (D-37): never absolute and never leaving the directory.
+const isTestPath = (path: string): boolean => path.startsWith('test/') && !path.split('/').includes('..');
+// The count a TAP summary line gives (`# fail 2`): the last such line, or undefined when the report has none.
+function tapCount(output: unknown, label: 'pass' | 'fail'): number | undefined {
+  const found = typeof output === 'string' ? [...output.matchAll(new RegExp(`^# ${label} (\\d+)\\s*$`, 'gm'))] : [];
+  const last = found[found.length - 1];
+  return last === undefined ? undefined : Number(last[1]);
+}
+const commandNamesTest = (command: unknown, test: string): boolean => typeof command === 'string' && command.split(/\s+/).includes(test);
+
+// D-36 and D-37 before a reset is proposed, as a list of problems (empty when the proposal may be written). Pure: it reads no file. It judges, in this order: the role is a run of the
+// authorization; no attempt of the role is open; the role has a failed attempt in its stop-loss epoch and the latest of them is an owner-confirmed product defect (a brief/harness
+// stop, or an unruled one, resets nothing); each product-defect attempt has exactly one scenario and each scenario names one; each scenario's test is tracked under test/ and its red
+// and green proofs show the failure and the pass of that test; no red proof was proved by an earlier confirmed reset (a repeat of the same failure still counts); and the parity
+// report is clean, at the pin, checked after every ruling and covering the run's brief. Each problem names the fact and the decision it serves.
+export function judgeResetProposal(input: ResetProposalInput): string[] {
+  const { evidence, role, scenarios } = input;
+  if (!input.order.includes(role)) return [`${role} is not a run of the authorization (order ${input.order.join(', ')}) (D-28)`];
+  const problems: string[] = [];
+  const mine = asObjects(evidence?.['runs']).filter((r) => r['run'] === role);
+  const idOf = (e: Json): string => String(e['runId'] ?? '');
+  for (const open of mine.filter((e) => e['passed'] !== true && !isFailedAttempt(e))) problems.push(`${idOf(open)} is neither passed nor failed: it is still open, so nothing is proven yet (D-34)`);
+
+  const since = stopLossEpochOf(evidence, role);
+  const sinceMs = since === null ? Number.NEGATIVE_INFINITY : Date.parse(since);
+  const failed = mine.filter((e) => isFailedAttempt(e) && startedMs(e) >= sinceMs);
+  if (failed.length === 0) return [...problems, `nothing to reset: ${role} has no failed attempt since its last reset (D-36)`];
+  const latest = latestAttempt(failed) as Json;
+  const ruling = confirmedOf(latest);
+  if (ruling === undefined) problems.push(`${idOf(latest)} has no owner ruling: only an owner-confirmed product defect resets the count (D-27, D-36)`);
+  else if (ruling['class'] !== 'product-defect') problems.push(`only an owner-confirmed product defect resets the count (D-36): ${idOf(latest)} is ${String(ruling['class'])}`);
+
+  const covered = failed.filter((e) => confirmedOf(e)?.['class'] === 'product-defect').map(idOf);
+  for (const id of covered) {
+    const named = scenarios.filter((s) => s.runId === id).length;
+    if (named === 0) problems.push(`no red-to-green scenario for ${id} (D-37)`);
+    else if (named > 1) problems.push(`${id} is named by more than one scenario (D-37)`);
+  }
+  for (const s of scenarios.filter((x) => !covered.includes(x.runId))) problems.push(`scenario names ${s.runId}, which is not a failed product-defect attempt of ${role} in its stop-loss epoch (D-37)`);
+
+  const cited = new Set<string>();
+  for (const reset of asObjects(evidence?.['resets']).filter((r) => isObject(r['confirmed']))) {
+    const proposed = isObject(reset['proposed']) ? reset['proposed'] : {};
+    for (const s of asObjects(proposed['scenarios'])) if (isObject(s['red']) && typeof s['red']['sha256'] === 'string') cited.add(s['red']['sha256']);
+  }
+  for (const s of scenarios) {
+    const label = `scenario ${s.runId}`;
+    if (!isTestPath(s.test)) problems.push(`${label}: the test ${s.test} is not a relative path under test/ without .. (D-37)`);
+    else if (!s.testTracked) problems.push(`${label}: the test ${s.test} is not tracked by git (D-37)`);
+    if (s.red === undefined) problems.push(`${label}: the red proof is missing or is not JSON (D-37)`);
+    else {
+      if (!commandNamesTest(s.red['command'], s.test)) problems.push(`${label}: the red proof's command does not name ${s.test} (D-37)`);
+      if (typeof s.red['exitCode'] !== 'number' || s.red['exitCode'] === 0) problems.push(`${label}: the red proof's exit code is ${String(s.red['exitCode'])}, not a failure (D-37)`);
+      if ((tapCount(s.red['output'], 'fail') ?? 0) <= 0) problems.push(`${label}: the red proof does not show a failing test (no \`# fail\` above 0) (D-37)`);
+    }
+    if (s.green === undefined) problems.push(`${label}: the green proof is missing or is not JSON (D-37)`);
+    else {
+      if (!commandNamesTest(s.green['command'], s.test)) problems.push(`${label}: the green proof's command does not name ${s.test} (D-37)`);
+      if (s.green['exitCode'] !== 0) problems.push(`${label}: the green proof's exit code is ${String(s.green['exitCode'])}, not 0 (D-37)`);
+      if (tapCount(s.green['output'], 'fail') !== 0) problems.push(`${label}: the green proof does not show \`# fail 0\` (D-37)`);
+      if ((tapCount(s.green['output'], 'pass') ?? 0) <= 0) problems.push(`${label}: the green proof does not show a passing test (no \`# pass\` above 0) (D-37)`);
+      if (typeof s.green['output'] === 'string' && /^\s*not ok\b/m.test(s.green['output'])) problems.push(`${label}: the green proof has a not ok line (D-37)`);
+    }
+    if (cited.has(s.redSha256)) problems.push(`${label}: the red proof is already proved by an earlier reset: a repeat of the same failure still counts (D-36)`);
+  }
+  const shared = scenarios.filter((s, i) => scenarios.findIndex((o) => o.redSha256 === s.redSha256) !== i);
+  for (const s of shared) problems.push(`scenario ${s.runId}: the scenarios share one red proof, and each defect needs its own reproduction (D-37)`);
+
+  const p = input.parity;
+  if (p === undefined) problems.push('the parity report is missing or is not JSON (D-37)');
+  else {
+    const emptyList = (value: unknown): boolean => Array.isArray(value) && value.length === 0;
+    if (p['schema'] !== 1) problems.push(`the parity report is not schema 1 (it is ${String(p['schema'])}) (D-37)`);
+    if (p['parity'] !== true) problems.push("the parity report's parity is not true (D-37)");
+    if (!emptyList(p['problems'])) problems.push('the parity report lists a problem (D-37)');
+    if (!emptyList(p['mismatches'])) problems.push('the parity report lists a mismatch (D-37)');
+    if (p['spentUsd'] !== 0) problems.push(`the parity report records spend (spentUsd ${String(p['spentUsd'])}); the check is offline (D-37)`);
+    if (!isObject(p['checkout']) || p['checkout']['unchanged'] !== true) problems.push("the parity report's checkout is not unchanged (D-37)");
+    const reportPin = p['pin'];
+    if (typeof reportPin !== 'string' || input.pin === '' || !reportPin.startsWith(input.pin)) problems.push(`the parity report is at pin ${String(reportPin)}, not ${input.pin} (D-37)`);
+    const checkedMs = typeof p['checkedAt'] === 'string' ? Date.parse(p['checkedAt']) : Number.NaN;
+    const rulingMs = failed.map((e) => confirmedOf(e)?.['at']).map((at) => (typeof at === 'string' ? Date.parse(at) : Number.NEGATIVE_INFINITY));
+    if (!Number.isFinite(checkedMs)) problems.push('the parity report has no checkedAt time (D-37)');
+    else if (checkedMs <= Math.max(...rulingMs)) problems.push(`the parity report was checked before the owner's ruling (${String(p['checkedAt'])}): re-run it after the ruling (D-37)`);
+    const digests = asObjects(p['briefs']).map((b) => b['digest']);
+    if (input.briefDigest === undefined) problems.push(`the authorization names no brief digest for ${role} (D-37)`);
+    else if (!digests.includes(input.briefDigest)) problems.push(`the parity report does not cover the brief of ${role} (${input.briefDigest}) (D-37)`);
+  }
+  return problems;
+}
+
 // `reset --propose --by claude --evidence F --authorization-file A --run R --parity P [--pin SHA] --defect RUN_ID --test PATH --red FILE --green FILE [...] --summary TEXT`
 // records Claude's proposal to begin a new stop-loss epoch for one run (D-36, D-37): into the evidence file's top-level `resets` list, as `{ run, covers, proposed }`, with the
 // proof files each named and hashed. `reset --confirm --by owner --evidence F --run R --ref TEXT` adds the owner's `confirmed` record to the run's pending proposal (its latest
@@ -900,7 +1004,17 @@ function resetCommand(argv: readonly string[]): number {
   if (confirming) {
     const latest = [...resets].reverse().find((r) => r['run'] === role);
     if (latest === undefined || isObject(latest['confirmed'])) return refuse(`${role} has no pending reset proposal to confirm: Claude proposes first (D-37)`);
-    const next = resets.map((r) => (r === latest ? { ...r, confirmed: { by: 'owner', ref, at: now } } : r));
+    const confirmation = { by: 'owner', ref, at: now };
+    if (!isValidReset({ ...latest, confirmed: confirmation })) return refuse(`the pending proposal for ${role} lacks a field the proposal writes, so it cannot be confirmed (D-37)`);
+    // D-37: the owner confirms the proofs Claude proposed, so each proof file must still be the one hashed at the proposal.
+    const proposed = latest['proposed'] as Json;
+    const proofs = [...asObjects(proposed['scenarios']).flatMap((s) => [s['red'], s['green']]), proposed['parity']].filter(isObject);
+    for (const proof of proofs) {
+      const proofPath = String(proof['path']);
+      if (!existsSync(resolve(proofPath))) return refuse(`${proofPath} is missing, so it changed since the proposal (D-37)`);
+      if (sha256OfFile(resolve(proofPath)) !== proof['sha256']) return refuse(`${proofPath} changed since the proposal (D-37)`);
+    }
+    const next = resets.map((r) => (r === latest ? { ...r, confirmed: confirmation } : r));
     writeFileSync(path, `${JSON.stringify({ ...file, resets: next }, null, 2)}\n`);
     out(`reset: confirmed for ${role}\n`);
     return 0;
@@ -921,11 +1035,37 @@ function resetCommand(argv: readonly string[]): number {
   const parity = tryReadJson(resolve(parityPath));
   if (parity === undefined) return refuse(`${parityPath} is not a parity report`);
 
+  const pin = named['pin'] ?? DEFAULT_PIN;
+  const proofOf = (p: string): { path: string; sha256: string } => ({ path: p, sha256: sha256OfFile(resolve(p)) });
+  const scenarios = groups.defect.map((runId, i) => ({ runId, test: groups.test[i] as string, red: proofOf(groups.red[i] as string), green: proofOf(groups.green[i] as string) }));
+  // D-37: the three proofs are checked here, before anything is written. The tracked test is read from this checkout, read-only.
+  const problems = judgeResetProposal({
+    evidence: file,
+    order: auth.order,
+    role,
+    briefDigest: auth.briefs.find((b) => b['run'] === role)?.['digest'] as string | undefined,
+    pin,
+    parity,
+    scenarios: groups.defect.map((runId, i) => {
+      const test = groups.test[i] as string;
+      const tracked = isTestPath(test) && spawnSync('git', ['--no-optional-locks', '-C', REPO_ROOT, 'ls-files', '--error-unmatch', '--', test], { encoding: 'utf8' }).status === 0;
+      return {
+        runId,
+        test,
+        testTracked: tracked,
+        red: tryReadJson(resolve(groups.red[i] as string)),
+        green: tryReadJson(resolve(groups.green[i] as string)),
+        redSha256: (scenarios[i] as { red: { sha256: string } }).red.sha256,
+        greenSha256: (scenarios[i] as { green: { sha256: string } }).green.sha256,
+      };
+    }),
+  });
+  for (const problem of problems) errOut(`exit-run: reset: ${problem}`);
+  if (problems.length > 0) return 2;
+
   const since = stopLossEpochOf(file, role);
   const sinceMs = since === null ? Number.NEGATIVE_INFINITY : Date.parse(since);
   const covers = asObjects(file['runs']).filter((r) => r['run'] === role && isFailedAttempt(r) && startedMs(r) >= sinceMs).map((r) => String(r['runId'] ?? ''));
-  const proofOf = (p: string): { path: string; sha256: string } => ({ path: p, sha256: sha256OfFile(resolve(p)) });
-  const scenarios = groups.defect.map((runId, i) => ({ runId, test: groups.test[i] as string, red: proofOf(groups.red[i] as string), green: proofOf(groups.green[i] as string) }));
   const record = {
     run: role,
     covers,
@@ -933,7 +1073,7 @@ function resetCommand(argv: readonly string[]): number {
       by: 'claude',
       at: now,
       summary,
-      pin: named['pin'] ?? DEFAULT_PIN,
+      pin,
       scenarios,
       parity: { ...proofOf(parityPath), checkedAt: parity['checkedAt'], pin: parity['pin'], parity: parity['parity'], problems: parity['problems'] },
     },
