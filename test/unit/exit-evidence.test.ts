@@ -2338,6 +2338,75 @@ describe("exit evidence: a reset is proposed only with D-37's three proofs, afte
   }
 });
 
+// What a reset does not change (plan 03-66, Task 3): D-26's epoch and the verdict are computed without reading `resets`, and every writer of the evidence file keeps the list.
+describe("exit evidence: a reset changes neither D-26's epoch nor the verdict, and every writer keeps the resets list (plan 03-66; D-26, D-38)", () => {
+  const AUTH66 = {
+    ...AUTH53,
+    briefs: [
+      { path: 'b2.md', digest: 'sha256:run2', run: 'run2', expects: 'amend-stale' },
+      { path: 'b3.md', digest: 'sha256:run3', run: 'run3', expects: 'silence' },
+      { path: 'b1.md', digest: 'sha256:run1', run: 'run1', expects: 'block-resume' },
+    ] as Json[],
+  };
+  const dirs: string[] = [];
+  after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+  const epochOf = (e: Json): string | null => (exitTools as unknown as { epochOf: (e: Json) => string | null }).epochOf(e);
+  const verdictOf = (e: Json): unknown => (exitTools as unknown as { exitVerdict: (e: Json, a: typeof AUTH66) => unknown }).exitVerdict(e, AUTH66);
+  // One finished entry that meets every condition of its role (the shape plan 03-54's verdict counts).
+  const cleanOf = (role: string, n: number, startMinute: number): Json => {
+    const runId = `run_${role}_${n}`;
+    const decisions =
+      role === 'run2'
+        ? { contract: { version: 2, authorizedBy: 'owner:tester', reason: 'r', diff: [{ path: 'files.write' }] }, decisions: [{ decisionId: 'dec_old', state: 'stale', origin: { origin: 'pause' } }, { decisionId: 'dec_new', state: 'answered', origin: { origin: 'pause' } }] }
+        : role === 'run3'
+          ? { contract: { version: 1 }, silence: { problems: [] }, decisions: [{ decisionId: 'dec_3', state: 'answered', origin: { origin: 'pause' } }] }
+          : { contract: { version: 1 }, decisions: [{ decisionId: 'dec_1', state: 'answered', origin: { origin: 'pause' } }] };
+    return passed53(role, n, startMinute, { runId, problems: [], finalState: 'ready_for_review', resumed: true, checkout: { equal: true, newRefs: [`refs/heads/avarice/${runId}`], removedOrChangedRefs: [] }, ...decisions });
+  };
+  const RESET = reset66('run2', 30, ['run_run2_1', 'run_run2_2']);
+  const stops = (): Json[] => [failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('product-defect', 18) })];
+  const files: Array<[string, Json[]]> = [
+    ['run2 failed twice as product defects, with a confirmed reset', stops()],
+    ['the same plus a passed run2 attempt 3 and a passed run3', [...stops(), cleanOf('run2', 3, 40), cleanOf('run3', 1, 50)]],
+    ['the same plus a failed run3', [...stops(), cleanOf('run2', 3, 40), cleanOf('run3', 1, 50), failed53('run3', 2, 60, { classification: ruled53('product-defect', 68) })]],
+  ];
+  for (const [name, runs] of files) {
+    it(`leaves epochOf and exitVerdict as they are without the list: ${name}`, () => {
+      const withReset: Json = { ...evidence53(...runs), resets: [RESET] };
+      const without = evidence53(...runs);
+      assert.deepEqual(epochOf(withReset), epochOf(without));
+      assert.deepEqual(verdictOf(withReset), verdictOf(without));
+      assert.notEqual(stopLossEpochOf(withReset, 'run2'), null, 'the reset is a valid one, so the two epochs are different notions');
+    });
+  }
+
+  it('keeps the list in evidenceFileBody and in withClassification', () => {
+    const file: Json = { ...evidence53(failed53('run2', 1, 1)), resets: [RESET] };
+    assert.deepEqual(evidenceFileBody(file, '03-66', [failed53('run2', 1, 1)], minute53(5))['resets'], [RESET]);
+    const classified = (exitTools as unknown as { withClassification: (f: Json, id: string, p: Json) => Json | undefined }).withClassification(file, 'run_run2_1', { proposed: { by: 'claude' } });
+    assert.deepEqual(classified?.['resets'], [RESET]);
+  });
+
+  it('keeps the list when the verdict and the supplement subcommands rewrite the file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exit-reset-writers-'));
+    dirs.push(dir);
+    const auth = writeFreshAuthorization(dir, { briefs: AUTH66.briefs, order: ['run2', 'run3', 'run1'] });
+    const evidence = join(dir, 'evidence.json');
+    const other = join(dir, 'other-evidence.json');
+    writeFileSync(evidence, `${JSON.stringify({ ...evidence53(...stops()), resets: [RESET] }, null, 2)}\n`);
+    writeFileSync(other, `${JSON.stringify({ schema: 1, plan: '03-48', runs: [{ runId: 'run_OLD', items: [], decisions: [], problems: [], checkout: { equal: true, newRefs: [] }, passed: false, state: 'blocked_on_decision' }] })}\n`);
+    const read = (): Json => JSON.parse(readFileSync(evidence, 'utf8')) as Json;
+    const verdict = runTools(['verdict', '--evidence', evidence, '--authorization-file', auth]);
+    assert.ok(verdict.status === 0 || verdict.status === 1, verdict.stderr + verdict.stdout);
+    assert.deepEqual(read()['resets'], [RESET]);
+    assert.equal(typeof read()['verdict'], 'string');
+    const supplement = runTools(['supplement', '--evidence', evidence, '--from', other, '--run-id', 'run_OLD', '--note', 'an older run']);
+    assert.equal(supplement.status, 0, supplement.stderr + supplement.stdout);
+    assert.deepEqual(read()['resets'], [RESET]);
+    assert.equal((read()['supplementary'] as Json[]).length, 1);
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // Plan 03-54: each run's expectations are judged by code. Run 2 (`expects: amend-stale`) is the one run whose amendment and stale original are its expected path
 // (SC3, SC4); any other amendment is refused (D-28); D-35's `not run: not required` report is judged live at both stages.
