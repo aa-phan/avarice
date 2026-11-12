@@ -1581,19 +1581,19 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
           classification: ruled53('product-defect', ruledAt),
         });
         // The proof files of one scenario each, and the parity report, in the shapes the tools read (D-37).
-        const writeProofs = (): { red: string[]; green: string[]; parity: string } => {
+        const writeProofs = (tag = 'a'): { red: string[]; green: string[]; parity: string } => {
           const command = `node --test --test-reporter=tap ${TEST_FILE}`;
           const red = [1, 2].map((n) => {
-            const path = join(fx().dir, `reset-red-${n}.json`);
+            const path = join(fx().dir, `reset-${tag}-red-${n}.json`);
             writeFileSync(path, JSON.stringify({ command, exitCode: 1, output: `TAP version 13\nnot ok 1 - scenario ${n} before its fix\n1..1\n# tests 1\n# pass 0\n# fail 1\n` }));
             return path;
           });
           const green = [1, 2].map((n) => {
-            const path = join(fx().dir, `reset-green-${n}.json`);
+            const path = join(fx().dir, `reset-${tag}-green-${n}.json`);
             writeFileSync(path, JSON.stringify({ command, exitCode: 0, output: `TAP version 13\nok 1 - scenario ${n} after its fix\n1..1\n# tests 1\n# pass 1\n# fail 0\n` }));
             return path;
           });
-          const parity = join(fx().dir, 'reset-parity.json');
+          const parity = join(fx().dir, `reset-${tag}-parity.json`);
           writeFileSync(
             parity,
             JSON.stringify({ schema: 1, plan: '03-65', checkedAt: minute53(20), pin: fx().repo.head, briefs: [{ path: 'run2.md', digest: digestOf('run2') }], spentUsd: 0, modelHostLaunched: false, checkout: { unchanged: true }, mismatches: [], parity: true, problems: [] }),
@@ -1635,6 +1635,73 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
           assert.equal(resets.length, 1);
           assert.equal((resets[0]?.['proposed'] as Json)['by'], 'claude');
           assert.equal((resets[0]?.['confirmed'] as Json)['by'], 'owner');
+        });
+
+        // Task 2: every refusal is exit 2 with the evidence file byte-identical.
+        describe('refuses, exit 2 and the evidence file byte-identical (D-27, D-36, D-37)', () => {
+          const fresh = (name: string): { path: string; before: () => string } => {
+            const { path } = evidenceWith(name, [stoppedB(1, 1, 8), stoppedB(2, 10, 18)]);
+            return { path, before: () => readFileSync(path, 'utf8') };
+          };
+          const refused = (args: string[], path: string, pattern: RegExp): void => {
+            const before = readFileSync(path, 'utf8');
+            const ran = runTools(args);
+            assert.equal(ran.status, 2, ran.stderr + ran.stdout);
+            assert.match(ran.stderr, pattern);
+            assert.equal(readFileSync(path, 'utf8'), before);
+          };
+
+          it('a proposal by the owner', () => {
+            const { path } = fresh('evidence-reset-by-owner.json');
+            const args = proposeArgs(path, writeProofs('by-owner'));
+            args[args.indexOf('claude')] = 'owner';
+            refused(args, path, /--by must be claude/);
+          });
+
+          it('a proposal whose green proof holds a failing test', () => {
+            const { path } = fresh('evidence-reset-green-fails.json');
+            const proofs = writeProofs('green-fails');
+            writeFileSync(proofs.green[1] as string, JSON.stringify({ command: `node --test --test-reporter=tap ${TEST_FILE}`, exitCode: 0, output: 'TAP version 13\nnot ok 1 - still failing\n# tests 1\n# pass 0\n# fail 0\n' }));
+            refused(proposeArgs(path, proofs), path, /scenario run_B2: the green proof/);
+          });
+
+          it('a proposal with three --defect and two --red', () => {
+            const { path } = fresh('evidence-reset-unequal.json');
+            const args = [...proposeArgs(path, writeProofs('unequal')), '--defect', 'run_B3'];
+            refused(args, path, /the same number of times/);
+          });
+
+          it('a proposal for a run that has no failed attempt left to reset', () => {
+            const { path } = evidenceWith('evidence-reset-none.json', [stoppedB(1, 1, 8)]);
+            const args = proposeArgs(path, writeProofs('none'));
+            args[args.indexOf('run-b')] = 'run-a';
+            refused(args, path, /nothing to reset/);
+          });
+
+          it('a confirmation by claude, with an empty --ref, and for a run with no pending proposal', () => {
+            const { path } = fresh('evidence-reset-confirm-refused.json');
+            const proposed = runTools(proposeArgs(path, writeProofs('confirm-refused')));
+            assert.equal(proposed.status, 0, proposed.stderr + proposed.stdout);
+            refused(['reset', '--confirm', '--by', 'claude', '--evidence', path, '--run', 'run-b', '--ref', 'owner reply'], path, /--by must be owner/);
+            refused(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-b', '--ref', ''], path, /--ref is required/);
+            refused(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-a', '--ref', 'owner reply'], path, /no pending reset proposal/);
+          });
+
+          it('a confirmation after a proof file was rewritten since the proposal', () => {
+            const { path } = fresh('evidence-reset-rewritten.json');
+            const proofs = writeProofs('rewritten');
+            const proposed = runTools(proposeArgs(path, proofs));
+            assert.equal(proposed.status, 0, proposed.stderr + proposed.stdout);
+            writeFileSync(proofs.green[0] as string, JSON.stringify({ command: `node --test --test-reporter=tap ${TEST_FILE}`, exitCode: 0, output: 'TAP version 13\nok 1 - rewritten\n# tests 1\n# pass 1\n# fail 0\n' }));
+            refused(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-b', '--ref', 'owner reply'], path, /reset-rewritten-green-1\.json changed since the proposal \(D-37\)/);
+          });
+
+          it('a confirmation once the run has no pending proposal because its latest reset is confirmed', () => {
+            const { path } = fresh('evidence-reset-twice.json');
+            assert.equal(runTools(proposeArgs(path, writeProofs('twice'))).status, 0);
+            assert.equal(runTools(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-b', '--ref', 'owner reply']).status, 0);
+            refused(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-b', '--ref', 'owner reply again'], path, /no pending reset proposal/);
+          });
         });
       });
     });
@@ -2165,6 +2232,110 @@ describe("exit evidence: the stop-loss counts within the run's epoch, and an own
       assert.deepEqual(refusalOf(file, 'run2', CANCELLED_ALL), { code: 75, text: NO_RESET }, name);
     }
   });
+});
+
+// D-37's three proofs, judged before a proposal is written (plan 03-66, Task 2). The input is pure: the parsed proof bodies and the facts the command reads from the checkout.
+interface ResetInput66 {
+  evidence: Json | undefined;
+  order: string[];
+  role: string;
+  briefDigest: string | undefined;
+  pin: string;
+  parity: Json | undefined;
+  scenarios: Array<{ runId: string; test: string; testTracked: boolean; red: Json | undefined; green: Json | undefined; redSha256: string; greenSha256: string }>;
+}
+const judgeResetProposal = (input: ResetInput66): string[] => (exitTools as unknown as { judgeResetProposal: (i: ResetInput66) => string[] }).judgeResetProposal(input);
+
+describe("exit evidence: a reset is proposed only with D-37's three proofs, after a product-defect ruling, and never twice on one reproduction (plan 03-66; D-36, D-37)", () => {
+  const SCENARIO_TEST = 'test/integration/scenario.test.ts';
+  const COMMAND = `node --test --test-reporter=tap ${SCENARIO_TEST}`;
+  const redBody = (n: number): Json => ({ command: COMMAND, exitCode: 1, output: `TAP version 13\nnot ok 1 - scenario ${n}\n1..1\n# tests 1\n# pass 0\n# fail 1\n` });
+  const greenBody = (n: number): Json => ({ command: COMMAND, exitCode: 0, output: `TAP version 13\nok 1 - scenario ${n}\n1..1\n# tests 1\n# pass 1\n# fail 0\n` });
+  const validInput = (): ResetInput66 => ({
+    evidence: evidence53(failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('product-defect', 18) })),
+    order: [...AUTH53.order],
+    role: 'run2',
+    briefDigest: 'sha256:run2',
+    pin: '9f1cd8d',
+    parity: {
+      schema: 1,
+      plan: '03-65',
+      checkedAt: minute53(20),
+      pin: '9f1cd8d0123456789abcdef0123456789abcdef0',
+      briefs: [{ path: 'b2.md', digest: 'sha256:run2' }],
+      spentUsd: 0,
+      modelHostLaunched: false,
+      checkout: { unchanged: true },
+      mismatches: [],
+      parity: true,
+      problems: [],
+    },
+    scenarios: ['run_run2_1', 'run_run2_2'].map((runId, i) => ({ runId, test: SCENARIO_TEST, testTracked: true, red: redBody(i), green: greenBody(i), redSha256: `red-${i}`, greenSha256: `green-${i}` })),
+  });
+  const mutated = (edit: (i: ResetInput66) => void): ResetInput66 => {
+    const input = validInput();
+    edit(input);
+    return input;
+  };
+  const scenarioOf = (i: ResetInput66, n: number): ResetInput66['scenarios'][number] => i.scenarios[n] as ResetInput66['scenarios'][number];
+  const parityOf = (i: ResetInput66): Json => i.parity as Json;
+  const evidenceOf = (i: ResetInput66): Json => i.evidence as Json;
+  const withReset = (i: ResetInput66, reset: Json): void => void (evidenceOf(i)['resets'] = [reset]);
+
+  it('returns no problem for a complete input, and an earlier unconfirmed proposal of the run is not a problem', () => {
+    assert.deepEqual(judgeResetProposal(validInput()), []);
+    assert.deepEqual(judgeResetProposal(mutated((i) => withReset(i, withoutConfirmation(reset66('run2', 30, ['run_run2_1']))))), []);
+  });
+
+  const refusals: Array<[string, (i: ResetInput66) => void, RegExp]> = [
+    ['a product-defect attempt with no scenario', (i) => void i.scenarios.pop(), /no red-to-green scenario for run_run2_2 \(D-37\)/],
+    ['a scenario that names a run ID which is not a failed attempt of the run in its epoch', (i) => void (scenarioOf(i, 1).runId = 'run_run2_9'), /run_run2_9, which is not a failed product-defect attempt of run2/],
+    ['two scenarios for one attempt', (i) => void (scenarioOf(i, 1).runId = 'run_run2_1'), /run_run2_1 is named by more than one scenario/],
+    ['a test outside test/', (i) => void (scenarioOf(i, 0).test = 'src/lib/x.test.ts'), /not a relative path under test\//],
+    ['a test path holding ..', (i) => void (scenarioOf(i, 0).test = 'test/../src/x.test.ts'), /not a relative path under test\//],
+    ['an absolute test path', (i) => void (scenarioOf(i, 0).test = '/tmp/test/x.test.ts'), /not a relative path under test\//],
+    ['a test that is not tracked', (i) => void (scenarioOf(i, 0).testTracked = false), /not tracked/],
+    ['a missing red proof', (i) => void (scenarioOf(i, 0).red = undefined), /scenario run_run2_1: the red proof is missing/],
+    ['a red proof with exit code 0', (i) => void (scenarioOf(i, 0).red = { ...redBody(0), exitCode: 0 }), /the red proof's exit code is 0/],
+    ['a red proof with `# fail 0`', (i) => void (scenarioOf(i, 0).red = { ...redBody(0), output: 'TAP version 13\n# tests 1\n# pass 1\n# fail 0\n' }), /the red proof does not show a failing test/],
+    ['a red proof whose command does not name the test', (i) => void (scenarioOf(i, 0).red = { ...redBody(0), command: 'node --test --test-reporter=tap test/other.test.ts' }), /the red proof's command does not name test\/integration\/scenario\.test\.ts/],
+    ['a missing green proof', (i) => void (scenarioOf(i, 1).green = undefined), /scenario run_run2_2: the green proof is missing/],
+    ['a green proof with exit code 1', (i) => void (scenarioOf(i, 1).green = { ...greenBody(1), exitCode: 1 }), /the green proof's exit code is 1/],
+    ['a green proof with `# fail 2`', (i) => void (scenarioOf(i, 1).green = { ...greenBody(1), output: 'TAP version 13\n# tests 2\n# pass 0\n# fail 2\n' }), /the green proof does not show `# fail 0`/],
+    ['a green proof with a `not ok` line', (i) => void (scenarioOf(i, 1).green = { ...greenBody(1), output: 'TAP version 13\n    not ok 1 - x\n# tests 1\n# pass 1\n# fail 0\n' }), /the green proof has a not ok line/],
+    ['a green proof with `# pass 0`', (i) => void (scenarioOf(i, 1).green = { ...greenBody(1), output: 'TAP version 13\n# tests 0\n# pass 0\n# fail 0\n' }), /the green proof does not show a passing test/],
+    ['a green proof whose command does not name the test', (i) => void (scenarioOf(i, 1).green = { ...greenBody(1), command: 'node --test --test-reporter=tap test/other.test.ts' }), /the green proof's command does not name test\/integration\/scenario\.test\.ts/],
+    ['two scenarios that share one red proof', (i) => void (scenarioOf(i, 1).redSha256 = 'red-0'), /share one red proof/],
+    ['a missing parity report', (i) => void (i.parity = undefined), /the parity report is missing/],
+    ['a parity report of schema 2', (i) => void (parityOf(i)['schema'] = 2), /parity report.*schema 1/],
+    ['a parity report with parity false', (i) => void (parityOf(i)['parity'] = false), /parity report.*parity is not true/],
+    ['a parity report with a problem', (i) => void (parityOf(i)['problems'] = ['x']), /parity report lists a problem/],
+    ['a parity report with a mismatch', (i) => void (parityOf(i)['mismatches'] = ['build']), /parity report lists a mismatch/],
+    ['a parity report that records spend', (i) => void (parityOf(i)['spentUsd'] = 0.1), /parity report records spend/],
+    ['a parity report whose checkout changed', (i) => void (parityOf(i)['checkout'] = { unchanged: false }), /parity report.*checkout/],
+    ['a parity report at another pin', (i) => void (parityOf(i)['pin'] = 'abc1234'), /parity report is at pin abc1234, not 9f1cd8d/],
+    ['a parity report checked before a covered ruling', (i) => void (parityOf(i)['checkedAt'] = minute53(10)), /parity report was checked before the owner's ruling/],
+    ['a parity report whose briefs lack the run', (i) => void (parityOf(i)['briefs'] = [{ path: 'b3.md', digest: 'sha256:run3' }]), /parity report does not cover the brief of run2 \(sha256:run2\)/],
+    ['a latest failed attempt confirmed as a brief/harness defect', (i) => void (evidenceOf(i)['runs'] = [failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('brief-harness-defect', 18) })]), /only an owner-confirmed product defect resets the count \(D-36\)/],
+    ['a latest failed attempt with no owner ruling', (i) => void (evidenceOf(i)['runs'] = [failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10)]), /run_run2_2 has no owner ruling.*\(D-27, D-36\)/],
+    ['no failed attempt after the last confirmed reset', (i) => withReset(i, reset66('run2', 30, ['run_run2_1', 'run_run2_2'])), /nothing to reset/],
+    [
+      'a red proof an earlier confirmed reset already cites',
+      (i) => withReset(i, reset66('run2', 5, ['x'], { proposed: { ...(reset66('run2', 5, ['x'])['proposed'] as Json), scenarios: [{ runId: 'x', test: 'test/a.test.ts', red: { path: 'old.json', sha256: 'red-0' }, green: { path: 'g.json', sha256: 'g' } }] } })),
+      /already proved by an earlier reset: a repeat of the same failure still counts \(D-36\)/,
+    ],
+    ['an attempt of the run that is neither passed nor failed', (i) => void (evidenceOf(i)['runs'] = [...(evidenceOf(i)['runs'] as Json[]), attempt53('run2', 3, 40)]), /run_run2_3 is neither passed nor failed/],
+    ['a role that is not in the order', (i) => void (i.role = 'run9'), /run9 is not a run of the authorization/],
+  ];
+  for (const [name, edit, pattern] of refusals) {
+    it(`refuses ${name}`, () => {
+      const problems = judgeResetProposal(mutated(edit));
+      assert.ok(
+        problems.some((p) => pattern.test(p)),
+        `${pattern}: ${JSON.stringify(problems)}`,
+      );
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------------------------------------------
