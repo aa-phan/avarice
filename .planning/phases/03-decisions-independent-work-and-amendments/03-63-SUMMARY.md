@@ -31,7 +31,9 @@ key-decisions:
 requirements-completed: []
 
 completed: 2026-11-11
-status: halted
+status: superseded
+superseded_by: ["03-64", "03-65", "03-66", "03-67", "03-68"]
+superseded_note: "Marked superseded on 2026-11-12 after the owner ruled run 2 attempt 2 a product defect (D-26, D-27), confirmed run 2's reset in plan 03-67 (D-36, D-37), and plan 03-68 recorded attempt 3 as a pass: the halted attempt is kept as evidence."
 ---
 
 # Phase 3 Plan 63: Run 2's attempt 2 started once, stopped on item A's human_needed verification, ruled a product defect Summary
@@ -102,3 +104,7 @@ None.
 - Commits a6e0853 and b0867e9 are ancestors of HEAD.
 - `classification.confirmed.by` is `owner` with class `product-defect` in the newest run 2 entry.
 - 03-57-SUMMARY.md supersede check passed.
+
+## Superseded by the gap plans
+
+Attempt 2 stopped on two open pause decisions at item A, and the owner ruled the stop a product defect (D-26, D-27). Plan 03-64 made each required check's declared environment reach the unit's allowed commands, and plan 03-65 added the parity check that proves the unit runs every required check as the supervisor does. Plan 03-66 made the stop-loss count per epoch, and plan 03-67 recorded the owner's confirmed reset of run 2. Plan 03-68 ran attempt 3, the first of the new epoch: it paused as planned on item B, the owner amended and answered in their own terminal, and it finished passed, which the owner confirmed with `continue`. Attempt 2's facts stay as evidence that does not count toward 3 of 3 (D-28).
