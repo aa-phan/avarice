@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 58/64 plans executed (32 waves, with 22 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; run 2's next attempt waits for the owner's D-29 re-decision)
+**Plans:** 58/67 plans executed (35 waves, with 25 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3)
 
 Plans:
 **Wave 1**
@@ -335,22 +335,31 @@ Plans:
 - [x] 03-63-PLAN.md — Gap closure: exit run 2, attempt 2 of 2 (D-29): start, the owner's amendment and answers, finish, the owner's ruling; 03-57 marked superseded
 - [x] 03-65-PLAN.md — Gap closure: the exit tools' offline `parity` subcommand (each check run exactly as the unit would and as the supervisor does, no spend, no host) and the recorded parity of the portfolio's twelve required checks at 9f1cd8d
 
-**Wave 27** *(blocked on 03-57 and 03-63)*
+**Wave 27** *(gap closure, blocked on 03-65; stop-loss re-decided as D-36 to D-39)*
+- [ ] 03-66-PLAN.md — Gap closure: the exit tools' D-29 stop-loss counts failed attempts only within the run's current epoch; a new epoch begins only from a recorded, owner-confirmed reset carrying the three D-37 proofs (`reset --propose` by Claude, `reset --confirm` by the owner); src/ and docs/system unchanged
+
+**Wave 28** *(gap closure, blocked on 03-66)*
+- [ ] 03-67-PLAN.md — Gap closure: run 2's reset at a no-spend checkpoint (D-39): both attempts closed (checked, never cancelled by Claude), parity re-run at the pin, scenarios R and E re-run green, Claude's proposal, the owner's confirmation, authorize admits run 2's attempt 3
+
+**Wave 29** *(gap closure, blocked on 03-67)*
+- [ ] 03-68-PLAN.md — Gap closure: exit run 2, attempt 3 (the first of its new epoch): start, the owner's amendment and answers, finish, the owner's ruling, the run 1 headroom; 03-63 marked superseded
+
+**Wave 30** *(blocked on 03-57, 03-63 and 03-68)*
 - [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
 
-**Wave 28** *(blocked on 03-58)*
+**Wave 31** *(blocked on 03-58)*
 - [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling (refused with exit 75 for the owner if runs 2 and 3 together spent more than the D-05 headroom)
 
-**Wave 29** *(blocked on 03-59)*
+**Wave 32** *(blocked on 03-59)*
 - [ ] 03-60-PLAN.md — Exit record: the tools' verdict (3 of 3 or n/3 with the pending re-runs), correct stops as evidence (D-28), old run 1 as supplementary evidence (D-34), LIVE-CASES.md and spend
 
-**Wave 30** *(blocked on Wave 29 completion)*
+**Wave 33** *(blocked on Wave 32 completion)*
 - [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61 and the check environment of 03-64), data model and processes with three diagrams, from the code
 
-**Wave 31** *(blocked on Wave 30 completion)*
+**Wave 34** *(blocked on Wave 33 completion)*
 - [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35, the baseline rule of 03-61 and the check environment of 03-64), containment (with the command-identity rule of 03-64), integrations, overview, from the code
 
-**Wave 32** *(blocked on Wave 31 completion)*
+**Wave 35** *(blocked on Wave 34 completion)*
 - [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35, the residual of 03-61 and the lines of 03-64 and 03-65), fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.
@@ -446,7 +455,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 58/64 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 58/67 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
