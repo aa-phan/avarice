@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 3
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "Phase 3 stop-loss re-decided (D-36 to D-39); next: owner cancels run_01M75NPTEF7FKDNW8ABQ9Q16WS, then /gsd-plan-phase 3 to plan run 2's reset checkpoint and the per-epoch stop-loss"
-last_updated: "2026-11-12T04:01:41.478Z"
+stopped_at: Completed 03-66-PLAN.md
+last_updated: "2026-11-12T04:21:16.560Z"
 last_activity: 2026-11-11
 last_activity_desc: Phase 3 execution started
-state_head: ca9de7535e501b32ae8a058511f3f5c32247c0f9
+state_head: 65f1b01c27ccf6ced806c3e38ccb3dca0164b43f
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 128
-  completed_plans: 119
+  completed_plans: 120
 ---
 
 # Project State
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 3 (Decisions, independent work and amendments) — EXECUTING
-Plan: 1 of 67
-Status: Executing Phase 3
+Plan: 2 of 67
+Status: Ready to execute
 Last activity: 2026-11-11 — Phase 3 execution started
 
 Progress: [███░░░░░░░] 25%
@@ -156,6 +156,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P47 | 3h | 2 tasks | 5 files |
 | Phase 03 P48 | 40 min | 2 tasks | 3 files |
 | Phase 03 P49 | continuation | 3 tasks | 10 files |
+| Phase 03 P66 | 16 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -370,6 +371,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: Finding for the documentation plans 03-31 to 03-33 and findings.md (owner decision 4, 2026-11-10): a declared, non-required check (test:e2e) is never run by the supervisor (src/app/checks.ts checksToRun runs only the required and the target checks), so a delivered tree can fail it with nothing recorded; exit run 1 under answer-2-in-place will leave tests/e2e/copy-email.spec.ts failing with no record of it — Measured in plan 03-49 scenario N: the run reached ready_for_review while test:e2e would have failed. The owner asked for the finding to be recorded; the product is unchanged (src/ untouched) and the owner decides whether the supervisor should run or record declared non-required checks
 - [Phase 03]: Owner decision 2026-11-10/11 after run 1's third stop (plan 03-50): STOP AND RE-DISCUSS. Live exit work stops now; run 2 and run 3 are not started; no relax record is written (the owner stopped instead of accepting run 1); the owner cancels run 1 in their own terminal; the exit criteria (D-03; briefs vs. protected conventions) are re-discussed with /gsd-discuss-phase 3 before any more spend; the remaining Phase 3 budget (13.7014 of 25 USD) stays unspent — Run 1's resumed C unit finished inside the write set, but tests/e2e/copy-email.spec.ts (protected, line 5, old toast literal) still fails, so its verifier reported gaps_found and G2 parked C on dec_01M74276ZA17K36XWT9GJHRWDW. AVARICE behaved correctly: containment refused the protected write, the verifier reported the real gap, G2 refused to pass it
 - [Phase 03]: 03-50 findings: three product defects fixed and proven live (03-40 item prompt scope and pause attribution; 03-43 recorded host config directory; 03-46 fenced VERIFICATION record); two brief defects (run 1's change breaks the protected e2e literal outside the write set; run 3's original option 2 collided with seven protected e2e specs, fixed in 03-49 with R3-3 and R3-1); a declared non-required check (test:e2e) is never run by the supervisor, so a delivered tree can fail it with nothing recorded (for the documentation plans and findings.md) — Recorded in 03-50-SUMMARY.md and 03-48-evidence-exit.json; no src change in this plan
+- [Phase 03]: 03-66: the exit tools' stop-loss counts failed attempts within the run's own epoch (stopLossEpochOf), begun only by an owner-confirmed reset with D-37's proofs; D-26's epoch and the verdict are unchanged (D-36, D-39)
+- [Phase 03]: 03-66: reset --confirm acts only on the run's latest reset when it has no confirmation, so a stale unconfirmed proposal cannot be confirmed behind a later one
 
 ### Pending Todos
 
@@ -430,6 +433,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-11T20:02:20.945Z
-Stopped at: Phase 3 stop-loss re-decided (D-36 to D-39); next: owner cancels run_01M75NPTEF7FKDNW8ABQ9Q16WS, then /gsd-plan-phase 3 to plan run 2's reset checkpoint and the per-epoch stop-loss
-Resume file: .planning/phases/03-decisions-independent-work-and-amendments/03-CONTEXT.md
+Last session: 2026-11-12T04:21:16.314Z
+Stopped at: Completed 03-66-PLAN.md
+Resume file: None
