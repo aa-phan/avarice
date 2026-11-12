@@ -45,7 +45,18 @@
 //       (D-33: 2, 3, 1) has no recorded outcome, a pass or the owner's confirmed classification; an earlier attempt of the run has no owner-confirmed classification;
 //       or an earlier attempt's live run is not failed, cancelled or closed in the owner's ledger (D-34, read-only). A confirmed product defect starts a new EPOCH at its
 //       confirmation: an attempt started before it no longer counts as a pass or toward the order, so all three runs must pass again (D-26). The stop-loss (D-29) is
-//       exit 75: a run with two failed attempts, in any epoch and whatever their classification, is refused. Nothing lifts it but a new owner decision and a re-plan.
+//       exit 75 for a run with two failed attempts within its current stop-loss epoch, whatever their classification. That epoch begins at the run's latest owner-confirmed
+//       reset (below), or at the run's first attempt when there is none (D-36 to D-39).
+//
+// Plan 03-66 adds the reset that begins a new stop-loss epoch for one run (D-36 to D-39), into the evidence file's top-level `resets` list:
+//   reset --propose --by claude --evidence F --authorization-file A --run R --parity P [--pin SHA] --defect RUN_ID --test PATH --red FILE --green FILE [...] --summary TEXT
+//   reset --confirm --by owner --evidence F --run R --ref TEXT
+//       Three proofs (D-37): (1) one red-to-green scenario per owner-confirmed product-defect attempt the reset covers, a tracked test under test/ with a red and a green evidence
+//       file (command, exitCode, output); (2) a parity report written by `parity` (03-65) at the pin, with parity true, no problem and no mismatch, checked after every covered ruling and
+//       covering the run's brief; (3) the owner's confirmation. `--propose` checks the first two and records every proof file with its sha256 (exit 2, the file untouched, on any
+//       failure, on a latest failed attempt that is not an owner-confirmed product defect, and on a red proof an earlier confirmed reset already cites). `--confirm` re-hashes the
+//       proof files and writes the `confirmed` record: only the owner's own checkpoint reply writes it, and a proposal alone lifts nothing. A reset changes neither `epochOf` nor the
+//       verdict (D-26), and the D-05 guard and the 25 USD ceiling still apply after it (D-38).
 //
 // Plan 03-54 teaches the evidence stage what each run expects, and adds run 3's silence step. The authorization's `expects` (copied into each entry by the start stage)
 // decides how the finish judges an amendment: only `amend-stale` (run 2) is amended, once, to contract version 2 by the owner with a reason and a files.write diff, with the
@@ -2966,7 +2977,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const line of report.lines) out(`${line}\n`);
     return report.ok ? 0 : 1;
   }
-  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | parity | preflight | field | authorize | snapshot | evidence | relax | classify | silence | verdict | supplement) ...');
+  errOut('usage: exit-run-phase3-tools.ts (dry-run | brief-check [--all] | brief-gate | write-authorization | parity | preflight | field | authorize | snapshot | evidence | relax | classify | reset | silence | verdict | supplement) ...');
   return 2;
 }
 
