@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 61/67 plans executed (35 waves, with 25 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3)
+**Plans:** 62/67 plans executed (35 waves, with 25 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), to be closed by a gap plan and run 3's attempt 2 before run 1)
 
 Plans:
 **Wave 1**
@@ -345,7 +345,7 @@ Plans:
 - [x] 03-68-PLAN.md — Gap closure: exit run 2, attempt 3 (the first of its new epoch): start, the owner's amendment and answers, finish, the owner's ruling, the run 1 headroom; 03-63 marked superseded
 
 **Wave 30** *(blocked on 03-57, 03-63 and 03-68)*
-- [ ] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling
+- [x] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling *(halted: attempt 1 stopped on a verification-human-needed pause because the unit's sessions had no content-search route; the owner ruled a brief-harness-defect, fix first; run 3's attempt 2 of 2 runs before run 1)*
 
 **Wave 31** *(blocked on 03-58)*
 - [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling (refused with exit 75 for the owner if runs 2 and 3 together spent more than the D-05 headroom)
@@ -455,7 +455,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 61/67 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 62/67 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |

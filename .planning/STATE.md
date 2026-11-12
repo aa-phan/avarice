@@ -5,8 +5,8 @@ milestone_name: Contained Kernel
 current_phase: 3
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-68-PLAN.md
-last_updated: "2026-11-12T16:19:33.609Z"
+stopped_at: Halted 03-58-PLAN.md - run 3 attempt 1 ruled a brief-harness-defect (fix first); next a gap plan for the unit's content-search route, then run 3 attempt 2 of 2 before run 1
+last_updated: "2026-11-12T16:45:00.000Z"
 last_activity: 2026-11-11
 last_activity_desc: Phase 3 execution started
 state_head: a7e7e1e8e1b5e884c226b185dd9b3479978ad01f
@@ -14,7 +14,7 @@ progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 128
-  completed_plans: 122
+  completed_plans: 123
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 3 (Decisions, independent work and amendments) — EXECUTING
-Plan: 4 of 67
+Plan: 5 of 67
 Status: Ready to execute
 Last activity: 2026-11-11 — Phase 3 execution started
 
@@ -375,6 +375,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-66: the exit tools' stop-loss counts failed attempts within the run's own epoch (stopLossEpochOf), begun only by an owner-confirmed reset with D-37's proofs; D-26's epoch and the verdict are unchanged (D-36, D-39)
 - [Phase 03]: 03-66: reset --confirm acts only on the run's latest reset when it has no confirmation, so a stale unconfirmed proposal cannot be confirmed behind a later one
 - [Phase 3]: 03-68: run 2's attempt 3 passed and the owner confirmed it with continue; run 2 counts toward 3 of 3. Run 1 headroom after it is 7.8582 USD (25 - 4.50 - 12.6418); 03-63-SUMMARY.md is superseded
+- [Phase 3]: 03-58: run 3's attempt 1 stopped on two open pause decisions because the unit's verifier and executor subagents had no content-search route (Grep tool absent from their sessions, shell grep denied by the hook); the owner ruled brief-harness-defect, fix first, overriding Claude's product-defect proposal. Halted; a gap plan fixes the route, then run 3's attempt 2 of 2 runs before run 1. Spend 0.2520 USD; ledger 12.8938 of 25; run 1 headroom 7.6062 USD. The owner's profile config still forces the banner failure
 
 ### Pending Todos
 
