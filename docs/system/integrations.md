@@ -67,11 +67,12 @@ An invocation has a purpose: map, intel, knowledge or run. Onboarding stages kno
 
 AVARICE spawns the host headlessly, once per contained invocation (map, intel, knowledge or run purpose), in its own process group, with stdin closed. An onboarding invocation starts in the staging copy; a run invocation starts in the real location of the run's clone. The command line is generated, never composed from free text:
 
-`claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file> [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>`
+`claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file> [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config <file> --allowedTools Glob,Grep --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>`
 
-`--setting-sources ""` means none of the user's own settings load. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run. Before spawning, a refusal check judges the finished argument list. It refuses each of these:
+`--setting-sources ""` means none of the user's own settings load. The admitted host removes its Glob and Grep tools from a session that has a shell, and from every agent that session starts, unless the launch line names one of them. The line names both as allowed tools, which grants nothing the generated settings do not already allow and keeps the two search tools in the session and in its agents. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run. Before spawning, a refusal check judges the finished argument list. It refuses each of these:
 
-- `--bare`, anything starting with `--dangerously`, `--allow-dangerously`, `--add-dir`, `--allowedTools`, `--allowed-tools` and `--permission-prompt-tool`;
+- `--bare`, anything starting with `--dangerously`, `--allow-dangerously`, `--add-dir`, `--allowed-tools` and `--permission-prompt-tool`;
+- `--allowedTools` with any value other than `Glob,Grep`, in its `=` form, or a second time;
 - a prompt that is empty or starts with a dash;
 - any permission mode other than `dontAsk`, and a `--permission-prompts` value other than `none`;
 - a non-empty setting-sources value, a missing settings file and a missing `--strict-mcp-config`;

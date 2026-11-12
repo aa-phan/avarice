@@ -80,7 +80,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 ## From containment
 
 - `docs/containment.md:29`: spec places per-run files at `<data root>/runs/<run>/`; code writes `onboard/{onb}/{purpose}-{inv}/` (src/adapters/host-claude/claude-host.ts:152)
-- `docs/containment.md:28`: spec launch line omits `--verbose` and the optional `--agent`; code emits both (src/adapters/host-claude/launch-args.ts:36)
+- `docs/containment.md:28`: spec launch line omits `--verbose` and the optional `--agent`; code emits both (src/adapters/host-claude/launch-args.ts:63)
 - `docs/containment.md:60`: spec allows `npm test`, `git add`, `git commit` and a worktree-scoped Edit; code allows Read, Edit on one write root, Glob, Grep and blanket Bash gated by the hook, and denies `git commit` and `npm` (src/adapters/host-claude/settings.ts:84)
 - `docs/containment.md:81`: spec network allows registry.npmjs.org; code lists no domain and preflight refuses a non-empty list (src/adapters/host-claude/launch-preflight.ts:58)
 - `docs/containment.md:84`: spec hook command is `avarice hook pre-tool-use --run <run>`; code runs node with the hook entry, `--event` and `--policy` (src/adapters/host-claude/settings.ts:157) (now at `src/adapters/host-claude/settings.ts:59`)
@@ -216,6 +216,8 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/adapters/git/run-workspace.ts:412` (now at `src/adapters/git/run-workspace.ts:417`): the hand-off fetch writes the objects of the run branch into the user's repository, while the port header says it creates exactly one ref and nothing else (intent unknown)
 - `src/adapters/git/run-source.ts:39` (now at `src/adapters/git/run-source.ts:55`): the conventions walk is capped at the newest 500 first-parent commits above the pin, so an older conventions-only commit is skipped in favor of the pin's file (intent unknown)
 - `src/adapters/exec/allowlist-proxy.ts:91`: the proxy refuses an allowlisted name that resolves to a non-public address, and the conventions refuse `localhost`, single-label names and IP-spelled hosts (`src/domain/conventions.ts:224`), so a registry on a private network (a local mirror, a split-horizon name) cannot be used by an install. Owner to confirm that private-network registries are out of scope.
+
+- `src/adapters/host-claude/launch-args.ts:55`: `--allowedTools Glob,Grep` is on every launch line because the admitted host (observed on 2.1.316 to 2.1.319) removes its Glob and Grep tools from a session with a shell, and from the agents it resolves, unless `--tools` or `--allowedTools` names one of them; a `permissions.allow` entry does not count. Until the launch line named both, no run unit or shell-bearing onboarding session had a content search: Grep failed with the host's own hint to use `grep` through the shell, which the hook refuses (test/containment/LIVE-CASES.md:226 and :319 recorded it). Resolved with this change; whether a later host keeps the rule is unknown, and the host probe test fails if it drops the tools again.
 
 ## From interactive-shell
 

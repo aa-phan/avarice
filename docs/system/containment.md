@@ -46,6 +46,7 @@ The launch line is generated from these inputs and never composed from free text
 - the named agent, when the purpose runs an agent directly;
 - permission mode `dontAsk` and permission prompts `none`;
 - strict MCP config with the empty MCP file;
+- the allowed tools Glob and Grep, which the host would otherwise remove from a session that has a shell and from the agents it starts;
 - the model, and the cost cap as the host's budget flag;
 - stream-json output with verbose, and the session ID.
 
@@ -81,7 +82,8 @@ Launch argument judgment refuses:
 
 - the `--bare` flag (it would skip hooks and settings);
 - any flag starting `--dangerously` or `--allow-dangerously`;
-- the widening flags `--add-dir`, `--allowedTools`, `--allowed-tools` and `--permission-prompt-tool`;
+- the widening flags `--add-dir`, `--allowed-tools` and `--permission-prompt-tool`;
+- `--allowedTools` with any value other than `Glob,Grep`, in its `=` form, or a second time;
 - an empty prompt or a prompt starting with a dash;
 - a permission mode other than `dontAsk` (including the `=` form and a missing one), and permission prompts other than `none`;
 - setting-sources other than the empty string, a missing settings file, or missing strict MCP config;
@@ -298,7 +300,7 @@ The denied prefixes are sixteen: `git push`, `git commit`, `git -c`, `git config
 
 The denied `find` actions are ten: `-exec`, `-execdir`, `-ok`, `-okdir`, `-delete`, `-rm`, `-fprint`, `-fprint0`, `-fprintf` and `-fls`. The shell may run `find` as an implementation where `-rm` is an alias of `-delete`.
 
-`grep` is not admitted, by name or through any wrapper. The shell tool may run it as an embedded or a system binary chosen per call, so the hook cannot model its options. Searching goes through the Grep tool, whose path the read rules judge.
+`grep` is not admitted, by name or through any wrapper. The shell tool may run it as an embedded or a system binary chosen per call, so the hook cannot model its options. Searching goes through the Grep tool, whose path the read rules judge. The host keeps the Grep tool only because the launch line names it, so the shell refusal leaves search with the Grep tool and not with no route.
 
 GSD arguments. For a `gsd_run` verb, the words after the verb pass an option allow-list: `--raw` for every verb; `--budget` for `graphify query`; `--default` for `query config-get`; `--validate` for `query init.quick`. A value must not start with a dash. Any other option, a missing option value, or a value that is itself an option is `shell-gsd-option`; this keeps GSD's own working-directory and project-directory redirection out. Two verbs take exactly one operand from a fixed list, else `shell-gsd-operand`: `query config-get` takes one of seven configuration keys the quick workflow reads, and `loop render-hooks` takes `plan:pre` or `execute:post`. Every operand and option value is then read-checked. For `intel patch-meta`, whose operand GSD rewrites, each operand is also write-checked against the write roots.
 
