@@ -48,3 +48,4 @@
 {"plan":"03-57","case":"exit-p3-run2-graduation-label-run_01M74RNSAHDTSHE8JDEZ5XW6F9-start","costUsd":0.21726982499999994,"claudeVersion":"2.1.319","at":"2026-11-11T07:44:14.789Z"}
 {"plan":"03-63","case":"exit-p3-run2-graduation-label-run_01M75NPTEF7FKDNW8ABQ9Q16WS-start","costUsd":0.14515885500000003,"claudeVersion":"2.1.319","at":"2026-11-11T16:10:02.816Z"}
 {"plan":"03-68","case":"exit-p3-run2-graduation-label-run_01M770J8CYMCQSXJWVXBFAEGCW-start","costUsd":0.151884745,"claudeVersion":"2.1.319","at":"2026-11-12T04:39:30.327Z"}
+{"plan":"03-68","case":"exit-p3-run2-graduation-label-run_01M770J8CYMCQSXJWVXBFAEGCW-finish","costUsd":0.8289033999999997,"claudeVersion":"2.1.319","at":"2026-11-12T07:33:24.647Z"}
