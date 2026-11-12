@@ -1965,6 +1965,11 @@
           "parity": true,
           "problems": []
         }
+      },
+      "confirmed": {
+        "by": "owner",
+        "ref": "\"confirm-reset\" (the owner's reply) at the plan 03-67 Task 2 checkpoint, 2026-11-12",
+        "at": "2026-11-12T04:30:58.090Z"
       }
     }
   ]

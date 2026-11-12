@@ -73,7 +73,10 @@
       "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
       "run_01M75NPTEF7FKDNW8ABQ9Q16WS"
     ],
-    "confirmed": null
+    "confirmed": {
+      "by": "owner",
+      "at": "2026-11-12T04:30:58.090Z"
+    }
   },
   "authorizeBeforeConfirm": {
     "exitCode": 75,
@@ -91,5 +94,17 @@
     "run1HeadroomUsd": 8.838991495000002,
     "perStartCapOverride": false
   },
-  "problems": []
+  "problems": [],
+  "ownerReply": "confirm-reset",
+  "ownerReplyAt": "2026-11-12",
+  "confirmation": {
+    "at": "2026-11-12T04:30:58.090Z",
+    "by": "owner",
+    "ref": "\"confirm-reset\" (the owner's reply) at the plan 03-67 Task 2 checkpoint, 2026-11-12",
+    "printed": "reset: confirmed for run2"
+  },
+  "authorizeAfterReset": {
+    "exitCode": 0,
+    "text": "authorized: test/benchmark/phase3/p3-run2-graduation-label.md (sha256:f0c9395bc0fd...), host 2.1.319, Phase 3 spend 11.6610 plus 4.50 fits 25 USD, run2 attempt 3"
+  }
 }
