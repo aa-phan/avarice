@@ -4552,6 +4552,13 @@
           },
           "summary": "Run 3's attempt 1 stopped blocked_on_decision on two open pause decisions, not the one the brief expects: item A (dec_01M789NHY4VJXZBCGKXTQMH8NW, verification-human-needed, free-text only) was not done, item B (dec_01M789NR2ES83AXM6DECC2FER2) paused on the planted numbered choice with its two wordings, and two decision banners were queued with lastError osascript-missing (the forced failure held). The unit finished item A's change (THEME_ATTRIBUTE exported and used in src/lib/theme.ts; typecheck, lint, test and the other required checks passed at the run's tree, format:check failed and was reported pre-existing) but its verifier wrote status human_needed because it could not search the repo for THEME_ATTRIBUTE outside the file: grep is deliberately not an admitted command (invocation-scope.ts, review WR-02) and searches are meant to go through the Grep tool, which the prompt names (docs/system/runs.md, The unit). Same family as the two attempts the owner ruled product-defect on (the unit and its subagents are not told what the gate already knows or how to do what they need). What I could not establish: whether the verifier subagent had no Grep tool or tried shell grep and was refused, because the transcript is not in the evidence. Alternative reading for the owner: brief-harness-defect, since item A's acceptance wording (every data-theme access) invites a repo-wide search the unit cannot run by shell, and docs/system does not say a verifier is told to use the Grep tool. Evidence: checkout digests equal before and after, no new ref, cost 0.2520 USD of 4.50, no silence step run (it needs the one expected decision).",
           "proposedAt": "2026-11-12T16:34:28.094Z"
+        },
+        "confirmed": {
+          "by": "owner",
+          "class": "brief-harness-defect",
+          "overrides": "product-defect",
+          "ref": "\"brief-harness-defect-fix-first\" (the owner's reply) at the plan 03-58 Task 3 checkpoint, 2026-11-12, overriding Claude's product-defect proposal",
+          "at": "2026-11-12T16:37:20.554Z"
         }
       }
     }
