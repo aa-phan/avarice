@@ -6,7 +6,7 @@
 // The launch line (01-RESEARCH "Minimal launch line"; `--verbose` is required with stream-json under -p):
 //   claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file>
 //     [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config
-//     --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose
+//     --mcp-config <file> --allowedTools Glob,Grep --model <m> --max-budget-usd <n> --output-format stream-json --verbose
 //     --session-id <uuid>      (a resume ends `--resume <uuid>` instead; the two are never both on the line)
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -25,6 +25,12 @@ export interface LaunchArgsInput {
   // Named agent for the session (the intel seam, S0-D).
   agent?: string;
 }
+
+// The admitted host removes its Glob and Grep tools from a session that has a shell, and from every agent that session starts, unless the launch line names one of them (a
+// `permissions.allow` entry does not count). Without them a run's unit and its subagents have no content search at all: the Grep call fails with the host's hint to use `grep`
+// through the shell, and the hook never admits shell grep (plan 03-69; the owner's brief-harness-defect ruling on run 3's attempt 1, D-26, D-27). The generated settings already
+// allow both tools unconditionally and the hook judges every search's path with the read rules, so naming the pair grants nothing new.
+export const SEARCH_TOOLS_ALLOWED = 'Glob,Grep';
 
 export function buildLaunchArgs(input: LaunchArgsInput): string[] {
   return [
@@ -46,6 +52,8 @@ export function buildLaunchArgs(input: LaunchArgsInput): string[] {
     '--strict-mcp-config',
     '--mcp-config',
     input.mcpFile,
+    '--allowedTools',
+    SEARCH_TOOLS_ALLOWED,
     '--model',
     input.model,
     '--max-budget-usd',
@@ -86,7 +94,8 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '-r',
 ]);
 
-// Flags that grant authority the generated settings do not: refused outright.
+// Flags that grant authority the generated settings do not: refused outright. `--allowedTools` is the one exception, admitted only as the generated Glob and Grep pair
+// (see below).
 const WIDENING_FLAGS: ReadonlySet<string> = new Set(['--add-dir', '--allowedTools', '--allowed-tools', '--permission-prompt-tool']);
 
 function refuse(reason: string): Result<never> {
@@ -97,6 +106,7 @@ export function assertLaunchArgsSafe(argv: readonly string[]): Result<void> {
   const values = new Map<string, string>();
   const bare = new Set<string>();
   let prompt: string | undefined;
+  let allowedToolsSeen = false;
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i] as string;
@@ -113,7 +123,14 @@ export function assertLaunchArgsSafe(argv: readonly string[]): Result<void> {
     if (flag.startsWith('--dangerously') || flag.startsWith('--allow-dangerously')) {
       return refuse(`dangerously: ${flag} bypasses permissions`);
     }
-    if (WIDENING_FLAGS.has(flag)) return refuse(`widen: ${flag} grants access the generated settings do not`);
+    if (WIDENING_FLAGS.has(flag)) {
+      // The generated pair only: the bare flag, once, with the exact value. The `=` form, another value, a second occurrence and `--allowed-tools` are refused.
+      const generatedPair = flag === '--allowedTools' && equals === -1 && !allowedToolsSeen && argv[i + 1] === SEARCH_TOOLS_ALLOWED;
+      if (!generatedPair) return refuse(`widen: ${flag} grants access the generated settings do not`);
+      allowedToolsSeen = true;
+      i++;
+      continue;
+    }
 
     if (equals !== -1) {
       values.set(flag, token.slice(equals + 1));

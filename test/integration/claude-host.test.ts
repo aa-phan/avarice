@@ -379,9 +379,12 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.ok(launch, 'the fake claude was launched');
     const { argv } = launch;
     assert.equal(argv[0], '-p');
-    for (const forbidden of ['--bare', '--dangerously-skip-permissions', '--allow-dangerously-skip-permissions', 'bypassPermissions', 'auto', '--add-dir', '--allowedTools']) {
+    for (const forbidden of ['--bare', '--dangerously-skip-permissions', '--allow-dangerously-skip-permissions', 'bypassPermissions', 'auto', '--add-dir', '--allowed-tools']) {
       assert.ok(!argv.includes(forbidden), `argv has no ${forbidden}`);
     }
+    // The one grant the line carries: the host's Glob and Grep search tools, which the generated settings already allow (the host removes them otherwise).
+    assert.equal(argv.filter((token) => token === '--allowedTools').length, 1, '--allowedTools appears once');
+    assert.equal(argv[argv.indexOf('--allowedTools') + 1], 'Glob,Grep');
     assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'dontAsk');
     assert.equal(argv[argv.indexOf('--setting-sources') + 1], '');
     assert.ok(argv.includes('--strict-mcp-config'));
@@ -971,6 +974,8 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
     assert.ok(argv.includes('--strict-mcp-config'));
     assert.equal(value('--max-budget-usd'), '1');
     assert.match(value('--settings') ?? '', /host-settings\.json$/);
+    assert.equal(argv.filter((token) => token === '--allowedTools').length, 1, '--allowedTools appears once on the resumed line');
+    assert.equal(value('--allowedTools'), 'Glob,Grep');
   });
 
   it('refuses a resumeSessionId that is not a UUID with the invalid field resumeSessionId, starting nothing', async () => {

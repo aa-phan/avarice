@@ -246,8 +246,9 @@ describe('the pinned host keeps Glob and Grep under AVARICE\'s own launch line (
     assert.equal(launched.argv[(at[0] as number) + 1], 'Glob,Grep');
   });
 
-  it('gives the session Glob and Grep, in its init tools and in its first model request, and neither WebFetch nor WebSearch', async () => {
+  it('gives the session Glob and Grep, in its init tools and in its first model request, and neither WebFetch nor WebSearch', async (t) => {
     const seen = await probeHost(bin, launched, []);
+    t.diagnostic(`session init tools: ${seen.init.join(',')}; first request tools: ${seen.request.join(',')}`);
     for (const [where, tools] of [['init', seen.init], ['first request', seen.request]] as const) {
       assert.ok(tools.includes('Glob'), `${where} tools lack Glob: ${tools.join(',')}`);
       assert.ok(tools.includes('Grep'), `${where} tools lack Grep: ${tools.join(',')}`);
@@ -267,9 +268,10 @@ describe('the pinned host keeps Glob and Grep under AVARICE\'s own launch line (
   });
 
   for (const name of RUN_AGENTS) {
-    it(`gives ${name}, launched as that agent, Grep and Glob and none of its disallowed tools`, async () => {
+    it(`gives ${name}, launched as that agent, Grep and Glob and none of its disallowed tools`, async (t) => {
       const disallowed = agents()[name]?.disallowedTools ?? [];
       const seen = await probeHost(bin, launched, ['--agent', name]);
+      t.diagnostic(`${name} init tools: ${seen.init.join(',')}; first request tools: ${seen.request.join(',')}`);
       for (const [where, tools] of [['init', seen.init], ['first request', seen.request]] as const) {
         assert.ok(tools.includes('Grep') && tools.includes('Glob'), `${name} ${where} tools lack Grep or Glob: ${tools.join(',')}`);
         for (const tool of disallowed) assert.ok(!tools.includes(tool), `${name} ${where} tools hold the disallowed ${tool}: ${tools.join(',')}`);
