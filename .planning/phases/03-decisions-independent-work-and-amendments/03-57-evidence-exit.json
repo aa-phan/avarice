@@ -1918,5 +1918,54 @@
     "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
     "evidenceFile": "03-48-evidence-exit.json",
     "reason": "the owner's D-34 decision: old run 1 is cancelled by the owner in their own terminal and superseded; its live facts are supplementary evidence, not a pass (D-28)"
-  }
+  },
+  "resets": [
+    {
+      "run": "run2",
+      "covers": [
+        "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+        "run_01M75NPTEF7FKDNW8ABQ9Q16WS"
+      ],
+      "proposed": {
+        "by": "claude",
+        "at": "2026-11-12T04:27:30.983Z",
+        "summary": "Run 2's two stops were owner-ruled product defects: the baseline-red format:check (fixed by plan 03-61, scenario R) and the check env missing from the unit's commands (fixed by plan 03-64, scenario E); parity holds at 9f1cd8d",
+        "pin": "9f1cd8d",
+        "scenarios": [
+          {
+            "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+            "test": "test/integration/run-baseline-red-verification.test.ts",
+            "red": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-61-red-task1.json",
+              "sha256": "4a37dfe01bfc1505adfce60d134057c343f1a8c11e7b2d6ac6afdb092ee7a821"
+            },
+            "green": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-green-scenario-r.json",
+              "sha256": "c0c3621a8a22a50cefce63f5ac96ae7f29f3190739865c938a8ebf839e019745"
+            }
+          },
+          {
+            "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+            "test": "test/integration/run-check-env.test.ts",
+            "red": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-64-red-task1.json",
+              "sha256": "70db3de7491929c4a05805df23ab4bc7a0473512a8214dfb2410d676502a9312"
+            },
+            "green": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-green-scenario-e.json",
+              "sha256": "2329cfafa5502e6d8c1036705195ff516077d8c4957773846d4bf518a07cdc55"
+            }
+          }
+        ],
+        "parity": {
+          "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-parity.json",
+          "sha256": "760953277f46c87aec2033cc20873988573d0d56d7eedfa6f35e98e10bec6a4d",
+          "checkedAt": "2026-11-12T04:25:02.857Z",
+          "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "parity": true,
+          "problems": []
+        }
+      }
+    }
+  ]
 }

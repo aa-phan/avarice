@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "plan": "03-67",
+  "checkedAt": "2026-11-12T04:28:10.983Z",
+  "spentUsd": 0,
+  "modelHostLaunched": false,
+  "precondition": {
+    "readFrom": "avarice status --json (read-only, owner profile, AVARICE_CLAUDE_BIN=2.1.319)",
+    "summary03_66Status": "complete",
+    "nodeModulesIsDirectory": true,
+    "claudeRanCancel": false
+  },
+  "run2Attempts": [
+    {
+      "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+      "attempt": 1,
+      "state": "cancelled",
+      "cancelRequestedAt": "2026-11-11T15:18:44.712Z",
+      "confirmedClass": "product-defect",
+      "confirmedBy": "owner",
+      "confirmedAt": "2026-11-11T15:20:24.680Z",
+      "claudeRanCancel": false
+    },
+    {
+      "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+      "attempt": 2,
+      "state": "cancelled",
+      "cancelRequestedAt": "2026-11-11T16:15:10.565Z",
+      "confirmedClass": "product-defect",
+      "confirmedBy": "owner",
+      "confirmedAt": "2026-11-11T16:15:57.822Z",
+      "claudeRanCancel": false
+    }
+  ],
+  "parity": {
+    "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-parity.json",
+    "exitCode": 0,
+    "parity": true,
+    "problems": [],
+    "mismatches": [],
+    "checks": 12,
+    "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "checkedAt": "2026-11-12T04:25:02.857Z"
+  },
+  "scenarios": [
+    {
+      "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+      "test": "test/integration/run-baseline-red-verification.test.ts",
+      "redPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-61-red-task1.json",
+      "redExitCode": 1,
+      "redFail": 4,
+      "greenPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-green-scenario-r.json",
+      "greenExitCode": 0,
+      "greenPass": 7,
+      "greenFail": 0
+    },
+    {
+      "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+      "test": "test/integration/run-check-env.test.ts",
+      "redPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-64-red-task1.json",
+      "redExitCode": 1,
+      "redFail": 4,
+      "greenPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-67-green-scenario-e.json",
+      "greenExitCode": 0,
+      "greenPass": 7,
+      "greenFail": 0
+    }
+  ],
+  "proposal": {
+    "at": "2026-11-12T04:27:30.983Z",
+    "by": "claude",
+    "covers": [
+      "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
+      "run_01M75NPTEF7FKDNW8ABQ9Q16WS"
+    ],
+    "confirmed": null
+  },
+  "authorizeBeforeConfirm": {
+    "exitCode": 75,
+    "text": "exit-run: stop-loss (D-29): run2 has failed twice; return to the owner before spending again"
+  },
+  "hostVersion": "2.1.319",
+  "hostVersionOutput": "2.1.319 (Claude Code)",
+  "spend": {
+    "spentUsdPhase3": 11.661008504999998,
+    "ceilingUsd": 25,
+    "perRunCapUsd": 4.5,
+    "headroomUsd": 13.338991495000002,
+    "threeRunsAtCapUsd": 13.5,
+    "fullCapsFit": false,
+    "run1HeadroomUsd": 8.838991495000002,
+    "perStartCapOverride": false
+  },
+  "problems": []
+}
