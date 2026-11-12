@@ -858,6 +858,91 @@ function classifyCommand(argv: readonly string[]): number {
   return 0;
 }
 
+const sha256OfFile = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+// A JSON file that may not be there or may not parse: undefined then, instead of a throw.
+function tryReadJson(path: string): Json | undefined {
+  try {
+    return readJson(path);
+  } catch {
+    return undefined;
+  }
+}
+
+// `reset --propose --by claude --evidence F --authorization-file A --run R --parity P [--pin SHA] --defect RUN_ID --test PATH --red FILE --green FILE [...] --summary TEXT`
+// records Claude's proposal to begin a new stop-loss epoch for one run (D-36, D-37): into the evidence file's top-level `resets` list, as `{ run, covers, proposed }`, with the
+// proof files each named and hashed. `reset --confirm --by owner --evidence F --run R --ref TEXT` adds the owner's `confirmed` record to the run's pending proposal (its latest
+// reset, when that has no confirmation). Only that record lifts the stop-loss, and Claude runs --confirm only from the owner's own checkpoint reply, which `--ref` quotes (D-27,
+// D-37), the classify pattern. Each refuses with exit 2 and the file untouched, and each keeps every other key of the file.
+function resetCommand(argv: readonly string[]): number {
+  const { named, many, bools } = flags(argv);
+  const refuse = (text: string): number => {
+    errOut(`exit-run: reset: ${text}`);
+    return 2;
+  };
+  const proposing = bools.has('propose');
+  const confirming = bools.has('confirm');
+  if (proposing === confirming) return refuse('usage: give exactly one of --propose and --confirm (neither takes a value)');
+  const evidence = named['evidence'];
+  const role = named['run'];
+  if (evidence === undefined || role === undefined) return refuse('usage: reset --evidence F --run R (--propose ... | --confirm --by owner --ref TEXT)');
+  const ref = named['ref']?.trim() ?? '';
+  if (proposing && named['by'] !== 'claude') return refuse('--by must be claude: Claude proposes the reset (D-37)');
+  if (confirming && named['by'] !== 'owner') return refuse('--by must be owner: only the owner confirms a reset (D-37)');
+  if (confirming && ref === '') return refuse('--ref is required: name the owner reply that confirmed the reset (D-37)');
+
+  const path = resolve(evidence);
+  const file = tryReadJson(path);
+  if (file === undefined) return refuse(`${evidence} is not an evidence file`);
+  const resets = asObjects(file['resets']);
+  const now = new Date().toISOString();
+
+  if (confirming) {
+    const latest = [...resets].reverse().find((r) => r['run'] === role);
+    if (latest === undefined || isObject(latest['confirmed'])) return refuse(`${role} has no pending reset proposal to confirm: Claude proposes first (D-37)`);
+    const next = resets.map((r) => (r === latest ? { ...r, confirmed: { by: 'owner', ref, at: now } } : r));
+    writeFileSync(path, `${JSON.stringify({ ...file, resets: next }, null, 2)}\n`);
+    out(`reset: confirmed for ${role}\n`);
+    return 0;
+  }
+
+  const authorizationPath = named['authorization-file'];
+  const parityPath = named['parity'];
+  const summary = named['summary']?.trim() ?? '';
+  if (authorizationPath === undefined || parityPath === undefined) return refuse('usage: reset --propose needs --authorization-file and --parity');
+  if (summary === '') return refuse('--summary is required: say what the fixes are and what the proofs show (D-37)');
+  const auth = authorizationOf(authorizationPath);
+  if (typeof auth === 'string') return refuse(auth);
+  const groups = { defect: many['defect'] ?? [], test: many['test'] ?? [], red: many['red'] ?? [], green: many['green'] ?? [] };
+  if (groups.defect.length === 0) return refuse('--defect RUN_ID --test PATH --red FILE --green FILE is required at least once: one scenario per product defect the reset covers (D-37)');
+  if (new Set(Object.values(groups).map((g) => g.length)).size !== 1) return refuse('--defect, --test, --red and --green must be given the same number of times, in groups (D-37)');
+  const missing = [parityPath, ...groups.red, ...groups.green].find((p) => !existsSync(resolve(p)));
+  if (missing !== undefined) return refuse(`${missing} does not exist`);
+  const parity = tryReadJson(resolve(parityPath));
+  if (parity === undefined) return refuse(`${parityPath} is not a parity report`);
+
+  const since = stopLossEpochOf(file, role);
+  const sinceMs = since === null ? Number.NEGATIVE_INFINITY : Date.parse(since);
+  const covers = asObjects(file['runs']).filter((r) => r['run'] === role && isFailedAttempt(r) && startedMs(r) >= sinceMs).map((r) => String(r['runId'] ?? ''));
+  const proofOf = (p: string): { path: string; sha256: string } => ({ path: p, sha256: sha256OfFile(resolve(p)) });
+  const scenarios = groups.defect.map((runId, i) => ({ runId, test: groups.test[i] as string, red: proofOf(groups.red[i] as string), green: proofOf(groups.green[i] as string) }));
+  const record = {
+    run: role,
+    covers,
+    proposed: {
+      by: 'claude',
+      at: now,
+      summary,
+      pin: named['pin'] ?? DEFAULT_PIN,
+      scenarios,
+      parity: { ...proofOf(parityPath), checkedAt: parity['checkedAt'], pin: parity['pin'], parity: parity['parity'], problems: parity['problems'] },
+    },
+  };
+  writeFileSync(path, `${JSON.stringify({ ...file, resets: [...resets, record] }, null, 2)}\n`);
+  out(`reset: proposed for ${role}\n`);
+  return 0;
+}
+
 // The owner's confirmed ruling on an entry, when there is one: the record the owner's `classify --confirm` wrote.
 function confirmedOf(entry: Json): Json | undefined {
   const classification = entry['classification'];
@@ -896,23 +981,66 @@ export function epochOf(evidence: Json | undefined): string | null {
   return latest;
 }
 
+const isFilled = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+const isProofFile = (value: unknown): boolean => isObject(value) && isFilled(value['path']) && isFilled(value['sha256']);
+
+// A reset the tools count (D-36, D-37): every field `reset --propose` and then `reset --confirm` write. Claude's proposal holds one scenario per covered attempt, each with a
+// test and a red and a green proof file, and a parity report that is true and lists no problem; the owner's confirmation names the owner, a reference and a time. A hand-edited
+// record that lacks one of these is no reset.
+function isValidReset(reset: Json): boolean {
+  const proposed = reset['proposed'];
+  const confirmed = reset['confirmed'];
+  if (!isObject(proposed) || !isObject(confirmed)) return false;
+  if (proposed['by'] !== 'claude') return false;
+  const scenarios = proposed['scenarios'];
+  const scenarioOk = (s: unknown): boolean => isObject(s) && isFilled(s['runId']) && isFilled(s['test']) && isProofFile(s['red']) && isProofFile(s['green']);
+  if (!Array.isArray(scenarios) || scenarios.length === 0 || !scenarios.every(scenarioOk)) return false;
+  const parity = proposed['parity'];
+  if (!isObject(parity) || parity['parity'] !== true || !Array.isArray(parity['problems']) || parity['problems'].length !== 0) return false;
+  return confirmed['by'] === 'owner' && isFilled(confirmed['ref']) && typeof confirmed['at'] === 'string' && Number.isFinite(Date.parse(confirmed['at']));
+}
+
+// The stop-loss epoch of one run (D-36, D-39): the confirmation time of its latest valid reset in the evidence's top-level `resets`, or null when it has none. The later entry
+// wins a tie. It is a different epoch from epochOf's: that one is the time of the latest owner-confirmed product defect and decides which passes count and the order (D-26,
+// unchanged); this one begins only at an owner-confirmed reset that carries D-37's proofs, is per run, and bounds only the two-failure count of D-29.
+export function stopLossEpochOf(evidence: Json | undefined, role: string): string | null {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const reset of asObjects(evidence?.['resets'])) {
+    if (reset['run'] !== role || !isValidReset(reset)) continue;
+    const at = (reset['confirmed'] as Json)['at'] as string;
+    const ms = Date.parse(at);
+    if (ms >= latestMs) {
+      latest = at;
+      latestMs = ms;
+    }
+  }
+  return latest;
+}
+
 // The latest attempt among entries of one role: the highest attempt number, the later entry on a tie.
 const latestAttempt = (entries: readonly Json[]): Json | undefined =>
   entries.reduce<Json | undefined>((best, e) => (best === undefined || Number(e['attempt'] ?? 0) >= Number(best['attempt'] ?? 0) ? e : best), undefined);
 
 // Whether authorize may start an attempt of a run (D-26, D-27, D-29, D-33, D-34), judged over the entries of the evidence file. `readState` reads a run from the owner's
-// ledger. Returns the refusal, or undefined. Code 75 is the stop-loss: two failed attempts of the run, in any epoch and whatever their classification (D-29). Code 2:
+// ledger. Returns the refusal, or undefined. Code 75 is the stop-loss: two failed attempts of the run within its stop-loss epoch, whatever their classification (D-29). That epoch
+// begins at the run's latest owner-confirmed reset (`stopLossEpochOf`), or at the run's first attempt when there is none (D-36 to D-39). Code 2:
 //   - the run already passed in the current epoch (D-26, D-03);
 //   - a run earlier in the authorization's order has no recorded outcome in the current epoch, an outcome being a pass or the owner's confirmed classification (D-33);
 //   - an earlier attempt of the run, in the current epoch, has no owner-confirmed classification (D-26, D-27), where a confirmed product defect starts a new epoch;
 //   - an earlier attempt's live run is not failed, cancelled or closed in the owner's ledger: Claude never cancels it (D-34).
-// No flag, variable or file edit lifts any of these; the stop-loss is lifted only by a new owner decision and a re-plan.
+// No flag, variable or file edit lifts any of these; the stop-loss is lifted only by a recorded reset the owner confirmed (D-36, D-37) or a new owner decision and a re-plan.
 export function startRefusal(evidence: Json | undefined, auth: Pick<Authorization, 'order'>, role: string, readState: (runId: string) => string | undefined): { code: 2 | 75; text: string } | undefined {
   const refuse = (text: string): { code: 2; text: string } => ({ code: 2, text });
   if (!auth.order.includes(role)) return refuse(`${role} is not a run of the authorization (order ${auth.order.join(', ')}) (D-28)`);
   const entries = asObjects(evidence?.['runs']);
   const mine = entries.filter((r) => r['run'] === role);
-  if (mine.filter(isFailedAttempt).length >= 2) return { code: 75, text: `stop-loss (D-29): ${role} has failed twice; return to the owner before spending again` };
+  const resetAt = stopLossEpochOf(evidence, role);
+  const sinceMs = resetAt === null ? Number.NEGATIVE_INFINITY : Date.parse(resetAt);
+  if (mine.filter((e) => isFailedAttempt(e) && startedMs(e) >= sinceMs).length >= 2) {
+    const text = resetAt === null ? `stop-loss (D-29): ${role} has failed twice; return to the owner before spending again` : `stop-loss (D-29, D-36): ${role} has failed twice since its reset at ${resetAt}; return to the owner before spending again`;
+    return { code: 75, text };
+  }
 
   const epoch = epochOf(evidence);
   const epochMs = epoch === null ? Number.NEGATIVE_INFINITY : Date.parse(epoch);
@@ -2677,6 +2805,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'evidence') return evidenceCommand(rest);
   if (command === 'relax') return relaxCommand(rest);
   if (command === 'classify') return classifyCommand(rest);
+  if (command === 'reset') return resetCommand(rest);
   if (command === 'silence') return silenceCommand(rest);
   if (command === 'verdict') return verdictCommand(rest);
   if (command === 'supplement') return supplementCommand(rest);
