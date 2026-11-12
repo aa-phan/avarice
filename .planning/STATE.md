@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 3
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Completed 03-67-PLAN.md
-last_updated: "2026-11-12T04:32:12.021Z"
+stopped_at: Completed 03-68-PLAN.md
+last_updated: "2026-11-12T16:19:33.609Z"
 last_activity: 2026-11-11
 last_activity_desc: Phase 3 execution started
-state_head: 87b94122a198c4581b82ee286773fab154b4498f
+state_head: a7e7e1e8e1b5e884c226b185dd9b3479978ad01f
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 128
-  completed_plans: 121
+  completed_plans: 122
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 ## Current Position
 
 Phase: 3 (Decisions, independent work and amendments) — EXECUTING
-Plan: 3 of 67
+Plan: 4 of 67
 Status: Ready to execute
 Last activity: 2026-11-11 — Phase 3 execution started
 
@@ -374,6 +374,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-50 findings: three product defects fixed and proven live (03-40 item prompt scope and pause attribution; 03-43 recorded host config directory; 03-46 fenced VERIFICATION record); two brief defects (run 1's change breaks the protected e2e literal outside the write set; run 3's original option 2 collided with seven protected e2e specs, fixed in 03-49 with R3-3 and R3-1); a declared non-required check (test:e2e) is never run by the supervisor, so a delivered tree can fail it with nothing recorded (for the documentation plans and findings.md) — Recorded in 03-50-SUMMARY.md and 03-48-evidence-exit.json; no src change in this plan
 - [Phase 03]: 03-66: the exit tools' stop-loss counts failed attempts within the run's own epoch (stopLossEpochOf), begun only by an owner-confirmed reset with D-37's proofs; D-26's epoch and the verdict are unchanged (D-36, D-39)
 - [Phase 03]: 03-66: reset --confirm acts only on the run's latest reset when it has no confirmation, so a stale unconfirmed proposal cannot be confirmed behind a later one
+- [Phase 3]: 03-68: run 2's attempt 3 passed and the owner confirmed it with continue; run 2 counts toward 3 of 3. Run 1 headroom after it is 7.8582 USD (25 - 4.50 - 12.6418); 03-63-SUMMARY.md is superseded
 
 ### Pending Todos
 
@@ -434,6 +435,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T04:32:11.621Z
-Stopped at: Completed 03-67-PLAN.md
+Last session: 2026-11-12T16:19:26.336Z
+Stopped at: Completed 03-68-PLAN.md
 Resume file: None
