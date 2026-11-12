@@ -1567,6 +1567,76 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
         assert.equal(ran.status, 2, ran.stderr + ran.stdout);
         assert.match(ran.stderr, /run-b's previous attempt run_B1 cannot be read from the owner's ledger; the owner cancels it first \(D-34\)/);
       });
+
+      // Plan 03-66 (D-36, D-37, D-39): the tracer from the stop-loss to a recorded reset. Claude proposes with the proofs; only the owner's confirmation lifts the stop.
+      describe('a reset lifts the stop-loss of its run only once the owner has confirmed it (plan 03-66)', () => {
+        const TEST_FILE = 'test/unit/exit-evidence.test.ts';
+        const stoppedB = (n: number, startMinute: number, ruledAt: number): Json => ({
+          runId: `run_B${n}`,
+          run: 'run-b',
+          attempt: n,
+          startedAt: minute53(startMinute),
+          passed: false,
+          finishedAt: minute53(startMinute + 3),
+          classification: ruled53('product-defect', ruledAt),
+        });
+        // The proof files of one scenario each, and the parity report, in the shapes the tools read (D-37).
+        const writeProofs = (): { red: string[]; green: string[]; parity: string } => {
+          const command = `node --test --test-reporter=tap ${TEST_FILE}`;
+          const red = [1, 2].map((n) => {
+            const path = join(fx().dir, `reset-red-${n}.json`);
+            writeFileSync(path, JSON.stringify({ command, exitCode: 1, output: `TAP version 13\nnot ok 1 - scenario ${n} before its fix\n1..1\n# tests 1\n# pass 0\n# fail 1\n` }));
+            return path;
+          });
+          const green = [1, 2].map((n) => {
+            const path = join(fx().dir, `reset-green-${n}.json`);
+            writeFileSync(path, JSON.stringify({ command, exitCode: 0, output: `TAP version 13\nok 1 - scenario ${n} after its fix\n1..1\n# tests 1\n# pass 1\n# fail 0\n` }));
+            return path;
+          });
+          const parity = join(fx().dir, 'reset-parity.json');
+          writeFileSync(
+            parity,
+            JSON.stringify({ schema: 1, plan: '03-65', checkedAt: minute53(20), pin: fx().repo.head, briefs: [{ path: 'run2.md', digest: digestOf('run2') }], spentUsd: 0, modelHostLaunched: false, checkout: { unchanged: true }, mismatches: [], parity: true, problems: [] }),
+          );
+          return { red, green, parity };
+        };
+        const proposeArgs = (evidence: string, proofs: { red: string[]; green: string[]; parity: string }): string[] => [
+          'reset', '--propose', '--by', 'claude', '--evidence', evidence, '--authorization-file', state.auth as string, '--run', 'run-b', '--parity', proofs.parity, '--pin', fx().repo.head,
+          '--defect', 'run_B1', '--test', TEST_FILE, '--red', proofs.red[0] as string, '--green', proofs.green[0] as string,
+          '--defect', 'run_B2', '--test', TEST_FILE, '--red', proofs.red[1] as string, '--green', proofs.green[1] as string,
+          '--summary', 'both product defects are fixed and proven offline',
+        ];
+
+        it('exits 75 for two failed attempts, still after the proposal, and no longer after the owner confirms it: the next rule answers', () => {
+          const { path } = evidenceWith('evidence-reset.json', [stoppedB(1, 1, 8), stoppedB(2, 10, 18)]);
+          const ask = (): { status: number | null; stdout: string; stderr: string } => runTools(authorizeArgs(state.auth as string, fx().run2, path), authorizeEnv());
+          const before = ask();
+          assert.equal(before.status, 75, before.stderr + before.stdout);
+          assert.match(before.stderr, /stop-loss \(D-29\): run-b has failed twice; return to the owner before spending again/);
+          const runsBefore = (JSON.parse(readFileSync(path, 'utf8')) as Json)['runs'];
+
+          const proposed = runTools(proposeArgs(path, writeProofs()));
+          assert.equal(proposed.status, 0, proposed.stderr + proposed.stdout);
+          assert.match(proposed.stdout, /reset: proposed for run-b/);
+          const proposal = ask();
+          assert.equal(proposal.status, 75, proposal.stderr + proposal.stdout);
+
+          const confirmed = runTools(['reset', '--confirm', '--by', 'owner', '--evidence', path, '--run', 'run-b', '--ref', 'owner reply at the checkpoint']);
+          assert.equal(confirmed.status, 0, confirmed.stderr + confirmed.stdout);
+          assert.match(confirmed.stdout, /reset: confirmed for run-b/);
+          const after = ask();
+          assert.equal(after.status, 2, after.stderr + after.stdout);
+          assert.match(after.stderr, /run-b's previous attempt run_B1 cannot be read from the owner's ledger; the owner cancels it first \(D-34\)/);
+          assert.doesNotMatch(after.stderr, /stop-loss/);
+
+          const file = JSON.parse(readFileSync(path, 'utf8')) as Json;
+          assert.deepEqual(file['runs'], runsBefore);
+          const resets = file['resets'] as Json[];
+          assert.equal(resets.length, 1);
+          assert.equal((resets[0]?.['proposed'] as Json)['by'], 'claude');
+          assert.equal((resets[0]?.['confirmed'] as Json)['by'], 'owner');
+        });
+      });
     });
   });
 });
@@ -1980,6 +2050,120 @@ describe('exit evidence: the order 2, 3, 1, the product-defect epoch, the two-fa
       assert.equal(refused?.code, 75);
       assert.match(refused?.text ?? '', /stop-loss \(D-29\): run1 has failed twice/);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Plan 03-66: the two-failure stop-loss counts within the run's own epoch, and an owner-confirmed reset with D-37's proofs begins a new one (D-29, D-36 to D-39).
+// The new exports are read through casts so a missing one fails its own case and not the loading of the file.
+// ---------------------------------------------------------------------------------------------------------------
+
+// A valid confirmed reset of one run, as `reset --propose` and then `reset --confirm` write it: one scenario per covered attempt, a clean parity report and the
+// owner's confirmation at `confirmMinute`. `over` replaces top-level keys of the record.
+const reset66 = (run: string, confirmMinute: number, covers: string[], over: Json = {}): Json => ({
+  run,
+  covers,
+  proposed: {
+    by: 'claude',
+    at: minute53(confirmMinute - 2),
+    summary: 'the fixes hold offline',
+    pin: '9f1cd8d',
+    scenarios: covers.map((runId) => ({
+      runId,
+      test: 'test/integration/scenario.test.ts',
+      red: { path: `${runId}-red.json`, sha256: `sha256-red-${runId}` },
+      green: { path: `${runId}-green.json`, sha256: `sha256-green-${runId}` },
+    })),
+    parity: { path: 'parity.json', sha256: 'sha256-parity', checkedAt: minute53(confirmMinute - 3), pin: '9f1cd8d', parity: true, problems: [] },
+  },
+  confirmed: { by: 'owner', ref: 'owner reply', at: minute53(confirmMinute) },
+  ...over,
+});
+const withoutConfirmation = (reset: Json): Json => Object.fromEntries(Object.entries(reset).filter(([key]) => key !== 'confirmed'));
+const withProposed = (reset: Json, patch: Json): Json => ({ ...reset, proposed: { ...(reset['proposed'] as Json), ...patch } });
+const stopLossEpochOf = (evidence: Json | undefined, role: string): string | null =>
+  (exitTools as unknown as { stopLossEpochOf: (e: Json | undefined, r: string) => string | null }).stopLossEpochOf(evidence, role);
+
+describe("exit evidence: the stop-loss counts within the run's epoch, and an owner-confirmed reset begins a new one (plan 03-66; D-29, D-36 to D-39)", () => {
+  const CANCELLED_ALL = new Proxy({} as Record<string, string>, { get: () => 'cancelled' });
+  const NO_RESET = 'stop-loss (D-29): run2 has failed twice; return to the owner before spending again';
+  const SINCE_RESET = (minute: number): string => `stop-loss (D-29, D-36): run2 has failed twice since its reset at ${minute53(minute)}; return to the owner before spending again`;
+  const BOTH = ['run_run2_1', 'run_run2_2'];
+  // run2's two stops, each ruled a product defect by the owner (minutes 8 and 18).
+  const twoProductDefects = (): Json[] => [failed53('run2', 1, 1, { classification: ruled53('product-defect', 8) }), failed53('run2', 2, 10, { classification: ruled53('product-defect', 18) })];
+  const withResets = (runs: Json[], resets: Json[]): Json => ({ ...evidence53(...runs), resets });
+
+  it('refuses the third start of a run with two failed attempts and no reset, with the text of plan 03-53 (D-29)', () => {
+    assert.deepEqual(refusalOf(evidence53(...twoProductDefects()), 'run2', CANCELLED_ALL), { code: 75, text: NO_RESET });
+  });
+
+  it('admits a start after a recorded, owner-confirmed reset of the run (D-39)', () => {
+    const file = withResets(twoProductDefects(), [reset66('run2', 30, BOTH)]);
+    assert.equal(stopLossEpochOf(file, 'run2'), minute53(30));
+    assert.equal(refusalOf(file, 'run2', CANCELLED_ALL), undefined);
+  });
+
+  it('admits one failed attempt after the reset, whatever its ruling, and refuses the second with the per-epoch text (D-36, D-39)', () => {
+    for (const ruling of ['product-defect', 'brief-harness-defect']) {
+      const one = withResets([...twoProductDefects(), failed53('run2', 3, 40, { classification: ruled53(ruling, 48) })], [reset66('run2', 30, BOTH)]);
+      assert.equal(refusalOf(one, 'run2', CANCELLED_ALL), undefined, ruling);
+    }
+    const two = withResets([...twoProductDefects(), failed53('run2', 3, 40, { classification: ruled53('product-defect', 48) }), failed53('run2', 4, 50, { classification: ruled53('brief-harness-defect', 58) })], [reset66('run2', 30, BOTH)]);
+    assert.deepEqual(refusalOf(two, 'run2', CANCELLED_ALL), { code: 75, text: SINCE_RESET(30) });
+  });
+
+  it('counts an attempt that started exactly at the reset, and never counts one before it again', () => {
+    const atTheReset = withResets([...twoProductDefects(), failed53('run2', 3, 30), failed53('run2', 4, 40)], [reset66('run2', 30, BOTH)]);
+    assert.deepEqual(refusalOf(atTheReset, 'run2', CANCELLED_ALL), { code: 75, text: SINCE_RESET(30) });
+    const justBefore = withResets([...twoProductDefects(), failed53('run2', 3, 29, { classification: ruled53('brief-harness-defect', 30) }), failed53('run2', 4, 40, { classification: ruled53('brief-harness-defect', 48) })], [reset66('run2', 30, BOTH)]);
+    assert.equal(refusalOf(justBefore, 'run2', CANCELLED_ALL), undefined);
+  });
+
+  it('lifts nothing for a proposal that the owner has not confirmed, and stopLossEpochOf is null for no file, no resets key and an empty list', () => {
+    const proposalOnly = withResets(twoProductDefects(), [withoutConfirmation(reset66('run2', 30, BOTH))]);
+    assert.equal(stopLossEpochOf(proposalOnly, 'run2'), null);
+    assert.deepEqual(refusalOf(proposalOnly, 'run2', CANCELLED_ALL), { code: 75, text: NO_RESET });
+    assert.equal(stopLossEpochOf(undefined, 'run2'), null);
+    assert.equal(stopLossEpochOf(evidence53(...twoProductDefects()), 'run2'), null);
+    assert.equal(stopLossEpochOf(withResets(twoProductDefects(), []), 'run2'), null);
+  });
+
+  it("is per run: a reset of run3 leaves run2's two failures at code 75, and a reset of run2 leaves run3's", () => {
+    const run3Failures = [failed53('run3', 1, 20, { classification: ruled53('product-defect', 24) }), failed53('run3', 2, 26, { classification: ruled53('product-defect', 32) })];
+    const resetOfRun3 = withResets([...twoProductDefects(), ...run3Failures], [reset66('run3', 40, ['run_run3_1', 'run_run3_2'])]);
+    assert.equal(stopLossEpochOf(resetOfRun3, 'run3'), minute53(40));
+    assert.equal(stopLossEpochOf(resetOfRun3, 'run2'), null);
+    assert.deepEqual(refusalOf(resetOfRun3, 'run2', CANCELLED_ALL), { code: 75, text: NO_RESET });
+    const resetOfRun2 = withResets([...twoProductDefects(), ...run3Failures], [reset66('run2', 40, BOTH)]);
+    assert.equal(stopLossEpochOf(resetOfRun2, 'run3'), null);
+    assert.equal(refusalOf(resetOfRun2, 'run3', CANCELLED_ALL)?.code, 75);
+  });
+
+  it('begins the epoch at the reset the owner confirmed later, and no longer counts the failures between two resets', () => {
+    const runs = [...twoProductDefects(), failed53('run2', 3, 40, { classification: ruled53('brief-harness-defect', 48) }), failed53('run2', 4, 50, { classification: ruled53('brief-harness-defect', 58) })];
+    const file = withResets(runs, [reset66('run2', 60, [...BOTH, 'run_run2_3', 'run_run2_4']), reset66('run2', 30, BOTH)]);
+    assert.equal(stopLossEpochOf(file, 'run2'), minute53(60));
+    assert.equal(refusalOf(file, 'run2', CANCELLED_ALL), undefined);
+    assert.equal(stopLossEpochOf(withResets(runs, [reset66('run2', 30, BOTH), reset66('run2', 60, BOTH)]), 'run2'), minute53(60));
+  });
+
+  it('counts a hand-edited reset as no reset when it lacks a field the proposal writes or names another party as the owner', () => {
+    const valid = reset66('run2', 30, BOTH);
+    const edited: Array<[string, Json]> = [
+      ['a confirmation by claude', { ...valid, confirmed: { by: 'claude', ref: 'owner reply', at: minute53(30) } }],
+      ['an empty confirmation reference', { ...valid, confirmed: { by: 'owner', ref: '', at: minute53(30) } }],
+      ['a confirmation without a time', { ...valid, confirmed: { by: 'owner', ref: 'owner reply' } }],
+      ['no scenarios', withProposed(valid, { scenarios: [] })],
+      ['a scenario without a green proof', withProposed(valid, { scenarios: [{ runId: 'run_run2_1', test: 'test/x.test.ts', red: { path: 'r.json', sha256: 'a' } }] })],
+      ['a parity report that is not true', withProposed(valid, { parity: { ...((valid['proposed'] as Json)['parity'] as Json), parity: false } })],
+      ['a parity report with a problem', withProposed(valid, { parity: { ...((valid['proposed'] as Json)['parity'] as Json), problems: ['x'] } })],
+      ['a proposal by the owner', withProposed(valid, { by: 'owner' })],
+    ];
+    for (const [name, reset] of edited) {
+      const file = withResets(twoProductDefects(), [reset]);
+      assert.equal(stopLossEpochOf(file, 'run2'), null, name);
+      assert.deepEqual(refusalOf(file, 'run2', CANCELLED_ALL), { code: 75, text: NO_RESET }, name);
+    }
   });
 });
 
