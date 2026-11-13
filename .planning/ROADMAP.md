@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 63/69 plans executed (36 waves, with 27 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1)
+**Plans:** 64/73 plans executed (39 waves, with 31 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1; 03-70 halted on run 3's product defect (the unit's command list held the declared check test:e2e, which no gate judges), closed by gap plans 03-71 (only the checks the run executes are listed for the agent, the prompt names the others), 03-72 (run 3's no-spend reset and the owner's spend decision), and, because the ruling began a new D-26 epoch, 03-73 (run 2's attempt 4) and 03-74 (run 3's attempt 3) before run 1)
 
 Plans:
 **Wave 1**
@@ -348,22 +348,32 @@ Plans:
 - [x] 03-58-PLAN.md — Exit run 3 (silence and notifier failure): start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling *(halted: attempt 1 stopped on a verification-human-needed pause because the unit's sessions had no content-search route; the owner ruled a brief-harness-defect, fix first; run 3's attempt 2 of 2 runs before run 1; 03-70 marks it superseded)*
 - [x] 03-69-PLAN.md — Gap closure: the launch line names the host's Glob and Grep tools (`--allowedTools Glob,Grep`, admitted only as that pair), so the unit's session and every agent it starts can search the repository; a no-spend probe of the pinned host and scenario S reproduce run 3's stop (red before, ready_for_review after); shell grep stays refused; settings, hook, gates and `--json` shapes unchanged; docs/system updated
 
-**Wave 31** *(gap closure, blocked on 03-69)*
-- [ ] 03-70-PLAN.md — Gap closure: exit run 3, attempt 2 of 2 (D-29, D-36): the search route checked without spend, start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling (a second failure ends run 3's epoch for the owner), the run 1 headroom; 03-58 marked superseded *(halted: attempt 2 proved the search route live, then stopped on item A's verification-human-needed pause because the unit's list holds the declared non-required check test:e2e, which cannot pass as written; the owner ruled a product-defect, so a gap plan fixes the unit's admitted-command list and the prompt's rule for declared checks the gate does not judge, then the owner's D-37 reset, then run 3 in a new epoch; run 1 headroom 7.3890 USD)*
+**Wave 31** *(gap closure, blocked on 03-69; 03-71 on 03-69)*
+- [ ] 03-70-PLAN.md — Gap closure: exit run 3, attempt 2 of 2 (D-29, D-36): the search route checked without spend, start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling (a second failure ends run 3's epoch for the owner), the run 1 headroom; 03-58 marked superseded *(halted: attempt 2 proved the search route live, then stopped on item A's verification-human-needed pause because the unit's list holds the declared non-required check test:e2e, which cannot pass as written; the owner ruled a product-defect, so a gap plan fixes the unit's admitted-command list and the prompt's rule for declared checks the gate does not judge, then the owner's D-37 reset, then run 3 in a new epoch; run 1 headroom 7.3890 USD; 03-74 marks it superseded)*
+- [ ] 03-71-PLAN.md — Gap closure: the run contract lists for the agent only the checks the run executes (required or target) beside the conventions' own agent commands, and the unit prompt names the other declared checks under a data line as judged by no gate (never a condition, never a question for the owner); `contract amend --check +name` adds the check's command; run 3's attempt 2 reproduced offline as scenario D (red before, ready_for_review after); gates, pause detection, hook, host adapter, supervisor check runs and `--json` shapes unchanged; docs/system runs.md and findings.md updated
 
-**Wave 32** *(blocked on 03-70)*
+**Wave 32** *(gap closure, blocked on 03-71)*
+- [ ] 03-72-PLAN.md — Gap closure: run 3's reset at a no-spend checkpoint (D-36, D-37): both attempts closed (checked, never cancelled by Claude), parity re-run at the pin, scenario D re-run green, Claude's proposal, the owner's confirmation; authorize then gates run 3 by the D-33 order and admits run 2's attempt 4; the owner's spend decision, since three runs at 4.50 do not fit the 11.8890 USD left
+
+**Wave 33** *(gap closure, blocked on 03-72)*
+- [ ] 03-73-PLAN.md — Gap closure: exit run 2, attempt 4 (first in the new D-26 epoch): start, the owner's amendment and answers, finish, the owner's ruling, the run 1 headroom
+
+**Wave 34** *(gap closure, blocked on 03-73)*
+- [ ] 03-74-PLAN.md — Gap closure: exit run 3, attempt 3 (first of its new stop-loss epoch): the fix and the search route checked without spend, start with the banner forced to fail, `--silence`, the owner's answer, finish, the owner's ruling, the run 1 headroom; 03-70 marked superseded
+
+**Wave 35** *(blocked on 03-74)*
 - [ ] 03-59-PLAN.md — Exit run 1 (block and resume, redrafted brief): start, the owner's answer, finish, the owner's ruling (refused with exit 75 for the owner if runs 2 and 3 together spent more than the D-05 headroom)
 
-**Wave 33** *(blocked on 03-59)*
+**Wave 36** *(blocked on 03-59)*
 - [ ] 03-60-PLAN.md — Exit record: the tools' verdict (3 of 3 or n/3 with the pending re-runs), correct stops as evidence (D-28), old run 1 as supplementary evidence (D-34), LIVE-CASES.md and spend
 
-**Wave 34** *(blocked on Wave 33 completion)*
+**Wave 37** *(blocked on Wave 36 completion)*
 - [ ] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61 and the check environment of 03-64), data model and processes with three diagrams, from the code
 
-**Wave 35** *(blocked on Wave 34 completion)*
+**Wave 38** *(blocked on Wave 37 completion)*
 - [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35, the baseline rule of 03-61 and the check environment of 03-64), containment (with the command-identity rule of 03-64), integrations, overview, from the code
 
-**Wave 36** *(blocked on Wave 35 completion)*
+**Wave 39** *(blocked on Wave 38 completion)*
 - [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35, the residual of 03-61 and the lines of 03-64 and 03-65), fresh reviews of every new or changed document (success criterion 6)
 
 **Notes**: Delivers the work-item scheduler with dependencies, authority-class matching, `decide` with identity, duplicate and state-digest checks, batching, local notifier and launchd digest scheduler, gates G1 and G3, integrity gates for overrides and PRUNE, and subagent concurrency reservation. Excluded: push notifiers, reply channels other than the terminal.

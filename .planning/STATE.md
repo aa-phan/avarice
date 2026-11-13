@@ -5,15 +5,15 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: 03-70 halted, run 3 attempt 2 ruled product-defect by the owner; next a gap plan for the unit's declared non-required checks, then the owner's D-37 reset, then run 3 in a new epoch
-last_updated: "2026-11-13T22:52:15.033Z"
+stopped_at: Planned gap plans 03-71 (unit lists only executed checks; prompt names declared-not-run checks), 03-72 (run 3 D-37 reset and spend decision), 03-73 (run 2 attempt 4), 03-74 (run 3 attempt 3); next execute 03-71
+last_updated: "2026-11-13T23:31:41.228Z"
 last_activity: 2026-11-12
 last_activity_desc: Phase 03 execution started
-state_head: ae52f3dff8f63f7c3667fc0d8205a1b899d17bbb
+state_head: 2bebd974228cc06a34399ce15c5e6fc209021db8
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 130
+  total_plans: 134
   completed_plans: 125
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — EXECUTING
+Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
 Plan: 2 of 69
 Status: Ready to execute
 Last activity: 2026-11-12 — Phase 03 execution started
