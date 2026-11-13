@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "plan": "03-58",
+  "plan": "03-70",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-12T16:32:53.911Z",
+  "updatedAt": "2026-11-13T04:21:50.762Z",
   "runs": [
     {
       "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
@@ -4559,6 +4559,965 @@
           "overrides": "product-defect",
           "ref": "\"brief-harness-defect-fix-first\" (the owner's reply) at the plan 03-58 Task 3 checkpoint, 2026-11-12, overriding Claude's product-defect proposal",
           "at": "2026-11-12T16:37:20.554Z"
+        }
+      }
+    },
+    {
+      "runId": "run_01M79HRGD1R1538H52AH0B8FEX",
+      "title": "Theme attribute constant and the toggle's accessible name",
+      "state": "blocked_on_decision",
+      "reason": "decision",
+      "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "branch": "avarice/run_01M79HRGD1R1538H52AH0B8FEX",
+      "updatedAt": "2026-11-13T04:21:49.818Z",
+      "commit": null,
+      "clean": false,
+      "costUsd": 0.21713976499999998,
+      "hostConfigDir": {
+        "claudeConfigDir": "/Users/aphan/.claude-edu",
+        "source": "CLAUDE_CONFIG_DIR"
+      },
+      "contract": {
+        "version": 1,
+        "authorizedBy": "cli:start",
+        "reason": null
+      },
+      "budgets": [
+        {
+          "name": "costUsd",
+          "used": 0.21713976499999998,
+          "reserved": 0,
+          "limit": 4.5
+        },
+        {
+          "name": "invocations",
+          "used": 2,
+          "reserved": 0,
+          "limit": 5
+        },
+        {
+          "name": "subagentsTotal",
+          "used": 4,
+          "reserved": 0,
+          "limit": 20
+        },
+        {
+          "name": "toolCalls",
+          "used": 88,
+          "reserved": 0,
+          "limit": 800
+        },
+        {
+          "name": "wallClockMs",
+          "used": 464748,
+          "reserved": 0,
+          "limit": 7200000
+        }
+      ],
+      "items": [
+        {
+          "itemId": "A",
+          "state": "blocked_on_decision",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "0d6cede5-5d97-4ba5-b604-70d5dd3e01ae"
+        },
+        {
+          "itemId": "B",
+          "state": "blocked_on_decision",
+          "size": "medium",
+          "model": "sonnet",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "2512530e-5043-49ac-85b7-3ba76e1ad9ee"
+        }
+      ],
+      "attempts": [
+        {
+          "attemptId": "att_01M79HRMBVS0Y42Y0SXWBJ98Z4",
+          "ordinal": 1,
+          "reason": "initial",
+          "itemId": "A",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-13T04:13:30.875Z",
+          "endedAt": "2026-11-13T04:21:35.441Z"
+        },
+        {
+          "attemptId": "att_01M79J7DX6QDK6MPEXWE7XGD1S",
+          "ordinal": 2,
+          "reason": "initial",
+          "itemId": "B",
+          "outcome": "blocked:decision",
+          "startedAt": "2026-11-13T04:21:35.782Z",
+          "endedAt": "2026-11-13T04:21:49.816Z"
+        }
+      ],
+      "decisions": [
+        {
+          "decisionId": "dec_01M79J7DJHSYS9S4EW51923646",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "A"
+          ],
+          "issue": "oth calls in `syncAttribute`, and the `subscribeTheme` attribute filter. The `observer.observe(...)` call was wrapped to fit the 100-column limit. That is formatting only.\n- `tests/unit/use-theme.test.tsx`: imports the constant and adds one test that pins its value and checks that a toggle writes it. The two existing tests are unchanged.\n- Not touched: `index.html`, `404.html`, theme storage, `ThemeToggle.tsx`, `useTheme.ts`, and CSS. `tests/unit/theme-toggle.test.tsx` does not exist, so I did not create it.\n\n**Gates**\n- Grep: `THEME_ATTRIBUTE` appears on 6 lines in `theme.ts`. The quoted `'data-theme'` appears once, in the declaration.\n- Typecheck, lint, prettier on the two touched files, the three theme test files (30 tests), and the full unit suite (409 tests) all pass. The production build passes with `VITE_SITE_ORIGIN` set.\n- `npm run test:e2e` fails at its build step with \"VITE_SITE_ORIGIN is empty\". The allowed command list has no variable prefix. To clear it, run `VITE_SITE_ORI",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "text",
+              "kind": "text",
+              "label": "free text"
+            }
+          ],
+          "consequences": {
+            "text": "item A resumes with your text answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-13T04:21:35.441Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "verification-human-needed",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M79HRMBVS0Y42Y0SXWBJ98Z4"
+        },
+        {
+          "decisionId": "dec_01M79J7VKRH14Q5D129JTHWZG3",
+          "class": "acceptance",
+          "state": "open",
+          "urgency": "blocking",
+          "contractVersion": 1,
+          "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
+          "affectedItems": [
+            "B"
+          ],
+          "issue": "I haven't changed anything yet. The task says to ask which variant you want before any edit, and this choice decides what the toggle exposes to screen readers.\n\nBoth options keep the name \"Dark theme\" and `aria-pressed` exactly as they are. Both add `tests/unit/theme-toggle.test.tsx` with the test `theme toggle accessible name`, which pins whichever pattern you pick.\n\n- **Option 1** keeps the toggle button as it is and adds no spoken description.\n- **Option 2** adds a visually hidden description, \"Switches between the light and dark theme\", linked with `aria-describedby`. The toggle renders in two bars, so each instance gets its own unique id for the description.\n\nWhich variant of the ThemeToggle accessible pattern should I implement?\n1. Option 1: keep the toggle button with the fixed name \"Dark theme\" and `aria-pressed`.\n2. Option 2: the same toggle button plus a visually hidden description linked with `aria-describedby`, with a unique id per instance.",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "Option 1: keep the toggle button with the fixed name \"Dark theme\" and `aria-pressed`."
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "Option 2: the same toggle button plus a visually hidden description linked with `aria-describedby`, with a unique id per instance."
+            }
+          ],
+          "consequences": {
+            "1": "item B resumes with this answer",
+            "2": "item B resumes with this answer"
+          },
+          "evidenceRefs": [],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-13T04:21:49.816Z",
+          "answeredAt": null,
+          "answeredBy": null,
+          "answer": null,
+          "answerChannel": null,
+          "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M79J7DX6QDK6MPEXWE7XGD1S"
+        }
+      ],
+      "notifications": [
+        {
+          "notificationId": "ntf_01M79J7DJKKFEGN4P04Q36R42J",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M79J7DJHSYS9S4EW51923646"
+          ],
+          "state": "pending",
+          "attempts": 1,
+          "lastError": "osascript-missing",
+          "createdAt": "2026-11-13T04:21:35.443Z",
+          "deliveredAt": null
+        },
+        {
+          "notificationId": "ntf_01M79J7VKSPNBH5P3JG7BK5AP2",
+          "kind": "decisions",
+          "destination": "local",
+          "subjectIds": [
+            "dec_01M79J7VKRH14Q5D129JTHWZG3"
+          ],
+          "state": "pending",
+          "attempts": 1,
+          "lastError": "osascript-missing",
+          "createdAt": "2026-11-13T04:21:49.817Z",
+          "deliveredAt": null
+        }
+      ],
+      "gates": [
+        {
+          "gate": "G0",
+          "workItem": null,
+          "passed": true,
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "failures": []
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "typecheck",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "lint",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "format:check",
+          "status": "failed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "test",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:case",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:colors",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:contrast",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "build",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:meta",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:budget",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:no-phone",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        },
+        {
+          "name": "check:images",
+          "status": "passed",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC2",
+          "verifiedBy": [
+            "check:test",
+            "check:lint"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        },
+        {
+          "id": "AC3",
+          "verifiedBy": [
+            "decision:toggle-pattern",
+            "check:test",
+            "test:theme toggle accessible name"
+          ],
+          "satisfiedBy": [
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+              "workItem": "A",
+              "phase": "base"
+            }
+          ],
+          "satisfied": true
+        }
+      ],
+      "evidenceRows": [
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC2"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3"
+          ],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+          "clean": false,
+          "workItem": "A",
+          "acceptance": [],
+          "phase": "base"
+        }
+      ],
+      "commits": [],
+      "invocations": [
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M79HRMBVS0Y42Y0SXWBJ98Z4",
+          "itemId": "A",
+          "model": "haiku",
+          "invocationId": "inv_01M79HSKS06MVD9TNSJVBSJYAW",
+          "requestedSession": "0d6cede5-5d97-4ba5-b604-70d5dd3e01ae",
+          "answeredDecisionId": null,
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.14368836499999998,
+          "costChargedUsd": 0.14368836499999998,
+          "transcript": "sha256:e4a60530a9479127e8bda328323229ecff208cbc38b4bee95914538b21280393",
+          "initSessions": [
+            "0d6cede5-5d97-4ba5-b604-70d5dd3e01ae",
+            "0d6cede5-5d97-4ba5-b604-70d5dd3e01ae"
+          ],
+          "toolCounts": {
+            "Bash": 24,
+            "Read": 29,
+            "Agent": 4,
+            "Glob": 8,
+            "Grep": 10,
+            "Write": 3,
+            "Edit": 14
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M79J7DX6QDK6MPEXWE7XGD1S",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M79J7E3K9C2SCRYADS1CR6NM",
+          "requestedSession": "2512530e-5043-49ac-85b7-3ba76e1ad9ee",
+          "answeredDecisionId": null,
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.0734514,
+          "costChargedUsd": 0.0734514,
+          "transcript": "sha256:d32cbc7b7cc327ae0e20cadc0e5a0f95837aa831e52daa992420fcd83a44f504",
+          "initSessions": [
+            "2512530e-5043-49ac-85b7-3ba76e1ad9ee"
+          ],
+          "toolCounts": {}
+        }
+      ],
+      "toolCounts": {
+        "Bash": 24,
+        "Read": 29,
+        "Agent": 4,
+        "Glob": 8,
+        "Grep": 10,
+        "Write": 3,
+        "Edit": 14
+      },
+      "askUserQuestion": 0,
+      "statusView": {
+        "runId": "run_01M79HRGD1R1538H52AH0B8FEX",
+        "title": "Theme attribute constant and the toggle's accessible name",
+        "state": "blocked_on_decision",
+        "reason": "decision",
+        "lastCheckpoint": {
+          "seq": 16,
+          "nextAction": "park",
+          "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "at": "2026-11-13T04:21:49.509Z"
+        },
+        "branch": "avarice/run_01M79HRGD1R1538H52AH0B8FEX",
+        "commit": null,
+        "clean": false,
+        "evidence": [
+          {
+            "name": "typecheck",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "lint",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "format:check",
+            "kind": "check",
+            "status": "failed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "test",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:case",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:colors",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:contrast",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "build",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:meta",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:budget",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:no-phone",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          },
+          {
+            "name": "check:images",
+            "kind": "check",
+            "status": "passed",
+            "revision": "tree:sha256:a983af37a65bc8d984b9d8d933f644845420a1c000419f884c9a7a8690c39e38",
+            "clean": false
+          }
+        ],
+        "gates": [
+          {
+            "gate": "G0",
+            "passed": true,
+            "revision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+          }
+        ],
+        "openDecisions": 2,
+        "budgets": [
+          {
+            "name": "costUsd",
+            "used": 0.21713976499999998,
+            "limit": 4.5
+          },
+          {
+            "name": "invocations",
+            "used": 2,
+            "limit": 5
+          },
+          {
+            "name": "subagentsTotal",
+            "used": 4,
+            "limit": 20
+          },
+          {
+            "name": "toolCalls",
+            "used": 88,
+            "limit": 800
+          },
+          {
+            "name": "wallClockMs",
+            "used": 464748,
+            "limit": 7200000
+          }
+        ],
+        "references": [
+          {
+            "kind": "brief",
+            "id": "p3-run3-theme-toggle.md",
+            "revision": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd"
+          },
+          {
+            "kind": "conventions",
+            "id": ".avarice/config.json",
+            "revision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          }
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "size": "small",
+            "model": "haiku",
+            "dependsOn": [],
+            "attempts": 1
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          }
+        ],
+        "decisions": [
+          {
+            "decisionId": "dec_01M79J7DJHSYS9S4EW51923646",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "A"
+            ],
+            "supersedes": null,
+            "successor": null
+          },
+          {
+            "decisionId": "dec_01M79J7VKRH14Q5D129JTHWZG3",
+            "class": "acceptance",
+            "state": "open",
+            "affectedItems": [
+              "B"
+            ],
+            "supersedes": null,
+            "successor": null
+          }
+        ],
+        "notifications": {
+          "delivered": 0,
+          "pending": 2,
+          "held": 0,
+          "failed": 0,
+          "lastError": "osascript-missing"
+        },
+        "checksNotRun": [
+          {
+            "name": "test:e2e",
+            "reason": "not required"
+          }
+        ]
+      },
+      "checksNotRunExpected": [
+        "test:e2e"
+      ],
+      "brief": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "briefDigest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+      "run": "run3",
+      "attempt": 2,
+      "expects": "silence",
+      "plan": "03-70",
+      "host": {
+        "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+        "claudeVersion": "2.1.319",
+        "pinnedBy": "03-56-exit-authorization.json",
+        "liveAdmitVariableSet": false
+      },
+      "perRunCapUsd": 4.5,
+      "startExit": 3,
+      "startedAt": "2026-11-13T04:13:25Z",
+      "startStdoutTail": "run run_01M79HRGD1R1538H52AH0B8FEX: contract_ready\nproject: proj_01M6J4ATTQV9SQX67ATV0SB9EW (/Users/aphan/aa-phan-portfolio-v2)\nbase revision: 9f1cd8d51f83252ad11a8c486c4245b1b9fc3066\nconventions revision: 9f63d9114c5d3d720b8496b08cec85382cfaa357\ntitle: Theme attribute constant and the toggle's accessible name\nacceptance: 3 criteria\nwrite paths: src/lib/theme.ts, src/components/ui/ThemeToggle.tsx, tests/unit/theme-toggle.test.tsx, tests/unit/use-theme.test.tsx\nrequired checks: typecheck, lint, format:check, test, check:case, check:colors, check:contrast, build, check:meta, check:budget, check:no-phone, check:images\nbudgets: 4.50 USD per run, 2.00 USD per invocation; 120 min, 5 invocations, 800 tool calls\nindex: used (2 files, 0 symbols)\nitem A: small, haiku (from size); files src/lib/theme.ts (derived)\nitem B: medium, sonnet (from size); files src/components/ui/ThemeToggle.tsx (derived)\ncontract: routine v1 sha256:37054e907d2b9eabe5258856c8133ddb882dfaef2d91d0130397b41a1a5de0b1\nstored at: /Users/aphan/.local/share/avarice/personal-local/runs/run_01M79HRGD1R1538H52AH0B8FEX/contract-v1.json\nrun run_01M79HRGD1R1538H52AH0B8FEX: blocked_on_decision (decision)\n",
+      "checkoutBeforeSnapshot": {
+        "schema": 1,
+        "takenAt": "2026-11-13T04:13:25.468Z",
+        "repo": "/Users/aphan/aa-phan-portfolio-v2",
+        "digest": {
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 4
+          }
+        },
+        "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+        "refs": [
+          {
+            "ref": "refs/heads/avarice/run_01M6SE68ZTSJPBARR0DVKDKAMR",
+            "object": "0c4b58dffe2864f1521216fc87e7b7a0f0e3ece4"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEKC0QAEW1HQHBANRCJPE7",
+            "object": "c093ca053c949863220e150c4f98168d439e9ac5"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M6SEY4D8H2AWJX3PTTVZE1HR",
+            "object": "54b250016cd436fd2b340795b13c2cfadad6599f"
+          },
+          {
+            "ref": "refs/heads/avarice/run_01M770J8CYMCQSXJWVXBFAEGCW",
+            "object": "b548813dee64188d62f7ace572e9d486dc0a1669"
+          },
+          {
+            "ref": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+            "object": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+          },
+          {
+            "ref": "refs/heads/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          },
+          {
+            "ref": "refs/remotes/origin/main",
+            "object": "f69dcae633c942b535a5613e741249445d849bd5"
+          }
+        ]
+      },
+      "checkout": {
+        "before": {
+          "takenAt": "2026-11-13T04:13:25.468Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 4
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "after": {
+          "takenAt": "2026-11-13T04:21:50.462Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 4
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "equal": true,
+        "newRefs": [],
+        "removedOrChangedRefs": [],
+        "newRefObjects": []
+      },
+      "atPause": {
+        "at": "2026-11-13T04:21:50.760Z",
+        "state": "blocked_on_decision",
+        "items": [
+          {
+            "itemId": "A",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "0d6cede5-5d97-4ba5-b604-70d5dd3e01ae"
+          },
+          {
+            "itemId": "B",
+            "state": "blocked_on_decision",
+            "attempts": 1,
+            "gsdSession": "2512530e-5043-49ac-85b7-3ba76e1ad9ee"
+          }
+        ]
+      },
+      "stopOk": false,
+      "spend": {
+        "recordedUsd": 0,
+        "appendedUsd": 0.21713976499999998,
+        "line": {
+          "plan": "03-70",
+          "case": "exit-p3-run3-theme-toggle-run_01M79HRGD1R1538H52AH0B8FEX-start",
+          "costUsd": 0.21713976499999998,
+          "claudeVersion": "2.1.319",
+          "at": "2026-11-13T04:21:50.762Z"
+        }
+      },
+      "phase3SpentUsd": 13.11098208,
+      "spendGuardAfterStage": {
+        "remainingRunCapUsd": 4.282860235,
+        "ceilingUsd": 25,
+        "fits": true
+      },
+      "problems": [
+        "the run has 2 decision(s), 2 open; D-02 wants exactly one, open",
+        "the decision lists 0 choice option(s), not the two wordings",
+        "item B is independent of the decision and is blocked_on_decision, not done",
+        "the run has 2 notification row(s), not one"
+      ],
+      "classification": {
+        "proposed": {
+          "by": "claude",
+          "class": "brief-harness-defect",
+          "stoppedBy": "item A's own VERIFICATION status human_needed (pause signal verification-human-needed), not a gate: the verifier ran the declared check npm run test:e2e, the one command on the run's list that cannot pass as written (its own npm run build needs VITE_SITE_ORIGIN, the declared check carries no env, and the prefixed form is not an admitted command), and asked a human to run it with the variable set",
+          "at": [
+            "test/benchmark/portfolio/avarice-config.json:16",
+            "src/domain/run-contract.ts:671",
+            "src/domain/run-contract.ts:582",
+            "src/app/run-gsd-config.ts:143",
+            "src/domain/outcome.ts:116",
+            "src/app/run-stages/item.ts:390"
+          ],
+          "docsSystem": {
+            "conformant": true,
+            "ref": "docs/system/runs.md"
+          },
+          "summary": "Run 3's attempt 2 stopped blocked_on_decision on two open pause decisions, not the one the brief expects. The search route plan 03-69 built works live: the verifier and the other agents made 18 Grep and Glob calls with every result returned, no 'No such tool available' error, no shell refusal and no loop.limit possible (at most 10 searches in any one agent against a limit of 25 consecutive). Item A's change was made and every check the gate reads passed at the run's tree except format:check, pre-existing. Item A paused again with a different cause: the supervisor's prompt lists every declared check as a command the unit may run exactly as written, test:e2e included (src/domain/run-contract.ts:671 by docs/system/runs.md's execution row), and the benchmark portfolio's conventions declare test:e2e (test/benchmark/portfolio/avarice-config.json:16, required false) without the env the build step inside it needs, while the build and check:meta entries declare VITE_SITE_ORIGIN. The planner made 'npm run test:e2e must exit 0' gate 7 of the quick plan, the executor and verifier ran it, it failed at its build step with 'VITE_SITE_ORIGIN is empty', the prefixed form is not on the list, and the verifier wrote human_needed, which the supervisor reads as a pause (outcome.ts:116). The supervisor's own gate never judges test:e2e (not required, not a target check; reported not run under D-35), and AVARICE behaved as docs/system documents. Alternative reading for the owner: product-defect, because the prompt tells the unit what the gate does with a required check that failed before the item began (run-gsd-config.ts:119) but nothing about a declared check the gate does not judge, so the unit makes a gate of it; and the unit's list holds a command that cannot work. Consequence of each ruling: brief-harness-defect earns no reset, so run 3's epoch ends for the owner with two failures; product-defect allows the D-37 reset after a fix with an offline red-to-green scenario and parity. Item B paused on its planted numbered choice as the brief plans. Both banners were queued with lastError osascript-missing (the forced failure held). Checkout digests equal, no new ref, cost 0.2171 USD of 4.50.",
+          "proposedAt": "2026-11-13T04:25:05.808Z"
         }
       }
     }
