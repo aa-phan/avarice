@@ -5518,6 +5518,13 @@
           },
           "summary": "Run 3's attempt 2 stopped blocked_on_decision on two open pause decisions, not the one the brief expects. The search route plan 03-69 built works live: the verifier and the other agents made 18 Grep and Glob calls with every result returned, no 'No such tool available' error, no shell refusal and no loop.limit possible (at most 10 searches in any one agent against a limit of 25 consecutive). Item A's change was made and every check the gate reads passed at the run's tree except format:check, pre-existing. Item A paused again with a different cause: the supervisor's prompt lists every declared check as a command the unit may run exactly as written, test:e2e included (src/domain/run-contract.ts:671 by docs/system/runs.md's execution row), and the benchmark portfolio's conventions declare test:e2e (test/benchmark/portfolio/avarice-config.json:16, required false) without the env the build step inside it needs, while the build and check:meta entries declare VITE_SITE_ORIGIN. The planner made 'npm run test:e2e must exit 0' gate 7 of the quick plan, the executor and verifier ran it, it failed at its build step with 'VITE_SITE_ORIGIN is empty', the prefixed form is not on the list, and the verifier wrote human_needed, which the supervisor reads as a pause (outcome.ts:116). The supervisor's own gate never judges test:e2e (not required, not a target check; reported not run under D-35), and AVARICE behaved as docs/system documents. Alternative reading for the owner: product-defect, because the prompt tells the unit what the gate does with a required check that failed before the item began (run-gsd-config.ts:119) but nothing about a declared check the gate does not judge, so the unit makes a gate of it; and the unit's list holds a command that cannot work. Consequence of each ruling: brief-harness-defect earns no reset, so run 3's epoch ends for the owner with two failures; product-defect allows the D-37 reset after a fix with an offline red-to-green scenario and parity. Item B paused on its planted numbered choice as the brief plans. Both banners were queued with lastError osascript-missing (the forced failure held). Checkout digests equal, no new ref, cost 0.2171 USD of 4.50.",
           "proposedAt": "2026-11-13T04:25:05.808Z"
+        },
+        "confirmed": {
+          "by": "owner",
+          "class": "product-defect",
+          "overrides": "brief-harness-defect",
+          "ref": "\"product-defect\" (the owner's reply) at the plan 03-70 Task 3 checkpoint, 2026-11-13, overriding Claude's brief-harness-defect proposal",
+          "at": "2026-11-13T22:50:44.149Z"
         }
       }
     }

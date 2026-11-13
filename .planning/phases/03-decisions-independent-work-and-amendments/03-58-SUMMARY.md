@@ -30,7 +30,9 @@ key-decisions:
 requirements-completed: []
 
 completed: 2026-11-12
-status: halted
+status: superseded
+superseded_by: ["03-69", "03-70"]
+superseded_note: "The owner's brief-harness-defect ruling with fix first (D-26, D-27) was answered by the search-route fix of plan 03-69 and the re-run of plan 03-70 on 2026-11-13, whose own stop the owner ruled a product-defect."
 ---
 
 # Phase 3 Plan 58: Run 3's attempt 1 started once, stopped on item A's human_needed verification, ruled a brief-harness-defect (fix first) Summary
@@ -115,3 +117,7 @@ None.
 - Commits 85e8130 and 5527e81 are ancestors of HEAD; `git log ec5fc0e..HEAD` showed exactly 85e8130 before the ruling commit.
 - `classification.confirmed.by` is `owner` with class `brief-harness-defect` in run 3's newest entry.
 - Task 3 checks passed: `run3-stop-ruled:brief-harness-defect`; spend within caps.
+
+## Superseded by the gap plans
+
+Attempt 1's stop on item A's `human_needed` verification was ruled a brief-harness-defect by the owner, fix first, because the unit's sessions had no content-search route. Plan 03-69 fixed it: the launch line keeps the host's Grep and Glob tools for the unit and its agents, proven on the pinned host without spend and by scenario S. Plan 03-70 re-ran run 3 as attempt 2 (run `run_01M79HRGD1R1538H52AH0B8FEX`): the search route worked live, and the attempt stopped again on item A's `human_needed` for a different cause, the declared non-required check `test:e2e`. The owner's reply to that stop was, verbatim: "product-defect", which is run 3's ruling for the order and overrides Claude's brief-harness-defect proposal. Attempt 1's facts stay as evidence that does not count toward 3 of 3 (D-28).
