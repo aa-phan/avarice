@@ -44,7 +44,7 @@ import type { RunDisposition } from '../../domain/work-items.ts';
 import type { InvocationOutcome } from '../../ports/agent-host.ts';
 import type { AttemptRow, DecisionRow, RunRow, WorkItemRow } from '../../ports/ledger.ts';
 import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts';
-import { measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
+import { checksNotRun, measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
 import type { CheckRunResult, InventoryMeasure } from '../checks.ts';
 import { queryContext } from '../context.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
@@ -967,7 +967,7 @@ async function launchUnit(unit: Unit, row: RunRow, launch: Launch): Promise<Resu
     prompt =
       resume !== undefined && answered !== null
         ? runResumePrompt(resumeAnswerText(answered.decision), resumeItemOf(contract, unit.item.itemId))
-        : runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text, preExisting);
+        : runUnitPrompt(contract, pack, promptItemOf(contract, unit.item.itemId), answered === null ? undefined : ownerAnswerText(answered.decision), repair?.text, preExisting, checksNotRun(contract));
   } catch (cause) {
     if (!(cause instanceof RangeError)) throw cause;
     const blocked = blockItem(ctx, { reason: 'decision', signal: { kind: 'pause' }, issue: `the brief is too long for the unit prompt: ${cause.message}`, attemptId, itemId: unit.item.itemId, base: itemBase });

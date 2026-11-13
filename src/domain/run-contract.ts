@@ -4,6 +4,8 @@
 // write set past the conventions, write a protected path, or grant the agent git, avarice or network commands.
 // A declared check is listed for the agent with its environment written as leading NAME=value words (plan 03-64; D-26, D-27), so the unit
 // runs it exactly as the supervisor does; the hook compares those words like any other word of the command.
+// Plan 03-71 (D-26, D-27): only the checks the run executes (required, or a target of the brief) are listed; a declared check no gate judges is not, because the unit made a gate of
+// one that could not pass as written (run 3's attempt 2).
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
@@ -668,7 +670,13 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
       return invalid('execution.commands', `${JSON.stringify(command)} would grant the agent a command that is never granted`);
     }
   }
-  const commands = unique([...conventions.agentCommands, ...conventions.checks.map(checkAgentCommand)]);
+  // The agent is given only the checks the run executes: a required check or a target check of the brief. A declared check that is neither is never run by the supervisor and
+  // judged by no gate (D-35), so listing it would hand the unit a command whose result means nothing to the run and that may not even pass as declared (run 3's attempt 2, plan 03-71).
+  // It stays in execution.checks, and both refusals above still judge it. A repository's own agent command is kept as written, even when it equals a dropped check's command.
+  const commands = unique([
+    ...conventions.agentCommands,
+    ...conventions.checks.filter((check) => check.required || brief.targetChecks.includes(check.name)).map(checkAgentCommand),
+  ]);
 
   const compiledItems = compileWorkItems(brief, write, protectedGlobs, input.indexFacts);
   if (!compiledItems.ok) return compiledItems;
