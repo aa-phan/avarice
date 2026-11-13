@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "plan": "03-72",
+  "checkedAt": "2026-11-13T23:59:03.000Z",
+  "spentUsd": 0,
+  "modelHostLaunched": false,
+  "precondition": {
+    "readFrom": "avarice status --json (read-only, owner profile, AVARICE_CLAUDE_BIN=2.1.319)",
+    "summary03_71Status": "complete",
+    "nodeModulesIsDirectory": true,
+    "claudeRanCancel": false
+  },
+  "run3Attempts": [
+    {
+      "runId": "run_01M78966NJ0SW8NB54564MFFZW",
+      "attempt": 1,
+      "state": "cancelled",
+      "confirmedClass": "brief-harness-defect",
+      "confirmedBy": "owner",
+      "confirmedAt": "2026-11-12T16:37:20.554Z",
+      "claudeRanCancel": false
+    },
+    {
+      "runId": "run_01M79HRGD1R1538H52AH0B8FEX",
+      "attempt": 2,
+      "state": "cancelled",
+      "confirmedClass": "product-defect",
+      "confirmedBy": "owner",
+      "confirmedAt": "2026-11-13T22:50:44.149Z",
+      "claudeRanCancel": false
+    }
+  ],
+  "parity": {
+    "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-72-parity.json",
+    "exitCode": 0,
+    "parity": true,
+    "problems": [],
+    "mismatches": [],
+    "checks": 12,
+    "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "checkedAt": "2026-11-13T23:56:39.019Z"
+  },
+  "scenario": {
+    "runId": "run_01M79HRGD1R1538H52AH0B8FEX",
+    "test": "test/integration/run-declared-checks.test.ts",
+    "redPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-71-red-task1.json",
+    "redExitCode": 1,
+    "redFail": 4,
+    "greenPath": ".planning/phases/03-decisions-independent-work-and-amendments/03-72-green-scenario-d.json",
+    "greenExitCode": 0,
+    "greenPass": 5,
+    "greenFail": 0
+  },
+  "portfolioCommands": {
+    "test": "test/unit/exit-drafts.test.ts",
+    "exitCode": 0,
+    "pass": 39,
+    "fail": 0
+  },
+  "proposal": {
+    "at": "2026-11-13T23:58:34.958Z",
+    "by": "claude",
+    "covers": [
+      "run_01M78966NJ0SW8NB54564MFFZW",
+      "run_01M79HRGD1R1538H52AH0B8FEX"
+    ],
+    "confirmed": null
+  },
+  "authorizeRun3BeforeConfirm": {
+    "exitCode": 75,
+    "text": "exit-run: stop-loss (D-29): run3 has failed twice; return to the owner before spending again"
+  },
+  "authorizeRun2": {
+    "exitCode": 0,
+    "text": "authorized: test/benchmark/phase3/p3-run2-graduation-label.md (sha256:f0c9395bc0fd...), host 2.1.319, Phase 3 spend 13.1110 plus 4.50 fits 25 USD, run2 attempt 4"
+  },
+  "hostVersion": "2.1.319",
+  "hostVersionOutput": "2.1.319 (Claude Code)",
+  "spend": {
+    "spentUsdPhase3": 13.11098208,
+    "ceilingUsd": 25,
+    "perRunCapUsd": 4.5,
+    "headroomUsd": 11.88901792,
+    "runsToGo": [
+      "run2",
+      "run3",
+      "run1"
+    ],
+    "threeRunsAtCapUsd": 13.5,
+    "fullCapsFit": false,
+    "shortfallUsd": 1.6109820799999994,
+    "run1HeadroomUsd": 7.389017920000001,
+    "largestEqualCapThatFitsUsd": 3.96,
+    "priorAttemptCostsUsd": {
+      "plan03_68_run2_attempt3": 0.9807881449999998,
+      "plan03_58_run3_attempt1": 0.25204566500000003,
+      "plan03_70_run3_attempt2": 0.21713976499999998
+    },
+    "perStartCapOverride": false
+  },
+  "problems": []
+}

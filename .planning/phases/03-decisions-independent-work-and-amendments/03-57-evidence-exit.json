@@ -5587,6 +5587,41 @@
         "ref": "\"confirm-reset\" (the owner's reply) at the plan 03-67 Task 2 checkpoint, 2026-11-12",
         "at": "2026-11-12T04:30:58.090Z"
       }
+    },
+    {
+      "run": "run3",
+      "covers": [
+        "run_01M78966NJ0SW8NB54564MFFZW",
+        "run_01M79HRGD1R1538H52AH0B8FEX"
+      ],
+      "proposed": {
+        "by": "claude",
+        "at": "2026-11-13T23:58:34.958Z",
+        "summary": "Run 3's attempt 2 was an owner-ruled product defect: the unit's command list held the declared check test:e2e, which no gate judges and which cannot pass as declared, and the prompt said nothing about it (fixed by plan 03-71, scenario D); attempt 1 was a brief-harness defect fixed by plan 03-69; parity holds at 9f1cd8d",
+        "pin": "9f1cd8d",
+        "scenarios": [
+          {
+            "runId": "run_01M79HRGD1R1538H52AH0B8FEX",
+            "test": "test/integration/run-declared-checks.test.ts",
+            "red": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-71-red-task1.json",
+              "sha256": "6384821d614ffaacee178c4ae2b40d2d5e6a1615b999a84faa1592eb73ce8434"
+            },
+            "green": {
+              "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-72-green-scenario-d.json",
+              "sha256": "7a35bfba4db5cf76cb851c9c2ef57b78ba7d48d07f0bc7b895305b953a82ae59"
+            }
+          }
+        ],
+        "parity": {
+          "path": ".planning/phases/03-decisions-independent-work-and-amendments/03-72-parity.json",
+          "sha256": "fc47d349b4f5fb004ab188ced3cce47655954c62925c22abdd839f9065034104",
+          "checkedAt": "2026-11-13T23:56:39.019Z",
+          "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+          "parity": true,
+          "problems": []
+        }
+      }
     }
   ]
 }
