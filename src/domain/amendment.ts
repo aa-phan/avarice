@@ -11,7 +11,7 @@ import { BRIEF_LIMITS, parseAcceptanceSection } from './brief.ts';
 import { CHECK_NAME_PATTERN, validateGlob } from './conventions.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
-import { BUDGET_OVERRIDE_NAMES, checkG0Static, globWithin } from './run-contract.ts';
+import { BUDGET_OVERRIDE_NAMES, checkAgentCommand, checkG0Static, globWithin } from './run-contract.ts';
 import type { RunContract } from './run-contract.ts';
 
 export interface AmendmentRequest {
@@ -196,6 +196,10 @@ function amendWrite(next: RunContract, raw: unknown, conventionsWrite: readonly 
 
 // D-20 / AUT-16: `+name` makes a declared check required, `-name` makes it not required. The declaration stays; only the contract's
 // required list changes, in the declaration order the compiler uses. A run keeps at least one required check (G0).
+// The compiler lists for the agent only the checks the run executes, so a check the amendment makes required must reach the agent too (plan 03-71), or the unit could not
+// run what the gate now judges. Compile already refused a never-granted first word and a non-plain or secret-looking environment for every declared check, so the amendment
+// adds nothing the compiler did not vet. A check made not required keeps its command, because it may also be the repository's own agent command; the prompt then names it
+// as not judged. The widening stays the owner's alone: amend runs only from the owner's terminal outside the run (CS-11, D-18).
 function amendChecks(next: RunContract, raw: unknown, diff: FieldDiff[]): Result<void> {
   if (!Array.isArray(raw)) return invalid('check', 'must be a list of +name or -name entries');
   const declared = new Set(next.execution.checks.map((check) => check.name));
@@ -225,6 +229,19 @@ function amendChecks(next: RunContract, raw: unknown, diff: FieldDiff[]): Result
   if (added.length === 0 && removed.length === 0) return ok(undefined);
   next.verification.requiredChecks = next.execution.checks.map((check) => check.name).filter((name) => target.has(name));
   diff.push({ path: 'verification.requiredChecks', ...(added.length > 0 ? { added } : {}), ...(removed.length > 0 ? { removed } : {}) });
+  const listed = new Set(next.execution.commands);
+  const commandsAdded: string[] = [];
+  for (const check of next.execution.checks) {
+    if (!added.includes(check.name)) continue;
+    const command = checkAgentCommand(check);
+    if (listed.has(command)) continue;
+    listed.add(command);
+    commandsAdded.push(command);
+  }
+  if (commandsAdded.length > 0) {
+    next.execution.commands.push(...commandsAdded);
+    diff.push({ path: 'execution.commands', added: commandsAdded });
+  }
   return ok(undefined);
 }
 
