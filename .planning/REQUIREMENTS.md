@@ -53,7 +53,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **RC-3** [MVP]: The user's authorization comes from the brief, the selected preset or an explicit instruction; AVARICE adds no confirmation step for authority already granted.
 - [x] **RC-4** [MVP]: Within the contract, routine actions and phase transitions proceed without human prompts.
 - [x] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
-- [ ] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
+- [x] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
 - [ ] **RC-7** [MVP]: Each work item carries a size (`small`, `medium`, `large`) and a specification (files it may change, public symbols it adds or changes, configuration keys it touches, documents it cites); when the brief omits them the compiler derives them from the brief, the indexes and the GSD plan and records which were derived.
 - [ ] **RC-8** [MVP]: The model for each work item's invocation comes from its size through the preset's size-to-model map, unless the contract overrides it for that item.
 
@@ -93,7 +93,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **AUT-13** [MVP]: When a contract enables the mutation gate, test strength on changed lines is measured with a mechanically generated, model-free mutant set; each mutant is killed or accepted as equivalent by the user before `ready_for_review`; model-proposed mutants may add to the set but never replace it (ADR-007).
 - [ ] **AUT-14** [MVP]: A hardening work item may add or strengthen tests only; its contract makes every non-test path read-only, and no test is edited to pass under a mutation.
 - [ ] **AUT-15** [Later]: An unattended run may span several repositories of one project group only when each has an active project record; each repository gets its own worktree, contract scope, gates and change request, and the run reaches `ready_for_review` only when every repository's gates pass.
-- [ ] **AUT-16** [MVP]: After every work item the required checks run on the run worktree; a newly failing check is charged to that item and goes to repair, then to a decision; a contract may turn this off only with a recorded reason.
+- [x] **AUT-16** [MVP]: After every work item the required checks run on the run worktree; a newly failing check is charged to that item and goes to repair, then to a decision; a contract may turn this off only with a recorded reason.
 - [ ] **AUT-17** [MVP]: Gate G2 compares each item's symbol diff from the code graph with its specification; a new import outside the repository's declared dependencies, or a new or changed public symbol outside the specification, is a finding that goes to repair, then to a decision.
 
 ### Codebase onboarding (ONB-1 to ONB-15)
@@ -244,7 +244,7 @@ Each v1 requirement maps to exactly one phase.
 | RC-3 | Phase 2 | Complete |
 | RC-4 | Phase 2 | Complete |
 | RC-5 | Phase 2 | Complete |
-| RC-6 | Phase 3 | Pending |
+| RC-6 | Phase 3 | Complete |
 | RC-7 | Phase 3 | Pending |
 | RC-8 | Phase 3 | Pending |
 | CON-1 | Phase 2 | Complete |
@@ -278,7 +278,7 @@ Each v1 requirement maps to exactly one phase.
 | AUT-13 | Phase 5 | Pending |
 | AUT-14 | Phase 5 | Pending |
 | AUT-15 | Phase 8 | Pending |
-| AUT-16 | Phase 3 | Pending |
+| AUT-16 | Phase 3 | Complete |
 | AUT-17 | Phase 5 | Pending |
 | ONB-1 | Phase 1 | Complete |
 | ONB-2 | Phase 1 | Complete |

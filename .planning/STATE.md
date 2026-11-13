@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: Planned gap plans 03-71 (unit lists only executed checks; prompt names declared-not-run checks), 03-72 (run 3 D-37 reset and spend decision), 03-73 (run 2 attempt 4), 03-74 (run 3 attempt 3); next execute 03-71
-last_updated: "2026-11-13T23:31:41.228Z"
-last_activity: 2026-11-12
+stopped_at: Completed 03-71-PLAN.md
+last_updated: "2026-11-13T23:51:41.748Z"
+last_activity: 2026-11-13
 last_activity_desc: Phase 03 execution started
-state_head: 2bebd974228cc06a34399ce15c5e6fc209021db8
+state_head: 6ca7f3a5712ef17662cf48ab3792a2edd96fe16e
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 134
-  completed_plans: 125
+  completed_plans: 126
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-08)
 
 ## Current Position
 
-Phase: 03 (Decisions, independent work and amendments) — READY TO EXECUTE
-Plan: 2 of 69
+Phase: 03 (Decisions, independent work and amendments) — EXECUTING
+Plan: 2 of 73
 Status: Ready to execute
-Last activity: 2026-11-12 — Phase 03 execution started
+Last activity: 2026-11-13 — Phase 03 execution started
 
 Progress: [███░░░░░░░] 25%
 
@@ -159,6 +159,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P66 | 16 min | 3 tasks | 4 files |
 | Phase 03 P67 | 12 min | 2 tasks | 5 files |
 | Phase 03 P69 | 60min | 3 tasks | 14 files |
+| Phase 03 P71 | 45min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -378,6 +379,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 3]: 03-68: run 2's attempt 3 passed and the owner confirmed it with continue; run 2 counts toward 3 of 3. Run 1 headroom after it is 7.8582 USD (25 - 4.50 - 12.6418); 03-63-SUMMARY.md is superseded
 - [Phase 3]: 03-58: run 3's attempt 1 stopped on two open pause decisions because the unit's verifier and executor subagents had no content-search route (Grep tool absent from their sessions, shell grep denied by the hook); the owner ruled brief-harness-defect, fix first, overriding Claude's product-defect proposal. Halted; a gap plan fixes the route, then run 3's attempt 2 of 2 runs before run 1. Spend 0.2520 USD; ledger 12.8938 of 25; run 1 headroom 7.6062 USD. The owner's profile config still forces the banner failure
 - [Phase 03]: 03-69: the launch line keeps the host's search tools with --allowedTools Glob,Grep (judge admits only that pair, once); shell grep stays refused; offline probe of the pinned 2.1.319 host plus scenario S prove it
+- [Phase 03]: 03-71: the agent command list holds only the checks the run executes (required or target); declared checks no gate judges are named in the prompt as judged by no gate; contract amend --check +name adds the check's command with an execution.commands diff entry
 
 ### Pending Todos
 
@@ -438,6 +440,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T22:52:14.270Z
-Stopped at: 03-70 halted, run 3 attempt 2 ruled product-defect by the owner; next a gap plan for the unit's declared non-required checks, then the owner's D-37 reset, then run 3 in a new epoch
+Last session: 2026-11-13T23:51:41.305Z
+Stopped at: Completed 03-71-PLAN.md
 Resume file: None
