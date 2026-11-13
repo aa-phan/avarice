@@ -54,6 +54,15 @@ export interface FakeRunOptions {
   // matched files equal the sorted `expect` and `gaps_found` otherwise. Takes precedence over `verification`, `verificationByPrompt` and `runListedCommand`. With
   // `recordTo`, the record gains `search: { available, outside: [{ path, denied }], denied, matched, shell }` (shell null, or { command, denied }). JSON-serializable.
   verifierSearch?: { pattern: string; path: string; expect: readonly string[]; outside?: readonly string[]; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-71 (D-26, D-27). The fake unit stands in for run 3's attempt-2 unit, whose planner made a gate of a declared check because its prompt listed the command, and whose
+  // verifier wrote human_needed when that command could not pass as written. It decides only from the prompt the real code produced. After the edits and after `shellAttempts`,
+  // for each entry: `named` is whether the prompt holds a line equal to `notJudgedMarker` followed by the bullet `- <name>` (promptNames); `listed` is whether the prompt's
+  // 'Commands you may run, exactly as written:' bullets hold one equal to `command` or ending with a space and `command`. Only an entry that is listed and not named becomes a gate:
+  // its bullet goes through the real hook and, when admitted, runs as `runListedCommand` runs its command. The status is `passed` when every gate it made exited 0 (which includes
+  // making none) and `otherwise` when a gate exited non-zero or was refused. Takes precedence over `verificationByPrompt` and `verification`, after `verifierSearch` and
+  // `runListedCommand`. With `recordTo`, the record gains `gates: [{ name, listed, named, denied, exitCode }]` (denied false and exitCode null for an entry that made no gate).
+  // JSON-serializable, like every option here.
+  planGates?: { checks: ReadonlyArray<{ name: string; command: string }>; notJudgedMarker: string; otherwise: 'human_needed' | 'gaps_found' };
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -467,9 +476,11 @@ export class FakeRunHost implements AgentHost {
       tool('Write', { file_path: target, content: 'outside the write set\n' }, () => write(o.deniedEdit as string, 'outside the write set\n'));
     }
 
-    // Plan 03-64: the command the prompt lists for a check, run as the unit would run it (see `runListedCommand`).
+    // Plan 03-64: the command the prompt lists for a check, run as the unit would run it (see `runListedCommand`). Plan 03-71: the gates the unit makes of the commands its prompt
+    // lists and does not name as judged by no gate (see `planGates`).
     let listedStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
-    if (o.runListedCommand !== undefined || o.shellAttempts !== undefined) {
+    let gatesStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    if (o.runListedCommand !== undefined || o.shellAttempts !== undefined || o.planGates !== undefined) {
       const hostEnv = buildInvocationEnv(process.env, {
         gsdCoreBin: join(tmpdir(), 'avarice-fake-run-no-such-gsd-core-bin'),
         onboardingId: req.onboardingId,
@@ -498,8 +509,25 @@ export class FakeRunHost implements AgentHost {
         listed = bullet === undefined ? { command: wanted, denied: false, exitCode: null } : runShell(bullet);
         listedStatus = listed.exitCode === 0 ? 'passed' : o.runListedCommand.otherwise;
       }
+      let gates: Array<{ name: string; listed: boolean; named: boolean; denied: boolean; exitCode: number | null }> | undefined;
+      if (o.planGates !== undefined) {
+        const plan = o.planGates;
+        gates = [];
+        let failed = false;
+        for (const entry of plan.checks) {
+          const named = promptNames(req.prompt, plan.notJudgedMarker, entry.name);
+          const bullet = listedCommandsOf(req.prompt).find((b) => b === entry.command || b.endsWith(` ${entry.command}`));
+          const made = bullet !== undefined && !named && !stopped ? runShell(bullet) : undefined;
+          if (made !== undefined && (made.denied || made.exitCode !== 0)) failed = true;
+          gates.push({ name: entry.name, listed: bullet !== undefined, named, denied: made?.denied ?? false, exitCode: made?.exitCode ?? null });
+        }
+        gatesStatus = failed ? plan.otherwise : 'passed';
+      }
       if (o.recordTo !== undefined) {
-        writeFileSync(o.recordTo, JSON.stringify({ ...record, ...(listed !== undefined ? { listed } : {}), ...(o.shellAttempts !== undefined ? { shell: attempted } : {}) }));
+        writeFileSync(
+          o.recordTo,
+          JSON.stringify({ ...record, ...(listed !== undefined ? { listed } : {}), ...(o.shellAttempts !== undefined ? { shell: attempted } : {}), ...(gates !== undefined ? { gates } : {}) }),
+        );
       }
     }
 
@@ -513,7 +541,7 @@ export class FakeRunHost implements AgentHost {
     }
     if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
-      const status = searchStatus ?? listedStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
+      const status = searchStatus ?? listedStatus ?? gatesStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
       if (status !== 'none') {
         const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
