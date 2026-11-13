@@ -288,8 +288,40 @@ describe('applyAmendment: --check +name / -name (D-20 required checks, AUT-16)',
     assert.deepEqual(v1.verification.requiredChecks, ['test']);
     const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }] }));
     assert.deepEqual(r.contract.verification.requiredChecks, ['test', 'build']);
-    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'] }]);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'] }, { path: 'execution.commands', added: ['npm run build'] }]);
+    assert.deepEqual(r.contract.execution.commands.at(-1), 'npm run build');
     assert.deepEqual(r.invalidates, ['check-evidence']);
+  });
+
+  it('gives the agent the command of a check made required, as the compiler renders it (its environment first)', () => {
+    const conventions = {
+      ...CONVENTIONS_OBJECT,
+      checks: [...CONVENTIONS_OBJECT.checks, { name: 'site', argv: ['node', 'scripts/site.mjs'], required: false, env: { SITE_ORIGIN: 'https://example.test', A: '1' } }],
+    };
+    const v1 = compile(ONE_ITEM_BRIEF, conventions);
+    assert.equal(v1.execution.commands.includes('A=1 SITE_ORIGIN=https://example.test node scripts/site.mjs'), false, 'a check that is not required is not listed');
+    const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'site' }] }));
+    assert.deepEqual(r.contract.execution.commands, [...v1.execution.commands, 'A=1 SITE_ORIGIN=https://example.test node scripts/site.mjs']);
+    assert.deepEqual(r.diff, [
+      { path: 'verification.requiredChecks', added: ['site'] },
+      { path: 'execution.commands', added: ['A=1 SITE_ORIGIN=https://example.test node scripts/site.mjs'] },
+    ]);
+  });
+
+  it('adds no command entry for a check made required whose command is already listed (a conventions agent command)', () => {
+    const v1 = compile(ONE_ITEM_BRIEF, { ...CONVENTIONS_OBJECT, agentCommands: ['npm run build'] });
+    assert.deepEqual(v1.execution.commands, ['npm run build', 'npm test']);
+    const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }] }));
+    assert.deepEqual(r.contract.execution.commands, ['npm run build', 'npm test']);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'] }]);
+  });
+
+  it('never mutates the input contract when it adds a command', () => {
+    const v1 = compile(ONE_ITEM_BRIEF);
+    const before = structuredClone(v1);
+    const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }] }));
+    assert.deepEqual(v1, before);
+    assert.notEqual(r.contract.execution.commands, v1.execution.commands);
   });
 
   it('makes a required check not required, keeping the declaration', () => {
@@ -300,13 +332,14 @@ describe('applyAmendment: --check +name / -name (D-20 required checks, AUT-16)',
     assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', removed: ['test'] }]);
     assert.deepEqual(r.invalidates, ['check-evidence']);
     assert.equal(r.contract.execution.checks.some((c) => c.name === 'test'), true);
+    assert.deepEqual(r.contract.execution.commands, v1.execution.commands, 'a check made not required keeps its command');
   });
 
   it('applies an add and a remove together, in one diff entry', () => {
     const v1 = compile(ONE_ITEM_BRIEF);
     const r = unwrap(amend(v1, { checks: [{ op: '+', name: 'build' }, { op: '-', name: 'test' }] }));
     assert.deepEqual(r.contract.verification.requiredChecks, ['build']);
-    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'], removed: ['test'] }]);
+    assert.deepEqual(r.diff, [{ path: 'verification.requiredChecks', added: ['build'], removed: ['test'] }, { path: 'execution.commands', added: ['npm run build'] }]);
   });
 
   it('refuses removing the only required check, naming check', () => {
@@ -418,7 +451,7 @@ describe('applyAmendment: combined requests', () => {
     );
     assert.deepEqual(r.invalidates, ['gates', 'acceptance-mappings', 'checks-rerun', 'scope-conformance', 'check-evidence']);
     assert.equal(r.contract.contractVersion, 2);
-    assert.equal(r.diff.length, 5);
+    assert.equal(r.diff.length, 6);
   });
 
   it('gives scope-conformance alone for a write amendment beside a budget change', () => {

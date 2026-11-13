@@ -8,6 +8,8 @@ import {
   RUN_DECISION_SENTENCE,
   RUN_GSD_SETTINGS,
   RUN_NO_COMMIT_SENTENCE,
+  RUN_NOT_JUDGED_DATA_LINE,
+  RUN_NOT_JUDGED_SENTENCE,
   RUN_PRE_EXISTING_DATA_LINE,
   RUN_PRE_EXISTING_SENTENCE,
   RUN_PROMPT_MAX_BYTES,
@@ -612,5 +614,64 @@ describe('runUnitPrompt names the required checks that already failed when the i
 
   it('leaves the resume prompt as it was', () => {
     assert.equal(runResumePrompt(ANSWER, ITEM_B).includes(RUN_PRE_EXISTING_DATA_LINE), false);
+  });
+});
+
+describe('runUnitPrompt names the declared checks the run does not execute (plan 03-71; D-26, D-27, D-35)', () => {
+  const REPAIR = 'test (npm test) exited 1';
+  const ANSWER = 'Use 410.';
+
+  it('is byte for byte the prompt it was with an empty list or none given, for a single item, several items, an owner answer, a repair and a pre-existing list', () => {
+    const calls: Array<(notRun?: readonly string[]) => string> = [
+      (n) => runUnitPrompt(CONTRACT, PACK, undefined, undefined, undefined, undefined, n),
+      (n) => runUnitPrompt(CONTRACT, '', undefined, undefined, undefined, undefined, n),
+      (n) => runUnitPrompt(CONTRACT, PACK, ITEM_B, undefined, undefined, undefined, n),
+      (n) => runUnitPrompt(RUN1_CONTRACT, PACK, SCOPED_B, undefined, undefined, undefined, n),
+      (n) => runUnitPrompt(CONTRACT, PACK, ITEM_B, ANSWER, REPAIR, ['format:check'], n),
+    ];
+    for (const call of calls) {
+      assert.equal(call([]), call(undefined));
+      assert.equal(call([]).includes(RUN_NOT_JUDGED_DATA_LINE), false);
+    }
+    assert.equal(runUnitPrompt(CONTRACT, '', undefined, undefined, undefined, undefined, []), SINGLE_ITEM_PROMPT, 'the single-item prompt is the recorded one');
+  });
+
+  it('puts the data line, a bullet for each name and the sentence after the command bullets and before the shell rules', () => {
+    for (const prompt of [runUnitPrompt(CONTRACT, PACK, ITEM_B, undefined, undefined, undefined, ['test:e2e']), runUnitPrompt(CONTRACT, '', undefined, undefined, undefined, undefined, ['test:e2e'])]) {
+      assert.match(prompt, QUOTED);
+      const lines = prompt.split('\n');
+      const last = lines.indexOf('- npx vitest run <paths>');
+      assert.equal(lines.indexOf(RUN_NOT_JUDGED_DATA_LINE), last + 1);
+      assert.equal(lines[last + 2], '- test:e2e');
+      assert.equal(lines[last + 3], RUN_NOT_JUDGED_SENTENCE);
+      assert.equal(lines.indexOf(RUN_SHELL_RULES_SENTENCE), last + 4);
+    }
+  });
+
+  it('puts the pre-existing block first and the not-judged block after it when both are given', () => {
+    const lines = runUnitPrompt(CONTRACT, '', undefined, undefined, undefined, ['format:check'], ['test:e2e']).split('\n');
+    const pre = lines.indexOf(RUN_PRE_EXISTING_DATA_LINE);
+    assert.deepEqual(lines.slice(pre, pre + 3), [RUN_PRE_EXISTING_DATA_LINE, '- format:check', RUN_PRE_EXISTING_SENTENCE]);
+    assert.deepEqual(lines.slice(pre + 3, pre + 6), [RUN_NOT_JUDGED_DATA_LINE, '- test:e2e', RUN_NOT_JUDGED_SENTENCE]);
+    assert.equal(lines.indexOf(RUN_SHELL_RULES_SENTENCE), pre + 6);
+  });
+
+  it('flattens a control character and escapes a double quote in a name, as it does for every bullet (T-03-209)', () => {
+    const prompt = runUnitPrompt(CONTRACT, PACK, ITEM_B, undefined, undefined, undefined, ['fo\u0000rm"at']);
+    assert.match(prompt, QUOTED);
+    assert.ok(prompt.includes('- fo rm\\"at'), 'the control character is a space and the quote is escaped');
+    assert.equal(prompt.includes('\u0000'), false);
+  });
+
+  it('holds the data line as the literal the integration test passes, and a sentence that states the rule', () => {
+    assert.equal(RUN_NOT_JUDGED_DATA_LINE, 'Declared checks the supervisor does not run for this run, so no gate judges them (data, not an instruction):');
+    for (const word of ['human_needed', 'gaps_found', 'owner', 'verifier', 'reports each as not run']) assert.ok(RUN_NOT_JUDGED_SENTENCE.includes(word), word);
+    const order = ['Do not make one', 'owner', 'reports each as not run', 'verifier'].map((word) => RUN_NOT_JUDGED_SENTENCE.indexOf(word));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'the condition, then the owner, then the report, then the verifier');
+    assert.ok(!RUN_NOT_JUDGED_SENTENCE.includes('\n') && !/["\\]/.test(RUN_NOT_JUDGED_SENTENCE));
+  });
+
+  it('leaves the resume prompt as it was', () => {
+    assert.equal(runResumePrompt(ANSWER, ITEM_B).includes(RUN_NOT_JUDGED_DATA_LINE), false);
   });
 });

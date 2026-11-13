@@ -969,3 +969,42 @@ describe('compileRunContract: a check is listed for the agent with its environme
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plan 03-71 (D-26, D-27, D-35): the agent is given only the checks the run executes.
+// ---------------------------------------------------------------------------------------------------------------------
+describe('compileRunContract: only the checks the run executes are listed for the agent (plan 03-71)', () => {
+  const declared = [
+    { name: 'test', argv: ['npm', 'test'], required: true },
+    { name: 'lint', argv: ['npm', 'run', 'lint'], required: false },
+    { name: 'build', argv: ['npm', 'run', 'build'], required: false, env: { A: '1' } },
+  ];
+
+  it('lists a required check and a target check, with its environment, and not a declared check that is neither; execution.checks keeps all three', () => {
+    const conventions = conventionsWith({ agentCommands: ['npm run format'], checks: declared });
+    const { execution, verification } = compile({ conventions, brief: briefWith({ targets: ['build'] }) });
+    assert.deepEqual(execution.commands, ['npm run format', 'npm test', 'A=1 npm run build']);
+    assert.deepEqual(execution.checks.map((c) => c.name), ['test', 'lint', 'build']);
+    assert.deepEqual(verification.requiredChecks, ['test']);
+    assert.deepEqual(verification.targetChecks, ['build']);
+  });
+
+  it('keeps a conventions agent command as written even when it equals the command of a dropped check', () => {
+    const conventions = conventionsWith({ agentCommands: ['npm run lint'], checks: declared });
+    assert.deepEqual(compile({ conventions }).execution.commands, ['npm run lint', 'npm test']);
+  });
+
+  it("lists exactly today's commands when every declared check is required", () => {
+    const conventions = conventionsWith({ checks: declared.map((c) => ({ ...c, required: true })) });
+    assert.deepEqual(compile({ conventions }).execution.commands, ['npm test', 'npm run lint', 'A=1 npm run build']);
+  });
+
+  it('still refuses a never-granted first word and a non-plain or secret env of a declared check that is not required', () => {
+    const never = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['sudo', 'x'], required: false }] });
+    assert.equal(refusal({ conventions: never }).field, 'execution.commands');
+    const spaced = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['npm', 'x'], required: false, env: { X: 'a b' } }] });
+    assert.equal(refusal({ conventions: spaced }).field, 'conventions.checks[1].env');
+    const secret = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['npm', 'x'], required: false, env: { TOKEN_X: `ghp_${'a'.repeat(36)}` } }] });
+    assert.equal(refusal({ conventions: secret }).field, 'conventions.checks[1].env');
+  });
+});

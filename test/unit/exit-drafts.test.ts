@@ -12,7 +12,9 @@ import { parseBrief } from '../../src/domain/brief.ts';
 import type { Brief } from '../../src/domain/brief.ts';
 import { checkSpecDigest, parseConventions } from '../../src/domain/conventions.ts';
 import type { Conventions } from '../../src/domain/conventions.ts';
-import { compileRunContract } from '../../src/domain/run-contract.ts';
+import { RUN_NOT_JUDGED_DATA_LINE, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import { checksNotRun } from '../../src/app/checks.ts';
+import { checkAgentCommand, compileRunContract } from '../../src/domain/run-contract.ts';
 import type { IndexFacts } from '../../src/domain/run-contract.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -278,6 +280,44 @@ describe('the three Phase 3 exit briefs (plan 03-28, D-02 to D-04)', () => {
       });
       assert.ok(lowered.ok, JSON.stringify(lowered));
       assert.equal(lowered.value.contract.budgets.costUsd.perRun, 5.67);
+    });
+
+    it(`${spec.file} lists for the agent the command of each of the twelve required checks and not test:e2e, and the unit prompt names test:e2e as judged by no gate (plan 03-71)`, () => {
+      const b = brief(path);
+      const compiled = compileRunContract({
+        runId: 'run_Phase3Draft03',
+        projectId: 'portfolio',
+        baseRevision: PIN,
+        conventionsRevision: CONVENTIONS_COMMIT,
+        brief: b,
+        conventions: conventions(),
+        nowIso: '2026-11-09T00:00:00.000Z',
+        policy: 'routine',
+      });
+      assert.ok(compiled.ok, JSON.stringify(compiled));
+      const contract = compiled.value.contract;
+      const conv = conventions();
+      for (const name of REQUIRED_CHECKS) {
+        const check = conv.checks.find((c) => c.name === name);
+        assert.ok(check !== undefined && contract.execution.commands.includes(checkAgentCommand(check)), `${name} is listed`);
+      }
+      assert.ok(contract.execution.commands.includes('VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build'));
+      assert.ok(contract.execution.commands.includes('VITE_SITE_ORIGIN=https://aa-phan.github.io npm run check:meta'));
+      assert.equal(contract.execution.commands.includes('npm run test:e2e'), false, 'test:e2e is not listed');
+      assert.deepEqual(checksNotRun(contract), ['test:e2e']);
+      const first = contract.intent.workItems[0];
+      assert.ok(first !== undefined);
+      const owned = new Set(first.acceptance);
+      const prompt = runUnitPrompt(contract, '', {
+        id: first.id,
+        task: first.task,
+        acceptance: contract.intent.acceptance.filter((c) => owned.has(c.id)).map((c) => `${c.id}: ${c.text}`),
+      }, undefined, undefined, undefined, checksNotRun(contract));
+      const lines = prompt.split('\n');
+      assert.equal(lines.includes('- npm run test:e2e'), false, 'the prompt lists no test:e2e command');
+      const at = lines.indexOf(RUN_NOT_JUDGED_DATA_LINE);
+      assert.ok(at >= 0, 'the prompt holds the not-judged data line');
+      assert.equal(lines[at + 1], '- test:e2e');
     });
 
     it(`${spec.file}: the planted item and the independent item share no file the compiler derives for them, and every file the run writes exists at the pin or is created by the brief`, { skip: portfolioSkip }, () => {
