@@ -77,7 +77,7 @@ Editing those four keys changes nothing. Because they are written once, they can
 
 ### The `notify` section
 
-AVARICE never writes this section: the owner adds it by hand. It sets where a banner may go, when a digest runs and when banners are held. The behavior it configures is described in [autonomy-and-decisions.md](autonomy-and-decisions.md#notification). The file is read each time a banner, a digest or a schedule needs the settings, so an edit applies to the next one with no restart. The only exception is the schedule: launchd keeps the times that `schedule install` last wrote until it is run again.
+AVARICE never writes this section: the owner adds it by hand. It sets where a banner may go, when a digest runs and when banners are held. The behavior it configures is described in [autonomy-and-decisions.md](autonomy-and-decisions.md#notification). The file is read each time a banner, a digest or a schedule needs the settings, so an edit applies to the next one with no restart. There are two exceptions. The `osascriptPath` is read once when a command starts, so a supervisor already running keeps the path it started with. And launchd keeps the times that `schedule install` last wrote until it is run again.
 
 A missing file or a missing `notify` section gives every default below, and a missing key inside the section takes its own default. The file is opened without following a symbolic link and must be a regular file of at most 65536 bytes holding a JSON object. Any other file, a section that is not an object and any key that this table does not list (in `notify` or in `notify.local`) is refused with the field and the reason. `schedule install` reports that as exit 64 and `digest` as exit 70.
 
