@@ -26,7 +26,9 @@ key-decisions:
   - "Run 3's attempt 2 stopped unexpectedly at its start (two open pause decisions, not one), so Task 2 was not presented and Task 3 became the owner's ruling on the stop: product-defect, overriding Claude's brief-harness-defect proposal"
 requirements-completed: []
 completed: 2026-11-13
-status: halted
+status: superseded
+superseded_by: ["03-71", "03-72", "03-73", "03-74"]
+superseded_note: "The owner's product-defect ruling on this attempt (D-26, D-27) led to plan 03-71's fix, plan 03-72's confirmed reset (D-36, D-37) and run 2's re-run in plan 03-73 (D-26); run 3's attempt 3 passed in plan 03-74 on 2026-11-14 and the owner ruled continue."
 ---
 
 # Phase 3 Plan 70: Run 3's attempt 2 started once, stopped on item A's human_needed for the declared non-required check test:e2e, ruled a product-defect Summary
@@ -123,3 +125,7 @@ None.
 - Commits ec1f0db and 971def7 are ancestors of HEAD; `git rev-list --count 431e7d1..HEAD` was 2 before this SUMMARY's commit.
 - `classification.confirmed.by` is `owner` with class `product-defect` in run 3's newest entry (attempt 2).
 - Task 3 checks passed: `supersede ok`, `run3-attempt2-ruled:product-defect`, run1HeadroomUsd 7.3890.
+
+## Superseded by the gap plans
+
+This attempt stopped on item A's `human_needed` verification, because the declared non-required check `test:e2e` was handed to the unit, and the owner ruled it a product defect, overriding Claude's brief-harness-defect proposal. Plan 03-71 fixed it: only the checks the run executes are listed for the agent, and the prompt names the others as judged by no gate, proven offline by scenario D. Plan 03-72 reset run 3's stop-loss epoch at the owner's confirmation, and plan 03-73 re-ran run 2, which passed. Plan 03-74 re-ran run 3 as attempt 3 (run `run_01M7C32K11S8YDK4W2K8VHCXV3`): the silence held through the notifier failure and the digest, the owner answered the decision on the terminal, the run reached ready_for_review with no problem, and the owner's reply was, verbatim: "continue", which is run 3's ruling for the order. This attempt's facts stay as evidence that does not count toward 3 of 3 (D-28).
