@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-73",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-14T03:33:29.548Z",
+  "updatedAt": "2026-11-14T03:42:26.350Z",
   "runs": [
     {
       "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
@@ -5531,51 +5531,65 @@
     {
       "runId": "run_01M7C1JN8KNG3TXP4Z93CZPY90",
       "title": "Graduation label for the education entry",
-      "state": "blocked_on_decision",
-      "reason": "decision",
+      "state": "ready_for_review",
+      "reason": null,
       "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
       "branch": "avarice/run_01M7C1JN8KNG3TXP4Z93CZPY90",
-      "updatedAt": "2026-11-14T03:33:28.769Z",
-      "commit": null,
-      "clean": false,
-      "costUsd": 0.15418268499999999,
+      "updatedAt": "2026-11-14T03:41:55.945Z",
+      "commit": "04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+      "clean": true,
+      "costUsd": 0.966775185,
       "hostConfigDir": {
         "claudeConfigDir": "/Users/aphan/.claude-edu",
         "source": "CLAUDE_CONFIG_DIR"
       },
       "contract": {
-        "version": 1,
-        "authorizedBy": "cli:start",
-        "reason": null
+        "version": 2,
+        "authorizedBy": "owner:aphan",
+        "reason": "let item B cover the date copy test",
+        "diff": [
+          {
+            "path": "files.create",
+            "added": [
+              "tests/unit/date-copy.test.ts"
+            ]
+          },
+          {
+            "path": "files.write",
+            "added": [
+              "tests/unit/date-copy.test.ts"
+            ]
+          }
+        ]
       },
       "budgets": [
         {
           "name": "costUsd",
-          "used": 0.15418268499999999,
+          "used": 0.966775185,
           "reserved": 0,
           "limit": 4.5
         },
         {
           "name": "invocations",
-          "used": 2,
+          "used": 3,
           "reserved": 0,
           "limit": 5
         },
         {
           "name": "subagentsTotal",
-          "used": 4,
+          "used": 8,
           "reserved": 0,
           "limit": 20
         },
         {
           "name": "toolCalls",
-          "used": 47,
+          "used": 81,
           "reserved": 0,
           "limit": 800
         },
         {
           "name": "wallClockMs",
-          "used": 255885,
+          "used": 409024,
           "reserved": 0,
           "limit": 7200000
         }
@@ -5592,11 +5606,11 @@
         },
         {
           "itemId": "B",
-          "state": "blocked_on_decision",
+          "state": "done",
           "size": "medium",
           "model": "sonnet",
           "dependsOn": [],
-          "attempts": 1,
+          "attempts": 2,
           "gsdSession": "0e53e036-92d3-4aa6-886a-ef71e9e011d4"
         }
       ],
@@ -5618,13 +5632,22 @@
           "outcome": "blocked:decision",
           "startedAt": "2026-11-14T03:33:23.376Z",
           "endedAt": "2026-11-14T03:33:28.768Z"
+        },
+        {
+          "attemptId": "att_01M7C25GNA8F2ZN0A7V2PK3R06",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "handed-off",
+          "startedAt": "2026-11-14T03:38:39.146Z",
+          "endedAt": "2026-11-14T03:41:55.945Z"
         }
       ],
       "decisions": [
         {
           "decisionId": "dec_01M7C1W1J0X5SRGB2G2G8W0AR7",
           "class": "acceptance",
-          "state": "open",
+          "state": "stale",
           "urgency": "blocking",
           "contractVersion": 1,
           "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
@@ -5652,11 +5675,58 @@
           "evidenceRefs": [],
           "authorizedDefault": null,
           "openedAt": "2026-11-14T03:33:28.768Z",
-          "answeredAt": null,
-          "answeredBy": null,
-          "answer": null,
-          "answerChannel": null,
+          "answeredAt": "2026-11-14T03:37:42.806Z",
+          "answeredBy": "owner:aphan",
+          "answer": "1",
+          "answerChannel": "terminal",
           "supersedes": null,
+          "origin": {
+            "origin": "pause",
+            "signalKind": "pause",
+            "pauseSignal": "numbered-choice",
+            "gate": null,
+            "rules": null
+          },
+          "parkAttemptId": "att_01M7C1VW9GR0E63ZG0CJ09MKP8"
+        },
+        {
+          "decisionId": "dec_01M7C23SMRSTWAGSWB9F172JK7",
+          "class": "acceptance",
+          "state": "answered",
+          "urgency": "blocking",
+          "contractVersion": 2,
+          "stateDigest": "sha256:b61ba112e0aeb3fd1b18c6de9f8c0a3e46b943aa0d0fd22defabafce36763bb0",
+          "affectedItems": [
+            "B"
+          ],
+          "issue": "The spec leaves the wording from the end month on to you, and says to ask before writing the function. So I haven't planned or edited anything yet.\n\nBefore the end month, `graduationLabel` returns `Expected <Month YYYY>` in both cases (AC2: `graduationLabel(\"2026-12\", \"2026-11\")` gives `Expected December 2026`). The two options only differ from the end month on. For example, `graduationLabel(\"2026-12\", \"2026-12\")` would return:\n\nWhich wording should `graduationLabel` return from the end month on?\n1. `<Month YYYY>`, for example `December 2026`\n2. `Graduated <Month YYYY>`, for example `Graduated December 2026`",
+          "recommendation": null,
+          "options": [
+            {
+              "key": "1",
+              "kind": "choice",
+              "label": "`<Month YYYY>`, for example `December 2026`"
+            },
+            {
+              "key": "2",
+              "kind": "choice",
+              "label": "`Graduated <Month YYYY>`, for example `Graduated December 2026`"
+            }
+          ],
+          "consequences": {
+            "1": "item B resumes with this answer",
+            "2": "item B resumes with this answer"
+          },
+          "evidenceRefs": [
+            "contract:v2"
+          ],
+          "authorizedDefault": null,
+          "openedAt": "2026-11-14T03:37:42.806Z",
+          "answeredAt": "2026-11-14T03:38:38.660Z",
+          "answeredBy": "owner:aphan",
+          "answer": "1",
+          "answerChannel": "terminal",
+          "supersedes": "dec_01M7C1W1J0X5SRGB2G2G8W0AR7",
           "origin": {
             "origin": "pause",
             "signalKind": "pause",
@@ -5680,6 +5750,19 @@
           "lastError": null,
           "createdAt": "2026-11-14T03:33:28.768Z",
           "deliveredAt": "2026-11-14T03:33:28.872Z"
+        },
+        {
+          "notificationId": "ntf_01M7C2BGVBTS07X9V8H0CWK20J",
+          "kind": "review",
+          "destination": "local",
+          "subjectIds": [
+            "run_01M7C1JN8KNG3TXP4Z93CZPY90"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-14T03:41:55.946Z",
+          "deliveredAt": "2026-11-14T03:41:56.027Z"
         }
       ],
       "gates": [
@@ -5703,81 +5786,114 @@
           "passed": true,
           "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
           "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "A",
+          "passed": false,
+          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
+          "failures": [
+            {
+              "detail": "amended to contract v2: scope-conformance",
+              "rule": "stale-after-amendment"
+            }
+          ]
+        },
+        {
+          "gate": "G1",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "failures": []
+        },
+        {
+          "gate": "G4",
+          "workItem": null,
+          "passed": true,
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "failures": []
         }
       ],
       "requiredChecks": [
         {
           "name": "typecheck",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "lint",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "format:check",
           "status": "failed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false,
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
           "preExisting": true
         },
         {
           "name": "test",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:case",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:colors",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:contrast",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "build",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:meta",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:budget",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:no-phone",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         },
         {
           "name": "check:images",
           "status": "passed",
-          "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-          "clean": false
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true
         }
       ],
       "acceptance": [
@@ -5805,6 +5921,24 @@
               "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -5833,6 +5967,24 @@
               "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -5880,6 +6032,42 @@
               "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+              "workItem": null,
+              "phase": "final"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -6184,6 +6372,305 @@
           "workItem": "A",
           "acceptance": [],
           "phase": "item"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "gsd-verdict",
+          "name": "gsd-verification",
+          "status": "passed",
+          "independence": "model-review",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "clean": true,
+          "workItem": null,
+          "acceptance": []
         }
       ],
       "commits": [
@@ -6191,6 +6678,12 @@
           "commit": "7c69e1f108f66ea1ecef66c5c4986e6acc542e53",
           "attemptId": "att_01M7C1JRK3EMCPBTKWMDE6BCA8",
           "itemId": "A",
+          "paths": 2
+        },
+        {
+          "commit": "04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "attemptId": "att_01M7C25GNA8F2ZN0A7V2PK3R06",
+          "itemId": "B",
           "paths": 2
         }
       ],
@@ -6241,118 +6734,148 @@
             "0e53e036-92d3-4aa6-886a-ef71e9e011d4"
           ],
           "toolCounts": {}
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M7C25GNA8F2ZN0A7V2PK3R06",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M7C25GW1F15VQ5WS4H9DPC20",
+          "requestedSession": "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+          "answeredDecisionId": "dec_01M7C23SMRSTWAGSWB9F172JK7",
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.8125925,
+          "costChargedUsd": 0.8125925,
+          "transcript": "sha256:ac6ac2e434cec0c9fe3e55c18ccbfd3a7ee09a4e25779f70b9a7b9a2e5c3923e",
+          "initSessions": [
+            "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+            "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+            "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+            "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+            "0e53e036-92d3-4aa6-886a-ef71e9e011d4"
+          ],
+          "toolCounts": {
+            "Read": 13,
+            "Grep": 2,
+            "Agent": 4,
+            "Write": 3,
+            "Edit": 3,
+            "Bash": 13
+          }
         }
       ],
       "toolCounts": {
-        "Bash": 20,
-        "Read": 18,
-        "Agent": 4,
+        "Bash": 33,
+        "Read": 31,
+        "Agent": 8,
         "Glob": 1,
-        "Grep": 4,
-        "Write": 3,
+        "Grep": 6,
+        "Write": 6,
         "SendMessage": 1,
-        "Edit": 3
+        "Edit": 6
       },
       "askUserQuestion": 0,
       "statusView": {
         "runId": "run_01M7C1JN8KNG3TXP4Z93CZPY90",
         "title": "Graduation label for the education entry",
-        "state": "blocked_on_decision",
-        "reason": "decision",
+        "state": "ready_for_review",
+        "reason": null,
         "lastCheckpoint": {
-          "seq": 18,
-          "nextAction": "park",
-          "revision": "7c69e1f108f66ea1ecef66c5c4986e6acc542e53",
-          "at": "2026-11-14T03:33:28.547Z"
+          "seq": 31,
+          "nextAction": "handoff:fetch",
+          "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+          "at": "2026-11-14T03:41:55.855Z"
         },
         "branch": "avarice/run_01M7C1JN8KNG3TXP4Z93CZPY90",
-        "commit": null,
-        "clean": false,
+        "commit": "04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+        "clean": true,
         "evidence": [
           {
             "name": "typecheck",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "lint",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "format:check",
             "kind": "check",
             "status": "failed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false,
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true,
             "preExisting": true
           },
           {
             "name": "test",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:case",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:colors",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:contrast",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "build",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:meta",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:budget",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:no-phone",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           },
           {
             "name": "check:images",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0",
-            "clean": false
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+            "clean": true
           }
         ],
         "gates": [
@@ -6364,39 +6887,44 @@
           {
             "gate": "G1",
             "passed": true,
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0"
+            "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139"
           },
           {
             "gate": "G2",
             "passed": true,
-            "revision": "tree:sha256:1a799d5eada72be69d99f102be68ff4d99065ed7e80196d0245cc906d6e97dc0"
+            "revision": "tree:sha256:1bbdc29f93b9e5404ad68bf1715f2de10adcac9c36634dafad845f85b555e139"
+          },
+          {
+            "gate": "G4",
+            "passed": true,
+            "revision": "git:04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d"
           }
         ],
-        "openDecisions": 1,
+        "openDecisions": 0,
         "budgets": [
           {
             "name": "costUsd",
-            "used": 0.15418268499999999,
+            "used": 0.966775185,
             "limit": 4.5
           },
           {
             "name": "invocations",
-            "used": 2,
+            "used": 3,
             "limit": 5
           },
           {
             "name": "subagentsTotal",
-            "used": 4,
+            "used": 8,
             "limit": 20
           },
           {
             "name": "toolCalls",
-            "used": 47,
+            "used": 81,
             "limit": 800
           },
           {
             "name": "wallClockMs",
-            "used": 255885,
+            "used": 409024,
             "limit": 7200000
           }
         ],
@@ -6423,27 +6951,37 @@
           },
           {
             "itemId": "B",
-            "state": "blocked_on_decision",
+            "state": "done",
             "size": "medium",
             "model": "sonnet",
             "dependsOn": [],
-            "attempts": 1
+            "attempts": 2
           }
         ],
         "decisions": [
           {
             "decisionId": "dec_01M7C1W1J0X5SRGB2G2G8W0AR7",
             "class": "acceptance",
-            "state": "open",
+            "state": "stale",
             "affectedItems": [
               "B"
             ],
             "supersedes": null,
+            "successor": "dec_01M7C23SMRSTWAGSWB9F172JK7"
+          },
+          {
+            "decisionId": "dec_01M7C23SMRSTWAGSWB9F172JK7",
+            "class": "acceptance",
+            "state": "answered",
+            "affectedItems": [
+              "B"
+            ],
+            "supersedes": "dec_01M7C1W1J0X5SRGB2G2G8W0AR7",
             "successor": null
           }
         ],
         "notifications": {
-          "delivered": 1,
+          "delivered": 2,
           "pending": 0,
           "held": 0,
           "failed": 0,
@@ -6548,7 +7086,7 @@
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "after": {
-          "takenAt": "2026-11-14T03:33:29.343Z",
+          "takenAt": "2026-11-14T03:42:26.307Z",
           "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
           "branch": "gsd/phase-02-deployed-themed-skeleton",
           "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
@@ -6559,16 +7097,23 @@
             "untracked": 1,
             "statusEntries": 1,
             "refs": 3,
-            "refsAllowed": 4
+            "refsAllowed": 5
           },
           "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
           "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "equal": true,
-        "newRefs": [],
+        "newRefs": [
+          "refs/heads/avarice/run_01M7C1JN8KNG3TXP4Z93CZPY90"
+        ],
         "removedOrChangedRefs": [],
-        "newRefObjects": []
+        "newRefObjects": [
+          {
+            "ref": "refs/heads/avarice/run_01M7C1JN8KNG3TXP4Z93CZPY90",
+            "object": "04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d"
+          }
+        ]
       },
       "atPause": {
         "at": "2026-11-14T03:33:29.547Z",
@@ -6590,23 +7135,79 @@
       },
       "stopOk": true,
       "spend": {
-        "recordedUsd": 0,
-        "appendedUsd": 0.15418268499999999,
+        "recordedUsd": 0.15418268499999999,
+        "appendedUsd": 0.8125925,
         "line": {
           "plan": "03-73",
-          "case": "exit-p3-run2-graduation-label-run_01M7C1JN8KNG3TXP4Z93CZPY90-start",
-          "costUsd": 0.15418268499999999,
+          "case": "exit-p3-run2-graduation-label-run_01M7C1JN8KNG3TXP4Z93CZPY90-finish",
+          "costUsd": 0.8125925,
           "claudeVersion": "2.1.319",
-          "at": "2026-11-14T03:33:29.548Z"
+          "at": "2026-11-14T03:42:26.349Z"
         }
       },
-      "phase3SpentUsd": 13.265164765,
+      "phase3SpentUsd": 14.077757264999999,
       "spendGuardAfterStage": {
-        "remainingRunCapUsd": 4.345817315,
+        "remainingRunCapUsd": 3.533224815,
         "ceilingUsd": 25,
         "fits": true
       },
-      "problems": []
+      "problems": [],
+      "resume": {
+        "resumed": true,
+        "hostConfigDir": {
+          "claudeConfigDir": "/Users/aphan/.claude-edu",
+          "source": "CLAUDE_CONFIG_DIR"
+        },
+        "itemId": "B",
+        "sessionAtPause": "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+        "sessionAfter": "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+        "attempt": {
+          "attemptId": "att_01M7C25GNA8F2ZN0A7V2PK3R06",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "handed-off",
+          "startedAt": "2026-11-14T03:38:39.146Z",
+          "endedAt": "2026-11-14T03:41:55.945Z"
+        },
+        "invocationRequestedSession": "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+        "invocationInitSessions": [
+          "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+          "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+          "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+          "0e53e036-92d3-4aa6-886a-ef71e9e011d4",
+          "0e53e036-92d3-4aa6-886a-ef71e9e011d4"
+        ],
+        "answeredDecisionId": "dec_01M7C23SMRSTWAGSWB9F172JK7"
+      },
+      "pauseDecisionIds": [
+        "dec_01M7C1W1J0X5SRGB2G2G8W0AR7"
+      ],
+      "answeredDecision": {
+        "decisionId": "dec_01M7C23SMRSTWAGSWB9F172JK7",
+        "class": "acceptance",
+        "answer": "1",
+        "answerChannel": "terminal",
+        "answeredBy": "owner:aphan",
+        "answeredAt": "2026-11-14T03:38:38.660Z",
+        "origin": {
+          "origin": "pause",
+          "signalKind": "pause",
+          "pauseSignal": "numbered-choice",
+          "gate": null,
+          "rules": null
+        }
+      },
+      "newDecision": null,
+      "stop": {
+        "state": "ready_for_review",
+        "reason": null
+      },
+      "finalState": "ready_for_review",
+      "resumed": true,
+      "branchRefCommit": "04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d",
+      "finishedAt": "2026-11-14T03:42:26.348Z",
+      "passed": true
     }
   ],
   "exitRules": "D-26..D-35",
