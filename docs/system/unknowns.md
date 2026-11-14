@@ -46,7 +46,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From runs
 
-- Whether the states `waiting_external`, `awaiting_review` and `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states (no match that writes the state; `failed` and `cancelled` are entered by the supervisor's end of a run that can deliver nothing and by `cancel`) and a search of `src` for the four reason names (only the lifecycle definition and an unrelated freshness enum).
+- Whether the states `waiting_external`, `awaiting_review` and `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states, which found no match that writes the state. `failed` and `cancelled` are entered by the supervisor's end of a run that can deliver nothing and by `cancel`. A search of `src` for the four reason names found only the lifecycle definition and an unrelated freshness enum.
 - Whether containment.md is complete for the run purpose. Checked: the run-owner rule, the scope inputs, the scratch directory creation, the run skill and agents and the canonical clone working directory were read in `src/domain/invocation-scope.ts`, `src/adapters/host-claude/claude-host.ts` and `src/app/invocation.ts`; the hook rule list and the settings generator were not read for this document.
 - What the install, check validation, baseline, evidence and gate rules do in detail. Checked: `src/app/checks.ts` lines 325 to 390 (the install summary and the start of the install) and `src/domain/evidence.ts` (the baseline delta); `src/app/check-validation.ts` was not read for this document.
 - Whether the behavior holds on a live host. Checked: code only; no run was executed and no test was run.
@@ -85,7 +85,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From data-model (run slice)
 
-- Whether the unused evidence external reference is deliberate staging for later work: checked every INSERT, UPDATE and DELETE statement under src for evidence (only ledger.ts writes it, with no update); the owner classifies intent. The decision states are all entered: `answerDecision`, `reopenStaleDecision` and `withdrawDecision` write them, called by the `decide` and `cancel` services, and an amendment answers its decision inside `amendRunContract`.
+- Whether the unused evidence external reference is deliberate staging for later work. Checked: every INSERT, UPDATE and DELETE statement under src for evidence; only ledger.ts writes it, with no update. The owner classifies intent. The decision states are all entered: `answerDecision`, `reopenStaleDecision` and `withdrawDecision` write them, called by the `decide` and `cancel` services, and an amendment answers its decision inside `amendRunContract`.
 - Event levels: invocation.finished, invocation.reconciled and the ledger-written kinds were checked for a level argument and have none, so they take the default info; every other kind's level was read at its call site.
 - The `containment.finding` check names a run's blocking stage chooses were not enumerated: the name comes from callers of the block function in item.ts, finish.ts and prepare.ts, read only where they write run rows and events. The runs and containment documents own the names.
 - src/ports/ledger.ts was read only for the Ledger method list (61 methods), not line by line.
@@ -100,7 +100,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 - The test-only adapters of the agent host, executor and egress ports come from the earlier text of this tree plus a search of `test/` for the egress override; the fake host and fake `claude` executable were not re-read at HEAD.
 - Whether the hook policy fields of the run purpose (globs, loop limits, denied tools) are enforced as the settings describe was not checked; the hook source is outside this packet and belongs to containment.md.
-- Whether `avarice budget` is a planned command is not determinable from the code: the run skill text tells sessions not to run it, and no command of that name exists (checked the command list in `src/cli/main.ts` and searched `src` for it). `avarice contract amend` is built.
+- Whether `avarice budget` is a planned command is not determinable from the code. The run skill text tells sessions not to run it, and no command of that name exists (checked the command list in `src/cli/main.ts` and searched `src` for it). `avarice contract amend` is built.
 - Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the earlier text of this tree after spot checks of timeouts and limits by grep; they were not re-read line by line.
 - The order in which supervisor steps call the install and validation helpers was read only at the call sites in `src/app/run-stages/prepare.ts`; runs.md owns the sequence.
 
@@ -123,7 +123,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From autonomy-and-decisions
 
-- Whether launchd starts the installed LaunchAgent at the digest times, and whether a banner shows on a real desktop. Checked: the property list the writer produces, the `launchctl` and `plutil` argument lists and the notifier's `osascript` call, all read in the code; no `schedule install` was run, no `launchctl` was called and no banner was posted.
+- Whether launchd starts the installed LaunchAgent at the digest times, and whether a banner shows on a real desktop. Checked: the property list the writer produces, the `launchctl` and `plutil` argument lists and the notifier's `osascript` call, all read in the code. No `schedule install` was run, no `launchctl` was called and no banner was posted.
 - Whether the Claude host resumes a paused session with `--resume` on every admitted version. Checked: the launch line, the reap pattern and the fallbacks, read in the code; the host's own session handling is outside this tree and no live case was read for this document.
 - Whether the amendment of a run that a live supervisor is working is picked up at the next item boundary on a real run. Checked: the scheduler rule and the ledger transaction in the code; no run was executed.
 
