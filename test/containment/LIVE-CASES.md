@@ -185,8 +185,23 @@ The total live-model spend of Phase 3 may not pass **25 USD** (owner decision D-
 | 03-37 | 2026-11-09 | 2.1.319 (pinned binary, owner decision of 2026-11-09) | Gap plan after the 03-36 halt, halted at `s21`: `s21` twice (0.0430 and 0.0364), both NOT EXERCISED: 2 ledger lines; `cs5`, `s52` and `s17-s51` not run (stop rule) | 0.0794 | 5.0456 |
 | 03-38 | 2026-11-09 | 2.1.319 (pinned binary) | Gap plan with one brief per live case, halted at `s21`: `s21` once (0.0721), FAIL: 1 ledger line; `cs5`, `s52` and `s17-s51` not run (stop rule) | 0.0721 | 5.1177 |
 | 03-39 | 2026-11-09 | 2.1.319 (pinned binary) | Gap plan after the 03-38 halt: `s21` re-judged from the kept 03-38 run (no ledger line), then `cs5` (0.1318), `s52` (0.1640) and `s17-s51` (2.5605), all PASS: 3 ledger lines | 2.8563 | 7.9739 |
+| 03-29 | 2026-11-09 | 2.1.319 (pinned binary) | An earlier exit run 1, start only (`run_01M71BDV8MWGEG7XSAWH1GZ80W`): 1 ledger line | 0.1430 | 8.1170 |
+| 03-42 | 2026-11-10 | 2.1.319 (pinned binary) | An earlier exit run 1, start and finish (`run_01M71J9AVJ3N1BEKC4EM2P0GGF`): 2 ledger lines | 1.0682 | 9.1851 |
+| 03-45 | 2026-11-10 | 2.1.319 (pinned binary) | An earlier exit run 1, start and finish (`run_01M7220WKE6WAP7N0FTPSH95RV`): 2 ledger lines | 0.9443 | 10.1294 |
+| 03-48 | 2026-11-10 | 2.1.319 (pinned binary) | Old run 1, start and finish (`run_01M73RX3RF0ZJETYWVF52WFZ5B`, supplementary evidence, D-34): 2 ledger lines | 1.0629 | 11.1923 |
+| 03-50 | 2026-11-11 | 2.1.319 (pinned binary) | Old run 1, a further finish on the same run (`run_01M73RX3RF0ZJETYWVF52WFZ5B`): 1 ledger line | 0.1063 | 11.2986 |
+| 03-57 | 2026-11-11 | 2.1.319 (pinned binary) | Run 2 attempt 1 (`run_01M74RNSAHDTSHE8JDEZ5XW6F9`), start: 1 ledger line | 0.2173 | 11.5158 |
+| 03-63 | 2026-11-11 | 2.1.319 (pinned binary) | Run 2 attempt 2 (`run_01M75NPTEF7FKDNW8ABQ9Q16WS`), start: 1 ledger line | 0.1452 | 11.6610 |
+| 03-68 | 2026-11-12 | 2.1.319 (pinned binary) | Run 2 attempt 3 (`run_01M770J8CYMCQSXJWVXBFAEGCW`), start and finish: 2 ledger lines | 0.9808 | 12.6418 |
+| 03-58 | 2026-11-12 | 2.1.319 (pinned binary) | Run 3 attempt 1 (`run_01M78966NJ0SW8NB54564MFFZW`), start: 1 ledger line | 0.2520 | 12.8938 |
+| 03-70 | 2026-11-13 | 2.1.319 (pinned binary) | Run 3 attempt 2 (`run_01M79HRGD1R1538H52AH0B8FEX`), start: 1 ledger line | 0.2171 | 13.1110 |
+| 03-73 | 2026-11-14 | 2.1.319 (pinned binary) | Run 2 attempt 4 (`run_01M7C1JN8KNG3TXP4Z93CZPY90`), start and finish: 2 ledger lines | 0.9668 | 14.0778 |
+| 03-74 | 2026-11-14 | 2.1.319 (pinned binary) | Run 3 attempt 3 (`run_01M7C32K11S8YDK4W2K8VHCXV3`), start and finish: 2 ledger lines | 1.2172 | 15.2949 |
+| 03-59 | 2026-11-14 | 2.1.319 (pinned binary) | Run 1 attempt 1 (`run_01M7DVKCXRR2MYYPK3K46B3ED0`), start and finish: 2 ledger lines | 1.3480 | 16.6429 |
 
 The cumulative total equals the sum of `costUsd` over the ledger (28 lines, 4.7326 to four decimals, 4.73 to two; 26 lines and 4.5488 before plan 03-35; 24 lines and 1.0927 before plan 03-27). Plan 03-13's own total is 0.9412 USD of its 4.00 USD cap; plan 03-27's own total is 3.4561 USD of its 6.00 USD cap; after it 20.4512 USD remain under the ceiling.
+
+After plan 03-59 the cumulative total equals the ledger sum again: 59 lines, 16.6429 USD to four decimals, so 8.3571 USD remain under the 25 USD ceiling. The ledger labels three lines `03-27` (3.4589 USD): the two `s17-s51` runs (3.4561) and `cs15`'s agent call (0.0028), which the `03-36` row counts.
 
 ### Phase 3 run-purpose cases (plan 03-27)
 
@@ -394,6 +409,31 @@ Phase 2 cumulative spend after the exit: **9.2851 USD** of the 25 USD ceiling (t
 - Each run: one attempt, gates G0, G2 and G4 passed, 12 required checks at the handed-off revision on a clean tree (`format:check` failed and is reported pre-existing, D-12; the other 11 passed), the three acceptance criteria each mapped to passed deterministic check evidence.
 - The portfolio's checked-out branch (`gsd/phase-02-deployed-themed-skeleton` at 9f63d91), index, working tree (including the untracked `.env`), `main`, `origin/main` and worktrees are byte-identical before the first run and after the third; the only change is the three new `refs/heads/avarice/run_*` branches, each at the commit its run handed off (D-02, S-20).
 - The model improvised no question to a human in any transcript (AskUserQuestion count 0 in all three; S-12). Host outcome kinds were not used as a verdict.
+
+## Exit (plans 03-57 to 03-68)
+
+The Phase 3 exit (D-03, D-26 to D-38): the three briefs `p3-run2-graduation-label.md`, `p3-run3-theme-toggle.md` and `p3-run1-copy-fallback.md` on `~/aa-phan-portfolio-v2` at pin 9f1cd8d with the owner's conventions 9f63d91, on the pinned host 2.1.319, each started with `avarice start --brief <file> --policy routine --wait` under the authorization `03-56-exit-authorization.json` at 4.50 USD per run, in the order 2, 3, 1. Evidence: `.planning/phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json`; verdict `exit: 3/3 ready_for_review`, computed by `exit-run-phase3-tools.ts verdict` over the current D-26 epoch (plan 03-60, 2026-11-14T21:57:59Z), never by hand.
+
+The heading names plans 03-57 to 03-68, the plans that first planned this section. The attempts below run on to plans 03-69 to 03-74 (the fixes and the later attempts) and plan 03-59 (run 1), and the table lists all of them.
+
+| Role | Brief | Run ID | Attempt (plan) | Decisions | Outcome or ruling | Commit | Cost (USD) |
+|---|---|---|---|---|---|---|---|
+| run 2 | `p3-run2-graduation-label.md` | `run_01M74RNSAHDTSHE8JDEZ5XW6F9` | 1 (03-57) | 2 (open, open) | `blocked_on_decision`; owner ruled `product-defect` (overriding Claude's `brief-harness-defect`), a new epoch (D-26); fixed by plan 03-61; not counted | none | 0.2173 |
+| run 2 | `p3-run2-graduation-label.md` | `run_01M75NPTEF7FKDNW8ABQ9Q16WS` | 2 (03-63) | 2 (open, open) | `blocked_on_decision`; owner ruled `product-defect`, a new epoch; fixed by plan 03-64; not counted | none | 0.1452 |
+| run 2 | `p3-run2-graduation-label.md` | `run_01M770J8CYMCQSXJWVXBFAEGCW` | 3 (03-68) | 2 (stale, answered) | `ready_for_review`, clean; owner ruled `continue`; passed before the epoch that began 2026-11-13T22:50:44Z, so not counted (D-26) | `b548813dee64188d62f7ace572e9d486dc0a1669` | 0.9808 |
+| run 2 | `p3-run2-graduation-label.md` | `run_01M7C1JN8KNG3TXP4Z93CZPY90` | 4 (03-73) | 2 (stale, answered) | `ready_for_review`, clean; owner ruled `continue`; **counted** | `04ac67f0d2b4ad27483ef159d4fb4eafbaadad3d` | 0.9668 |
+| run 3 | `p3-run3-theme-toggle.md` | `run_01M78966NJ0SW8NB54564MFFZW` | 1 (03-58) | 2 (open, open) | `blocked_on_decision`; owner ruled `brief-harness-defect` (overriding Claude's `product-defect`), fix first; a correct stop (D-28), the search route of plan 03-69 followed; not counted | none | 0.2520 |
+| run 3 | `p3-run3-theme-toggle.md` | `run_01M79HRGD1R1538H52AH0B8FEX` | 2 (03-70) | 2 (open, open) | `blocked_on_decision`; owner ruled `product-defect` (overriding Claude's `brief-harness-defect`) on 2026-11-13, a new epoch; fixed by plan 03-71, reset confirmed in plan 03-72; not counted | none | 0.2171 |
+| run 3 | `p3-run3-theme-toggle.md` | `run_01M7C32K11S8YDK4W2K8VHCXV3` | 3 (03-74) | 1 (answered) | `ready_for_review`, clean, silence step held; owner ruled `continue`; **counted** | `56076a9d10c0a9a033a73e459aa439622396bc24` | 1.2172 |
+| run 1 | `p3-run1-copy-fallback.md` | `run_01M7DVKCXRR2MYYPK3K46B3ED0` | 1 (03-59) | 1 (answered) | `ready_for_review`, clean, B resumed on its own paused session, C ran; owner ruled `continue`; **counted** | `0909a46448cfcf876bf8f3a93935b1580b4237cf` | 1.3480 |
+
+The three counted runs are run 2 attempt 4, run 3 attempt 3 and run 1 attempt 1, each from one `avarice start`, with equal checkout digests and only their own run branches added. The eight attempts cost 5.3444 USD.
+
+- Old run 1 (`run_01M73RX3RF0ZJETYWVF52WFZ5B`, plans 03-48 and 03-50) is supplementary evidence and not a pass (D-34): A independent and committed; B's delegated session resumed under the recorded configuration directory; G2 passing a resumed unit; the protected-write refusal (plan 03-49 scenario P, exit 64); the honest `gaps_found` stop on the protected spec. It counts toward nothing.
+- Correct stop (evidence, not a pass, D-28): run 3 attempt 1 (`run_01M78966NJ0SW8NB54564MFFZW`) stopped at item A's own `human_needed` verification, not at a gate, because the unit's verifier could not run a repo-wide search; the owner confirmed a brief-harness defect with AVARICE conforming to `docs/system/runs.md`.
+- Not counted (D-26): run 2 attempts 1 and 2 and run 3 attempt 2 each ended in an owner-confirmed product defect, which starts a new epoch where every run passes again; run 2 attempt 3 passed before the epoch that began 2026-11-13T22:50:44Z. The verdict lists all four with those reasons.
+
+Phase 3 cumulative spend after the exit record: **16.6429 USD** of the 25 USD ceiling (D-05), the sum of `costUsd` over `test/containment/live-spend-phase3.jsonl` (59 lines), so 8.3571 USD remain. The table in the Phase 3 spend section above carries each plan's line.
 
 ## Attended sessions with the avarice-run skill (Phase 2, plan 02-25)
 
