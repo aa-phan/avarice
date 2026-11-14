@@ -1,12 +1,12 @@
 # Built system documentation
 
-This tree describes AVARICE as it is built: the onboarding of one existing repository to an active project record, and the unattended run of one or several work items on an onboarded repository to a reviewable local branch, including the decisions a run opens, the owner's answers, amendments and cancel, and the notifications and check-ins that reach the owner. It also covers the interactive shell. Every document here is written from the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
+This tree describes AVARICE as it is built. It covers the onboarding of one existing repository to an active project record, and the unattended run of one or several work items on an onboarded repository to a reviewable local branch. It includes the decisions a run opens, the owner's answers, amendments and cancel, and the notifications and check-ins that reach the owner. It also covers the interactive shell. Every document here is written from the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
 
 ## How to read this
 
 Start with [overview.md](overview.md). Reference documents ([cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md)) are exhaustive for their surface. Descriptive documents state the mechanism and its consequences; the code owns the implementation, so they name their modules once in the opening and not again. Each document ends with the quirks a reader is likely to trip over.
 
-A document marked "drafted, not yet reviewed" under its title has not had a second reader; do not rely on it before the others. The review status of every document is in [coverage.md](coverage.md).
+A new document carries the mark "drafted, not yet reviewed" under its title until a second reader has checked it. A document that changed after its review is listed as `drafted` in [coverage.md](coverage.md) until it is reviewed again. Do not rely on a marked or drafted document before the others. The review status of every document is in [coverage.md](coverage.md).
 
 ## Documents
 
