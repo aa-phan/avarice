@@ -1,14 +1,14 @@
 # Integrations
 
-This document describes the adapter modules under `src/adapters/`, the port interfaces under `src/ports/`, the composition root `src/cli/composition.ts`, the dependency container `src/app/deps.ts` and the supervisor launcher `src/cli/spawn-supervisor.ts`. Together they carry every runtime contact between AVARICE and an external system.
+This document describes the adapter modules under `src/adapters/`, the port interfaces under `src/ports/`, the composition root `src/cli/composition.ts`, the dependency container `src/app/deps.ts` and the supervisor launcher `src/cli/spawn-supervisor.ts`. The banner adapter (`src/adapters/notify/local-notifier.ts`), the LaunchAgent writer (`src/adapters/schedule/launchd.ts`) and the process ancestry reader (`src/adapters/proc/ancestry.ts`) are among those adapters. Together they carry every runtime contact between AVARICE and an external system.
 
 ## Summary
 
-AVARICE drives its tools by spawning processes. The only network traffic it brokers is the dependency install of a run, which reaches a package registry through a loopback allowlist proxy that AVARICE itself runs. Claude Code is the one system that also calls back into AVARICE (through the hook). The rest are one-way: AVARICE spawns them, reads their stdout or files, and judges the result.
+AVARICE drives its tools by spawning processes. The only network traffic it brokers is the dependency install of a run, which reaches a package registry through a loopback allowlist proxy that AVARICE itself runs. Two systems call back into AVARICE: Claude Code through the hook, and launchd, which starts `avarice digest` at the owner's digest times. The rest are one-way: AVARICE spawns them, reads their stdout or files, and judges the result.
 
 | System | Direction | Protocol | Version expectation | When missing or wrong |
 |---|---|---|---|---|
-| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk | exactly 2.1.312, 2.1.316, 2.1.317 or 2.1.318 | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure |
+| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume` | exactly 2.1.312, 2.1.316, 2.1.317, 2.1.318 or 2.1.319 | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure |
 | Claude configuration directory | AVARICE writes one file; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` written by `install-host`; GSD and user skills read | none | `install-host` refuses a link or an unmarked file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
 | GSD (`@opengsd/gsd-core`) | AVARICE spawns `gsd-tools.cjs` under Node; Claude Code runs GSD's own shell shim inside the host; a run drives GSD's quick workflow through the host | JSON on stdout, one verb per process | 1.17.x only | no GSD adapter; onboarding stops as incompatible; no host |
 | git | AVARICE spawns it | argv arrays, minimal environment, plain-text output | none checked | the failing call returns an error; the run or onboarding stops at that step |
@@ -17,18 +17,22 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 | graphify | AVARICE spawns it, sandboxed | `extract` and `cluster-only`, files on disk | 0.9.x documented, not enforced | the code-graph and knowledge indexes are recorded absent; onboarding continues |
 | `sandbox-exec` | AVARICE spawns it as a wrapper | Seatbelt profile on argv | any macOS where a probe profile applies | no command runs; no unsandboxed fallback |
 | `mount` | AVARICE spawns it | text table on stdout | none | profile preparation fails closed |
-| `pgrep` and `ps` | AVARICE spawns them | text on stdout | none | reaping reports unavailable |
+| `pgrep` and `ps` | AVARICE spawns them | text on stdout | none | reaping reports unavailable; an owner command that cannot read the process chain refuses |
+| `osascript` | AVARICE spawns it once per banner | a fixed three-line AppleScript, with the text as arguments | any macOS; the path comes from the profile config | the attempt is recorded as `osascript-missing`, `osascript-timeout` or `osascript-failed`; the decision stays in `inbox` |
+| `launchctl` | `schedule` spawns it | `bootstrap` and `bootout` of `gui/<uid>` jobs | any macOS | `schedule` exits 70 and quotes the first line of the tool's error |
+| `plutil` | `schedule install` spawns it | `-lint` of the property list before it is installed | any macOS | `schedule install` exits 70 and installs nothing |
+| launchd | runs the digest on a clock | a user LaunchAgent that starts `node <entry> digest` | any macOS | a failed scheduled digest writes its error to `logs/digest.log` in the data root |
 | Detached supervisor (`node`) | the CLI spawns a copy of itself | `supervise <runId>` on argv; the ledger is the only channel | the Node that runs the CLI | the command exits 70 and the run stays stored |
 | Node.js and `node:sqlite` | AVARICE runs on them | in process | Node 22.22.3 or newer; SQLite with the WAL-reset fix | every ledger open refuses |
 | `gh` | not invoked | none | none | not applicable |
 
-Everything that runs repository-influenced or model-directed work (GSD verbs, graphify, the dependency install, declared checks, the host itself through its own sandbox settings) is confined. The probes and inspections in this document (the gsd-core identity check, git, `claude --version`, the hook self-test, `pgrep`, `ps`, `mount`) run unconfined, and so does the supervisor. See [containment.md](containment.md) for the rules the hook and sandbox enforce. This document does not repeat them.
+Everything that runs repository-influenced or model-directed work (GSD verbs, graphify, the dependency install, declared checks, the host itself through its own sandbox settings) is confined. The probes and inspections in this document (the gsd-core identity check, git, `claude --version`, the hook self-test, `pgrep`, `ps`, `mount`, `osascript`, `launchctl`, `plutil`) run unconfined, and so does the supervisor. See [containment.md](containment.md) for the rules the hook and sandbox enforce. This document does not repeat them.
 
-The spawn sites are these: `sandbox-exec` (probe and wrapper), git, `claude` (launch and `--version`), `node` for the gsd-core identity check, `node` for the hook self-test, `node` for the detached supervisor, `pgrep`, `ps` and `mount`. GSD verbs and graphify do not spawn directly; they go through the sandboxed executor. No source file spawns `gh`.
+The spawn sites are these: `sandbox-exec` (probe and wrapper), git, `claude` (launch and `--version`), `node` for the gsd-core identity check, `node` for the hook self-test, `node` for the detached supervisor, `pgrep`, `ps` (reaping and the process chain), `mount`, `osascript`, `launchctl` and `plutil`. GSD verbs and graphify do not spawn directly; they go through the sandboxed executor. No source file spawns `gh`.
 
 ## Ports and wired adapters
 
-The ports directory holds eleven ports and one shared type (the capability descriptor every adapter publishes). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of the command executor, graph tool, GSD adapter (when present) and agent host are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The three run ports have no descriptor and are not recorded.
+The ports directory holds twelve ports and one shared type (the capability descriptor every adapter publishes). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of the command executor, graph tool, GSD adapter (when present) and agent host are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The three run ports have no descriptor and are not recorded.
 
 | Port | Production adapter | Test-only adapters |
 |---|---|---|
@@ -43,6 +47,7 @@ The ports directory holds eleven ports and one shared type (the capability descr
 | Egress proxy | in-process allowlisting `CONNECT` proxy | a proxy injected only by the test entry point, for a registry that is a local server on a port the conventions cannot name |
 | Ledger | SQLite ledger | none |
 | Artifact store | local content-addressed file store | none |
+| Notifier | local macOS banner through `osascript` (see [osascript](#osascript)); built by every composition that is not read-only | a silent notifier that a test entry passes, or the real one pointed at a fake script |
 
 The production entry point never passes the host, executor or egress overrides; only test entry points do. The three run ports are built on every composition, including a read-only one, because building them executes nothing. A read-only command (`status`) builds the refusing host without a reason, runs no sandbox probe and never launches a host; it locates GSD only when it asks to (the `context` command does). The dependency container carries the run ports as optional members, so a hand-built container in an onboarding test need not supply them; a composed container always has all three.
 
@@ -82,6 +87,8 @@ The host's environment is built from nothing. It holds the safe-git variables, t
 
 The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. The ID must be a UUID, and the adapter generates one otherwise.
 
+A paused item's session is continued with the host's resume flag. The line then ends `--resume <session-id>` in place of `--session-id <uuid>`; the host refuses both together, so one is never added beside the other, and every other flag stays as above. The host looks for a session only in the configuration directory of the process that launches it, which is why a run records the directory it started under and every supervisor launches the host with it (see [runs.md](runs.md#the-detached-supervisor)). A session the host does not know ends as an error result with no turns and no cost and exit 1, which the run reads as a session that is gone and answers with a fresh unit.
+
 ### Which agents and skills are driven
 
 | Purpose | Prompt | Skill loaded through the plugin directory | Agent definitions loaded |
@@ -101,7 +108,7 @@ One sentence is appended to the body of `gsd-executor` wherever it is loaded. On
 
 ### Stream-json parsing
 
-The parser reads stdout as it arrives, line by line. It keeps only the `system/init` event, every `system/permission_denied` event and the last `result` event (error flag, subtype, terminal reason, permission denials, cost, turn count, duration, session ID, subagent counts). Model text, tool inputs and the result's text are dropped. A line that is not a JSON object, or that exceeds 16 MiB, is counted as malformed and skipped; the parser never throws. If several result events arrive, the last wins. Permission denials appear both as events and inside the result; the adapter takes the larger per-tool count of the two sources.
+The parser reads stdout as it arrives, line by line. It keeps only the `system/init` event, every `system/permission_denied` event and the last `result` event (error flag, subtype, terminal reason, permission denials, cost, turn count, duration, session ID, subagent counts). Model text and tool inputs are dropped, and so is the result's text except for a bounded tail: the last 2000 characters of the final text with control characters removed. That tail is data for the one caller that reads it. It becomes the question of a unit that paused, and it goes into no event, step or log line. A line that is not a JSON object, or that exceeds 16 MiB, is counted as malformed and skipped; the parser never throws. If several result events arrive, the last wins. Permission denials appear both as events and inside the result; the adapter takes the larger per-tool count of the two sources.
 
 ### Outcome classification
 
@@ -142,7 +149,7 @@ The generated settings register AVARICE's hook command as the Node binary that i
 
 ### Reaping by session ID
 
-On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--session-id <uuid>"` (10 second timeout) and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains that exact flag and UUID is terminated.
+On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--(session-id|resume) <uuid>"` (10 second timeout), which finds a fresh host and a resumed one alike, and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains either flag followed by that exact UUID is terminated.
 
 ### The unavailable-host fallback
 
@@ -330,6 +337,35 @@ A probe (`sandbox-exec` with a permissive profile running `/usr/bin/true`) decid
 
 The same probe is repeated separately by the host adapter before each Claude Code launch.
 
+## osascript
+
+A banner is the one way AVARICE speaks to the owner without being asked. The notifier port has one production adapter, which posts a local macOS notification by running `osascript`. The port is defined so that a push adapter could implement it later. A banner tells the owner that something waits, and it carries no answer: the inbox is the record, and a banner that did not arrive changes no decision and no exit code ([autonomy-and-decisions.md](autonomy-and-decisions.md#notification) owns when a banner is raised and how a failure is retried).
+
+The program is `notify.local.osascriptPath` of the profile config, `/usr/bin/osascript` by default. It is run once per delivery attempt, with an argument list and no shell, a 10 second timeout, SIGKILL at the timeout, and the environment of the AVARICE process. The script is fixed: three `-e` lines that define `on run argv` and `display notification (item 1 of argv) with title (item 2 of argv)`. The body and the title follow after `--`, so the message is data to the script whatever characters it holds and is never part of the script. The title is `AVARICE`. The body holds AVARICE's own words only, at most 200 characters (see [autonomy-and-decisions.md](autonomy-and-decisions.md#notification)).
+
+The adapter reports a failed attempt as a short code, and never throws.
+
+| Code | When |
+|---|---|
+| `osascript-missing` | The program does not exist at the configured path. |
+| `osascript-timeout` | The program was killed at the 10 second limit. |
+| `osascript-failed` | Any other failure, including a non-zero exit. |
+
+An attempt that fails is recorded with its code, the row is tried at once, after 10 seconds and after 60 seconds, and then marked `failed`. The owner sees a failed banner in three places. `status` prints `notifications: N failed (<code>)` for the run. `inbox` prints `banner not delivered (<code>); this list is the record` under the decision. `digest` exits 70 and prints the code on stderr, and the next digest tries again. The decision itself stays open and listed throughout. A notifier that throws is recorded as a failed attempt with the generic code `notifier-error`.
+
+## launchctl, plutil and the digest schedule
+
+`schedule install` makes launchd run `avarice digest` at the owner's digest times, so that no AVARICE process or model waits between runs. It writes one user LaunchAgent, `~/Library/LaunchAgents/io.avarice.digest.<profile>.plist`, with no admin rights, and runs two tools from fixed paths with an argument list, no shell, no input and a 10 second limit each. [cli-reference.md](cli-reference.md#schedule) owns the command line and the contents of the file.
+
+| Tool | Path | Used for |
+|---|---|---|
+| `plutil` | `/usr/bin/plutil` | `-lint` of the new file, under a temporary name, before it is renamed into place. A rejection installs nothing. |
+| `launchctl` | `/bin/launchctl` | `bootstrap gui/<uid> <file>` to load the agent, and `bootout gui/<uid>/<label>` to unload it before a replacement and in `remove`. The deprecated `load` and `unload` are never used. |
+
+A failure shows on the command line. Each tool's exit status and the first line of its error (control characters removed, cut to 160 characters) are quoted in the message, and the command exits 70. When `plutil` rejects the file, nothing was installed. When `bootstrap` fails on a first install, the new file is removed again. When it fails on a replacement, the new file is in place but not loaded, and the message says so. `bootout` reporting that the job is not loaded (exit 3 or 113) is not an error in `remove`, and any other `bootout` failure leaves the file in place. A scheduled digest that fails when launchd runs it has no terminal. Its standard output and standard error go to `logs/digest.log` in the data root, which is the only place its error appears.
+
+The file is the only thing `schedule` writes outside the profile roots. The command touches only a file that carries the marker line AVARICE writes, never follows a symbolic link, and creates the agents directory only when absent. The agent has no run-at-load and no keep-alive.
+
 ## mount
 
 Preparing the profile runs `mount` with no arguments (first of `/sbin/mount`, `/bin/mount`, `/usr/bin/mount` that exists, 5 second timeout) and requires the data root to sit on a mount marked `local`. The mount whose point is the longest prefix of the data root is chosen. On macOS the `local` flag decides. Linux output has no such flag, so a mount is local unless its type is in a short list of network types. If `mount` is missing, fails, or no entry contains the path, the profile is refused (fail closed); a non-local mount is refused with advice to set `AVARICE_DATA_ROOT`. The check is a heuristic: a synced or FUSE folder can still report `local`.
@@ -365,6 +401,10 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | Supervisor cannot be spawned | the command exits 70; the run stays stored |
 | `install-host` meets a link or an unmarked file | refused (exit 3), nothing written |
 | `install-host` runs inside a run or with bad arguments | refused (exit 64), nothing written |
+| A banner cannot be delivered (`osascript` missing, killed at 10 seconds or failing) | three attempts are recorded, the row is `failed`, `status` and `inbox` name the code, `digest` exits 70 and tries again next time; no decision changes and no run changes |
+| `schedule install` cannot load the agent (`plutil` rejects the file or `launchctl bootstrap` fails) | exit 70 with the tool's first error line; a new file is removed again, and a replaced one stays in place unloaded |
+| A scheduled digest fails under launchd | the error is in `logs/digest.log` in the data root; nothing else records it |
+| An owner command cannot read the process chain with `ps` | the command refuses as if it were inside a run (exit 64) |
 
 ## Quirks
 
@@ -376,9 +416,11 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 - The supervisor inherits the user's whole environment, unlike the host and every sandboxed command.
 - The hand-off writes objects as well as one ref into the user's repository. A failed fetch can leave unreferenced objects there.
 - The conventions walk examines the newest 500 first-parent commits above the pin. A conventions-only commit older than that is not found, and the pin's own file is used.
-- The installed skill tells the model not to run `avarice contract amend` and `avarice budget`, and neither is a command of this CLI.
+- The installed skill tells the model not to run `avarice contract amend` and `avarice budget`. `contract amend` is a command of this CLI; `avarice budget` is not.
 - The supervisor's own install and check commands set `HOME` and `TMPDIR` to the scratch directory itself, while the host's `TMPDIR` is a subdirectory of it.
-- Reaping matches any process whose command line contains the exact session flag and UUID, not only processes AVARICE started.
+- Reaping matches any process whose command line contains `--session-id` or `--resume` followed by the exact UUID, not only processes AVARICE started.
+- The `osascript` path is read once when a command starts. A banner is a success when the program exits 0, which says nothing about whether the owner saw it.
+- `launchctl` and `plutil` run with the whole environment of the command and outside any sandbox, as does `osascript`.
 
 ## Related documents
 
