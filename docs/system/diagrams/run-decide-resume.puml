@@ -13,26 +13,32 @@ note over Ledger : a decision is open, its item is blocked_on_decision,\nits del
 == Who may answer ==
 Owner -> Decide : decide DECISION with an option key or text
 alt inside a run, no terminal, or from a run's process tree
-  Decide --> Owner : refused (64), nothing read, nothing written
-end
-Decide -> Ledger : read the decision, its run and the latest contract
-alt not the user who owns the profile
+  Decide --> Owner : refused (64), before the profile is resolved,\nnothing read, nothing written
+else not the user who owns the profile
   Decide --> Owner : refused (64), nothing written
+else open decision, and the host configuration directory\nthe run recorded is missing or unreadable
+  Decide --> Owner : refused (3), nothing written, the decision stays open
+else not refused
+  Decide -> Ledger : read the decision, its run and the latest contract
 end
 
 == The checks, in order ==
 Decide -> Decide : open? listed option or allowed text? same answer as before?\nstate digest still equal?
 alt decision stale, withdrawn or not open
+  Decide -> Ledger : decision.rejected (check name only)
   Decide --> Owner : refused (3), the stale one names its successor
+else amend-only record answered with an option key other than withdraw
+  Decide -> Ledger : amendment.requested
+  Decide --> Owner : the amend command, nothing applied (3)
 else option not listed, text not allowed or invalid
   Decide -> Ledger : decision.rejected (check name only)
   Decide --> Owner : refused (64)
 else same answer to an answered decision
   Decide -> Ledger : decision.duplicate
   Decide --> Owner : ignored (0)
-else amend-only record answered with an option key
-  Decide -> Ledger : amendment.requested
-  Decide --> Owner : the amend command, nothing applied (3)
+else different answer to an answered decision
+  Decide -> Ledger : decision.rejected (check name only)
+  Decide --> Owner : refused (3)
 else state moved since the question
   Decide -> Ledger : old decision stale with the answer kept,\nsuccessor opened on the new state
   Decide --> Owner : answer not applied, answer the successor (3)
@@ -46,7 +52,6 @@ end
 alt a supervisor holds a live lease
   note over Supervisor : its scheduler reads the ledger after every item\nand takes the answered item next
 else run blocked on a decision, continuable, no live lease
-  Decide -> Decide : the recorded host configuration directory must be readable
   Decide -> Supervisor : spawn detached, step supervisor:decide
   Supervisor -> Ledger : take the lease, run blocked_on_decision to running
 else nothing continuable (decisions still open, or a run in another state)
@@ -67,7 +72,7 @@ alt the item has its session, a parked delta and no earlier fallback
     Supervisor -> Ledger : next attempt with reason answer
     Supervisor -> Host : fresh unit with the question and the answer
   else delta back in the tree
-    Supervisor -> Ledger : reserve an invocation, launch step with the session
+    Supervisor -> Ledger : launch checkpoint, reserve an invocation, launch step with the session
     Supervisor -> Host : launch resume of the item's own session, the answer as data
     Host -> Clone : edit files
     Host --> Supervisor : result
@@ -89,8 +94,10 @@ end
 == Judged as any unit is ==
 Supervisor -> Clone : classify against the item base
 Supervisor -> Ledger : gate G1, gate G2, repair when a required check newly failed, gate G3
-alt unit asks again or a gate fails
+alt unit asks again, or gate G1, gate G3 or gate G2 (other than scope) fails
   Supervisor -> Ledger : park, new decision for the item
+else gate G2 scope or deletion scope fails, HEAD moved, budget spent or host refused
+  Supervisor -> Ledger : run blocked, nothing parked
 else gates pass
   Supervisor -> Clone : drop the park ref, commit the item
   Supervisor -> Ledger : item done, next item or verifying

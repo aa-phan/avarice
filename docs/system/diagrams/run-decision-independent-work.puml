@@ -35,9 +35,9 @@ note over Clone : nothing of B is in A's tree or commit
 alt batch window has passed and not in quiet hours
   Supervisor -> Banner : one banner for the queued notices
   note over Banner : up to three tries, 0, 10 and 60 seconds;\nthe outcome never changes the run
-else quiet hours
+else batch window has passed and quiet hours
   Supervisor -> Ledger : notice held for the next digest
-else window still open
+else batch window still open, in quiet hours or not
   note over Supervisor : the notice stays queued
 end
 

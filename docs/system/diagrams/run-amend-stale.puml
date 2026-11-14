@@ -15,7 +15,7 @@ alt inside a run, no terminal, or from a run's process tree
   Amend --> Owner : refused (64), before the profile is resolved
 end
 Amend -> Ledger : read the run, its latest contract, the evidence and gate rows
-alt run failed, cancelled or closed, decision A not open or a pause,\nrequest empty, a field not amendable, or static gate G0 fails
+alt run failed, cancelled or closed, decision A not open or not of an amendable class\n(repeated failure, permission, budget or scope expansion),\nrequest empty, a field not amendable, or static gate G0 fails
   Amend --> Owner : refused, nothing written
 end
 Amend -> Amend : build version 2: field diff, what it invalidates,\nwhich evidence and gates get a stale copy
