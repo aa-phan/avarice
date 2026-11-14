@@ -1,12 +1,12 @@
 # Configuration reference
 
-This document describes every configuration input AVARICE reads and every built-in limit that acts as configuration. The inputs are the environment variables that the `avarice` CLI, its detached supervisor and its hook read and set. They also include the profile `config.json`, the repository-side `.avarice/config.json` and `.planning/config.json`, the `routine` and `onboarding` presets, and the sandbox and egress-proxy settings. The sources are the profile and root resolution (`src/adapters/fs/profile-paths.ts`); the repository conventions and the run contract (`src/domain/conventions.ts`, `src/domain/run-contract.ts`, `src/domain/run-preflight.ts`, `src/domain/policy-narrowing.ts`); the run services (`src/app/`); the host, executor and proxy adapters (`src/adapters/`); and the CLI (`src/cli/`).
+This document describes every configuration input AVARICE reads and every built-in limit that acts as configuration. The inputs are the environment variables that the `avarice` CLI, its detached supervisor and its hook read and set. They also include the profile `config.json`, the repository-side `.avarice/config.json` and `.planning/config.json`, the `routine` and `onboarding` presets, and the sandbox and egress-proxy settings. The sources are the profile and root resolution and the notify section reader (`src/adapters/fs/profile-paths.ts`, `src/adapters/fs/profile-config.ts`, `src/domain/notify-policy.ts`); the repository conventions and the run contract (`src/domain/conventions.ts`, `src/domain/run-contract.ts`, `src/domain/run-preflight.ts`, `src/domain/policy-narrowing.ts`); the run services (`src/app/`); the host, executor and proxy adapters (`src/adapters/`); and the CLI (`src/cli/`).
 
 ## Summary
 
 - AVARICE reads 9 `AVARICE_*` variables and sets 4: `AVARICE_RUN` for the contained host, and the three root variables for the detached run supervisor. It reads 10 other variables: `HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `GSD_HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR`, `NO_COLOR` and `TERM`. Six more `AVARICE_*` names in the source are constants, not variables: `AVARICE_WRITE_SET`, `AVARICE_TRACKED_WRITABLE`, `AVARICE_SECRET_PATTERNS`, `AVARICE_COMMIT_IDENTITY`, `AVARICE_EXECUTOR_ADDENDUM` and `AVARICE_RUN_SKILL`.
 - `PYTHONDONTWRITEBYTECODE`, the proxy variables, `CI` and the `GIT_*` variables are set for child processes and never read. `NO_COLOR` is both read (by the CLI) and set (for graphify).
-- The profile `config.json` has four keys. All are written once and none is ever read back, so all four are dead knobs. The effective roots always come from the environment variables or their defaults.
+- The profile `config.json` has four keys that AVARICE writes once and never reads back, so all four are dead knobs, and one section the owner writes by hand, `notify`, which is read every time a notification or a digest is raised. The effective roots always come from the environment variables or their defaults.
 - The repository's `.avarice/config.json` is the only configuration file AVARICE parses, as untrusted data that can only narrow authority. Two readers parse it for different purposes and accept different keys. `.planning/config.json` is written by gsd-core in the working copy and is never parsed by AVARICE.
 - There is no configuration file for budgets, versions or limits. They are built-in constants. A run's budgets are lowered per run only through `avarice start --budget name=value`, and an onboarding's through `avarice onboard --budget name=value`.
 - The sandboxed executor listens on no port. Its only network allowance is outbound connections to loopback ports that an AVARICE supervisor step names. The only listener is a per-step allowlist proxy on an operating-system-chosen port of 127.0.0.1.
@@ -25,7 +25,7 @@ Every row names a read on a production path unless marked otherwise. An empty va
 | `AVARICE_GRAPHIFY_BIN` | first `graphify` on `PATH` | Path of the `graphify` executable for code extraction and the knowledge pass. | When set and non-empty it is the only candidate: if it names no executable file, graphify is reported missing and `PATH` is not tried. Only absolute `PATH` entries are searched. A missing graphify does not fail startup; it fails the index step that needs it. |
 | `AVARICE_LEASE_TTL_MS` | `180000` | Lease time-to-live, in milliseconds, for an onboarding and for a run supervisor. The lease is renewed every third of the TTL (at least 1 ms). | Read on the production path, but used as a test seam (short leases for fault tests). A value that is not a positive safe integer, including an empty one, silently falls back to the default. |
 | `AVARICE_FAULT` | unset | Kills the process with SIGKILL when execution reaches the named checkpoint (`name`, or `name#N` for the Nth arrival). | Test-only fault injection, but the read is on the production path: an operator who sets it gets a SIGKILL with no cleanup. The run supervisor also fires checkpoints named `after-checkpoint:<action>` and `after-transition:<state>`. Do not set it outside tests. Unlike the other variables an empty value is not treated as unset (it matches no checkpoint). |
-| `AVARICE_RUN` | unset | The run marker. Any value, including an empty one, counts as set. | Not for operators to set. The host launch sets it (next section). While set, bare `avarice` does not open the interactive shell and exits 64 with the usage text, the shell refuses to open, and `install-host` is refused with exit 64. No other command reads it. A process can unset it, so it is a guard against accidental use, not a containment control. |
+| `AVARICE_RUN` | unset | The run marker. Any value, including an empty one, counts as set. | Not for operators to set. The host launch sets it (next section). While set, bare `avarice` does not open the interactive shell and exits 64 with the usage text, the shell refuses to open, and `install-host`, `digest`, `contract amend`, `decide`, `cancel` and `schedule` are refused with exit 64. No other command reads it. A process can unset it, so it is a guard against accidental use, not a containment control; the owner commands also judge the process tree (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)). |
 | `HOME` | the OS home directory | Base for the default roots, the gsd-core candidate `~/.claude/gsd-core`, the default `~/.claude` config directory and the default skill directory of `install-host`. It is also the base of the credential locations that sandboxed commands may not read, and it is forwarded to children. | Normally inherited. Empty is treated as unset for AVARICE's own path resolution. |
 | `PATH` | none (see children) | Search path for `claude` and `graphify` (absolute entries only for graphify). Forwarded to git children. Its value is also appended to the directory of the running Node binary to form the `PATH` of check, install and list commands. | Must contain `git`; the git child falls back to a fixed path list only when `PATH` is empty. The check sandbox falls back to `/usr/bin:/bin` when `PATH` is unset. |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Host configuration directory. Used for the root placement rules, for the gsd-core candidate `<dir>/gsd-core`, as the skills root for the host, as the default target of `install-host`, and forwarded to the host and gsd-core. | Set when Claude Code is installed in a nondefault directory. `install-host --config-dir` overrides it. |
@@ -36,7 +36,7 @@ Every row names a read on a production path unless marked otherwise. An empty va
 | `NO_COLOR` | unset | Any value, including an empty one, turns colour and cursor escapes off. | Standard convention. Colour is on only when the stream is a terminal, `NO_COLOR` is unset and `TERM` is not `dumb`. |
 | `TERM` | unset | `dumb` selects the plain line mode of the interactive shell and turns colour off. | Any other value, or none, leaves the full-screen mode and colour on when the streams are terminals. |
 
-Test-only seam: `AVARICE_FAKE_HOST` is read only by the test fake host; nothing in the shipped source references it, so it has no effect on the CLI.
+Test-only seams: `AVARICE_FAKE_HOST` is read only by the test fake host, and `AVARICE_TEST_NOTIFIER` only by the test entry point, which then keeps the real osascript notifier (pointed at a fake script by the profile's `notify.local.osascriptPath`) instead of a silent one. Nothing in the shipped source references either, so neither has any effect on the CLI. The notify keys of the profile config are in "Profile config file".
 
 ## Environment variables AVARICE sets for child processes
 
@@ -57,6 +57,8 @@ Children get an allowlisted environment built from nothing; names not listed her
 | host and sandbox probes | `PATH=/usr/bin:/bin:/opt/homebrew/bin` and the six passthrough names | Used for the host version and capability probes and the sandbox probe. |
 | run supervisor (detached) | the whole environment of the starting command, with three overrides, and `NODE_TEST_CONTEXT` removed | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT` and `AVARICE_WORK_ROOT` are set to the roots the starting command resolved, whatever the environment said. `NODE_TEST_CONTEXT` is dropped so a test entry does not do nothing. The supervisor then builds every child environment as in the rows above. |
 | hook | none set | The hook is started by the host and inherits the host environment above. |
+| `osascript`, `launchctl`, `plutil` (banner and schedule) | none set | Started with an argument list and no `env` option, so each inherits the whole environment of the AVARICE process that starts it. They are the owner's own tools, run outside any sandbox. |
+| digest LaunchAgent (launchd) | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` | Written into the agent's property list by `schedule install` from the roots the command resolved, and the only variables it writes, so the scheduled `avarice digest` reads the same profile as the command that installed it. |
 
 Every sandboxed command runs with exactly the environment it is given: the executor inherits nothing.
 
@@ -71,7 +73,23 @@ Location: `<config home>/profiles/personal-local/config.json`, mode 0600. It is 
 | `dataRoot` | the resolved data root at first creation | nothing | dead knob |
 | `workRoot` | the resolved work root at first creation | nothing | dead knob |
 
-Editing the file changes nothing. Because it is written once, it can disagree with the roots in use after an environment variable changes. The roots come from `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` and the defaults on every run.
+Editing those four keys changes nothing. Because they are written once, they can disagree with the roots in use after an environment variable changes. The roots come from `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` and the defaults on every run.
+
+### The `notify` section
+
+AVARICE never writes this section: the owner adds it by hand. It sets where a banner may go, when a digest runs and when banners are held. The behavior it configures is described in [autonomy-and-decisions.md](autonomy-and-decisions.md#notification). The file is read each time a banner, a digest or a schedule needs the settings, so an edit applies to the next one with no restart. The only exception is the schedule: launchd keeps the times that `schedule install` last wrote until it is run again.
+
+A missing file or a missing `notify` section gives every default below, and a missing key inside the section takes its own default. The file is opened without following a symbolic link and must be a regular file of at most 65536 bytes holding a JSON object. Any other file, a section that is not an object and any key that this table does not list (in `notify` or in `notify.local`) is refused with the field and the reason. `schedule install` reports that as exit 64 and `digest` as exit 70.
+
+| Key | Type | Default | Constraint | Usage |
+|---|---|---|---|---|
+| `notify.destinations` | array of strings | `["local"]` | Each entry must be `local`, the one destination built. A repeated name counts once. An empty array is accepted and posts no banner. | The profile's list of places a banner may go. A contract can only choose a subset of it; a destination the profile does not list is dropped, and a contract cannot add one. |
+| `notify.digestTimes` | array of `HH:MM` strings | `["12:30", "17:30"]` | At most 6. Each is two digits for the hour (00 to 23), a colon and two for the minute (00 to 59). Sorted and de-duplicated. An empty array is accepted. | The local times at which launchd runs `avarice digest`. `schedule install` refuses an empty list. |
+| `notify.quietHours` | string `HH:MM-HH:MM`, or `null` | `null` (off) | The two ends must differ. | A half-open range of local time that includes its start and excludes its end, and wraps past midnight when the start is later than the end. No banner is posted inside it; the rows are held for the next digest and the inbox still lists everything. |
+| `notify.batchWindowMinutes` | integer | `10` | A whole number from 1 to 120. | How long the first queued notice of a run waits before the supervisor posts the queued notices as one banner, counted from the oldest queued notice. |
+| `notify.local.osascriptPath` | string | `/usr/bin/osascript` | An absolute path of at most 1024 characters with no control character. | The program the local banner runs. |
+
+A banner is posted only when both the contract's list for that kind of event and `notify.destinations` name the destination. The contract's own `notify` lists hold `local` for review-ready and blocking events and are not configurable; its `digest` list is always empty and nothing reads it, so a digest uses the profile's destinations.
 
 ## Repository-side files
 
@@ -107,10 +125,10 @@ Each `checks` entry (keys `name`, `argv`, `timeoutSec`, `required`, `env`, `writ
 | `argv` | yes | none | 1 to 64 non-empty strings of at most 1024 characters each, no NUL. | Never a shell string: the vector is run as written. |
 | `timeoutSec` | no | `600` | Integer from 1 to 3600. | Kill time of the check, in seconds. |
 | `required` | no | `true` | Boolean. | A required check must pass at final proof. |
-| `env` | no | empty | Object of at most 32 variables. A name matches `[A-Z_][A-Z0-9_]*`, a value is a string of at most 1024 characters without NUL. | Non-secret environment for the check. The sandbox values override it (see the process environment section). |
+| `env` | no | empty | Object of at most 32 variables. A name matches `[A-Z_][A-Z0-9_]*`, a value is a string of at most 1024 characters without NUL. | Non-secret environment for the check. The sandbox values override it (see the process environment section). At compile, every variable the check sandbox does not set itself must have a plain word as its value: letters, digits and `_@%+=:,./-`, possibly empty. The value must also match no secret pattern. Otherwise the start is refused as a compile error naming the variable, because the value is also written to the agent as a leading `NAME=value` word and compared word for word. |
 | `writes` | no | empty | Array of at most 128 globs. | Paths the check may write besides the scratch directory; they become run artifacts. |
 
-Reserved check environment names are refused at parse. `PATH`, `HOME`, `TMPDIR`, `TMP`, `TEMP`, `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `BASH_ENV`, `ENV`, `SHELL`, `IFS`, compared as written. Any name starting with `DYLD_`, `LD_` or `npm_config_` is also refused, compared without regard to case.
+Reserved check environment names are refused at parse. `PATH`, `HOME`, `TMPDIR`, `TMP`, `TEMP`, `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `BASH_ENV`, `ENV`, `SHELL`, `IFS`, compared as written. Any name starting with `DYLD_`, `LD_` or `npm_config_` is also refused, compared without regard to case. The same names are refused as the leading assignment of an `agentCommands` entry.
 
 `paths` keys (any other key is refused):
 
@@ -141,7 +159,10 @@ Each `agentCommands` entry is a string with these rules.
 - None of the characters semicolon, ampersand, pipe, dollar sign, backtick or backslash.
 - Words separated by exactly one space (no leading, trailing or doubled space).
 - No `<` or `>` except a single final word `<paths>` that is not the only word.
-- The first word, by its last path segment and without regard to case, is not one of `git`, `avarice`, `claude`, `gh`, `curl`, `wget`, `ssh`, `scp` or `sudo`. At compile, each check's argument vector, joined by spaces, must pass the last rule too.
+- The entry may begin with assignment words `NAME=value`, and the words after them are the command. Each assignment must name an upper-case variable that matches `[A-Z_][A-Z0-9_]*` and is not reserved (the list and prefixes above), and its value must be a plain word (letters, digits and `_@%+=:,./-`, possibly empty) that matches no secret pattern. A program word must follow the assignments, and it is not `<paths>`. Any other assignment makes the conventions invalid.
+- The program word, which is the first word after any assignments, by its last path segment and without regard to case, is not one of `git`, `avarice`, `claude`, `gh`, `curl`, `wget`, `ssh`, `scp` or `sudo`. An assignment never hides it. At compile, each check's argument vector, joined by spaces, must pass this rule too.
+
+The contract lists each required check and each target check of the brief as an agent command written as its environment in `NAME=value` words sorted by name (leaving out the names the check sandbox sets) followed by its argument vector. See [containment.md](containment.md#command-identity-bash) for how the hook matches such a command.
 
 Glob rule, used by every glob above and by the brief's `## Write` section. A glob is a non-empty string of at most 512 characters, with no control character or NUL, no backslash, no leading `/`, no leading `~`, and no empty, `.` or `..` segment.
 
@@ -189,6 +210,9 @@ The full flag contract is in [cli-reference.md](cli-reference.md).
 | `start --budget name=value` (repeatable) | none | Lowers a run budget; see the routine preset. |
 | `start --wait` | off | Follows the run for at most its wall-clock budget plus 15 minutes. |
 | `resume <id> --wait` | off | Follows a resumed run for at most 24 hours. |
+| `decide <id> ... --wait` | off | Follows a supervisor that `decide` started, for at most 24 hours. |
+| `cancel <id> --wait` | off | Follows a cancel that a supervisor carries out, for at most 24 hours. |
+| `contract amend <run> --budget name=value` (repeatable) | none | Changes a budget of a running contract, up or down. It is the one way a limit rises. |
 | `install-host --config-dir <dir>` | the `CLAUDE_CONFIG_DIR` value, else `~/.claude` | Directory that receives the `avarice-run` skill. |
 | `context --budget N` | `4000` | Token budget for a context query, whole number 1 to 100000. |
 | `init --profile personal-local` | `personal-local` | Only that profile is accepted. |
@@ -199,23 +223,23 @@ The `--budget` value is `name=value` with a number. The name and the lower-only 
 
 ### The `routine` preset
 
-The preset is the constant that the run compiler copies into each contract. A digest of the whole preset is stored as the policy revision, so changing any value changes it. No file or variable changes a preset value; only budgets can be lowered, per run.
+The preset is the constant that the run compiler copies into each contract. A digest of the whole preset is stored as the policy revision, so changing any value changes it. No file or variable changes a preset value. A run's budgets can be lowered when it starts, and a contract amendment can raise or lower them afterwards; neither changes the preset.
 
-Budgets. An override can only lower a value: a value above the preset is refused. The name must be one of the seven below, and the number must be finite and above 0, and an integer where marked.
+Budgets. The limits that scale grow with the number of work items n in the brief. A start override can only lower a value: a value above the limit the preset gives for n items is refused. The name must be one of the seven below, and the number must be finite and above 0, and an integer where marked. Only a contract amendment raises a limit.
 
 | Budget | Preset | Override name | Integer |
 |---|---|---|---|
-| Wall clock | 60 minutes per run | `wallClockMinutes` | yes |
-| Invocations | 3 (one unit, one discard-and-retry, one relaunch after an interruption) | `invocations` | yes |
-| Tool calls | 400 | `toolCalls` | yes |
-| Subagents, total | 10 (a planner, up to two plan checkers, an executor and a verifier make 5 per unit; two rounds) | `subagentsTotal` | yes |
+| Wall clock | 120 minutes per run | `wallClockMinutes` | yes |
+| Invocations | `2n + 1`: two per item (its unit and one retry or repair) and one relaunch after an interruption | `invocations` | yes |
+| Tool calls | `400n` | `toolCalls` | yes |
+| Subagents, total | `10n` (a planner, up to two plan checkers, an executor and a verifier make 5 per unit; two rounds) | `subagentsTotal` | yes |
 | Subagents, concurrent | 2 | `subagentsConcurrent` | yes |
 | Cost per invocation | 2.0 USD | `costUsdPerInvocation` | no |
-| Cost per run | 5.0 USD (estimated) | `costUsdPerRun` | no |
+| Cost per run | 10.0 USD (estimated) | `costUsdPerRun` | no |
 | Retry | 1 | not overridable | not applicable |
-| Repair attempts per check | 0 | not overridable | not applicable |
+| Repair attempts per check | 1 | not overridable | not applicable |
 
-Two consistency adjustments run after the overrides and are recorded in the contract. A per-invocation cost above the per-run cost is lowered to it, and a concurrent subagent cap above the total is lowered to it. A killed or interrupted invocation is charged its full reservation, the smaller of the per-invocation cap and what is left of the run's cost, and nothing is refunded. The retry count is read by the retry logic. The repair-attempt count is recorded and read by nothing.
+Two consistency adjustments run after the overrides and are recorded in the contract. A per-invocation cost above the per-run cost is lowered to it, and a concurrent subagent cap above the total is lowered to it. A killed or interrupted invocation is charged its full reservation, the smaller of the per-invocation cap and what is left of the run's cost, and nothing is refunded. The retry count is read by the retry logic. The repair-attempt count is read by the repair rule: a required check that passed when an item began and fails after it gets that many repair units on the same item, and then a decision.
 
 Other values:
 
@@ -232,12 +256,12 @@ Other values:
 | Escalation: consecutive searches | 25 | yes, by the hook |
 | Escalation: no-progress invocations | 2 | dead: recorded, read by nothing |
 | Tool classes | `read`, `search`, `edit`, `write`, `shell`, `subagent` | recorded only |
-| Decisions, delegated | internal naming, test structure, refactors inside write paths | recorded only |
-| Decisions, human | user-visible behavior changes, new dependencies, public API changes, scope expansion, acceptance criteria changes | recorded only |
+| Decisions, delegated | internal naming, test structure, refactors inside write paths | yes: the unit prompt lists them as choices the unit may make, and the decision classifier takes them as input (its delegated path has no caller, see [autonomy-and-decisions.md](autonomy-and-decisions.md#quirks)) |
+| Decisions, human | user-visible behavior changes, new dependencies, public API changes, scope expansion, acceptance criteria changes | yes: the unit prompt lists them as choices to ask the owner about, and the decision classifier takes them as input |
 | Decisions, prohibited | policy changes, budget changes, credential changes, merge, push | recorded only |
 | Delivery | endpoint `ready_for_review`, hand-off `local-branch`, no push, no draft change request | recorded only; the hand-off in code is fixed |
-| Notification | `local` for review-ready and blocking events | recorded only |
-| Verification | GSD verifier `required-passed`, baseline `delta`, per-item `required-checks`, integrity gates `no-new-overrides`, `no-test-deletion`, `no-skip-markers`, `scope-conformance`, `prune-is-decision` | recorded only; the gates run from code, not from this list |
+| Notification | `local` for review-ready and blocking events; the digest list is empty | the review-ready and blocking lists, yes: a banner goes only to a destination that this list and the profile's `notify.destinations` both name; the digest list is read by nothing |
+| Verification | GSD verifier `required-passed`, baseline `delta`, per-item `required-checks`, integrity gates `no-new-overrides`, `no-test-deletion`, `no-skip-markers`, `scope-conformance`, `prune-is-decision` | the integrity gate names, yes: a failed gate's event lists which of them it broke (see [checks-and-evidence.md](checks-and-evidence.md#the-integrity-gates)); the rest are recorded only, and the gates run from code, not from this list |
 
 The loop limits are prevention. At 25 searches in a row with no read, edit or write between, the next search is refused. At 3 denials in a row, the third denial is the one that reaches the limit. In both cases the invocation is also stopped and a loop-limit event is appended. A limit of zero would turn that control off; the preset has none. What each setting does is described in [runs.md](runs.md), and the hook rules are in [containment.md](containment.md).
 
@@ -257,6 +281,8 @@ The loop limits are prevention. At 25 searches in a row with no read, edit or wr
 | Blocked issue text | 1000 characters |
 | Wait margins | `start --wait` polls every 250 ms for the wall-clock budget plus 15 minutes; `resume --wait` polls every 250 ms for 24 hours |
 | Lease | 180000 ms, renewed every third (override `AVARICE_LEASE_TTL_MS`) |
+| Cancel lease | the lease `cancel` takes when no supervisor holds one: at most 60 s, or the lease time-to-live when that is shorter |
+| Wait margins, decide and cancel | `decide --wait` polls every 250 ms and `cancel --wait` every 200 ms, each for at most 24 hours |
 | Hook command length | a shell command over 16384 characters is denied |
 | Hook edit fingerprint | a file over 8 MiB is fingerprinted by size and modified time, not content |
 | Dependency install | timeout 15 minutes; lockfile read cap 32 MiB; at most 20 grouped network attempts kept |
@@ -339,6 +365,11 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 | Context query budget | default 4000, max 100000 tokens |
 | Proposal file | 65536 bytes |
 | Installed skill | an existing `SKILL.md` over 256 KiB is not one AVARICE wrote and is left untouched |
+| Profile config read | 64 KiB, opened without following a symbolic link |
+| Banner | body at most 200 characters; up to three attempts, at once and after 10 s and 60 s; `osascript` killed after 10 s |
+| Schedule | `launchctl` and `plutil` 10 s each; at most six digest times; an existing agent file over 64 KiB is not one AVARICE wrote |
+| Amendment | reason at most 500 characters; acceptance file at most 64 KiB; at most ten added write globs |
+| Decision answer | option key at most 200 characters; free text 1 to 2000 characters; issue shown at most 1000 characters |
 | Shell history | `shell-history` in the data root, mode 0600, at most 1000 lines, oldest dropped |
 | Shell live view | the ledger is read again every 1000 ms; width 100 columns when the terminal reports none |
 
@@ -346,12 +377,12 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 
 - An empty `AVARICE_FAULT` is read as "set", an empty `AVARICE_RUN` counts as set, and an empty `NO_COLOR` counts as set. Every other variable treats empty as unset or, for the lease TTL, as invalid and therefore the default.
 - `AVARICE_LEASE_TTL_MS` falls back to the default for any invalid value without a message.
-- `AVARICE_RUN` is read at only three places. `start`, `supervise` and the other commands do not look at it, so it blocks only the shell and `install-host`.
+- `AVARICE_RUN` is read by the shell gate, `install-host`, `digest` and the owner commands (`contract amend`, `decide`, `cancel`, `schedule`). `start`, `supervise` and the other commands do not look at it.
 - Children differ in how they get `PATH`: git falls back to a fixed `PATH` only when the parent's is empty, while graphify and the host build their own `PATH` regardless of the parent.
 - A run host and a run's checks differ in home and temp. The host keeps the forwarded `HOME` and gets `TMPDIR` at `<scratch>/tmp`. Checks, install and list commands get both set to the scratch directory itself.
 - A check's `env` cannot change `CI`, `LANG` or the other sandbox names, although only the reserved names and prefixes listed above are refused at parse, and `CI`, `LANG` and the rest of the sandbox names are not. The sandbox value silently wins.
 - `AVARICE_GRAPHIFY_BIN` set to a bad path disables the `PATH` search.
 - Sandboxed supervisor commands (checks, install, list) deny reading the credential locations of the home directory (listed in [containment.md](containment.md#generated-settings-in-effect)), the data root and the three default AVARICE parent directories. They then allow back the run's own clone and scratch. A work root or config home placed elsewhere by an environment variable is not denied by name, except the data root.
-- The preset records values that no code reads back: the no-progress limit, the decision lists, the tool classes, delivery, notification, the verification list and the repair-attempt count. Changing them would change only the policy revision.
-- The install proxy admits only port-443 targets, so a registry that needs another port or plain HTTP cannot be reached.
+- The preset records values that no code reads back: the no-progress limit, the prohibited decision list, the tool classes, delivery, the notification digest list, the GSD verifier, baseline and per-item settings of the verification list. Changing them would change only the policy revision.
+- The `notify` section of the profile config is the one part of that file that is read, and AVARICE never writes it. A misspelt key in it is refused rather than ignored, unlike an unknown flag on the command line.- The install proxy admits only port-443 targets, so a registry that needs another port or plain HTTP cannot be reached.
 - The same `.avarice/config.json` produces onboarding findings for every key the run reader needs. They do not affect a run.

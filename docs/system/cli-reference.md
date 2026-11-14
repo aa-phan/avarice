@@ -1,15 +1,16 @@
 # CLI reference
 
-This document describes the command-line surface in `src/cli/` (entry `bin/avarice.ts`), the read models behind `status` and `inbox` (`src/app/status.ts`, `src/app/run-status.ts`), the start service behind `start` (`src/app/run-start.ts`) and the skill file that `install-host` writes (`src/adapters/host-claude/avarice-run-skill.ts`, `src/adapters/host-claude/skill-install.ts`). The `context`, `onboard` and `resume` sections defer to [indexes-and-context.md](indexes-and-context.md), [onboarding.md](onboarding.md) and [runs.md](runs.md) for their mechanics. It covers ten commands, a bare `avarice` that may open the interactive shell, one exit-code convention and one argument parser shared by all commands.
+This document describes the command-line surface in `src/cli/` (entry `bin/avarice.ts`), the read models behind `status` and `inbox` (`src/app/status.ts`, `src/app/run-status.ts`), the start service behind `start` (`src/app/run-start.ts`), the services behind the owner commands (`src/app/amend.ts`, `src/app/decide.ts`, `src/app/cancel.ts`, `src/app/digest.ts`), the LaunchAgent writer behind `schedule` (`src/adapters/schedule/launchd.ts`) and the skill file that `install-host` writes (`src/adapters/host-claude/avarice-run-skill.ts`, `src/adapters/host-claude/skill-install.ts`). The `context`, `onboard` and `resume` sections defer to [indexes-and-context.md](indexes-and-context.md), [onboarding.md](onboarding.md) and [runs.md](runs.md) for their mechanics, and the owner commands defer to [autonomy-and-decisions.md](autonomy-and-decisions.md) and [runs.md](runs.md). It covers fifteen commands, a bare `avarice` that may open the interactive shell, one exit-code convention and one argument parser shared by all commands.
 
 ## Summary
 
-- Commands: `init`, `repo add`, `onboard`, `start`, `supervise`, `status`, `inbox`, `resume`, `context`, `install-host`. Bare `avarice` opens the interactive shell on a terminal and is a usage error elsewhere. Any other word is a usage error.
-- Exit codes: `0` success, `3` the command ran correctly but the answer is "not active, not ready, refused, held or unavailable", `64` usage error, `70` internal failure.
+- Commands: `init`, `repo add`, `onboard`, `start`, `supervise`, `status`, `inbox`, `resume`, `context`, `install-host`, `contract` (the one subcommand `amend`), `decide`, `digest`, `schedule` (the subcommands `install` and `remove`) and `cancel`. Bare `avarice` opens the interactive shell on a terminal and is a usage error elsewhere. Any other word is a usage error.
+- Owner commands: `contract amend`, `decide`, `cancel`, `schedule install` and `schedule remove` need a person at a terminal. They refuse inside a run, without a terminal on standard input and output, and from the process tree of a run, before the profile is resolved (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)). `digest` needs no terminal, so launchd can run it, and refuses only inside a run.
+- Exit codes: `0` success, `3` the command ran correctly but the answer is "not active, not ready, refused, held, not applied or unavailable", `64` usage error, `70` internal failure.
 - Streams: results go to stdout; every error and every warning goes to stderr, except the unreadable-run line of `start --wait` and `resume --wait`, which goes to stdout (see Quirks). Only `status`, `inbox` and `context` have a `--json` form. All three print pretty-printed JSON (two-space indent) and a trailing newline.
-- Leases: `onboard`, `supervise` and the onboarding path of `resume` take a lease and run stages in their own process. `start` and the run path of `resume` start a detached `supervise` process, which takes the lease.
+- Leases: `onboard`, `supervise` and the onboarding path of `resume` take a lease and run stages in their own process. `start`, `decide` and the run path of `resume` start a detached `supervise` process, which takes the lease. `cancel` takes the run lease for at most 60 seconds when no supervisor holds it.
 - Read-only commands: `status`, `inbox` and `context` write no project, onboarding, run, adapter or lease rows. See "Order of checks and profile side effects" for what every command creates.
-- Network: the CLI layer opens no network connection, and `status`, `inbox` and `context` are offline. `onboard` and the supervisor that `start` and `resume` spawn may launch the contained agent host, whose behavior belongs to [containment.md](containment.md).
+- Network: the CLI layer opens no network connection, and `status`, `inbox` and `context` are offline. `onboard` and the supervisor that `start`, `decide` and `resume` spawn may launch the contained agent host, whose behavior belongs to [containment.md](containment.md). `digest` and `schedule` run local tools (`osascript`, `launchctl`, `plutil`; see [integrations.md](integrations.md)) and nothing else.
 
 The PreToolUse hook entry is not a user command; it runs inside the agent host and is described in [containment.md](containment.md). What each run command does to a run is described in [runs.md](runs.md). This document owns the command lines, flags, output and exit codes.
 
@@ -22,12 +23,12 @@ The PreToolUse hook entry is not a user command; it runs inside the agent host a
 | `avarice --help` or `avarice -h` (first word only) | usage text on stdout | 0 |
 | `avarice` with no words, standard input and output both terminals, `AVARICE_RUN` unset | the interactive shell opens; its keys, views and exit codes belong to [interactive-shell.md](interactive-shell.md) | the shell's |
 | `avarice` with no words in any other case (a stream is not a terminal, or `AVARICE_RUN` is set) | `avarice: no command given` plus usage text on stderr | 64 |
-| `avarice <name>` where name is not one of the ten | `avarice: unknown command '<name>'` plus usage text on stderr | 64 |
+| `avarice <name>` where name is not one of the fifteen | `avarice: unknown command '<name>'` plus usage text on stderr | 64 |
 | A listed command whose module is missing from the build | `avarice <name>: not available in this build` plus usage text on stderr | 64 |
 | A command module that fails to load for another reason | `avarice <name>: cannot load: <message>` on stderr | 70 |
 | A command module that exports no entry point | `avarice <name>: the command module does not export run()` on stderr | 70 |
 
-Only the ten listed names are ever loaded, so a path-like name is an unknown command. `--help` and `-h` are recognised only as the first word. `avarice --help` with more words behind it still prints usage and exits 0. After a command name they are not special. `init -h` is rejected as an unexpected argument, and `status --help` is accepted and ignored.
+Only the fifteen listed names are ever loaded, so a path-like name is an unknown command. `--help` and `-h` are recognised only as the first word. `avarice --help` with more words behind it still prints usage and exits 0. After a command name they are not special. `init -h` is rejected as an unexpected argument, and `status --help` is accepted and ignored.
 
 The shell condition is checked only when there are no words at all. `avarice --json` or any other word never opens the shell. The shell module is loaded only on that path. The shell refuses again when `AVARICE_RUN` is set (exit 64, `the interactive shell does not open inside a run`).
 
@@ -41,15 +42,15 @@ All commands share one parser. Its rules are the contract:
 - `--flag=value` attaches a value, and the value may be empty.
 - `--flag value` consumes the next word as the value unless that word starts with `--`, or the flag is declared boolean by the command. A flag with no value is the boolean `true`. A value may start with a single dash (`--budget -5` consumes `-5`).
 - `--` ends flag parsing; every later word is positional.
-- A flag given more than once keeps the last value. `--budget` additionally uses every occurrence (`onboard` and `start`).
-- Unknown flags are accepted silently and ignored. A misspelt flag is therefore not an error.
-- The boolean flags are declared per command: `--json` for `status`, `inbox` and `context`; `--wait` for `start` and `resume`; none for the others. A flag that a command does not declare boolean consumes the following word unless that word starts with `--`. So `--json` on `init`, `repo add`, `onboard`, `start`, `supervise`, `resume` or `install-host`, and `--wait` on any other command, are unknown flags.
+- A flag given more than once keeps the last value. Three flags additionally use every occurrence: `--budget` (`onboard`, `start` and `contract amend`), and `--add-write` and `--check` (`contract amend`).
+- Unknown flags are accepted silently and ignored. A misspelt flag is therefore not an error, except for `schedule`, which refuses every flag.
+- The boolean flags are declared per command: `--json` for `status`, `inbox` and `context`; `--wait` for `start`, `resume`, `decide` and `cancel`; none for the others. A flag that a command does not declare boolean consumes the following word unless that word starts with `--`. So `--json` on `init`, `repo add`, `onboard`, `start`, `supervise`, `resume`, `install-host`, `contract`, `decide`, `digest`, `schedule` or `cancel`, and `--wait` on any other command, are unknown flags. A value that starts with a single `+` or `-` is a value, which is how `--check +name` and `--check -name` work.
 
 ### Order of checks and profile side effects
 
 For every command that passes dispatch, the work runs in this order. It parses arguments, then runs the command's own usage check if it has one. It then resolves and prepares the profile and opens the ledger, and last it runs the command.
 
-`init`, `repo add`, `start`, `supervise`, `inbox`, `install-host` and `context` have a usage check, so a malformed command line exits 64 before anything is created. The usage check of `install-host` also refuses a run environment, so that refusal creates nothing either.
+`init`, `repo add`, `start`, `supervise`, `inbox`, `install-host`, `context`, `contract`, `decide`, `digest`, `schedule` and `cancel` have a usage check, so a malformed command line exits 64 before anything is created. The usage checks of `install-host` and `digest` also refuse a run environment, and those of `contract amend`, `decide`, `schedule` and `cancel` also refuse a run environment, a missing terminal and a run's process tree, so those refusals create nothing either.
 
 `onboard` and `resume` check their arguments inside the command, after the profile is prepared. A usage error from either can therefore leave a freshly created profile behind. `status` has no usage check and ignores extra words.
 
@@ -61,7 +62,7 @@ Preparing the profile (every command, including `status`, `inbox` and `context`)
 - Placement is judged for the data root and the work root only; the config home is not checked. Either root is refused when it lies under a `~/.claude*` directory or under `CLAUDE_CONFIG_DIR`, or when it would contain the home or Claude configuration directory. Refusal also follows when the two roots are nested, or when the data root is not on local storage (or its mount cannot be determined). The refusal is exit 70 with the reason on stderr.
 - Missing directories are created with mode 0700; a missing profile `config.json` is created with mode 0600 and never overwritten.
 - The ledger (`state.db` in the data root) is created and migrated when absent or behind. A read-only command opens an already current ledger read-only. If the ledger is absent or has pending migrations, it is created or migrated first and then reopened read-only.
-- A command that is not read-only (`init`, `repo add`, `onboard`, `start`, `supervise`, `resume`, `install-host`) also records the executor, graph, GSD (when located) and agent-host adapter descriptors. The ledger holds them. `status` and `inbox` record none. `context` records none and locates GSD only to read the indexes.
+- A command that is not read-only (`init`, `repo add`, `onboard`, `start`, `supervise`, `resume`, `install-host`, `contract`, `decide`, `digest`, `schedule`, `cancel`) also records the executor, graph, GSD (when located) and agent-host adapter descriptors. The ledger holds them. `status` and `inbox` record none. `context` records none and locates GSD only to read the indexes.
 - Failure of any of these steps is exit 70 with a message of the form `avarice <command>: <what>: <reason>`.
 
 ### Output style
@@ -77,11 +78,11 @@ Tables are aligned columns with a header row. A row is cut to the terminal width
 | Code | Meaning | Used by |
 |---|---|---|
 | 0 | The command did what was asked. For `onboard` and the onboarding path of `resume`, the project is active. For `start`, the run is stored and its supervisor started (with `--wait`, the run reached `ready_for_review`). For `supervise` and the run path of `resume`, the run is in `ready_for_review`. | all |
-| 3 | A valid request with no positive result: onboarding stopped without activating, a repository or a start was refused, the run stopped anywhere but `ready_for_review`, another process holds the lease, an install target was refused, or `context` has nothing it can query | `repo add`, `onboard`, `start`, `supervise`, `resume`, `context`, `install-host` |
-| 64 | Usage error, an unknown run or onboarding ID (`resume`, `supervise`), an invalid brief or budget override (`start`), a path that is not a repository (`repo add`, `onboard`), several active projects without `--project` (`context`), or `install-host` inside a run | dispatch, `init`, `repo add`, `onboard`, `start`, `supervise`, `inbox`, `resume`, `context`, `install-host` |
-| 70 | Internal failure: profile, store or adapter failure, an unexpected exception, a supervisor that could not be started | all |
+| 3 | A valid request with no positive result: onboarding stopped without activating, a repository or a start was refused, the run stopped anywhere but `ready_for_review`, another process holds the lease, an install target was refused, `context` has nothing it can query, an amendment or an answer was not applied for the state of the run or the decision, a run had already ended when `cancel` was asked, or `schedule` refused to touch a file | `repo add`, `onboard`, `start`, `supervise`, `resume`, `context`, `install-host`, `contract`, `decide`, `schedule`, `cancel` |
+| 64 | Usage error, an unknown run, decision or onboarding ID (`resume`, `supervise`, `contract`, `decide`, `cancel`), an invalid brief or budget override (`start`), an invalid amendment flag, a path that is not a repository (`repo add`, `onboard`), several active projects without `--project` (`context`), `install-host` or `digest` inside a run, or an owner command run inside a run, without a terminal or from a run's process tree | dispatch, `init`, `repo add`, `onboard`, `start`, `supervise`, `inbox`, `resume`, `context`, `install-host`, `contract`, `decide`, `digest`, `schedule`, `cancel` |
+| 70 | Internal failure: profile, store or adapter failure, an unexpected exception, a supervisor that could not be started, a banner that was not delivered (`digest`), a tool that failed (`schedule`) | all |
 
-`status` returns only 0 and 70. `inbox` returns 0, 64 (a positional argument) and 70. An uncaught exception inside a command is caught by dispatch, printed as `avarice <name>: failed: <message>` and returned as 70. The store is closed on every path. An exception thrown by a usage check or while preparing the profile is outside that handler (see [unknowns.md](unknowns.md)).
+`status` returns only 0 and 70. `inbox` returns 0, 64 (a positional argument) and 70. `digest` returns 0, 64 and 70. An uncaught exception inside a command is caught by dispatch, printed as `avarice <name>: failed: <message>` and returned as 70. The store is closed on every path. An exception thrown by a usage check or while preparing the profile is outside that handler (see [unknowns.md](unknowns.md)).
 
 ## init
 
@@ -208,10 +209,13 @@ acceptance: N criterion|criteria
 write paths: <globs, or none>
 required checks: <names, or none>
 budgets: X USD per run, Y USD per invocation; N min, N invocations, N tool calls
-model: <model>
+index: <note>
+item <id>: <size>, <model>; depends on <ids>; files <list>; symbols <list>
 contract: <preset> v<version> <digest>
 stored at: <path of the contract file under the data root>
 ```
+
+The `index:` line says whether the onboarded indexes helped to derive the items' specs: `index: used (N files, M symbols)`, `index: used, but nothing in it names these files or symbols`, `index: not used (absent)`, `(stale)` or `(unreadable)`, or `index: not queried (no item names a file or a symbol)`. An index never blocks a start. There is one `item` line per work item. It gives the size and the model (marked `(derived)` for a size the compiler chose and `(from size)` for a model that follows from the size), the items it depends on when it has any, and the spec's files and symbols, at most four each followed by `and N more`. A list that AVARICE derived from the item's text and the indexes is marked `(derived)`. The derivation is described in [runs.md](runs.md#the-contract).
 
 Before it spawns the supervisor, the command records the host configuration directory it runs under as the step `host:config-dir`. That directory is the value of `CLAUDE_CONFIG_DIR` when it is set and not empty, otherwise `.claude` in the home directory, made absolute and resolved to its real path when it exists. The step holds the directory and where it came from (`CLAUDE_CONFIG_DIR` or `default`). The host keeps its sessions, its skills and the GSD installation in that directory and looks for a session nowhere else, so every supervisor of the run is later started with the recorded directory as its `CLAUDE_CONFIG_DIR`, whichever terminal answers a decision or resumes the run. A step that cannot be recorded is exit 70 (`run <id> is stored but its host configuration directory could not be recorded: ...`) and no supervisor is started.
 
@@ -274,11 +278,14 @@ Human output: a first line `status: N project(s)`. With none, it is followed by 
 A run's detail block starts with its result line (`run <id>: <state>` with the reason). The following lines are indented by two spaces, and those with no content are omitted:
 
 - For an interrupted run: `interrupted attempt <attempt> at <step>` (or `interrupted at <step>` when no attempt was open) and `continue with: avarice resume <id>`.
+- `cancel requested (<local time>, <relative time>)` while an owner's cancel request stands and the run has not ended.
 - `last checkpoint: <next action> (<local time>, <relative time>)`.
 - `branch <name> at <short commit>` with `(clean)` or `(not clean)` once handed off, or `branch <name> (not handed off)`.
-- `evidence: <name> <status>, ...`, with `(pre-existing)` for a check that already failed at the base, or `evidence: none`.
+- `evidence: <name> <status>, ...`, with `(pre-existing)` for a check that already failed at the base. After the measured entries come `<name> not run: not required` entries, one for each declared check that is neither required nor a target of the brief, which the run never runs (see [checks-and-evidence.md](checks-and-evidence.md#required-checks-and-target-checks)). `evidence: none` appears only when there is neither kind.
 - `gates: <gate> passed|failed, ...` or `gates: none`.
-- `decisions: N open (see avarice inbox)`.
+- One `item <id>  <state>  [decision <id>  ]size <size>, model <model>, after <ids or none>, N attempt(s)` line per work item. An item that an open decision names first carries that decision's ID.
+- `decisions: N open (see avarice inbox)`, then one `decision <id>  <class>  <state>[  items <ids>][  replaced by <id>][  replaces <id>]` line per decision of the run in any state.
+- `notifications: N delivered, N pending, N held, N failed (<code>)`: only the delivery states that hold at least one banner, and the code of the latest delivery that did not arrive. The line is absent when the run has raised no banner. A failed banner never hides or closes a decision.
 - `budget: <name> <used> of <limit>; ...`: cost, invocations, tool calls, subagents and wall clock in that order, then any other name.
 - `references: <kind> <id> at <12 characters of the revision>; ...`.
 
@@ -320,8 +327,15 @@ Each element of `runs`:
 | `budgets` | array | `name`, `used`, `limit`. |
 | `references` | array | What the run was started from: `kind`, `id`, `revision`. The brief's requirement references come first, then the repository conventions (`kind` `conventions`, the conventions file as `id`). |
 | `interrupted` | object, optional | Present only when interrupted (above): `state` (the ledger state), `presentedAs` (always `paused`), `reason` (`verification interrupted` or `supervisor interrupted`), `attemptId` (string or null), `step`, `nextAction`, `resumeCommand`. |
+| `items` | array | One entry per work item: `itemId`, `state`, `size`, `model`, `dependsOn` (array of item IDs), `attempts` (number of times it was delegated). |
+| `decisions` | array | One entry per decision of the run in any state: `decisionId`, `class`, `state`, `affectedItems` (array), `supersedes` (the decision it re-opened, or null) and `successor` (the decision that re-opened it, or null). |
+| `notifications` | object | The run's banners by delivery state: `delivered`, `pending`, `held`, `failed` (counts) and `lastError` (the short code of the latest banner that did not arrive, or null). |
+| `cancelRequestedAt` | string, optional | ISO time of the owner's cancel request. Present only while the request stands on a run that has not ended. |
+| `checksNotRun` | array, optional | The last key of the entry. Present only when a declared check is neither required nor a target of the brief: each entry is `name` and `reason`, and the reason is always `not required`. |
 
-The fields `title`, `branch`, the check, gate and budget names, and the reference `id` are free text or repository-derived. The rest are IDs, states, revisions, booleans and counts.
+`items`, `decisions` and `notifications` are always present in the output of the command, and every key above them keeps its name, order and value. A reader of the earlier output ignores the added keys.
+
+The fields `title`, `branch`, the check, gate and budget names, the item IDs, sizes and models, and the reference `id` are free text or repository-derived. The rest are IDs, states, revisions, booleans and counts.
 
 Exit: 0, or 70 when the ledger cannot be read.
 
@@ -329,7 +343,7 @@ Exit: 0, or 70 when the ledger cannot be read.
 
 `avarice inbox [--json]`
 
-Lists the open decisions of runs and the runs that wait for a review. Read-only, offline, takes no lease. Answering a decision is not a command yet.
+Lists the open decisions of runs and the runs that wait for a review. Read-only, offline, takes no lease. It is the record of what waits: a banner that did not arrive changes nothing here. A decision is answered with [`decide`](#decide), or with [`contract amend`](#contract-amend) when it offers only `withdraw` and names an amend command.
 
 | Argument | Type | Default | Validation |
 |---|---|---|---|
@@ -338,14 +352,16 @@ Lists the open decisions of runs and the runs that wait for a review. Read-only,
 
 Unknown flags are ignored.
 
-Human output: `inbox: N open decision(s), M review(s)`, in the singular for one. Nothing follows when both are zero. When there are decisions, the output is `decisions:` and a table with `DECISION`, `RUN`, `CLASS`, `URGENCY` and `OPENED` (local time with a relative form). Then comes one `issue <decision id>: <text>` line per decision. The text is flattened to one line and cut to the terminal width. When there are reviews: `reviews:` and a table with `RUN`, `BRANCH`, `COMMIT` (seven characters, `-` when not handed off) and `REPOSITORY`.
+Human output: `inbox: N open decision(s), M review(s)`, in the singular for one. Nothing follows when both are zero. When there are decisions, the output is `decisions:` and a table with `DECISION`, `RUN`, `CLASS`, `URGENCY` and `OPENED` (local time with a relative form). Then comes one block per decision. It starts with `issue <decision id>: <text>`, the text flattened to one line and cut to the terminal width. Indented by two spaces below it come `items: <ids>` (the items the decision holds up), one `option <key>: <label>` line per option, `answer with: <command>` and, when a banner was raised for the decision, one banner line. The command is `avarice decide <id> <option-key>`, or the stored amend command (or `avarice decide <id> withdraw` when it holds none) for a decision whose only option is `withdraw`. The banner line is `banner delivered`, `banner held for the next digest`, `banner pending`, or `banner not delivered (<code>); this list is the record`. When there are reviews: `reviews:` and a table with `RUN`, `BRANCH`, `COMMIT` (seven characters, `-` when not handed off) and `REPOSITORY`. Under the table, one `checks <run id>: <name> not run: not required, ...` line per review whose run left a declared check unrun, because it is neither required nor a target.
 
 JSON output: an object with two arrays.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `decisions` | array | Each open decision of a run: `decisionId`, `runId`, `class`, `urgency` (`blocking` or `digest`), `openedAt` (ISO time), `issue` (free text, model-derived). Blocking before digest, otherwise in the order the ledger returns them. |
-| `reviews` | array | Each run in `ready_for_review` or `awaiting_review`: `runId`, `title` (free text), `branch` (string or null), `commit` (the handed-off commit, string or null), `repository` (the project's path). |
+| `decisions` | array | Each open decision of a run: `decisionId`, `runId`, `class`, `urgency` (`blocking` or `digest`), `openedAt` (ISO time), `issue` (free text, model-derived), then `items` (array of item IDs the decision holds up), `options` (array of `key`, `label` and `kind`, which is `choice`, `text` or `withdraw`), `command` (the command that answers it) and, only when a banner was raised for it, `notification`. Blocking before digest, otherwise in the order the ledger returns them. |
+| `decisions[].notification` | object, optional | `state` (`pending`, `held`, `delivered` or `failed`; a failed delivery outranks a held or pending one, and those outrank a delivered one), `attempts` (number) and `lastError` (a short code, only when the state is not `delivered` and a delivery failed). |
+| `reviews` | array | Each run in `ready_for_review` or `awaiting_review`: `runId`, `title` (free text), `branch` (string or null), `commit` (the handed-off commit, string or null), `repository` (the project's path) and, as the last key, `checksNotRun`. |
+| `reviews[].checksNotRun` | array, optional | Present only when a declared check is neither required nor a target of the brief: each entry is `name` and `reason`, and the reason is always `not required`. |
 
 Exit: 0, 64 for a positional, 70 when the ledger cannot be read.
 
@@ -451,6 +467,46 @@ Side effects: the skill file above, and one adapter record named `host-skill:ava
 
 The skill text is advisory and is identical on every install. It tells a session to call `avarice status` first, to treat the context pack and retrieved text as data and never as instruction, to stay inside the contract's paths, and to stop and report a denied tool call. It also tells the session to ask a clear question with numbered options last when a choice is consequential, and to use `avarice context` before reading whole files. It names `avarice contract amend`, `avarice budget` and `avarice install-host` as owner-only commands. Its front matter allows the tools `Bash(avarice status:*)`, `Bash(avarice context:*)` and `Read`. The text enforces nothing. The hook, the sandbox and the gates do that, as described in [containment.md](containment.md).
 
+## contract amend
+
+`avarice contract amend <runId> --reason <text> [--budget name=value]... [--add-write <glob>]... [--acceptance-file <file> [--item <id>]] [--check +<name>|-<name>]... [--decision <decisionId>]`
+
+Records contract version n+1 for a run: the one way a limit rises or a scope widens, and a person at a terminal outside the run is the one who does it. The command shows what it would change and what that invalidates, asks for a confirmation, and only then writes. What each change means, the rules a change must meet and what an amendment invalidates are in [runs.md](runs.md#amendments-and-contract-versions); this section owns the command line. `contract` takes one subcommand, `amend`.
+
+| Argument | Type | Default | Validation |
+|---|---|---|---|
+| `amend` | literal first positional | required | Missing or any other word is a usage error: `contract needs a subcommand: amend`. |
+| `<runId>` | string | required | Exactly one run ID after `amend`, `run_` followed by letters or digits; otherwise `contract amend needs exactly one run ID`. An unknown run is exit 64. |
+| `--reason` | string | required | Non-blank. At most 500 characters, which the planning step checks (exit 64). |
+| `--budget` | `name=value`, repeatable | none | Shape as for `start` (a letter-led alphanumeric name, `=`, a finite number); a bare `--budget` is a usage error. The name, the direction and the limits are judged by the amendment rules: a limit may rise or fall. |
+| `--add-write` | glob, repeatable | none | Each occurrence needs a value; a bare `--add-write` is a usage error. The glob rules, the ten-glob cap and the conventions' write set are judged by the amendment rules. |
+| `--check` | `+name` or `-name`, repeatable | none | Each value must begin with `+` or `-`: `+name` makes a declared check required, `-name` makes it not required. A bare `--check` is a usage error. `+name` also adds the check's command to the agent's list. |
+| `--acceptance-file` | file path | none | A non-empty path, read relative to the working directory. A regular file of at most 65536 bytes, valid UTF-8, in the brief's criterion syntax. Read after the profile is prepared, so an unreadable file is exit 64. |
+| `--item` | work item ID | none | Only with `--acceptance-file`. Names the item that owns a new criterion; the amendment rules require it when the run has more than one item. |
+| `--decision` | decision ID | none | `dec_` followed by letters or digits. An open `repeated_failure`, `permission`, `budget` or `scope_expansion` decision of the same run, which this amendment then answers. |
+
+At least one of `--budget`, `--add-write`, `--check` and `--acceptance-file` is required, otherwise `nothing to amend: name a budget, a write glob, a check or an acceptance file`. Every shape check above runs before the profile is prepared, with the terminal checks first (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule); each is a usage error, exit 64). The command records the owner as `owner:<operating system user>`. It does not check that the user owns the profile; the ledger's refusal of a store owned by another user stands behind it.
+
+Output (stdout), one item per line with control characters removed:
+
+```
+run <id>: amending contract v<n> to v<n+1>
+<path>: <from> -> <to>            (a changed value, both shown as JSON)
+<path>: +<added> -<removed>       (a changed list)
+invalidates: <classes, or nothing>
+stale gates: <gates>              (only when some)
+stale evidence: <evidence IDs>    (only when some)
+answers decision <id> as amended:v<n+1>    (only with --decision)
+```
+
+It then asks `apply contract v<n+1>? [y/N] ` through the shell's prompt when run from the shell, and as one line from standard input otherwise. `y` or `yes`, in any case, applies it. Any other answer, an empty line or end of input prints `not amended` and exits 0, with nothing written. On apply it prints `contract v<n+1> recorded`, then `appended N stale evidence row(s) and M stale gate row(s)` when either count is above zero, then `decision <id> answered amended:v<n+1>` when `--decision` was given, and exits 0. The invalidation classes are `gates`, `acceptance-mappings`, `checks-rerun`, `scope-conformance`, `check-evidence` and `approvals`.
+
+Failures print `avarice contract: <message>`. An invalid flag value, a rule the amendment breaks, an unknown run, or a `--decision` that is not a decision of the run is exit 64. A run that has failed, been cancelled or been closed, a contract that moved since it was read, and a decision that is no longer open are `not amended: conflict: ...` with exit 3, and nothing is written. Conventions that cannot be read at the contract's revision, and every other failure, are exit 70 (`avarice contract: failed: ...`).
+
+Exit: 0 amended or declined. 3 not amended because of the state of the run, the contract or the decision. 64 usage, a refusal of who runs it, an invalid flag or an unknown run. 70 internal failure.
+
+Side effects: on `y`, one ledger transaction writes the contract version, the changed budget limits, the stale rows and the answer to the decision, and the contract file of the new version is written after it. It takes no lease, so it can run beside a supervisor. Not read-only. The `decide` prompt's `amend` entry reaches the same preview and confirmation.
+
 ## decide
 
 `avarice decide <decisionId> [<option-key> | --text "<text>"] [--wait]`
@@ -528,6 +584,96 @@ Exit: 0 answered, withdrawn, identical answer ignored, left open, or declined at
 
 Side effects: writes the decision's new state and its events, may write contract version n+1 (the `amend` entry), and may start the detached supervisor. Takes no lease. Not read-only.
 
+## digest
+
+`avarice digest`
+
+The scheduled check-in. When open decisions or runs ready for review exist, it posts one batched banner with the counts and writes one `digest` notification row. When nothing waits, it posts nothing and writes nothing. It also catches up on banners that did not arrive. The notification rules, the covering of earlier rows and the quiet-hours hold are in [autonomy-and-decisions.md](autonomy-and-decisions.md#check-ins). launchd runs it at the profile's digest times once `schedule install` has been run, and a person can run it by hand. It takes no argument and answers no decision.
+
+| Argument | Type | Default | Validation |
+|---|---|---|---|
+| positionals | none | | Any positional is a usage error (64): `digest takes no argument, found "<word>"`. |
+
+Flags are ignored. The command needs no terminal. It refuses to run inside a run (`AVARICE_RUN` set) with exit 64, before the profile is resolved. It does not look at the process tree.
+
+Output (stdout): when a banner was delivered, `digest: N decision(s) waiting, M run(s) ready for review`, in the singular for one. When nothing waits, when no destination is configured, and when quiet hours held the banner, it prints nothing and exits 0.
+
+A banner that was not delivered after the last attempt is `avarice digest: the banner was not delivered (<code>); N decision(s) and M run(s) still wait in avarice inbox` on stderr, with exit 70. The code is the short code of the last failed attempt (`osascript-missing`, `osascript-timeout`, `osascript-failed` or `notifier-error`). An unreadable ledger or profile config (a notify key that does not validate) is `avarice digest: failed: <reason>`, also 70. The recorded attempts and the row states are described in [autonomy-and-decisions.md](autonomy-and-decisions.md#notification).
+
+Exit: 0 delivered, held for quiet hours, or nothing to say. 64 an argument, or inside a run. 70 a banner that was not delivered, or a failure to read the ledger or the settings.
+
+Side effects: writes notification rows and their delivery attempts, marks the earlier rows it covers delivered, and runs `osascript` once per attempt for a banner. It changes no decision. Takes no lease. Not read-only.
+
+## schedule
+
+`avarice schedule install`
+`avarice schedule remove`
+
+`install` writes one user LaunchAgent that runs `avarice digest` at the profile's digest times, and loads it. `remove` unloads it and deletes the file. launchd keeps the clock, so no AVARICE process waits between digests. The agent is written with no run-at-load and no keep-alive. The command works only for the owner's own profile.
+
+| Argument | Type | Default | Validation |
+|---|---|---|---|
+| `install` or `remove` | literal | required | Exactly one. Anything else, a second positional, or any flag at all is a usage error: `avarice schedule: usage: avarice schedule install \| remove`. |
+
+The terminal checks of an owner command apply first (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)), then the data-root owner check (`only the user who owns the profile schedules its digest`, 64). The command is refused with exit 64 on a system with no launchd, which is any system that is not macOS: `the digest schedule is a macOS LaunchAgent; this system has no launchd`.
+
+The agent is named `io.avarice.digest.<profile>`, which is `io.avarice.digest.personal-local`, and lives at `~/Library/LaunchAgents/<label>.plist` (mode 0644, in the home directory the profile resolved). Its fixed template holds:
+
+- the label;
+- the program: the absolute path of the Node binary that runs the command, any `--disable-warning=<Name>` option of the running process (no other Node option is copied), the real path of the CLI entry script, and the word `digest`;
+- an environment of three variables, `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT` and `AVARICE_WORK_ROOT`, set to the roots the command resolved;
+- one calendar interval, an hour and a minute, for each of the profile's digest times (`notify.digestTimes`, default `12:30` and `17:30`; see [config-reference.md](config-reference.md#profile-config-file));
+- standard output and standard error sent to `logs/digest.log` in the data root.
+
+`install` with no digest time in the profile is exit 64 (`notify.digestTimes in the profile config is empty, so there is no time to run the digest; add at least one HH:MM`). At most six times are accepted. Every value written passes a check: a label of `a-z`, `0-9`, dot and dash after the fixed prefix, absolute paths without control characters, and times of two digits each. Every value is XML-escaped, and the Node binary and the CLI entry must exist as files. A value that fails is exit 64.
+
+`install` writes the file under a temporary name, lints it with `/usr/bin/plutil -lint`, and renames it into place. When the label is already installed it first runs `/bin/launchctl bootout gui/<uid>/<label>`, so running `install` again replaces the agent. It then loads the file with `/bin/launchctl bootstrap gui/<uid> <file>`. It never follows a symbolic link and touches only a file that carries the marker line AVARICE writes. It creates the agents directory (mode 0755) and the log directory (mode 0700) when absent.
+
+Output (stdout): `install` prints `digest schedule installed: <label> at <times>` (or `replaced` for an existing agent) and `log: <path of digest.log>`. `remove` prints `digest schedule removed: <label>`, or `digest schedule not installed: <label>` when there was no agent, which is not an error.
+
+| Case | Stderr | Exit |
+|---|---|---|
+| The agents directory, the agent file or the log directory is a symbolic link or not the right kind of file; an existing file has no marker line or is over 64 KiB | `avarice schedule: <path> ... so nothing was written` (or `removed`, or `was not written by AVARICE ... left untouched`) | 3 |
+| A value is not allowed, or the Node binary or entry does not exist | `avarice schedule: invalid <field>: <reason>` | 64 |
+| `plutil` rejects the plist | `avarice schedule: failed: internal error: plutil lint refused the plist (exit N: <first line>); nothing was installed` | 70 |
+| `launchctl bootstrap` fails | `... launchctl bootstrap failed (exit N: <first line>); the new file was removed again` (first install) or `the new file is in place but not loaded` (replacement) | 70 |
+| `launchctl bootout` fails in `remove` with anything but "not loaded" (exit 3 or 113) | `... launchctl bootout failed (exit N: <first line>); the file was left in place` | 70 |
+
+Each tool runs with an argument list and no shell, a 10 second limit and no input. The first line of the tool's own error, with control characters removed and cut to 160 characters, is quoted.
+
+Exit: 0 done, or already absent. 3 a refusal that wrote nothing. 64 usage, a refusal of who runs it, a value that is not allowed, or no launchd. 70 a tool failed.
+
+Side effects: the plist, the log directory, and a loaded or unloaded launchd job; the only thing AVARICE writes outside the profile roots here is the plist. Not read-only. Takes no lease.
+
+## cancel
+
+`avarice cancel <runId> [--wait]`
+
+Cancels a run in any state that has not ended. The mechanics, including what a supervisor does with the request, are in [runs.md](runs.md#cancel).
+
+| Argument | Type | Default | Validation |
+|---|---|---|---|
+| `<runId>` | string | required | Exactly one positional, `run_` followed by 4 to 64 letters or digits; otherwise a usage error. An unknown run is exit 64. |
+| `--wait` | boolean | off | Boolean; never consumes a following word. Follows a cancel that a supervisor must carry out. |
+
+The terminal checks of an owner command apply first (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)), then the data-root owner check (`only the user who owns the profile cancels a run`, 64).
+
+The request is recorded first. What follows depends on the lease:
+
+| Situation | Stdout | Exit |
+|---|---|---|
+| No live lease: the command ends the hosts the run left running, withdraws every open decision, ends the open attempt and moves the run to `cancelled` | `run <id>: cancelled; N decision(s) withdrawn` | 0 |
+| A supervisor holds the lease: the request is recorded and that supervisor carries it out | `run <id>: cancel requested`, and without `--wait` the command ends | 0 |
+| The same, with `--wait` | polls every 200 milliseconds for at most 24 hours, and prints `run <id>: cancelled` | 0 |
+
+With `--wait`, a supervisor that died with the request standing leaves no live lease, so the command finishes the cancel itself, prints `run <id>: cancelled` and exits 0. A run that reaches another end instead prints `run <id>: <state>` and exits 3. When the wait runs out the command prints `avarice cancel: run <id> was still not cancelled after the wait` on stderr and exits 3.
+
+A run that has ended already is `avarice cancel: run <id> is already <state>` with exit 3, and nothing is written. A conflict of any other kind is `not applied: ...` with exit 3. An unknown run is `no run <id> (not found: run <id>)` with exit 64. Any other failure is `run <id> was not cancelled: <reason>` with exit 70. `cancelled` is terminal: `resume` then only reports it.
+
+Exit: 0 cancelled or requested. 3 the run had ended, or a `--wait` that did not reach `cancelled`. 64 usage, a refusal of who runs it, or an unknown run. 70 internal failure.
+
+Side effects: the cancel request on the run row, the withdrawn decisions, the ended attempt and the run's move to `cancelled`, all as ledger rows. With no live lease it takes the run lease for at most 60 seconds, and it reaps a host the earlier supervisor left running by its session ID. The run clone, its branch and the user's checkout are not touched. Not read-only.
+
 ## Quirks
 
 - A command named read-only still prepares the profile and may create and migrate the ledger on a first run; it writes no project, onboarding, run or adapter rows.
@@ -541,5 +687,8 @@ Side effects: writes the decision's new state and its events, may write contract
 - The start refusal codes are not printed; only the message is. A script that needs to tell the refusals apart must match message text.
 - Exit code 3 covers several different situations (refused, blocked, held lease, run stopped elsewhere, no answer); the message on stderr or stdout distinguishes them. `status` and `inbox` never return it.
 - The error line for a run that cannot be read during `start --wait` or `resume --wait` is printed on stdout, not stderr, although it is an error and exits 70.
-- The `avarice-run` skill names two owner commands, `contract amend` and `budget`, that dispatch does not know; they are unknown commands today.
+- The `avarice-run` skill names two owner commands, `contract amend` and `budget`. `contract amend` is a command; `budget` is not one, and dispatch treats it as an unknown command.
+- A usage error from an owner command prints the command's own usage line and then the list of command names. A refusal for a run, a terminal or a process tree prints only the reason and the command list.
+- The data-root owner check of `decide`, `cancel` and `schedule` runs after the profile is prepared and the ledger is opened. The ledger open itself refuses a store file owned by another user, so the command's own check is a second guard. `contract amend` makes no such check.
+- `digest` exits 0 when quiet hours held its banner or when nothing waits, so a scheduled run that posted nothing is not a failure. Only an undelivered banner is exit 70.
 - The wait of `start --wait` is bounded by the contract's wall clock plus 15 minutes and ends with exit 3 and a "still running" line when the supervisor outlives it. The wait of `resume --wait` is bounded by 24 hours regardless of the contract.
