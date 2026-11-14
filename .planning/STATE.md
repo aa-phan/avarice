@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "Completed 03-31-PLAN.md: documentation draft 1 (decision subsystem, runs, data model, processes, three diagrams); next 03-32 (documentation draft 2)"
-last_updated: "2026-11-14T22:19:44.346Z"
+stopped_at: Completed 03-32-PLAN.md
+last_updated: "2026-11-14T22:38:30.355Z"
 last_activity: 2026-11-13
 last_activity_desc: Phase 03 execution started
-state_head: 25eebab5df86b9e034aa067969c8d382f8332ba9
+state_head: 2043fd34c222266b65c1a455124df9fb491e906b
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 134
-  completed_plans: 132
+  completed_plans: 133
 ---
 
 # Project State
@@ -163,6 +163,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 03 P72 | 10 min | 3 tasks | 4 files |
 | Phase 03 P59 | one live attempt, 19.5 min run | 3 tasks | 2 files |
 | Phase 03 P31 | 2h | 3 tasks | 8 files |
+| Phase 03 P32 | 15 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -385,6 +386,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-71: the agent command list holds only the checks the run executes (required or target); declared checks no gate judges are named in the prompt as judged by no gate; contract amend --check +name adds the check's command with an execution.commands diff entry
 - [Phase 03]: 03-60: the exit verdict is 3/3 ready_for_review over the D-26 epoch (run 2 attempt 4, run 3 attempt 3, run 1 attempt 1); LIVE-CASES.md keeps the heading Exit (plans 03-57 to 03-68) and lists every attempt under it
 - [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
+- [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
 
 ### Pending Todos
 
@@ -445,6 +447,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-14T22:19:31.690Z
-Stopped at: Completed 03-31-PLAN.md: documentation draft 1 (decision subsystem, runs, data model, processes, three diagrams); next 03-32 (documentation draft 2)
+Last session: 2026-11-14T22:38:08.967Z
+Stopped at: Completed 03-32-PLAN.md
 Resume file: None

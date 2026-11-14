@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 71/73 plans executed (39 waves, with 31 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1; 03-70 halted on run 3's product defect (the unit's command list held the declared check test:e2e, which no gate judges), closed by gap plans 03-71 (only the checks the run executes are listed for the agent, the prompt names the others), 03-72 (run 3's no-spend reset and the owner's spend decision), and, because the ruling began a new D-26 epoch, 03-73 (run 2's attempt 4) and 03-74 (run 3's attempt 3) before run 1)
+**Plans:** 72/73 plans executed (39 waves, with 31 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1; 03-70 halted on run 3's product defect (the unit's command list held the declared check test:e2e, which no gate judges), closed by gap plans 03-71 (only the checks the run executes are listed for the agent, the prompt names the others), 03-72 (run 3's no-spend reset and the owner's spend decision), and, because the ruling began a new D-26 epoch, 03-73 (run 2's attempt 4) and 03-74 (run 3's attempt 3) before run 1)
 
 Plans:
 **Wave 1**
@@ -371,7 +371,7 @@ Plans:
 - [x] 03-31-PLAN.md — Documentation draft 1: the worklist; the decision subsystem document, runs (with the pre-existing list of 03-61 and the check environment of 03-64), data model and processes with three diagrams, from the code
 
 **Wave 38** *(blocked on Wave 37 completion)*
-- [ ] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35, the baseline rule of 03-61 and the check environment of 03-64), containment (with the command-identity rule of 03-64), integrations, overview, from the code
+- [x] 03-32-PLAN.md — Documentation draft 2: CLI reference, interactive shell, config reference, checks and evidence (with D-35, the baseline rule of 03-61 and the check environment of 03-64), containment (with the command-identity rule of 03-64), integrations, overview, from the code
 
 **Wave 39** *(blocked on Wave 38 completion)*
 - [ ] 03-33-PLAN.md — Documentation pass (last plan): diff compared with docs/system and gaps fixed, README tables, coverage and findings (with D-35, the residual of 03-61 and the lines of 03-64 and 03-65), fresh reviews of every new or changed document (success criterion 6)
@@ -469,7 +469,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 71/73 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 72/73 | In Progress | - |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
