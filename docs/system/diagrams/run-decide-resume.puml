@@ -47,6 +47,7 @@ else withdraw
 else answer applies
   Decide -> Ledger : decision answered, affected items\nblocked_on_decision to ready (one transaction)
 end
+note over Decide, Ledger : the pickup and the answered item below follow only a withdraw\nor an answer that applies; every other branch above ends with its message to the owner
 
 == Who picks the run up ==
 alt a supervisor holds a live lease
