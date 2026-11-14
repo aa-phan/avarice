@@ -385,6 +385,24 @@ The install, validation, baseline, item and final check commands and the test-in
 - **Network.** None, except one loopback port. The install's proxy allows the registry hosts. The validation proxy allows nothing and records the attempts. The install also sets the package manager's proxy variables, switches off its update notifier and sets its ignore-scripts switch through the environment.
 - **Install timeout.** 15 minutes.
 
+## Owner commands and the terminal identity rule
+
+Five commands act for the owner and never for the agent: `contract amend` widens a run, `decide` answers a decision, `cancel` ends a run, and `schedule install` and `schedule remove` manage the digest LaunchAgent. Each applies one identity rule in its argument check, which runs before the profile is resolved. A refusal therefore creates nothing: no data root, no ledger, no row, no event and no file. `digest` is not one of them, and refuses only inside a run.
+
+The checks apply in this order, and the first that fails is the only one reported. Each is a usage error (exit 64, `avarice <command>: <reason>`).
+
+| Order | Reason printed | Condition |
+|---|---|---|
+| 1 | `refused inside a run (AVARICE_RUN is set)` | `AVARICE_RUN` is set in the environment, with any value, including an empty one. |
+| 2 | `needs an interactive terminal` | Standard input or standard output is not a terminal. A command that is given no way to tell where it runs refuses the same way. |
+| 3 | `refused from inside a run's process tree` | A process on the chain from the command up to process 1 has a command line holding ` supervise run_` followed by a letter or digit. |
+
+The chain is read with `/bin/ps`, one process at a time, and only when the first two checks passed. A chain that cannot be read, that loops or that is longer than 64 processes counts as inside a run, so the refusal fails closed. A command line is cut to 400 characters keeping its start and its end, because the supervisor's signature sits at the end. The agent's shell is a descendant of the supervisor that launched it, which is the one fact a run cannot hide. The environment marker, by contrast, can be unset by a process, so it stops accidents and the process tree is the control that matters.
+
+Once the profile is open, `decide`, `cancel` and `schedule` also require the data root to be owned by the user running the command, and refuse with `only the user who owns the profile answers a decision`, `cancels a run` or `schedules its digest` (exit 64) otherwise. `contract amend` makes no such check of its own. The ledger's own refusal to open a store owned by another user is what stands behind it.
+
+What an owner command records is the operating system user as `owner:<name>`, with control characters removed (`unknown` when the system has no name). A refusal at these three checks writes no event, because it says nothing about a run or a decision. The responder checks that `decide` then applies to an answer are in [autonomy-and-decisions.md](autonomy-and-decisions.md#response-checks). The hook's denied prefix `avarice` and the never-granted words keep the agent from naming these commands at all (see "Command identity (Bash)"), so the identity rule is a second barrier.
+
 ## Git safety
 
 Every git subprocess AVARICE starts carries one environment. Repository hooks are disabled by pointing the hooks path at the null device, and fsmonitor is off. System config and system attributes are not read. Optional locks are off, so read-only calls do not refresh the user's index. Terminal prompts are off. Nothing from the caller's environment reaches git except `PATH` (with a default), `HOME` and `LANG`. The contained host inherits the same variables, so GSD's own git calls carry the guard. The host environment does not carry filter blanking; that exists only on AVARICE's own calls.

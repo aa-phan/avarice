@@ -451,6 +451,83 @@ Side effects: the skill file above, and one adapter record named `host-skill:ava
 
 The skill text is advisory and is identical on every install. It tells a session to call `avarice status` first, to treat the context pack and retrieved text as data and never as instruction, to stay inside the contract's paths, and to stop and report a denied tool call. It also tells the session to ask a clear question with numbered options last when a choice is consequential, and to use `avarice context` before reading whole files. It names `avarice contract amend`, `avarice budget` and `avarice install-host` as owner-only commands. Its front matter allows the tools `Bash(avarice status:*)`, `Bash(avarice context:*)` and `Read`. The text enforces nothing. The hook, the sandbox and the gates do that, as described in [containment.md](containment.md).
 
+## decide
+
+`avarice decide <decisionId> [<option-key> | --text "<text>"] [--wait]`
+
+Answers a decision of a run as the owner. Given an option key or `--text`, it applies that answer. Given neither, it prints the decision's record and asks for the answer at the terminal. The checks an answer passes, what a stale answer and a withdrawal do, and how the run is picked up afterwards belong to [autonomy-and-decisions.md](autonomy-and-decisions.md); this section owns the command line. `decide` never changes a contract field, a budget or the write scope. A decision that only an amendment can answer is answered with `contract amend`, or with `amend` at the prompt below.
+
+| Argument | Type | Default | Validation |
+|---|---|---|---|
+| `<decisionId>` | string | required | `dec_` followed by 4 to 64 letters or digits; anything else is a usage error (64). |
+| `<option-key>` | string | none | 1 to 200 characters. A listed choice key, or `withdraw` where the record lists it. A `text` option is answered with `--text`, never by its key. Not combined with `--text`. |
+| `--text` | string | none | Non-empty, and not combined with an option key; a bare `--text` is a usage error. Accepted only for a record that lists a `text` option, and then 1 to 2000 characters with no control character other than tab and line feed. |
+| `--wait` | boolean | off | Boolean; never consumes a following word. Follows a supervisor that this command started (see Output). |
+| more positionals | none | | A usage error: `give one option key, or --text with the text`. |
+
+The command needs a person at a terminal and refuses anything else, before the profile is resolved, so a refusal creates nothing. The three refusals and their order are in [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule). All three are usage errors (64): `avarice decide: refused inside a run (AVARICE_RUN is set)`, `needs an interactive terminal` and `refused from inside a run's process tree`. Once the profile is open, a profile whose data root is not owned by the user running the command is refused with `only the user who owns the profile answers a decision` (64), and nothing is written.
+
+An open decision whose run recorded a host configuration directory (see `start`) is refused before anything is written when that directory is missing, is not a directory or cannot be read: exit 3, `avarice decide: not applied: the run's host configuration directory <dir>, recorded when it started, is <missing|not a directory|unreadable>; restore it, or run this from an environment where it exists`. The supervisor this command may start runs the host under that directory, and the paused session lives there. A decision that is not open is not checked this way, and a run without the recorded step is never refused.
+
+### Record and prompt
+
+With no key and no `--text`, `decide` prints the record on stdout, one item per line and cut to the terminal width (80 columns when the width is unknown):
+
+- `decision <id> (<state>)` and `run <id>`;
+- `item: <item>`, with `(also affects <items>)` when others depend on it;
+- `class: <class>`, and `re-opens: <id>` for a decision that replaced a stale one;
+- `question from the unit (data):` and the issue, indented, at most 1000 characters;
+- `options:` and one `<key>: <label>` line each, the `text` option marked `(answer with --text "...")`;
+- `recommendation: <key>` when the unit marked one;
+- `consequences:` and one `<key>: <sentence>` line per option;
+- `answered: <answer> (<who>)` once it is answered;
+- `amend: <command>`, never cut, for a record that an amendment answers.
+
+Every value passes the control-character strip described under output style. The issue is the unit's own words and is labelled as data.
+
+For an open decision it then asks `answer (<keys>; empty leaves it open): `. The keys are the choice keys, then `withdraw` when the record lists it, `text` when it takes free text and `amend` when it carries an amend command. The answer goes through the same engine as the one-line form.
+
+| Entry | Effect |
+|---|---|
+| Empty line, or end of input | Prints `left open`, changes nothing, exits 0. |
+| `amend` (not a listed key, record carries an amend command) | Records the request and continues as `contract amend` does (below). |
+| A listed key, or any entry for a record with no `text` option | Applied as an option key (cut to 200 characters). |
+| Any other entry | Applied as free text. |
+
+The `amend` entry prints the amendment preview that `contract amend` prints, pre-filled with the paths or budget values the record measured, and asks `apply contract v<n+1>? [y/N] `. On `y` it writes the amended contract and answers the decision in one step, printing `contract v<n+1> recorded` and `decision <id> answered amended:v<n+1>`, and then picks up the run as below. Anything else prints `not amended` and `left open` and exits 0. A record that measured nothing to pre-fill prints `decision <id> is answered by an amendment, and the record has no measured request to pre-fill` and `amend with: <command>` and exits 3.
+
+When the decision is not open, or no prompt can be shown, the record is printed and the command ends with `avarice decide: give an option key or --text` and the usage line on stderr (64).
+
+### Output and pick-up
+
+An applied answer prints `decision <id> answered (<key>)`, with `text` in place of the key for free text, or `decision <id> withdrawn`. A line about the run follows:
+
+| Situation | Line | Effect |
+|---|---|---|
+| A supervisor holds the run's lease | `run <id>: a running supervisor takes item <item> next` (`a running supervisor continues the run` after a withdrawal) | Nothing starts; that supervisor takes the item. |
+| The run is blocked, the answer made it continuable and no lease is live | `run <id>: supervisor started` | Starts the detached supervisor as `start` does and records the step `supervisor:decide`. |
+| Any other run state | none | Nothing starts. |
+
+With `--wait` after a started supervisor, the command lets the supervisor take the run up and then polls every 250 milliseconds for at most 24 hours, printing the result block of `start --wait`. It exits 0 when the run reaches `ready_for_review` and 3 otherwise. With a live supervisor already holding the lease there is nothing to follow and the command returns at once. A supervisor that cannot be started is exit 70 (`avarice decide: run <id> was not continued: <reason>`), as is a spawn whose step cannot be recorded.
+
+Answers that apply nothing:
+
+| Case | stdout or stderr | Exit |
+|---|---|---|
+| The same answer to an answered decision | `decision <id> already answered; ignored` | 0 |
+| A key for a record that only an amendment answers | `decision <id> is answered by an amendment, not by an option; nothing was applied`, `amend with: <command>`, `or take it back: avarice decide <id> withdraw` | 3 |
+| The state moved since the question was asked | `the run changed since decision <id> was asked (contract v<a> -> v<b>); your answer was not applied`, `decision <new> asks the same question on the new state, with your answer kept as context`, `answer it with: avarice decide <new> <option-key>` | 3 |
+| A different answer to an answered decision; a withdrawn, stale or otherwise closed decision | `avarice decide: <reason>` on stderr; a stale decision names its successor | 3 |
+| A key that is not listed; free text for a record with no `text` option; free text that is empty, too long or holds a control character | `avarice decide: <reason>` on stderr | 64 |
+| The decision or the contract moved while the answer was written, twice | `avarice decide: not applied: conflict: ...` | 3 |
+| No such decision | `avarice decide: no such decision (not found: decision <id>)` | 64 |
+
+The version part of the stale line appears only when the contract version changed. A refused answer is recorded as an event naming the run, the decision and the check, and never the text typed.
+
+Exit: 0 answered, withdrawn, identical answer ignored, left open, or declined at the amendment question. 3 an answer not applied for the state of the decision or the run, or a `--wait` that ended anywhere but `ready_for_review`. 64 usage, a refusal of who runs it, an unknown decision, or an option or text the record does not allow. 70 internal failure (`avarice decide: failed: ...`).
+
+Side effects: writes the decision's new state and its events, may write contract version n+1 (the `amend` entry), and may start the detached supervisor. Takes no lease. Not read-only.
+
 ## Quirks
 
 - A command named read-only still prepares the profile and may create and migrate the ledger on a first run; it writes no project, onboarding, run or adapter rows.
