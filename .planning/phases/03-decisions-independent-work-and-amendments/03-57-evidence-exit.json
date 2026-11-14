@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-59",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-14T20:27:37.522Z",
+  "updatedAt": "2026-11-14T20:41:52.666Z",
   "runs": [
     {
       "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
@@ -8908,14 +8908,14 @@
     {
       "runId": "run_01M7DVKCXRR2MYYPK3K46B3ED0",
       "title": "The copy fallback names the address",
-      "state": "blocked_on_decision",
-      "reason": "decision",
+      "state": "ready_for_review",
+      "reason": null,
       "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
       "branch": "avarice/run_01M7DVKCXRR2MYYPK3K46B3ED0",
-      "updatedAt": "2026-11-14T20:27:36.840Z",
-      "commit": null,
-      "clean": false,
-      "costUsd": 0.15307327,
+      "updatedAt": "2026-11-14T20:41:45.432Z",
+      "commit": "0909a46448cfcf876bf8f3a93935b1580b4237cf",
+      "clean": true,
+      "costUsd": 1.3480121799999998,
       "hostConfigDir": {
         "claudeConfigDir": "/Users/aphan/.claude-edu",
         "source": "CLAUDE_CONFIG_DIR"
@@ -8928,31 +8928,31 @@
       "budgets": [
         {
           "name": "costUsd",
-          "used": 0.15307327,
+          "used": 1.3480121799999998,
           "reserved": 0,
           "limit": 4.5
         },
         {
           "name": "invocations",
-          "used": 2,
+          "used": 4,
           "reserved": 0,
           "limit": 7
         },
         {
           "name": "subagentsTotal",
-          "used": 5,
+          "used": 14,
           "reserved": 0,
           "limit": 30
         },
         {
           "name": "toolCalls",
-          "used": 47,
+          "used": 198,
           "reserved": 0,
           "limit": 1200
         },
         {
           "name": "wallClockMs",
-          "used": 256275,
+          "used": 971826,
           "reserved": 0,
           "limit": 7200000
         }
@@ -8969,23 +8969,23 @@
         },
         {
           "itemId": "B",
-          "state": "blocked_on_decision",
+          "state": "done",
           "size": "medium",
           "model": "sonnet",
           "dependsOn": [],
-          "attempts": 1,
+          "attempts": 2,
           "gsdSession": "a07062e9-bd8b-483f-86ab-f3b9cc59669f"
         },
         {
           "itemId": "C",
-          "state": "ready",
+          "state": "done",
           "size": "small",
           "model": "haiku",
           "dependsOn": [
             "B"
           ],
-          "attempts": 0,
-          "gsdSession": null
+          "attempts": 1,
+          "gsdSession": "ebed3265-46eb-4360-8785-4d9484ddbcdc"
         }
       ],
       "attempts": [
@@ -9006,13 +9006,31 @@
           "outcome": "blocked:decision",
           "startedAt": "2026-11-14T20:27:31.522Z",
           "endedAt": "2026-11-14T20:27:36.839Z"
+        },
+        {
+          "attemptId": "att_01M7DVYX9P3VESVQ8G7E8S1T57",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "committed",
+          "startedAt": "2026-11-14T20:28:40.118Z",
+          "endedAt": "2026-11-14T20:31:30.614Z"
+        },
+        {
+          "attemptId": "att_01M7DW442QAN9PCM7HSBZKFZKT",
+          "ordinal": 4,
+          "reason": "initial",
+          "itemId": "C",
+          "outcome": "handed-off",
+          "startedAt": "2026-11-14T20:31:30.902Z",
+          "endedAt": "2026-11-14T20:41:45.431Z"
         }
       ],
       "decisions": [
         {
           "decisionId": "dec_01M7DVWZG7DJFH4J1AYVWS15SW",
           "class": "acceptance",
-          "state": "open",
+          "state": "answered",
           "urgency": "blocking",
           "contractVersion": 1,
           "stateDigest": "sha256:cf93ed9be1610caca023d5300f171cfbe2884528d1585ef29bd7d917b6b11fe3",
@@ -9041,10 +9059,10 @@
           "evidenceRefs": [],
           "authorizedDefault": null,
           "openedAt": "2026-11-14T20:27:36.839Z",
-          "answeredAt": null,
-          "answeredBy": null,
-          "answer": null,
-          "answerChannel": null,
+          "answeredAt": "2026-11-14T20:28:39.589Z",
+          "answeredBy": "owner:aphan",
+          "answer": "1",
+          "answerChannel": "terminal",
           "supersedes": null,
           "origin": {
             "origin": "pause",
@@ -9069,6 +9087,19 @@
           "lastError": null,
           "createdAt": "2026-11-14T20:27:36.839Z",
           "deliveredAt": "2026-11-14T20:27:36.940Z"
+        },
+        {
+          "notificationId": "ntf_01M7DWPW6TX78JM15XJ1SD8D5V",
+          "kind": "review",
+          "destination": "local",
+          "subjectIds": [
+            "run_01M7DVKCXRR2MYYPK3K46B3ED0"
+          ],
+          "state": "delivered",
+          "attempts": 1,
+          "lastError": null,
+          "createdAt": "2026-11-14T20:41:45.434Z",
+          "deliveredAt": "2026-11-14T20:41:45.557Z"
         }
       ],
       "gates": [
@@ -9092,81 +9123,116 @@
           "passed": true,
           "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
           "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "B",
+          "passed": true,
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "failures": []
+        },
+        {
+          "gate": "G1",
+          "workItem": "C",
+          "passed": true,
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "failures": []
+        },
+        {
+          "gate": "G2",
+          "workItem": "C",
+          "passed": true,
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "failures": []
+        },
+        {
+          "gate": "G4",
+          "workItem": null,
+          "passed": true,
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "failures": []
         }
       ],
       "requiredChecks": [
         {
           "name": "typecheck",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "lint",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "format:check",
           "status": "failed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false,
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
           "preExisting": true
         },
         {
           "name": "test",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:case",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:colors",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:contrast",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "build",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:meta",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:budget",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:no-phone",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         },
         {
           "name": "check:images",
           "status": "passed",
-          "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-          "clean": false
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true
         }
       ],
       "acceptance": [
@@ -9194,6 +9260,33 @@
               "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -9240,6 +9333,60 @@
               "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -9269,6 +9416,33 @@
               "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -9335,6 +9509,87 @@
               "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
               "workItem": "A",
               "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+              "workItem": "B",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+              "workItem": "C",
+              "phase": "item"
+            },
+            {
+              "kind": "check",
+              "name": "typecheck",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
+            },
+            {
+              "kind": "check",
+              "name": "lint",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
+            },
+            {
+              "kind": "check",
+              "name": "test",
+              "status": "passed",
+              "independence": "deterministic",
+              "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+              "workItem": null,
+              "phase": "final"
             }
           ],
           "satisfied": true
@@ -9647,6 +9902,467 @@
           "workItem": "A",
           "acceptance": [],
           "phase": "item"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:d5273e46f6148e46946390f89801da711b2b61eac9db4d37e0829ea0c4452e0c",
+          "clean": false,
+          "workItem": "B",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "test-inventory",
+          "name": "test-inventory",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45",
+          "clean": false,
+          "workItem": "C",
+          "acceptance": [],
+          "phase": "item"
+        },
+        {
+          "kind": "check",
+          "name": "typecheck",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [
+            "AC2",
+            "AC4"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "lint",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [
+            "AC4"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "format:check",
+          "status": "failed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final",
+          "preExisting": true
+        },
+        {
+          "kind": "check",
+          "name": "test",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4"
+          ],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:case",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:colors",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:contrast",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "build",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:meta",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:budget",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:no-phone",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "check",
+          "name": "check:images",
+          "status": "passed",
+          "independence": "deterministic",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": [],
+          "phase": "final"
+        },
+        {
+          "kind": "gsd-verdict",
+          "name": "gsd-verification",
+          "status": "passed",
+          "independence": "model-review",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "clean": true,
+          "workItem": null,
+          "acceptance": []
         }
       ],
       "commits": [
@@ -9654,6 +10370,18 @@
           "commit": "5ed7b145cb036a401e631249a81a08b4b1b0688b",
           "attemptId": "att_01M7DVKGRSZR5Y7FKGC5PBBJYH",
           "itemId": "A",
+          "paths": 2
+        },
+        {
+          "commit": "50d8189e47bbab9d39fcde5f910a1ad883c1ff02",
+          "attemptId": "att_01M7DVYX9P3VESVQ8G7E8S1T57",
+          "itemId": "B",
+          "paths": 2
+        },
+        {
+          "commit": "0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "attemptId": "att_01M7DW442QAN9PCM7HSBZKFZKT",
+          "itemId": "C",
           "paths": 2
         }
       ],
@@ -9708,117 +10436,182 @@
             "a07062e9-bd8b-483f-86ab-f3b9cc59669f"
           ],
           "toolCounts": {}
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M7DVYX9P3VESVQ8G7E8S1T57",
+          "itemId": "B",
+          "model": "sonnet",
+          "invocationId": "inv_01M7DVYXHEJA5930YC6PVHBJGG",
+          "requestedSession": "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+          "answeredDecisionId": "dec_01M7DVWZG7DJFH4J1AYVWS15SW",
+          "kind": "no_progress",
+          "error": null,
+          "costUsd": 0.9317249999999999,
+          "costChargedUsd": 0.9317249999999999,
+          "transcript": "sha256:db8d5c3544c628ce9d9e9c1b9a57b6a9287f16efd04d2f4357838db72c5a79f5",
+          "initSessions": [
+            "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+            "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+            "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+            "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+            "a07062e9-bd8b-483f-86ab-f3b9cc59669f"
+          ],
+          "toolCounts": {
+            "Read": 17,
+            "Agent": 4,
+            "Glob": 5,
+            "Grep": 6,
+            "Write": 3,
+            "Edit": 3,
+            "Bash": 12
+          }
+        },
+        {
+          "step": "launch:run",
+          "status": "completed",
+          "attemptId": "att_01M7DW442QAN9PCM7HSBZKFZKT",
+          "itemId": "C",
+          "model": "haiku",
+          "invocationId": "inv_01M7DW447E5B2Z29QNE70V3BGX",
+          "requestedSession": "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+          "answeredDecisionId": null,
+          "kind": "denied",
+          "error": null,
+          "costUsd": 0.26321391,
+          "costChargedUsd": 0.26321391,
+          "transcript": "sha256:dc51084822e6839409b7794f9460bc2e0e5248fcb064fdc083d6353dd566096b",
+          "initSessions": [
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc",
+            "ebed3265-46eb-4360-8785-4d9484ddbcdc"
+          ],
+          "toolCounts": {
+            "Read": 48,
+            "Agent": 5,
+            "Grep": 28,
+            "Glob": 7,
+            "Write": 5,
+            "Edit": 3,
+            "Bash": 15,
+            "ToolSearch": 1
+          }
         }
       ],
       "toolCounts": {
-        "Read": 17,
-        "Agent": 5,
-        "Grep": 1,
-        "Write": 3,
-        "Glob": 1,
-        "Edit": 3,
-        "Bash": 22
+        "Read": 82,
+        "Agent": 14,
+        "Grep": 35,
+        "Write": 11,
+        "Glob": 13,
+        "Edit": 9,
+        "Bash": 49,
+        "ToolSearch": 1
       },
       "askUserQuestion": 0,
       "statusView": {
         "runId": "run_01M7DVKCXRR2MYYPK3K46B3ED0",
         "title": "The copy fallback names the address",
-        "state": "blocked_on_decision",
-        "reason": "decision",
+        "state": "ready_for_review",
+        "reason": null,
         "lastCheckpoint": {
-          "seq": 18,
-          "nextAction": "park",
-          "revision": "5ed7b145cb036a401e631249a81a08b4b1b0688b",
-          "at": "2026-11-14T20:27:36.573Z"
+          "seq": 38,
+          "nextAction": "handoff:fetch",
+          "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+          "at": "2026-11-14T20:41:45.330Z"
         },
         "branch": "avarice/run_01M7DVKCXRR2MYYPK3K46B3ED0",
-        "commit": null,
-        "clean": false,
+        "commit": "0909a46448cfcf876bf8f3a93935b1580b4237cf",
+        "clean": true,
         "evidence": [
           {
             "name": "typecheck",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "lint",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "format:check",
             "kind": "check",
             "status": "failed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false,
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true,
             "preExisting": true
           },
           {
             "name": "test",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:case",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:colors",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:contrast",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "build",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:meta",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:budget",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:no-phone",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           },
           {
             "name": "check:images",
             "kind": "check",
             "status": "passed",
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01",
-            "clean": false
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf",
+            "clean": true
           }
         ],
         "gates": [
@@ -9830,39 +10623,44 @@
           {
             "gate": "G1",
             "passed": true,
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01"
+            "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45"
           },
           {
             "gate": "G2",
             "passed": true,
-            "revision": "tree:sha256:6668eadc9ec37a5f4318c612e7170265eaae8dc5ec192b5d5b4956c0a0f22f01"
+            "revision": "tree:sha256:3fd7d15d0b22e0a9d144e53daa5d9d5de033df4c5a30651b5131a46f0b330a45"
+          },
+          {
+            "gate": "G4",
+            "passed": true,
+            "revision": "git:0909a46448cfcf876bf8f3a93935b1580b4237cf"
           }
         ],
-        "openDecisions": 1,
+        "openDecisions": 0,
         "budgets": [
           {
             "name": "costUsd",
-            "used": 0.15307327,
+            "used": 1.3480121799999998,
             "limit": 4.5
           },
           {
             "name": "invocations",
-            "used": 2,
+            "used": 4,
             "limit": 7
           },
           {
             "name": "subagentsTotal",
-            "used": 5,
+            "used": 14,
             "limit": 30
           },
           {
             "name": "toolCalls",
-            "used": 47,
+            "used": 198,
             "limit": 1200
           },
           {
             "name": "wallClockMs",
-            "used": 256275,
+            "used": 971826,
             "limit": 7200000
           }
         ],
@@ -9889,28 +10687,28 @@
           },
           {
             "itemId": "B",
-            "state": "blocked_on_decision",
+            "state": "done",
             "size": "medium",
             "model": "sonnet",
             "dependsOn": [],
-            "attempts": 1
+            "attempts": 2
           },
           {
             "itemId": "C",
-            "state": "ready",
+            "state": "done",
             "size": "small",
             "model": "haiku",
             "dependsOn": [
               "B"
             ],
-            "attempts": 0
+            "attempts": 1
           }
         ],
         "decisions": [
           {
             "decisionId": "dec_01M7DVWZG7DJFH4J1AYVWS15SW",
             "class": "acceptance",
-            "state": "open",
+            "state": "answered",
             "affectedItems": [
               "B",
               "C"
@@ -9920,7 +10718,7 @@
           }
         ],
         "notifications": {
-          "delivered": 1,
+          "delivered": 2,
           "pending": 0,
           "held": 0,
           "failed": 0,
@@ -10033,7 +10831,7 @@
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "after": {
-          "takenAt": "2026-11-14T20:27:37.307Z",
+          "takenAt": "2026-11-14T20:41:52.614Z",
           "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
           "branch": "gsd/phase-02-deployed-themed-skeleton",
           "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
@@ -10044,16 +10842,23 @@
             "untracked": 1,
             "statusEntries": 1,
             "refs": 3,
-            "refsAllowed": 6
+            "refsAllowed": 7
           },
           "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
           "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
           "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
         },
         "equal": true,
-        "newRefs": [],
+        "newRefs": [
+          "refs/heads/avarice/run_01M7DVKCXRR2MYYPK3K46B3ED0"
+        ],
         "removedOrChangedRefs": [],
-        "newRefObjects": []
+        "newRefObjects": [
+          {
+            "ref": "refs/heads/avarice/run_01M7DVKCXRR2MYYPK3K46B3ED0",
+            "object": "0909a46448cfcf876bf8f3a93935b1580b4237cf"
+          }
+        ]
       },
       "atPause": {
         "at": "2026-11-14T20:27:37.520Z",
@@ -10081,23 +10886,79 @@
       },
       "stopOk": true,
       "spend": {
-        "recordedUsd": 0,
-        "appendedUsd": 0.15307327,
+        "recordedUsd": 0.15307327,
+        "appendedUsd": 1.1949389099999999,
         "line": {
           "plan": "03-59",
-          "case": "exit-p3-run1-copy-fallback-run_01M7DVKCXRR2MYYPK3K46B3ED0-start",
-          "costUsd": 0.15307327,
+          "case": "exit-p3-run1-copy-fallback-run_01M7DVKCXRR2MYYPK3K46B3ED0-finish",
+          "costUsd": 1.1949389099999999,
           "claudeVersion": "2.1.319",
-          "at": "2026-11-14T20:27:37.521Z"
+          "at": "2026-11-14T20:41:52.665Z"
         }
       },
-      "phase3SpentUsd": 15.447994479999998,
+      "phase3SpentUsd": 16.64293339,
       "spendGuardAfterStage": {
-        "remainingRunCapUsd": 4.34692673,
+        "remainingRunCapUsd": 3.1519878200000004,
         "ceilingUsd": 25,
         "fits": true
       },
-      "problems": []
+      "problems": [],
+      "resume": {
+        "resumed": true,
+        "hostConfigDir": {
+          "claudeConfigDir": "/Users/aphan/.claude-edu",
+          "source": "CLAUDE_CONFIG_DIR"
+        },
+        "itemId": "B",
+        "sessionAtPause": "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+        "sessionAfter": "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+        "attempt": {
+          "attemptId": "att_01M7DVYX9P3VESVQ8G7E8S1T57",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "committed",
+          "startedAt": "2026-11-14T20:28:40.118Z",
+          "endedAt": "2026-11-14T20:31:30.614Z"
+        },
+        "invocationRequestedSession": "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+        "invocationInitSessions": [
+          "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+          "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+          "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+          "a07062e9-bd8b-483f-86ab-f3b9cc59669f",
+          "a07062e9-bd8b-483f-86ab-f3b9cc59669f"
+        ],
+        "answeredDecisionId": "dec_01M7DVWZG7DJFH4J1AYVWS15SW"
+      },
+      "pauseDecisionIds": [
+        "dec_01M7DVWZG7DJFH4J1AYVWS15SW"
+      ],
+      "answeredDecision": {
+        "decisionId": "dec_01M7DVWZG7DJFH4J1AYVWS15SW",
+        "class": "acceptance",
+        "answer": "1",
+        "answerChannel": "terminal",
+        "answeredBy": "owner:aphan",
+        "answeredAt": "2026-11-14T20:28:39.589Z",
+        "origin": {
+          "origin": "pause",
+          "signalKind": "pause",
+          "pauseSignal": "numbered-choice",
+          "gate": null,
+          "rules": null
+        }
+      },
+      "newDecision": null,
+      "stop": {
+        "state": "ready_for_review",
+        "reason": null
+      },
+      "finalState": "ready_for_review",
+      "resumed": true,
+      "branchRefCommit": "0909a46448cfcf876bf8f3a93935b1580b4237cf",
+      "finishedAt": "2026-11-14T20:41:52.664Z",
+      "passed": true
     }
   ],
   "exitRules": "D-26..D-35",

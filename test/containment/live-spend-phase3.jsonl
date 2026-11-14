@@ -56,3 +56,4 @@
 {"plan":"03-74","case":"exit-p3-run3-theme-toggle-run_01M7C32K11S8YDK4W2K8VHCXV3-start","costUsd":0.15706084499999995,"claudeVersion":"2.1.319","at":"2026-11-14T04:00:28.837Z"}
 {"plan":"03-74","case":"exit-p3-run3-theme-toggle-run_01M7C32K11S8YDK4W2K8VHCXV3-finish","costUsd":1.0601030999999999,"claudeVersion":"2.1.319","at":"2026-11-14T20:09:26.210Z"}
 {"plan":"03-59","case":"exit-p3-run1-copy-fallback-run_01M7DVKCXRR2MYYPK3K46B3ED0-start","costUsd":0.15307327,"claudeVersion":"2.1.319","at":"2026-11-14T20:27:37.521Z"}
+{"plan":"03-59","case":"exit-p3-run1-copy-fallback-run_01M7DVKCXRR2MYYPK3K46B3ED0-finish","costUsd":1.1949389099999999,"claudeVersion":"2.1.319","at":"2026-11-14T20:41:52.665Z"}
