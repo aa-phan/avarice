@@ -5,16 +5,16 @@ milestone_name: Contained Kernel
 current_phase: 03
 current_phase_name: Decisions, independent work and amendments
 status: executing
-stopped_at: "03-59 complete: run 1 passed, owner ruled continue; all three exit runs passed in the new epoch; next 03-60 (exit record)"
-last_updated: "2026-11-14T21:56:46.599Z"
+stopped_at: "03-60 complete: exit verdict 3/3 ready_for_review recorded, old run 1 supplementary, LIVE-CASES.md and spend 16.6429 of 25 USD; next 03-31 (documentation draft 1)"
+last_updated: "2026-11-14T22:00:53.712Z"
 last_activity: 2026-11-13
 last_activity_desc: Phase 03 execution started
-state_head: d489c380e1942a06abb3b2b897079a44484b98e3
+state_head: 63abf2fcaeaf5762e2ac3a1ed4796bae60f43337
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 134
-  completed_plans: 130
+  completed_plans: 131
 ---
 
 # Project State
@@ -382,6 +382,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 3]: 03-58: run 3's attempt 1 stopped on two open pause decisions because the unit's verifier and executor subagents had no content-search route (Grep tool absent from their sessions, shell grep denied by the hook); the owner ruled brief-harness-defect, fix first, overriding Claude's product-defect proposal. Halted; a gap plan fixes the route, then run 3's attempt 2 of 2 runs before run 1. Spend 0.2520 USD; ledger 12.8938 of 25; run 1 headroom 7.6062 USD. The owner's profile config still forces the banner failure
 - [Phase 03]: 03-69: the launch line keeps the host's search tools with --allowedTools Glob,Grep (judge admits only that pair, once); shell grep stays refused; offline probe of the pinned 2.1.319 host plus scenario S prove it
 - [Phase 03]: 03-71: the agent command list holds only the checks the run executes (required or target); declared checks no gate judges are named in the prompt as judged by no gate; contract amend --check +name adds the check's command with an execution.commands diff entry
+- [Phase 03]: 03-60: the exit verdict is 3/3 ready_for_review over the D-26 epoch (run 2 attempt 4, run 3 attempt 3, run 1 attempt 1); LIVE-CASES.md keeps the heading Exit (plans 03-57 to 03-68) and lists every attempt under it
 
 ### Pending Todos
 
@@ -442,6 +443,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-14T21:56:46.305Z
-Stopped at: 03-59 complete: run 1 passed, owner ruled continue; all three exit runs passed in the new epoch; next 03-60 (exit record)
+Last session: 2026-11-14T22:00:53.003Z
+Stopped at: 03-60 complete: exit verdict 3/3 ready_for_review recorded, old run 1 supplementary, LIVE-CASES.md and spend 16.6429 of 25 USD; next 03-31 (documentation draft 1)
 Resume file: None
