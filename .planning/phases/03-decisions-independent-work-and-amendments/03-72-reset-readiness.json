@@ -104,5 +104,8 @@
   "authorizeRun3AfterReset": {
     "exitCode": 2,
     "text": "exit-run: run3 starts only after run2's outcome is recorded (D-33): run2 has no attempt in this exit yet"
-  }
+  },
+  "spendChoice": "keep-cap",
+  "spendChoiceReply": "\"confirm-reset, keep-cap\" (one message answering both the Task 2 and Task 3 checkpoints; Task 3 answer: keep-cap)",
+  "spendChoiceAt": "2026-11-13"
 }
