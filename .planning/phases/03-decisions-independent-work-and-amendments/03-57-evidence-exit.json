@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "03-59",
   "decision": "D-03, D-05",
-  "updatedAt": "2026-11-14T20:41:52.666Z",
+  "updatedAt": "2026-11-14T21:57:59.790Z",
   "runs": [
     {
       "runId": "run_01M74RNSAHDTSHE8JDEZ5XW6F9",
@@ -11060,5 +11060,191 @@
         "at": "2026-11-14T02:55:54.117Z"
       }
     }
-  ]
+  ],
+  "supplementary": [
+    {
+      "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
+      "fromFile": ".planning/phases/03-decisions-independent-work-and-amendments/03-48-evidence-exit.json",
+      "brief": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "briefDigest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0",
+      "items": [
+        {
+          "itemId": "A",
+          "state": "done",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [],
+          "attempts": 1,
+          "gsdSession": "a71eb1c1-1ee0-400e-b817-79bf196c9df2"
+        },
+        {
+          "itemId": "B",
+          "state": "done",
+          "size": "medium",
+          "model": "sonnet",
+          "dependsOn": [],
+          "attempts": 2,
+          "gsdSession": "9673ee64-b2ab-4652-8bc0-c562238a7445"
+        },
+        {
+          "itemId": "C",
+          "state": "blocked_on_decision",
+          "size": "small",
+          "model": "haiku",
+          "dependsOn": [
+            "B"
+          ],
+          "attempts": 2,
+          "gsdSession": "e0a42d29-7db7-45e3-a0fc-9ba83ebbcd89"
+        }
+      ],
+      "decisions": [
+        {
+          "id": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
+          "state": "answered",
+          "class": "acceptance",
+          "origin": "pause",
+          "answeredBy": "owner:aphan",
+          "answerChannel": "terminal"
+        },
+        {
+          "id": "dec_01M73THARNM0VENR94QDX62BJ3",
+          "state": "answered",
+          "class": "acceptance",
+          "origin": "pause",
+          "answeredBy": "owner:aphan",
+          "answerChannel": "terminal"
+        },
+        {
+          "id": "dec_01M74276ZA17K36XWT9GJHRWDW",
+          "state": "open",
+          "class": "acceptance",
+          "origin": "G2:gsd-verification",
+          "answeredBy": null,
+          "answerChannel": null
+        }
+      ],
+      "resume": {
+        "resumed": true,
+        "hostConfigDir": {
+          "claudeConfigDir": "/Users/aphan/.claude-edu",
+          "source": "CLAUDE_CONFIG_DIR"
+        },
+        "itemId": "B",
+        "sessionAtPause": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "sessionAfter": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "attempt": {
+          "attemptId": "att_01M73T3HZ08S8P5SQQHZ7K09KR",
+          "ordinal": 3,
+          "reason": "resume",
+          "itemId": "B",
+          "outcome": "committed",
+          "startedAt": "2026-11-10T22:43:50.880Z",
+          "endedAt": "2026-11-10T22:46:41.780Z"
+        },
+        "invocationRequestedSession": "9673ee64-b2ab-4652-8bc0-c562238a7445",
+        "invocationInitSessions": [
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445",
+          "9673ee64-b2ab-4652-8bc0-c562238a7445"
+        ],
+        "answeredDecisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM"
+      },
+      "problems": [
+        "the run ended blocked_on_decision, not ready_for_review (D-03)",
+        "the run stopped again on decision dec_01M74276ZA17K36XWT9GJHRWDW (acceptance, origin G2:gsd-verification) after the owner's answer",
+        "2 decision(s) are answered, not one",
+        "item C is blocked_on_decision, not done",
+        "item C has no commit step",
+        "the final evidence was not taken on a clean tree",
+        "no handed-off commit",
+        "gate G4 did not pass"
+      ],
+      "checkout": {
+        "before": {
+          "takenAt": "2026-11-10T22:22:50.113Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "after": {
+          "takenAt": "2026-11-11T01:08:36.079Z",
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "a76078f04b3035da36a90565d79df6a8cf76e29d073e7776d26d6177c1d7a948",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 3,
+            "refsAllowed": 3
+          },
+          "indexDigest": "sha256:3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67"
+        },
+        "equal": true,
+        "newRefs": [],
+        "removedOrChangedRefs": [],
+        "newRefObjects": []
+      },
+      "costUsd": 1.1691696500000002,
+      "note": "Supplementary evidence only, never a pass (D-34): old run 1 (run_01M73RX3RF0ZJETYWVF52WFZ5B) from the earlier exit proves A independent and committed; B's delegated session resumed under the recorded configuration directory; G2 passing a resumed unit; the protected-write refusal (plan 03-49 scenario P, exit 64); and the honest gaps_found stop on the protected spec.",
+      "countsToward3of3": false
+    }
+  ],
+  "verdict": "exit: 3/3 ready_for_review",
+  "verdictRuns": [
+    {
+      "role": "run2",
+      "runId": "run_01M7C1JN8KNG3TXP4Z93CZPY90",
+      "attempt": 4
+    },
+    {
+      "role": "run3",
+      "runId": "run_01M7C32K11S8YDK4W2K8VHCXV3",
+      "attempt": 3
+    },
+    {
+      "role": "run1",
+      "runId": "run_01M7DVKCXRR2MYYPK3K46B3ED0",
+      "attempt": 1
+    }
+  ],
+  "correctStops": [
+    {
+      "runId": "run_01M78966NJ0SW8NB54564MFFZW",
+      "role": "run3",
+      "attempt": 1,
+      "class": "brief-harness-defect",
+      "stoppedBy": "item A's own VERIFICATION status human_needed (pause signal verification-human-needed), not a gate: the unit's verifier could not run a repo-wide search for THEME_ATTRIBUTE and asked a human to run grep -rn THEME_ATTRIBUTE src; the unit's invocation ended kind denied with 33 Bash, 7 Grep and 6 Agent calls",
+      "at": [
+        "src/domain/invocation-scope.ts:82",
+        "src/domain/outcome.ts:116",
+        "src/app/run-stages/item.ts:390",
+        "test/benchmark/phase3/p3-run3-theme-toggle.md:13"
+      ],
+      "docsRef": "docs/system/runs.md",
+      "summary": "Run 3's attempt 1 stopped blocked_on_decision on two open pause decisions, not the one the brief expects: item A (dec_01M789NHY4VJXZBCGKXTQMH8NW, verification-human-needed, free-text only) was not done, item B (dec_01M789NR2ES83AXM6DECC2FER2) paused on the planted numbered choice with its two wordings, and two decision banners were queued with lastError osascript-missing (the forced failure held). The unit finished item A's change (THEME_ATTRIBUTE exported and used in src/lib/theme.ts; typecheck, lint, test and the other required checks passed at the run's tree, format:check failed and was reported pre-existing) but its verifier wrote status human_needed because it could not search the repo for THEME_ATTRIBUTE outside the file: grep is deliberately not an admitted command (invocation-scope.ts, review WR-02) and searches are meant to go through the Grep tool, which the prompt names (docs/system/runs.md, The unit). Same family as the two attempts the owner ruled product-defect on (the unit and its subagents are not told what the gate already knows or how to do what they need). What I could not establish: whether the verifier subagent had no Grep tool or tried shell grep and was refused, because the transcript is not in the evidence. Alternative reading for the owner: brief-harness-defect, since item A's acceptance wording (every data-theme access) invites a repo-wide search the unit cannot run by shell, and docs/system does not say a verifier is told to use the Grep tool. Evidence: checkout digests equal before and after, no new ref, cost 0.2520 USD of 4.50, no silence step run (it needs the one expected decision).",
+      "confirmedRef": "\"brief-harness-defect-fix-first\" (the owner's reply) at the plan 03-58 Task 3 checkpoint, 2026-11-12, overriding Claude's product-defect proposal",
+      "confirmedAt": "2026-11-12T16:37:20.554Z"
+    }
+  ],
+  "verdictAt": "2026-11-14T21:57:59.790Z"
 }
