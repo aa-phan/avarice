@@ -2,7 +2,7 @@
 
 This document describes what AVARICE persists, as implemented in `src/adapters/sqlite/`, `src/adapters/fs/`, `src/domain/project-record.ts`, `src/domain/ids.ts`, `src/domain/run-lifecycle.ts`, `src/ports/ledger.ts`, `src/ports/artifact-store.ts` and the PreToolUse hook (`src/hook/pre-tool-use.ts`). The file layouts it lists are written by `src/app/run-start.ts`, `src/adapters/host-claude/claude-host.ts`, `src/adapters/git/run-workspace.ts` and `src/cli/shell/history.ts`.
 
-AVARICE keeps three kinds of state: one SQLite file per profile (the ledger), a content-addressed blob store beside it, and working directories under a separate work root. The ledger holds 23 tables; 21 are written by the built code and 2 are created empty and have no writer. In the data root nothing is ever deleted: no code removes a row, a blob, a backup or a per-invocation directory, and events are append-only by trigger. Columns belong to the migrations; this document states mechanisms and consequences. Hook rules are in [containment.md](containment.md), onboarding transitions in [onboarding.md](onboarding.md), run behavior in [runs.md](runs.md), evidence meaning in [checks-and-evidence.md](checks-and-evidence.md), the interactive shell in [interactive-shell.md](interactive-shell.md) and CLI flags in [cli-reference.md](cli-reference.md).
+AVARICE keeps three kinds of state: one SQLite file per profile (the ledger), a content-addressed blob store beside it, and working directories under a separate work root. The ledger holds 24 tables; 22 are written by the built code and 2 are created empty and have no writer. In the data root nothing is ever deleted: no code removes a row, a blob, a backup or a per-invocation directory, and events are append-only by trigger. Columns belong to the migrations; this document states mechanisms and consequences. Hook rules are in [containment.md](containment.md), onboarding transitions in [onboarding.md](onboarding.md), run behavior in [runs.md](runs.md), evidence meaning in [checks-and-evidence.md](checks-and-evidence.md), the interactive shell in [interactive-shell.md](interactive-shell.md) and CLI flags in [cli-reference.md](cli-reference.md).
 
 ## Profile roots on disk
 
@@ -19,7 +19,7 @@ Resolution rules:
 - Every root is resolved through the real path of its nearest existing ancestor before anything is created, so a symlinked root is judged by where it lands.
 - A data or work root is refused when it lies under any `~/.claude*` directory or under the Claude config directory. It is also refused when it would contain the home directory or the Claude config directory, or when the two roots are nested in either direction.
 - The data root must be on a local mount. On macOS the `mount` output must carry the `local` flag; on Linux a mount is local unless its type is a known network type. This is a heuristic, so a synced or FUSE mount that reports local passes.
-- Directories are created with mode 0700. The config file is created with mode 0600 only when absent and is never rewritten. The built code writes it and never reads it: the roots always come from the environment and the defaults, so editing the file changes nothing. `init` only prints its path.
+- Directories are created with mode 0700. The config file is created with mode 0600 only when absent and is never rewritten. The roots are never read from it: they always come from the environment and the defaults, so editing the file changes no root. The one part the built code reads is the `notify` section, which the notification and check-in commands open without following a symlink, up to 64 KiB; [config-reference.md](config-reference.md) lists its keys. `init` only prints its path.
 - `init` warns, but does not fix, a root whose mode lets other users in.
 
 ## Identifiers
@@ -36,6 +36,7 @@ Every identifier is a prefix plus a 26-character ULID (a 48-bit millisecond time
 | `ckp_` | a checkpoint |
 | `ev_` | an evidence row |
 | `dec_` | a decision record |
+| `ntf_` | a notification |
 
 Gate results, budgets, steps and work items carry no generated identifier: they are keyed by run plus a name.
 
@@ -53,7 +54,7 @@ The ledger is `state.db` in the data root. Facts that bind every opener except t
 
 ### Migrations and schema version
 
-Schema version 2 is the latest of two migrations. Version 1 creates the 20 original tables and four triggers. Version 2 (the run) adds four columns to `runs`, three tables, two indexes and four triggers; the tables below describe them. The version is stored in the `meta` table under `schema_version`, and `init` and `status` read it from there. `meta` also holds `profile_id`, written once (insert-or-ignore) by the migration pass that applies the last pending migration.
+Schema version 3 is the latest of three migrations. Version 1 creates the 20 original tables and four triggers. Version 2 (the run) adds four columns to `runs`, three tables, two indexes and four triggers. Version 3 (decisions, independent work and amendments) adds a column `item_id` to `attempts`, `supersedes` to `decisions`, `cancel_requested_at` and `cancel_requested_by` to `runs`, the table `notifications` and two indexes, with no trigger; the tables below describe them. A row written before version 3 reads `NULL` in every new column, and an attempt with no item reads as item `A`. The version is stored in the `meta` table under `schema_version`, and `init` and `status` read it from there. `meta` also holds `profile_id`, written once (insert-or-ignore) by the migration pass that applies the last pending migration.
 
 The runner is forward-only:
 
@@ -61,18 +62,18 @@ The runner is forward-only:
 - Before applying, every recorded migration is checked against the shipped text. A different checksum, or a recorded version this build does not ship (a store from a newer build), refuses the store with a conflict error and changes nothing, including no backup. A checksum mismatch also tells the operator that an applied migration must never be edited and to restore from backup or run the build that wrote it. The CLI turns this into exit 70.
 - Versions must be contiguous; a gap is refused.
 - Each pending migration, its `schema_migrations` row and the `schema_version` update commit in one transaction. A failing migration rolls back alone; earlier ones in the same pass stay applied.
-- Before the first pending migration is applied to a store that already has history, the store is copied with `VACUUM INTO` to `backups/pre-migration-{timestamp}.db` beside the database (mode 0600, directory 0700; a numeric suffix avoids collisions). If the copy cannot be written, no migration runs. A fresh store with no history gets no backup, and neither does an in-memory database. A version 1 store with history therefore gets one backup before version 2 applies.
+- Before the first pending migration is applied to a store that already has history, the store is copied with `VACUUM INTO` to `backups/pre-migration-{timestamp}.db` beside the database (mode 0600, directory 0700; a numeric suffix avoids collisions). If the copy cannot be written, no migration runs. A fresh store with no history gets no backup, and neither does an in-memory database. A store with history therefore gets one backup before the first pending migration applies, whether that brings it to version 2 or to version 3.
 - Backups accumulate; nothing removes them.
 
 Eight triggers enforce immutability. Version 1 installs four: a stored project record's body and digest cannot be updated, a stored contract's body and digest cannot be updated, and events cannot be updated or deleted. Version 2 installs four more: evidence rows and gate result rows cannot be updated or deleted.
 
-Version 2 adds two indexes: evidence by attempt, and events by run. No other table or column is indexed beyond its primary and unique keys.
+Version 2 adds two indexes: evidence by attempt, and events by run. Version 3 adds two more: attempts by run and item, and notifications by state. No other table or column is indexed beyond its primary and unique keys.
 
 Quirk: a command that is meant to be read-only first checks for pending migrations. When there are none it opens read-only. When there are some, it opens read-write, migrates (with a backup), then reopens read-only. A read-only command can therefore write once, on the first run after an upgrade.
 
 ## Tables by purpose
 
-All 23 tables are created by the two migrations. A writer is code that inserts or updates rows: every such statement sits in the ledger adapter, the migration runner or the hook.
+All 24 tables are created by the three migrations. A writer is code that inserts or updates rows: every such statement sits in the ledger adapter, the migration runner or the hook.
 
 ### Bookkeeping
 
@@ -99,24 +100,27 @@ The run operations see only rows whose state is a run state. A carrier row is in
 
 | Table | Writer | Notes |
 |---|---|---|
-| `runs` | store-contract (carrier row), run creation, run transition, run checkpoint, run lease | see below |
-| `contracts` | store-contract, run creation | one row per run and version; body and digest are immutable by trigger; the built code stores version 1 only |
-| `budgets` | contract storing, hook, budget accounting | see budgets |
-| `attempts` | attempt recorder | ordinal increments per run; a run attempt ends once |
+| `runs` | store-contract (carrier row), run creation, run transition, run checkpoint, run lease, cancel request | see below |
+| `contracts` | store-contract, run creation, amendment | one row per run and version; body and digest are immutable by trigger; start stores version 1 and each amendment stores the next version (see contracts and amendments) |
+| `budgets` | contract storing, hook, budget accounting, amendment | see budgets |
+| `attempts` | attempt recorder | ordinal increments per run; a run attempt ends once; a run attempt names its work item |
 | `checkpoints` | create, transition, checkpoint (onboardings and runs) | see checkpoints |
 | `run_steps` | step recorder | one row per run, step name and attempt number, replaced on re-record; see attempts and steps |
 | `work_items` | run creation, work item transition | see work items |
-| `decisions` | decision recorder | see decisions |
+| `decisions` | decision recorder, answer, stale re-open, withdraw, amendment | see decisions |
 | `evidence` | evidence recorder | insert-only; see evidence and gate results |
 | `gate_results` | gate recorder | insert-only; see evidence and gate results |
 | `check_validations` | check validation | see check validations |
 | `hook_reads` | hook | see hook reads |
+| `notifications` | notification recorder | see notifications |
 
-The `runs` row of a real run is inserted once, in state `contract_ready` at version 1, together with its first contract, budget rows and work item. Each transition raises the version by one and commits the new state, a checkpoint and an event together. Four columns come from the second migration:
+The `runs` row of a real run is inserted once, in state `contract_ready` at version 1, together with its first contract, budget rows and one work item row for each item of the brief. Each transition raises the version by one and commits the new state, a checkpoint and an event together. Four columns come from the second migration:
 
 - `reason` holds the blocked reason while the run is `blocked_on_decision` and is cleared by every other transition. A reason is refused on any other target state, and a move to `blocked_on_decision` without one is refused. The seven accepted reasons are listed in [runs.md](runs.md).
 - `workspace_path` is set when a transition supplies it (the move to `running`, or a block that happens before that move) and is kept by later transitions that supply none.
 - `branch` and `base_revision` are set when the run is created and kept the same way.
+
+Two columns come from the third migration. `cancel_requested_at` and `cancel_requested_by` hold the owner's request to cancel the run, written by the first request and kept: a repeated request returns the first and appends nothing. A run in `failed`, `cancelled` or `closed` refuses a request as a conflict. The request is committed before anything acts on it, and a run with a request standing never goes on with work. [runs.md](runs.md) describes how it is carried out.
 
 A carrier row is inserted once per onboarding and no code updates it afterwards, so its state and version never change and its lease columns are unused (an onboarding's lease lives on `onboardings`).
 
@@ -134,7 +138,7 @@ A carrier row is inserted once per onboarding and no code updates it afterwards,
 | `task_refs` | no statement in the source writes or reads it |
 | `approvals` | same |
 
-These two exist in the schema and stay empty. The port has no method for them. One unused column also sits in a written table: a checkpoint's GSD state digest, which no code sets. Two more columns are never set by any caller: an evidence row's external reference, and the answer columns of a decision (see decisions).
+These two exist in the schema and stay empty. The port has no method for them. One unused column also sits in a written table: a checkpoint's GSD state digest, which no code sets. One more column is never set by any caller: an evidence row's external reference.
 
 ## Event log
 
@@ -147,7 +151,7 @@ The event log is the `events` table: one row per notable fact, chained by hash.
 - **Atomicity.** Transition, checkpoint, contract, attempt, evidence, gate, work item and decision events commit in the same transaction as the row they describe. Events appended by the application layer (findings, invocation outcomes, check results, the hand-off) are separate transactions, so a crash between the work and its event can leave one without the other. A block of a run is several separate transactions: the finding event, the decision record, the work item move, the attempt end and the run transition. A crash between them leaves an open decision on a run that is still `running`.
 - **Reads that depend on events.** The reason an onboarding is blocked or incompatible is not a column; it is read back from the latest transition event for that onboarding, by scanning events by type and by a field inside the data. A run's reason is a column. The events-by-run index serves reads of one run's events. The hook's per-invocation counts (denials, subagents in flight, consecutive searches) filter by invocation, which is not indexed, so they scan.
 
-Event kinds emitted: 28. Every kind below has a writer in the built code. Levels are debug, info, warn and error; the table gives the level each kind is written at.
+Event kinds emitted: 39. Every kind below has a writer in the built code. Levels are debug, info, warn and error; the table gives the level each kind is written at.
 
 | Kind | Writer | Level | Meaning and data |
 |---|---|---|---|
@@ -157,17 +161,28 @@ Event kinds emitted: 28. Every kind below has a writer in the built code. Levels
 | `run.created` | ledger | info | a run row was inserted. Data: run, project, state (always `contract_ready`), version (1) |
 | `run.transition` | ledger | info | a run state change. Data: run, from, to, version, next action, checkpoint; reason when blocked; plus the caller's short fields, such as the decision, class, item, gate, a reconcile flag or an inconclusive count |
 | `run.checkpoint` | ledger | info | a run checkpoint without a state change. Data: run, state, next action, sequence, checkpoint |
-| `attempt.started` | ledger | info | a run attempt opened. Data: run, attempt, ordinal |
+| `attempt.started` | ledger | info | a run attempt opened. Data: run, attempt, ordinal; the item when the caller names one |
 | `attempt.ended` | ledger | info | a run attempt ended. Data: run, attempt, outcome |
 | `work_item.upserted` | ledger | info | a work item row was written. Data: run, item, type, whether it was newly created |
-| `work_item.transition` | ledger | info | a work item changed state. Data: run, item, from, to; plus the caller's fields, such as the decision and the reason |
-| `decision.opened` | ledger | info | a decision record was opened. Data: run, decision, class, urgency, contract version |
+| `work_item.transition` | ledger | info | a work item changed state. Data: run, item, from, to; plus the caller's fields, such as the decision that blocked or released the item and the reason |
+| `decision.opened` | ledger | info | a decision record was opened. Data: run, decision, class, urgency, contract version; the decision it replaced when a stale answer re-opened it |
+| `decision.answered` | ledger | info | an open decision was answered, by `decide` or by an amendment. Data: run, decision, channel, number of items released. Never the answer |
+| `decision.stale` | ledger | info | an answer arrived on a state that had moved and the decision was closed as stale with the answer kept. Data: run, decision, channel |
+| `decision.withdrawn` | ledger | info | a decision was withdrawn. Data: run, decision, reason (`owner` or `cancel`) |
+| `decision.rejected` | application | info | an answer was refused by a response check. Data: run, decision, the check's name. Not written for a refusal at the identity check |
+| `decision.duplicate` | application | info | the same answer was given again to an answered decision and ignored. Data: run, decision |
+| `amendment.requested` | application | info | the owner asked for an amendment to answer an amend-only decision. Data: run, decision |
+| `contract.amended` | ledger | info | the next contract version was written. Data: run, version, number of budget changes, number of stale evidence rows and stale gate rows appended, and the decision the amendment answered when it named one |
+| `notify.delivered` | ledger | info | one delivery attempt of a notification succeeded. Data: notification, run (null for a digest), attempt number |
+| `notify.failed` | ledger | info | one delivery attempt failed. Data: notification, run (null for a digest), attempt number, a short error code |
+| `run.cancel_requested` | ledger | info | the owner asked to cancel a run. Data: run, who asked |
+| `item.unpark_conflict` | application | warn | the parked delta of an answered item no longer applied, so the item gave up on its resume. Data: run, item, a count of paths, never the paths |
 | `evidence.recorded` | ledger | info | an evidence row was inserted. Data: run, evidence, name, kind, status |
 | `gate.result` | ledger | info | a gate row was inserted. Data: run, gate, passed, revision, number of failures; item when item-scoped |
 | `check.validated` | application | info | a declared check was judged in the validation clone. Data: run, check name, verdict; the reason when there is one, cut short |
 | `check.finished` | application | info | a check ran. Data: run, attempt, name, label, status, exit code, duration, evidence; a pre-existing flag when the check was already failing at base |
 | `handoff.fetched` | application | info | the run branch was fetched into the source repository. Data: run, attempt, branch, the resulting revision, whether the ref was newly created |
-| `invocation.finished` | application | info | a contained agent invocation ended. Data: the owner (onboarding, or run, attempt and item), invocation, purpose, outcome, cost reported and cost charged with its basis, duration, permission denials; when the host reported details, also exit code, signal, timed-out flag, head-moved flag, hook denials and budget denials, turns, transcript size, and optionally the result subtype, the terminal reason and the subagents spawned |
+| `invocation.finished` | application | info | a contained agent invocation ended. Data: the owner (onboarding, or run, attempt and item), invocation, purpose, the model of a run's unit, outcome, cost reported and cost charged with its basis, duration, permission denials; when the host reported details, also exit code, signal, timed-out flag, head-moved flag, hook denials and budget denials, turns, transcript size, and optionally the result subtype, the terminal reason and the subagents spawned |
 | `invocation.reaped` | application | warn | a stale invocation's host processes were ended on resume. Data: the owner (onboarding or run), invocation when known, number terminated |
 | `invocation.reconciled` | application | info | an onboarding resume found the interrupted invocation's expected map files complete and treated it as finished (no event is written when the files are incomplete). Data: onboarding, attempt, invocation when known |
 | `invocation.interrupted` | application | warn | a run resume marked a launch step interrupted. Data: run, step, invocation when known |
@@ -194,36 +209,59 @@ An onboarding's sequence is continuous across its own id and its carrier run id:
 
 A lease lives on the row of whatever holds it: the `onboardings` row for an onboarding, the `runs` row for a run. Both use one rule. Acquiring takes a free lease or one whose expiry has passed and bumps a fence counter, so a previous holder's next fenced write fails. Renew and release require the holder and fence to match. Expiry is compared as ISO timestamp text.
 
-The fence guards the writes that move a thing forward. For an onboarding these are every transition and checkpoint; transitions also present the row version they last read. For a run these are every transition (which also presents the version), run checkpoint, contract storage and work item transition. A mismatch is a conflict and nothing is written. The other run writes take no fence: steps, attempts, evidence, gate results, decisions and budget changes. The one exception is the failed reconcile step, which presents the fence, so a superseded supervisor cannot record it. A superseded supervisor can still record the other unfenced rows until its next fenced write fails. The transition rules themselves are in [onboarding.md](onboarding.md) and [runs.md](runs.md).
+The fence guards the writes that move a thing forward. For an onboarding these are every transition and checkpoint; transitions also present the row version they last read. For a run these are every transition (which also presents the version), run checkpoint, contract storage and work item transition. A mismatch is a conflict and nothing is written. The other run writes take no fence: steps, attempts, evidence, gate results, decisions and budget changes. That includes the three decision moves (an answer, a stale re-open and a withdrawal), an amendment and a cancel request, which come from the owner's terminal beside a supervisor that may be working another item. They take the run's lock for the length of their transaction and re-check, inside it, that the decision is still open and that the contract is the version the caller read. The one exception is the failed reconcile step, which presents the fence, so a superseded supervisor cannot record it. A superseded supervisor can still record the other unfenced rows until its next fenced write fails. The transition rules themselves are in [onboarding.md](onboarding.md) and [runs.md](runs.md).
 
 ## Budgets
 
-Budget rows are created from the contract inside the contract-storing transaction, one per named budget and run. Creation leaves an existing row untouched, so a retry or resume cannot reset a counter or raise a limit. A run has five: `invocations`, `toolCalls`, `subagentsTotal`, `wallClockMs` and `costUsd`. Afterwards only two columns move, and only upward:
+Budget rows are created from the contract inside the contract-storing transaction, one per named budget and run. Creation leaves an existing row untouched, so a retry or resume cannot reset a counter or raise a limit. A run has five: `invocations`, `toolCalls`, `subagentsTotal`, `wallClockMs` and `costUsd`. Afterwards two columns move, and only upward, while running:
 
 - Reserving adds to the reserved amount only while used plus reserved plus the amount stays within the limit; otherwise nothing changes and the caller is told it was not granted.
 - Charging adds to used. From a reservation, the amount moves out of reserved first and the call fails if the reservation is too small. Charged directly (an estimated cost after the fact), it may pass the limit.
 - The charges of one invocation settlement, or of one orphan conversion with its `invocation.orphan-charged` event, change their rows together in one transaction: if any charge fails, no row changes and no event is written.
 - The hook charges one unit per allowed call with the same conditional update. A missing row for a charged budget is treated as a broken ledger and fails closed; a row at its limit produces a `budget_exhausted` deny.
 - An invocation reserves one unit of `invocations` and a cost amount before it launches. When the holder dies before settling, the next reservation, or a run resume that has ended the host, turns the reservation into spent budget and writes `invocation.orphan-charged`.
-- Nothing refunds, resets or deletes. A limit is fixed at creation.
+- Nothing refunds, resets or deletes spend. Only a contract amendment changes a limit, up or down to any finite value, and it does so in one statement that also records the contract version the limit belongs to. Used and reserved amounts are never touched by it, so spend carries over, and no run, hook or stage can raise its own limit. The amendment command runs from the owner's terminal outside the run.
 
 ## Attempts and steps
 
-An onboarding attempt is a numbered try inside the carrier run and needs the contract stored first. A run attempt is numbered per run, needs a reason, and ends once with an outcome; ending it a second time is a conflict. Run attempts write `attempt.started` and `attempt.ended` events.
+An onboarding attempt is a numbered try inside the carrier run and needs the contract stored first. A run attempt is numbered per run, needs a reason, and ends once with an outcome; ending it a second time is a conflict. An attempt names the work item it served, and a row with no item reads as item `A`, so a run that began before attempts named items keeps its history; the ordinals still count run-wide, and the reasons the built code writes are `initial`, `con16-retry`, `answer`, `resume` and `repair`. An attempt's outcome is a short token such as `committed`, `discarded`, `repaired`, `cancelled`, `handed-off` or `blocked:` and the block's reason. Run attempts write `attempt.started` and `attempt.ended` events.
 
 An onboarding step result is keyed by onboarding, step name and attempt number; a run step result is keyed by run, step name and attempt number in `run_steps`. Recording a step again for the same key replaces its status, result and timestamps, so a step row shows the latest outcome only; the history of that key is not kept (the events are the history). Step results are capped at 1 MiB.
 
-A run step has one of six accepted statuses: `started`, `completed`, `failed`, `interrupted`, `reconciled`, `skipped`. The built code never writes `reconciled` for a run. It writes `started` and `interrupted` for launches, `skipped` for a dependency install with nothing to install, and `completed` or `failed` otherwise. The 23 step names a run writes are `start:preflight`, `host:config-dir`, `supervisor:spawn`, `supervisor:resume`, `supervisor:decide`, `workspace:prepare`, `gsd:inspect`, `gsd:configure`, `deps:install`, `checks:validate`, `baseline`, `context:pack`, `item:base`, `launch:run`, `snapshot`, `classify`, `discard`, `park`, `repair:reproducer`, `resume:fallback`, `commit`, `handoff:fetch` and `resume:reconcile`. `host:config-dir` holds the host configuration directory the run was started under and where it came from (`CLAUDE_CONFIG_DIR` or `default`); it is written once, before the first supervisor is spawned, and a run started before it was written has none. [runs.md](runs.md) says what the stages record.
+A run step has one of six accepted statuses: `started`, `completed`, `failed`, `interrupted`, `reconciled`, `skipped`. The built code never writes `reconciled` for a run. It writes `started` and `interrupted` for launches, `skipped` for a dependency install with nothing to install, and `completed` or `failed` otherwise. The 24 step names a run writes are `start:preflight`, `host:config-dir`, `supervisor:spawn`, `supervisor:resume`, `supervisor:decide`, `workspace:prepare`, `gsd:inspect`, `gsd:configure`, `deps:install`, `checks:validate`, `baseline`, `context:pack`, `item:base`, `launch:run`, `snapshot`, `classify`, `discard`, `park`, `spec:plan`, `repair:reproducer`, `resume:fallback`, `commit`, `handoff:fetch` and `resume:reconcile`. A step of the unit carries the attempt and the item it belongs to, and the `gsd:configure` step is written again for each later item. `host:config-dir` holds the host configuration directory the run was started under and where it came from (`CLAUDE_CONFIG_DIR` or `default`); it is written once, before the first supervisor is spawned, and a run started before it was written has none. [runs.md](runs.md) says what the stages record.
 
 ## Work items
 
-A work item is keyed by run and item ID and carries its type, the items it depends on, a size, a model, the item's specification as JSON and a state. The ledger accepts the types `implement` and `harden`; the built code writes `implement` only. A row is created in state `ready`. Writing an item again changes its description but never its state or attempt count: only a state move does, and each move to `delegated` adds one to the attempt count. The states and moves are in [runs.md](runs.md). Both writes emit an event.
+A work item is keyed by run and item ID and carries its type, the items it depends on, a size, a model, the item's specification as JSON and a state. It also holds the session ID its unit runs under, set when the unit is delegated, which an answer resumes. The ledger accepts the types `implement` and `harden`; the built code writes `implement` only. A row is created in state `ready`. Writing an item again changes its description but never its state or attempt count: only a state move does, and each move to `delegated` adds one to the attempt count. The states and moves are in [runs.md](runs.md). Both writes emit an event.
 
 ## Decisions
 
 A decision is a record opened when a run cannot finish inside its contract. It carries a class, the issue text, an optional recommendation, options, consequences and references to evidence. It also carries the affected items, an optional authorized default, a digest of the state it was opened on, an urgency and a state. Its contract version is the one the run was on.
 
-The ledger accepts eight classes (`acceptance`, `architecture`, `scope_expansion`, `permission`, `repeated_failure`, `equivalent_mutant`, `contradiction`, `budget`), two urgencies (`blocking`, `digest`) and four states (`open`, `answered`, `stale`, `withdrawn`). The built code writes four classes (`acceptance`, `permission`, `repeated_failure`, `scope_expansion`), urgency `blocking` and state `open`. No code updates a decision, so the answer columns (who answered, when, what and through which channel) are never set. A decision is never answered, made stale or withdrawn. What a decision means for a run is in [runs.md](runs.md).
+The ledger accepts eight classes (`acceptance`, `architecture`, `scope_expansion`, `permission`, `repeated_failure`, `equivalent_mutant`, `contradiction`, `budget`), two urgencies (`blocking`, `digest`) and four states (`open`, `answered`, `stale`, `withdrawn`). The built code writes five classes (`acceptance`, `permission`, `repeated_failure`, `scope_expansion`, `budget`) and urgency `blocking`.
+
+A decision leaves `open` in one of three ways, each one transaction under the run's lock that refuses with a conflict when the decision is no longer open.
+
+- **Answered.** The answer, who gave it, when and the channel are set, and the decision event carries the channel and a count, never the answer. The ledger first re-checks that the run's latest contract version is the one the caller validated against. Every affected item that no other open decision of the run lists then moves from `blocked_on_decision` to `ready`, with the decision's ID on the move. An amendment answers a decision the same way with the answer `amended:v` and the new version, and the owner who signed the amendment as the answerer.
+- **Stale.** The old row becomes `stale` and keeps the answer, who and the channel as context. A new row opens with the same class, issue, recommendation, options, consequences, affected items and default, on the new state digest and contract version, and its `supersedes` names the old decision. The affected items keep their state.
+- **Withdrawn.** The row becomes `withdrawn`, and the affected items keep their state. A cancel withdraws every open decision of the run.
+
+Only an open decision blocks work. The channel is always the terminal. What a decision means for a run is in [runs.md](runs.md), and the answer rules are in [autonomy-and-decisions.md](autonomy-and-decisions.md).
+
+## Notifications
+
+A notification row records the delivery of one banner: the run it is about (empty for a digest), a kind (`decisions`, `review`, `blocked-run` or `digest`), a destination, the IDs of the decisions or runs it is about, a state, the number of attempts, the time of the next attempt, the last error code and the times it was created, updated and delivered.
+
+- The states are `pending`, `held`, `delivered` and `failed`. A row moves from `pending` to `delivered`, `failed` or `held`, from `held` to `delivered` or `failed`, and from `failed` to `delivered`. `delivered` is final.
+- A delivery attempt on a pending or held row adds one to the attempts. A delivered attempt makes the row `delivered`. A failed attempt with a next-attempt time keeps the state and schedules the retry, and one without it makes the row `failed`. The error is a short code of lower-case letters, digits and hyphens, at most 64 characters, and a delivered attempt carries none. A delivered or failed row refuses another attempt as a conflict.
+- The one way out of `failed` is moving a row to `delivered` directly, which a digest does for a banner it covered. A move that is not on the list is refused as invalid, and a move of several rows commits all or none.
+- Events carry the IDs, the attempt count and the error code, never the banner text.
+
+## Contracts and amendments
+
+Every contract version is a row. Start stores version 1 and an amendment stores the next version in one transaction without a lease: its diff, its reason and who authorized it are in columns of the contract row. The transaction also changes the limits of the budget rows it names, appends the stale rows, appends the `contract.amended` event and, when the amendment names a decision, answers it. It is refused, with nothing written, when the run's latest version is not the one the caller read, when the run has failed, been cancelled or closed, when a budget it names does not exist, and when the decision it names is not open or is a pause. The run's contract body and digest are immutable like version 1's.
+
+An amendment invalidates by appending. Each evidence row it invalidates gets a copy with the status `stale` under the new contract version, in the same attempt, and its environment names the amendment and the row it supersedes. Each gate it invalidates gets a new failed row under the new version, with the failure `stale-after-amendment`, for the gate's latest row. The originals stay, so the history of what was measured on each version is intact. Evidence and gate result rows remain insert-only.
 
 ## Evidence and gate results
 
@@ -231,7 +269,7 @@ Evidence and gate result rows are insert-only: a trigger refuses any update or d
 
 An evidence row hangs off an attempt, not a run; the run is found through the attempt. It records a kind, a name, the status, the revision and tree digest it was measured on, a clean flag and the environment as JSON. It also records the contract version, the policy revision, an independence and the acceptance criteria it speaks to. Optional parts are test and command details, an exit code, a duration and an artifact digest. The ledger accepts six statuses (`passed`, `failed`, `skipped`, `unavailable`, `inconclusive`, `stale`) and three independences (`deterministic`, `external`, `model-review`). The built code writes four kinds: `check`, `test-inventory`, `gsd-verdict` and `diff`. Their independence is `deterministic`, except the `gsd-verdict`, which is `model-review`. The external reference column is always empty. What the kinds and statuses mean is in [checks-and-evidence.md](checks-and-evidence.md).
 
-A gate result row records the gate, an optional work item, the contract version, policy revision and revision it was judged on, whether it passed and its failures as JSON. The built code writes three gates, `G0`, `G2` and `G4`, and a gate can have several rows for one run.
+A gate result row records the gate, an optional work item, the contract version, policy revision and revision it was judged on, whether it passed and its failures as JSON. The built code writes five gates, `G0`, `G1`, `G2`, `G3` and `G4`, and a gate can have several rows for one run: one for each item and attempt it judged, and a failed `stale-after-amendment` row for each gate an amendment invalidated. An item's rows name the item, and the rows of the final proof name none. Evidence is written with the `stale` status only by an amendment.
 
 ## Check validations
 
@@ -275,7 +313,7 @@ Data root, besides the ledger:
 - `artifacts/` holds blobs.
 - `onboard/{onboarding}/{purpose}-{invocation}/` holds the five generated inputs of one contained invocation of an onboarding: host settings, hook policy, agent list, a plugin directory of linked skills, and an empty MCP configuration. Files are 0600, directories 0700, written by temporary file and rename. The data root is denied to the contained agent. Nothing removes these directories.
 - `run/{run}/run-{invocation}/` holds the same five inputs for one invocation of a run. The directory name is singular.
-- `runs/{run}/contract-v{n}.json` holds the run's contract as canonical JSON, written by temporary file, sync and rename, mode 0600 in a 0700 directory. The built code writes version 1 only. The ledger holds the contract too: if a start is killed between the ledger transaction and the file write, the supervisor rewrites the file from the ledger before it launches anything. The directory name is plural.
+- `runs/{run}/contract-v{n}.json` holds the run's contract as canonical JSON, written by temporary file, sync and rename, mode 0600 in a 0700 directory. Start writes version 1, and each amendment writes the next version beside it. The ledger holds every version too: if a start is killed between the ledger transaction and the file write, or an amendment between its transaction and its file, the supervisor rewrites the latest file from the ledger before it launches anything. The directory name is plural.
 - `shell-history` holds the interactive shell's command history, one entry per line, oldest first, mode 0600. It is capped at 1000 lines; at the cap the file is rewritten without its oldest line through a temporary file and a rename. An entry is stored without control characters or escape sequences. A missing, unreadable or unwritable file is an empty history or a skipped entry, never an error that stops the shell.
 
 Work root, per onboarding:
@@ -286,6 +324,7 @@ Work root, per onboarding:
 Work root, per run:
 
 - `{run}/clone` is the run's clone, built by the same partial-then-rename rules as staging and detached at the onboarded revision, on the branch `avarice/{run}`.
+- Inside the clone's own git directory, an item that stopped to ask keeps its delta under one ref, `refs/avarice/park/{run}/{item}`, until the item commits or its resume gives up on the delta. The ref is never fetched into the user's repository.
 - `{run}/validate` is a second, scratch clone, detached at the same revision, where declared checks are validated.
 - `{run}/scratch/` holds the agent's temporary directory and package cache (`tmp` and `npm-cache`), mode 0700, writable by the contained agent.
 - `{run}/tmp/` holds short-lived temporary index directories used to snapshot the clone. Each is removed after use; the parent stays.
@@ -307,14 +346,15 @@ Nothing is promoted anywhere else: the record's promotion field is `none`, and t
 ## Quirks to keep in mind
 
 - Two tables are schema-only; do not build on them without adding a writer.
-- A decision is never answered: the answer columns and three of its four states are unreachable in the built code.
+- A withdrawn decision does not release its items, and an amendment makes every decision still open stale, so the next answer to one re-opens it.
+- A notification row can move from `failed` to `delivered`, but only through the digest's bulk move. A single delivery attempt refuses a failed row.
 - A superseded project record still says active; test the supersession time.
 - A read-only command can migrate and back up the store on the first run after an upgrade.
-- The config file is written once and never read.
+- The config file is written once. Only its `notify` section is read, and it is hand-edited: no command writes that section.
 - The event hash chain leaves out three event columns and has no verifier.
 - Retention labels exist; retention behavior does not.
 - Step rows are replaced on re-record; budgets, events, evidence and gate results are not.
 - The run's directory in the data root is `runs` for the contract and `run` for the invocation inputs.
 - The hook's event field for the owner is called onboarding even when the owner is a run.
-- A block of a run is not one transaction. The fence guards a run's transitions, checkpoints, contract and work item moves, and a failed reconcile step, but not its other steps, attempts, evidence, gates or decisions.
+- A block of a run is not one transaction. The fence guards a run's transitions, checkpoints, contract and work item moves, and a failed reconcile step, but not its other steps, attempts, evidence, gates or decisions. An answer, an amendment and a cancel request are unfenced too and re-check their own preconditions inside their transaction.
 - A carrier run row of an onboarding is invisible to every run operation, so the `runs` table holds rows that no run listing shows.
