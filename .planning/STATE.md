@@ -387,6 +387,10 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
 - [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
 
+### Roadmap Evolution
+
+- Phase 9 added: v1.0 tech-debt cleanup (2026-11-15, at the v1.0 close; runs after the last implemented phase; scope from milestones/v1.0-MILESTONE-AUDIT.md)
+
 ### Pending Todos
 
 None yet.

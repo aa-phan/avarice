@@ -14,6 +14,7 @@ AVARICE is built in eight vertical slices; Phase N mirrors slice N−1 of `docs/
 
 **Phase Numbering:**
 - Integer phases (1-8): Planned milestone work; phase N is slice N−1 of the implementation plan
+- Phase 9: v1.0 tech-debt cleanup, added at the v1.0 close; not a slice of the implementation plan
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
@@ -39,6 +40,10 @@ Full phase details, success criteria and notes: `milestones/v1.0-ROADMAP.md`. Re
 - [ ] **Phase 6: GSD capability bridge, phased work, plugin and push notifiers** - Gates inside GSD's loop, `/gsd-autonomous --only N` units, one-step install, notifications away from the desk
 - [ ] **Phase 7: Personal infrastructure** - NAS artifacts, remote worker, coordination service, Vault adapter; each part starts only on a measured trigger
 - [ ] **Phase 8: Cross-repository runs and project groups** - One unattended run spans several repositories of a project group and ends with one linked change request per repository
+
+**End of roadmap**
+
+- [ ] **Phase 9: v1.0 tech-debt cleanup** - Close the review findings, deferred items and integration gaps the v1.0 audit accepted, after every other phase is built
 
 ## Phase Details
 
@@ -126,10 +131,34 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
 **Plans**: TBD
 **Notes**: Starts when two repositories regularly need changes together, measured from the user's own runs. Excluded: coordinated merging, cross-profile groups.
 
+### Phase 9: v1.0 tech-debt cleanup
+
+**Goal**: Close the tech debt the v1.0 milestone audit accepted, once every other phase is built, so the shipped kernel carries no known open review finding, integration gap or stale verification record
+**Depends on**: The last implemented phase (Phase 8; if the Phase 6 to 8 triggers never fire, Phase 5). Runs last on purpose: owner decision at the v1.0 close, 2026-11-15
+**Requirements**: None newly owned. Hardens ONB-5, ONB-8, RC-6, RC-7, AUT-6, AUT-10, AUT-16, FR-11, OPS-7 and CON-1 (read containment)
+**Source**: `milestones/v1.0-MILESTONE-AUDIT.md` (`tech_debt`, 17 items); STATE.md Deferred Items (14 acknowledged at the v1.0 close); backlog 999.1, 999.2, 999.4 and 999.5 overlap and may be folded in
+**Scope** (re-triage every item against the code at the start; later phases may already have fixed some):
+  - Phase 3 review findings (03-REVIEW.md, 13 open): first WR-05 (a relative Glob pattern with `..` or a brace pattern with an absolute alternative gets no pattern-root check) and WR-03 (an answered `repeated_failure` gets no repair on resume), then WR-01, WR-02, WR-04, WR-06, WR-07 and IN-01 to IN-06
+  - Phase 3 verifier warnings: W-1 (`policyRevision` invalidation unreachable from `contract amend`; evidence invalidation proven offline only), W-3 (no record of a routine choice; the `assumption` branch and the `default`/`delegated` paths have no caller), W-4 (no live run completes independent work after the pause)
+  - Phase 2 review findings (02-35-REVIEW.md): WR-01 to WR-03 skipped, WR-04 and IN-01 to IN-06 deferred, and the owner decisions left open on purpose (private-network registries, SIGTERM and T-02-108, home-path residue)
+  - Phase 1 review findings (01-REVIEW.md): WR-01 and IN-01 to IN-05 open; the `mid-invocation:knowledge` kill point that skips without graphify
+  - Integration gaps: the active record's graph, intel and knowledge commits are never compared at `start`; `status`, `inbox` and the run view do not show the contract version, amendment history or parked deltas; the "Phase 2 invocation" wording in the discard stage
+  - Bookkeeping: the 01 and 02 VERIFICATION.md bodies that still read `human_needed`, the stale phase 1 and 2 verifications at the v1.0 close, the duplicate FR-1 traceability row, ONB-6 listed as completed by a phase 1 SUMMARY
+**Success Criteria** (what must be TRUE):
+  1. Every finding in 01-REVIEW.md, 02-35-REVIEW.md and 03-REVIEW.md has a recorded final disposition (`fixed`, `rejected` with a reason, or `deferred` with an owner, a reason and a backlog entry); none reads `open`, and each `fixed` row names a failing-then-passing test
+  2. A relative Glob pattern with `..` segments, or a brace pattern with an absolute alternative, is judged against the read set and denied when it reaches outside it, with a hook test and a containment test
+  3. An answered `repeated_failure` decision gives the resumed item a fresh repair attempt before any new decision, proven by an offline scenario red before the fix and green after it
+  4. `avarice start` warns or refuses, as the owner decides, when the active record's graph or intel commit differs from the onboarded revision; `status` and `inbox` show the contract version, amendment history and parked deltas from the ledger
+  5. Phase 1 and phase 2 are re-verified against the code at the start of this phase and read `passed` with current bodies; the full offline suite, type check and boundary lint are green
+  6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
+
+**Plans**: TBD (run /gsd-discuss-phase 9, then /gsd-plan-phase 9, when it starts)
+**Notes**: Planned at the v1.0 close and not before its turn, so the plans read the code as it is then. Live spend only if a fix needs live proof, under its own ceiling. Excluded: new features; anything a later phase's own review produces belongs to that phase.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c after 6b) and 8 as their triggers fire (each depends on Phase 5)
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c after 6b) and 8 as their triggers fire (each depends on Phase 5), and Phase 9 last, after the last implemented phase
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -141,6 +170,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |
 | 8. Cross-repository runs and project groups | v2.0 | 0/TBD | Not started | - |
+| 9. v1.0 tech-debt cleanup | end of roadmap | 0/TBD | Not started | - |
 
 ## Backlog
 
