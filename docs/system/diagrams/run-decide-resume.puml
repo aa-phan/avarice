@@ -61,7 +61,7 @@ else run blocked on a decision, continuable, no live lease
 else nothing continuable (a blocked run with decisions still open, or a run that has stopped or has no live supervisor)
   Decide --> Owner : nothing started
 end
-Decide --> Owner : exit 0 (answered or withdrawn)
+Decide --> Owner : exit 0 (answered or withdrawn)\nwith --wait, or after a spawn, the exit follows the run (cli-reference.md)
 
 == The answered item ==
 Supervisor -> Ledger : scheduler picks the item, context pack step

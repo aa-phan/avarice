@@ -249,7 +249,7 @@ The read verbs the hook admits per purpose are listed in [containment.md](contai
 
 ## git
 
-AVARICE calls the `git` found on `PATH` for every operation, always through one wrapper, never a shell. No version is checked. The wrapper rejects anything but a subcommand as the first argument (so no `-c`, `-C`, `--git-dir`) and rejects `--config-env` anywhere. Its environment holds the caller's `PATH`, `HOME` and `LANG` plus a fixed set that disables hooks (`core.hooksPath=/dev/null`), `core.fsmonitor`, system config, system attributes, optional locks and terminal prompts. On calls that compare or write working files, every `filter.<name>` clean, smudge and process command in the repository is blanked for that call. The default timeout is 10 seconds. Run source listings allow 60. Clone, checkout and fetch allow 120, and so do the run workspace tree operations and the hand-off fetch. A timeout, an unrunnable git (unavailable) and a non-zero exit (internal, with the first stderr line) are distinct errors.
+AVARICE calls the `git` found on `PATH` for every operation, always through one wrapper, never a shell. No version is checked. The wrapper rejects anything but a subcommand as the first argument (so no `-c`, `-C`, `--git-dir`) and rejects `--config-env` anywhere. Its environment holds the caller's `PATH`, `HOME` and `LANG` (with defaults when `PATH` or `LANG` is empty) plus a fixed set that disables hooks (`core.hooksPath=/dev/null`), `core.fsmonitor`, system config, system attributes, optional locks and terminal prompts. On calls that compare or write working files, every `filter.<name>` clean, smudge and process command in the repository is blanked for that call, and `filter.<name>.required` is set to false. The default timeout is 10 seconds. Run source listings allow 60. Clone, checkout and fetch allow 120, and so do the run workspace tree operations and the hand-off fetch. A timeout, an unrunnable git (unavailable) and a non-zero exit (internal, with the first stderr line) are distinct errors.
 
 Three subcommands accept only listed options. Anything else is refused before git runs, which prevents a caller from re-enabling what the environment turns off.
 
@@ -339,7 +339,7 @@ The command executor wraps every command as `/usr/bin/sandbox-exec -p <profile> 
 4. Re-allow writes under each declared write path.
 5. Deny reads of the named paths.
 6. Re-allow reads of each re-allowed path, which wins over the denials.
-7. Give back the metadata (not the contents, not a listing) of each directory above a re-allowed path that lies inside a denied one, so a program can resolve the real path of a file below it.
+7. Give back the metadata of each directory above a re-allowed path that lies inside a denied one, without its contents or a listing. A program can then resolve the real path of a file below it.
 
 Paths are resolved to real locations first, and a path with a quote, backslash, newline or NUL is refused rather than escaped.
 

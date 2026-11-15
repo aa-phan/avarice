@@ -342,8 +342,6 @@ Each element of `runs`:
 | `cancelRequestedAt` | string, optional | ISO time of the owner's cancel request. Present only while the request stands on a run that has not ended. |
 | `checksNotRun` | array, optional | The last key of the entry. Present only when a declared check is neither required nor a target of the brief: each entry is `name` and `reason`, and the reason is always `not required`. |
 
-In each run element, `items`, `decisions` and `notifications` are always present. `cancelRequestedAt` and `checksNotRun` are optional, and `checksNotRun` is the last key.
-
 The fields `title`, `branch`, the check, gate and budget names, the item IDs, sizes and models, and the reference `id` are free text or repository-derived. The rest are IDs, states, revisions, booleans and counts.
 
 Exit: 0, or 70 when the ledger cannot be read.
