@@ -51,7 +51,11 @@ Supervisor -> Ledger : read items and decisions again
 alt an answer arrived in that window
   Supervisor -> Ledger : run goes on in this process
 else none
-  Supervisor -> Banner : one banner covering every queued notice
+  alt not in quiet hours
+    Supervisor -> Banner : one banner covering every queued notice
+  else quiet hours
+    Supervisor -> Ledger : queued notices held for the next digest
+  end
   Supervisor --> Owner : exit; status and inbox list the decision
 end
 note over Owner, Ledger : an answer later starts a supervisor again:\nsee the decide and resume flow

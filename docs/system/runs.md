@@ -308,7 +308,8 @@ A failed G2 records its gate row and blocks before any commit:
 | Scope or deletion scope (alone or with others) | Run-wide: `enforcement_failure`, class `permission`, with a containment finding listing at most ten paths. |
 | Only the checks delta, every blocking check one that passed at the item's start and now fails | One repair first (see Repair and gate G3); a decision only when the repair is not offered or fails. |
 | Only the checks delta, otherwise | Item-local: `decision`, class `repeated_failure`, with the failing evidence and the reproducer attached. |
-| Anything else | Item-local: `decision`, class `acceptance`. |
+| Anything else, in a unit that is not a repair | Item-local: `decision`, class `acceptance`. |
+| Anything else, in a repair unit | Item-local: `decision`, class `repeated_failure`. |
 
 A passing G2 moves the item to `gated` and the supervisor commits. A repair can put the work back to the pin; with nothing in scope left to commit, the item opens a `repeated_failure` decision instead of an empty commit. Otherwise:
 
@@ -457,7 +458,7 @@ Each mechanism below is stated as what it does, so a reader can tell prevention 
 - A brief without `items` is one item `A`, so a run with no items keeps one unit, one gate and one commit. A run with several items runs them strictly one at a time, in dependency and declaration order; nothing runs two items at once.
 - A repair is the same item's second unit, not an item of its own. It is offered only for a check that passed when the item began, and the item has one repair for each such check.
 - A blocked run continues when an answer made an item ready or left no decision open. Withdrawing a decision releases nothing, so the item stays blocked and the run ends `failed` once the other work is done. The states `waiting_external`, `awaiting_review` and `closed` still exist in the lifecycle table with nothing driving them.
-- A run blocked for any reason but `decision` is final in practice. No answer continues it, because the pickup rule reads only item decisions, and `resume` only reports it.
+- A run blocked for any reason but `decision` is final. No answer continues it, because the pickup rule reads only item decisions, and `resume` only reports it.
 - A parked item's delta lives only under a ref in the run clone. It is not fetched into the source, so it is invisible outside the clone, and it is dropped when the item commits.
 - An amendment makes every open decision stale. The next answer re-opens the decision instead of applying.
 - A `cancel` against a live supervisor is carried out by that supervisor, so a supervisor that is stopped but not dead keeps the run at `cancel requested` until its lease lapses.

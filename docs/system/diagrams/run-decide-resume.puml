@@ -16,10 +16,13 @@ alt inside a run, no terminal, or from a run's process tree
   Decide --> Owner : refused (64), before the profile is resolved,\nnothing read, nothing written
 else not the user who owns the profile
   Decide --> Owner : refused (64), nothing written
-else open decision, and the host configuration directory\nthe run recorded is missing or unreadable
-  Decide --> Owner : refused (3), nothing written, the decision stays open
-else not refused
-  Decide -> Ledger : read the decision, its run and the latest contract
+else not refused so far
+  Decide -> Ledger : read the decision to find its run
+  alt open decision, and the host configuration directory\nthe run recorded is missing or unreadable
+    Decide --> Owner : refused (3), nothing written, the decision stays open
+  else not refused
+    Decide -> Ledger : read the latest contract
+  end
 end
 
 == The checks, in order ==
@@ -39,26 +42,26 @@ else same answer to an answered decision
 else different answer to an answered decision
   Decide -> Ledger : decision.rejected (check name only)
   Decide --> Owner : refused (3)
+else withdraw, applied whatever the state digest says
+  Decide -> Ledger : decision withdrawn, items keep their state
 else state moved since the question
   Decide -> Ledger : old decision stale with the answer kept,\nsuccessor opened on the new state
   Decide --> Owner : answer not applied, answer the successor (3)
-else withdraw
-  Decide -> Ledger : decision withdrawn, items keep their state
 else answer applies
   Decide -> Ledger : decision answered, affected items\nblocked_on_decision to ready (one transaction)
 end
-note over Decide, Ledger : the pickup and the answered item below follow only a withdraw\nor an answer that applies; every other branch above ends with its message to the owner
+note over Decide, Ledger : the pickup and the answered item below follow only a withdraw\nor an answer that applies; every refusal above, in both sections, ends with its message to the owner
 
 == Who picks the run up ==
-alt a supervisor holds a live lease
+alt a supervisor holds a live lease, and the run is not blocked or is continuable
   note over Supervisor : its scheduler reads the ledger after every item\nand takes the answered item next
 else run blocked on a decision, continuable, no live lease
   Decide -> Supervisor : spawn detached, step supervisor:decide
   Supervisor -> Ledger : take the lease, run blocked_on_decision to running
-else nothing continuable (decisions still open, or a run in another state)
-  Decide --> Owner : exit 0, nothing started
+else nothing continuable (a blocked run with decisions still open, or a run that has stopped or has no live supervisor)
+  Decide --> Owner : nothing started
 end
-Decide --> Owner : answered (0)
+Decide --> Owner : exit 0 (answered or withdrawn)
 
 == The answered item ==
 Supervisor -> Ledger : scheduler picks the item, context pack step
