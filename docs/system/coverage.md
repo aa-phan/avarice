@@ -59,7 +59,7 @@ Counted at commit `187409e` on 2026-11-14. Every command below was re-run at tha
 
 ## Per-document status
 
-Reviewed means a second reader (a fresh-eyes reviewer) checked claims against the code and every finding was applied or answered. A document changed after its review is `drafted` until a fresh reviewer has read the changes. Each reviewer bounced its first draft except one; the fixes were applied from the reviewer's code evidence, and no document was bounced twice.
+Reviewed means a second reader (a fresh-eyes reviewer) checked claims against the code and every finding was applied or answered. A document changed after its review is `drafted` until a fresh reviewer has read the changes. A BLOCKER or a code-behaviour WARNING was fixed from the reviewer's code evidence and the document was read again by a fresh reviewer. Several documents took two or three rounds, and `findings.md` took more; `03-33-reviews/README.md` records each round.
 
 | Document | Status | Review notes |
 |---|---|---|

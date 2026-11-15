@@ -22,7 +22,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 
 - `src/adapters/host-claude/env.ts:16`: comment says AVARICE_RUN marks a contained run for commands and the hook, but nothing in src or bin reads it; only tests check it. No longer holds at 72a86b1 for commands: `src/cli/main.ts:58` (now at `src/cli/main.ts:71`), `src/cli/shell/shell.ts:532` (now at `src/cli/shell/shell.ts:547`) and `src/cli/commands/install-host.ts:25` read it. The hook still does not.
 - `src/adapters/fs/profile-paths.ts:90`: profile config.json (schema, profile, dataRoot, workRoot) is written once and never read; it can go stale against the roots in use
-- `src/adapters/fs/profile-paths.ts:62`: the profile config file is created by every command that resolves the profile, while init.ts:2 describes it as the init path
+- `src/adapters/fs/profile-paths.ts:91`: the profile config file is created by every command that resolves the profile, while init.ts:2 describes it as the init path
 - `src/app/onboarding-service.ts:32`: AVARICE_FAULT SIGKILL injection is read on the production path with no build-time gate
 - `src/app/onboarding-service.ts:43`: an invalid AVARICE_LEASE_TTL_MS silently falls back to the default
 - `package.json:7`: engines node >=22.22.3 is not enforced at runtime; only the SQLite gate (src/adapters/sqlite/db.ts:100) acts
@@ -46,7 +46,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/domain/preflight.ts:50`: spec adopts a complete stamped map with drift pass (docs/repository-onboarding.md:272) and classifies via `verify codebase-drift` (line 285); code regenerates every class and classifies from git history (spec contradiction)
 - `src/domain/mapping.ts:56`: mapping modes `adopt` and `paths` block with scope_unavailable (src/app/stages/workspace.ts), contradicting the decision table in docs/repository-onboarding.md
 - `src/domain/onboarding-lifecycle.ts:13`: states `planning`, `stale`, `deactivated` have edges but no code enters them; edges out of blocked, incompatible and deactivated are never driven
-- `src/app/stages/map.ts:107`: the `paused` outcome branch is dead: the outcome classifier (src/domain/outcome.ts) never returns `paused`
+- `src/app/stages/map.ts:107`: the `paused` outcome branch is dead: no onboarding stage passes a `pauseSignal`, so the classifier (src/domain/outcome.ts:69) never returns `paused` to the map stage (only the run item stage sets it, `src/app/run-stages/item.ts:407`)
 - `src/app/stages/contract.ts:58`: the compile-refusal block for promotion is unreachable from normal start paths because preflight (src/domain/preflight.ts:101) refuses first
 - `src/domain/project-record.ts:198`: completeness comes from the mode alone (no file evidence passed), so an adopted map would be labeled by mode (unreachable while adopt is blocked)
 - `src/app/stages/activate.ts:209`: the record version increments from a previous active record, but preflight refuses a project with an active record, so versions above 1 cannot occur
@@ -75,7 +75,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/adapters/host-claude/claude-host.ts:333` (now at `src/adapters/host-claude/claude-host.ts:244`): transcript redaction runs after the 20 MiB cap, so a secret split by the truncation boundary is not matched (not verified)
 - `src/adapters/host-claude/claude-host.ts:100`: the startup descriptor is cached once per adapter while launches re-probe, so the descriptor can read `enforced` while a later launch is refused (for example after a claude upgrade within one process)
 - `docs/existing-tooling-assessment.md:103`: proposes `gh pr create` and, at line 193, "gh CLI covers MVP needs"; code never invokes gh and denies it to the host (spec contradiction)
-- `docs/existing-tooling-assessment.md:24`: records Claude Code 2.1.312 and 2.1.316 only; code also admits 2.1.317 (at 72a86b1 the code also admits 2.1.318)
+- `docs/existing-tooling-assessment.md:24`: records Claude Code 2.1.312 and 2.1.316 only; code also admits 2.1.317, 2.1.318 and 2.1.319 (the list at `src/adapters/host-claude/launch-preflight.ts:24`)
 
 ## From containment
 
@@ -86,7 +86,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `docs/containment.md:85`: spec hook command is `avarice hook pre-tool-use --run <run>`; code runs node with the hook entry, `--event` and `--policy` (src/adapters/host-claude/settings.ts:157) (now at `src/adapters/host-claude/settings.ts:59`)
 - `docs/containment.md:95`: spec carries four GSD hooks; code carries only the GSD secret read guard, when present (src/adapters/host-claude/settings.ts:165) (now at `src/adapters/host-claude/settings.ts:130`)
 - `docs/containment.md:97`: spec env allowlist includes repository-declared toolchain variables; code has fixed names only (src/adapters/host-claude/env.ts:36)
-- `docs/containment.md:122` (now at `docs/containment.md:133`): spec executor is @anthropic-ai/sandbox-runtime with contract network endpoints and invocation env; code uses /usr/bin/sandbox-exec, all network denied, caller env (src/adapters/exec/sandboxed-executor.ts:18)
+- `docs/containment.md:122` (now at `docs/containment.md:133`): spec executor is @anthropic-ai/sandbox-runtime with contract network endpoints and invocation env; code uses /usr/bin/sandbox-exec, all network denied, caller env (src/adapters/exec/sandboxed-executor.ts:18). The network part no longer holds: the executor now allows one loopback port (`src/adapters/exec/seatbelt-profile.ts:84`; see From containment (run slice))
 - `docs/containment.md:148`: spec says an unadmitted host version gives restricted mode via doctor; code refuses the launch (src/adapters/host-claude/launch-preflight.ts:136 (now at src/adapters/host-claude/launch-preflight.ts:143)); no restricted mode or `--restricted` flag exists
 - `docs/containment.md:116`: spec file-edit safeguards (read-before-edit digest, unexpected_change, create and delete globs) are not implemented; the write decision is path-in-write-root only (src/domain/hook-decision.ts:526, now at `src/domain/hook-decision.ts:278`). No longer holds at 72a86b1 for the run purpose: `src/domain/hook-decision.ts:646`, now at `src/domain/hook-decision.ts:839`. It still holds for the onboarding purposes.
 - `docs/containment.md:207`: spec denies agent definitions with permissionMode in settings and the hook; code refuses to build the agents file instead (src/adapters/gsd/agent-frontmatter.ts:20)
@@ -103,7 +103,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 
 - `src (many files)`: code comments and one user-facing string carry delivery narrative (phase numbers, plan IDs, threat IDs); not a runtime defect
 
-## From from review
+## From review
 
 - `src/app/stages/shared.ts:123`: blocked reasons `existing_state_conflict` and `adapter_incompatible` exist in the type but no stage records them; a move to `incompatible` carries no reason, though the CLI prints reasons in parentheses
 - `src/hook/pre-tool-use.ts:100`: the hook opens the ledger with a bare connection (4 s busy wait): no SQLite version gate, ownership or mode check, WAL switch or foreign-key pragma, unlike every other opener (`src/adapters/sqlite/db.ts:146`)
@@ -165,7 +165,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/cli/commands/install-host.ts:35`: the config directory reads `process.env` for `CLAUDE_CONFIG_DIR`, while the usage check at `install-host.ts:25` uses the environment passed to `main`; the two can differ when `main` is given an environment; intent unknown.
 - `src/app/run-status.ts:143` (now at `src/app/run-status.ts:215`): a run with no lease holder (a just-started `contract_ready` run before its supervisor takes the lease) is presented as interrupted and `paused`, with a resume hint; intent unknown.
 - `src/cli/main.ts:94` (now at `src/cli/main.ts:113`): `createDeps` and the usage check (`src/cli/main.ts:88`, now at `src/cli/main.ts:107`) are outside the try block that maps exceptions to exit 70; a throw there is not handled by dispatch; intent unknown.
-- `docs/extensions.md:35`: spec contradiction: the proposal's exit-code summary lists 0, 1, 2, 64, 69, 70; the CLI returns only 0, 3, 64 and 70 (`src/cli/main.ts:13` (now at `src/cli/main.ts:18`)).
+- `docs/extensions.md:35`: spec contradiction: the proposal's exit-code summary lists 0, 1, 2, 64, 69, 70; the CLI returns only 0, 3, 64 and 70 (`src/cli/main.ts:13` (now at `src/cli/main.ts:18`); 70 is `EXIT_INTERNAL` at `src/cli/composition.ts:51`).
 - `docs/extensions.md:60`: spec contradiction: the proposal's `resume <runId>` row has no `--wait` flag; the code declares it (`src/cli/commands/resume.ts:26` (now at `src/cli/commands/resume.ts:28`)) and adds exit 70 for a failed reconcile.
 
 ## From config-reference (run slice)
@@ -279,7 +279,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 
 ## Proposal drift
 
-Differences between a proposal document and the code that still hold at the pass's code state. The proposal stands as written.
+Differences between a proposal document and the code that still hold. The proposal stands as written.
 
 - `docs/containment.md:3`: the status line says the onboarding of one existing repository is built and says nothing about runs, although runs are built
 - `docs/containment.md:115`: the matrix row "Pre-existing user changes survive" describes a dedicated worktree on a new branch; runs work in a local clone
@@ -294,7 +294,7 @@ Differences between a proposal document and the code that still hold at the pass
 - `docs/autonomy-and-decisions.md:87`: the proposal says destinations come only from the profile, and lists `notify.reviewReady`, `notify.blocking`, `notify.digest` and `notify.quietHours` in one settings table (line 68). `docs/contracts-and-state.md:194`, by contrast, puts a `notify` block with the digest times in the contract. Built: destinations, digest times, quiet hours and the batch window live in the profile config (`src/domain/notify-policy.ts:21`), and the contract's lists only choose among the profile's destinations (`src/app/notify.ts:51`). The two proposal documents disagree with each other; the code follows the autonomy document. Spec contradiction.
 - `docs/autonomy-and-decisions.md:98`: the proposal applies a response that expands scope or budget "as a contract amendment", and line 91 allows a reply channel that authenticates the user. Built: `decide` never widens anything; it records the request as an amendment request and prints the amend command (`src/app/decide.ts:136`), and only `avarice contract amend` at a terminal outside the run applies it (`src/cli/commands/contract.ts:174`). The only response path is `avarice decide`; no reply channel exists. Spec contradiction.
 - `src/ports/ledger.ts:705`: the comment on the budget rows said nothing refunds, resets or raises a limit (RC-5). An owner amendment now raises or lowers a limit in one transaction with no lease (`src/adapters/sqlite/ledger.ts:951`) and spend carries over. The comment now says only the amend command changes a limit, from a terminal outside the run. The invariant that the run cannot raise its own limit holds. Resolved at d16fad6.
-- `docs/autonomy-and-decisions.md:54`: the proposal lists the `human` class as product behavior, acceptance criteria, data migrations and new dependencies. `docs/contracts-and-state.md:169` lists user-visible status codes, new dependencies and public API changes. The routine preset lists user-visible behavior changes, new dependencies, public API changes, scope expansion and acceptance criteria changes (`src/domain/run-contract.ts:108`). The code matches a choice the unit names against the contract's list by its normalized text (`src/domain/decision-policy.ts:205`), so each contract decides for itself. The proposal's class names `scope_expansion` and `architecture` also differ from the five the code writes (`src/domain/decision-policy.ts:50`). Spec contradiction.
+- `docs/autonomy-and-decisions.md:54`: the proposal lists the `human` class as product behavior, acceptance criteria, data migrations and new dependencies. `docs/contracts-and-state.md:169` lists user-visible status codes, new dependencies and public API changes. The routine preset lists user-visible behavior changes, new dependencies, public API changes, scope expansion and acceptance criteria changes (`src/domain/run-contract.ts:108`). The code matches a choice the unit names against the contract's list by its normalized text (`src/domain/decision-policy.ts:205`), so each contract decides for itself. The proposal's class name `architecture` (`docs/autonomy-and-decisions.md:40`, beside `scope_expansion`) is not among the five the code writes (`src/domain/decision-policy.ts:50`). Spec contradiction.
 - `docs/operations-and-testing.md:411`: S-50 expects a size and a specification for every item "when the contract compiles", with the derived ones listed "before the run starts". Built: the start command reads the indexes before the compiler runs (`src/cli/commands/start.ts:132`) and the compiler derives the fields. The summary that lists them is printed after the run is stored in `contract_ready` and before its supervisor is spawned (`src/cli/commands/start.ts:136`). Whether "before the run starts" means before the run is stored is for the owner.
 - `docs/autonomy-and-decisions.md:75`: the proposal holds everything except blocking notifications during quiet hours. Built: every banner is held in quiet hours, a blocking one included (`src/app/notify.ts:114`); the inbox still lists the decision and the next digest covers the held banner. Spec contradiction.
 - `src/cli/commands/cancel.ts:1`: `avarice cancel` is not in the run command table of `docs/extensions.md:56`, which has no row for `decide`, `contract`, `digest` or `schedule` either. The proposal stands as written and the owner decides whether the table gains the rows.

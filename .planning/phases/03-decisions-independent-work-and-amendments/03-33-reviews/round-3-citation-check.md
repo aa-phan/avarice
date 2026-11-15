@@ -1,6 +1,6 @@
 # Round 3 citation check of docs/system/findings.md
 
-Author of the drafts: the plan executor. This is the mechanical check that answers `round-3-A.md` (12 citation WARNINGs, W1 to W12). The check ran against the working tree at the code state of `13a7267` (the code does not change in this plan) with the documents as edited in round 3.
+Author of the drafts: the plan executor. This is the mechanical check that answers `round-3-A.md` (12 citation WARNINGs, W1 to W12). It is a range and overlap check, not a proof that a citation supports its claim; see "What the check does not prove" and `round-4-A.md`. The check ran against the working tree at the code state of `13a7267` (the code does not change in this plan) with the documents as edited in round 3.
 
 ## Command
 
@@ -50,7 +50,18 @@ The one historical citation is `src/app/run-stages/item.ts:70` on the discard-ba
 
 ## Statement
 
-The check extracted 541 citations from `docs/system/findings.md`: 410 current citations, 130 superseded leads that are followed by a `(now at ...)` re-point, and 1 position that the line names as gone. All 410 current citations land: each resolves to an existing line of code or text that supports its claim. `verify` exits 0.
+The check extracted 541 citations from `docs/system/findings.md`: 410 current citations, 130 superseded leads that are followed by a `(now at ...)` re-point, and 1 position that the line names as gone. For all 410 current citations the file exists, the line is in range and not blank, and the claim and the line share a word within three lines (or the citation is in `READ_OK`). `verify` exited 0.
+
+## What the check does not prove
+
+Correction made after `round-4-A.md`. An earlier version of this statement said that every current citation "lands" and "supports its claim". The script cannot show that.
+
+- It tests existence, range, non-blank content and a loose word overlap: one word of five or more letters from the whole findings line must appear within three lines of the cited line. A long claim shares such a word with almost any code in the right file.
+- It does not compare the meaning of the cited line with the claim. The round 4 reviewer found one citation (`profile-paths.ts:62`, a path lookup cited for a file write) that passed `verify`, and four claims about code behaviour that it cannot judge (the `paused` classifier, the admitted host versions, the network rule of the executor and the decision class names).
+- It does not check the 130 lead numbers that precede a `(now at ...)` re-point, and it does not check the historical entry.
+- The hand reading of the 410 citations in round 3 is the only check of meaning, and it missed these five. A reviewer reading the code at each cited line is the control that found them.
+
+The script stays in the repository as an aid for finding gross misses (blank lines, out-of-range lines, ambiguous short names). A pass of `verify` is not evidence that a citation is correct. Its result line says only what it tests.
 
 ## Sentence length
 
