@@ -5,6 +5,10 @@ created: 2026-11-07T00:00:00Z
 updated: 2026-11-07T00:00:00Z
 goal: find_root_cause_only
 head: 86e6c4da67cd4dbe02ea6ffc231749a92c5a4903
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-15
+  status: diagnosed
 ---
 
 ## Current Focus
@@ -114,92 +118,118 @@ Size: S = under about 40 changed lines, one module; M = several modules or a new
 # Per-finding notes
 
 ## R-CR-01 already-fixed
+
 Plan 02-26 added `checkGitObjects` (hook-decision.ts:498-514), `GIT_OUTPUT_FORMS` and `checkGitOutput` (:516-595) and the call at :634. The reproduction table in 02-REVIEW.md CR-01 now reads: `git show HEAD:.env` deny-secret-read, `git show :.env` deny-secret-read, `git log -p` deny shell-git-output, `git show HEAD:config/.env.local` deny-secret-read. Plan tests: `test/unit/hook-decision.test.ts`, `test/integration/hook-git-secret-reads.test.ts` (56 pass). Disposition: `fixed`. The remaining symlink bypass is G-02-H2.
 
 ## R-WR-01 unsanitized note and reason
+
 Root cause: the onboarding branch of two commands bypasses the shared text style. `message` is the last stage `ctx.note` (onboarding-service.ts:186), and notes are built from repository-derived strings: activate.ts:132 (staging paths), validate.ts:151 (secret-hit locations), contract.ts:61 (a parse detail). A file name may hold an ESC byte. Run commands already print through `resultLine`/`errorLine`/`stripControl`.
 Files: src/cli/commands/onboard.ts:54-55 (also :43 and :50 echo `describeError`), src/cli/commands/resume.ts:45,49,52,56-57.
 Fix: `resultLine(\`onboarding ${id}\`, state, reason)` and `stripControl(message)`; use `errorLine('onboard'|'resume', ...)` for errors. Cleaner: one `outcomeLines()` pure function in `src/cli/render/` used by onboard, resume and supervise, which also makes it unit-testable without building `AppDeps`. Size S. Offline.
 Note: no test calls these `run()` functions directly today (the CLI tests spawn the binary), so the new test goes on the pure helper.
 
 ## R-WR-02 install egress proxy admits loopback and private hosts
+
 Root cause: the host allowlist is a syntax check only (`HOST_LABEL` per dot label, conventions.ts:222-237), so any IPv4 spelling (including `2130706433`, `0x7f.1`, `127.1`) passes; the proxy compares the requested `host:port` to the allowlist string and then `connect(port, host)` (allowlist-proxy.ts:95) without looking at the resolved address. Provenance of the list: `.avarice/config.json` from the newest descendant commit that changes only `.avarice/` (run-source.ts:30-58), and the install argv comes from the same file. The reach is port 443 only (checks.ts:355), the sandbox's only egress, so it is SSRF to `:443` on loopback, link-local (169.254.169.254) or the LAN. `docs/system/containment.md:443` documents "the proxy trusts DNS for an allowed registry name"; it does not mention private addresses.
 Fix direction (two layers, because a syntactic refusal cannot be complete):
 1. `readHosts`: refuse `localhost`, single-label names and any host whose labels are all numeric or `0x..` forms. `src/domain` may import only relative paths plus `node:crypto` (check-boundaries), so this is a hand-written regex, not `node:net.isIP`.
 2. `allowlist-proxy.ts` (adapter, may import `node:dns`/`node:net`): `dns.lookup(host, {all:true})`, refuse the connection if any address is loopback, link-local, private (RFC 1918), CGNAT, unspecified or IPv6 equivalents, then `connect(port, vettedAddress)`. This also closes rebinding.
+
 Test impact (the load-bearing detail): `test/unit/conventions.test.ts:205` pins `127.0.0.1` as an accepted registry host, and `test/integration/run-deps.test.ts:67` (`registryHosts: ['127.0.0.1']`, fake registry on a loopback port via `proxyAlso`) and `test/integration/allowlist-proxy.test.ts`, `test/containment/npm-ci-proxy.test.ts` all rely on dialing loopback. The fix needs a test seam: an injected `lookup`/`allowPrivate` option on `startAllowlistProxy` (production never sets it, like `sandboxExecPath`), and run-deps must use a name that the seam maps to loopback rather than a literal.
 Docs: docs/system/containment.md (lines ~367, 376, 443) and config-reference.md:136 (`registryHosts` rules). Size M. Offline.
 
 ## R-WR-03 credential directories
+
 Root cause: three code sites hold the same 3-directory list, and the command sandboxes use `(allow default)` for reads. Reproduced (Evidence). The list feeds: the supervisor's install/check/inventory sandbox (`sandboxSetup`, checks.ts:120), the onboarding scope (invocation-scope.ts:291) and the run scope's `credentialDirs` (invocation-scope.ts:488, which becomes the host's `sandbox.filesystem.denyRead` and the hook's `denyRead`, settings.ts:122-124). A contract command the model runs through the host Bash tool is therefore exposed the same way. The scratch channel is real: scratch is writable to those commands and is in the run purpose's `allowRead` (invocation-scope.ts:521), so the model's Read tool can read what they copied there. Check output is stored unredacted (checks.ts:215-226) while transcripts go through `redactSecrets` (claude-host.ts:239); the check-output artifact is not read back into prompts (only inventory artifacts are, checks.ts:517), so that half is owner-visible, not model-visible.
 Fix: one exported `CREDENTIAL_DIRS` (home-relative: `.ssh .aws .config/gh .gnupg .netrc .npmrc .docker .kube .config/gcloud Library/Keychains`, plus `.git-credentials`, `.pgpass` if wanted) in `src/domain/invocation-scope.ts`, used by all three sites; `redactSecrets` over `output` before `artifacts.put` (checks.ts:226). HOME is already redirected to scratch for these commands (checks.ts:118), so legitimate tools do not need the real home credentials. Do not invert to an allow-list: node/npm need many system paths; that is L and risky. Update the "three credential directories" sentence in containment.md (~line 349) and the limits section.
 Tests: extend `test/unit/invocation-scope.test.ts`, `test/unit/claude-settings.test.ts`; add a real-sandbox test with a fake HOME (wr03.mts is the template). Size M. Offline, free.
 
 ## R-WR-04 crashed host charged $0
+
 Root cause: `wasKilled` (invocation.ts:152-159) treats only `timedOut` or `signal !== null` as killed; `settleInvocation` charges `Math.max(reported, reservation)` only when `killed` (budget.ts:200-210). A host that exits non-zero with no `result` event reports `costUsd: result?.totalCostUsd ?? 0` (claude-host.ts:248), so the charge is 0. That is the CON-16 retry path (`crashed`, item.ts:610: `exitCode !== 0 || signal !== null || !resultSeen`).
 Fix: `|| d.resultSeen === false` (the review's one-liner is right). Decide the clean-exit-no-result case (exit 0, `resultSeen=false`) deliberately: it is also an unknown cost, so charging the reservation is consistent. Risk: a host that fails instantly at startup (bad flag) now charges a full per-invocation cap; the invocation unit is spent anyway.
 Tests: test/fault/budgets.test.ts has the `outcomeOf` helper whose default `details` is `resultSeen: false` (line ~375); existing non-killed cases that rely on the default must set `resultSeen: true`. Add the crashed case. Size S. Offline.
 
 ## R-WR-05 orphan charging not atomic
+
 Root cause: `chargeOrphans` (budget.ts:95-123) does `chargeBudget(invocations, fromReserved)`, `chargeBudget(costUsd)`, `appendEvent` as three `tx` calls. The orphan count is read from `reserved` (budget.ts:97), which write 1 sets to 0, so a kill between 1 and 2 loses the cost for good. Same shape in `settleInvocation` (budget.ts:202-209): invocations, wallClockMs, costUsd in three writes; a kill after the first leaves the reservation spent with cost and time never charged, and resume finds `reserved = 0` (no orphan).
 Fix: add one ledger port method (src/ports/ledger.ts near :583, implementation in src/adapters/sqlite/ledger.ts next to `chargeBudget` :673) that applies a list of charges and the event in a single `tx`; `chargeOrphans` and `settleInvocation` call it. SqliteLedger is the only Ledger implementation, so no other adapter changes. Adjacent, not in the review: docs/system/findings.md:116 records that an orphan's wall-clock is never charged; the same method is the place to decide that. Size M. Offline; a fault-injection style test (throw between writes) is not needed once the writes are one transaction, a unit test of the new method plus the existing kill tests (test/fault/budgets.test.ts:519) suffices.
 
 ## R-WR-06 SHA-256 repositories
+
 Root cause: `COMMIT_SHA` accepts 64 hex (staging-base.ts:22, used by run-source.ts, run-workspace.ts, staging-base.ts), while `revisionOf` (evidence.ts:38) and G4's `COMMITTED_CLEAN` (gates.ts:146) accept 40. Reproduced with a real sha256 repository. Note that Phase 1 modules are 40-only too (freshness.ts:7, knowledge-corpus.ts:17, graph-validation.ts:4, knowledge-validation.ts:33), so a SHA-256 repository is not supported end to end anyway.
 Fix: narrow `COMMIT_SHA` to `[0-9a-f]{40}` so `start` refuses a SHA-256 repository with a clear message before any work (S). Widening every domain pattern is M and buys nothing while onboarding cannot map such a repository. Where it fails today: `cloneRevision` (checks.ts), which runs in `checks:validate`, before the first unit invocation (run-deps.test.ts step order), so the review's "after an invocation has been spent" overstates it. Size S. Offline. Check that no test uses a 64-hex pin: grep found none.
 
 ## R-WR-07 Math.min spread
+
 Root cause: run-source.ts:74. Reproduced limit: ok at 100000, RangeError at 125000. The preflight limit is 25 commits (run-preflight.ts:7), so the count matters more than the oldest time. Fix: `times.reduce((a, b) => (a < b ? a : b))`. Add a unit test that feeds 150k lines through a stubbed `runGit`, or test the pure reduction. Size S. Offline.
 
 ## R-WR-08 attended harness allow list
+
 Root cause: live-attended.ts:474 builds `Bash(cat:*)`, `Bash(head:*)`, `Bash(git diff:*)`, `Bash(git show:*)`, `Bash(git log:*)` as prefix rules with no hook; production settings.ts:71 builds the same shape from `READ_ONLY_COMMANDS` but the PreToolUse hook refuses `>` and `--output`, which the harness has no equivalent of. Whether the host's permission engine lets `cat > file` through a `cat:*` prefix rule needs a live session to establish; I did not run one. Fix: drop `cat` and `head` (the model has `Read`), anchor or drop `git diff`. Provenance note for the planner: the recorded G-02-9 verdicts (status first FAIL 1/4, stop on a denial PASS 3/3, routable question FAIL 0/3) were measured under the current list; LIVE-CASES.md:244 says a judged FAIL is never re-run, so do not re-run. Add one sentence to LIVE-CASES.md stating the list used for those records. Size S. Offline (assert the generated settings).
 
 ## R-WR-09 cleanupAttended recursive delete
+
 Root cause: live-attended.ts:559-563 removes `fixture.profileDirs` (under the real `~/.local/share/avarice*`, `~/.config/avarice`) and `fixture.evidenceDir` recursively, trusting the fixture object. Creation asserts only `!existsSync` (:480-484), so the path shape is safe today by construction, not by check. Fix: before each `rmSync`, require `realpathSync(dir)` to be inside the fixture's own tag prefix (basename starts `avarice-live-attended-<name>-` for the profile dirs) and `evidenceDir` inside `realpathSync(tmpdir())`; throw otherwise. Test with a forged fixture. Size S.
 
 ## R-IN-01 home path in evidence
+
 Valid but low value: the four files named hold one line each (`live-attended-phase2.jsonl:1` a profile path and `/Users/aphan/.local/bin/claude`, the two live-run files one line each, LIVE-CASES.md:278 `/Users/aphan/.claude-edu`). The same string is committed in 28 `spikes/slice-0-wave-0/evidence` files, `docs/existing-tooling-assessment.md`, `spikes/2026-11-01-pre-slice-0/run.sh` and 113 `.planning` files, so the repository is already private-by-assumption. Fix narrowly: redact in the writers (live-attended.ts:252, live-run.test.ts:37, live-harness.ts) and rewrite the four files; nothing digests these files (grep found no reference besides prose). Defer the wider residue to a public-release decision (owner). Size S.
 
 ## R-IN-02 not-a-defect
+
 See Eliminated. Recommend `skipped` with the reason: "node:test reports these as skipped, with the reason printed; the parse and compile cases are unconditional". The only residual is the hard-coded `PIN`/default path, which the test header documents.
 
 ## R-IN-03 bidi regex
+
 Reproduced (Evidence). The scanner flagged style.ts as invisible-unicode for exactly this line. Fix: write the class with `\u` escapes and cover U+061C, U+200B-U+200F, U+2060, U+FEFF and U+202A-U+202E, U+2066-U+2069 (keep soft hyphen U+00AD out unless wanted). Tests in test/unit/render.test.ts. Size S.
 
 ## R-IN-04 checkRelative backslash
+
 Root cause: staging-base.ts:90 splits on `[\\/]`. Reproduced. Callers that then act on the rewritten path: `checkCommitPath` (run-workspace.ts:68-76, joins with `/` for `git add`), `removeAddedPath` (:93) and `clearDirectoryInTheWay` (:125) (join under the clone root), plus staging reads. A run-added file named `a\b` therefore makes discard act on `a/b`, a different path. Fix: split on `/` only. A backslash then stays a literal character; `..` traversal checks are unaffected because POSIX has no `\` separator. Size S. Offline.
 
 ## R-IN-05 resume skips reaping silently
+
 Root cause: run-resume.ts:81 `continue` for a missing `reap` or `sessionId`. In production neither is missing (invocation.ts:131-140 records a `randomUUID()` session id before launch; ClaudeHostAdapter implements `reap`, claude-host.ts:367; every test host implements it too), so the branch is defensive and unreachable today. The file's own header (T-02-56) says "a reap that fails stops the resume"; the silent `continue` contradicts it on paper. Fix: return `err({kind:'internal', ...})` (recorded as the failed `resume:reconcile` step by `reconcileRun`). Sibling already in findings.md:115 for the onboarding resume (`src/app/resume.ts:29`). Size S.
 
 ## R-IN-06 abort signal never aborted
+
 Root cause: item.ts:511 `new AbortController().signal`; `RunStageContext` (stage.ts) carries no signal; `runSupervisor` (run-service.ts:131-136) records a lost lease in `lease.lost` that is read only at the top of the stage loop, i.e. after the in-flight unit returns. The host adapter already honors abort (claude-host.ts:138, :319). Correctness is protected by the fence (every ledger write presents it), so the cost is wasted spend and a delayed stop until the new supervisor reaps. Fix: `signal` on the stage context, aborted from the renewal-failure branch and on SIGTERM in supervise.ts; the cancelled outcome then settles through the normal `wasKilled` path (charged the reservation). The onboarding map stage uses `AbortSignal.timeout(wallClockMs)` (stages/map.ts:57), the same lease-loss gap, bounded. Size M, medium risk. Offline with the fake run host (real process group).
 
 ## R-IN-07 substring acceptance (valid observation, documented design)
+
 `finish.ts:204-207` accepts `id.includes(text)`. It is the documented behavior (docs/system/checks-and-evidence.md:123, runs.md:280), the finish.ts comment says so, and the owner's own R1 briefs depend on it (`test:isIsoYearMonth`, `test:ignores non-finite deltas`, test/benchmark/r1/). A whole-id match breaks them; "id must exist in the base inventory" forbids the unit from satisfying a criterion with the regression test it adds, which is the normal bug-fix shape. The mitigations that exist: the checks that run the tests must pass at head and the inventory comparison detects weakening. The proposal (docs/contracts-and-state.md:126-127) shows exact ids, so code and proposal disagree: per CLAUDE.md that is a one-line entry in docs/system/findings.md for the owner to decide. Recommendation: `deferred` with that reason and the findings.md line; if the owner still wants a fix, the least breaking tightening is a segment-anchored match plus updating the two briefs.
 
 ## R-IN-08 gated-commit parent
+
 Root cause: item.ts:419-433 accepts a moved HEAD on trailers alone. Between `gated` and the commit only the supervisor acts and the host has been reaped before reconcile, so this is defense in depth. Fix: `git rev-list --count <snapshot.head>..HEAD` equals 1 and `HEAD^` equals `snapshot.head`; needs a small `RunWorkspace` port method (or reuse `diffCommits`' underlying git call) and a fake. Size S-M.
 
 ## R-IN-09 run-ref prefix match
+
 Root cause: `RUN_REF_GLOB` + `globToRegExp` (checkout-digest.ts:37, :46-49) turn `*` into `.*`, so `refs/heads/avarice/run_X/extra` is also excluded from `refsDigest`. Mitigated: the Phase 2 exit evidence tool judges new refs from the full ref list and fails any new ref other than `refs/heads/avarice/<runId>` (exit-run-phase2-tools.ts:699-706). Fix: a dedicated anchored regex for `--allow-run-refs` (`^refs/heads/avarice/run_[A-Za-z0-9_]+$`; the unit test uses `run_01TESTRUN`, production ids are `run_` plus 26 characters, so do not hard-code 26). Leave `--allow-ref` glob semantics as documented. Size S.
 
 ## S-WR-01 integration tests that only report
+
 Confirmed (see Evidence): `git show :sub` is allowed and prints no sentinel on git 2.39.5, so nothing is wrong today; the test cannot fail if that changes. Fix: add `git show :sub` to the `admitted` list. Same file as S-IN-04.
 
 ## S-WR-02 two tables
+
 Latent, not exploitable (Eliminated). The drift is real: git rows of `SHORT_VALUE_OPTIONS` list `M`/`nSGOLUMCBl`; `GIT_OUTPUT_FORMS` lists `n` (log), `u` attached (status), nothing (show). Fix: derive the git rows from `GIT_OUTPUT_FORMS` (`shortValued` takes the next word, `shortAttached` only the cluster rest) and add the pinning unit test the review suggests. Do this after the G-02-H2 change, with its corpus in place, because it refactors the same parser.
 
 ## S-IN-01 nested repositories
+
 Negligible: object paths resolve from the staging root and the shell cwd, and the model can change neither (no `cd`, no `git -C`; `git -c` is refused). Recommend skip with that reason and one sentence in docs/system/containment.md rule 12.
 
 ## S-IN-02 refusals say nothing
+
 Valid usability item: `deny()` (hook-decision.ts:107) never sets `reason`, although the decision type has it (:88) and the hook prints it (pre-tool-use.ts:334). Add a corrective reason ("use --name=value; admitted options: ...") for `shell-git-output` and `shell-git-object`. Fewer retries means fewer consecutive-denial stops (CON-14).
 
 ## S-IN-03 rev-parse and ls-files
+
 No leak found: probes of `git rev-parse HEAD:.env`, `git rev-parse --verify HEAD:.env`, `git ls-files -s .env` are denied by the path check; `git ls-files --with-tree=HEAD` prints names only. Cheapest honest fix is the reviewer's second option: a comment beside `GIT_OUTPUT_FORMS` recording why these two are left out and what was checked.
 
 ## S-IN-04 test collection
+
 `rig()` is called inside seven `describe` bodies (lines 74, 93, 112, 141, 153, 172, 183), so repositories are created at load. Move to `before` hooks; give `gitOutput` an argv overload or reuse the hook's lexer.
 
 ---

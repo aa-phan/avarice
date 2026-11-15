@@ -2,39 +2,36 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 milestone_name: Contained Kernel
-current_phase: 4
-current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
-status: planning
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-11-15T07:46:00.779Z"
+status: Awaiting next milestone
+stopped_at: Milestone v1.0 complete, ready to start v1.1
+last_updated: "2026-11-15T23:54:06.930Z"
 last_activity: 2026-11-15
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 190ccb1bb7b3b746466e4936cb22b76561d50f8b
+last_activity_desc: Milestone v1.0 completed and archived
+state_head: 71225b0fe962daaf840b13f1b2ff2d5ac4d35d65
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 134
   completed_plans: 134
-  percent: 38
+current_phase: 4
+current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-08)
+See: .planning/PROJECT.md (updated 2026-11-15)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 03 — Decisions, independent work and amendments
+**Current focus:** Milestone v1.0 shipped 2026-11-15; next is v1.1 MVP Completion (Phase 4). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
 
 ## Current Position
 
-Phase: 4 — Profiles, retrieval budgets, restricted mode and the portability proof
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-11-15 — Phase 03 complete, transitioned to Phase 4
-
-Progress: [████░░░░░░] 38%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-15 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -421,23 +418,12 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.4]: A host that ends with no result event is charged its full reservation even when it spent nothing (02-35-REVIEW WR-04); IN-01..IN-06 untriaged (UAT test 4, deferred)
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
-- Plan 03-27 halted at its tracer gate: s17-s51 failed twice live because item A (small, so haiku) did not complete; S-50, S-18, S-21, S-52, CS-5, CS-15 not started; 3.4561 USD of the plan's 6.00 spent (Phase 3: 4.5488 of 25). A fix plan or an owner decision on haiku for small items is needed before plans that depend on 03-27 run. [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
-- Plan 03-36 halted at s21 (NOT EXERCISED: the haiku unit read scripts/tamper.mjs and declined to run npm test); cs5 likely the same; owner decision needed on how the tamper and write-probe cases are exercised; 03-27 stays halted, 03-28..03-33 blocked [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
-- Plan 03-37 halted at s21 (NOT EXERCISED twice on pinned 2.1.319: the harness tamper ran, the haiku unit's planner stopped with an acceptance decision before any gate); cs5, s52 and s17-s51 not run; 03-27 and 03-36 stay halted, 03-28..03-33 blocked; owner decision needed on the s21 brief [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
-- Plan 03-38 halted at s21 (FAIL on pinned 2.1.319: the combined harness tamper cannot produce the removed-test, new-skip-marker and repeated_failure results the judge asserts); cs5, s52 and s17-s51 not run; 03-27, 03-36 and 03-37 stay halted, 03-28..03-33 blocked; owner decision needed on S-21's tamper, judge or scenario text [resolved: plan 03-39 completed the cases and resumed the plan on 2026-11-09]
-- Phase 3 exit run 1 (03-29) stopped under D-03: item A asked B's owner-choice question and was parked uncommitted, so two pause decisions opened (run_01M71BDV8MWGEG7XSAWH1GZ80W, left blocked, unanswered). Needs a fix plan and a repeat of all three runs; owner decides the cap or ceiling for the repeat (16.88 USD headroom).
-- Plan 03-42 halted (D-03): run 1's resume found no session under the owner's terminal environment (CLAUDE_CONFIG_DIR ~/.claude-edu vs ~/.claude); a fresh session failed gate G2. Run 2 not started; 03-29 stays halted, 03-30 blocked. Owner decides the fix and spend (Phase 3 at 9.1851 of 25 USD).
-- Phase 3 exit stopped by owner decision; re-discuss with /gsd-discuss-phase 3 before more spend. Run 1 (run_01M73RX3RF0ZJETYWVF52WFZ5B) stays blocked_on_decision on dec_01M74276ZA17K36XWT9GJHRWDW until the owner cancels it in their own terminal; 03-29, 03-42, 03-45, 03-48 and 03-50 are halted and 03-30 is blocked (Phase 3 at 11.2986 of 25 USD)
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 261104-jnc | Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04 | 2026-11-04 | 974d8b1 | [261104-jnc-close-p-3-grep-d-directories-recursion-b](./quick/261104-jnc-close-p-3-grep-d-directories-recursion-b/) |
-| 261104-l3t | Resolve WR-02: drop grep from the shell read-only commands (shell grep denied by name; search via Grep tool) and deny bfs find -rm | 2026-11-04 | 07e6a34 | [261104-l3t-resolve-wr-02-establish-which-grep-the-c](./quick/261104-l3t-resolve-wr-02-establish-which-grep-the-c/) |
-| 261104-nxh | Fix Phase 1 code review warnings WR-01 (runtime check that workRoot is a normalized absolute path) and WR-02 (npm test now exercises the missing-work-root guard) | 2026-11-04 | e50de6f | [261104-nxh-fix-phase-1-code-review-warnings-wr-01-a](./quick/261104-nxh-fix-phase-1-code-review-warnings-wr-01-a/) |
-| 261105-2i2 | Fix phase 01 code-review findings WR-05..WR-08 (parseArgs prototype names, gsd_run argument checks, sandbox probe retry, exit-run spend guard) | 2026-11-05 | 4ac1127 | [261105-2i2-fix-phase-01-code-review-findings-wr-05-](./quick/261105-2i2-fix-phase-01-code-review-findings-wr-05-/) |
 
 ## Deferred Items
 
@@ -445,10 +431,31 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| debug_sessions | git-object-name-symlink-secret-bypass | diagnosed | 2026-11-15 | v1.0 |
+| debug_sessions | knowledge-pass-reads-originals | diagnosed | 2026-11-15 | v1.0 |
+| debug_sessions | phase2-review-findings-triage | diagnosed | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Validation path-references rejects the real haiku fast map on a generated scratch repository (blocks the T3 c… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: The stored transcript artifact can contain a line that is not valid JSON. redactSecrets replaces the GSD secr… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: The 01-15 hook-denial fixture text differs from the real host. The real tool_result is PreToolUse:{Tool} hook… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Update 2026-11-02 (gap fix for item 1, plan 01-16) - Item 1, path-references part: fixed (commits 792ccb8 RED… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Resolved 2026-11-02 (gap fix, plan 01-16) - Item 1: Resolved. Commits 792ccb8 (RED), b05f0b7 (GREEN). The use… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03 (plan 01-19 blockers, items 9, 10, 11, 12) Decided by the user; spend-free (no model call,… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03, second owner decision on item 10 - Item 10: Resolved. RED fb53444, GREEN 34eac4b. The use… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: 2026-11-03, claude 2.1.317 admission (plan 01-16 follow-up) - Item 12, the default claude on PATH: Resolved.… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03, plan 01-19 rehearsal 4 findings (items 13 to 15 of the 01-19 numbering) Decided by the us… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Resolved 2026-11-04 (plan 01-19 exit run complete) - Items 9 to 11, 13 to 15: resolved by the orchestrator's… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 02/deferred-items.md: 02-01: knowledge pass on Claude Code 2.1.318 writes with the /var path form - Found by: plan 02-01, live case… | acknowledged | 2026-11-15 | v1.0 |
 | Requirement | FR-23 review-only reconciliation (unscheduled, extension catalog entry 13) | Deferred | 2026-11-01 | v1.0 |
 
 ## Session Continuity
 
 Last session: 2026-11-15T06:54:20.672Z
-Stopped at: Phase 03 complete, ready to plan Phase 4
+Stopped at: Milestone v1.0 complete, ready to start v1.1
 Resume file: None
+
+## Operator Next Steps
+
+- Ship the phase 3 branch (worktree-phase-03) through its PR with a merge commit; the v1.0 close rides in it
+- After the merge, tag v1.0 on main (`git tag -a v1.0` on the merge commit) and push the tag
+- Start the next milestone with /gsd-new-milestone (v1.1, Phases 4-5)
+- Phase 9 (v1.0 tech-debt cleanup) is planned last, after every implemented phase

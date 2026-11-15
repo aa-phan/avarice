@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "UAT gap G-01-154 (test 154): live knowledge agent read 16 original staging/docs files instead of the .avarice-knowledge copies; all 16 denied outside-read-set; record has 9 document nodes (24 in the target run) with dropped 0; injected ADR-999 never read, so the exit-run fence check failed. goal: find_root_cause_only"
 created: 2026-11-05T00:18:13Z
 updated: 2026-11-05T00:18:13Z
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-15
+  status: diagnosed
 ---
 
 ## Current Focus
@@ -92,6 +96,7 @@ root_cause: |
   1. TRIGGER (nondeterministic, model): claude-haiku-5-5, told to build each Read path as "your working directory, then / and the file's path", sometimes drops the `.avarice-knowledge/` segment and reads `<staging>/docs/...`, `<staging>/.planning/codebase/TESTING.md`. Observed in 2 of 4 live runs of the split pass (rehearsal 5, UAT rehearsal) and absent in 2 (rehearsal 6, 01-19 target). Not a regression: rehearsal 5 pre-dates 01-21..24 and the quick tasks, every knowledge-related source file is identical to the commit the target ran on, and the readConfine rule that denies the originals was already first in the hook at 7ffc697/0d930f3.
   2. DESIGN (deterministic, no recovery): the chunk plan lists repository-relative paths that also exist as real files in staging (the originals), AVARICE does not hand the model the path to read, the hook's denial text is the bare "avarice: outside-read-set" with no allowed root, and the prompt says "If a file cannot be read, skip it and go on: do not stop." So after the first slip the model never corrects and repeats the wrong prefix in later batches (it wrote empty chunks 04 and 05 and finished with "done").
   3. NO COVERAGE ACCOUNTING (deterministic, code): a chunk counts as usable on JSON shape alone (`nodes: []` is usable); `usedFiles`/`knowledge.corpus` are derived from chunk shape, not from document nodes; validateKnowledgeGraph only needs one document node; classifyOutcome returns `progressed` before it counts hook denials; the stage ignores non-budget denials; the record's `dropped` holds only `{dangling, astDocument}`. So 16 of 25 documents without a node produced `active`, `dropped 0`, and a corpus claim that includes docs/, docs/adr/ and docs/decisions/. No test or spec requires per-document coverage; test knowledge-pass.test.ts:239 pins the opposite for an empty usable chunk.
+
 fix: ""
 verification: ""
 oracle_type: ""

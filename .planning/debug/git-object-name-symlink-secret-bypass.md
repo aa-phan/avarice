@@ -4,6 +4,10 @@ trigger: "G-02-H2 / UAT Test 2 (02-HUMAN-UAT.md): path part of a git object name
 created: 2026-11-07T00:00:00Z
 updated: 2026-11-07T00:00:00Z
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-15
+  status: diagnosed
 ---
 
 ## Current Focus

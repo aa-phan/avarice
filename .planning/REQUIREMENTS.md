@@ -11,6 +11,8 @@ Source: `docs/requirements.md` (PRD, precedence 1). IDs are the PRD's own (the i
 
 Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are the first milestone (v1.0).
 
+**v1.0 shipped 2026-11-15.** The 62 requirements mapped to Phases 1-3 are complete and checked below; a snapshot at close is archived in `milestones/v1.0-REQUIREMENTS.md`. This file stays live for v1.1 (Phases 4-5) and v2.0 (Phases 6-8), whose requirements are still proposals.
+
 ### Workflow (FR-1 to FR-11)
 
 - [x] **FR-1** [MVP]: A run starts from a manual brief (Markdown text or file) or a typed external task reference; a manual brief is sufficient on its own.
@@ -350,4 +352,4 @@ An earlier phase delivers part of a requirement that a later phase completes (th
 
 ---
 *Requirements defined: 2026-11-01*
-*Last updated: 2026-11-01 after initial definition*
+*Last updated: 2026-11-15 after v1.0 milestone close*
