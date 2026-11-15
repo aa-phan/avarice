@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Decisions, independent work and amendments",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -46,8 +46,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 3 of 8 · executing"
+    "label": "Advance to the next step (plan phase 4)",
+    "reason": "Phase 4 of 8 — needs a plan"
   },
-  "updated_at": "2026-11-14T22:38:02.364Z"
+  "updated_at": "2026-11-15T07:46:00.792Z"
 }

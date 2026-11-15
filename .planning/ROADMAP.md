@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Contained onboarding of one repository** - `avarice onboard` takes one existing repository to an active project record with GSD as the mapper, source read-only (completed 2026-11-05)
 - [x] **Phase 2: Contained unattended run of one work item** - `avarice start` takes one work item to `ready_for_review` or `blocked_on_decision` inside enforced containment (completed 2026-11-08)
-- [ ] **Phase 3: Decisions, independent work and amendments** - Runs continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish
+- [x] **Phase 3: Decisions, independent work and amendments** - Runs continue independent work around an open decision, take a validated answer, resume the paused GSD session and finish (completed 2026-11-15)
 
 **v1.1 MVP Completion**
 
@@ -213,7 +213,7 @@ Plans:
   5. Each work item carries a size and specification (derivations marked as derived) and gets its model from `modelBySize`; required checks run after every item, a newly failing check is charged to that item with bounded repair before a decision; subagents draw from the parent's budget and cannot exceed its authority
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans:** 73/73 plans executed (39 waves, with 31 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1; 03-70 halted on run 3's product defect (the unit's command list held the declared check test:e2e, which no gate judges), closed by gap plans 03-71 (only the checks the run executes are listed for the agent, the prompt names the others), 03-72 (run 3's no-spend reset and the owner's spend decision), and, because the ruling began a new D-26 epoch, 03-73 (run 2's attempt 4) and 03-74 (run 3's attempt 3) before run 1)
+**Plans:** 73/73 plans complete (39 waves, with 31 gap-closure plans; 03-30 superseded by the exit replanned under D-26 to D-35; 03-57 halted on run 2's product defect, closed by gap plans 03-61 to 03-63; 03-63 halted on run 2's second product defect (check environment missing from the unit's commands), closed by gap plans 03-64 and 03-65; D-29 re-decided as D-36 to D-39, so gap plans 03-66 to 03-68 add the per-epoch stop-loss, run 2's no-spend reset and its attempt 3; 03-58 halted on run 3's brief-harness-defect (no content-search route in the unit's sessions), closed by gap plans 03-69 (the launch line keeps the host's Grep and Glob tools) and 03-70 (run 3's attempt 2 of 2) before run 1; 03-70 halted on run 3's product defect (the unit's command list held the declared check test:e2e, which no gate judges), closed by gap plans 03-71 (only the checks the run executes are listed for the agent, the prompt names the others), 03-72 (run 3's no-spend reset and the owner's spend decision), and, because the ruling began a new D-26 epoch, 03-73 (run 2's attempt 4) and 03-74 (run 3's attempt 3) before run 1)
 
 Plans:
 **Wave 1**
@@ -469,7 +469,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 |-------|-----------|----------------|--------|-----------|
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
-| 3. Decisions, independent work and amendments | v1.0 | 73/73 | In Progress | - |
+| 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
 | 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
