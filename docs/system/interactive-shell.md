@@ -8,7 +8,7 @@ The shell opens when `avarice` has no arguments, standard input and standard out
 
 `TERM` takes no part in that decision. It only selects the input mode once the shell is open. The shell code loads only on this path, so no one-shot command pays for it.
 
-A second refusal sits inside the shell. When `AVARICE_RUN` is set it prints `avarice: the interactive shell does not open inside a run (AVARICE_RUN is set)` and returns 64. The dispatcher is the only caller and has already checked the variable, so from the command line this message is never reached. It is wired as a second gate and does not run in practice. Inside a contained run, bare `avarice` therefore gets the usage text, and the shell cannot become a route to any command. Both gates prevent: the shell never opens.
+A second refusal sits inside the shell. When `AVARICE_RUN` is set it prints `avarice: the interactive shell does not open inside a run (AVARICE_RUN is set)` and returns 64. The dispatcher is the only caller and has already checked the variable, so from the command line this message is never reached. It is wired as a second gate. Inside a contained run, bare `avarice` therefore gets the usage text, and the shell cannot become a route to any command.
 
 ## Two input modes
 
@@ -109,7 +109,7 @@ Other Ctrl combinations are ignored. Completion works only on the first word, an
 Each command-line entry that runs is recorded in `shell-history` in the data root, at the data root that [config-reference.md](config-reference.md) names. The file holds one entry per line, oldest first. It is created with mode 0600, and an existing file is tightened to 0600 on the next write, because a line can name a brief path or a run ID.
 
 - An entry is stored with escape sequences and every control character removed, and trimmed. An entry empty after that is not stored.
-- The cap is 1000 lines. A write that would pass the cap rewrites the file without its oldest lines through a temporary file in the same directory and renames it over the original, so a crash leaves the old file or the new one. A file longer than the cap is read as its last 1000 lines.
+- The cap is 1000 lines. A write that would pass the cap rewrites the file without its oldest lines. It writes a temporary file in the same directory and renames it over the original, so a crash leaves the old file or the new one. A file longer than the cap is read as its last 1000 lines.
 - The up arrow recalls the entries loaded at start plus those added in this session.
 - Entries are not deduplicated, and a line is stored as typed, including a leading `avarice`.
 - Only command-line entries are recorded. Menu choices (start, resume, status, inbox, watch, decide) are not, and neither are `quit` and `exit`.

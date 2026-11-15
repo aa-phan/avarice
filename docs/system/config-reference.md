@@ -272,7 +272,7 @@ The loop limits are prevention. At 25 searches in a row with no read, edit or wr
 | Staleness: commits | at most 25 commits past the onboarded revision outside `.avarice/` and `.planning/`; more refuses the start (`stale-commits`) |
 | Staleness: age | the oldest such commit at most 14 days old; older refuses the start (`stale-age`) |
 | Start refusal order | `revision-mismatch`, `not-descendant`, `stale-commits`, `stale-age`, `no-conventions`, `no-planning`; the first that applies is reported |
-| Brief file | 64 KiB; 4096 characters per line; title 1 to 200 characters; at most 128 items per list section; at most 20 acceptance criteria; `expectedDecisions` 0 to 1000 (format in [runs.md](runs.md)) |
+| Brief file | 64 KiB; 4096 characters per line; title 1 to 200 characters; at most 128 items per list section; at most 20 work items; at most 20 acceptance criteria; `expectedDecisions` 0 to 1000 (format in [runs.md](runs.md)) |
 | Conventions file | 262144 bytes read; 500 commits walked |
 | Run prompt | 32 KiB for the whole `/gsd-quick` prompt; the context pack is cut to fit, the contract text never is |
 | Context pack in a run | 4000 tokens |
@@ -380,7 +380,7 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 - `AVARICE_RUN` is read by the shell gate, `install-host`, `digest` and the owner commands (`contract amend`, `decide`, `cancel`, `schedule`). `start`, `supervise` and the other commands do not look at it.
 - Children differ in how they get `PATH`: git falls back to a fixed `PATH` only when the parent's is empty, while graphify and the host build their own `PATH` regardless of the parent.
 - A run host and a run's checks differ in home and temp. The host keeps the forwarded `HOME` and gets `TMPDIR` at `<scratch>/tmp`. Checks, install and list commands get both set to the scratch directory itself.
-- A check's `env` cannot change `CI`, `LANG` or the other sandbox names, although only the reserved names and prefixes listed above are refused at parse, and `CI`, `LANG` and the rest of the sandbox names are not. The sandbox value silently wins.
+- A check's `env` cannot change `CI`, `LANG` or the other sandbox names. Only the reserved names and prefixes listed above are refused at parse, so the sandbox names are accepted there and the sandbox value silently wins.
 - `AVARICE_GRAPHIFY_BIN` set to a bad path disables the `PATH` search.
 - Sandboxed supervisor commands (checks, install, list) deny reading the credential locations of the home directory (listed in [containment.md](containment.md#generated-settings-in-effect)), the data root and the three default AVARICE parent directories. They then allow back the run's own clone and scratch. A work root or config home placed elsewhere by an environment variable is not denied by name, except the data root.
 - The preset records values that no code reads back. They are the no-progress limit, the prohibited decision list, the tool classes, delivery, the notification digest list, and the GSD verifier, baseline and per-item settings of the verification list. Changing them would change only the policy revision.
