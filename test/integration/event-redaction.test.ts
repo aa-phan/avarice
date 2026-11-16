@@ -27,7 +27,7 @@ const GITHUB_TOKEN = `ghp_${'a1B2c3D4e5'.repeat(4).slice(0, 36)}`;
 const AWS_KEY = `AKIA${'IOSFODNN7EXAMPLE'}`;
 const PEM = ['-----BEGIN RSA PRIVATE', ' KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE', ' KEY-----'].join('');
 
-function appendThroughLedger(fx: HookFixture, data: unknown): void {
+function appendThroughLedger(fx: HookFixture, data: Record<string, unknown>): void {
   const opened = openDb(fx.ledgerPath);
   assert.ok(opened.ok);
   const ledger = new SqliteLedger(opened.value, (prefix) => `${prefix}x`);

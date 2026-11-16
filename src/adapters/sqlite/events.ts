@@ -3,9 +3,12 @@
 // (src/hook/pre-tool-use.ts), so the hook's rows continue the same chain.
 //   row_hash = sha256(prev_hash \n ts \n type \n (run_id or "") \n data_json), genesis prev_hash = 64 zeros.
 // The caller's transaction must be open (BEGIN IMMEDIATE): the previous hash is read inside it.
-// This module imports only node and the digest helpers, so the lean hook entry can load it.
+// This module imports only node, the digest helpers and the redactor (domain and the process redactor), so the lean hook entry can load it.
+// Event data is redacted before it is bounded and hashed (SEC-3): the hook and the ledger share the one redactor of the process.
 import type { DatabaseSync } from 'node:sqlite';
 import { canonicalJson, sha256Hex } from '../../domain/digest.ts';
+import { redactLeaves } from '../../domain/redactor.ts';
+import { processRedactor } from '../redaction/process-redactor.ts';
 
 export const GENESIS_HASH = '0'.repeat(64);
 export const MAX_EVENT_STRING = 1024;
@@ -57,7 +60,8 @@ export function boundedEventJson(data: unknown): string {
 }
 
 export function appendEventRow(db: DatabaseSync, ev: EventRowInput): EventRowReceipt {
-  const dataJson = boundedEventJson(ev.data);
+  // SEC-3: redact before bounding and hashing, so the stored text holds no secret and row_hash covers exactly what is stored.
+  const dataJson = boundedEventJson(redactLeaves(ev.data, processRedactor));
   const last = db.prepare('SELECT row_hash FROM events ORDER BY seq DESC LIMIT 1').get() as { row_hash: string } | undefined;
   const prevHash = last ? last.row_hash : GENESIS_HASH;
   const ts = new Date(ev.nowMs).toISOString();
