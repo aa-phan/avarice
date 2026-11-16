@@ -1,5 +1,7 @@
 // Application dependencies (SKELETON.md "Application").
 import type { IdPrefix } from '../domain/ids.ts';
+import type { ProfileNotify } from '../domain/notify-policy.ts';
+import type { Result } from '../domain/result.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
@@ -8,6 +10,7 @@ import type { GraphTool } from '../ports/graph-tool.ts';
 import type { EgressProxy } from '../ports/egress-proxy.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { Ledger } from '../ports/ledger.ts';
+import type { Notifier } from '../ports/notifier.ts';
 import type { RunSource } from '../ports/run-source.ts';
 import type { RunWorkspace } from '../ports/run-workspace.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
@@ -30,6 +33,16 @@ export interface ProfilePaths {
 export interface GsdProblem {
   found: string;
   admitted: string;
+}
+
+// What the notification service needs beyond the ledger and the clock (plan 03-16). Everything that touches the outside is injected: the
+// notifier (a port), the profile's notify settings (read from the owner's config file), the wait between delivery attempts and the
+// local minute of the day, so a test drives the backoff and the quiet hours with no real time passing.
+export interface NotifyDeps {
+  notifier: Notifier;
+  settings(): Result<ProfileNotify>;
+  sleep(ms: number): Promise<void>;
+  minuteOfDay(nowMs: number): number;
 }
 
 export interface AppDeps {
@@ -58,6 +71,9 @@ export interface AppDeps {
   runSource?: RunSource;
   runWorkspace?: RunWorkspace;
   egress?: EgressProxy;
+  // Local notification (plan 03-16, D-21, D-22). Present on a composed AppDeps that is not read-only; a hand-built one need not supply it,
+  // and a service that finds it absent notifies no one.
+  notify?: NotifyDeps;
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;

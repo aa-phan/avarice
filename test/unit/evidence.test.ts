@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { EVIDENCE_STATUSES, baselineDelta, evidenceStatusOf, mapAcceptance, revisionOf } from '../../src/domain/evidence.ts';
+import { EVIDENCE_STATUSES, baselineDelta, evidenceStatusOf, mapAcceptance, preExistingAtStart, revisionOf } from '../../src/domain/evidence.ts';
 import type { CheckOutcome, EvidenceRow } from '../../src/domain/evidence.ts';
 
 const A40 = 'a'.repeat(40);
@@ -133,6 +133,41 @@ describe('baselineDelta (D-12)', () => {
     assert.deepEqual(first, second);
     assert.deepEqual(baselineDelta(input), first);
     assert.deepEqual(first.blocking.map((b) => b.name), ['b', 'c']);
+  });
+});
+
+describe('preExistingAtStart (plan 03-61; D-12, D-26, D-27)', () => {
+  // The rule is baselineDelta's with head equal to base, so the list is what G2 would call pre-existing if the checks failed again.
+  const sameRule = (start: CheckOutcome[], required: string[], targets: string[]): string[] => baselineDelta({ base: start, head: start, required, targets }).preExisting;
+
+  it('is empty for no start rows', () => {
+    assert.deepEqual(preExistingAtStart([], ['format', 'test'], ['test']), []);
+    assert.deepEqual(sameRule([], ['format', 'test'], ['test']), []);
+  });
+
+  it('lists a required check that failed at the start and leaves out a target that failed', () => {
+    const start = outcomes({ format: 'failed', test: 'failed' });
+    assert.deepEqual(preExistingAtStart(start, ['test', 'format'], ['test']), ['format']);
+    assert.deepEqual(preExistingAtStart(start, ['test', 'format'], ['test']), sameRule(start, ['test', 'format'], ['test']));
+  });
+
+  it('lists the names sorted', () => {
+    assert.deepEqual(preExistingAtStart(outcomes({ lint: 'failed', format: 'failed', types: 'failed' }), ['lint', 'types', 'format'], []), ['format', 'lint', 'types']);
+  });
+
+  it('leaves out a required check that passed, was inconclusive or unavailable, was absent from the start rows, or is not required', () => {
+    const cases: Array<[CheckOutcome[], string[], string[]]> = [
+      [outcomes({ format: 'passed' }), ['format'], []],
+      [outcomes({ format: 'inconclusive' }), ['format'], []],
+      [outcomes({ format: 'unavailable' }), ['format'], []],
+      [outcomes({ test: 'failed' }), ['format', 'test'], []],
+      [outcomes({ format: 'failed' }), ['test'], []],
+    ];
+    for (const [start, required, targets] of cases) {
+      assert.deepEqual(preExistingAtStart(start, required, targets).filter((name) => name === 'format'), [], JSON.stringify(start));
+      assert.deepEqual(preExistingAtStart(start, required, targets), sameRule(start, required, targets), JSON.stringify(start));
+    }
+    assert.deepEqual(preExistingAtStart(outcomes({ format: 'failed', test: 'failed' }), ['test'], []), ['test'], 'a failed check that is not required (`format`) is not listed');
   });
 });
 

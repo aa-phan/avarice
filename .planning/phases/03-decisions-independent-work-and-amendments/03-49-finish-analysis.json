@@ -1,0 +1,196 @@
+{
+  "schema": 1,
+  "plan": "03-49",
+  "measuredAt": "2026-11-10T23:32:05Z",
+  "readOnly": "the owner's ledger was read through the read-only read model (createDeps readOnly); nothing in it, in the owner's portfolio or in any brief was written, answered, amended, cancelled or resumed. No model host was started and nothing was spent.",
+  "suite": "test/integration/run-finish-in-place.test.ts (scenarios P, U, N and Y; the fake run host plays the model, the CLI, supervisor, ledger, gates and git are the real ones)",
+  "ownerRun": {
+    "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
+    "state": "blocked_on_decision",
+    "reason": "decision",
+    "branch": "avarice/run_01M73RX3RF0ZJETYWVF52WFZ5B",
+    "baseRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+    "contract": {
+      "version": 1,
+      "digest": "sha256:f58da020d8ed8dad0dfad96dba557806f209b2bd749cfc3c9d98fb809f431486",
+      "write": ["src/lib/dates.ts", "tests/unit/dates.test.ts", "src/lib/copy.ts", "tests/unit/copy.test.ts", "src/components/ui/useCopyEmail.ts"],
+      "create": ["src/lib/dates.ts", "tests/unit/dates.test.ts", "src/lib/copy.ts", "tests/unit/copy.test.ts", "src/components/ui/useCopyEmail.ts"],
+      "protected": [
+        ".avarice/**", ".github/**", ".claude/**", ".git/**", "package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", ".gitignore", "CLAUDE.md",
+        "scripts/**", "tests/e2e/**", "tests/fixtures/**", "tests/setup.ts", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tsconfig.json", "tsconfig.app.json",
+        "tsconfig.node.json", "tsconfig.scripts.json", "tsconfig.test.json", ".oxlintrc.json", ".oxlintignore", "prettier.config.mjs", ".prettierignore"
+      ],
+      "requiredChecks": ["typecheck", "lint", "format:check", "test", "check:case", "check:colors", "check:contrast", "build", "check:meta", "check:budget", "check:no-phone", "check:images"],
+      "targetChecks": ["test"],
+      "declaredChecksNotRequired": ["test:e2e"],
+      "testE2eRequired": false,
+      "testE2eRunBySupervisor": false,
+      "testE2eRunBySupervisorWhy": "src/app/checks.ts checksToRun runs only the required checks and the brief's target checks; test:e2e is neither, so the run holds no evidence for it and nothing in the run judges the e2e spec"
+    },
+    "decisionB": {
+      "decisionId": "dec_01M73S9TGB7KVJZWGVCZ1H8CQM",
+      "state": "answered",
+      "answer": "2",
+      "answeredBy": "owner:aphan",
+      "answerChannel": "terminal",
+      "contractVersion": 1,
+      "affectedItems": ["B", "C"],
+      "options": [
+        { "key": "1", "label": "`Couldn’t copy. Email me at <address>.`" },
+        { "key": "2", "label": "`Couldn’t copy the address. Opening your mail app to <address>.`" }
+      ]
+    },
+    "decisionC": {
+      "decisionId": "dec_01M73THARNM0VENR94QDX62BJ3",
+      "state": "open",
+      "class": "acceptance",
+      "contractVersion": 1,
+      "affectedItems": ["C"],
+      "options": [
+        { "key": "1", "kind": "choice", "label": "Yes, allow the one-line e2e change and re-verify." },
+        { "key": "2", "kind": "choice", "label": "No, leave the e2e spec failing and let you handle it separately." }
+      ],
+      "consequenceKeys": ["1", "2"],
+      "carriesAmendCommand": false,
+      "amendKeyOffered": false
+    },
+    "gateRows": [
+      "G0:-:v1:passed",
+      "G1:A:v1:passed",
+      "G2:A:v1:passed",
+      "G1:B:v1:passed",
+      "G2:B:v1:passed"
+    ],
+    "items": [["A", "done", 1], ["B", "done", 2], ["C", "blocked_on_decision", 1]],
+    "budgets": { "costUsd": { "used": 1.062910355, "limit": 4.95 }, "invocations": { "used": 4, "limit": 7 }, "subagentsTotal": { "used": 13, "limit": 30 }, "toolCalls": { "used": 167, "limit": 1200 } }
+  },
+  "scenarios": {
+    "shape": "three items: A (src/slug.ts) and B (src/helper.ts) done with one commit each, C (depends on B) blocked on one open pause-origin acceptance decision at contract v1, affecting C only, options 1 'Yes, allow the one-line e2e change and re-verify' and 2 'No, leave the e2e spec failing and let you handle it separately'. Conventions write src/**, test/**, tests/unit/** and protect tests/e2e/** and scripts/**; the declared check `e2e` is not required. The brief writes src/** and test/**.",
+    "P": {
+      "what": "the owner adds a protected path to the write set",
+      "commands": [
+        {
+          "argv": "contract amend <run> --add-write tests/e2e/x.spec.ts --reason 'the e2e spec asserts the old toast text'",
+          "exit": 64,
+          "stderr": "avarice contract: invalid add-write: tests/e2e/x.spec.ts is a protected path",
+          "stdout": "",
+          "confirmationAsked": false
+        },
+        { "argv": "contract amend <run> --add-write tests/e2e/copy-email.spec.ts ...", "exit": 64, "stderr": "invalid add-write: tests/e2e/copy-email.spec.ts is a protected path" },
+        { "argv": "contract amend <run> --add-write tests/e2e/** ...", "exit": 64, "stderr": "invalid add-write: tests/e2e/** is a protected path" },
+        {
+          "argv": "contract amend <run> --add-write other/place.ts ...",
+          "exit": 64,
+          "stderr": "avarice contract: invalid add-write: other/place.ts is not inside the write set of the repository conventions: change the conventions and start a new run to write there"
+        }
+      ],
+      "endState": "contract stays at version 1; the contracts, decisions, gate rows, evidence rows, attempts, run row and event count are identical before and after; the decision stays open; no supervisor ran a unit (three attempts, those of the start); `decide <C's decision>` on a terminal lists keys 1 and 2 and no amend key",
+      "exitCodeVersusPlan": "the plan expected exit 3; the built command exits 64 (EXIT_USAGE): an `invalid` refusal of the domain maps to 64 and only a `conflict` (a run that ended, a contract that moved, a decision no longer open) maps to 3 (src/cli/commands/contract.ts fail()). The suite pins 64; nothing was written either way."
+    },
+    "U": {
+      "what": "the owner adds an unprotected path inside the conventions' write set, then answers",
+      "commands": [
+        {
+          "argv": "contract amend <run> --add-write tests/unit/status-extra.ts --reason 'the e2e spec asserts the old toast text' (answer y)",
+          "exit": 0,
+          "stdout": [
+            "run <run>: amending contract v1 to v2",
+            "files.write: +tests/unit/status-extra.ts",
+            "files.create: +tests/unit/status-extra.ts",
+            "invalidates: scope-conformance",
+            "stale gates: G2",
+            "contract v2 recorded",
+            "appended 0 stale evidence row(s) and 1 stale gate row(s)"
+          ],
+          "confirmation": "apply contract v2? [y/N] "
+        },
+        {
+          "argv": "decide <C's decision, opened at v1> 1",
+          "exit": 3,
+          "stdout": [
+            "the run changed since decision <old> was asked (contract v1 -> v2); your answer was not applied",
+            "decision <successor> asks the same question on the new state, with your answer kept as context",
+            "answer it with: avarice decide <successor> <option-key>"
+          ]
+        },
+        { "argv": "decide <successor> 1 --wait", "exit": 0, "stdout": ["decision <successor> answered (1)", "run <run>: supervisor started", "run <run>: ready_for_review"] }
+      ],
+      "measured": {
+        "contractVersionsAfterAmend": [1, 2],
+        "v2": { "authorizedBy": "owner:<os user>", "reason": "the e2e spec asserts the old toast text", "diffPaths": ["files.write", "files.create"] },
+        "firstAnswerStale": true,
+        "oldDecision": { "state": "stale", "answer": "1", "answerKept": true, "contractVersion": 1 },
+        "successor": { "state": "answered after the owner's second answer", "contractVersion": 2, "supersedesOld": true },
+        "ownerMustAnswerSuccessor": true,
+        "staleGateRowsAppended": ["G2:B:v2:failed:stale-after-amendment"],
+        "staleGateRowsNote": "one row, for G2: the row names the item of the latest G2 row at the time (B); no G4 row stood passed yet, so none was appended; A's rows are not restated; no evidence row went stale (a scope change stales no evidence)",
+        "gateRowsAfterTheRun": ["G0:-:v1:passed", "G1:A:v1:passed", "G2:A:v1:passed", "G1:B:v1:passed", "G2:B:v1:passed", "G2:B:v2:failed:stale-after-amendment", "G1:C:v2:passed", "G2:C:v2:passed", "G4:-:v2:passed"],
+        "staleRowBlocksReadyForReview": false,
+        "attempts": ["A:initial:committed", "B:initial:committed", "C:initial:blocked:decision", "C:resume:handed-off"],
+        "endState": "ready_for_review at contract v2; C committed with src/status.ts and tests/unit/status-extra.ts; the stale G2 row stays as history and C's later G2 and the run's G4 passed at v2"
+      }
+    },
+    "N": {
+      "what": "the owner answers option 2 (leave the protected spec alone)",
+      "commands": [{ "argv": "decide <C's decision> 2 --wait", "exit": 0, "stdout": ["decision <C's decision> answered (2)", "run <run>: supervisor started", "run <run>: ready_for_review"] }],
+      "endState": "ready_for_review at contract v1, no amendment; attempts A:initial, B:initial, C:initial(blocked:decision), C:resume(handed-off); gates G1 and G2 passed for A, B and C, G4 passed; C's commit holds only src/status.ts; the required check `test` passed for C",
+      "declaredCheckNotRequired": {
+        "ranBySupervisor": false,
+        "evidenceRowsNamingIt": 0,
+        "runByHandInDeliveredTree": { "exit": 1, "stderr": "e2e: src/status.ts no longer says 404" },
+        "meaning": "the run reaches ready_for_review without ever running the declared check that is not required; the delivered tree fails that check when it is run by hand"
+      }
+    },
+    "Y": {
+      "what": "the owner answers option 1 (allow the e2e change); nothing is amended",
+      "commands": [{ "argv": "decide <C's decision> 1 --wait", "exit": 0 }],
+      "measured": {
+        "contractVersions": [1],
+        "hookDenial": { "rule": "protected-path", "tool": "Write", "decision": "deny" },
+        "protectedSpecAtPinEqualsDeliveredTree": true
+      },
+      "limit": "the answer widens nothing: the hook refuses any write to tests/e2e/** whatever the owner answers. The fake unit goes on after the refusal and finishes, so the end state here says nothing about what a live model would do after its write is refused; the live outcome of this answer is not predicted."
+    }
+  },
+  "inPlaceOptions": [
+    {
+      "id": "answer-2-in-place",
+      "availableByMeasurement": true,
+      "ownerCommands": [
+        "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice decide dec_01M73THARNM0VENR94QDX62BJ3 2"
+      ],
+      "whatTheRunWillDo": "decide records the answer; the detached supervisor resumes item C's own session under the recorded host configuration directory (attempt reason resume); C finishes inside its write set; G1, G2 and G4 judge it; the run ends ready_for_review (scenario N). The run has 3.8871 USD of its 4.95 USD cap and 3 invocations of 7 left.",
+      "deliveredBranch": "commits for A, B and C. tests/e2e/copy-email.spec.ts is unchanged and fails against the new toast text; test:e2e is not a required or target check, so the run never runs it and nothing in the evidence says it fails",
+      "unmeasuredOffline": "whether the live C unit, resumed after answer 2, ends with a VERIFICATION that G2 accepts: its verifier status was gaps_found for the same e2e gap before the question",
+      "relaxRecord": "D-03 is relaxed for run 1 by one extra owner-answered decision (dec_01M73THARNM0VENR94QDX62BJ3), recorded with the relax subcommand of the exit tools"
+    },
+    {
+      "id": "amend-unprotected-path",
+      "availableByMeasurement": false,
+      "availableWhy": "admitted only for a path inside the conventions' write set and outside the protected globs (scenario U); run 1's need, tests/e2e/copy-email.spec.ts, is protected (scenario P)",
+      "ownerCommands": [
+        "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice contract amend run_01M73RX3RF0ZJETYWVF52WFZ5B --add-write <an unprotected path inside src/**, tests/unit/** or docs/**> --reason <why>",
+        "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice decide dec_01M73THARNM0VENR94QDX62BJ3 <option-key>",
+        "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice decide <the successor decision the previous command names> <option-key>"
+      ],
+      "whatTheRunWillDo": "the amendment writes contract v2; the first answer is stale (exit 3) and opens a successor at v2 with the answer kept as context; the owner answers the successor; the run reaches ready_for_review (scenario U); one stale G2 row is appended and does not block",
+      "deliveredBranch": "only useful where the missing write is an unprotected path; it is not the e2e spec"
+    },
+    {
+      "id": "answer-1",
+      "availableByMeasurement": true,
+      "ownerCommands": [
+        "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 /Users/aphan/avarice/.claude/worktrees/phase-03/bin/avarice decide dec_01M73THARNM0VENR94QDX62BJ3 1"
+      ],
+      "whatTheRunWillDo": "the answer applies and C resumes, but its write to tests/e2e/copy-email.spec.ts is denied by the hook (rule protected-path, scenario Y); the answer widens nothing",
+      "deliveredBranch": "not predicted: the live outcome depends on what the unit does after its write is refused; it cannot deliver the e2e change"
+    }
+  ],
+  "notPossible": {
+    "request": "contract amend run_01M73RX3RF0ZJETYWVF52WFZ5B --add-write tests/e2e/copy-email.spec.ts --reason ...",
+    "result": "refused before the confirmation, exit 64: invalid add-write: tests/e2e/copy-email.spec.ts is a protected path",
+    "sourceLine": "src/domain/amendment.ts:175 (`if (withinAny(glob.value, next.files.protected)) return invalid('add-write', `${glob.value} is a protected path`)`); the contract's protected list holds tests/e2e/** (read from the owner's ledger) and the conventions' protected globs also hold it (portfolio .avarice/config.json at 9f63d91)",
+    "alsoRefusedBy": "src/domain/amendment.ts:176-181: a path outside the conventions' write set is refused with 'change the conventions and start a new run to write there' (assumption A8)",
+    "exitCodeMapping": "src/cli/commands/contract.ts fail(): `invalid` and `not_found` exit 64, `conflict` exits 3, anything else 70"
+  }
+}

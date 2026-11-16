@@ -1,6 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { sandboxSetup } from '../../src/app/checks.ts';
+import type { AppDeps } from '../../src/app/deps.ts';
+import type { RunRow } from '../../src/ports/ledger.ts';
+// A namespace import so a name this file reads from the module that does not exist yet fails its own test, not every test of the file.
+import * as conventionsApi from '../../src/domain/conventions.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { digestOf } from '../../src/domain/digest.ts';
 import { parseBrief } from '../../src/domain/brief.ts';
@@ -11,10 +19,14 @@ import {
   BUDGET_OVERRIDE_NAMES,
   ROUTINE_PRESET,
   ROUTINE_POLICY,
+  checkAgentCommand,
   checkG0Static,
   compileRunContract,
+  itemCandidateTerms,
+  planNamedSpec,
+  scaledBudgetLimits,
 } from '../../src/domain/run-contract.ts';
-import type { RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
+import type { IndexFacts, RunCompileInput, RunContract } from '../../src/domain/run-contract.ts';
 
 function unwrap<T>(r: Result<T>): T {
   if (!r.ok) throw new Error(`expected ok, got ${JSON.stringify(r.error)}`);
@@ -90,10 +102,10 @@ describe('run contract tracer: a brief and conventions compile into a routine co
     assert.equal(contract.intent.workItems[0]?.model, 'sonnet');
     assert.equal(contract.workspace.branch, `avarice/${RUN_ID}`);
     assert.match(contract.workspace.branch, /^avarice\/run_/);
-    assert.equal(contract.budgets.wallClockMinutes, 60);
+    assert.equal(contract.budgets.wallClockMinutes, 120);
     assert.equal(contract.budgets.invocations, 3);
     assert.equal(contract.budgets.toolCalls, 400);
-    assert.deepEqual(contract.budgets.costUsd, { perInvocation: 2, perRun: 5, exactness: 'estimated' });
+    assert.deepEqual(contract.budgets.costUsd, { perInvocation: 2, perRun: 10, exactness: 'estimated' });
     assert.equal(digest, digestOf(contract));
   });
 
@@ -162,16 +174,16 @@ describe('compileRunContract: every RC-1 field exists on a compiled contract', (
 
   it('carries the preset limits with their recorded derivations (D-13)', () => {
     const { budgets } = contract;
-    assert.equal(budgets.wallClockMinutes, 60);
+    assert.equal(budgets.wallClockMinutes, 120);
     assert.equal(budgets.invocations, 3);
     assert.equal(budgets.toolCalls, 400);
     assert.equal(budgets.subagentsConcurrent, 2);
     assert.equal(budgets.subagentsTotal, 10);
     assert.equal(budgets.costUsd.perInvocation, 2);
-    assert.equal(budgets.costUsd.perRun, 5);
+    assert.equal(budgets.costUsd.perRun, 10);
     assert.equal(budgets.costUsd.exactness, 'estimated');
-    assert.equal(budgets.repairAttemptsPerCheck, 0);
-    assert.match(budgets.repairAttemptsReason, /no repair/);
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+    assert.match(budgets.repairAttemptsReason, /one repair invocation.*repeated_failure/);
     assert.equal(budgets.invocationsDerivation.total, budgets.invocations);
     assert.equal(budgets.subagentsDerivation.total, budgets.subagentsTotal);
     assert.equal(budgets.subagentsDerivation.perUnit.total * budgets.subagentsDerivation.rounds, budgets.subagentsTotal);
@@ -316,13 +328,13 @@ describe('compileRunContract: budgets only go down (RC-5)', () => {
     assert.equal(budgets.subagentsTotal, 5);
     assert.equal(budgets.subagentsConcurrent, 1);
     assert.equal(budgets.costUsd.perInvocation, 1.5);
-    assert.equal(budgets.costUsd.perRun, 5);
+    assert.equal(budgets.costUsd.perRun, 10);
     assert.equal(compile({ budgetOverrides: { toolCalls: 400, wallClockMinutes: 60 } }).budgets.toolCalls, 400);
   });
 
   it('refuses a value above the preset with field budget.<name>', () => {
     const above: Record<string, number> = {
-      wallClockMinutes: 61, invocations: 4, toolCalls: 401, subagentsTotal: 11, subagentsConcurrent: 3, costUsdPerInvocation: 2.01, costUsdPerRun: 6,
+      wallClockMinutes: 121, invocations: 4, toolCalls: 401, subagentsTotal: 11, subagentsConcurrent: 3, costUsdPerInvocation: 2.01, costUsdPerRun: 11,
     };
     for (const [name, value] of Object.entries(above)) {
       assert.equal(refusal({ budgetOverrides: { [name]: value } }).field, `budget.${name}`, name);
@@ -521,5 +533,478 @@ describe('domain purity (NFR-3)', () => {
     const b = unwrap(compileRunContract(inputFor()));
     assert.equal(a.digest, b.digest);
     assert.equal(a.contract.compiledAt, NOW);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Work items (D-06, D-10): the compiler emits one work item per brief item, each with its own acceptance, size and model.
+// ---------------------------------------------------------------------------------------------------------------------
+export function itemsBrief(items: unknown[], extraAcceptance: string[] = [], front: string[] = []): Brief {
+  const lines = ['---', 'title: Two items', ...front, `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+  lines.push('## Acceptance criteria', '- AC1: first | verifiedBy: check:test', '- AC2: second | verifiedBy: check:test', ...extraAcceptance);
+  lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+  return loadBrief(lines.join('\n'));
+}
+
+export const TWO_ITEM_LIST = [
+  { id: 'A', title: 't1', dependsOn: [], size: 'small', acceptance: ['AC1'] },
+  { id: 'B', title: 't2', dependsOn: ['A'], model: 'opus', acceptance: ['AC2'] },
+];
+
+describe('compileRunContract: a two-item brief compiles to two work items (tracer)', () => {
+  it('gives A (small, haiku from modelBySize) and B (medium derived, opus from the brief), each with its acceptance', () => {
+    const { workItems } = compile({ brief: itemsBrief(TWO_ITEM_LIST) }).intent;
+    assert.deepEqual(workItems.map((w) => w.id), ['A', 'B']);
+    const [a, b] = workItems;
+    assert.equal(a?.size, 'small');
+    assert.equal(a?.model, 'haiku');
+    assert.equal(a?.modelSource, 'modelBySize');
+    assert.deepEqual(a?.acceptance, ['AC1']);
+    assert.deepEqual(a?.dependsOn, []);
+    assert.equal(a?.task, 't1');
+    assert.equal(b?.size, 'medium');
+    assert.ok(b?.spec.derived.includes('size'), 'a defaulted size is named in spec.derived');
+    assert.ok(!a?.spec.derived.includes('size'), 'a given size is not derived');
+    assert.equal(b?.model, 'opus');
+    assert.equal(b?.modelSource, 'brief');
+    assert.deepEqual(b?.dependsOn, ['A']);
+    assert.deepEqual(b?.acceptance, ['AC2']);
+  });
+
+  it('compiles a brief without items to the single item A that carries every criterion', () => {
+    const { workItems } = compile({
+      brief: briefWith({ acceptance: ['- AC1: one | verifiedBy: check:test', '- AC2: two | verifiedBy: check:test'] }),
+    }).intent;
+    assert.equal(workItems.length, 1);
+    assert.equal(workItems[0]?.id, 'A');
+    assert.deepEqual(workItems[0]?.acceptance, ['AC1', 'AC2']);
+    assert.deepEqual(workItems[0]?.dependsOn, []);
+  });
+
+  it('writes contractVersion as a number an amendment can raise', () => {
+    const { contract } = unwrap(compileRunContract(inputFor()));
+    assert.equal(typeof contract.contractVersion, 'number');
+    assert.equal(contract.contractVersion, 1);
+  });
+});
+
+describe('compileRunContract: spec files stay inside the run write set (RC-7, T-03-05)', () => {
+  const specItems = (a: unknown, b: unknown): unknown[] => [
+    { id: 'A', title: 't1', dependsOn: [], acceptance: ['AC1'], ...(a as object) },
+    { id: 'B', title: 't2', dependsOn: [], acceptance: ['AC2'], ...(b as object) },
+  ];
+
+  it('accepts two items whose explicit spec files overlap', () => {
+    const { workItems } = compile({
+      brief: itemsBrief(specItems({ spec: { files: ['src/lib/copy.ts', 'src/shared/**'] } }, { spec: { files: ['src/shared/**'] } })),
+    }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/lib/copy.ts', 'src/shared/**']);
+    assert.deepEqual(workItems[1]?.spec.files, ['src/shared/**']);
+    assert.ok(!workItems[0]?.spec.derived.includes('files'), 'an explicit field is not derived');
+    assert.ok(workItems[0]?.spec.derived.includes('symbols'));
+  });
+
+  it('refuses src-evil/** under src/** and a glob outside the write set with field brief.items[n].spec.files', () => {
+    for (const glob of ['src-evil/**', 'src-evil/x.ts', 'srcx', 'docs/readme.md', '**']) {
+      const r = refusal({ brief: itemsBrief(specItems({}, { spec: { files: [glob] } })) });
+      assert.equal(r.field, 'brief.items[1].spec.files', glob);
+    }
+  });
+
+  it('refuses a spec file on a protected path with field brief.items[n].spec.files', () => {
+    const custom = conventionsWith({ paths: { write: ['src/**'], protected: ['src/generated/**'], artifacts: [] } });
+    const r = refusal({ conventions: custom, brief: itemsBrief(specItems({ spec: { files: ['src/generated/api.ts'] } }, {})) });
+    assert.equal(r.field, 'brief.items[0].spec.files');
+    assert.match(r.reason, /protected/);
+  });
+
+  it('refuses an item whose explicit spec.files is empty before it reaches the compiler (an item must be allowed to write something)', () => {
+    const parsed = parseBrief(
+      ['---', 'title: x', `items: ${JSON.stringify(specItems({ spec: { files: [] } }, {}))}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: a | verifiedBy: check:test', '- AC2: b | verifiedBy: check:test', ''].join('\n'),
+      { kind: 'file', id: 'b.md' },
+    );
+    assert.equal(parsed.ok, false);
+    if (!parsed.ok) assert.equal((parsed.error as { field: string }).field, 'brief.items[0].spec.files');
+  });
+
+  it('keeps work items in declaration order, so the same brief gives the same digest', () => {
+    const items = specItems({}, {});
+    const a = unwrap(compileRunContract(inputFor({ brief: itemsBrief(items) })));
+    const b = unwrap(compileRunContract(inputFor({ brief: itemsBrief(items) })));
+    assert.equal(a.digest, b.digest);
+    assert.deepEqual(a.contract.intent.workItems.map((w) => w.id), ['A', 'B']);
+    const reversed = unwrap(compileRunContract(inputFor({ brief: itemsBrief([...items].reverse()) })));
+    assert.deepEqual(reversed.contract.intent.workItems.map((w) => w.id), ['B', 'A']);
+  });
+
+  it('records modelSource brief when an explicit model equals the size map value, and haiku/sonnet/opus from the size otherwise', () => {
+    const { workItems } = compile({
+      brief: itemsBrief(specItems({ model: 'sonnet' }, { size: 'large' })),
+    }).intent;
+    assert.equal(workItems[0]?.model, 'sonnet');
+    assert.equal(workItems[0]?.modelSource, 'brief');
+    assert.equal(workItems[0]?.size, 'medium');
+    assert.equal(workItems[1]?.model, 'opus');
+    assert.equal(workItems[1]?.modelSource, 'modelBySize');
+    assert.ok(!workItems[1]?.spec.derived.includes('size'));
+  });
+});
+
+describe('checkG0Static: a decision: reference never stands alone (D-02)', () => {
+  it('refuses a criterion whose only references are decision: forms, naming the criterion', () => {
+    const r = refusal({ brief: briefWith({ acceptance: ['- AC1: copy is the owner\'s choice | verifiedBy: decision:fallback-wording'] }) });
+    assert.equal(r.field, 'g0');
+    assert.match(r.reason, /acceptance-verified-by/);
+    assert.match(r.reason, /AC1 needs a check, test or diff reference beside decision:/);
+  });
+
+  it('accepts decision: beside a check, test or diff reference', () => {
+    const brief = briefWith({ acceptance: ['- AC1: copy | verifiedBy: decision:fallback-wording, check:test'] });
+    assert.deepEqual(checkG0Static(compile({ brief })), []);
+    const diff = briefWith({ acceptance: ['- AC1: copy | verifiedBy: decision:fallback-wording, diff:src/a.ts unchanged'], targets: [] });
+    assert.deepEqual(checkG0Static(compile({ brief: diff })), []);
+  });
+
+  it('flags the criterion from checkG0Static directly', () => {
+    const contract = compile();
+    const only: RunContract = { ...contract, intent: { ...contract.intent, acceptance: [{ id: 'AC9', text: 'x', verifiedBy: ['decision:k'] }] } };
+    const failures = checkG0Static(only);
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0]?.rule, 'acceptance-verified-by');
+    assert.match(failures[0]?.detail ?? '', /AC9 needs a check, test or diff reference beside decision:/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Scaled routine budgets (D-11, D-12, owner decision 1, CON-15) and spec derivation from index facts (RC-7, D-07 stage 1).
+// ---------------------------------------------------------------------------------------------------------------------
+function threeItemBrief(): Brief {
+  const items = [
+    { id: 'A', title: 't1', dependsOn: [], acceptance: ['AC1'] },
+    { id: 'B', title: 't2', dependsOn: ['A'], acceptance: ['AC2'] },
+    { id: 'C', title: 't3', dependsOn: ['B'], acceptance: ['AC3'] },
+  ];
+  const lines = ['---', 'title: Three items', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+  lines.push('## Acceptance criteria');
+  for (const n of [1, 2, 3]) lines.push(`- AC${n}: criterion ${n} | verifiedBy: check:test`);
+  lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+  return loadBrief(lines.join('\n'));
+}
+
+describe('scaledBudgetLimits: the routine limits grow with the item count (D-12)', () => {
+  it('gives the Phase 2 single-item values for one item, with a cost and wall clock that do not scale', () => {
+    const one = scaledBudgetLimits(1);
+    assert.equal(one.invocations, 3);
+    assert.equal(one.subagentsTotal, 10);
+    assert.equal(one.toolCalls, 400);
+    assert.equal(one.wallClockMinutes, 120);
+    assert.equal(one.costUsd.perRun, 10);
+    assert.equal(one.costUsd.perInvocation, 2);
+  });
+
+  it('gives items x 2 + 1 invocations, items x 10 subagents and items x 400 tool calls for three items', () => {
+    const three = scaledBudgetLimits(3);
+    assert.equal(three.invocations, 7);
+    assert.equal(three.subagentsTotal, 30);
+    assert.equal(three.toolCalls, 1200);
+    assert.equal(three.wallClockMinutes, 120);
+    assert.equal(three.costUsd.perRun, 10);
+    assert.equal(three.costUsd.perInvocation, 2);
+  });
+
+  it('records the invocation formula and a subagent derivation scaled by the item count', () => {
+    const three = scaledBudgetLimits(3);
+    assert.equal(three.invocationsDerivation.formula, '3 item units + 3 retries or repairs + 1 resume = 7');
+    assert.equal(three.invocationsDerivation.total, 7);
+    assert.equal(three.subagentsDerivation.total, 30);
+    assert.equal(three.subagentsDerivation.units, 3);
+    assert.equal(three.subagentsDerivation.perUnit.total * three.subagentsDerivation.rounds * three.subagentsDerivation.units, 30);
+    assert.match(three.subagentsDerivation.formula, /3 items/);
+  });
+
+  it('carries the derivations onto the compiled budgets of a three-item brief', () => {
+    const { budgets } = compile({ brief: threeItemBrief() });
+    assert.equal(budgets.invocations, 7);
+    assert.equal(budgets.subagentsTotal, 30);
+    assert.equal(budgets.toolCalls, 1200);
+    assert.equal(budgets.invocationsDerivation.total, 7);
+    assert.equal(budgets.subagentsDerivation.total, 30);
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+  });
+});
+
+describe('compileRunContract: overrides only lower the scaled limits (CON-15)', () => {
+  it('refuses invocations=8 for three items and accepts 5; refuses 4 for one item', () => {
+    const r = refusal({ brief: threeItemBrief(), budgetOverrides: { invocations: 8 } });
+    assert.equal(r.field, 'budget.invocations');
+    assert.match(r.reason, /7/);
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { invocations: 5 } }).budgets.invocations, 5);
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { invocations: 7 } }).budgets.invocations, 7);
+    assert.equal(refusal({ budgetOverrides: { invocations: 4 } }).field, 'budget.invocations');
+  });
+
+  it('refuses a subagent or tool-call override above the scaled limit and accepts one at or below it', () => {
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { subagentsTotal: 31 } }).field, 'budget.subagentsTotal');
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { toolCalls: 1201 } }).field, 'budget.toolCalls');
+    assert.equal(compile({ brief: threeItemBrief(), budgetOverrides: { subagentsTotal: 30, toolCalls: 1200 } }).budgets.toolCalls, 1200);
+  });
+
+  it('refuses costUsdPerRun=11 for a one-item brief and accepts 6; cost does not scale with items', () => {
+    assert.equal(refusal({ budgetOverrides: { costUsdPerRun: 11 } }).field, 'budget.costUsdPerRun');
+    assert.equal(compile({ budgetOverrides: { costUsdPerRun: 6 } }).budgets.costUsd.perRun, 6);
+    assert.equal(refusal({ brief: threeItemBrief(), budgetOverrides: { costUsdPerRun: 11 } }).field, 'budget.costUsdPerRun');
+    assert.equal(compile({ brief: threeItemBrief() }).budgets.costUsd.perRun, 10);
+  });
+
+  it('keeps the repair limit at 1 with a reason that names one repair invocation then repeated_failure', () => {
+    const { budgets } = compile();
+    assert.equal(budgets.repairAttemptsPerCheck, 1);
+    assert.match(budgets.repairAttemptsReason, /one repair invocation/);
+    assert.match(budgets.repairAttemptsReason, /repeated_failure/);
+    assert.equal(refusal({ budgetOverrides: { repairAttemptsPerCheck: 3 } }).field, 'budget.repairAttemptsPerCheck');
+  });
+});
+
+describe('compileRunContract: spec derivation from index facts (RC-7, D-07 stage 1)', () => {
+  const FACTS: IndexFacts = {
+    files: ['src/lib/copy.ts', 'src/lib/dates.ts', 'scripts/tool.ts', 'docs/guide.md'],
+    symbolsByFile: { 'src/lib/copy.ts': ['copyText', 'otherThing'], 'src/lib/dates.ts': ['formatDate'] },
+  };
+
+  function briefWithText(title: string, ac1: string, ac2 = 'second'): Brief {
+    const items = [
+      { id: 'A', title, dependsOn: [], acceptance: ['AC1'] },
+      { id: 'B', title: 'plain', dependsOn: [], acceptance: ['AC2'] },
+    ];
+    const lines = ['---', 'title: Facts', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'Do the thing.', ''];
+    lines.push('## Acceptance criteria', `- AC1: ${ac1} | verifiedBy: check:test`, `- AC2: ${ac2} | verifiedBy: check:test`);
+    lines.push('', '## Write', '- src/**', '', '## Target checks', '- test', '');
+    return loadBrief(lines.join('\n'));
+  }
+
+  it('derives files and symbols the item text names, each named in spec.derived', () => {
+    const { workItems } = compile({ brief: briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works'), indexFacts: FACTS }).intent;
+    const a = workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts']);
+    assert.deepEqual(a?.spec.symbols, ['copyText']);
+    for (const field of ['files', 'symbols', 'configKeys', 'references']) assert.ok(a?.spec.derived.includes(field), field);
+  });
+
+  it('reads the acceptance text too, and sorts and de-duplicates each derived list', () => {
+    const brief = briefWithText('Touch src/lib/dates.ts and `src/lib/copy.ts`', 'Also `src/lib/dates.ts`, `formatDate`, `copyText` and `src/lib/copy.ts`.');
+    const a = compile({ brief, indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts', 'src/lib/dates.ts']);
+    assert.deepEqual(a?.spec.symbols, ['copyText', 'formatDate']);
+  });
+
+  it('gives an item that names no known path the run write set, marked derived', () => {
+    const { workItems } = compile({ brief: briefWithText('Do something', 'It works'), indexFacts: FACTS }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/**']);
+    assert.deepEqual(workItems[0]?.spec.symbols, []);
+    assert.ok(workItems[0]?.spec.derived.includes('files'));
+    assert.deepEqual(workItems[1]?.spec.files, ['src/**']);
+  });
+
+  it('does not take a named file that is outside the run write set', () => {
+    const { workItems } = compile({ brief: briefWithText('Edit `scripts/tool.ts`', 'It works'), indexFacts: FACTS }).intent;
+    assert.deepEqual(workItems[0]?.spec.files, ['src/**']);
+  });
+
+  it('derives references from a .md path under the write set or docs/, and config keys from dotted lower-case spans', () => {
+    const brief = briefWithText('Update `docs/guide.md` and `notes.md`', 'Honors `budget.max-cost` and `copy.ts` and `src/lib/copy.ts`.');
+    const a = compile({ brief, indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.references, ['docs/guide.md']);
+    assert.deepEqual(a?.spec.configKeys, ['budget.max-cost']);
+    assert.deepEqual(a?.spec.files, ['src/lib/copy.ts']);
+  });
+
+  it('works without facts: files are the write set and symbols stay empty, both derived', () => {
+    const a = compile({ brief: briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works') }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/**']);
+    assert.deepEqual(a?.spec.symbols, []);
+    assert.ok(a?.spec.derived.includes('files') && a?.spec.derived.includes('symbols'));
+  });
+
+  it('keeps an explicit spec field as given and not in derived, and derives the others', () => {
+    const items = [{ id: 'A', title: 'Rewrite `copyText` in `src/lib/copy.ts`', dependsOn: [], acceptance: ['AC1'], spec: { files: ['src/lib/dates.ts'] } }];
+    const lines = ['---', 'title: Facts', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+    const a = compile({ brief: loadBrief(lines.join('\n')), indexFacts: FACTS }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/lib/dates.ts']);
+    assert.ok(!a?.spec.derived.includes('files'));
+    assert.ok(a?.spec.derived.includes('symbols'));
+  });
+
+  it('gives the same contract digest for the same brief and facts, and a different one when the facts differ', () => {
+    const brief = briefWithText('Rewrite `copyText` in `src/lib/copy.ts`', 'It works');
+    const one = unwrap(compileRunContract(inputFor({ brief, indexFacts: FACTS })));
+    const two = unwrap(compileRunContract(inputFor({ brief, indexFacts: { files: [...FACTS.files].reverse(), symbolsByFile: FACTS.symbolsByFile } })));
+    assert.equal(one.digest, two.digest);
+    const none = unwrap(compileRunContract(inputFor({ brief })));
+    assert.notEqual(one.digest, none.digest);
+  });
+
+  it('itemCandidateTerms: what start asks the indexes is the paths and the backtick identifiers of each item, sorted and de-duplicated', () => {
+    const brief = briefWithText('Touch src/lib/dates.ts and `src/lib/copy.ts` via `copyText`', 'Also `formatDate`, `copyText`, `src/lib/dates.ts` and `budget.max-cost`.');
+    const terms = itemCandidateTerms(brief);
+    assert.deepEqual([...terms.keys()], ['A', 'B']);
+    assert.deepEqual(terms.get('A'), ['copyText', 'formatDate', 'src/lib/copy.ts', 'src/lib/dates.ts']);
+    assert.deepEqual(terms.get('B'), [], 'an item that names nothing has no terms');
+  });
+
+  it('itemCandidateTerms: a brief without items is the single item A, and its terms are the ones deriveItemSpec reads', () => {
+    const lines = ['---', 'title: Fix `slugify` in src/slug.ts', '---', '## Behavior', 'x', '', '## Acceptance criteria', '- AC1: keeps `trimDashes` | verifiedBy: check:test', '', '## Write', '- src/**', '', '## Target checks', '- test', ''];
+    const brief = loadBrief(lines.join('\n'));
+    assert.deepEqual([...itemCandidateTerms(brief).entries()], [['A', ['slugify', 'src/slug.ts', 'trimDashes']]]);
+    const facts: IndexFacts = { files: ['src/slug.ts'], symbolsByFile: { 'src/slug.ts': ['slugify', 'trimDashes'] } };
+    const a = compile({ brief, indexFacts: facts }).intent.workItems[0];
+    assert.deepEqual(a?.spec.files, ['src/slug.ts']);
+    assert.deepEqual(a?.spec.symbols, ['slugify', 'trimDashes']);
+  });
+});
+
+describe('RC-8: the model never exceeds the explicit model or the size map entry (prohibition)', () => {
+  it('maps small to haiku, medium to sonnet and large to opus, and never selects a larger model than asked', () => {
+    const expected: Record<string, string> = { small: 'haiku', medium: 'sonnet', large: 'opus' };
+    for (const [size, model] of Object.entries(expected)) {
+      const items = [{ id: 'A', title: 't', dependsOn: [], size, acceptance: ['AC1'] }];
+      const lines = ['---', 'title: x', `items: ${JSON.stringify(items)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+      const item = compile({ brief: loadBrief(lines.join('\n')) }).intent.workItems[0];
+      assert.equal(item?.model, model, size);
+      assert.equal(item?.modelSource, 'modelBySize');
+    }
+    const explicit = [{ id: 'A', title: 't', dependsOn: [], size: 'large', model: 'haiku', acceptance: ['AC1'] }];
+    const lines = ['---', 'title: x', `items: ${JSON.stringify(explicit)}`, '---', '## Behavior', 'x', '## Acceptance criteria', '- AC1: ok | verifiedBy: check:test', '## Write', '- src/**', ''];
+    const item = compile({ brief: loadBrief(lines.join('\n')) }).intent.workItems[0];
+    assert.equal(item?.model, 'haiku', 'an explicit model wins even over a larger size');
+    assert.equal(item?.modelSource, 'brief');
+  });
+});
+
+describe('planNamedSpec: RC-7 stage 2, what a quick PLAN names for the fields the item left to derivation (plan 03-19)', () => {
+  const text = 'Change `slugify` and `Slugger`, read `slug.max-length` and `package.json`, and see docs/slug-rules.md, src/notes.md and README.md.';
+  const held = { symbols: ['Slugger'], configKeys: [], references: [], derived: ['symbols', 'configKeys', 'references'] };
+
+  it('lists identifiers as symbols, dotted lower-case spans that are not file names as config keys, and .md paths under docs/ or the write set as references', () => {
+    assert.deepEqual(planNamedSpec(text, held, ['src/**']), { symbols: ['slugify'], configKeys: ['slug.max-length'], references: ['docs/slug-rules.md', 'src/notes.md'] });
+  });
+
+  it('reads only the fields the item derived, and lists a name the spec already holds once, in the spec', () => {
+    assert.deepEqual(planNamedSpec(text, { ...held, derived: ['configKeys'] }, ['src/**']), { symbols: [], configKeys: ['slug.max-length'], references: [] });
+    assert.deepEqual(planNamedSpec(text, { ...held, symbols: ['slugify', 'Slugger'] }, ['src/**']).symbols, []);
+    assert.deepEqual(planNamedSpec(text, { ...held, derived: [] }, ['src/**']), { symbols: [], configKeys: [], references: [] });
+  });
+
+  it('is the same list whatever order the names come in, and caps each list', () => {
+    const many = Array.from({ length: 80 }, (_, i) => `\`name${String(i).padStart(2, '0')}\``).join(' ');
+    const named = planNamedSpec(many, held, []);
+    assert.equal(named.symbols.length, 50);
+    assert.deepEqual(named.symbols, [...named.symbols].sort());
+    assert.deepEqual(planNamedSpec('`b` `a`', held, []).symbols, planNamedSpec('`a` `b`', held, []).symbols);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plan 03-64 (D-26, D-27): a declared check is listed for the agent with the environment the supervisor gives it.
+// ---------------------------------------------------------------------------------------------------------------------
+function withCheckEnv(env: Record<string, string>, argv: string[] = ['npm', 'test']): Conventions {
+  return conventionsWith({ checks: [{ name: 'test', argv, env }] });
+}
+
+describe('compileRunContract: a check is listed for the agent with its environment (plan 03-64)', () => {
+  it('writes the environment as NAME=value words sorted by name, then the argument vector', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ B: '2', A: '1' }) }).execution.commands, ['A=1 B=2 npm test']);
+    assert.equal(checkAgentCommand({ argv: ['npm', 'test'], env: { B: '2', A: '1' } }), 'A=1 B=2 npm test');
+    assert.equal(checkAgentCommand({ argv: ['npm', 'test'], env: {} }), 'npm test');
+  });
+
+  it('leaves out the names the supervisor sandbox sets itself, and lists a check with only those as its bare argv', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ CI: 'true', LANG: 'en', X: '1' }) }).execution.commands, ['X=1 npm test']);
+    assert.deepEqual(compile({ conventions: withCheckEnv({ CI: 'true', LANG: 'en' }) }).execution.commands, ['npm test']);
+  });
+
+  it('keeps the check env itself on execution.checks, as declared', () => {
+    const { execution } = compile({ conventions: withCheckEnv({ CI: 'true', X: '1' }) });
+    assert.deepEqual(execution.checks[0]?.env, { CI: 'true', X: '1' });
+  });
+
+  it('refuses a value that cannot be one plain shell word, with field conventions.checks[0].env and a reason naming the variable', () => {
+    for (const value of ['a b', '~', 'a*', "it's", 'say "x"', '$HOME', '{x}', 'a\nb', 'a;b', 'a|b', 'a?b', 'a[b', 'a#b', 'a\\b']) {
+      const r = refusal({ conventions: withCheckEnv({ X_ORIGIN: value }) });
+      assert.equal(r.field, 'conventions.checks[0].env', JSON.stringify(value));
+      assert.match(r.reason, /X_ORIGIN/, JSON.stringify(value));
+    }
+  });
+
+  it('refuses a value the secret patterns redact, with the same field', () => {
+    for (const value of [`ghp_${'a'.repeat(36)}`, 'AKIAABCDEFGHIJKLMNOP']) {
+      const r = refusal({ conventions: withCheckEnv({ TOKEN_X: value }) });
+      assert.equal(r.field, 'conventions.checks[0].env', value);
+      assert.match(r.reason, /TOKEN_X/);
+      assert.match(r.reason, /secret/);
+    }
+  });
+
+  it('accepts a plain URL value, as the portfolio declares', () => {
+    assert.deepEqual(compile({ conventions: withCheckEnv({ VITE_SITE_ORIGIN: 'https://aa-phan.github.io' }, ['npm', 'run', 'build']) }).execution.commands, [
+      'VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build',
+    ]);
+  });
+
+  it('still refuses a check whose argv starts with a never-granted word when it has env, with field execution.commands', () => {
+    const conventions = conventionsWith({ checks: [{ name: 'test', argv: ['npm', 'test'] }, { name: 'extra', argv: ['git', 'x'], env: { X: '1' } }] });
+    assert.equal(refusal({ conventions }).field, 'execution.commands');
+  });
+
+  it('pins SUPERVISOR_CHECK_ENV_NAMES to the names sandboxSetup gives every supervisor check', () => {
+    const base = mkdtempSync(join(tmpdir(), 'avarice-supervisor-env-'));
+    try {
+      const deps = { home: join(base, 'home'), profile: { dataRoot: join(base, 'data'), workRoot: join(base, 'work') } } as unknown as AppDeps;
+      mkdirSync(join(base, 'home'), { recursive: true });
+      mkdirSync(join(base, 'work'), { recursive: true });
+      const sandbox = sandboxSetup(deps, { runId: 'run_A' } as unknown as RunRow, join(base, 'clone'));
+      assert.ok(sandbox.ok, JSON.stringify(sandbox));
+      assert.deepEqual([...conventionsApi.SUPERVISOR_CHECK_ENV_NAMES].sort(), Object.keys(sandbox.value.env).sort());
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plan 03-71 (D-26, D-27, D-35): the agent is given only the checks the run executes.
+// ---------------------------------------------------------------------------------------------------------------------
+describe('compileRunContract: only the checks the run executes are listed for the agent (plan 03-71)', () => {
+  const declared = [
+    { name: 'test', argv: ['npm', 'test'], required: true },
+    { name: 'lint', argv: ['npm', 'run', 'lint'], required: false },
+    { name: 'build', argv: ['npm', 'run', 'build'], required: false, env: { A: '1' } },
+  ];
+
+  it('lists a required check and a target check, with its environment, and not a declared check that is neither; execution.checks keeps all three', () => {
+    const conventions = conventionsWith({ agentCommands: ['npm run format'], checks: declared });
+    const { execution, verification } = compile({ conventions, brief: briefWith({ targets: ['build'] }) });
+    assert.deepEqual(execution.commands, ['npm run format', 'npm test', 'A=1 npm run build']);
+    assert.deepEqual(execution.checks.map((c) => c.name), ['test', 'lint', 'build']);
+    assert.deepEqual(verification.requiredChecks, ['test']);
+    assert.deepEqual(verification.targetChecks, ['build']);
+  });
+
+  it('keeps a conventions agent command as written even when it equals the command of a dropped check', () => {
+    const conventions = conventionsWith({ agentCommands: ['npm run lint'], checks: declared });
+    assert.deepEqual(compile({ conventions }).execution.commands, ['npm run lint', 'npm test']);
+  });
+
+  it("lists exactly today's commands when every declared check is required", () => {
+    const conventions = conventionsWith({ checks: declared.map((c) => ({ ...c, required: true })) });
+    assert.deepEqual(compile({ conventions }).execution.commands, ['npm test', 'npm run lint', 'A=1 npm run build']);
+  });
+
+  it('still refuses a never-granted first word and a non-plain or secret env of a declared check that is not required', () => {
+    const never = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['sudo', 'x'], required: false }] });
+    assert.equal(refusal({ conventions: never }).field, 'execution.commands');
+    const spaced = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['npm', 'x'], required: false, env: { X: 'a b' } }] });
+    assert.equal(refusal({ conventions: spaced }).field, 'conventions.checks[1].env');
+    const secret = conventionsWith({ checks: [declared[0], { name: 'extra', argv: ['npm', 'x'], required: false, env: { TOKEN_X: `ghp_${'a'.repeat(36)}` } }] });
+    assert.equal(refusal({ conventions: secret }).field, 'conventions.checks[1].env');
   });
 });

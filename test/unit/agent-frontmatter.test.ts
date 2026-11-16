@@ -7,8 +7,15 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseAgentFile } from '../../src/adapters/gsd/agent-frontmatter.ts';
-import { AVARICE_EXECUTOR_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
+import { AVARICE_EXECUTOR_ADDENDUM, AVARICE_VERIFIER_ADDENDUM, buildAgentsJson } from '../../src/adapters/gsd/agents-json.ts';
 import { PURPOSE_EXTENSIONS, buildPluginDir } from '../../src/adapters/gsd/plugin-dir.ts';
+import { READ_ONLY_COMMANDS } from '../../src/domain/invocation-scope.ts';
+import { AVARICE_RUN_SHELL_ADDENDUM } from '../../src/domain/run-shell-rules.ts';
+
+// The verifier's closing note (plan 03-61), as the plan words it.
+const VERIFIER_ADDENDUM = AVARICE_VERIFIER_ADDENDUM;
+const VERIFIER_SENTENCE =
+  'AVARICE run: a required check that the task lists as already failing when the work item began is pre-existing. Report it, and report any failure it shows in a file the task changed; a pre-existing failure alone does not make the status human_needed or gaps_found.';
 
 const MAPPER = `---
 name: gsd-codebase-mapper
@@ -206,7 +213,56 @@ describe('buildAgentsJson', () => {
     assert.match(json['gsd-executor'].prompt, /You are a GSD executor\./);
     assert.equal(json['gsd-executor'].prompt.endsWith(`\n\n${sentence}\n`), true);
     assert.equal(json['gsd-executor'].prompt.split(sentence).length, 2, 'the addendum appears once');
-    for (const other of ['gsd-planner', 'gsd-codebase-mapper']) assert.equal(json[other].prompt.includes('AVARICE run'), false, `${other} gets no addendum`);
+    for (const other of ['gsd-planner', 'gsd-codebase-mapper']) assert.equal(json[other].prompt.includes(sentence), false, `${other} gets no commit addendum`);
+  });
+
+  it("appends the run's shell-rules addendum to the four run agents, before the executor's commit addendum, and to no map or intel agent (plan 03-34)", () => {
+    const dir = join(root, 'agents-h');
+    const agent = (name: string): string => INTEL.replace('gsd-intel-updater', name).replace(/\n$/, `\nYou are ${name}.\n`);
+    const files: Record<string, string> = { 'gsd-codebase-mapper': MAPPER, 'gsd-intel-updater': INTEL };
+    for (const name of PURPOSE_EXTENSIONS.run.agents) files[name] = agent(name);
+    writeAgents(dir, files);
+    const out = join(root, 'out-h.json');
+    const r = buildAgentsJson(dir, [...PURPOSE_EXTENSIONS.run.agents, 'gsd-codebase-mapper', 'gsd-intel-updater'], out);
+    assert.ok(r.ok, JSON.stringify(r));
+    const json = JSON.parse(readFileSync(out, 'utf8'));
+    assert.deepEqual([...PURPOSE_EXTENSIONS.run.agents], ['gsd-planner', 'gsd-plan-checker', 'gsd-executor', 'gsd-verifier']);
+    for (const name of PURPOSE_EXTENSIONS.run.agents) {
+      const prompt: string = json[name].prompt;
+      assert.match(prompt, new RegExp(`You are ${name}\\.`));
+      assert.equal(prompt.split(AVARICE_RUN_SHELL_ADDENDUM).length, 2, `${name}: the shell addendum appears once`);
+      const closing =
+        name === 'gsd-executor'
+          ? `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n\n${AVARICE_EXECUTOR_ADDENDUM}\n`
+          : name === 'gsd-verifier'
+            ? `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n\n${VERIFIER_ADDENDUM}\n`
+            : `\n\n${AVARICE_RUN_SHELL_ADDENDUM}\n`;
+      assert.equal(prompt.endsWith(closing), true, `${name}: the prompt closes with ${name === 'gsd-executor' ? 'the shell addendum, then the commit addendum' : name === 'gsd-verifier' ? 'the shell addendum, then the pre-existing note' : 'the shell addendum'}`);
+      assert.equal(prompt.includes(VERIFIER_SENTENCE), name === 'gsd-verifier', `${name}: the pre-existing note belongs to the verifier alone`);
+      assert.equal(prompt.includes(AVARICE_EXECUTOR_ADDENDUM), name === 'gsd-executor', `${name}: the commit addendum belongs to the executor alone`);
+    }
+    for (const name of ['gsd-codebase-mapper', 'gsd-intel-updater']) {
+      assert.equal(json[name].prompt.includes(AVARICE_RUN_SHELL_ADDENDUM), false, `${name}: no shell addendum`);
+      assert.equal(json[name].prompt.includes(AVARICE_EXECUTOR_ADDENDUM), false, `${name}: no commit addendum`);
+    }
+    assert.equal(json['gsd-intel-updater'].prompt, 'body of the intel updater', 'an agent outside the run keeps its prompt as the parser reads it');
+  });
+
+  it('writes a verifier note that says a required check the task lists as already failing is pre-existing and alone does not make the status human_needed or gaps_found (plan 03-61)', () => {
+    assert.equal(VERIFIER_ADDENDUM, VERIFIER_SENTENCE);
+    assert.match(VERIFIER_ADDENDUM, /already failing/);
+    assert.match(VERIFIER_ADDENDUM, /is pre-existing/);
+    assert.match(VERIFIER_ADDENDUM, /does not make the status human_needed or gaps_found/);
+    assert.match(VERIFIER_ADDENDUM, /file the task changed/);
+    assert.equal(VERIFIER_ADDENDUM.includes('\n'), false);
+  });
+
+  it('writes an addendum that states the rules: one plain command per call, every read-only command, the file tools, and no gsd-tools, mkdir or repository-changing git', () => {
+    assert.match(AVARICE_RUN_SHELL_ADDENDUM, /one plain command per Bash call/);
+    for (const command of READ_ONLY_COMMANDS) assert.ok(AVARICE_RUN_SHELL_ADDENDUM.includes(command), command);
+    for (const tool of ['Read', 'Grep', 'Glob']) assert.ok(AVARICE_RUN_SHELL_ADDENDUM.includes(tool), tool);
+    for (const word of ['gsd-tools', 'mkdir', 'git command that changes the repository', 'Write']) assert.ok(AVARICE_RUN_SHELL_ADDENDUM.includes(word), word);
+    assert.equal(AVARICE_RUN_SHELL_ADDENDUM.includes('AVARICE run:'), false, 'it is not the executor commit sentence');
   });
 
   it('refuses names that are not plain file names', () => {

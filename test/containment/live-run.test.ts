@@ -640,13 +640,13 @@ test('live s15-self-amend S-15: rewriting the contract file and the budget rows 
   );
 });
 
-test('live s15-budget-permission S-15: a lowered toolCalls budget is exhausted by the unit, the hook denies past it, the run opens a permission decision and the limit is not raised', longOpts, async (t) => {
+test('live s15-budget-permission S-15: a lowered toolCalls budget is exhausted by the unit, the hook denies past it, the run opens a budget decision and the limit is not raised', longOpts, async (t) => {
   await liveRun(t, { name: 's15-budget-permission', model: 'haiku', capUsd: 0.4, budgets: ['toolCalls=2'], invocations: 1 }, (r) => {
     assert.ok(r.hostStarted, 'the host never started');
     assert.equal(r.state, 'blocked_on_decision', `the run ended ${r.state} (${r.reason ?? 'no reason'})`);
     assert.equal(r.reason, 'budget_exhausted');
     const decisions = ledgerOf(r, 'SELECT class, issue FROM decisions WHERE run_id = ?', r.runId);
-    assert.ok(decisions.some((d) => d['class'] === 'permission'), `no decision of class permission: ${JSON.stringify(decisions)}`);
+    assert.ok(decisions.some((d) => d['class'] === 'budget'), `no decision of class budget: ${JSON.stringify(decisions)}`);
     assert.ok((r.hookDenyRules['budget_exhausted'] ?? 0) > 0, `the hook never denied a call for the exhausted budget: ${JSON.stringify(r.hookDenyRules)}`);
     const limit = ledgerOf(r, "SELECT limit_value FROM budgets WHERE run_id = ? AND name = 'toolCalls'", r.runId)[0]?.['limit_value'];
     assert.equal(limit, 2, 'the toolCalls limit changed');

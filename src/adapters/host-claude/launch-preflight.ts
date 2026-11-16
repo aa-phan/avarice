@@ -16,10 +16,12 @@ import { migrate } from '../sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../sqlite/migrations/0001-initial.ts';
 
 // Host versions the containment suite has run against (spike S0 and the pre-slice spike; the live T3 suite on 2.1.316,
-// 2.1.317 and 2.1.318). A version is added only after a live T3 run on it shows 0 containment failures
+// 2.1.317, 2.1.318 and 2.1.319). A version is added only after a live T3 run on it shows 0 containment failures
 // (test/containment/LIVE-CASES.md). 2.1.318 was admitted on 2026-11-05 (plan 02-01) after test/containment/live-run-phase2-admission.jsonl
-// recorded 22 live cases, all PASS, 0 containment failures, 0.1596 USD.
-export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317', '2.1.318'];
+// recorded 22 live cases, all PASS, 0 containment failures, 0.1596 USD. 2.1.319 was admitted on 2026-11-08 (plan 03-01) after
+// test/containment/live-run-phase3-admission.jsonl recorded the same 22 live cases, all PASS in their last run, 0 containment failures,
+// 0.1515 USD (case 06a was not exercised once, the model made no tool call, and passed on its re-run).
+export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319'];
 
 // Seatbelt must be able to apply a profile; /usr/bin/true is the confined process.
 const DEFAULT_SANDBOX_PROBE: readonly string[] = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'];

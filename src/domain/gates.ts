@@ -1,10 +1,11 @@
-// Gates G2 and G4 (AUT-7, AUT-9; docs/contracts-and-state.md "Phase gates"). Pure verdicts over facts AVARICE
-// measured. A GSD verifier verdict, a SUMMARY or any model-written text is never an input that can pass a gate.
+// Gates G1, G2 and G4 (AUT-7, AUT-9, D-07; docs/contracts-and-state.md "Phase gates"). Pure verdicts over facts AVARICE
+// measured. A GSD verifier verdict, a SUMMARY, a quick PLAN or any model-written text is never an input that can pass a gate.
 // Failures are listed in a fixed rule order, and every list is sorted before it is judged, so the same facts give
 // a deep-equal verdict whatever order they arrive in.
 import type { AcceptanceMapping, DeltaBlocking, EvidenceStatus } from './evidence.ts';
 import { matchesAny } from './glob.ts';
-import type { InventoryFailure } from './test-inventory.ts';
+import type { QuickPlan } from './quick-record.ts';
+import type { InventoryFailure, InventoryFailureRule } from './test-inventory.ts';
 
 export interface GateFailure {
   rule: string;
@@ -14,6 +15,8 @@ export interface GateFailure {
 export interface GateVerdict {
   passed: boolean;
   failures: GateFailure[];
+  // Findings recorded but not failing (G1 plan-cites-acceptance while it is advisory). Present only when non-empty.
+  advisories?: GateFailure[];
 }
 
 export const G2_RULES = [
@@ -182,4 +185,193 @@ export function evaluateG4(facts: G4Facts): GateVerdict {
     fail('budgets-within', `budgets exceeded: ${sorted(facts.budgetsExceeded).join(', ')}`);
   }
   return { passed: failures.length === 0, failures };
+}
+
+export const G1_RULES = [
+  'plan-present',
+  'plan-within-write-scope',
+  'plan-within-spec',
+  'decision-checkpoint-unresolved',
+  'owner-choice-unasked',
+  'plan-cites-acceptance',
+] as const;
+
+export interface G1Facts {
+  plan: QuickPlan | null;
+  globs: { write: readonly string[]; create: readonly string[]; protected: readonly string[] };
+  itemSpec: { files: readonly string[]; derived: readonly string[] };
+  outcome: string;
+  ownerChoices: ReadonlyArray<{ acceptanceId: string; key: string; answered: boolean }>;
+  itemAcceptance: readonly string[];
+}
+
+// A plan path is judged as written, except that a leading `./` is dropped. An absolute path, a `..` segment or a backslash can never
+// sit inside a repository-relative glob, so each one is outside the contract whatever the globs say.
+function planPathProblem(path: string): string | null {
+  if (path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.includes('\\') || path.split('/').includes('..')) return 'not a repository-relative path';
+  return null;
+}
+
+function normalizePlanPath(path: string): string {
+  return path.replace(/^(?:\.\/)+/, '');
+}
+
+// The plan paths G1 holds against the contract, as written (a leading `./` dropped): those outside the write and create globs (an absolute path, a `..`
+// segment, a protected path and a path no glob holds), and, when the item's spec files were not derived, those beyond the spec files. The decision of a failed
+// G1 names them, so the amend command it prints asks for exactly the paths the plan needed (plan 03-19).
+export function g1PathBreaches(facts: Pick<G1Facts, 'plan' | 'globs' | 'itemSpec'>): { scope: string[]; spec: string[] } {
+  if (facts.plan === null) return { scope: [], spec: [] };
+  const writable = [...facts.globs.write].sort();
+  const creatable = [...facts.globs.create].sort();
+  const protectedGlobs = [...facts.globs.protected].sort();
+  const planPaths = [...new Set([...facts.plan.filesModified, ...facts.plan.taskFiles].map(normalizePlanPath))].sort();
+  const scope = planPaths.filter((path) => planPathProblem(path) !== null || matchesAny(path, protectedGlobs) || (!matchesAny(path, writable) && !matchesAny(path, creatable)));
+  const specFiles = [...facts.itemSpec.files].sort();
+  const spec = facts.itemSpec.derived.includes('files') ? [] : planPaths.filter((path) => !matchesAny(path, specFiles));
+  return { scope, spec };
+}
+
+// G1, in the rule order of G1_RULES. The plan is model-written text: it can fail this gate and never pass it, and a plan that is absent
+// fails closed. Every list is sorted before it is judged, so input order never changes the verdict.
+// plan-cites-acceptance is an advisory. Spike S3-A (plan 03-13) measured one live quick PLAN, written after a resume, that cites its item's
+// acceptance ID, and left this false: the plan's rule asks for two rounds. Set it true once a second live PLAN cites its item's IDs.
+export const PLAN_CITES_ACCEPTANCE_HARD = false;
+
+export interface G1Options {
+  citesAcceptanceHard?: boolean;
+}
+
+export function evaluateG1(facts: G1Facts, options: G1Options = {}): GateVerdict {
+  const failures: GateFailure[] = [];
+  const advisories: GateFailure[] = [];
+  const fail = (rule: (typeof G1_RULES)[number], detail: string): void => {
+    failures.push({ rule, detail });
+  };
+
+  if (facts.plan === null) {
+    fail('plan-present', 'the unit left no readable quick PLAN to judge');
+    return { passed: false, failures };
+  }
+
+  const writable = [...facts.globs.write].sort();
+  const creatable = [...facts.globs.create].sort();
+  const protectedGlobs = [...facts.globs.protected].sort();
+  const planPaths = [...new Set([...facts.plan.filesModified, ...facts.plan.taskFiles].map(normalizePlanPath))].sort();
+
+  const outside: string[] = [];
+  for (const path of planPaths) {
+    const problem = planPathProblem(path);
+    if (problem !== null) outside.push(`${path} (${problem})`);
+    else if (matchesAny(path, protectedGlobs)) outside.push(`${path} (protected)`);
+    else if (!matchesAny(path, writable) && !matchesAny(path, creatable)) outside.push(`${path} (outside write and create globs)`);
+  }
+  if (outside.length > 0) {
+    fail('plan-within-write-scope', `plan paths outside the contract: ${listPaths(outside)}`);
+  }
+
+  // An item whose spec files were derived from the write set has no narrower list than the write set itself.
+  if (!facts.itemSpec.derived.includes('files')) {
+    const specFiles = [...facts.itemSpec.files].sort();
+    const beyond = planPaths.filter((path) => !matchesAny(path, specFiles));
+    if (beyond.length > 0) {
+      fail('plan-within-spec', `plan paths outside the item's spec files: ${listPaths(beyond)}`);
+    }
+  }
+
+  // A checkpoint:decision with no auto_select is a question for a person. A unit that went on to progress resolved it itself.
+  if (facts.outcome === 'progressed') {
+    const open = facts.plan.decisionCheckpoints
+      .filter((checkpoint) => !checkpoint.hasAutoSelect)
+      .map((checkpoint) => (checkpoint.optionIds.length > 0 ? `options ${[...checkpoint.optionIds].sort().join(', ')}` : 'no options named'))
+      .sort();
+    if (open.length > 0) {
+      fail('decision-checkpoint-unresolved', `${open.length} decision checkpoint(s) without auto_select, resolved without pausing: ${listPaths(open)}`);
+    }
+  }
+
+  const unasked = facts.ownerChoices
+    .filter((choice) => !choice.answered)
+    .map((choice) => `${choice.acceptanceId} (${choice.key})`)
+    .sort();
+  if (unasked.length > 0) {
+    fail('owner-choice-unasked', `acceptance criteria verified by an owner choice that was never asked: ${listPaths(unasked)}`);
+  }
+
+  const wanted = [...new Set(facts.itemAcceptance)].sort();
+  if (wanted.length > 0 && !wanted.some((id) => facts.plan?.acceptanceRefs.includes(id))) {
+    const detail = `the plan cites none of the item's acceptance IDs: ${listPaths(wanted)}`;
+    if (options.citesAcceptanceHard ?? PLAN_CITES_ACCEPTANCE_HARD) fail('plan-cites-acceptance', detail);
+    else advisories.push({ rule: 'plan-cites-acceptance', detail });
+  }
+  return advisories.length > 0 ? { passed: failures.length === 0, failures, advisories } : { passed: failures.length === 0, failures };
+}
+
+export const G3_RULES = ['repair-limit', 'failing-test-present', 'failing-test-unchanged'] as const;
+
+export interface G3Facts {
+  repairAttempts: number;
+  limit: number;
+  failingTests: readonly string[];
+  inventoryAfter: readonly string[];
+  testFilesOfFailing: readonly string[];
+  changes: ReadonlyArray<{ path: string; status: ChangeStatus }>;
+  authorizedTestPaths: readonly string[];
+}
+
+// G3, in the rule order of G3_RULES (D-11). It judges a repair of a failed required check from facts AVARICE measured: how many
+// repairs the check has had, the failing test IDs, the inventory after the repair and the changed paths. A repair that deletes,
+// renames or edits the failing test to pass is exactly what the last two rules refuse; a repair that must change that test goes
+// to a decision, and an amendment that authorized the path (D-07) is the only thing that lets it through.
+export function evaluateG3(facts: G3Facts): GateVerdict {
+  const failures: GateFailure[] = [];
+  const fail = (rule: (typeof G3_RULES)[number], detail: string): void => {
+    failures.push({ rule, detail });
+  };
+
+  if (facts.repairAttempts >= facts.limit) {
+    fail('repair-limit', `${facts.repairAttempts} repair attempt(s) for this check reached the limit of ${facts.limit}`);
+  }
+
+  const present = new Set(facts.inventoryAfter);
+  const gone = [...new Set(facts.failingTests)].filter((id) => !present.has(id)).sort();
+  if (gone.length > 0) {
+    fail('failing-test-present', `failing tests missing from the inventory after the repair: ${listPaths(gone)}`);
+  }
+
+  const failingFiles = new Set(facts.testFilesOfFailing);
+  const authorized = new Set(facts.authorizedTestPaths);
+  const touched = [...new Set(facts.changes.filter((change) => failingFiles.has(change.path) && !authorized.has(change.path)).map((change) => `${change.path} (${change.status})`))].sort();
+  if (touched.length > 0) {
+    fail('failing-test-unchanged', `test files holding a failing test changed during the repair without an amendment: ${listPaths(touched)}`);
+  }
+  return { passed: failures.length === 0, failures };
+}
+
+// The inventory rules, as a record so a rule added to InventoryFailureRule fails the typecheck here until it is listed.
+const INVENTORY_RULE_NAMES: Record<InventoryFailureRule, true> = { 'removed-test': true, 'new-skip-marker': true, 'lowered-test-count': true };
+
+// Each integrity gate of the routine preset (`verification.integrityGates`) mapped to the rules that enforce it, written
+// `<gate>:<rule>`, with a third part for one rule of the G2 test inventory. A test fails when a gate the preset lists maps to
+// nothing or to a rule that does not exist (AUT-9, AUT-10).
+export const INTEGRITY_GATE_RULES: Readonly<Record<string, readonly string[]>> = {
+  'no-new-overrides': ['G2:no-new-overrides'],
+  'no-test-deletion': ['G2:test-inventory:removed-test', 'G2:test-inventory:lowered-test-count', 'G3:failing-test-present', 'G3:failing-test-unchanged'],
+  'no-skip-markers': ['G2:test-inventory:new-skip-marker'],
+  'scope-conformance': ['G1:plan-within-write-scope', 'G2:scope-conformance', 'G2:deletion-scope'],
+  'prune-is-decision': ['G2:prune-is-decision'],
+};
+
+// Which of `gates` the verdicts broke, sorted. A gate this module does not map is not named: the completeness test is what
+// keeps the preset and the map in step. Advisories never count.
+export function integrityFailures(verdicts: { G1?: GateVerdict; G2?: GateVerdict; G3?: GateVerdict }, gates: readonly string[]): string[] {
+  const broken: string[] = [];
+  for (const gate of gates) {
+    const refs = INTEGRITY_GATE_RULES[gate] ?? [];
+    const hit = refs.some((ref) => {
+      const [which, rule, sub] = ref.split(':') as [keyof typeof verdicts, string, string | undefined];
+      return (verdicts[which]?.failures ?? []).some((failure) => failure.rule === rule && (sub === undefined || (sub in INVENTORY_RULE_NAMES && failure.detail.includes(`${sub}: `))));
+    });
+    if (hit && !broken.includes(gate)) broken.push(gate);
+  }
+  return broken.sort();
 }

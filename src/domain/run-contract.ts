@@ -2,18 +2,23 @@
 // Pure: the clock, the ids and the parsed brief and conventions are arguments. The compiler is the one place where a
 // run's authority is fixed, and it only narrows: a brief or the repository conventions never raise a budget, widen the
 // write set past the conventions, write a protected path, or grant the agent git, avarice or network commands.
+// A declared check is listed for the agent with its environment written as leading NAME=value words (plan 03-64; D-26, D-27), so the unit
+// runs it exactly as the supervisor does; the hook compares those words like any other word of the command.
+// Plan 03-71 (D-26, D-27): only the checks the run executes (required, or a target of the brief) are listed; a declared check no gate judges is not, because the unit made a gate of
+// one that could not pass as written (run 3's attempt 2).
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
-import type { Brief } from './brief.ts';
-import { isRefusedAgentCommand } from './conventions.ts';
+import type { Brief, BriefItem } from './brief.ts';
+import { SUPERVISOR_CHECK_ENV_NAMES, assignmentRefusal, isRefusedAgentCommand } from './conventions.ts';
 import type { CheckSpec, Conventions } from './conventions.ts';
 import { matchesGlob } from './glob.ts';
+import { redactSecrets } from './secret-patterns.ts';
 
 export const ROUTINE_POLICY = 'routine';
 
-// How the run's invocation count is derived (D-13): one work item runs one invocation, the CON-16 discard-and-retry runs
-// a second, and one more covers a relaunch after an interruption (a killed invocation stays charged).
+// How the run's invocation count is derived (D-12): each work item runs one invocation and may run one more for a CON-16
+// retry or a repair, and one more covers a resume after an interruption (a killed invocation stays charged).
 export interface InvocationDerivation {
   units: number;
   retries: number;
@@ -23,10 +28,13 @@ export interface InvocationDerivation {
 }
 
 // How the run's subagent total is derived: one quick unit spawns a planner, up to two plan-checker passes, an executor and
-// a verifier (5 per unit), and a CON-16 retry runs the unit again. RESEARCH A7 suggested 8; 10 covers a full retry.
+// a verifier (5 per unit), and a CON-16 retry runs the unit again. RESEARCH A7 suggested 8; 10 covers a full retry. The
+// total scales with the number of work items (owner decision 1): units x rounds x per-unit subagents.
 export interface SubagentDerivation {
   perUnit: { planner: number; planChecker: number; executor: number; verifier: number; total: number };
   rounds: number;
+  // The number of work items the total is scaled by.
+  units: number;
   total: number;
   formula: string;
 }
@@ -54,21 +62,6 @@ export interface RunBudgets {
   adjustments: BudgetAdjustment[];
 }
 
-const INVOCATION_DERIVATION: InvocationDerivation = {
-  units: 1,
-  retries: 1,
-  interruptionRelaunches: 1,
-  total: 3,
-  formula: '1 unit invocation + 1 CON-16 retry + 1 interruption relaunch = 3',
-};
-
-const SUBAGENT_DERIVATION: SubagentDerivation = {
-  perUnit: { planner: 1, planChecker: 2, executor: 1, verifier: 1, total: 5 },
-  rounds: 2,
-  total: 10,
-  formula: '(1 planner + 2 plan-checker + 1 executor + 1 verifier = 5 per unit) x 2 rounds (the unit and one CON-16 retry) = 10',
-};
-
 const SECRET_GLOBS = ['**/*.key', '**/*.pem', '**/.env', '**/.env.*', '**/id_ed25519*', '**/id_rsa*'];
 
 // Preset values. Changing any value changes `policyRevision`.
@@ -94,17 +87,20 @@ export const ROUTINE_PRESET = {
   toolClasses: ['read', 'search', 'edit', 'write', 'shell', 'subagent'],
   defaultSize: 'medium',
   modelBySize: { small: 'haiku', medium: 'sonnet', large: 'opus' },
+  // Limits that grow with the item count (D-12, owner decision 1): see `scaledBudgetLimits`. The invocation count is
+  // items x perItem.invocations + invocationsFixed; subagents and tool calls are items x their per-item value. The
+  // one-item values are the Phase 2 ones, so a brief with one item keeps its subagent and tool-call limits.
   budgets: {
-    wallClockMinutes: 60,
-    invocations: 3,
-    invocationsDerivation: INVOCATION_DERIVATION,
-    toolCalls: 400,
+    wallClockMinutes: 120,
+    perItem: { invocations: 2, subagentsTotal: 10, toolCalls: 400 },
+    invocationsFixed: 1,
+    subagentsPerUnit: { planner: 1, planChecker: 2, executor: 1, verifier: 1 },
+    subagentRounds: 2,
     subagentsConcurrent: 2,
-    subagentsTotal: 10,
-    subagentsDerivation: SUBAGENT_DERIVATION,
-    costUsd: { perInvocation: 2.0, perRun: 5.0, exactness: 'estimated' },
-    repairAttemptsPerCheck: 0,
-    repairAttemptsReason: 'no repair work items exist in this phase: a failing required check ends the run rather than opening a repair item',
+    costUsd: { perInvocation: 2.0, perRun: 10.0, exactness: 'estimated' },
+    repairAttemptsPerCheck: 1,
+    repairAttemptsReason:
+      'one repair invocation per newly failing required check, then a repeated_failure decision with the smallest reproducer (D-11)',
     retry: 1,
   },
   decisions: {
@@ -130,12 +126,15 @@ export interface RunWorkItem {
   model: string;
   modelSource: 'brief' | 'modelBySize';
   dependsOn: string[];
+  // IDs of the acceptance criteria this item owns; every criterion belongs to exactly one item.
+  acceptance: string[];
   spec: { files: string[]; symbols: string[]; configKeys: string[]; references: string[]; derived: string[] };
 }
 
 export interface RunContract {
   schema: 1;
-  contractVersion: 1;
+  // A number, so an amendment can write version n+1; a compiled contract starts at 1.
+  contractVersion: number;
   runId: string;
   policyPreset: typeof ROUTINE_POLICY;
   policyRevision: string;
@@ -186,6 +185,57 @@ export interface RunContract {
   notify: { reviewReady: string[]; blocking: string[]; digest: string[] };
 }
 
+// Facts the start command reads from the index (graph and intel) and hands to the pure compiler (D-07 stage 1).
+export interface IndexFacts {
+  files: readonly string[];
+  symbolsByFile: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface ScaledBudgetLimits {
+  wallClockMinutes: number;
+  invocations: number;
+  invocationsDerivation: InvocationDerivation;
+  toolCalls: number;
+  subagentsConcurrent: number;
+  subagentsTotal: number;
+  subagentsDerivation: SubagentDerivation;
+  costUsd: { perInvocation: number; perRun: number };
+}
+
+// The routine limits for a run of `itemCount` work items, each with the derivation that explains it (D-12, owner decision 1,
+// CON-15): invocations = items x 2 + 1, subagentsTotal = items x 10, toolCalls = items x 400. Wall clock and cost do not
+// scale. These are the ceilings a `--budget` override is checked against; an override can only lower them.
+export function scaledBudgetLimits(itemCount: number): ScaledBudgetLimits {
+  if (!Number.isInteger(itemCount) || itemCount < 1) throw new RangeError('a run has at least one work item');
+  const preset = ROUTINE_PRESET.budgets;
+  const unit = preset.subagentsPerUnit;
+  const perUnitTotal = unit.planner + unit.planChecker + unit.executor + unit.verifier;
+  const invocations = itemCount * preset.perItem.invocations + preset.invocationsFixed;
+  const subagentsTotal = itemCount * preset.perItem.subagentsTotal;
+  return {
+    wallClockMinutes: preset.wallClockMinutes,
+    invocations,
+    invocationsDerivation: {
+      units: itemCount,
+      retries: itemCount,
+      interruptionRelaunches: preset.invocationsFixed,
+      total: invocations,
+      formula: `${itemCount} item units + ${itemCount} retries or repairs + ${preset.invocationsFixed} resume = ${invocations}`,
+    },
+    toolCalls: itemCount * preset.perItem.toolCalls,
+    subagentsConcurrent: preset.subagentsConcurrent,
+    subagentsTotal,
+    subagentsDerivation: {
+      perUnit: { ...unit, total: perUnitTotal },
+      rounds: preset.subagentRounds,
+      units: itemCount,
+      total: subagentsTotal,
+      formula: `(${unit.planner} planner + ${unit.planChecker} plan-checker + ${unit.executor} executor + ${unit.verifier} verifier = ${perUnitTotal} per unit) x ${preset.subagentRounds} rounds (the unit and one CON-16 retry) x ${itemCount} items = ${subagentsTotal}`,
+    },
+    costUsd: { perInvocation: preset.costUsd.perInvocation, perRun: preset.costUsd.perRun },
+  };
+}
+
 export interface RunCompileInput {
   runId: string;
   projectId: string;
@@ -198,6 +248,8 @@ export interface RunCompileInput {
   policy?: string;
   // `--budget` style overrides. Untrusted: validated here, and they can only lower a preset value.
   budgetOverrides?: unknown;
+  // Index facts the compiler derives item specs from; without them a spec derives from the write set alone.
+  indexFacts?: IndexFacts;
 }
 
 export interface G0Failure {
@@ -216,15 +268,18 @@ export const BUDGET_OVERRIDE_NAMES = [
 ] as const;
 type BudgetOverrideName = (typeof BUDGET_OVERRIDE_NAMES)[number];
 
-const OVERRIDE_LIMITS: Readonly<Record<BudgetOverrideName, { limit: number; integer: boolean }>> = {
-  wallClockMinutes: { limit: ROUTINE_PRESET.budgets.wallClockMinutes, integer: true },
-  invocations: { limit: ROUTINE_PRESET.budgets.invocations, integer: true },
-  toolCalls: { limit: ROUTINE_PRESET.budgets.toolCalls, integer: true },
-  subagentsTotal: { limit: ROUTINE_PRESET.budgets.subagentsTotal, integer: true },
-  subagentsConcurrent: { limit: ROUTINE_PRESET.budgets.subagentsConcurrent, integer: true },
-  costUsdPerInvocation: { limit: ROUTINE_PRESET.budgets.costUsd.perInvocation, integer: false },
-  costUsdPerRun: { limit: ROUTINE_PRESET.budgets.costUsd.perRun, integer: false },
-};
+// The ceiling of each override: the limits scaled for this run's item count. An override only lowers them (CON-15).
+function overrideLimits(limits: ScaledBudgetLimits): Readonly<Record<BudgetOverrideName, { limit: number; integer: boolean }>> {
+  return {
+    wallClockMinutes: { limit: limits.wallClockMinutes, integer: true },
+    invocations: { limit: limits.invocations, integer: true },
+    toolCalls: { limit: limits.toolCalls, integer: true },
+    subagentsTotal: { limit: limits.subagentsTotal, integer: true },
+    subagentsConcurrent: { limit: limits.subagentsConcurrent, integer: true },
+    costUsdPerInvocation: { limit: limits.costUsd.perInvocation, integer: false },
+    costUsdPerRun: { limit: limits.costUsd.perRun, integer: false },
+  };
+}
 
 function invalid(field: string, reason: string): Result<never> {
   return err({ kind: 'invalid', field, reason });
@@ -254,17 +309,19 @@ export function globWithin(inner: string, outer: string): boolean {
 
 const withinAny = (inner: string, outers: readonly string[]): boolean => outers.some((outer) => globWithin(inner, outer));
 
-function applyBudgetOverrides(raw: unknown): Result<RunBudgets> {
+function applyBudgetOverrides(raw: unknown, itemCount: number): Result<RunBudgets> {
   const preset = ROUTINE_PRESET.budgets;
+  const scaled = scaledBudgetLimits(itemCount);
+  const limits = overrideLimits(scaled);
   const budgets: RunBudgets = {
-    wallClockMinutes: preset.wallClockMinutes,
-    invocations: preset.invocations,
-    invocationsDerivation: structuredClone(INVOCATION_DERIVATION),
-    toolCalls: preset.toolCalls,
-    subagentsConcurrent: preset.subagentsConcurrent,
-    subagentsTotal: preset.subagentsTotal,
-    subagentsDerivation: structuredClone(SUBAGENT_DERIVATION),
-    costUsd: { ...preset.costUsd },
+    wallClockMinutes: scaled.wallClockMinutes,
+    invocations: scaled.invocations,
+    invocationsDerivation: scaled.invocationsDerivation,
+    toolCalls: scaled.toolCalls,
+    subagentsConcurrent: scaled.subagentsConcurrent,
+    subagentsTotal: scaled.subagentsTotal,
+    subagentsDerivation: scaled.subagentsDerivation,
+    costUsd: { ...scaled.costUsd, exactness: preset.costUsd.exactness },
     repairAttemptsPerCheck: preset.repairAttemptsPerCheck,
     repairAttemptsReason: preset.repairAttemptsReason,
     retry: preset.retry,
@@ -278,10 +335,12 @@ function applyBudgetOverrides(raw: unknown): Result<RunBudgets> {
     if (!(BUDGET_OVERRIDE_NAMES as readonly string[]).includes(key)) {
       return invalid(field, `unknown budget; the overridable budgets are ${BUDGET_OVERRIDE_NAMES.join(', ')}`);
     }
-    const spec = OVERRIDE_LIMITS[key as BudgetOverrideName];
+    const spec = limits[key as BudgetOverrideName];
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return invalid(field, 'must be a finite number above 0');
     if (spec.integer && !Number.isInteger(value)) return invalid(field, 'must be an integer');
-    if (value > spec.limit) return invalid(field, `budgets can only be lowered: ${value} is above the preset ${spec.limit}`);
+    if (value > spec.limit) {
+      return invalid(field, `budgets can only be lowered: ${value} is above the ${spec.limit} the preset allows for ${itemCount} work item${itemCount === 1 ? '' : 's'}`);
+    }
     switch (key as BudgetOverrideName) {
       case 'wallClockMinutes':
         budgets.wallClockMinutes = value;
@@ -340,6 +399,9 @@ export function checkG0Static(contract: RunContract): G0Failure[] {
   for (const criterion of contract.intent.acceptance) {
     if (criterion.verifiedBy.length === 0) {
       failures.push({ rule: 'acceptance-verified-by', detail: `${criterion.id} has no verifiedBy` });
+    } else if (!criterion.verifiedBy.some((ref) => ref.startsWith('check:') || ref.startsWith('test:') || ref.startsWith('diff:'))) {
+      // A decision: reference marks a choice that belongs to the owner; it is never evidence by itself.
+      failures.push({ rule: 'acceptance-verified-by', detail: `${criterion.id} needs a check, test or diff reference beside decision:` });
     }
     for (const ref of criterion.verifiedBy) {
       if (ref.startsWith('check:') && !declared.has(ref.slice('check:'.length))) {
@@ -357,6 +419,177 @@ export function checkG0Static(contract: RunContract): G0Failure[] {
     failures.push({ rule: 'required-check-present', detail: 'no required check is declared in the repository conventions' });
   }
   return failures;
+}
+
+const sortedUnique = (items: Iterable<string>): string[] => [...new Set(items)].sort();
+
+// Extensions that make a dotted word a file name, not a config key.
+const FILE_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'md', 'yml', 'yaml', 'toml', 'css', 'html', 'txt', 'sh', 'py', 'go', 'rs', 'cts', 'mts',
+]);
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const CONFIG_KEY = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
+const EDGE_PUNCTUATION = /^[`'"([{<]+|[`'"\])}>.,;:!?]+$/g;
+
+function looksLikePath(word: string): boolean {
+  if (word.includes('/')) return /^[A-Za-z0-9_.@-]+(?:\/[A-Za-z0-9_.@*-]+)+$/.test(word);
+  return /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.[A-Za-z0-9]{1,8}$/.test(word) && FILE_EXTENSIONS.has(word.slice(word.lastIndexOf('.') + 1));
+}
+
+// The tokens of an item's own text that derivation reads: the backtick spans, and the path-like words and spans (the candidates).
+// One rule, used by deriveItemSpec and by itemCandidateTerms, so what start asks the indexes about and what the compiler derives from
+// cannot drift apart.
+function candidateTokens(texts: readonly string[]): { spans: string[]; candidates: string[] } {
+  const text = texts.join('\n');
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => (m[1] as string).trim());
+  const words = text
+    .split(/\s+/)
+    .map((word) => word.replace(EDGE_PUNCTUATION, ''))
+    .filter((word) => word !== '');
+  return { spans, candidates: sortedUnique([...spans, ...words].filter(looksLikePath)) };
+}
+
+// What start asks the indexes about, per item (D-07 stage 1): the path candidates and the backtick identifiers of the item's title and
+// its acceptance text, sorted and de-duplicated. An item that names nothing has no terms. A brief without items is the single item A.
+export function itemCandidateTerms(brief: Brief): Map<string, string[]> {
+  const items: ReadonlyArray<{ id: string; title: string; acceptance: readonly string[] }> = brief.items ?? [
+    { id: 'A', title: brief.title, acceptance: brief.acceptance.map((c) => c.id) },
+  ];
+  const terms = new Map<string, string[]>();
+  for (const item of items) {
+    const acceptanceText = brief.acceptance.filter((c) => item.acceptance.includes(c.id)).map((c) => c.text);
+    const { spans, candidates } = candidateTokens([item.title, ...acceptanceText]);
+    terms.set(item.id, sortedUnique([...candidates, ...spans.filter((span) => IDENTIFIER.test(span))]));
+  }
+  return terms;
+}
+
+// RC-7 stage 1: fields a brief item did not give are derived from the item's own text and the index facts. The candidates
+// are the backtick spans and the path-like words of the item title and its acceptance text. Files are the candidates the
+// index knows and the run may write (else the whole write set); symbols are the backtick identifiers the index lists for
+// those files; references are `.md` candidates inside the write set or under docs/; config keys are dotted lower-case
+// backtick spans that are not file names. Every list is sorted and de-duplicated, so the same brief and facts always give
+// the same contract digest. An explicit spec field is kept as given and is not named in `derived`.
+export function deriveItemSpec(
+  item: { title: string; acceptanceText: readonly string[]; spec?: BriefItem['spec'] },
+  writeSet: readonly string[],
+  facts?: IndexFacts,
+): RunWorkItem['spec'] {
+  const { spans, candidates } = candidateTokens([item.title, ...item.acceptanceText]);
+  const known = new Set(facts?.files ?? []);
+  const named = candidates.filter((c) => known.has(c) && withinAny(c, writeSet));
+
+  const given = item.spec ?? {};
+  const derived: string[] = [];
+  const files = given.files !== undefined ? [...given.files] : named.length > 0 ? sortedUnique(named) : sortedUnique(writeSet);
+  if (given.files === undefined) derived.push('files');
+
+  let symbols: string[];
+  if (given.symbols !== undefined) {
+    symbols = [...given.symbols];
+  } else {
+    const listed = new Set(named.flatMap((file) => facts?.symbolsByFile[file] ?? []));
+    symbols = sortedUnique(spans.filter((span) => IDENTIFIER.test(span) && listed.has(span)));
+    derived.push('symbols');
+  }
+  let configKeys: string[];
+  if (given.configKeys !== undefined) {
+    configKeys = [...given.configKeys];
+  } else {
+    const isFileName = (span: string): boolean => FILE_EXTENSIONS.has(span.slice(span.lastIndexOf('.') + 1));
+    configKeys = sortedUnique(spans.filter((span) => CONFIG_KEY.test(span) && !isFileName(span)));
+    derived.push('configKeys');
+  }
+  let references: string[];
+  if (given.references !== undefined) {
+    references = [...given.references];
+  } else {
+    references = sortedUnique(candidates.filter((c) => c.endsWith('.md') && (c.startsWith('docs/') || withinAny(c, writeSet))));
+    derived.push('references');
+  }
+  return { files, symbols, configKeys, references, derived };
+}
+
+// RC-7 stage 2 (plan 03-19): what the quick PLAN names for the spec fields the item left to derivation. The rules are the ones of stage 1, applied to the plan's
+// text: backtick identifiers are symbols, dotted lower-case backtick spans that are not file names are config keys, and `.md` paths under docs/ or inside the
+// write set are references. Only a field the item derived is read (an explicit field is the owner's), and only a name the item's spec does not already hold is
+// listed. The result is data for a step, never an input to the contract: the compiled spec stays as it was. Every list is sorted, de-duplicated and capped.
+export const PLAN_SPEC_MAX_NAMES = 50;
+
+export function planNamedSpec(
+  planText: string,
+  spec: Pick<RunWorkItem['spec'], 'symbols' | 'configKeys' | 'references' | 'derived'>,
+  writeSet: readonly string[],
+): { symbols: string[]; configKeys: string[]; references: string[] } {
+  const { spans, candidates } = candidateTokens([planText]);
+  const isFileName = (span: string): boolean => FILE_EXTENSIONS.has(span.slice(span.lastIndexOf('.') + 1));
+  const fresh = (names: Iterable<string>, held: readonly string[]): string[] => sortedUnique(names).filter((name) => !held.includes(name)).slice(0, PLAN_SPEC_MAX_NAMES);
+  return {
+    symbols: spec.derived.includes('symbols') ? fresh(spans.filter((span) => IDENTIFIER.test(span)), spec.symbols) : [],
+    configKeys: spec.derived.includes('configKeys') ? fresh(spans.filter((span) => CONFIG_KEY.test(span) && !isFileName(span)), spec.configKeys) : [],
+    references: spec.derived.includes('references') ? fresh(candidates.filter((c) => c.endsWith('.md') && (c.startsWith('docs/') || withinAny(c, writeSet))), spec.references) : [],
+  };
+}
+
+// One work item per brief item in declaration order, or the single item A that owns every criterion when the brief has no
+// items (a Phase 2 brief). A size the brief did not give is the preset default and is named in `spec.derived`; a model the
+// brief did not give is the size's `modelBySize` entry (D-10).
+function compileWorkItems(
+  brief: Brief,
+  write: readonly string[],
+  protectedGlobs: readonly string[],
+  facts: IndexFacts | undefined,
+): Result<RunWorkItem[]> {
+  const preset = ROUTINE_PRESET;
+  // A brief without items is the single item A that owns every criterion, with the brief's own size and model.
+  const items: BriefItem[] = brief.items ?? [
+    {
+      id: 'A',
+      title: brief.title,
+      dependsOn: [],
+      acceptance: brief.acceptance.map((c) => c.id),
+      ...(brief.size !== undefined ? { size: brief.size } : {}),
+      ...(brief.model !== undefined ? { model: brief.model } : {}),
+    },
+  ];
+  const out: RunWorkItem[] = [];
+  for (const [n, item] of items.entries()) {
+    // An explicit spec.files can only narrow the run's write set (RC-5, T-03-05).
+    for (const glob of item.spec?.files ?? []) {
+      const field = `brief.items[${n}].spec.files`;
+      if (withinAny(glob, protectedGlobs)) return invalid(field, `${glob} is a protected path`);
+      if (!withinAny(glob, write)) return invalid(field, `${glob} is not inside the write set of the run`);
+    }
+    const size = item.size ?? preset.defaultSize;
+    const acceptanceText = brief.acceptance.filter((c) => item.acceptance.includes(c.id)).map((c) => c.text);
+    const spec = deriveItemSpec({ title: item.title, acceptanceText, ...(item.spec !== undefined ? { spec: item.spec } : {}) }, write, facts);
+    if (item.size === undefined) spec.derived.unshift('size');
+    out.push({
+      id: item.id,
+      task: item.title,
+      size,
+      model: item.model ?? preset.modelBySize[size],
+      modelSource: item.model !== undefined ? 'brief' : 'modelBySize',
+      dependsOn: [...item.dependsOn],
+      acceptance: [...item.acceptance],
+      spec,
+    });
+  }
+  return ok(out);
+}
+
+// The command a declared check is listed under for the agent (execution.commands): the check's environment written as NAME=value words, sorted by
+// name, then its argument vector, joined by single spaces. A check without environment is listed as its argument vector alone.
+// The names the supervisor's check sandbox sets itself (SUPERVISOR_CHECK_ENV_NAMES) are left out, so the agent never gets a value the supervisor does not use.
+export function checkAgentCommand(check: Pick<CheckSpec, 'argv' | 'env'>): string {
+  return [...checkEnvAssignments(check), ...check.argv].join(' ');
+}
+
+function checkEnvAssignments(check: Pick<CheckSpec, 'env'>): string[] {
+  return Object.keys(check.env)
+    .filter((name) => !SUPERVISOR_CHECK_ENV_NAMES.includes(name))
+    .sort()
+    .map((name) => `${name}=${check.env[name] as string}`);
 }
 
 const RUN_ID = /^run_[0-9A-Za-z]{4,64}$/;
@@ -386,7 +619,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
     return invalid('brief.acceptance', 'the brief has no acceptance criteria: add a "## Acceptance criteria" section');
   }
 
-  const budgets = applyBudgetOverrides(input.budgetOverrides);
+  const budgets = applyBudgetOverrides(input.budgetOverrides, brief.items?.length ?? 1);
   if (!budgets.ok) return budgets;
 
   // The protected list is the preset's and the repository's together; nothing the repository says removes a preset entry.
@@ -418,15 +651,36 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
   }
   if (write.length === 0) return invalid('files.write', 'the run would have no writable path: the conventions declare no write set');
 
-  const commands = unique([...conventions.agentCommands, ...conventions.checks.map((check) => check.argv.join(' '))]);
-  for (const command of commands) {
+  // A check's environment is printed to the agent as NAME=value words: each value must be a plain word and must not look like a secret.
+  for (const [index, check] of conventions.checks.entries()) {
+    for (const name of Object.keys(check.env).filter((key) => !SUPERVISOR_CHECK_ENV_NAMES.includes(key)).sort()) {
+      const value = check.env[name] as string;
+      const refusal = assignmentRefusal(`${name}=${value}`);
+      if (refusal !== null) {
+        return invalid(`conventions.checks[${index}].env`, `${refusal}: the value of ${name} cannot be given to the agent exactly as written, and check environment must be non-secret and plain`);
+      }
+      if (redactSecrets(value) !== value) {
+        return invalid(`conventions.checks[${index}].env`, `the value of ${name} looks like a secret: check environment must be non-secret, since it is committed and printed to the agent`);
+      }
+    }
+  }
+  // The never-granted refusal judges each conventions agent command as written and each check by its argument vector, never the rendered string.
+  for (const command of [...conventions.agentCommands, ...conventions.checks.map((check) => check.argv.join(' '))]) {
     if (isRefusedAgentCommand(command)) {
       return invalid('execution.commands', `${JSON.stringify(command)} would grant the agent a command that is never granted`);
     }
   }
+  // The agent is given only the checks the run executes: a required check or a target check of the brief. A declared check that is neither is never run by the supervisor and
+  // judged by no gate (D-35), so listing it would hand the unit a command whose result means nothing to the run and that may not even pass as declared (run 3's attempt 2, plan 03-71).
+  // It stays in execution.checks, and both refusals above still judge it. A repository's own agent command is kept as written, even when it equals a dropped check's command.
+  const commands = unique([
+    ...conventions.agentCommands,
+    ...conventions.checks.filter((check) => check.required || brief.targetChecks.includes(check.name)).map(checkAgentCommand),
+  ]);
 
-  const size = brief.size ?? preset.defaultSize;
-  const model = brief.model ?? preset.modelBySize[size];
+  const compiledItems = compileWorkItems(brief, write, protectedGlobs, input.indexFacts);
+  if (!compiledItems.ok) return compiledItems;
+  const workItems = compiledItems.value;
   const contract: RunContract = {
     schema: 1,
     contractVersion: 1,
@@ -440,17 +694,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
       acceptance: brief.acceptance.map((c) => ({ id: c.id, text: c.text, verifiedBy: [...c.verifiedBy] })),
       exclusions: [...brief.exclusions],
       requirementRefs: [{ provider: 'manual', kind: 'brief', id: brief.source.id, revision: brief.digest }],
-      workItems: [
-        {
-          id: 'A',
-          task: brief.title,
-          size,
-          model,
-          modelSource: brief.model !== undefined ? 'brief' : 'modelBySize',
-          dependsOn: [],
-          spec: { files: [...write], symbols: [], configKeys: [], references: [], derived: ['files', 'symbols', 'configKeys', 'references'] },
-        },
-      ],
+      workItems,
     },
     workspace: {
       projectId: input.projectId,

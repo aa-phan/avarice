@@ -4,9 +4,13 @@
 // project entry) and of `inbox --json`; the human renderers live in src/cli/render/run-view.ts.
 import { ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import type { RunContract } from '../domain/run-contract.ts';
+import { checksNotRun } from './checks.ts';
+import { amendCommandOf, isAmendOnly, optionsOf } from '../domain/decision-policy.ts';
+import type { DecisionOption } from '../domain/decision-policy.ts';
 import { isRunResumable } from '../domain/run-lifecycle.ts';
 import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
-import type { DecisionUrgency, EvidenceRow, GateResultRow, Ledger, RunCheckpointRow, RunRow, RunStepRow } from '../ports/ledger.ts';
+import type { DecisionRow, DecisionUrgency, EvidenceRow, GateResultRow, Ledger, NotificationRow, NotificationState, RunCheckpointRow, RunRow, RunStepRow } from '../ports/ledger.ts';
 
 export interface RunCheckpointView {
   seq: number;
@@ -44,6 +48,38 @@ export interface RunReferenceView {
   revision: string;
 }
 
+// One work item of the run as the ledger holds it (AUT-12): its state, the size and model it was planned with, what it waits for and how many
+// times it was delegated.
+export interface RunItemView {
+  itemId: string;
+  state: string;
+  size: string;
+  model: string;
+  dependsOn: string[];
+  attempts: number;
+}
+
+// One decision of the run in any state. `supersedes` is the decision this one re-opened on a new state digest; `successor` is the one that
+// re-opened this one (a stale decision names it), so the owner is always pointed at the decision that is still open.
+export interface RunDecisionView {
+  decisionId: string;
+  class: string;
+  state: string;
+  affectedItems: string[];
+  supersedes: string | null;
+  successor: string | null;
+}
+
+// How many of the run's notifications are in each delivery state, and the code of the latest delivery that did not arrive. A count of
+// `failed` is a record that a banner did not arrive; it never closes or hides a decision (AUT-4).
+export interface RunNotificationView {
+  delivered: number;
+  pending: number;
+  held: number;
+  failed: number;
+  lastError: string | null;
+}
+
 // A run that stopped short of a stop state with nobody holding a live lease (S-3, AC-3). The run row keeps its ledger state;
 // the owner is shown it as paused, with the attempt and the step that were in flight and the command that continues it.
 export interface RunInterrupted {
@@ -54,6 +90,12 @@ export interface RunInterrupted {
   step: string;
   nextAction: string;
   resumeCommand: string;
+}
+
+// A declared check the run does not execute because it is neither required nor a target (D-35). The reason is always `not required`.
+export interface RunCheckNotRunView {
+  name: string;
+  reason: 'not required';
 }
 
 export interface RunStatus {
@@ -74,6 +116,15 @@ export interface RunStatus {
   budgets: RunBudgetView[];
   references: RunReferenceView[];
   interrupted?: RunInterrupted;
+  // Appended in Phase 3 (optional keys: every key above keeps its name, order and value, and a reader of Phase 2 output ignores these). The
+  // read model always fills the three of them; a view built by hand may leave them out.
+  items?: RunItemView[];
+  decisions?: RunDecisionView[];
+  notifications?: RunNotificationView;
+  // Present only when the owner asked for the run to be cancelled and the request still stands.
+  cancelRequestedAt?: string;
+  // Appended under the frozen-shapes rule (D-35): the declared checks that are neither required nor a target, so the run never runs them. Present only when there is one.
+  checksNotRun?: RunCheckNotRunView[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -139,6 +190,27 @@ function referencesOf(body: unknown): RunReferenceView[] {
   return out;
 }
 
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === 'string');
+
+// The declared checks of a stored contract body that the run does not execute (D-35). The body is read defensively, as referencesOf reads it: anything that is not the
+// shape of a compiled contract gives an empty list.
+export function checksNotRunOf(body: unknown): RunCheckNotRunView[] {
+  if (!isObject(body)) return [];
+  const execution = body['execution'];
+  const verification = body['verification'];
+  if (!isObject(execution) || !isObject(verification)) return [];
+  const checks = execution['checks'];
+  const requiredChecks = verification['requiredChecks'];
+  const targetChecks = verification['targetChecks'];
+  if (!Array.isArray(checks) || !isStringArray(requiredChecks) || !isStringArray(targetChecks)) return [];
+  const names: Array<{ name: string }> = [];
+  for (const check of checks) {
+    if (!isObject(check) || typeof check['name'] !== 'string') return [];
+    names.push({ name: check['name'] });
+  }
+  return checksNotRun({ execution: { checks: names }, verification: { requiredChecks, targetChecks } } as Pick<RunContract, 'execution' | 'verification'>).map((name) => ({ name, reason: 'not required' as const }));
+}
+
 function interruptedOf(ledger: Ledger, run: RunRow, checkpoint: RunCheckpointRow | null, nowMs: number): Result<RunInterrupted | undefined> {
   if (!isRunResumable(run.state) || leaseIsLive(run, nowMs)) return ok(undefined);
   const attempts = ledger.listRunAttempts(run.runId);
@@ -161,6 +233,23 @@ function interruptedOf(ledger: Ledger, run: RunRow, checkpoint: RunCheckpointRow
   });
 }
 
+function itemsOf(rows: ReadonlyArray<{ itemId: string; state: string; size: string; model: string; dependsOn: readonly string[]; attempts: number }>): RunItemView[] {
+  return rows.map((w) => ({ itemId: w.itemId, state: w.state, size: w.size, model: w.model, dependsOn: [...w.dependsOn], attempts: w.attempts }));
+}
+
+function decisionsOfRun(rows: readonly DecisionRow[]): RunDecisionView[] {
+  const successorOf = new Map<string, string>();
+  for (const d of rows) if (d.supersedes !== null) successorOf.set(d.supersedes, d.decisionId);
+  return rows.map((d) => ({ decisionId: d.decisionId, class: d.class, state: d.state, affectedItems: [...d.affectedItems], supersedes: d.supersedes, successor: successorOf.get(d.decisionId) ?? null }));
+}
+
+function notificationsOfRun(rows: readonly NotificationRow[]): RunNotificationView {
+  const count = (state: NotificationState): number => rows.filter((n) => n.state === state).length;
+  const unarrived = rows.filter((n) => n.state !== 'delivered' && n.lastError !== null);
+  const latest = unarrived.reduce<NotificationRow | undefined>((best, n) => (best === undefined || n.updatedAt >= best.updatedAt ? n : best), undefined);
+  return { delivered: count('delivered'), pending: count('pending'), held: count('held'), failed: count('failed'), lastError: latest === undefined ? null : latest.lastError };
+}
+
 function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus> {
   const checkpoints = ledger.listRunCheckpoints(run.runId);
   if (!checkpoints.ok) return checkpoints;
@@ -168,8 +257,12 @@ function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus>
   if (!evidenceRows.ok) return evidenceRows;
   const gateRows = ledger.listGateResults(run.runId);
   if (!gateRows.ok) return gateRows;
-  const open = ledger.listDecisions({ runId: run.runId, state: 'open' });
-  if (!open.ok) return open;
+  const decisionRows = ledger.listDecisions({ runId: run.runId });
+  if (!decisionRows.ok) return decisionRows;
+  const workItems = ledger.listWorkItems(run.runId);
+  if (!workItems.ok) return workItems;
+  const notificationRows = ledger.listNotifications({ runId: run.runId });
+  if (!notificationRows.ok) return notificationRows;
   const budgetRows = ledger.getBudgets(run.runId);
   if (!budgetRows.ok) return budgetRows;
   const contract = ledger.getRunContract(run.runId);
@@ -182,6 +275,7 @@ function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus>
   if (!interrupted.ok) return interrupted;
   const named = lastCheckpointOf(checkpoints.value);
   const evidence = finalEvidence(evidenceRows.value);
+  const notRun = checksNotRunOf(contract.value === null ? null : contract.value.body);
 
   return ok({
     runId: run.runId,
@@ -194,10 +288,15 @@ function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus>
     clean: evidence.length === 0 ? null : evidence.every((e) => e.clean),
     evidence: evidence.map((e) => ({ name: e.name, kind: e.kind, status: e.status, revision: e.revision, clean: e.clean, ...(e.environment['preExisting'] === true ? { preExisting: true as const } : {}) })),
     gates: latestGates(gateRows.value).map((g) => ({ gate: g.gate, passed: g.passed, revision: g.revision })),
-    openDecisions: open.value.length,
+    openDecisions: decisionRows.value.filter((d) => d.state === 'open').length,
     budgets: budgetRows.value.map((b) => ({ name: b.name, used: b.used, limit: b.limit })),
     references: referencesOf(contract.value === null ? null : contract.value.body),
     ...(interrupted.value !== undefined ? { interrupted: interrupted.value } : {}),
+    items: itemsOf(workItems.value),
+    decisions: decisionsOfRun(decisionRows.value),
+    notifications: notificationsOfRun(notificationRows.value),
+    ...(run.cancelRequestedAt !== null ? { cancelRequestedAt: run.cancelRequestedAt } : {}),
+    ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
   });
 }
 
@@ -224,6 +323,13 @@ export function getRunStatuses(ledger: Ledger, projectId: string, nowMs: number)
 
 // ---- inbox -------------------------------------------------------------------------------------------
 
+// The delivery state of the banner raised for a decision. `lastError` is a short code and appears only when a delivery failed.
+export interface InboxNotification {
+  state: NotificationState;
+  attempts: number;
+  lastError?: string;
+}
+
 export interface InboxDecision {
   decisionId: string;
   runId: string;
@@ -231,6 +337,12 @@ export interface InboxDecision {
   urgency: DecisionUrgency;
   openedAt: string;
   issue: string;
+  // Appended in Phase 3: the items the decision holds up, the answers it accepts, the command that answers it and, when a banner was
+  // raised for it, whether that banner arrived. A banner that did not arrive never hides the decision.
+  items: string[];
+  options: DecisionOption[];
+  command: string;
+  notification?: InboxNotification;
 }
 
 export interface InboxReview {
@@ -239,11 +351,34 @@ export interface InboxReview {
   branch: string | null;
   commit: string | null;
   repository: string;
+  // Appended under the frozen-shapes rule (D-35): the declared checks the run does not execute because they are neither required nor a target. Present only when there is one.
+  checksNotRun?: RunCheckNotRunView[];
 }
 
 export interface InboxView {
   decisions: InboxDecision[];
   reviews: InboxReview[];
+}
+
+// The command that answers a decision. A decision whose every option is withdraw is answered by an amendment (its stored command), and the
+// owner can still take it back with `withdraw`.
+function answerCommandOf(d: DecisionRow): string {
+  if (isAmendOnly(d.options)) return amendCommandOf(d.consequences, d.decisionId) ?? `avarice decide ${d.decisionId} withdraw`;
+  return `avarice decide ${d.decisionId} <option-key>`;
+}
+
+// A failed delivery outranks a held or pending one and those outrank a delivered one, so a banner that did not arrive is never covered by
+// another destination's success; ties go to the latest row.
+const NOTIFICATION_RANK: Readonly<Record<NotificationState, number>> = { failed: 3, held: 2, pending: 1, delivered: 0 };
+
+function notificationOfDecision(rows: readonly NotificationRow[], decisionId: string): InboxNotification | undefined {
+  let best: NotificationRow | undefined;
+  for (const row of rows) {
+    if (row.kind !== 'decisions' || !row.subjectIds.includes(decisionId)) continue;
+    if (best === undefined || NOTIFICATION_RANK[row.state] > NOTIFICATION_RANK[best.state] || (NOTIFICATION_RANK[row.state] === NOTIFICATION_RANK[best.state] && row.updatedAt >= best.updatedAt)) best = row;
+  }
+  if (best === undefined) return undefined;
+  return { state: best.state, attempts: best.attempts, ...(best.state !== 'delivered' && best.lastError !== null ? { lastError: best.lastError } : {}) };
 }
 
 // Open decisions and the runs that wait for a review. Read-only. Blocking decisions come before digest ones, the oldest first.
@@ -257,9 +392,25 @@ export function getInbox(ledger: Ledger): Result<InboxView> {
 
   const open = ledger.listDecisions({ state: 'open' });
   if (!open.ok) return open;
+  const banners = ledger.listNotifications();
+  if (!banners.ok) return banners;
   const decisions: InboxDecision[] = open.value
     .filter((d) => runIds.has(d.runId))
-    .map((d) => ({ decisionId: d.decisionId, runId: d.runId, class: d.class, urgency: d.urgency, openedAt: d.openedAt, issue: d.issue }));
+    .map((d) => {
+      const notification = notificationOfDecision(banners.value, d.decisionId);
+      return {
+        decisionId: d.decisionId,
+        runId: d.runId,
+        class: d.class,
+        urgency: d.urgency,
+        openedAt: d.openedAt,
+        issue: d.issue,
+        items: [...d.affectedItems],
+        options: optionsOf(d.options),
+        command: answerCommandOf(d),
+        ...(notification !== undefined ? { notification } : {}),
+      };
+    });
   decisions.sort((a, b) => (a.urgency === b.urgency ? 0 : a.urgency === 'blocking' ? -1 : 1));
 
   const reviews: InboxReview[] = [];
@@ -267,7 +418,17 @@ export function getInbox(ledger: Ledger): Result<InboxView> {
     if (run.state !== 'ready_for_review' && run.state !== 'awaiting_review') continue;
     const steps = ledger.getRunSteps(run.runId);
     if (!steps.ok) return steps;
-    reviews.push({ runId: run.runId, title: run.title, branch: run.branch, commit: handedOffCommit(steps.value), repository: repoOf.get(run.projectId) ?? '' });
+    const contract = ledger.getRunContract(run.runId);
+    if (!contract.ok) return contract;
+    const notRun = checksNotRunOf(contract.value === null ? null : contract.value.body);
+    reviews.push({
+      runId: run.runId,
+      title: run.title,
+      branch: run.branch,
+      commit: handedOffCommit(steps.value),
+      repository: repoOf.get(run.projectId) ?? '',
+      ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
+    });
   }
   return ok({ decisions, reviews });
 }

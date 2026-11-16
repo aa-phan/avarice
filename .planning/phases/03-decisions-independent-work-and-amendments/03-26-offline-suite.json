@@ -1,0 +1,63 @@
+{
+  "plan": "03-26",
+  "gate": "offline suite before live spend (D-04)",
+  "recordedAt": "2026-11-09",
+  "commit": "b627863",
+  "result": "pass",
+  "commands": [
+    {
+      "command": "node --test \"test/integration/phase3-exit-offline.test.ts\"",
+      "tests": 10,
+      "pass": 10,
+      "fail": 0,
+      "durationSeconds": 48,
+      "note": "the three D-03 exit runs, offline through the CLI"
+    },
+    {
+      "command": "node --test \"test/integration/run-silence.test.ts\"",
+      "tests": 10,
+      "pass": 10,
+      "fail": 0,
+      "durationSeconds": 11,
+      "note": "S-18 over 72 hours of injected clock, the batch window to the millisecond and a digest time to the minute"
+    },
+    {
+      "command": "node --test \"test/fault/decide-race.test.ts\" \"test/unit/killpoint-coverage.test.ts\" \"test/fault/run-killpoints.test.ts\" \"test/fault/run-park.test.ts\" \"test/fault/run-resume-session.test.ts\" \"test/fault/run-cancel.test.ts\" \"test/fault/run-reconcile.test.ts\"",
+      "tests": 76,
+      "pass": 76,
+      "fail": 0,
+      "durationSeconds": 339,
+      "note": "the race suite (6 orderings), kill-point coverage (12), and the four kill-point suites plus the new reconcile suite; AC-3: 27/27 interrupted attempts identified"
+    },
+    {
+      "command": "npm test",
+      "tests": 3461,
+      "suites": 719,
+      "pass": 3401,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 60,
+      "durationSeconds": 876,
+      "note": "the whole suite, every Phase 3 test file included; the 60 skipped tests are the live and attended cases that need AVARICE_LIVE and spend nothing offline"
+    }
+  ],
+  "loadSensitiveReruns": [],
+  "unexplainedFailures": [],
+  "newFiles": {
+    "test/integration/phase3-exit-offline.test.ts": { "tests": 10, "covers": "D-03 runs 1 to 3" },
+    "test/integration/run-silence.test.ts": { "tests": 10, "covers": "S-18 and the AUT-4 boundaries" },
+    "test/fault/decide-race.test.ts": { "tests": 6, "covers": "the lost-wakeup race: before the block, between block and release, between release and look (second supervisor finishes first; first looks again at once), after a kill at the block under a live lease and under a lapsed one" },
+    "test/unit/killpoint-coverage.test.ts": { "tests": 12, "covers": "every running, verifying and paused checkpoint has a kill point in the union of the lists, and each list has its own suite" },
+    "test/fault/run-reconcile.test.ts": { "tests": 3, "covers": "RECONCILE_KILL_POINTS: a resume killed at the reconcile checkpoint" },
+    "test/helpers/decide-cli.ts": { "tests": 0, "covers": "shared in-process decide, amend, inbox and status drivers, a movable clock" }
+  },
+  "defectsFoundAndFixed": [
+    {
+      "defect": "a supervisor killed at the transition to blocked_on_decision while it held its lease, an answer written under that live lease (decide starts nobody), and nothing ever picked the run up: `avarice resume` reported a blocked run as a stop state and continued nothing, and `resume --wait` returned at once on the stop state",
+      "red": "82cbc65 test(03-26): add the lost-wakeup race suite ..., whose case 'under the lease it still holds' failed with resume exiting 3",
+      "redEvidence": "03-26-red-evidence-task3.json",
+      "fix": "b627863 fix(03-26): resume continues a blocked run whose decision was answered under a dead supervisor's lease",
+      "files": ["src/app/run-resume.ts", "src/cli/commands/resume.ts", "docs/system/cli-reference.md", "docs/system/runs.md"]
+    }
+  ]
+}

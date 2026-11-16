@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "plan": "03-56",
+  "checkedAt": "2026-11-11T04:00:00.000Z",
+  "spentUsd": 0,
+  "modelHostLaunched": false,
+  "oldRun1": {
+    "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
+    "title": "The copy fallback names the address",
+    "readFrom": "avarice status --json (read-only, owner's profile, AVARICE_CLAUDE_BIN=2.1.319)",
+    "state": "cancelled",
+    "lastCheckpoint": { "seq": 41, "nextAction": "park", "at": "2026-11-11T01:05:39.076Z" },
+    "claudeRanCancel": false
+  },
+  "oldRun1State": "cancelled",
+  "gate": {
+    "command": "node scripts/exit-run-phase3-tools.ts brief-gate --classification .planning/phases/03-decisions-independent-work-and-amendments/03-55-brief-classification.json --source ~/aa-phan-portfolio-v2",
+    "exitCode": 0,
+    "summary": "brief-gate: pass: 148 finding(s) classified in 3 brief(s); repository unchanged"
+  },
+  "hostVersion": "2.1.319",
+  "hostVersionOutput": "2.1.319 (Claude Code)",
+  "oldAuthorizationRefused": true,
+  "oldAuthorization": {
+    "file": ".planning/phases/03-decisions-independent-work-and-amendments/03-49-exit-authorization.json",
+    "fieldExitCode": 2,
+    "message": "exit-run: the authorization selection is \"answer-2-in-place\", not \"approve\": only a fresh approval authorizes a start (D-28)"
+  },
+  "spentUsdPhase3": 11.2986,
+  "ceilingUsd": 25,
+  "perRunCapUsd": 4.5,
+  "runs": 3,
+  "guardWorstCaseUsd": 24.7986,
+  "guardFits": true,
+  "digests": {
+    "run2": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+    "run3": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+    "run1": "sha256:2183c31788bce25a7b14e5b961e6ec3518c50b6a5f0b4240151ae54bdd4eeb55"
+  },
+  "digestsCurrent": true,
+  "digestsComparedWith": "03-55-dry-run.json, against parseBrief of each brief file now",
+  "order": ["run2", "run3", "run1"],
+  "expects": { "run2": "amend-stale", "run3": "silence", "run1": "block-resume" },
+  "attempts": { "run2": 0, "run3": 0, "run1": 0 },
+  "attemptsFrom": ".planning/phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json (runs: [])"
+}

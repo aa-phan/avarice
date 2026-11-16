@@ -7,8 +7,11 @@ import {
   REFUSED_AGENT_COMMAND_WORDS,
   RESERVED_CHECK_ENV,
   checkSpecDigest,
+  isRefusedAgentCommand,
   parseConventions,
 } from '../../src/domain/conventions.ts';
+// A namespace import so a name this file reads from the module that does not exist yet fails its own test, not every test of the file.
+import * as conventionsApi from '../../src/domain/conventions.ts';
 import type { Conventions } from '../../src/domain/conventions.ts';
 
 type Obj = Record<string, unknown>;
@@ -240,6 +243,61 @@ describe('parseConventions: paths, inventory, dependencies and agent commands', 
       assert.equal(refusedField(parse({ schema: 1, agentCommands: [command] })), 'conventions.agentCommands[0]', JSON.stringify(command));
     }
     assert.equal(refusedField(parse({ schema: 1, agentCommands: 'npm test' })), 'conventions.agentCommands');
+  });
+});
+
+// Plan 03-64 (D-26, D-27): a leading NAME=value word never hides the program, and a leading assignment is held to the check-env rules.
+describe('leading assignments in agent commands', () => {
+  const agent = (command: string): Result<Conventions> => parse({ schema: 1, agentCommands: [command] });
+
+  it('programWords is the words after the leading assignment words', () => {
+    assert.deepEqual(conventionsApi.programWords(['A=1', 'B=', 'npm', 'test']), ['npm', 'test']);
+    assert.deepEqual(conventionsApi.programWords(['npm', 'A=1']), ['npm', 'A=1']);
+    assert.deepEqual(conventionsApi.programWords(['A=1']), []);
+    assert.deepEqual(conventionsApi.programWords(['1A=1', 'x']), ['1A=1', 'x']);
+  });
+
+  it('isRefusedAgentCommand judges the first word after the assignments', () => {
+    for (const command of ['X=1 git status', 'X=1 Y=2 /usr/bin/GIT log', 'A=1 curl x']) assert.equal(isRefusedAgentCommand(command), true, command);
+    for (const command of ['X=1 npm test', 'X=1', 'npm test']) assert.equal(isRefusedAgentCommand(command), false, command);
+  });
+
+  it('refuses a never-granted word after assignments, a reserved or lower-case name, a value that is not a plain word, a secret value and a command that is only assignments', () => {
+    const refused = [
+      'X=1 git status',
+      'PATH=bin npm test',
+      'NODE_OPTIONS=x npm test',
+      'npm_config_x=1 npm test',
+      'DYLD_X=1 npm test',
+      'lower=1 npm test',
+      'A=~x npm test',
+      'A=* npm test',
+      'A=1',
+      `A=ghp_${'a'.repeat(36)} npm test`,
+    ];
+    for (const command of refused) assert.equal(refusedField(agent(command)), 'conventions.agentCommands[0]', command);
+  });
+
+  it('admits a leading assignment of a non-reserved upper-case name with a plain value', () => {
+    assert.deepEqual(unwrap(agent('A=1 npm test')).agentCommands, ['A=1 npm test']);
+    assert.deepEqual(unwrap(agent('CI=1 npm run lint')).agentCommands, ['CI=1 npm run lint']);
+    assert.deepEqual(unwrap(agent('VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build')).agentCommands, ['VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build']);
+  });
+
+  it('assignmentRefusal names the variable it refuses, and PLAIN_ENV_VALUE is letters, digits and _@%+=:,./-', () => {
+    assert.equal(conventionsApi.assignmentRefusal('A=1'), null);
+    assert.equal(conventionsApi.assignmentRefusal('SITE_ORIGIN=https://example.test'), null);
+    for (const word of ['PATH=/x', 'lower=1', 'A=$x', 'A=a*', 'A=~x', 'NODE_OPTIONS=x']) {
+      const reason = conventionsApi.assignmentRefusal(word);
+      assert.notEqual(reason, null, word);
+      assert.ok((reason as string).includes(word.slice(0, word.indexOf('='))), `${word}: ${String(reason)}`);
+    }
+    for (const value of ['', 'abc', 'https://aa-phan.github.io', 'a_b@c%d+e=f:g,h./-i']) assert.equal(conventionsApi.PLAIN_ENV_VALUE.test(value), true, JSON.stringify(value));
+    for (const value of ['a b', '~', '*', "'", '"', '$', '{', 'a\nb', 'a;b', '?', '[']) assert.equal(conventionsApi.PLAIN_ENV_VALUE.test(value), false, JSON.stringify(value));
+  });
+
+  it('SUPERVISOR_CHECK_ENV_NAMES lists the names the supervisor check sandbox sets', () => {
+    assert.deepEqual([...conventionsApi.SUPERVISOR_CHECK_ENV_NAMES].sort(), ['CI', 'HOME', 'LANG', 'PATH', 'TMPDIR', 'npm_config_cache']);
   });
 });
 

@@ -9,10 +9,12 @@
 // never sees (a sandbox gap), a fix that leaves the check failing, and (plan 02-16) a crash or a wall-clock kill after some files were written,
 // a loop of denied calls, a flood of tool calls, and a different behaviour per attempt.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
+import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import { reapBySessionId } from '../../src/adapters/host-claude/claude-host.ts';
+import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { buildHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
 import { PURPOSE_EXTENSIONS } from '../../src/domain/invocation-scope.ts';
 import { err, ok } from '../../src/domain/result.ts';
@@ -28,6 +30,39 @@ export interface FakeRunOptions {
   summary?: boolean;
   // The `status:` of the quick VERIFICATION (default `passed`); `none` writes no VERIFICATION.
   verification?: 'passed' | 'gaps_found' | 'human_needed' | 'none';
+  // Plan 03-61. The status of the quick VERIFICATION depends on the prompt the unit was given: `passed` when the prompt holds a line equal to `marker` followed
+  // by a bullet line `- <check>` (a bullet list of the lines that start `- `), `otherwise` when it does not. It stands in for the 03-57 unit, which escalated a
+  // required check it was never told was pre-existing. When present it takes precedence over `verification`. JSON-serializable, like every option here.
+  verificationByPrompt?: { marker: string; check: string; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-64. The fake unit stands in for the 03-63 unit, which ran `npm run build` exactly as its prompt listed it and without VITE_SITE_ORIGIN. It takes the first bullet
+  // under the prompt line 'Commands you may run, exactly as written:' whose text equals `command` or ends with a space and `command` (a check command carries its environment
+  // first), calls the real hook with that bullet as a Bash command and, when the hook admits it, runs it in the clone under the environment the real host adapter builds
+  // (buildInvocationEnv, with this node's directory appended to PATH so the fixture's `node` is found). The VERIFICATION status is `passed` when it exits 0 and `otherwise` when
+  // it exits non-zero, is refused, or no bullet matches. It takes precedence over `verification` and `verificationByPrompt`. With `recordTo`, the record gains
+  // `listed: { command, denied, exitCode }` (exitCode null when the command did not run). JSON-serializable, like every option here.
+  runListedCommand?: { command: string; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-64. Shell lines the unit tries through the real hook, in order, before `runListedCommand`. A line the hook admits is run as `runListedCommand` runs its command
+  // and its exit code is recorded, never judged; a refused line is not run. With `recordTo`, the record gains `shell: [{ command, denied, exitCode }]` (exitCode null
+  // when the line did not run). It is how a test shows that an environment other than the listed one is refused and never runs. JSON-serializable.
+  shellAttempts?: readonly string[];
+  // Plan 03-69 (D-26, D-27). The fake unit stands in for run 3's attempt-1 verifier, which could not search because the host had removed Grep. After the edits the unit
+  // starts its verifier (one Agent call, subagent_type gsd-verifier, through the real hook) and the verifier searches for `pattern` under the clone-relative `path`.
+  // Whether its session has the Grep tool is decided from the production launch line (buildLaunchArgs for this request) by `hostKeepsSearchTools`. When it has not, the
+  // Grep call fails as the host fails it (the hook never sees it) and the verifier tries `grep -rn <pattern> <path>` through the real hook; the status is `otherwise`.
+  // When it has, each `outside` path is first tried as a Grep through the real hook (a refused call never searches), then the Grep of `path` goes through the hook and,
+  // when admitted, the fake searches the files under `path` in the clone (skipping `.git`, one regular expression match per line); the status is `passed` when the sorted
+  // matched files equal the sorted `expect` and `gaps_found` otherwise. Takes precedence over `verification`, `verificationByPrompt` and `runListedCommand`. With
+  // `recordTo`, the record gains `search: { available, outside: [{ path, denied }], denied, matched, shell }` (shell null, or { command, denied }). JSON-serializable.
+  verifierSearch?: { pattern: string; path: string; expect: readonly string[]; outside?: readonly string[]; otherwise: 'human_needed' | 'gaps_found' };
+  // Plan 03-71 (D-26, D-27). The fake unit stands in for run 3's attempt-2 unit, whose planner made a gate of a declared check because its prompt listed the command, and whose
+  // verifier wrote human_needed when that command could not pass as written. It decides only from the prompt the real code produced. After the edits and after `shellAttempts`,
+  // for each entry: `named` is whether the prompt holds a line equal to `notJudgedMarker` followed by the bullet `- <name>` (promptNames); `listed` is whether the prompt's
+  // 'Commands you may run, exactly as written:' bullets hold one equal to `command` or ending with a space and `command`. Only an entry that is listed and not named becomes a gate:
+  // its bullet goes through the real hook and, when admitted, runs as `runListedCommand` runs its command. The status is `passed` when every gate it made exited 0 (which includes
+  // making none) and `otherwise` when a gate exited non-zero or was refused. Takes precedence over `verificationByPrompt` and `verification`, after `verifierSearch` and
+  // `runListedCommand`. With `recordTo`, the record gains `gates: [{ name, listed, named, denied, exitCode }]` (denied false and exitCode null for an entry that made no gate).
+  // JSON-serializable, like every option here.
+  planGates?: { checks: ReadonlyArray<{ name: string; command: string }>; notJudgedMarker: string; otherwise: 'human_needed' | 'gaps_found' };
   // Run `git commit` through the hook (denied), then move the clone HEAD with a direct git call, as a containment bypass would.
   commitAttempt?: boolean;
   // The pause text the host captured: the unit stopped to ask.
@@ -52,7 +87,7 @@ export interface FakeRunOptions {
   addTest?: { file: string; name: string; body?: string };
   editPackageJson?: boolean;
   addOverride?: boolean;
-  // Where to write {prompt, cwd, invocationId} (the supervisor is another process).
+  // Where to write {prompt, cwd, invocationId, runId, sessionId, resumeSessionId, observed} (the supervisor is another process).
   recordTo?: string;
   // Quick directory name; default `261105-fk1-fix`.
   quickId?: string;
@@ -85,9 +120,105 @@ export interface FakeRunOptions {
   // and then hangs: until its abort signal fires (it ends the group, records `abortedAtMs`, and reports a SIGTERM end with no result), or until `maxMs`
   // passes (it ends the group and finishes normally). The host's own process group is what a real host's abort ends.
   hangUntilAbort?: { maxMs: number; onStart?: (request: InvocationRequest) => void };
+  // Plan 03-11 (D-06, D-08). One host script for several work items and a resumed session. The item of an invocation is the `Work item <ID>:` line of
+  // its prompt (the line the production unit and resume prompts write); a fresh call of item B plays the base options, then `perItem.B`, then
+  // `perItem.B.perAttempt[n]` for the n-th fresh call of B (0-based; resumed calls are not counted). A call that carries `resumeSessionId` plays the
+  // base options and `perItem.B.resume`, or `resume` when B has no entry of its own: it does not replay the options that paused it. An item with no
+  // entry, and a prompt with no item line, play the base options and the base `perAttempt[n]` (Phase 2's script, unchanged). Every option here must
+  // stay JSON-serializable: the options travel to the supervisor as AVARICE_FAKE_HOST.
+  perItem?: Readonly<Record<string, FakeRunOptions>>;
+  resume?: FakeRunOptions;
+  // A resumed call (one that carries `resumeSessionId`) ends as the real CLI ends for a session it does not know (spike S3-A, plan 03-13): a result event of
+  // subtype `error_during_execution` with `is_error` true, no turns, no cost and exit 1, nothing written to the clone, kind `failed`. Only a resumed call is
+  // affected, so it belongs in a `resume` entry; a fresh call ignores it. It lets a test reach the fresh-unit fallback.
+  missingSession?: boolean;
+  // The unit makes this many Agent calls through the real hook, before its edits, each with its own tool_use_id and a completion after it (so each is
+  // charged to subagentsTotal and none stays in flight). The outcome reports how many the hook admitted as `details.subagentsSpawned`.
+  subagents?: number;
+  // The text of the quick PLAN.md the unit leaves (written through the hook like the SUMMARY). It is written even when the unit writes no SUMMARY, as a
+  // unit that stopped to ask after it planned would leave it. Absent: the default plan, written only together with the SUMMARY.
+  planText?: string;
+  // Plan 03-43. The host keeps each session it starts under `<effective config dir>/fake-sessions/<session id>`, where the effective directory is the
+  // CLAUDE_CONFIG_DIR of the process the host runs in (else HOME/.claude), and a resumed call whose session is not under the launching process's directory
+  // ends as a missing session. This is how the real host behaves: it does not look across configuration directories. Off by default, so a test that runs
+  // the host in this process never writes under the real home.
+  sessionsPerConfigDir?: boolean;
+}
+
+// The item line of a unit or resume prompt: a line that starts `Work item <ID>:`, or the first line of the quoted task text. A phrase of that shape
+// in the middle of a line (a brief title) is not an item line.
+const ITEM_LINE = /(?:^|--text ")Work item ([A-Z][A-Za-z0-9_-]{0,31}):/m;
+
+const COMMANDS_LINE = 'Commands you may run, exactly as written:';
+
+// The bullets (without the `- `) of the run of `- ` lines right after the 'Commands you may run, exactly as written:' line.
+export function listedCommandsOf(prompt: string): string[] {
+  const lines = prompt.split('\n');
+  const at = lines.indexOf(COMMANDS_LINE);
+  const out: string[] = [];
+  if (at < 0) return out;
+  for (let i = at + 1; i < lines.length && (lines[i] as string).startsWith('- '); i += 1) out.push((lines[i] as string).slice(2));
+  return out;
+}
+
+export const itemOfPrompt = (prompt: string): string | undefined => ITEM_LINE.exec(prompt)?.[1];
+
+// Whether the prompt has a line equal to `marker` and, right after it, a run of bullet lines (`- ...`) that holds `- <check>`.
+export function promptNames(prompt: string, marker: string, check: string): boolean {
+  const lines = prompt.split('\n');
+  const at = lines.indexOf(marker);
+  if (at < 0) return false;
+  for (let i = at + 1; i < lines.length && (lines[i] as string).startsWith('- '); i += 1) {
+    if (lines[i] === `- ${check}`) return true;
+  }
+  return false;
+}
+
+// Whether the host keeps its Glob and Grep tools in a session launched with `argv`. This is the pinned 2.1.319 host's rule as host-search-tools.test.ts measures it on the
+// real binary: without a `--tools`, `--allowedTools` or `--allowed-tools` flag that names Glob or Grep, the host removes both tools from a session that has a shell and from
+// every agent it resolves. The flag's value is split on commas and spaces, and a parenthesized suffix (`Grep(src/**)`) is cut before the name is compared.
+export function hostKeepsSearchTools(argv: readonly string[]): boolean {
+  const flags = new Set(['--tools', '--allowedTools', '--allowed-tools']);
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i] as string;
+    const equals = token.startsWith('--') ? token.indexOf('=') : -1;
+    const flag = equals === -1 ? token : token.slice(0, equals);
+    if (!flags.has(flag)) continue;
+    const value = equals === -1 ? (argv[i + 1] ?? '') : token.slice(equals + 1);
+    for (const entry of value.split(/[,\s]+/)) {
+      const name = entry.replace(/\(.*$/, '');
+      if (name === 'Glob' || name === 'Grep') return true;
+    }
+  }
+  return false;
+}
+
+// The options without the keys that select options: what a selected layer contributes to the merged options.
+function withoutSelectors(options: FakeRunOptions | undefined): FakeRunOptions {
+  if (options === undefined) return {};
+  const { perItem: _perItem, resume: _resume, perAttempt: _perAttempt, ...rest } = options;
+  return rest;
+}
+
+// The options one invocation plays (plan 03-11): see `FakeRunOptions.perItem`. `perItemCallIndex` is the 0-based number of fresh calls of the
+// same item (or of no item) before this one. The result carries none of the selecting keys.
+export function selectFakeOptions(base: FakeRunOptions, request: Pick<InvocationRequest, 'prompt' | 'resumeSessionId'>, perItemCallIndex: number): FakeRunOptions {
+  const item = itemOfPrompt(request.prompt);
+  const entry = item !== undefined && base.perItem !== undefined && Object.hasOwn(base.perItem, item) ? base.perItem[item] : undefined;
+  const own = withoutSelectors(base);
+  if (request.resumeSessionId !== undefined) return { ...own, ...withoutSelectors(entry?.resume ?? base.resume) };
+  if (entry !== undefined) return { ...own, ...withoutSelectors(entry), ...withoutSelectors(entry.perAttempt?.[perItemCallIndex]) };
+  return { ...own, ...withoutSelectors(base.perAttempt?.[perItemCallIndex]) };
 }
 
 export const FAKE_QUICK_ID = '261105-fk1-fix';
+
+// The configuration directory of the process the fake host runs in: CLAUDE_CONFIG_DIR when set and not empty, else HOME/.claude (the real host's rule).
+function effectiveConfigDir(): string {
+  const set = process.env['CLAUDE_CONFIG_DIR'];
+  if (set !== undefined && set !== '') return set;
+  return join(process.env['HOME'] !== undefined && process.env['HOME'] !== '' ? process.env['HOME'] : homedir(), '.claude');
+}
 
 interface HookRun {
   denied: string | null;
@@ -95,9 +226,10 @@ interface HookRun {
   stopped: boolean;
 }
 
-function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolName: string, toolInput: Record<string, unknown>): HookRun {
+// `extra` carries the top-level fields of the hook input beside the tool call (`tool_use_id`).
+function callHook(policyFile: string, cwd: string, event: 'pre' | 'post', toolName: string, toolInput: Record<string, unknown>, extra: Record<string, unknown> = {}): HookRun {
   const result = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', HOOK_ENTRY, '--event', event, '--policy', policyFile], {
-    input: JSON.stringify({ cwd, hook_event_name: event === 'pre' ? 'PreToolUse' : 'PostToolUse', tool_name: toolName, tool_input: toolInput }),
+    input: JSON.stringify({ cwd, hook_event_name: event === 'pre' ? 'PreToolUse' : 'PostToolUse', tool_name: toolName, tool_input: toolInput, ...extra }),
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -124,6 +256,8 @@ export class FakeRunHost implements AgentHost {
   sleeperPid: number | undefined;
   abortedAtMs: number | undefined;
   hangStartedAtMs: number | undefined;
+  // Fresh calls so far by item ID ('' for a prompt with no item line): the index `selectFakeOptions` takes.
+  private readonly freshCalls = new Map<string, number>();
 
   constructor(options: FakeRunOptions = {}) {
     this.options = options;
@@ -132,18 +266,68 @@ export class FakeRunHost implements AgentHost {
   async invoke(req: InvocationRequest, signal: AbortSignal): Promise<Result<InvocationOutcome>> {
     this.calls.push(req);
     if (req.purpose !== 'run') return err({ kind: 'unsupported', capability: `fake-run-host:${req.purpose}` });
-    const o: FakeRunOptions = { ...this.options, ...(this.options.perAttempt?.[this.calls.length - 1] ?? {}) };
+    let freshIndex = 0;
+    if (req.resumeSessionId === undefined) {
+      const key = itemOfPrompt(req.prompt) ?? '';
+      freshIndex = this.freshCalls.get(key) ?? 0;
+      this.freshCalls.set(key, freshIndex + 1);
+    }
+    const o = selectFakeOptions(this.options, req, freshIndex);
+    // The session the unit runs under: a resumed session wins over a fresh one (as the real adapter does), else the caller's, else a made-up one.
+    const sessionId = req.resumeSessionId ?? req.sessionId ?? `fake-run-session-${this.calls.length}`;
+    // The session store of this process's configuration directory (plan 03-43): a session is kept where it was started, and only there.
+    const sessionsDir = o.sessionsPerConfigDir === true ? join(effectiveConfigDir(), 'fake-sessions') : undefined;
+    const unknownHere = sessionsDir !== undefined && req.resumeSessionId !== undefined && !existsSync(join(sessionsDir, req.resumeSessionId));
+    if (sessionsDir !== undefined && !unknownHere) {
+      mkdirSync(sessionsDir, { recursive: true });
+      writeFileSync(join(sessionsDir, sessionId), '');
+    }
     if (o.refuse === 'unavailable') return err({ kind: 'unavailable', cause: 'the fake host has no sandbox' });
     if (o.refuse === 'internal') return err({ kind: 'internal', cause: 'the fake host failed' });
+    // Plan 03-69: the production launch line for this request, judged as the real adapter judges it (the placeholders stand for the generated files).
+    let launchArgs: string[] = [];
+    if (o.verifierSearch !== undefined) {
+      launchArgs = buildLaunchArgs({
+        prompt: req.prompt,
+        settingsFile: '/avarice-fake-run/host-settings.json',
+        pluginDir: '/avarice-fake-run/plugin',
+        agentsFile: '/avarice-fake-run/agents.json',
+        mcpFile: '/avarice-fake-run/mcp.json',
+        model: req.model,
+        costCapUsd: req.costCapUsd,
+        sessionId: req.sessionId ?? `fake-run-session-${this.calls.length}`,
+        ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+        ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
+      });
+      const safe = assertLaunchArgsSafe(launchArgs);
+      if (!safe.ok) return err({ kind: 'denied', rule: `enforcement_failure:${safe.error.kind === 'denied' ? safe.error.rule.replace(/^launch_args:/, 'launch-args:') : 'launch-args'}`, enforcer: 'avarice' });
+    }
     const startedMs = Date.now();
     const cwd = realpathSync(req.cwd);
+    let record: Record<string, unknown> | undefined;
     if (o.recordTo !== undefined) {
       const observed: Record<string, string | null> = {};
       for (const rel of o.observe ?? []) observed[rel] = existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null;
-      writeFileSync(o.recordTo, JSON.stringify({ prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, observed }));
+      record = { prompt: req.prompt, cwd, invocationId: req.invocationId, runId: req.runId, sessionId, resumeSessionId: req.resumeSessionId, observed };
+      writeFileSync(o.recordTo, JSON.stringify(record));
     }
     if (o.delayMs !== undefined) await new Promise<void>((resolve) => setTimeout(resolve, o.delayMs));
     const head = gitHead(cwd);
+
+    // A session the CLI does not know: spike S3-A measured that it prints a result event (`error_during_execution`, an error, no turns, no cost) and exits 1,
+    // before it touches anything. The adapter reports it as kind `failed` and drops the host's own message.
+    if (req.resumeSessionId !== undefined && (o.missingSession === true || unknownHere)) {
+      return ok({
+        sessionId,
+        kind: 'failed',
+        permissionDenials: [],
+        costUsd: 0,
+        durationMs: Date.now() - startedMs,
+        headBefore: head,
+        headAfter: head,
+        details: { exitCode: 1, signal: null, timedOut: false, headMoved: false, transcriptBytes: 0, hookDenies: 0, hookBudgetDenies: 0, numTurns: 0, resultSeen: true, isError: true, subtype: 'error_during_execution' },
+      });
+    }
 
     const built = buildHookPolicy(
       req.scope,
@@ -158,15 +342,15 @@ export class FakeRunHost implements AgentHost {
     let denies = 0;
     let stopped = false;
     // One tool call: PreToolUse, the effect when allowed, PostToolUse.
-    const tool = (name: string, input: Record<string, unknown>, effect: () => void): boolean => {
-      const pre = callHook(policyFile, cwd, 'pre', name, input);
+    const tool = (name: string, input: Record<string, unknown>, effect: () => void, extra: Record<string, unknown> = {}): boolean => {
+      const pre = callHook(policyFile, cwd, 'pre', name, input, extra);
       if (pre.stopped) stopped = true;
       if (pre.denied !== null) {
         denies += 1;
         return false;
       }
       effect();
-      callHook(policyFile, cwd, 'post', name, input);
+      callHook(policyFile, cwd, 'post', name, input, extra);
       return true;
     };
     const write = (rel: string, text: string): void => {
@@ -209,7 +393,61 @@ export class FakeRunHost implements AgentHost {
       const original = readFileSync(join(cwd, 'src/slug.ts'), 'utf8');
       edits['src/slug.ts'] = `${original}// attempted fix\n`;
     }
+    // Agent calls through the hook, one after another (each completes before the next starts, so none holds a concurrency slot).
+    let subagentsAdmitted = 0;
+    for (let i = 0; i < (o.subagents ?? 0) && !stopped; i += 1) {
+      const admitted = tool(
+        'Agent',
+        { subagent_type: 'gsd-executor', description: `fake subagent ${i + 1}`, prompt: 'work' },
+        () => {},
+        { tool_use_id: `toolu_fake_${i + 1}` },
+      );
+      if (admitted) subagentsAdmitted += 1;
+    }
     for (const [rel, text] of Object.entries(edits)) edit(rel, text);
+    // Plan 03-69: the verifier the unit starts, searching the clone (see `verifierSearch`).
+    let searchStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    if (o.verifierSearch !== undefined && !stopped) {
+      const v = o.verifierSearch;
+      const verifier = { agent_id: 'agent-fake-verifier', agent_type: 'gsd-verifier' };
+      const started = tool('Agent', { subagent_type: 'gsd-verifier', description: 'verify the work', prompt: 'verify' }, () => {}, { tool_use_id: 'toolu_fake_verifier' });
+      const available = hostKeepsSearchTools(launchArgs);
+      const outside: Array<{ path: string; denied: boolean }> = [];
+      let matched: string[] = [];
+      let searchDenied = false;
+      let shell: { command: string; denied: boolean } | null = null;
+      if (started && available) {
+        for (const path of v.outside ?? []) {
+          if (stopped) break;
+          outside.push({ path, denied: !tool('Grep', { pattern: v.pattern, path }, () => {}, verifier) });
+        }
+        const found = new Set<string>();
+        const expression = new RegExp(v.pattern);
+        const walk = (dir: string): void => {
+          for (const name of readdirSync(dir).sort()) {
+            if (name === '.git') continue;
+            const full = join(dir, name);
+            if (statSync(full).isDirectory()) walk(full);
+            else if (readFileSync(full, 'utf8').split('\n').some((line) => expression.test(line))) found.add(relative(cwd, full));
+          }
+        };
+        const admitted = tool('Grep', { pattern: v.pattern, path: v.path }, () => walk(join(cwd, v.path)), verifier);
+        searchDenied = !admitted;
+        matched = [...found].sort();
+        searchStatus = admitted && JSON.stringify(matched) === JSON.stringify([...v.expect].sort()) ? 'passed' : 'gaps_found';
+      } else if (started) {
+        // The host answers the Grep call with its own error and the hook never sees it; the verifier then tries the shell.
+        const command = `grep -rn ${v.pattern} ${v.path}`;
+        shell = { command, denied: !tool('Bash', { command }, () => {}, verifier) };
+        searchStatus = v.otherwise;
+      } else {
+        searchStatus = v.otherwise;
+      }
+      if (o.recordTo !== undefined) {
+        record = { ...record, search: { available, outside, denied: searchDenied, matched, shell } };
+        writeFileSync(o.recordTo, JSON.stringify(record));
+      }
+    }
     const crashed = o.crash !== undefined || o.timeoutMs !== undefined;
     for (const rel of o.crash?.afterFiles ?? []) {
       const marker = '// partial write of a unit that stopped before it finished\n';
@@ -238,13 +476,72 @@ export class FakeRunHost implements AgentHost {
       tool('Write', { file_path: target, content: 'outside the write set\n' }, () => write(o.deniedEdit as string, 'outside the write set\n'));
     }
 
+    // Plan 03-64: the command the prompt lists for a check, run as the unit would run it (see `runListedCommand`). Plan 03-71: the gates the unit makes of the commands its prompt
+    // lists and does not name as judged by no gate (see `planGates`).
+    let listedStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    let gatesStatus: 'passed' | 'human_needed' | 'gaps_found' | undefined;
+    if (o.runListedCommand !== undefined || o.shellAttempts !== undefined || o.planGates !== undefined) {
+      const hostEnv = buildInvocationEnv(process.env, {
+        gsdCoreBin: join(tmpdir(), 'avarice-fake-run-no-such-gsd-core-bin'),
+        onboardingId: req.onboardingId,
+        marker: req.runId,
+        ...(req.scope.scratchDir !== undefined ? { scratchDir: req.scope.scratchDir } : {}),
+        extraPath: [dirname(process.execPath)],
+      });
+      // One Bash call through the real hook; an admitted line runs under the environment the real host adapter builds, a refused one never runs.
+      const runShell = (command: string): { command: string; denied: boolean; exitCode: number | null } => {
+        const seen: { command: string; denied: boolean; exitCode: number | null } = { command, denied: false, exitCode: null };
+        const admitted = tool('Bash', { command }, () => {
+          seen.exitCode = spawnSync('/bin/sh', ['-c', command], { cwd, env: hostEnv, encoding: 'utf8', timeout: 60_000 }).status;
+        });
+        seen.denied = !admitted;
+        return seen;
+      };
+      const attempted: Array<{ command: string; denied: boolean; exitCode: number | null }> = [];
+      for (const line of o.shellAttempts ?? []) {
+        if (stopped) break;
+        attempted.push(runShell(line));
+      }
+      let listed: { command: string; denied: boolean; exitCode: number | null } | undefined;
+      if (o.runListedCommand !== undefined) {
+        const wanted = o.runListedCommand.command;
+        const bullet = listedCommandsOf(req.prompt).find((b) => b === wanted || b.endsWith(` ${wanted}`));
+        listed = bullet === undefined ? { command: wanted, denied: false, exitCode: null } : runShell(bullet);
+        listedStatus = listed.exitCode === 0 ? 'passed' : o.runListedCommand.otherwise;
+      }
+      let gates: Array<{ name: string; listed: boolean; named: boolean; denied: boolean; exitCode: number | null }> | undefined;
+      if (o.planGates !== undefined) {
+        const plan = o.planGates;
+        gates = [];
+        let failed = false;
+        for (const entry of plan.checks) {
+          const named = promptNames(req.prompt, plan.notJudgedMarker, entry.name);
+          const bullet = listedCommandsOf(req.prompt).find((b) => b === entry.command || b.endsWith(` ${entry.command}`));
+          const made = bullet !== undefined && !named && !stopped ? runShell(bullet) : undefined;
+          if (made !== undefined && (made.denied || made.exitCode !== 0)) failed = true;
+          gates.push({ name: entry.name, listed: bullet !== undefined, named, denied: made?.denied ?? false, exitCode: made?.exitCode ?? null });
+        }
+        gatesStatus = failed ? plan.otherwise : 'passed';
+      }
+      if (o.recordTo !== undefined) {
+        writeFileSync(
+          o.recordTo,
+          JSON.stringify({ ...record, ...(listed !== undefined ? { listed } : {}), ...(o.shellAttempts !== undefined ? { shell: attempted } : {}), ...(gates !== undefined ? { gates } : {}) }),
+        );
+      }
+    }
+
     const quick = o.quickId ?? FAKE_QUICK_ID;
     const wroteEdits = Object.keys(edits).length > 0;
-    if ((o.summary ?? wroteEdits) && !crashed) {
-      const base = `.planning/quick/${quick}`;
-      tool('Write', { file_path: join(cwd, `${base}/${quick}-PLAN.md`), content: 'plan' }, () => write(`${base}/${quick}-PLAN.md`, '# Plan\n\nFix the slug.\n'));
+    const base = `.planning/quick/${quick}`;
+    const writesSummary = (o.summary ?? wroteEdits) && !crashed;
+    if (!crashed && (o.planText !== undefined || writesSummary)) {
+      const plan = o.planText ?? '# Plan\n\nFix the slug.\n';
+      tool('Write', { file_path: join(cwd, `${base}/${quick}-PLAN.md`), content: plan }, () => write(`${base}/${quick}-PLAN.md`, plan));
+    }
+    if (writesSummary) {
       tool('Write', { file_path: join(cwd, `${base}/${quick}-SUMMARY.md`), content: 'summary' }, () => write(`${base}/${quick}-SUMMARY.md`, `# Summary\n\nFixed the slug.\n${o.summaryText ?? ''}\n`));
-      const status = o.verification ?? 'passed';
+      const status = searchStatus ?? listedStatus ?? gatesStatus ?? (o.verificationByPrompt !== undefined ? (promptNames(req.prompt, o.verificationByPrompt.marker, o.verificationByPrompt.check) ? 'passed' : o.verificationByPrompt.otherwise) : (o.verification ?? 'passed'));
       if (status !== 'none') {
         const extra = [...(o.verificationExtra ?? []), ...(o.addOverride === true ? ['overrides_applied: 1'] : [])];
         const text = ['---', `status: ${status}`, ...extra, '---', '', '# Verification', ''].join('\n');
@@ -328,7 +625,7 @@ export class FakeRunHost implements AgentHost {
     const elapsed = Math.max(Date.now() - startedMs, o.timeoutMs ?? 0);
     if (abortedByCaller) {
       return ok({
-        sessionId: `fake-run-session-${this.calls.length}`,
+        sessionId,
         kind: 'inconclusive',
         permissionDenials: [],
         costUsd: 0,
@@ -349,7 +646,7 @@ export class FakeRunHost implements AgentHost {
       });
     }
     return ok({
-      sessionId: `fake-run-session-${this.calls.length}`,
+      sessionId,
       kind: crashed ? 'inconclusive' : denies > 0 && !wroteEdits ? 'denied' : 'progressed',
       permissionDenials: [],
       costUsd: o.crash?.costUsd ?? 0,
@@ -368,6 +665,7 @@ export class FakeRunHost implements AgentHost {
         numTurns: 1,
         resultSeen: !crashed,
         ...(crashed ? {} : { isError: false }),
+        ...(o.subagents !== undefined ? { subagentsSpawned: subagentsAdmitted } : {}),
       },
     });
   }

@@ -14,6 +14,7 @@ import { openDb } from '../src/adapters/sqlite/db.ts';
 import { migrate } from '../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { DENIED_COMMAND_PREFIXES, GSD_READ_VERBS, READ_ONLY_COMMANDS } from '../src/domain/invocation-scope.ts';
 import type { HookPolicy } from '../src/domain/hook-decision.ts';
 
@@ -43,7 +44,7 @@ try {
   const ledgerPath = join(dir, 'state.db');
   const opened = openDb(ledgerPath);
   if (!opened.ok) throw new Error('cannot open the bench ledger');
-  const migrated = migrate(opened.value, mode === 'run' ? [MIGRATION_0001, MIGRATION_0002] : [MIGRATION_0001]);
+  const migrated = migrate(opened.value, mode === 'run' ? [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003] : [MIGRATION_0001]);
   if (!migrated.ok) throw new Error('cannot migrate the bench ledger');
   opened.value.prepare("INSERT INTO budgets (run_id, name, limit_value, used, reserved, exactness, contract_version) VALUES ('run_bench', 'toolCalls', 1000000, 0, 0, 'exact', 1)").run();
   opened.value.close();

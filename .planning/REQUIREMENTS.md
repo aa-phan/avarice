@@ -11,6 +11,8 @@ Source: `docs/requirements.md` (PRD, precedence 1). IDs are the PRD's own (the i
 
 Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are the first milestone (v1.0).
 
+**v1.0 shipped 2026-11-15.** The 62 requirements mapped to Phases 1-3 are complete and checked below; a snapshot at close is archived in `milestones/v1.0-REQUIREMENTS.md`. This file stays live for v1.1 (Phases 4-5) and v2.0 (Phases 6-8), whose requirements are still proposals.
+
 ### Workflow (FR-1 to FR-11)
 
 - [x] **FR-1** [MVP]: A run starts from a manual brief (Markdown text or file) or a typed external task reference; a manual brief is sufficient on its own.
@@ -53,9 +55,9 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **RC-3** [MVP]: The user's authorization comes from the brief, the selected preset or an explicit instruction; AVARICE adds no confirmation step for authority already granted.
 - [x] **RC-4** [MVP]: Within the contract, routine actions and phase transitions proceed without human prompts.
 - [x] **RC-5** [MVP]: The agent, its subagents and any process the run starts cannot expand the contract's scope, change policy, raise a budget or obtain credentials; only the user (personal) or the authorizer named by policy (enterprise) can amend a contract, through an interactive AVARICE command outside the governed run.
-- [ ] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
-- [ ] **RC-7** [MVP]: Each work item carries a size (`small`, `medium`, `large`) and a specification (files it may change, public symbols it adds or changes, configuration keys it touches, documents it cites); when the brief omits them the compiler derives them from the brief, the indexes and the GSD plan and records which were derived.
-- [ ] **RC-8** [MVP]: The model for each work item's invocation comes from its size through the preset's size-to-model map, unless the contract overrides it for that item.
+- [x] **RC-6** [MVP]: A contract amendment is recorded as a new contract version with authorizer, reason and diff; evidence collected under an earlier version is invalidated when the amendment changes acceptance criteria, writable scope, required checks or the policy revision.
+- [x] **RC-7** [MVP]: Each work item carries a size (`small`, `medium`, `large`) and a specification (files it may change, public symbols it adds or changes, configuration keys it touches, documents it cites); when the brief omits them the compiler derives them from the brief, the indexes and the GSD plan and records which were derived.
+- [x] **RC-8** [MVP]: The model for each work item's invocation comes from its size through the preset's size-to-model map, unless the contract overrides it for that item.
 
 ### Containment (CON-1 to CON-16)
 
@@ -73,27 +75,27 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **CON-12** [MVP]: Caches record source version, freshness and access scope and are not reused after access is revoked or across profiles.
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
 - [x] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
-- [ ] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
+- [x] **CON-15** [MVP]: Subagents and delegated work receive equal or narrower authority than their parent and draw from the parent's budget.
 - [x] **CON-16** [MVP]: A crashed or timed-out invocation that left no side effect outside the machine is discarded before any retry by resetting the run worktree to the commit recorded at the work item's last checkpoint, limited to commits and files the run created after it (CON-9).
 
 ### Autonomy and human involvement (AUT-1 to AUT-17)
 
-- [ ] **AUT-1** [MVP]: Human involvement is triggered by decision significance (consequence, reversibility, authority, evidence), never by the end of a stage alone and never by model confidence alone.
-- [ ] **AUT-2** [MVP]: A needed human decision is persisted as a decision record with issue, evidence, options, recommendation, consequences, affected dependencies and any authorized default.
-- [ ] **AUT-3** [MVP]: While a consequential decision is open the run continues independent authorized work and does not implement dependent work; with none left it checkpoints and enters a visible blocked state without polling.
-- [ ] **AUT-4** [MVP]: Deadlines, silence and notification failure never count as approval.
-- [ ] **AUT-5** [MVP]: A decision response is validated for identity, scope, applicability to current state and duplication before it is applied; relevant tickets, code, policy and credentials are refreshed before work resumes.
-- [ ] **AUT-6** [MVP local, Later push adapters]: Notifications go only to destinations the user configured; a failed delivery leaves the decision pending and visible locally; scheduled check-ins use software scheduling, not a waiting model.
+- [x] **AUT-1** [MVP]: Human involvement is triggered by decision significance (consequence, reversibility, authority, evidence), never by the end of a stage alone and never by model confidence alone.
+- [x] **AUT-2** [MVP]: A needed human decision is persisted as a decision record with issue, evidence, options, recommendation, consequences, affected dependencies and any authorized default.
+- [x] **AUT-3** [MVP]: While a consequential decision is open the run continues independent authorized work and does not implement dependent work; with none left it checkpoints and enters a visible blocked state without polling.
+- [x] **AUT-4** [MVP]: Deadlines, silence and notification failure never count as approval.
+- [x] **AUT-5** [MVP]: A decision response is validated for identity, scope, applicability to current state and duplication before it is applied; relevant tickets, code, policy and credentials are refreshed before work resumes.
+- [x] **AUT-6** [MVP local, Later push adapters]: Notifications go only to destinations the user configured; a failed delivery leaves the decision pending and visible locally; scheduled check-ins use software scheduling, not a waiting model.
 - [x] **AUT-7** [MVP]: Phase transitions are decided by machine-checkable entry and exit conditions with persisted evidence, never by an agent summary alone.
 - [x] **AUT-8** [MVP]: Acceptance criteria map to verification; check results distinguish passed, failed, skipped, unavailable and inconclusive and are tied to the revision and environment tested.
 - [x] **AUT-9** [MVP]: The run cannot weaken acceptance criteria, delete or disable failing tests, bypass checks or relabel failure as success to pass a gate; legitimate test changes need a recorded justification and proportional review.
-- [ ] **AUT-10** [MVP]: Repair loops are bounded and escalate with the smallest useful reproducer and a diagnostic summary.
+- [x] **AUT-10** [MVP]: Repair loops are bounded and escalate with the smallest useful reproducer and a diagnostic summary.
 - [ ] **AUT-11** [MVP]: The normal unattended endpoint is a reviewable change plus an evidence package; merge, publish and deploy need separate authorization in the contract and in organizational policy.
-- [ ] **AUT-12** [MVP]: Every run state is visible offline, and cancellation and resumption are safe at any point.
+- [x] **AUT-12** [MVP]: Every run state is visible offline, and cancellation and resumption are safe at any point.
 - [ ] **AUT-13** [MVP]: When a contract enables the mutation gate, test strength on changed lines is measured with a mechanically generated, model-free mutant set; each mutant is killed or accepted as equivalent by the user before `ready_for_review`; model-proposed mutants may add to the set but never replace it (ADR-007).
 - [ ] **AUT-14** [MVP]: A hardening work item may add or strengthen tests only; its contract makes every non-test path read-only, and no test is edited to pass under a mutation.
 - [ ] **AUT-15** [Later]: An unattended run may span several repositories of one project group only when each has an active project record; each repository gets its own worktree, contract scope, gates and change request, and the run reaches `ready_for_review` only when every repository's gates pass.
-- [ ] **AUT-16** [MVP]: After every work item the required checks run on the run worktree; a newly failing check is charged to that item and goes to repair, then to a decision; a contract may turn this off only with a recorded reason.
+- [x] **AUT-16** [MVP]: After every work item the required checks run on the run worktree; a newly failing check is charged to that item and goes to repair, then to a decision; a contract may turn this off only with a recorded reason.
 - [ ] **AUT-17** [MVP]: Gate G2 compares each item's symbol diff from the code graph with its specification; a new import outside the repository's declared dependencies, or a new or changed public symbol outside the specification, is a finding that goes to repair, then to a decision.
 
 ### Codebase onboarding (ONB-1 to ONB-15)
@@ -244,9 +246,9 @@ Each v1 requirement maps to exactly one phase.
 | RC-3 | Phase 2 | Complete |
 | RC-4 | Phase 2 | Complete |
 | RC-5 | Phase 2 | Complete |
-| RC-6 | Phase 3 | Pending |
-| RC-7 | Phase 3 | Pending |
-| RC-8 | Phase 3 | Pending |
+| RC-6 | Phase 3 | Complete |
+| RC-7 | Phase 3 | Complete |
+| RC-8 | Phase 3 | Complete |
 | CON-1 | Phase 2 | Complete |
 | CON-2 | Phase 2 | Complete |
 | CON-3 | Phase 2 | Complete |
@@ -261,24 +263,24 @@ Each v1 requirement maps to exactly one phase.
 | CON-12 | Phase 4 | Pending |
 | CON-13 | Phase 2 | Complete |
 | CON-14 | Phase 2 | Complete |
-| CON-15 | Phase 3 | Pending |
+| CON-15 | Phase 3 | Complete |
 | CON-16 | Phase 2 | Complete |
-| AUT-1 | Phase 3 | Pending |
-| AUT-2 | Phase 3 | Pending |
-| AUT-3 | Phase 3 | Pending |
-| AUT-4 | Phase 3 | Pending |
-| AUT-5 | Phase 3 | Pending |
-| AUT-6 | Phase 3 | Pending |
+| AUT-1 | Phase 3 | Complete |
+| AUT-2 | Phase 3 | Complete |
+| AUT-3 | Phase 3 | Complete |
+| AUT-4 | Phase 3 | Complete |
+| AUT-5 | Phase 3 | Complete |
+| AUT-6 | Phase 3 | Complete |
 | AUT-7 | Phase 2 | Complete |
 | AUT-8 | Phase 2 | Complete |
 | AUT-9 | Phase 2 | Complete |
-| AUT-10 | Phase 3 | Pending |
+| AUT-10 | Phase 3 | Complete |
 | AUT-11 | Phase 5 | Pending |
-| AUT-12 | Phase 3 | Pending |
+| AUT-12 | Phase 3 | Complete |
 | AUT-13 | Phase 5 | Pending |
 | AUT-14 | Phase 5 | Pending |
 | AUT-15 | Phase 8 | Pending |
-| AUT-16 | Phase 3 | Pending |
+| AUT-16 | Phase 3 | Complete |
 | AUT-17 | Phase 5 | Pending |
 | ONB-1 | Phase 1 | Complete |
 | ONB-2 | Phase 1 | Complete |
@@ -350,4 +352,4 @@ An earlier phase delivers part of a requirement that a later phase completes (th
 
 ---
 *Requirements defined: 2026-11-01*
-*Last updated: 2026-11-01 after initial definition*
+*Last updated: 2026-11-15 after v1.0 milestone close*

@@ -64,7 +64,7 @@ describe('avarice init', () => {
     assert.ok(r.stdout.includes(configPath), r.stdout);
     assert.ok(r.stdout.includes(roots.AVARICE_DATA_ROOT), r.stdout);
     assert.ok(r.stdout.includes(roots.AVARICE_WORK_ROOT), r.stdout);
-    assert.match(r.stdout, /schema version:\s+2/);
+    assert.match(r.stdout, /schema version:\s+3/);
     assert.match(r.stdout, /node:sqlite/);
     assert.match(r.stdout, /experimental/i);
     assert.deepEqual(JSON.parse(readFileSync(configPath, 'utf8')), {
@@ -73,7 +73,7 @@ describe('avarice init', () => {
       dataRoot: roots.AVARICE_DATA_ROOT,
       workRoot: roots.AVARICE_WORK_ROOT,
     });
-    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '2');
+    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '3');
   });
 
   it('uses mode 0700 for every directory and 0600 for the config file and the store files', () => {
@@ -98,10 +98,10 @@ describe('avarice init', () => {
     const second = runCli(['init'], { roots });
     assert.equal(second.code, 0, second.stderr);
     assert.equal(readFileSync(configPath, 'utf8'), before);
-    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '2');
+    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '3');
     const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
     try {
-      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 2);
+      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 3);
     } finally {
       db.close();
     }

@@ -94,14 +94,14 @@ function describeError(error: { kind: string } & Record<string, unknown>): strin
 // preflight (read-only; Task 3's verification of the owner's commit, and the dry run's last step on its clone)
 // ---------------------------------------------------------------------------------------------------------------
 
-interface PreflightReport {
+export interface PreflightReport {
   lines: string[];
   ok: boolean;
   conventionsRevision?: string;
   checksDigest?: string;
 }
 
-function preflight(repo: string, configPath: string, pinRef: string, nowMs: number): PreflightReport {
+export function preflight(repo: string, configPath: string, pinRef: string, nowMs: number): PreflightReport {
   const lines: string[] = [];
   let ok = true;
   const fail = (line: string): void => {
@@ -612,7 +612,7 @@ interface RefLine {
   object: string;
 }
 
-function snapshot(repo: string): Json {
+export function snapshot(repo: string): Json {
   const digest = checkoutDigest(repo, [RUN_REF_PATTERN]);
   const stage = mustGit(repo, ['ls-files', '--stage', '-z']);
   const refs: RefLine[] = mustGit(repo, ['for-each-ref', '--format=%(refname) %(objectname)'])
@@ -627,7 +627,7 @@ function snapshot(repo: string): Json {
 // What "the checkout is unchanged" compares: the checkout digest (refs outside the run refs included), the index entries and the symbolic HEAD.
 // `counts.refsAllowed` is how many run refs exist: it changes by one per handed-off run and is judged on its own (newRefs), not here.
 // Recomputed from the parts by `evidence`, so a snapshot file cannot carry a stale rule.
-function compositeOf(snap: Json): string {
+export function compositeOf(snap: Json): string {
   const digest = isObject(snap['digest']) ? snap['digest'] : {};
   const counts = isObject(digest['counts']) ? { ...digest['counts'] } : {};
   delete counts['refsAllowed'];

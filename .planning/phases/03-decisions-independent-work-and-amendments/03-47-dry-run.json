@@ -1,0 +1,427 @@
+{
+  "schema": 1,
+  "plan": "03-47",
+  "startedAt": "2026-11-10T08:51:04.619Z",
+  "source": "~/aa-phan-portfolio-v2",
+  "pin": "9f1cd8d",
+  "node": "v26.9.0",
+  "spentUsd": 0,
+  "installs": false,
+  "modelHostLaunched": false,
+  "readOnly": true,
+  "preflight": [
+    "ok   pin 9f1cd8d, source HEAD 9f63d91",
+    "staleness: ok (HEAD descends from the pin; 0 commit(s) outside .avarice/ and .planning/ past the pin; the pin tree has .planning/ROADMAP.md)",
+    "conventions: ok (revision 9f63d9114c5d3d720b8496b08cec85382cfaa357, checks digest sha256:43b374ff784bfcab7e7533545e462d29edac345015ccb4b4328ff9041e99c214 equals the draft's, 13 checks)"
+  ],
+  "pinSha": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+  "conventionsRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+  "conventionsRead": "git objects of the portfolio (the revision that holds .avarice/config.json), not the working tree",
+  "spend": {
+    "ledger": "test/containment/live-spend-phase3.jsonl",
+    "spentUsd": 10.1294,
+    "ceilingUsd": 25,
+    "headroomUsd": 14.8706,
+    "runs": 3,
+    "routineCapUsdPerRun": 10,
+    "fullCapsTotalUsd": 30,
+    "fullCapsFit": false,
+    "largestPerRunCapThatFitsExactUsd": 4.956863,
+    "largestPerRunCapThatFitsUsd": 4.95,
+    "totalAtThatCapUsd": 14.85,
+    "flag": "--budget costUsdPerRun=4.95",
+    "fullCapGuard": {
+      "eachRunStartsOnlyIfSpendBeforeItIsAtMostUsd": 15,
+      "runsOneAndTwoMayCostAtMostInTotalUsd": 4.8706
+    }
+  },
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "title": "The copy fallback names the address",
+      "compiled": true,
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts",
+        "src/lib/copy.ts",
+        "tests/unit/copy.test.ts",
+        "src/components/ui/useCopyEmail.ts"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 7,
+        "toolCalls": 1200,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 7,
+        "toolCalls": 1200,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.95,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "fallback-wording"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "test:isIsoYearMonth"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:fallback-wording",
+            "check:test",
+            "test:copyFallback names the address"
+          ]
+        },
+        {
+          "id": "AC4",
+          "item": "C",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint",
+            "check:test"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export isIsoYearMonth from src/lib/dates.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "files": [
+            "src/lib/dates.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Add copyFallback(address) to src/lib/copy.ts",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC3"
+          ],
+          "files": [
+            "src/lib/copy.ts"
+          ],
+          "role": "planted"
+        },
+        {
+          "id": "C",
+          "title": "Use copyFallback in src/components/ui/useCopyEmail.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [
+            "B"
+          ],
+          "acceptance": [
+            "AC4"
+          ],
+          "files": [
+            "src/components/ui/useCopyEmail.ts"
+          ],
+          "role": "dependent"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        },
+        "C": {
+          "otherItemOptions": 0
+        }
+      }
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "title": "Graduation label for the education entry",
+      "compiled": true,
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/theme.ts",
+        "tests/unit/theme.test.ts",
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.95,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "graduation-wording"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "test:isTheme accepts only light and dark"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "B",
+          "verifiedBy": [
+            "check:test",
+            "test:graduationLabel"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:graduation-wording",
+            "check:test",
+            "check:typecheck"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export isTheme from src/lib/theme.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1"
+          ],
+          "files": [
+            "src/lib/theme.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Add graduationLabel(end, today) to src/lib/dates.ts",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC2",
+            "AC3"
+          ],
+          "files": [
+            "src/lib/dates.ts"
+          ],
+          "role": "planted"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        }
+      }
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "title": "Theme attribute constant and the toggle's accessible name",
+      "compiled": true,
+      "digest": "sha256:4019f32906cc1ad90571389b14cd2bee47d71b1e6853d78d36f1411ebc78631b",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/theme.ts",
+        "src/components/ui/ThemeToggle.tsx",
+        "tests/unit/theme-toggle.test.tsx"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.95,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "toggle-pattern"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:lint"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:toggle-pattern",
+            "check:test",
+            "test:theme toggle accessible name"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export THEME_ATTRIBUTE from src/lib/theme.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "files": [
+            "src/lib/theme.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Accessible name of ThemeToggle in src/components/ui/ThemeToggle.tsx",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC3"
+          ],
+          "files": [
+            "src/components/ui/ThemeToggle.tsx"
+          ],
+          "role": "planted"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        }
+      }
+    }
+  ],
+  "host": {
+    "executed": false,
+    "admittedVersions": [
+      "2.1.312",
+      "2.1.316",
+      "2.1.317",
+      "2.1.318",
+      "2.1.319"
+    ],
+    "claudeOnPath": [
+      "~/.local/bin/claude"
+    ],
+    "versionsDirectory": "~/.local/share/claude/versions",
+    "installedVersionNames": [
+      "2.1.317",
+      "2.1.318",
+      "2.1.319",
+      "2.1.321"
+    ],
+    "installedAndAdmittedByName": [
+      "2.1.317",
+      "2.1.318",
+      "2.1.319"
+    ],
+    "installedButNotAdmittedByName": [
+      "2.1.321"
+    ]
+  },
+  "portfolio": {
+    "before": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "after": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "unchanged": true
+  },
+  "problems": [],
+  "warnings": [
+    "three routine caps of 10.00 USD (30.00) do not fit the headroom 14.8706 USD: the owner chooses a lower cap or a decision about the ceiling",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: tests/unit/theme-toggle.test.tsx is created by the run (absent at the pin)"
+  ],
+  "wallSeconds": 0
+}

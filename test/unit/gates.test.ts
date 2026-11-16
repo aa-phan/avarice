@@ -2,8 +2,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { G2_RULES, G4_RULES, evaluateG2, evaluateG4 } from '../../src/domain/gates.ts';
-import type { G2Facts, G4Facts } from '../../src/domain/gates.ts';
+import {
+  G1_RULES,
+  G2_RULES,
+  G3_RULES,
+  G4_RULES,
+  INTEGRITY_GATE_RULES,
+  PLAN_CITES_ACCEPTANCE_HARD,
+  evaluateG1,
+  evaluateG2,
+  evaluateG3,
+  evaluateG4,
+  g1PathBreaches,
+  integrityFailures,
+} from '../../src/domain/gates.ts';
+import type { G1Facts, G2Facts, G3Facts, G4Facts } from '../../src/domain/gates.ts';
+import { ROUTINE_PRESET } from '../../src/domain/run-contract.ts';
+import type { QuickPlan } from '../../src/domain/quick-record.ts';
 
 const HEAD = `git:${'a'.repeat(40)}`;
 
@@ -221,5 +236,290 @@ describe('evaluateG2', () => {
     };
     assert.deepEqual(evaluateG2(facts), evaluateG2(facts));
     assert.deepEqual(evaluateG2(facts), evaluateG2(reversed));
+  });
+});
+
+function plan(over: Partial<QuickPlan> = {}): QuickPlan {
+  return { filesModified: ['src/lib/copy.ts'], taskFiles: ['src/lib/copy.ts'], decisionCheckpoints: [], acceptanceRefs: ['AC1'], ...over };
+}
+
+function g1(over: Partial<G1Facts> = {}): G1Facts {
+  return {
+    plan: plan(),
+    globs: { write: ['src/**'], create: ['src/**', 'test/**'], protected: ['.github/**'] },
+    itemSpec: { files: ['src/**'], derived: ['files'] },
+    outcome: 'progressed',
+    ownerChoices: [],
+    itemAcceptance: ['AC1'],
+    ...over,
+  };
+}
+
+describe('evaluateG1 (tracer: write scope, item spec, an unasked owner choice)', () => {
+  it('lists the rules in their fixed order', () => {
+    assert.deepEqual([...G1_RULES], ['plan-present', 'plan-within-write-scope', 'plan-within-spec', 'decision-checkpoint-unresolved', 'owner-choice-unasked', 'plan-cites-acceptance']);
+  });
+
+  it('passes a plan whose paths sit inside the write set and the spec, with nothing unasked', () => {
+    assert.deepEqual(evaluateG1(g1()), { passed: true, failures: [] });
+  });
+
+  it('fails plan-present when there is no plan text, and judges nothing else on a missing plan', () => {
+    const verdict = evaluateG1(g1({ plan: null, ownerChoices: [{ acceptanceId: 'AC3', key: 'k', answered: false }] }));
+    assert.equal(verdict.passed, false);
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-present']);
+  });
+
+  it('fails plan-within-write-scope naming the path outside files.write and files.create', () => {
+    const verdict = evaluateG1(g1({ plan: plan({ filesModified: ['src/lib/copy.ts', 'docs/x.md'], taskFiles: ['docs/x.md'] }) }));
+    assert.equal(verdict.passed, false);
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-within-write-scope']);
+    assert.match(verdict.failures[0]?.detail ?? '', /docs\/x\.md/);
+    assert.doesNotMatch(verdict.failures[0]?.detail ?? '', /src\/lib\/copy\.ts/);
+  });
+
+  it('lets a plan path that only files.create allows pass, and a protected glob win over the write set', () => {
+    assert.equal(evaluateG1(g1({ globs: { write: ['src/**'], create: ['test/**'], protected: [] }, plan: plan({ filesModified: ['test/new.test.ts'], taskFiles: [] }), itemSpec: { files: [], derived: ['files'] } })).passed, true);
+    const verdict = evaluateG1(g1({ globs: { write: ['**'], create: ['**'], protected: ['.github/**'] }, plan: plan({ filesModified: ['.github/workflows/ci.yml'], taskFiles: [] }), itemSpec: { files: [], derived: ['files'] } }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-within-write-scope']);
+    assert.match(verdict.failures[0]?.detail ?? '', /protected/);
+  });
+
+  it('treats an absolute path, a .. segment and a backslash as outside the contract whatever the globs say, and drops a leading ./', () => {
+    const wide = { write: ['**'], create: ['**'], protected: [] };
+    const bad = evaluateG1(g1({ globs: wide, plan: plan({ filesModified: ['../outside.ts', '/etc/passwd', 'src\\x.ts', 'src/../../y.ts'], taskFiles: [] }) }));
+    assert.deepEqual(bad.failures.map((f) => f.rule), ['plan-within-write-scope']);
+    for (const path of ['../outside.ts', '/etc/passwd', 'src\\x.ts', 'src/../../y.ts']) assert.ok((bad.failures[0]?.detail ?? '').includes(path), path);
+    assert.equal(evaluateG1(g1({ plan: plan({ filesModified: ['./src/lib/copy.ts'], taskFiles: [] }) })).passed, true);
+  });
+
+  it('fails plan-within-spec for a path inside the write set but outside the explicit item spec files', () => {
+    const verdict = evaluateG1(g1({ itemSpec: { files: ['src/lib/copy.ts'], derived: [] }, plan: plan({ filesModified: ['src/lib/dates.ts'], taskFiles: [] }) }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-within-spec']);
+    assert.match(verdict.failures[0]?.detail ?? '', /src\/lib\/dates\.ts/);
+  });
+
+  it('judges against the write set only when the item spec files are derived', () => {
+    const verdict = evaluateG1(g1({ itemSpec: { files: ['src/lib/copy.ts'], derived: ['files', 'symbols'] }, plan: plan({ filesModified: ['src/lib/dates.ts'], taskFiles: [] }) }));
+    assert.deepEqual(verdict, { passed: true, failures: [] });
+  });
+
+  it('fails owner-choice-unasked naming the acceptance ID, and passes once the choice is answered', () => {
+    const unasked = evaluateG1(g1({ ownerChoices: [{ acceptanceId: 'AC3', key: 'fallback-wording', answered: false }] }));
+    assert.deepEqual(unasked.failures.map((f) => f.rule), ['owner-choice-unasked']);
+    assert.match(unasked.failures[0]?.detail ?? '', /AC3/);
+    assert.match(unasked.failures[0]?.detail ?? '', /fallback-wording/);
+    assert.deepEqual(evaluateG1(g1({ ownerChoices: [{ acceptanceId: 'AC3', key: 'fallback-wording', answered: true }] })), { passed: true, failures: [] });
+  });
+
+  it('gives a deep-equal verdict whatever order the path lists and choices arrive in', () => {
+    const a = g1({
+      plan: plan({ filesModified: ['docs/b.md', 'docs/a.md', 'src/x.ts'], taskFiles: ['docs/c.md'] }),
+      ownerChoices: [{ acceptanceId: 'AC9', key: 'z', answered: false }, { acceptanceId: 'AC2', key: 'y', answered: false }],
+      globs: { write: ['src/**', 'lib/**'], create: ['test/**', 'src/**'], protected: [] },
+    });
+    const b = g1({
+      plan: plan({ filesModified: ['src/x.ts', 'docs/a.md', 'docs/b.md'], taskFiles: ['docs/c.md'] }),
+      ownerChoices: [{ acceptanceId: 'AC2', key: 'y', answered: false }, { acceptanceId: 'AC9', key: 'z', answered: false }],
+      globs: { write: ['lib/**', 'src/**'], create: ['src/**', 'test/**'], protected: [] },
+    });
+    assert.deepEqual(evaluateG1(a), evaluateG1(b));
+    assert.equal(evaluateG1(a).passed, false);
+  });
+});
+
+describe('evaluateG1 (decision checkpoints and the acceptance citation)', () => {
+  const unresolved = plan({ decisionCheckpoints: [{ hasAutoSelect: false, optionIds: ['a', 'b'] }] });
+
+  it('fails decision-checkpoint-unresolved when a checkpoint has no auto_select and the unit progressed anyway', () => {
+    const verdict = evaluateG1(g1({ plan: unresolved }));
+    assert.equal(verdict.passed, false);
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['decision-checkpoint-unresolved']);
+    assert.match(verdict.failures[0]?.detail ?? '', /a, b/);
+  });
+
+  it('passes when the unit paused at the checkpoint, or when every checkpoint carries an auto_select', () => {
+    assert.deepEqual(evaluateG1(g1({ plan: unresolved, outcome: 'paused' })), { passed: true, failures: [] });
+    const resolved = plan({ decisionCheckpoints: [{ hasAutoSelect: true, optionIds: ['a'] }, { hasAutoSelect: true, optionIds: [] }] });
+    assert.deepEqual(evaluateG1(g1({ plan: resolved })), { passed: true, failures: [] });
+  });
+
+  it('records plan-cites-acceptance as an advisory while the constant is false, leaving passed true', () => {
+    assert.equal(PLAN_CITES_ACCEPTANCE_HARD, false);
+    const verdict = evaluateG1(g1({ plan: plan({ acceptanceRefs: ['AC7'] }), itemAcceptance: ['AC1', 'AC2'] }));
+    assert.equal(verdict.passed, true);
+    assert.deepEqual(verdict.failures, []);
+    assert.deepEqual(verdict.advisories?.map((a) => a.rule), ['plan-cites-acceptance']);
+    assert.match(verdict.advisories?.[0]?.detail ?? '', /AC1, AC2/);
+  });
+
+  it('moves plan-cites-acceptance into failures when the hard option is set', () => {
+    const verdict = evaluateG1(g1({ plan: plan({ acceptanceRefs: [] }), itemAcceptance: ['AC1'] }), { citesAcceptanceHard: true });
+    assert.equal(verdict.passed, false);
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-cites-acceptance']);
+    assert.equal(verdict.advisories, undefined);
+  });
+
+  it('is satisfied by one cited ID, and by an item with no acceptance IDs, and leaves no advisories key then', () => {
+    for (const hard of [false, true]) {
+      assert.deepEqual(evaluateG1(g1({ plan: plan({ acceptanceRefs: ['AC2'] }), itemAcceptance: ['AC1', 'AC2'] }), { citesAcceptanceHard: hard }), { passed: true, failures: [] });
+      assert.deepEqual(evaluateG1(g1({ plan: plan({ acceptanceRefs: [] }), itemAcceptance: [] }), { citesAcceptanceHard: hard }), { passed: true, failures: [] });
+    }
+  });
+
+  it('lists every failing rule in the fixed G1 order', () => {
+    const verdict = evaluateG1(
+      g1({
+        plan: plan({ filesModified: ['docs/x.md'], taskFiles: [], decisionCheckpoints: [{ hasAutoSelect: false, optionIds: ['a'] }], acceptanceRefs: [] }),
+        itemSpec: { files: ['src/lib/copy.ts'], derived: [] },
+        ownerChoices: [{ acceptanceId: 'AC3', key: 'k', answered: false }],
+      }),
+      { citesAcceptanceHard: true },
+    );
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['plan-within-write-scope', 'plan-within-spec', 'decision-checkpoint-unresolved', 'owner-choice-unasked', 'plan-cites-acceptance']);
+  });
+
+  it('never lets plan text pass: a plan that claims auto_select, cites every ID and stays inside scope still fails an unanswered owner choice', () => {
+    const claims = plan({ decisionCheckpoints: [{ hasAutoSelect: true, optionIds: ['a'] }], acceptanceRefs: ['AC1', 'AC2', 'AC3'] });
+    const verdict = evaluateG1(g1({ plan: claims, ownerChoices: [{ acceptanceId: 'AC3', key: 'k', answered: false }] }), { citesAcceptanceHard: true });
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['owner-choice-unasked']);
+  });
+});
+
+function g3(over: Partial<G3Facts> = {}): G3Facts {
+  return {
+    repairAttempts: 0,
+    limit: 1,
+    failingTests: ['copy > names the address'],
+    inventoryAfter: ['copy > names the address', 'copy > other'],
+    testFilesOfFailing: ['tests/unit/copy.test.ts'],
+    changes: [{ path: 'src/lib/copy.ts', status: 'modified' }],
+    authorizedTestPaths: [],
+    ...over,
+  };
+}
+
+describe('evaluateG3', () => {
+  it('lists the rules in their fixed order', () => {
+    assert.deepEqual([...G3_RULES], ['repair-limit', 'failing-test-present', 'failing-test-unchanged']);
+  });
+
+  it('passes a repair below the limit that kept the failing test and left its file alone', () => {
+    assert.deepEqual(evaluateG3(g3()), { passed: true, failures: [] });
+  });
+
+  it('fails repair-limit once the attempts reach the limit, and a limit of 0 fails on the first look', () => {
+    assert.deepEqual(evaluateG3(g3({ repairAttempts: 1, limit: 1 })).failures.map((f) => f.rule), ['repair-limit']);
+    assert.deepEqual(evaluateG3(g3({ repairAttempts: 0, limit: 0 })).failures.map((f) => f.rule), ['repair-limit']);
+    assert.equal(evaluateG3(g3({ repairAttempts: 1, limit: 2 })).passed, true);
+  });
+
+  it('fails failing-test-present when a failing test ID is gone from the inventory after the repair', () => {
+    const verdict = evaluateG3(g3({ inventoryAfter: ['copy > other'] }));
+    assert.deepEqual(verdict.failures.map((f) => f.rule), ['failing-test-present']);
+    assert.match(verdict.failures[0]?.detail ?? '', /copy > names the address/);
+  });
+
+  it('fails failing-test-unchanged when the file holding the failing test changed, whatever the change status', () => {
+    for (const status of ['modified', 'deleted', 'added'] as const) {
+      const verdict = evaluateG3(g3({ changes: [{ path: 'tests/unit/copy.test.ts', status }] }));
+      assert.deepEqual(verdict.failures.map((f) => f.rule), ['failing-test-unchanged'], status);
+      assert.match(verdict.failures[0]?.detail ?? '', /tests\/unit\/copy\.test\.ts/);
+    }
+  });
+
+  it('passes the same change when an amendment authorized that test path, and not when it authorized another', () => {
+    const changes = [{ path: 'tests/unit/copy.test.ts', status: 'modified' as const }];
+    assert.deepEqual(evaluateG3(g3({ changes, authorizedTestPaths: ['tests/unit/copy.test.ts'] })), { passed: true, failures: [] });
+    assert.equal(evaluateG3(g3({ changes, authorizedTestPaths: ['tests/unit/other.test.ts'] })).passed, false);
+  });
+
+  it('lists every failing rule in order and gives a deep-equal verdict whatever order the lists arrive in', () => {
+    const a = g3({
+      repairAttempts: 2,
+      limit: 2,
+      failingTests: ['t2', 't1'],
+      inventoryAfter: [],
+      testFilesOfFailing: ['tests/b.test.ts', 'tests/a.test.ts'],
+      changes: [{ path: 'tests/b.test.ts', status: 'modified' }, { path: 'tests/a.test.ts', status: 'deleted' }],
+    });
+    const b = g3({
+      repairAttempts: 2,
+      limit: 2,
+      failingTests: ['t1', 't2'],
+      inventoryAfter: [],
+      testFilesOfFailing: ['tests/a.test.ts', 'tests/b.test.ts'],
+      changes: [{ path: 'tests/a.test.ts', status: 'deleted' }, { path: 'tests/b.test.ts', status: 'modified' }],
+    });
+    assert.deepEqual(evaluateG3(a).failures.map((f) => f.rule), ['repair-limit', 'failing-test-present', 'failing-test-unchanged']);
+    assert.deepEqual(evaluateG3(a), evaluateG3(b));
+  });
+});
+
+describe('the integrity gates of the routine preset', () => {
+  const RULES: Record<string, readonly string[]> = { G1: G1_RULES, G2: G2_RULES, G3: G3_RULES };
+  const INVENTORY_RULES = ['removed-test', 'new-skip-marker', 'lowered-test-count'];
+
+  it('maps every integrity gate the preset lists to at least one rule that exists, and lists no gate the preset lacks', () => {
+    const gates = [...ROUTINE_PRESET.verification.integrityGates];
+    assert.deepEqual(Object.keys(INTEGRITY_GATE_RULES).sort(), [...gates].sort());
+    for (const gate of gates) {
+      const refs = INTEGRITY_GATE_RULES[gate] ?? [];
+      assert.ok(refs.length > 0, `${gate} maps to nothing`);
+      for (const ref of refs) {
+        const [which, rule, sub] = ref.split(':');
+        assert.ok(RULES[which as string]?.includes(rule as string), `${gate} -> ${ref}: no such rule`);
+        if (sub !== undefined) {
+          assert.equal(rule, 'test-inventory', `${gate} -> ${ref}: only test-inventory has sub-rules`);
+          assert.ok(INVENTORY_RULES.includes(sub), `${gate} -> ${ref}: no such inventory rule`);
+        }
+      }
+    }
+  });
+
+  it('names the broken integrity gates of a set of verdicts, sorted, and none for a clean set', () => {
+    const gates = ROUTINE_PRESET.verification.integrityGates;
+    assert.deepEqual(integrityFailures({ G1: { passed: true, failures: [] }, G2: { passed: true, failures: [] } }, gates), []);
+    const g2 = { passed: false, failures: [{ rule: 'no-new-overrides', detail: '1 new VERIFICATION override(s)' }, { rule: 'prune-is-decision', detail: '1 node-repair PRUNE entry' }] };
+    assert.deepEqual(integrityFailures({ G2: g2 }, gates), ['no-new-overrides', 'prune-is-decision']);
+  });
+
+  it('attributes a test-inventory failure to the gate of its inventory rule only', () => {
+    const gates = ROUTINE_PRESET.verification.integrityGates;
+    const removed = { passed: false, failures: [{ rule: 'test-inventory', detail: 'the test inventory weakened: removed-test: test IDs present at base and missing after: b works' }] };
+    assert.deepEqual(integrityFailures({ G2: removed }, gates), ['no-test-deletion']);
+    const marker = { passed: false, failures: [{ rule: 'test-inventory', detail: 'the test inventory weakened: new-skip-marker: skip or focus markers added in: a.test.ts' }] };
+    assert.deepEqual(integrityFailures({ G2: marker }, gates), ['no-skip-markers']);
+  });
+
+  it('attributes a G1 scope failure and a G3 failing-test-unchanged failure, and ignores advisories', () => {
+    const gates = ROUTINE_PRESET.verification.integrityGates;
+    assert.deepEqual(integrityFailures({ G1: { passed: false, failures: [{ rule: 'plan-within-write-scope', detail: 'x' }] } }, gates), ['scope-conformance']);
+    assert.deepEqual(integrityFailures({ G3: { passed: false, failures: [{ rule: 'failing-test-unchanged', detail: 'x' }] } }, gates), ['no-test-deletion']);
+    assert.deepEqual(integrityFailures({ G1: { passed: true, failures: [], advisories: [{ rule: 'plan-cites-acceptance', detail: 'x' }] } }, gates), []);
+  });
+
+  it('judges only the gates it is asked about', () => {
+    const g2 = { passed: false, failures: [{ rule: 'no-new-overrides', detail: 'x' }, { rule: 'scope-conformance', detail: 'y' }] };
+    assert.deepEqual(integrityFailures({ G2: g2 }, ['scope-conformance']), ['scope-conformance']);
+    assert.deepEqual(integrityFailures({ G2: g2 }, ['not-a-gate']), []);
+  });
+});
+
+describe('g1PathBreaches (plan 03-19): the paths the decision of a failed G1 names', () => {
+  it('names the plan paths outside the write and create globs, and agrees with what evaluateG1 reports', () => {
+    const facts = g1({ plan: plan({ filesModified: ['src/lib/copy.ts', 'docs/x.md', '.github/workflows/ci.yml', '../outside.ts', './test/new.test.ts'], taskFiles: ['/etc/passwd'] }) });
+    const { scope, spec } = g1PathBreaches(facts);
+    assert.deepEqual(scope, ['../outside.ts', '.github/workflows/ci.yml', '/etc/passwd', 'docs/x.md']);
+    assert.deepEqual(spec, [], 'an item whose spec files were derived has no narrower list than the write set');
+    const detail = evaluateG1(facts).failures.find((f) => f.rule === 'plan-within-write-scope')?.detail ?? '';
+    for (const path of scope) assert.ok(detail.includes(path), path);
+    assert.ok(!detail.includes('src/lib/copy.ts') && !detail.includes('test/new.test.ts'));
+  });
+
+  it('names the plan paths beyond an explicit item spec separately, and nothing for a missing plan', () => {
+    const facts = g1({ itemSpec: { files: ['src/lib/copy.ts'], derived: [] }, plan: plan({ filesModified: ['src/lib/copy.ts', 'src/lib/dates.ts'], taskFiles: [] }) });
+    assert.deepEqual(g1PathBreaches(facts), { scope: [], spec: ['src/lib/dates.ts'] });
+    assert.deepEqual(g1PathBreaches(g1({ plan: null })), { scope: [], spec: [] });
   });
 });

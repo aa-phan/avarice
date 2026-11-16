@@ -11,6 +11,7 @@ import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../../src/adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../../src/adapters/sqlite/migrations/0002-run.ts';
+import { MIGRATION_0003 } from '../../src/adapters/sqlite/migrations/0003-decisions.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { digestOf } from '../../src/domain/digest.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -103,7 +104,7 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.ok(lines.length <= 24, 'a one-screen summary');
     assert.match(r.stdout, /Collapse repeated dashes in slugs/);
     assert.match(r.stdout, new RegExp(f.pin));
-    assert.match(r.stdout, /5\.00 USD per run, 2\.00 USD per invocation/);
+    assert.match(r.stdout, /10\.00 USD per run, 2\.00 USD per invocation/);
     assert.match(r.stdout, /sonnet/);
     assert.match(r.stdout, /src\/\*\*, test\/\*\*/);
     assert.match(r.stdout, /required checks?: test/);
@@ -129,8 +130,8 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.equal(budgets['invocations']?.limit_value, 3);
     assert.equal(budgets['toolCalls']?.limit_value, 400);
     assert.equal(budgets['subagentsTotal']?.limit_value, 10);
-    assert.equal(budgets['wallClockMs']?.limit_value, 3_600_000);
-    assert.equal(budgets['costUsd']?.limit_value, 5);
+    assert.equal(budgets['wallClockMs']?.limit_value, 7_200_000);
+    assert.equal(budgets['costUsd']?.limit_value, 10);
     assert.equal(budgets['costUsd']?.exactness, 'estimated');
     assert.ok(Object.values(budgets).every((b) => b.used === 0));
 
@@ -349,7 +350,7 @@ describe('start exits 64 for an invalid request, creating nothing (RC-5, AUT-7)'
 
   it('an over-preset budget names budget.costUsdPerRun', () => {
     const f = fixture();
-    const r = invalid(f, ['--budget', 'costUsdPerRun=6']);
+    const r = invalid(f, ['--budget', 'costUsdPerRun=11']);
     assert.match(r.stderr, /budget\.costUsdPerRun/);
   });
 
@@ -429,7 +430,7 @@ describe('createRunWithContract is one transaction (RC-1)', () => {
     const handle = openDb(join(dir, 'state.db'));
     assert.ok(handle.ok);
     const store = handle.value;
-    assert.ok(migrate(store, [MIGRATION_0001, MIGRATION_0002], { nowMs: 1 }).ok);
+    assert.ok(migrate(store, [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003], { nowMs: 1 }).ok);
     let n = 0;
     const ledger = new SqliteLedger(store, (prefix) => prefix + String(++n).padStart(26, '0'));
     const project = ledger.registerProject({ projectId: 'proj_1', rootCommit: 'r', repoPath: '/repo', remote: null, defaultBranch: 'main', nowMs: 1 });

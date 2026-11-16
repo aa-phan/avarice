@@ -7,14 +7,16 @@
 // changed), prints the state and next action it resumes from and, when an attempt was open, which one was interrupted, then spawns the detached
 // supervisor (as `start` does), which takes the lease, reaps what the dead supervisor left running, reconciles, and goes on. `--wait` follows the run
 // to where it stops: exit 0 at `ready_for_review`, 3 at any other stop state or when the supervisor died again, 70 when the supervisor could not
-// reconcile (a failed reap, for one). A run in a stop state is only reported; no lease is taken. Any other ID takes the Phase 1 onboarding path.
+// reconcile (a failed reap, for one). A run in a stop state is only reported; no lease is taken. A run that would be handed to a supervisor is refused with exit 3,
+// before anything is written, when the host configuration directory it recorded at start is missing or unreadable. Any other ID takes the Phase 1 onboarding path.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { resumeOnboarding } from '../../app/resume.ts';
 import { RECONCILE_STEP, resumeRun } from '../../app/run-resume.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
+import { unhonouredHostConfigDir } from '../host-config-dir.ts';
 import { errorLine, outcomeLines, resultLine, stripControl } from '../render/style.ts';
-import { spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
+import { isProcessAlive, spawnSupervisor, supervisorEnv, waitForRun } from '../spawn-supervisor.ts';
 import { renderWait } from './start.ts';
 
 const EXIT_NOT_ACTIVE = 3;
@@ -89,11 +91,19 @@ async function resumeRunCommand(deps: AppDeps, io: Io, runId: string, wait: bool
     return found.run.state === 'ready_for_review' ? 0 : EXIT_NOT_ACTIVE;
   }
 
+  // A run this command would hand to a new supervisor is not resumed when the host configuration directory it recorded at start cannot be used (plan 03-43):
+  // the supervisor would run the host under it, and the paused session lives there. Nothing has been written or started yet.
+  const unusable = unhonouredHostConfigDir(deps, runId);
+  if (unusable !== undefined) {
+    io.err(`${errorLine('resume', `not applied: ${unusable}`)}\n`);
+    return EXIT_NOT_ACTIVE;
+  }
+
   io.out(`${resultLine(`run ${runId}`, `resuming from ${found.run.state}`, found.nextAction === null ? null : `next: ${found.nextAction}`)}\n`);
   if (found.step !== null) io.out(`${found.attemptId === null ? 'interrupted' : `interrupted attempt ${stripControl(found.attemptId)}`} at ${stripControl(found.step)}\n`);
 
   const failuresBefore = reconcileFailures(deps, runId).count;
-  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps), cwd: deps.profile.dataRoot });
+  const spawned = spawnSupervisor({ entry: process.argv[1] ?? '', runId, env: supervisorEnv(deps, runId), cwd: deps.profile.dataRoot });
   if (!spawned.ok) {
     io.err(`${errorLine('resume', `run ${runId} was not resumed: ${spawned.message}`)}\n`);
     return EXIT_INTERNAL;
@@ -108,7 +118,16 @@ async function resumeRunCommand(deps: AppDeps, io: Io, runId: string, wait: bool
   }
   if (!wait) return 0;
 
-  const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs: WAIT_MAX_MS });
+  // A blocked run is already in a stop state when its supervisor starts, so the wait first lets the supervisor take it up (as `decide --wait` does).
+  const giveUpAt = Date.now() + WAIT_MAX_MS;
+  if (found.run.state === 'blocked_on_decision') {
+    for (;;) {
+      const read = deps.ledger.getRun(runId);
+      if (!read.ok || read.value.state !== 'blocked_on_decision' || !isProcessAlive(spawned.pid) || Date.now() >= giveUpAt) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs: Math.max(0, giveUpAt - Date.now()) });
   if (result.kind === 'interrupted') {
     // A supervisor that stopped on its own prelude (a reap that failed, a reconcile that could not read git) says so in a failed step: that is a failed
     // resume, not a second kill.

@@ -182,6 +182,8 @@ export interface AttemptRow {
   startedAt: string;
   endedAt: string | null;
   outcome: string | null;
+  // The work item the attempt served; null for an attempt written without one, which reads as item A.
+  itemId: string | null;
 }
 
 export interface ActivateInput {
@@ -279,6 +281,8 @@ export interface RunRow {
   leaseHolder: string | null;
   leaseExpiresAt: string | null;
   leaseFence: number;
+  // When the owner asked to cancel the run and the supervisor has not finished it yet (AUT-12); null otherwise.
+  cancelRequestedAt: string | null;
 }
 
 export interface NewRun {
@@ -346,6 +350,51 @@ export interface CreatedRun {
   workItems: WorkItemRow[];
 }
 
+export type NotificationState = 'pending' | 'held' | 'delivered' | 'failed';
+
+export interface NewNotification {
+  // null for a digest, which is about no one run.
+  runId: string | null;
+  kind: string;
+  destination: string;
+  // The decision IDs the notification is about.
+  subjectIds: readonly string[];
+  state: 'pending' | 'held';
+  nowMs: number;
+}
+
+export interface NotificationAttemptInput {
+  outcome: 'delivered' | 'failed';
+  // A short token (at most 64 characters, a-z, 0-9 and `-`); required for a failed attempt, refused for a delivered one.
+  errorCode?: string;
+  // When the next try is due; a failed attempt without it ends the row's tries.
+  nextAttemptAtMs?: number;
+  nowMs: number;
+}
+
+export interface NotificationRow {
+  notificationId: string;
+  runId: string | null;
+  kind: string;
+  destination: string;
+  subjectIds: readonly string[];
+  state: NotificationState;
+  attempts: number;
+  nextAttemptAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deliveredAt: string | null;
+}
+
+// The cancel request recorded on a run row.
+export interface CancelRequest {
+  requestedAt: string;
+  requestedBy: string;
+  // True when an earlier request already stood and this call recorded nothing.
+  repeated: boolean;
+}
+
 export interface RunStepRow {
   runId: string;
   step: string;
@@ -359,6 +408,9 @@ export interface RunStepRow {
 
 export interface RunAttemptInput {
   reason: string;
+  // The work item the attempt serves. A multi-item stage names it; an attempt with no item is read as item A, so a run that
+  // began before per-item attempts keeps its history.
+  itemId?: string;
   nowMs: number;
 }
 
@@ -519,6 +571,76 @@ export interface DecisionRow {
   answeredBy: string | null;
   answer: string | null;
   answerChannel: string | null;
+  // The decision this one re-opened because its state digest or contract version had moved on (D-15); null otherwise.
+  supersedes: string | null;
+}
+
+// The owner's answer to an open decision. `expectContractVersion` is the contract version the caller validated the answer
+// against; the ledger re-checks it inside the transaction so an amendment cannot slip in between validation and write.
+export interface AnswerDecisionInput {
+  runId: string;
+  decisionId: string;
+  answer: string;
+  answeredBy: string;
+  channel: 'terminal';
+  expectContractVersion: number;
+  nowMs: number;
+}
+
+// The owner's answer to a decision whose state digest or contract version moved on after it was opened (D-15). The answer is kept on
+// the stale row as context; a successor with the same question is opened on the new state.
+export interface ReopenStaleDecisionInput {
+  runId: string;
+  decisionId: string;
+  answer: string;
+  answeredBy: string;
+  channel: 'terminal';
+  stateDigest: string;
+  contractVersion: number;
+  evidenceRefs: readonly string[];
+  nowMs: number;
+}
+
+// The next contract version an amendment writes (RC-6). The diff and the reason are recorded with it; `authorizedBy` names who signed.
+export interface AmendedContract {
+  body: unknown;
+  digest: string;
+  policyRevision: string;
+  diff: unknown;
+  reason: string;
+  authorizedBy: string;
+}
+
+// One amendment, written in one transaction without a lease (D-19, D-20).
+export interface AmendRunContractInput {
+  runId: string;
+  // The contract version the caller amended; the ledger re-checks it inside the transaction.
+  expectVersion: number;
+  next: AmendedContract;
+  // Each names an existing budget row; only its limit and contract version change. Used and reserved never do.
+  budgetChanges: ReadonlyArray<{ name: string; limit: number }>;
+  // Evidence rows the amendment invalidates: each gets a stale copy under the new contract version; the original stays.
+  staleEvidenceIds?: readonly string[];
+  // Gates the amendment invalidates: each gets a failed row under the new contract version; earlier rows stay.
+  staleGates?: ReadonlyArray<{ gate: string; detail: string }>;
+  // An open non-pause decision the amendment answers (`amended:v<n+1>`); its items are released as answerDecision releases them.
+  resolvesDecisionId?: string;
+  nowMs: number;
+}
+
+export interface AmendRunContractResult {
+  contract: ContractRow;
+  staleEvidence: number;
+  staleGates: number;
+  resolved: DecisionRow | null;
+}
+
+export interface WithdrawDecisionInput {
+  runId: string;
+  decisionId: string;
+  // owner: the owner took the question back; cancel: the run was cancelled (AUT-12).
+  reason: 'owner' | 'cancel';
+  nowMs: number;
 }
 
 export interface CheckValidationInput {
@@ -580,8 +702,9 @@ export interface Ledger {
   insertRecordAndActivate(onboardingId: string, guard: TransitionGuard, input: ActivateInput): Result<ActivationResult>;
   getActiveRecord(projectId: string): Result<ActiveRecord | null>;
 
-  // Budgets (CON-13). The rows are created from the contract and only ever grow in `used`: createBudgets leaves
-  // an existing row untouched, and nothing refunds, resets or raises a limit (RC-5).
+  // Budgets (CON-13). The rows are created from the contract and only ever grow in `used`: createBudgets leaves an existing row
+  // untouched, and nothing refunds or resets spend. Only amendRunContract changes a limit (D-19). It is called only by the amend
+  // command, from a terminal outside the run, so the run cannot raise its own limits (RC-5).
   createBudgets(runId: string, contractVersion: number, rows: readonly BudgetRowInput[]): Result<BudgetRow[]>;
   // One conditional UPDATE on `reserved`: it changes a row only while used + reserved + amount stays within the limit.
   reserveBudget(runId: string, name: string, amount: number): Result<BudgetReservation>;
@@ -634,6 +757,11 @@ export interface Ledger {
   storeRunContract(runId: string, guard: { fence: number }, input: StoreRunContractInput): Result<ContractRow>;
   // The highest version, or null.
   getRunContract(runId: string): Result<ContractRow | null>;
+  // Writes contract version n+1 for an amendment (RC-6, D-19, D-20) in one transaction and takes no lease fence: the amend command
+  // runs from a terminal beside a supervisor that may be running another item. It is refused with `conflict` when the run's latest
+  // contract version is not `expectVersion` or the run is failed, cancelled or closed, and with `invalid` when a budget change names
+  // a row that does not exist or a decision it should resolve is a pause-class decision. Nothing is written when it is refused.
+  amendRunContract(input: AmendRunContractInput): Result<AmendRunContractResult>;
 
   // When a guard is given, the step is written only while that fence is current; a stale one is a conflict and nothing is written.
   recordRunStep(runId: string, input: StepResultInput, guard?: { fence: number }): Result<RunStepRow>;
@@ -642,7 +770,8 @@ export interface Ledger {
   // Attempts: ordinal 1, 2, ... per run. An attempt ends once, with an outcome.
   recordRunAttempt(runId: string, input: RunAttemptInput): Result<AttemptRow>;
   endRunAttempt(attemptId: string, input: { outcome: string; nowMs: number }): Result<AttemptRow>;
-  listRunAttempts(runId: string): Result<AttemptRow[]>;
+  // With an itemId, the attempts of that item; item A also matches the attempts that carry no item.
+  listRunAttempts(runId: string, filter?: { itemId?: string }): Result<AttemptRow[]>;
 
   // Evidence and gate results are insert-only (T-02-06, AUT-8): an interrupted check is marked by a new `inconclusive`
   // row, never by an UPDATE. The adapter refuses a status or independence outside the documented sets.
@@ -657,10 +786,37 @@ export interface Ledger {
   transitionWorkItem(runId: string, itemId: string, guard: { fence: number }, t: WorkItemTransitionInput): Result<WorkItemRow>;
   listWorkItems(runId: string): Result<WorkItemRow[]>;
 
-  // Decisions open in state `open`; answering them is Phase 3.
+  // Decisions open in state `open`. answerDecision, reopenStaleDecision and withdrawDecision each move an open decision in one
+  // transaction under the run lock and refuse with `conflict` when it is no longer open.
   openDecision(input: DecisionInput): Result<DecisionRow>;
+  // open -> answered, and every affected item that no other open decision blocks goes blocked_on_decision -> ready. Refused with
+  // `conflict` when the run's latest contract version is not expectContractVersion.
+  answerDecision(input: AnswerDecisionInput): Result<DecisionRow>;
+  // open -> stale with the received answer kept, and a new open decision carrying the same class, issue, options, consequences,
+  // affected items, recommendation and authorized default on the new state digest and contract version, supersedes set to the old
+  // ID. Affected items keep their state.
+  reopenStaleDecision(input: ReopenStaleDecisionInput): Result<{ stale: DecisionRow; reopened: DecisionRow }>;
+  // open -> withdrawn. Affected items keep their state.
+  withdrawDecision(input: WithdrawDecisionInput): Result<DecisionRow>;
   // Oldest first.
   listDecisions(filter: { runId?: string; state?: DecisionState }): Result<DecisionRow[]>;
+
+  // Notifications (AUT-6). A row moves pending -> delivered | failed | held, held -> delivered | failed and failed -> delivered; delivered is
+  // final, and failed is final for a delivery attempt (the one way out is setNotificationState, used when a digest covered the banner that
+  // did not arrive). Events carry IDs, an attempt count and an error code, never text.
+  createNotification(input: NewNotification): Result<NotificationRow>;
+  // One delivery attempt on a pending or held row: attempts + 1. A delivered attempt makes the row delivered and appends
+  // notify.delivered. A failed attempt with `nextAttemptAtMs` keeps the row's state and schedules the retry; without it the row is
+  // failed. Either way last_error is the code, and notify.failed is appended. A delivered or failed row is a `conflict`.
+  recordNotificationAttempt(notificationId: string, input: NotificationAttemptInput): Result<NotificationRow>;
+  // Moves every named row in one transaction along the allowed moves, or none: any other move is `invalid`, an unknown ID `not_found`.
+  setNotificationState(notificationIds: readonly string[], state: 'held' | 'delivered' | 'failed', nowMs: number): Result<NotificationRow[]>;
+  // Oldest first.
+  listNotifications(filter?: { states?: readonly NotificationState[]; runId?: string }): Result<NotificationRow[]>;
+
+  // The owner's request to cancel a run (AUT-12), recorded before the supervisor acts on it. The first request is kept; a repeat
+  // returns it and appends nothing. A run in failed, cancelled or closed is a `conflict`.
+  requestRunCancel(runId: string, input: { by: string; nowMs: number }): Result<CancelRequest>;
 
   // The validation verdict of one declared check (ONB-10), cached per project, base revision and spec digest.
   // A verdict is never overwritten: a second record for the same key is a conflict.

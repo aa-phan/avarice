@@ -1,3 +1,6 @@
+import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
+import type { IdentityContext } from './identity.ts';
+
 // Minimal argument parser and the command-module contract.
 //   positionals          words that are not flags
 //   --flag value         a value flag; the next word is consumed unless the flag is declared boolean
@@ -74,16 +77,26 @@ export function parseBudgetFlags(args: ParsedArgs): Record<string, number> | str
 export interface Io {
   out(text: string): void;
   err(text: string): void;
+  // Asks one question and returns the answer line; undefined when no answer can be read (end of input, Escape). Present when whoever
+  // supplied the io can ask (the interactive shell, a test); a command that needs an answer reads one line from standard input otherwise.
+  ask?(question: string): Promise<string | undefined>;
+}
+
+// What main() hands a command beyond its arguments, dependencies and io: test seams of the command that owns them. Production passes none.
+export interface CommandExtras {
+  // The LaunchAgent writer's directory, tools and program line (`schedule`).
+  scheduler?: SchedulerSeam;
 }
 
 // What a file under src/cli/commands/ exports. `readOnly` makes composition open the store read-only.
 export interface CommandModule<Deps> {
-  run(args: ParsedArgs, deps: Deps, io: Io): Promise<number> | number;
+  run(args: ParsedArgs, deps: Deps, io: Io, extras?: CommandExtras): Promise<number> | number;
   readOnly?: boolean;
   // Composition also locates GSD and builds its adapter (a read-only command that reads the indexes through GSD).
   needsGsd?: boolean;
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
   // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
-  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv): string | undefined;
+  // `context` tells a command that must not run inside a run where it runs: terminal facts and the process ancestry reader.
+  usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv, context?: IdentityContext): string | undefined;
 }

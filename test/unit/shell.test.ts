@@ -234,6 +234,79 @@ describe('the command line (ADR-013 decision 2)', () => {
   });
 });
 
+// `contract amend` asks `apply contract v2? [y/N]`. Run from the shell it asks through the shell's own prompt, not through raw standard input,
+// and the output the command printed before the question stays on screen above it (plan 03-15, D-18).
+describe('a command that asks a question uses the shell prompt', () => {
+  const QUESTION = 'apply contract v2? [y/N] ';
+  // The text of the last full redraw: the shell repaints from the home position each time.
+  const lastFrame = (term: FakeTerminal): string => withoutEscapes(term.output().split('\x1b[H').at(-1) ?? '');
+
+  function asking(): { dispatch: NonNullable<Parameters<typeof runShell>[0]['dispatch']>; answers: Array<string | undefined>; asked: string[] } {
+    const answers: Array<string | undefined> = [];
+    const asked: string[] = [];
+    return {
+      answers,
+      asked,
+      dispatch: async (_argv, overrides) => {
+        overrides.io?.out('budgets.costUsd.perRun: 10 -> 12\n');
+        asked.push(QUESTION);
+        const answer = await overrides.ask?.(QUESTION);
+        answers.push(answer);
+        overrides.io?.out(`answered ${String(answer)}\n`);
+        return 0;
+      },
+    };
+  }
+
+  it('shows the output so far above the question; the line typed there is the answer', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const { term, exited } = await openShell(terminalEnv(roots), { dispatch: s.dispatch });
+    term.type(':');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.type('contract amend run_1 --budget costUsdPerRun=12 --reason r\r');
+    await waitFor(() => lastFrame(term).includes(QUESTION), 'the question');
+    assert.match(lastFrame(term), /budgets\.costUsd\.perRun: 10 -> 12/, 'the diff is on screen with the question');
+    term.type('y\r');
+    await waitFor(() => screen(term).includes('answered y'), 'the answer reaching the command');
+    assert.deepEqual(s.answers, ['y']);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('Escape at the question answers nothing: the command sees undefined', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const { term, exited } = await openShell(terminalEnv(roots), { dispatch: s.dispatch });
+    term.type(':');
+    await waitFor(() => screen(term).includes('avarice> '), 'the command-line prompt');
+    term.type('contract amend run_1\r');
+    await waitFor(() => lastFrame(term).includes(QUESTION), 'the question');
+    term.type('\x1b');
+    await waitFor(() => screen(term).includes('answered undefined'), 'the cancelled answer');
+    assert.deepEqual(s.answers, [undefined]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('in line mode the output so far is printed once, before the question, and the next line is the answer', async () => {
+    const roots = newRoots();
+    const s = asking();
+    const term = fakeTerminal();
+    const exited = runShell({ stdin: term.stdin, stdout: term.stdout, env: terminalEnv(roots, { TERM: 'dumb' }), dispatch: s.dispatch });
+    await waitFor(() => term.output().includes('open decisions: 0'), 'the home view');
+    term.type('contract amend run_1\n');
+    await waitFor(() => term.output().includes(QUESTION), 'the question');
+    assert.ok(term.output().indexOf('budgets.costUsd.perRun: 10 -> 12') < term.output().indexOf(QUESTION), 'the output comes before the question');
+    term.type('y\n');
+    await waitFor(() => term.output().includes('answered y'), 'the answer reaching the command');
+    assert.equal((term.output().match(/budgets\.costUsd\.perRun: 10 -> 12/g) ?? []).length, 1, 'the diff is printed once');
+    assert.deepEqual(s.answers, ['y']);
+    term.type('q\n');
+    assert.equal(await exited, 0);
+  });
+});
+
 describe('TERM=dumb: line mode, no escape characters (ADR-013 decision 6)', () => {
   it('prints no ESC at all, never enters raw mode, and reads whole lines', async () => {
     const roots = profileWithProject();
@@ -491,11 +564,11 @@ async function openShell(env: NodeJS.ProcessEnv, extra: Partial<Parameters<typeo
 }
 
 describe('the action menu (ADR-013 decision 2)', () => {
-  it('lists start, watch, resume, status, inbox, command line and quit, numbered', async () => {
+  it('lists start, watch, resume, status, inbox, command line, decide and quit, numbered', async () => {
     const roots = newRoots();
     const { term, exited } = await openShell(terminalEnv(roots), spy());
     const text = screen(term);
-    for (const line of ['1  Start a run', '2  Watch a run', '3  Resume a run', '4  Status', '5  Inbox', '6  Command line', 'q  Quit']) assert.ok(text.includes(line), `the menu has "${line}"`);
+    for (const line of ['1  Start a run', '2  Watch a run', '3  Resume a run', '4  Status', '5  Inbox', '6  Command line', '7  Decide', 'q  Quit']) assert.ok(text.includes(line), `the menu has "${line}"`);
     term.type('q');
     assert.equal(await exited, 0);
   });
@@ -719,6 +792,94 @@ describe('watch and resume read the ledger (ADR-013 decisions 3 and 4)', () => {
   });
 });
 
+// ---- the Decide action (plan 03-25; D-13, ADR-013) ---------------------------------------------------------------------------------------------
+
+// Opens one blocking decision on the run, as a unit that asked would have; returns its ID. The rows are written through the ledger, as the
+// supervisor does.
+function openDecisionOn(roots: CliRoots, runId: string, issue: string, options: unknown = [{ key: '1', label: 'one', kind: 'choice' }, { key: '2', label: 'two', kind: 'choice' }]): string {
+  const composed = createDeps(profileEnv(roots), {});
+  assert.ok(composed.ok, 'composition');
+  try {
+    const { ledger } = composed.value.deps;
+    const contract = ledger.getRunContract(runId);
+    assert.ok(contract.ok && contract.value !== null, 'the run has a contract');
+    const opened = ledger.openDecision({
+      runId,
+      contractVersion: contract.value.version,
+      class: 'acceptance',
+      issue,
+      options,
+      consequences: {},
+      evidenceRefs: [],
+      affectedItems: [],
+      stateDigest: 'sha256:test',
+      urgency: 'blocking',
+      nowMs: Date.now(),
+    });
+    assert.ok(opened.ok, JSON.stringify(opened));
+    return opened.value.decisionId;
+  } finally {
+    composed.value.close();
+  }
+}
+
+describe('the Decide action (key 7 or d)', () => {
+  it('with no open decision it says so and stays in the shell', async () => {
+    const roots = newRoots();
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(roots), s);
+    term.type('7');
+    await waitFor(() => screen(term).includes('no open decisions'), 'the empty decision list');
+    assert.deepEqual(s.calls, []);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  const fixture = profileWithRun();
+  const shared = cleanup.splice(0);
+  after(() => {
+    for (const dir of shared) rmSync(dir, { recursive: true, force: true });
+  });
+  const first = openDecisionOn(fixture.roots, fixture.runId, 'Which status code?\nthe second line is not shown in the list');
+  const second = openDecisionOn(fixture.roots, fixture.runId, 'Which wording?');
+
+  it('lists the open decisions with their ID, run, class and the first line of the issue, and picking 1 runs `decide <id>` through the shell', async () => {
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), s);
+    term.type('7');
+    await waitFor(() => screen(term).includes('decision to answer (number or ID): '), 'the decision prompt');
+    const text = screen(term);
+    for (const wanted of [first, second, fixture.runId, 'acceptance', 'Which status code?', 'Which wording?']) assert.ok(text.includes(wanted), `the list shows ${wanted}`);
+    assert.equal(text.includes('the second line is not shown'), false, 'only the first line of the issue is listed');
+    term.type('1\r');
+    await waitFor(() => screen(term).includes(`ran decide ${first}`), 'the decide command');
+    assert.deepEqual(s.calls, [['decide', first]]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+
+  it('takes a decision ID as well as a number through the d key, refuses an unknown one and runs nothing for an empty entry', async () => {
+    const s = spy();
+    const { term, exited } = await openShell(terminalEnv(fixture.roots), s);
+    term.type('d');
+    await waitFor(() => screen(term).includes('decision to answer (number or ID): '), 'the decision prompt');
+    term.type('dec_nope\r');
+    await waitFor(() => screen(term).includes('no decision matches'), 'the refusal');
+    term.type('7');
+    await waitFor(() => (screen(term).match(/decision to answer \(number or ID\): /g) ?? []).length > 1, 'the prompt again');
+    term.type('\r');
+    await waitFor(() => (screen(term).match(/1 {2}Start a run/g) ?? []).length > 2, 'the menu to return');
+    assert.deepEqual(s.calls, []);
+    term.type('7');
+    await waitFor(() => (screen(term).match(/decision to answer \(number or ID\): /g) ?? []).length > 2, 'the prompt a third time');
+    term.type(`${second}\r`);
+    await waitFor(() => screen(term).includes(`ran decide ${second}`), 'the decide command by ID');
+    assert.deepEqual(s.calls, [['decide', second]]);
+    term.type('q');
+    assert.equal(await exited, 0);
+  });
+});
+
 // ---- completion and history (Task 3) --------------------------------------------------------------------------------------------------------
 
 describe('completion (ADR-013 decision 2)', () => {
@@ -732,7 +893,7 @@ describe('completion (ADR-013 decision 2)', () => {
     assert.deepEqual(completeCommand('st', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
     assert.deepEqual(completeCommand('sta', COMMANDS), { buffer: 'sta', candidates: ['start', 'status'] });
     assert.deepEqual(completeCommand('', COMMANDS)?.candidates, [...COMMANDS].sort());
-    assert.deepEqual(completeCommand('s', COMMANDS)?.candidates, ['start', 'status', 'supervise']);
+    assert.deepEqual(completeCommand('s', COMMANDS)?.candidates, ['schedule', 'start', 'status', 'supervise']);
   });
 
   it('offers nothing for an unknown prefix or once a second word is being typed', () => {

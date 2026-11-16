@@ -9,3 +9,4 @@ Out-of-scope discoveries made while executing Phase 2 plans. Nothing here blocks
 - **Why it is deferred:** it is the safe direction (a refused write), it is not a containment failure, and the knowledge pass is a Phase 1 index step that never blocks activation. Phase 2's run does not use it.
 - **For Phase 2 plans that build a run purpose:** give the model symlink-resolved (`realpath`) paths in prompts and expected-file lists, and render the generated allow and deny rules from the same resolved form. A live case on a `$TMPDIR` scratch repository will hit the same refusal otherwise.
 - **For the owner:** whether to harden the knowledge prompt's path form (Phase 1 code) or leave it; the existing exit target `~/aa-phan-portfolio-v2` is already onboarded, so no Phase 2 exit run depends on it.
+  status: acknowledged

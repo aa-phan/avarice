@@ -6,7 +6,7 @@
 // directory is always writable to a sandboxed shell, and a denyWrite on a path overrides an allowWrite beneath
 // it, so the only way to keep a shell out of `src/` is to deny each existing entry one by one. Entries created
 // later at unlisted locations are caught by the staging diff gate, not prevented.
-import { isRefusedAgentCommand } from './conventions.ts';
+import { isRefusedAgentCommand, programWords } from './conventions.ts';
 import { matchesAny } from './glob.ts';
 import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
@@ -175,6 +175,7 @@ export interface WorkspaceShape {
 
 // One shell command the run contract lists for the agent (RC-1 execution.commands), split into words. `paths: true` is an entry that
 // ended in `<paths>`: further words are admitted when each is a relative path that passes the read rule.
+// An entry's words may start with NAME=value words (a check's environment, plan 03-64), which the call must repeat exactly.
 export interface AgentCommand {
   words: string[];
   paths: boolean;
@@ -456,8 +457,10 @@ function parseAgentCommands(commands: readonly string[], stillDenied: readonly s
     const paths = tokens[tokens.length - 1] === '<paths>';
     const words = paths ? tokens.slice(0, -1) : tokens;
     if (words.length === 0 || words.some((word) => /[;&|$`\\<>'"]/.test(word))) continue;
-    if (isRefusedAgentCommand(words[0] as string)) continue;
-    if (stillDenied.some((prefix) => prefix.split(' ').every((word, i) => words[i] === word))) continue;
+    // A leading NAME=value word does not hide the program: the never-granted words and the denied prefixes judge the first word after the assignments.
+    const program = programWords(words);
+    if (program.length === 0 || isRefusedAgentCommand(program[0] as string)) continue;
+    if (stillDenied.some((prefix) => prefix.split(' ').every((word, i) => program[i] === word))) continue;
     out.set(`${paths ? 'p' : 'x'} ${words.join(' ')}`, { words, paths });
   }
   return [...out.values()];
@@ -516,7 +519,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
   // npm and npx leave the denied prefixes only for a contract-listed exact form; everything else keeps its Phase 1 denial.
   const base = DENIED_COMMAND_PREFIXES.filter((prefix) => !RUN_EXEMPT_PREFIXES.includes(prefix));
   const agentCommands = parseAgentCommands(contract.execution.commands, base);
-  const deniedPrefixes = DENIED_COMMAND_PREFIXES.filter((prefix) => !RUN_EXEMPT_PREFIXES.includes(prefix) || !agentCommands.some((command) => command.words[0] === prefix));
+  const deniedPrefixes = DENIED_COMMAND_PREFIXES.filter((prefix) => !RUN_EXEMPT_PREFIXES.includes(prefix) || !agentCommands.some((command) => programWords(command.words)[0] === prefix));
 
   return {
     purpose: 'run',

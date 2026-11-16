@@ -111,11 +111,11 @@ describe('a loop limit stops the run for escalation (CON-14)', () => {
   });
 });
 
-describe('an exhausted budget is a permission decision naming the budget (S-15)', () => {
-  it('toolCalls=5 and six calls: kind budget_exhausted, blocked (budget_exhausted), class permission naming toolCalls, the limit unchanged', () => {
+describe('an exhausted budget is a budget decision naming the budget, withdraw only (S-15)', () => {
+  it('toolCalls=5 and six calls: kind budget_exhausted, blocked (budget_exhausted), class budget naming toolCalls, the limit unchanged', () => {
     const f = fixture();
     const r = start(f, { toolCallFlood: 6 }, ['--budget', 'toolCalls=5']);
-    const { runId, issue } = assertBlocked(f, r, 'budget_exhausted', 'permission');
+    const { runId, issue } = assertBlocked(f, r, 'budget_exhausted', 'budget');
     assert.match(issue, /toolCalls/);
     assert.equal(classifyOf(f, runId)['kind'], 'budget_exhausted');
     const budget = ledgerRows<{ used: number; limit_value: number }>(f.roots, "SELECT used, limit_value FROM budgets WHERE run_id = ? AND name = 'toolCalls'", runId)[0];
@@ -127,7 +127,7 @@ describe('an exhausted budget is a permission decision naming the budget (S-15)'
   it('a unit that spends its budget on the way to a long run of denials is a budget decision, not a loop-limit one', () => {
     const f = fixture();
     const r = start(f, FIX, ['--budget', 'toolCalls=2']);
-    const { runId, issue } = assertBlocked(f, r, 'budget_exhausted', 'permission');
+    const { runId, issue } = assertBlocked(f, r, 'budget_exhausted', 'budget');
     assert.match(issue, /toolCalls/);
     assert.equal(classifyOf(f, runId)['kind'], 'budget_exhausted');
   });

@@ -1,0 +1,53 @@
+@startuml
+title Amend the contract and answer on a moved state
+
+actor Owner
+participant "avarice contract amend" as Amend
+participant "avarice decide" as Decide
+database Ledger
+participant Supervisor
+
+note over Ledger : contract version 1 is in force.\nDecision A (a repeated failure, answered by an amendment) and\ndecision B (a pause with choices) are open, both stamped with\nthe digest of version 1.
+
+== The amendment ==
+Owner -> Amend : amend with a reason, a budget or write change, and decision A
+alt inside a run, no terminal, or from a run's process tree
+  Amend --> Owner : refused (64), before the profile is resolved
+end
+Amend -> Ledger : read the run, its latest contract, the evidence and gate rows
+alt run failed, cancelled or closed, decision A not open or not of an amendable class\n(repeated failure, permission, budget or scope expansion),\nrequest empty, a field not amendable, or static gate G0 fails
+  Amend --> Owner : refused, nothing written
+end
+Amend -> Amend : build version 2: field diff, what it invalidates,\nwhich evidence and gates get a stale copy
+Amend --> Owner : preview of the diff, the invalidations and the decision it answers
+Owner -> Amend : apply version 2? y or n
+alt n or no answer
+  Amend --> Owner : not amended (0)
+else y
+  Amend -> Ledger : one transaction without a lease: contract version 2 with diff, reason, owner;\nbudget limits changed, spend untouched; stale evidence and failed\nstale-after-amendment gate rows appended; decision A answered as amended:v2,\nits items released
+  note over Ledger : refused with nothing written if version 1 is no longer the latest,\nthe run has ended, or decision A is no longer open
+  Amend -> Amend : write the contract file of version 2
+  Amend --> Owner : version 2 recorded, decision A answered (0)
+end
+
+== The supervisor ==
+alt a supervisor holds a live lease
+  Supervisor -> Ledger : reads the latest contract at its next unit or block,\nand takes the released item next
+else no live lease
+  note over Amend : the amend command starts no supervisor itself.\nThe amend chain inside decide checks the pickup as an answer does;\notherwise resume continues a run blocked on an item decision\nonce an item is ready.
+end
+
+== A stale answer ==
+Owner -> Decide : decide B with a choice
+Decide -> Ledger : read B and the latest contract
+Decide -> Decide : digest of version 2 is not the digest B was stamped with
+Decide -> Ledger : B stale with the answer kept,\nB2 opened on the new state, supersedes B
+Decide --> Owner : answer not applied, B2 asks the same question, answer B2 (3)
+Owner -> Decide : decide B again
+Decide --> Owner : refused: B was re-opened, answer B2 (3)
+Owner -> Decide : decide B2 with a choice
+Decide -> Decide : digest matches
+Decide -> Ledger : B2 answered, its items released
+Decide --> Owner : answered (0)
+note over Decide, Ledger : a withdraw is the one answer applied whatever the digest says
+@enduml

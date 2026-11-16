@@ -54,7 +54,12 @@ export const verifyingStage: RunStage = async (ctx, row) => {
   const attempt = attempts.value.at(-1);
   if (attempt === undefined) return err({ kind: 'internal', cause: `run ${ctx.runId} is verifying but has no attempt` });
   const attemptId = attempt.attemptId;
-  const itemId = 'A';
+  // The final proof is the run's, not an item's: its evidence and gate rows name no item. The checkpoints and a block name the item whose commit is
+  // the revision under proof (the last attempt's), which only an attempt written before items were named lacks.
+  const items = deps.ledger.listWorkItems(ctx.runId);
+  if (!items.ok) return items;
+  const itemId = attempt.itemId ?? items.value.at(0)?.itemId;
+  if (itemId === undefined) return err({ kind: 'internal', cause: `run ${ctx.runId} is verifying but has no work item` });
 
   const head = workspace.head(clone);
   if (!head.ok) return head;
@@ -101,7 +106,6 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
     attemptId: f.attemptId,
     phase: 'final',
     contractVersion: f.contractVersion,
-    itemId: f.itemId,
     base: base.value,
     afterEach: (index) => {
       if (index === 0) faultPoint('mid-verify');
@@ -123,7 +127,6 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
   if (!verdictRevision.ok) return verdictRevision;
   const verdictRow = deps.ledger.recordEvidence({
     attemptId: f.attemptId,
-    workItem: f.itemId,
     kind: 'gsd-verdict',
     name: 'gsd-verification',
     status: verdict === 'passed' ? 'passed' : 'failed',
@@ -155,7 +158,6 @@ async function verifyAndGate(ctx: Parameters<RunStage>[0], row: Parameters<RunSt
     if (target === undefined) continue;
     const row = deps.ledger.recordEvidence({
       attemptId: f.attemptId,
-      workItem: f.itemId,
       kind: 'diff',
       name: rule,
       status: changedPaths.has(target) ? 'failed' : 'passed',

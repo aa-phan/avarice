@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.0 — Contained Kernel",
+  "milestone": "v1.0",
   "phases": [
     {
       "number": "1",
@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Decisions, independent work and amendments",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -45,9 +45,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-progress --next",
-    "label": "Advance to the next step (plan phase 3)",
-    "reason": "Phase 3 of 8 — needs a plan"
+    "command": "/gsd-progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-11-08T08:35:32.476Z"
+  "updated_at": "2026-11-15T23:56:21.287Z"
 }

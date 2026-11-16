@@ -379,9 +379,12 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.ok(launch, 'the fake claude was launched');
     const { argv } = launch;
     assert.equal(argv[0], '-p');
-    for (const forbidden of ['--bare', '--dangerously-skip-permissions', '--allow-dangerously-skip-permissions', 'bypassPermissions', 'auto', '--add-dir', '--allowedTools']) {
+    for (const forbidden of ['--bare', '--dangerously-skip-permissions', '--allow-dangerously-skip-permissions', 'bypassPermissions', 'auto', '--add-dir', '--allowed-tools']) {
       assert.ok(!argv.includes(forbidden), `argv has no ${forbidden}`);
     }
+    // The one grant the line carries: the host's Glob and Grep search tools, which the generated settings already allow (the host removes them otherwise).
+    assert.equal(argv.filter((token) => token === '--allowedTools').length, 1, '--allowedTools appears once');
+    assert.equal(argv[argv.indexOf('--allowedTools') + 1], 'Glob,Grep');
     assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'dontAsk');
     assert.equal(argv[argv.indexOf('--setting-sources') + 1], '');
     assert.ok(argv.includes('--strict-mcp-config'));
@@ -391,6 +394,19 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
     assert.match(sessionId ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     const [step] = launchSteps(s.roots);
     assert.equal(step?.result['sessionId'], sessionId, 'the session ID is recorded in the ledger, so a resume can find the process');
+  });
+
+  it('keeps the final result text out of every ledger row: events and step results carry counts and codes, never the model text (AUT-1)', () => {
+    const marker = 'ZQX-RESULT-TEXT-MARK';
+    const s = setup({ transcript: 'success', mapFiles: 'all', resultText: `Done.\nWhich ${marker}?\n1. A\n2. B` });
+    assert.equal(onboard(s).code, 0);
+    const events = rows<{ data_json: string }>(s.roots, 'SELECT data_json FROM events');
+    const steps = rows<{ result_json: string }>(s.roots, 'SELECT result_json FROM onboarding_steps');
+    assert.ok(events.length > 0 && steps.length > 0, 'the ledger has rows to search');
+    assert.ok(events.some((e) => e.data_json.includes('"outcome"')), 'an invocation.finished event is among them');
+    assert.equal(events.filter((e) => e.data_json.includes(marker)).length, 0, 'no event holds the result text');
+    assert.equal(steps.filter((r) => r.result_json.includes(marker)).length, 0, 'no step result holds the result text');
+    assert.equal(steps.filter((r) => r.result_json.includes('Which')).length, 0);
   });
 
   it('starts the host with the allowlisted environment and no credential from the parent', () => {
@@ -683,7 +699,7 @@ describe('every containment layer is checked at launch, after the files are writ
 describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13)', () => {
   it('ends an overrunning host with SIGTERM, leaves no process in its group, and retries once before it blocks', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, background: true });
-    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 5_000));
     assert.deepEqual([run.state, run.reason], ['blocked', 'decision']);
     const launches = s.fake.launches();
     assert.equal(launches.length, 2, 'one launch and the one retry the contract allows');
@@ -697,7 +713,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
 
   it('judges an inconclusive ending by what staging holds: the retry rule completes a run whose second launch finishes', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, sleepFirstOnly: true });
-    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 600));
+    const run = await inProcess(s, { killGraceMs: 400 }, (adapter) => new ClampedHost(adapter, 5_000));
     assert.deepEqual([run.state, run.reason], ['active', null]);
     assert.deepEqual(finishedEvents(s.roots).map((f) => f['outcome']), ['inconclusive', 'progressed']);
   });
@@ -705,7 +721,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
   it('follows SIGTERM with SIGKILL after the grace when the host ignores SIGTERM', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', sleepMs: 120_000, ignoreSigterm: true });
     const started = Date.now();
-    const run = await inProcess(s, { killGraceMs: 300 }, (adapter) => new ClampedHost(adapter, 300));
+    const run = await inProcess(s, { killGraceMs: 300 }, (adapter) => new ClampedHost(adapter, 3_000));
     assert.equal(run.state, 'blocked');
     const [first] = finishedEvents(s.roots);
     assert.deepEqual([first?.['outcome'], first?.['timedOut'], first?.['signal']], ['inconclusive', true, 'SIGKILL']);
@@ -939,6 +955,71 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
     assert.ok(none.ok);
     assert.equal(none.value.details?.resultSeen, false);
     assert.equal(none.value.details?.isError, undefined);
+  });
+
+  it('launches a resume as --resume <id> under every containment flag, and reports the resumed session', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const resumed = randomUUID();
+    const launched = await s.adapter.invoke(requestFor(s, { resumeSessionId: resumed }), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    assert.equal(launched.value.sessionId, resumed, 'the outcome names the resumed session');
+    const [logged] = s.fake.argvs();
+    const argv = logged?.argv ?? [];
+    assert.deepEqual(argv.slice(-2), ['--resume', resumed]);
+    assert.ok(!argv.includes('--session-id') && !argv.includes('--fork-session'));
+    const value = (flag: string): string | undefined => argv[argv.indexOf(flag) + 1];
+    assert.equal(value('--permission-mode'), 'dontAsk');
+    assert.equal(value('--permission-prompts'), 'none');
+    assert.equal(value('--setting-sources'), '');
+    assert.ok(argv.includes('--strict-mcp-config'));
+    assert.equal(value('--max-budget-usd'), '1');
+    assert.match(value('--settings') ?? '', /host-settings\.json$/);
+    assert.equal(argv.filter((token) => token === '--allowedTools').length, 1, '--allowedTools appears once on the resumed line');
+    assert.equal(value('--allowedTools'), 'Glob,Grep');
+  });
+
+  it('refuses a resumeSessionId that is not a UUID with the invalid field resumeSessionId, starting nothing', async () => {
+    const s = setupRun({ transcript: 'success' });
+    for (const bad of ['not-a-uuid', '.* --session-id', '']) {
+      const refused = await s.adapter.invoke(requestFor(s, { resumeSessionId: bad }), new AbortController().signal);
+      assert.equal(refused.ok, false, bad);
+      assert.deepEqual(refused.ok ? null : refused.error, { kind: 'invalid', field: 'resumeSessionId', reason: 'a session ID must be a UUID' }, bad);
+    }
+    assert.equal(s.fake.started(), false);
+  });
+
+  it('returns the tail of the final result text as outcome.question, and nowhere else in the outcome', async () => {
+    const asked = 'I need a decision.\nWhich wording ZQX-QUESTION-MARK?\n1. A\n2. B';
+    const s = setupRun({ transcript: 'success', resultText: asked });
+    const launched = await s.adapter.invoke(requestFor(s), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    assert.equal(launched.value.question, asked);
+    const { question, ...rest } = launched.value;
+    assert.equal(question, asked);
+    assert.ok(!JSON.stringify(rest).includes('ZQX-QUESTION-MARK'), 'the details and every other field carry no result text');
+
+    const long = setupRun({ transcript: 'success', resultText: `${'a'.repeat(9000)}${asked}` });
+    const cut = await long.adapter.invoke(requestFor(long), new AbortController().signal);
+    assert.ok(cut.ok);
+    assert.equal(cut.value.question?.length, 2000);
+    assert.ok(cut.value.question?.endsWith(asked));
+
+    const silent = setupRun({ transcript: null });
+    const none = await silent.adapter.invoke(requestFor(silent), new AbortController().signal);
+    assert.ok(none.ok);
+    assert.equal(none.value.question, undefined);
+    assert.equal('question' in none.value, false);
+  });
+
+  it('lets the resumed session win when the request also names a session, so the launch line never carries both flags', async () => {
+    const s = setupRun({ transcript: 'success' });
+    const resumed = randomUUID();
+    const launched = await s.adapter.invoke(requestFor(s, { sessionId: randomUUID(), resumeSessionId: resumed }), new AbortController().signal);
+    assert.ok(launched.ok, JSON.stringify(launched));
+    const argv = s.fake.argvs()[0]?.argv ?? [];
+    assert.deepEqual(argv.slice(-2), ['--resume', resumed]);
+    assert.ok(!argv.includes('--session-id'));
+    assert.equal(launched.value.sessionId, resumed);
   });
 
   it('refuses a run request whose owner is missing, mismatched or not a plain name, starting nothing', async () => {

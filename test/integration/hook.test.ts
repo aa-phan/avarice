@@ -139,6 +139,17 @@ describe('commands, subagents and other tools', () => {
     }
   });
 
+  it('prints a reason after the rule for a shell-syntax refusal, and records the rule alone (plan 03-34)', () => {
+    const fx = fixture();
+    const out = runHook(fx, 'pre', { tool_name: 'Bash', tool_input: { command: 'ls src; ls test' } });
+    const reason = parsed(out.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /^avarice: shell-syntax: .*one plain command per call/);
+    assert.equal(reason.includes('ls src'), false, 'the refused command is not repeated');
+    const [row] = decisions(fx);
+    assert.deepEqual([row?.decision, row?.rule], ['deny', 'shell-syntax']);
+    assert.equal('reason' in (row ?? {}), false, 'the event keeps the rule, not the reason text');
+  });
+
   it('denies a subagent type outside the purpose set and charges subagentsTotal for an allowed one', () => {
     const fx = fixture();
     const bad = runHook(fx, 'pre', { tool_name: 'Agent', tool_input: { subagent_type: 'gsd-executor', prompt: 'x' } });

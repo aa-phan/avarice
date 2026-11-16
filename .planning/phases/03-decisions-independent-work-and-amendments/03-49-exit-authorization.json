@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "plan": "03-49",
+  "decidedAt": "2026-11-10",
+  "decidedBy": "owner",
+  "decisionRef": "the owner's replies of 2026-11-10 at the Task 3 checkpoint of plan 03-49 (decisions 1 to 4 below), on top of STATE.md 5ed69e0 (finish exit run 1 in place)",
+  "selection": "answer-2-in-place",
+  "selectionMeaning": "The owner finishes run_01M73RX3RF0ZJETYWVF52WFZ5B in their own terminal by answering C's decision dec_01M73THARNM0VENR94QDX62BJ3 with option 2 (leave tests/e2e/copy-email.spec.ts as it is). The run stays inside its write set. D-03 is relaxed for run 1 only, through the relax record of the exit tools (plan 03-50 writes it). The owner updates tests/e2e/copy-email.spec.ts after review.",
+  "ownerDecisions": [
+    "1. Run 1: answer-2-in-place. The owner runs `decide dec_01M73THARNM0VENR94QDX62BJ3 2` in their own terminal (in plan 03-50); C finishes inside the write set; Claude records the D-03 relaxation (the relax record) in plan 03-50; the owner updates tests/e2e/copy-email.spec.ts after review.",
+    "2. Run 2's brief stays unchanged.",
+    "3. Run 3's brief: apply R3-3 and R3-1 (R3-2 dropped). R3-3: item B's option 2 becomes a second variant of the toggle-button pattern that keeps aria-pressed and the name \"Dark theme\" (so none of the seven protected e2e specs and not tests/unit/use-theme.test.tsx lines 29 and 32 break), differing in something no spec asserts, with the planted \"stop and ask which one\" instruction kept. R3-1: tests/unit/use-theme.test.tsx joins run 3's Write list. The owner's answer approves the resulting new digest.",
+    "4. Record as a finding for the documentation plans (03-31 to 03-33, findings.md): a declared, non-required check (test:e2e) is never run by the supervisor, so a delivered tree can fail it with nothing recorded."
+  ],
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0",
+      "change": "none"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "change": "none"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+      "change": "R3-3 and R3-1, approved by the owner on 2026-11-10",
+      "previousDigest": "sha256:4019f32906cc1ad90571389b14cd2bee47d71b1e6853d78d36f1411ebc78631b",
+      "commit": "ce51b9b"
+    }
+  ],
+  "briefChangeApproval": {
+    "approved": ["R3-3", "R3-1"],
+    "dropped": ["R3-2"],
+    "run3Option2": "The same toggle button with a spoken description added: the name \"Dark theme\" and `aria-pressed` as in option 1, plus a visually hidden description \"Switches between the light and dark theme\", linked with `aria-describedby`. The toggle is rendered in two bars, so each instance needs its own unique id for the description.",
+    "run3WriteListAdded": "tests/unit/use-theme.test.tsx",
+    "digestRecomputedWith": "parseBrief (scripts/exit-run-phase3-tools.ts brief-check and dry-run)",
+    "check": "03-49-brief-check-after.json (run 1 and run 2 unchanged; run 3 has no real collision for either option) and 03-49-dry-run.json (every brief compiles; the preflight, staleness, conventions and promptScope are ok; the only problems are the write-set heuristic's, see notes)"
+  },
+  "perRunCapUsd": 4.95,
+  "perRunCapFlag": "--budget costUsdPerRun=4.95",
+  "ceilingUsd": 25,
+  "spentUsdSoFar": 11.1923,
+  "headroomUsd": 13.8077,
+  "run1RemainingUsd": 3.8871,
+  "run1": {
+    "runId": "run_01M73RX3RF0ZJETYWVF52WFZ5B",
+    "capUsd": 4.95,
+    "spentUsd": 1.0629,
+    "remainingUsd": 3.8871,
+    "openDecision": "dec_01M73THARNM0VENR94QDX62BJ3",
+    "ownerCommand": "AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 avarice decide dec_01M73THARNM0VENR94QDX62BJ3 2",
+    "ownerCommandNote": "run by the owner in their own terminal window (plan 03-50), without CLAUDE_CONFIG_DIR; Claude never answers, amends or cancels a portfolio run"
+  },
+  "worstCaseUsd": 24.9794,
+  "worstCaseNote": "11.1923 spent + 3.8871 left for run 1 + 4.95 for run 2 + 4.95 for run 3 = 24.9794, within the 25 USD ceiling. The dry run's fullCapsFit (false at three fresh runs of 4.95) does not apply: run 1 is not a fresh run.",
+  "dryRun": "03-49-dry-run.json",
+  "host": {
+    "claudeBin": "/Users/aphan/.local/share/claude/versions/2.1.319",
+    "claudeVersion": "2.1.319",
+    "pin": "every exit `avarice start` and `avarice resume` in plans 03-50 and 03-30 runs with AVARICE_CLAUDE_BIN set to claudeBin",
+    "ownerTerminalRequirement": "every owner-terminal `avarice decide` and `avarice resume` is given with the same AVARICE_CLAUDE_BIN=<claudeBin> and no CLAUDE_CONFIG_DIR (the run records its host configuration directory at start, plan 03-43, and every later supervisor uses it); owner commands are run in the owner's own terminal window, not in a `!` shell inside a Claude session (the identity rule refuses a non-terminal)",
+    "admittedClaudeVersionsChanged": false,
+    "defaultBinaryChanged": false
+  },
+  "itemA": "stays small (haiku) in all three briefs; no brief change",
+  "supersedes": "03-47-exit-authorization.json",
+  "supersedesNote": "The 03-47 authorization approved the three briefs at their earlier digests for three fresh runs. This file keeps runs 1 and 2 as they were, approves run 3's new digest, and replaces 'three fresh runs' by 'finish run 1 in place, then runs 2 and 3'. 03-47's evidence file 03-48-evidence-exit.json stays the evidence of run 1's start.",
+  "ownerConfirmedAt": "2026-11-11T00:00:06Z",
+  "ownerConfirmation": {
+    "reply": "answer-2-in-place; run 2 unchanged; run 3: apply R3-3 and R3-1, drop R3-2; record the non-required-check finding",
+    "repliedOn": "2026-11-10",
+    "recordedAt": "2026-11-11T00:00:06Z",
+    "note": "Recorded by Claude from the owner's reply relayed at the Task 3 checkpoint. Claude ran no owner command and read the owner's ledger and portfolio read-only."
+  },
+  "notes": [
+    "D-03 is relaxed for run 1 only, by the owner's decision of 2026-11-10 (STATE.md 5ed69e0 and this file). The relax record (`relax` subcommand of the exit tools, plan 03-49) names the decision reference and the extra decision IDs; the finish judge accepts an extra decision only through it. Runs 2 and 3 are not relaxed.",
+    "What run 1 will deliver: C finishes inside the write set with test:e2e failing against the new toast text (test:e2e is declared and not required, and the supervisor never runs a non-required check, so nothing records the failure). The owner updates tests/e2e/copy-email.spec.ts after review.",
+    "The dry run's write-set check lists every protected file that holds a name the Behavior mentions, whether the brief keeps or changes it. Run 1's one finding (tests/e2e/copy-email.spec.ts:5) is the owner-judged in-place case above. Run 3's 47 findings are names the brief says stay as they are (aria-pressed, \"Dark theme\", data-theme in item A) and aria-describedby on the project sleeves, so 03-49-dry-run.json exits 1 by design until a run's findings are judged; 03-49-brief-check-after.json classifies each one and records that neither option collides with a protected spec or tests/unit/use-theme.test.tsx.",
+    "ownerConfirmedAt is set from the owner's reply; plan 03-50 starts nothing that is not named here."
+  ]
+}

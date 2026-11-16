@@ -33,6 +33,7 @@ describe('parseStreamJson', () => {
       durationMs: 4726,
       sessionId: SESSION,
       subagentStats: { spawned: 1, completed: 1, failed: 0, refused: 0 },
+      finalTextTail: 'The scan finished. The documents are in .planning/codebase/.',
     });
     assert.deepEqual(parsed.permissionDenied, []);
     assert.equal(parsed.malformedLines, 0);
@@ -122,13 +123,15 @@ describe('parseStreamJson', () => {
     assert.equal(parsed.result?.isError, true);
   });
 
-  it('does not carry model text: nothing the model wrote is in the parsed facts', () => {
+  it('does not carry model text beyond the bounded final-text tail: assistant text and tool input are not kept', () => {
     const parsed = parseStreamJson(success);
     const json = JSON.stringify(parsed);
-    assert.ok(!json.includes('The scan finished'), 'the result text is not kept');
     assert.ok(!json.includes('I will run the scan'), 'assistant text is not kept');
+    assert.ok(!json.includes('map the repository'), 'tool input is not kept');
     assert.equal('text' in (parsed.result ?? {}), false);
     assert.equal('result' in (parsed.result ?? {}), false);
+    // The one exception is the tail of the final result text, under its own name.
+    assert.equal(parsed.result?.finalTextTail, 'The scan finished. The documents are in .planning/codebase/.');
   });
 
   it('coerces missing or invalid numbers to zero and never to NaN', () => {
@@ -154,5 +157,66 @@ describe('parseStreamJson', () => {
   it('accepts an iterable of string and byte chunks as well as one string', () => {
     const asBytes = [Buffer.from(success.slice(0, 100)), success.slice(100, 500), Buffer.from(success.slice(500))];
     assert.deepEqual(parseStreamJson(asBytes), parseStreamJson(success));
+  });
+});
+
+describe('the final result text tail (plan 03-08, AUT-1: the pause question, kept as data)', () => {
+  const resultLine = (fields: Record<string, unknown>): string => `${JSON.stringify({ type: 'result', subtype: 'success', is_error: false, ...fields })}\n`;
+
+  it('keeps a numbered question whole when it is short', () => {
+    const text = 'I need a decision before I go on.\nWhich wording?\n1. A\n2. B';
+    const parsed = parseStreamJson(resultLine({ result: text }));
+    assert.equal(parsed.result?.finalTextTail, text);
+    assert.ok(parsed.result?.finalTextTail?.endsWith('Which wording?\n1. A\n2. B'));
+  });
+
+  it('keeps only the last 2000 characters of a long result', () => {
+    const text = `${'a'.repeat(8000)}${'b'.repeat(1990)}Which?\n1. A\n2. B`;
+    assert.ok(text.length > 10_000, 'the fixture is a 10,000-character result');
+    const tail = parseStreamJson(resultLine({ result: text })).result?.finalTextTail ?? '';
+    assert.equal(tail.length, 2000);
+    assert.equal(tail, text.slice(-2000));
+    assert.ok(!tail.includes('a'));
+  });
+
+  it('strips control, zero-width and bidirectional characters but keeps the line feed', () => {
+    const dirty = 'Pick one\u001b[31m\u0007\n\u202e1. A\u200b\n2. B\u0000';
+    const tail = parseStreamJson(resultLine({ result: dirty })).result?.finalTextTail;
+    assert.equal(tail, 'Pick one[31m\n1. A\n2. B');
+  });
+
+  it('counts the 2000 characters after stripping, so stripped characters never eat the budget', () => {
+    const text = `${'x'.repeat(1990)}${'\u0007'.repeat(500)}0123456789`;
+    const tail = parseStreamJson(resultLine({ result: text })).result?.finalTextTail ?? '';
+    assert.equal(tail.length, 2000);
+    assert.ok(tail.endsWith('0123456789'));
+  });
+
+  it('sets no tail for a result with no text, an empty or blank text, or a text that is not a string, and leaves the other fields alone', () => {
+    for (const result of [undefined, '', '  \n ', '\u0007\u200b', 42, null, { text: 'x' }, ['x']]) {
+      const parsed = parseStreamJson(resultLine(result === undefined ? {} : { result }));
+      assert.equal('finalTextTail' in (parsed.result ?? {}), false, JSON.stringify(result));
+      assert.deepEqual(parsed.result, {
+        isError: false,
+        subtype: 'success',
+        permissionDenials: [],
+        totalCostUsd: 0,
+        numTurns: 0,
+        durationMs: 0,
+      });
+    }
+  });
+
+  it('keeps the tail of the last result when the host prints more than one', () => {
+    const parsed = parseStreamJson(resultLine({ result: 'first' }) + resultLine({ result: 'second' }));
+    assert.equal(parsed.resultCount, 2);
+    assert.equal(parsed.result?.finalTextTail, 'second');
+  });
+
+  it('does not cut a surrogate pair in half at the start of the tail', () => {
+    const text = `😀${'y'.repeat(1999)}`;
+    const tail = parseStreamJson(resultLine({ result: text })).result?.finalTextTail ?? '';
+    assert.ok(tail.length <= 2000);
+    assert.equal(/^[\udc00-\udfff]/.test(tail), false, 'no lone low surrogate leads the tail');
   });
 });

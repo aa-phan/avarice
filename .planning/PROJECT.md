@@ -2,7 +2,7 @@
 
 ## What This Is
 
-AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: the 26-document specification package was ingested on 2026-11-01; Phase 1 (contained onboarding of one repository) completed on 2026-11-05, Phase 2 (contained unattended run of one work item) completed on 2026-11-08, and Phase 3 (decisions, independent work and amendments) is next.
+AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination Environment) is a local-first TypeScript CLI that supplies a contained, auditable run envelope around GSD 1.17.0 and Claude Code. Given a brief and a policy preset, it compiles a run contract, runs GSD units headless inside an OS sandbox with fail-closed hooks and shared budgets, turns consequential questions into decision records, and checks the result with evidence bound to the exact revision. GSD keeps planning and execution inside each unit. It is built for one developer (aa-phan) with Claude as the implementer, personal profile first and enterprise-adaptable later. Status: milestone v1.0 Contained Kernel shipped on 2026-11-15. It onboards one repository, runs work items unattended inside enforced containment, keeps independent work going around an open decision, and resumes the paused session on a validated answer or a contract amendment (Phases 1-3, 134 plans). Milestone v1.1 MVP Completion (Phases 4-5) is next.
 
 ## Core Value
 
@@ -16,12 +16,10 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 
 - ✓ Contained onboarding of one existing repository to an active project record with GSD as the mapper, source read-only, GSD intel and graph indexes recorded (ONB-1/2/3/4/5/7/8/9/12/13/14, FR-20, SEC-5, NFR-2) — Phase 1 (verified 2026-11-04: `~/aa-phan-portfolio-v2` active with 1010 code and 24 document nodes; UAT complete 2026-11-05, 160 of 163 passed, the knowledge-pass gap G-01-154 closed by plans 01-25 and 01-26, tests 10 and 13 deferred to backlog 999.2 and 999.1)
 - ✓ A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (RC-1..5, CON-1/2/3/5/6/7/8/9/13/14/16, AUT-7..9, FR-1/2/4/5/6/7/11/27, NFR-1/3/5/6/9, OPS-2/7, ONB-10) — Phase 2 (35 plans; re-verified 2026-11-08 after gap-closure round 02-27..02-35, 8/8 success criteria; gaps G-02-H2 and G-02-H4 closed; security 122 threats, 0 open; UAT complete 2026-11-08, tests 4 and 5 deferred to backlog 999.4 and 999.5)
+- ✓ Decision records, independent work around an open decision, validated answers resuming the paused session, contract amendments, local notification, size-based models, bounded repair and subagents inside the parent budget (AUT-1..6/10/12/16, RC-6..8, CON-15) — Phase 3 (73 plans; verified 2026-11-15, 6/6 success criteria; three live exit runs 3 of 3 for 16.64 of 25 USD; security 0 open threats; Nyquist-compliant)
+- ✓ Milestone v1.0 Contained Kernel — shipped 2026-11-15 (62/62 requirements; audit `tech_debt`, 17 items scheduled as Phase 9)
 
 ### Active
-
-Milestone v1.0 Contained Kernel (Phases 1-3, first milestone, slices 0-2):
-
-- [ ] Decision records, independent work around an open decision, validated answers, contract amendments, local notification (Phase 3: AUT-1..6/10/12/16, RC-6..8, CON-15)
 
 Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
 
@@ -31,6 +29,10 @@ Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
 Milestone v2.0 Post-MVP Extensions (Phases 6-8, planned, trigger-driven):
 
 - [ ] GSD capability bridge, phased work, plugin, push notifiers (Phase 6); personal infrastructure and host records (Phase 7, FR-24); cross-repository runs and project groups (Phase 8, AUT-15, FR-21)
+
+End of roadmap:
+
+- [ ] v1.0 tech-debt cleanup (Phase 9): the review findings, deferred items and integration gaps the v1.0 audit recorded, done after the last implemented phase
 
 ### Out of Scope
 
@@ -50,7 +52,7 @@ Milestone v2.0 Post-MVP Extensions (Phases 6-8, planned, trigger-driven):
 ## Context
 
 - **Source set:** 26 documents ingested 2026-11-01 (1 PRD, 12 ADR, 9 SPEC, 4 DOC), all status proposal. Precedence PRD > ADR > SPEC > DOC. Conflict report: 0 blockers, 1 warning (the document cross-reference graph is one cycle of navigational links; accepted by the user), 9 info. Detail: `.planning/INGEST-CONFLICTS.md`; intel: `.planning/intel/`.
-- **Host baseline (decided 2026-11-01):** Claude Code is the primary host and GSD 1.17.0 the baseline; GSD updates are taken deliberately. Installed: Claude Code 2.1.316 (admitted versions: 2.1.312 and 2.1.316). Attended use targets whichever directory `CLAUDE_CONFIG_DIR` names, default `~/.claude`; nothing is hard-coded. The developer's active directory is `~/.claude-edu`. Unattended runs load neither directory's settings.
+- **Host baseline (decided 2026-11-01):** Claude Code is the primary host and GSD 1.17.0 the baseline; GSD updates are taken deliberately. Admitted Claude Code versions at v1.0 close: 2.1.312, 2.1.316, 2.1.317, 2.1.318 and 2.1.319, each after a recorded live containment run with 0 containment failures. Attended use targets whichever directory `CLAUDE_CONFIG_DIR` names, default `~/.claude`; nothing is hard-coded. The developer's active directory is `~/.claude-edu`. Unattended runs load neither directory's settings.
 - **Slice 0 exit-criterion target:** `~/aa-phan-portfolio-v2`, an existing repository with committed GSD planning (its own milestone v2, Phase 5 of 6 executing) and no codebase map, intel or graph. It exercises detection and non-overwrite of existing planning state (ONB-6, detection and refusal). Adoption of an existing stamped map is a Phase 4 deliverable and this target cannot exercise it unless a map exists first.
 - **Success metric:** acceptance criteria AC-1..AC-15 (PRD). The first milestone verifies AC-1 and AC-3 directly and reports containment failures (AC-11) from its containment suites; the rest are measured in Phases 4-6 (mapping in REQUIREMENTS.md).
 - **Pre-build spikes closed 2026-11-01** (`spikes/2026-11-01-pre-slice-0/README.md`): launch line gains `--plugin-dir` and `--agents`; out-of-scope worktree entries get `denyWrite`; the knowledge pass uses an AVARICE graph merge instead of `merge-graphs`; minimum Node raised to 22.22.3.
@@ -103,9 +105,16 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Registry hosts that can only mean a local target are refused in the conventions, and the install proxy resolves each host, refuses any non-public address and dials the vetted address; private-network registries are unsupported | The proxy dialled loopback, private and metadata hosts named in conventions (R-WR-02); dialling the vetted address also closes DNS rebinding | Phase 2 plan 02-34, 2026-11-08 (owner confirmation deferred to backlog 999.5) |
 | Budget settlement and orphan conversion each write in one ledger transaction; an invocation that ends with no result event is charged at least its reservation | Separate writes lost cost on a kill between them (R-WR-05); a crash with no result was charged 0 (R-WR-04); the zero-spend fast-failure case is deferred to backlog 999.4 | Phase 2 plan 02-32, 2026-11-08 |
 | A supervisor that loses its run lease aborts the unit's host; an operator SIGTERM does not (accepted threat T-02-108) | A lost lease left the unit running and spending until the new holder reaped it (R-IN-06); a SIGTERM abort needs its own design | Phase 2 plan 02-30, 2026-11-08 |
+| One `/gsd-quick` unit per work item with its own session ID; items run sequentially in dependency order, and a blocked item and its transitive dependents wait while independent items continue | Keeps each pause resumable by `claude -p --resume` on exactly that item's session | Phase 3 D-08, D-09 — ✓ Good (live run 1) |
+| `avarice decide` validates identity (profile owner, interactive terminal, outside the run's process tree), open state, listed option, duplicates, then the state digest; a digest mismatch re-opens the decision instead of applying it | AUT-5; an answer to a superseded question must never be applied | Phase 3 D-14, D-15 — ✓ Good (live run 2 stale path) |
+| `decide` never widens scope or budget; widening goes through `avarice contract amend` with typed flags, a required reason and a printed diff, writing contract version n+1 and invalidating evidence by change type | The run can never raise its own limits; only the owner, outside the run, can | Phase 3 D-17..D-20 — ✓ Good; ⚠️ Revisit the unreachable `policyRevision` invalidation class (audit W-1) |
+| Local notifier always writes inbox and status first and posts an `osascript` banner second; a failed banner is an event, silence never approves | AUT-4, AUT-6; the inbox is the source of truth | Phase 3 D-21..D-24 — ✓ Good (live run 3 silence) |
+| Bounded repair: one repair invocation per newly failing check, charged to the item, then a `repeated_failure` decision | AUT-10, AUT-16 | Phase 3 D-11 — ⚠️ Revisit: an answered `repeated_failure` gets no repair on resume (03-REVIEW WR-03) |
+| Exit-run discipline: a correct stop is evidence, not a pass; owner rules on each unexpected stop; two failed attempts stop spending; a proven product-defect fix resets the counter | Kept live spend under a 25 USD ceiling while finding real defects | Phase 3 D-26..D-39 — ✓ Good (16.64 of 25 USD) |
+| Milestone v1.0 closed with tech debt accepted; the cleanup is the last roadmap phase (Phase 9), after every implemented phase | Owner choice at close; none of the 17 items breaks a success criterion | 2026-11-15 — Pending |
 
 ---
-*Last updated: 2026-11-08 after Phase 2 transition*
+*Last updated: 2026-11-15 after v1.0 milestone*
 
 ## Evolution
 

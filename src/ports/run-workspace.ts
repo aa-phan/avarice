@@ -95,6 +95,20 @@ export interface DiscardResult {
   ignoredLeft: string[];
 }
 
+// A paused work item's delta, kept out of the working tree (AUT-3, research Pitfall 1). The delta is a commit object whose tree is the working
+// content at the moment of the park and whose parent is the base HEAD, held reachable by `ref` inside the run clone.
+export interface ParkRecord {
+  // `refs/avarice/park/<runId>/<itemId>` in the run clone.
+  ref: string;
+  commit: string;
+  // Tree of the working content at the park (the commit's tree).
+  tree: string;
+  // HEAD of the base snapshot the delta is measured against.
+  baseHead: string;
+  // Clone-relative paths that differ between the base snapshot and the parked content, sorted.
+  paths: string[];
+}
+
 export interface RunWorkspace {
   // Clone at the pin, on `avarice/<runId>`, built in clone.partial and renamed when complete.
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo>;
@@ -121,6 +135,19 @@ export interface RunWorkspace {
   // `conflict` (head-moved) when HEAD is not the snapshot's HEAD, and nothing is changed. Ignored paths and paths the run did not
   // change are never touched, and nothing is deleted recursively. A second call after a first changes nothing.
   discard(path: string, snapshot: WorkspaceSnapshot): Result<DiscardResult>;
+  // AUT-3: takes the paused item's delta (every path changed since `base`) out of the working tree. The delta is kept as a commit object
+  // (tree of the working content, parent `base.head`) under `refs/avarice/park/<runId>/<itemId>` in the clone, then the tree is put back to
+  // `base` through `discard`, so the next item runs without the paused item's edits or records. `runId` and `itemId` are plain names (`invalid`
+  // otherwise); `conflict` when HEAD is not `base.head` (nothing is changed) or when the ref already holds a different delta. Parking the same
+  // content again for the same item returns the same record. Never touches the user's checkout, an ignored path or anything outside the clone.
+  park(path: string, input: { base: WorkspaceSnapshot; runId: string; itemId: string }): Result<ParkRecord>;
+  // AUT-3: puts a parked delta back, content and file mode, deletions as deletions, onto the current HEAD. `conflict` naming the paths, and
+  // nothing changed, when a parked path differs between `record.baseHead` and HEAD or is modified in the working tree now; a path that already
+  // holds the parked content is left as it is, so a second call changes nothing and returns the same `applied`. `not_found` when the park ref
+  // is gone. A symlink is restored as the link itself and never followed; a parent that is a symlink is `denied`.
+  unpark(path: string, record: ParkRecord): Result<{ applied: string[] }>;
+  // AUT-3: deletes the park ref of a delta that is no longer needed (an absent ref is success), and nothing else.
+  dropPark(path: string, ref: string): Result<void>;
   // The supervisor's commit (D-03): fixed identity, no hooks, no signing, exactly `paths`. Returns the commit SHA.
   commit(path: string, input: CommitInput): Result<string>;
   // D-02: fetch `refs/heads/<branch>` of the clone into the source as a new local branch. Create-only.

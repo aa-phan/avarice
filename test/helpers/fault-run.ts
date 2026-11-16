@@ -1,7 +1,8 @@
 // Helpers for the kill-point and lease suites: run the test CLI (production main() with the fake host) to
 // completion, kill it at a named point, resume it, and normalize a project record for comparison. Every
 // profile lives under a temp dir (makeRoots); nothing here touches the user's profile or a real model.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { REPO_ROOT, makeRoots } from './run-cli.ts';
@@ -129,7 +130,7 @@ export function freshProfile(): CliRoots {
 }
 
 export function openRaw(roots: CliRoots, readOnly = true): DatabaseSync {
-  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly });
+  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly, timeout: 5000 });
 }
 
 export function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
@@ -214,7 +215,12 @@ export const RUN_KILL_POINTS = [
   'mid-invocation:run',
   'after-checkpoint:classify',
   'after-checkpoint:discard-attempt',
+  // Plan 03-19: gate G1 judges every unit's plan; the repair and gate G3 exist only for an item whose check a unit broke, so these three are reached by the
+  // repair scenario (REPAIR_SCENARIO_POINTS), whose reference run is the one of S-52.
+  'after-checkpoint:gate:g1',
   'after-checkpoint:gate:g2',
+  'after-checkpoint:repair',
+  'after-checkpoint:gate:g3',
   'after-checkpoint:commit',
   'mid-commit',
   // verifying: RUN_NEXT_ACTIONS.verifying; the commit's transition commits `verify:checks`, then the stage commits it again.
@@ -229,6 +235,69 @@ export const RUN_KILL_POINTS = [
   'mid-handoff#2',
 ] as const;
 export type RunKillPoint = (typeof RUN_KILL_POINTS)[number];
+
+// The points the kill suite runs against the repair scenario (S-52: item B breaks a test item A added, and one repair fixes it) instead of the single-item
+// reference: the repair and gate G3 are reached only there, and gate G1 is killed at the first item's gate, with a second item and a repair still to come.
+export const REPAIR_SCENARIO_POINTS: ReadonlySet<RunKillPoint> = new Set<RunKillPoint>(['after-checkpoint:gate:g1', 'after-checkpoint:repair', 'after-checkpoint:gate:g3']);
+
+// The kill points inside an item-local block (plan 03-18), reached only by a run whose item asks (test/fault/run-park.test.ts): right after the `park`
+// checkpoint (the delta is still in the tree), between the park step and the decision, and after the supervisor released its lease on a blocked run.
+export const PARK_KILL_POINTS = ['after-checkpoint:park', 'mid-park', 'after-release:blocked'] as const;
+export type ParkKillPoint = (typeof PARK_KILL_POINTS)[number];
+
+// The kill points inside the resume of an answered item (plan 03-22), reached only by a run whose answered item resumes its own session
+// (test/fault/run-resume-session.test.ts): right after the `unpark` checkpoint (the delta may or may not be back in the tree), after the delta was put back and
+// before the host is launched (`mid-unpark`), and inside the resumed unit (`mid-invocation:run`, with the host process of the resumed session left behind).
+export const RESUME_KILL_POINTS = ['after-checkpoint:unpark', 'mid-unpark', 'mid-invocation:run'] as const;
+export type ResumeKillPoint = (typeof RESUME_KILL_POINTS)[number];
+
+// The kill points of a cancel (plan 03-24; AUT-12), reached only by a run that is cancelled (test/fault/run-cancel.test.ts), so the single-item reference of the kill
+// suite never reaches them and they are not in RUN_KILL_POINTS: right after the owner's request is committed (before the supervisor aborts anything, or before
+// `cancel` takes the lease), and after the open decisions are withdrawn and before the run moves to cancelled.
+export const CANCEL_KILL_POINTS = ['after-cancel-request', 'mid-cancel'] as const;
+export type CancelKillPoint = (typeof CANCEL_KILL_POINTS)[number];
+
+// The kill point of a resume that is itself killed while it reconciles (plan 03-26): the supervisor that `resume` starts puts an interrupted run `paused` around
+// the reconcile of the item or the verification that was in flight, and commits the `reconcile` checkpoint (the transition's own `after-transition:paused` fires in
+// the same instant). Reached only by a run that was interrupted first and resumed, so the kill suite's single start never reaches it (test/fault/run-reconcile.test.ts).
+export const RECONCILE_KILL_POINTS = ['after-checkpoint:reconcile'] as const;
+export type ReconcileKillPoint = (typeof RECONCILE_KILL_POINTS)[number];
+
+// A supervisor that dies right after it moved the run to blocked_on_decision, while it still holds the lease (plan 03-26): the owner's answer then lands under a
+// lease that is live now and lapses later. It is a transition, not a checkpoint of RUN_NEXT_ACTIONS (the blocked run's checkpoint names no action).
+export const BLOCK_KILL_POINT = 'after-transition:blocked_on_decision' as const;
+
+const PTY_DRIVE = join(REPO_ROOT, 'test', 'helpers', 'pty-drive.py');
+
+export interface TerminalRun {
+  // The exit status of the command, as pty-drive.py reports it (a command killed by a signal exits with 256 minus the signal number).
+  code: number | null;
+  output: string;
+}
+
+// Runs the test CLI on a real pseudo-terminal, as a person at a shell would: a command that needs a terminal (`cancel`) is armed with a fault point and
+// killed there by its own SIGKILL, which no injected stream can show. Returns null when python3 is missing, so the caller can skip with a reason.
+export function runOnTerminal(roots: CliRoots, argv: readonly string[], env: Record<string, string | undefined> = {}, timeoutMs = 120_000): TerminalRun | null {
+  const childEnv: Record<string, string | undefined> = {
+    ...process.env,
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude',
+    TERM: 'xterm-256color',
+    ...env,
+  };
+  delete childEnv['NODE_TEST_CONTEXT'];
+  delete childEnv['NO_COLOR'];
+  delete childEnv['AVARICE_RUN'];
+  const result = spawnSync('python3', ['-I', PTY_DRIVE, '24', '80', process.execPath, '--disable-warning=ExperimentalWarning', TEST_CLI, ...argv], {
+    encoding: 'utf8',
+    env: childEnv as NodeJS.ProcessEnv,
+    timeout: timeoutMs,
+  });
+  if (result.error !== undefined && (result.error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+  return { code: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+}
 
 export function runHostEnv(host: FakeRunOptions, extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return { AVARICE_FAKE_HOST: JSON.stringify({ run: host }), AVARICE_LEASE_TTL_MS: String(RUN_LEASE_TTL_MS), ...extra };
@@ -262,7 +331,7 @@ export function runRunWithFault(
   roots: CliRoots,
   repo: ScratchRepo,
   briefPath: string,
-  point: RunKillPoint | undefined,
+  point: RunKillPoint | ParkKillPoint | typeof BLOCK_KILL_POINT | undefined,
   host: FakeRunOptions = {},
   env: Record<string, string | undefined> = {},
   extraArgs: readonly string[] = [],
@@ -375,5 +444,96 @@ export function normalizeRunResult(roots: CliRoots, runId: string): RunResult {
     subject: git(clone, ['log', '-1', '--format=%s']).trim(),
     evidence: [...latest.values()].sort((a, b) => (a.join('|') < b.join('|') ? -1 : 1)),
     gates: [...gates.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+  };
+}
+
+// ---- holding a supervisor at a named point (plan 03-26: the race between `decide` and the supervisor) -----------------------------------------------------------
+// A kill can only end a process at a point; the race of `decide` needs the process stopped there and alive, while another process writes. The test CLI
+// (test/helpers/test-cli.ts) holds a process that reaches the fault point named by AVARICE_FAULT when AVARICE_TEST_HOLD names a directory: it writes
+// `<dir>/reached`, waits for `<dir>/go`, and goes on (or dies there, when `go` says `kill`). `whenReached` is the callback hook: it waits for the process to
+// reach the point, runs the callback while the process is held, and lets the process go.
+
+export interface Hold {
+  dir: string;
+  // The environment that arms the point and names the directory.
+  env: Record<string, string>;
+}
+
+export function makeHold(roots: CliRoots, name: string, point: string): Hold {
+  const dir = join(roots.base, `hold-${name}`);
+  mkdirSync(dir, { recursive: true });
+  return { dir, env: { AVARICE_FAULT: point, AVARICE_TEST_HOLD: dir } };
+}
+
+export const holdReached = (hold: Hold): boolean => existsSync(join(hold.dir, 'reached'));
+
+export function releaseHold(hold: Hold, mode: 'continue' | 'kill' = 'continue'): void {
+  writeFileSync(join(hold.dir, 'go'), mode);
+}
+
+// Waits for the held process to reach its point, runs `callback` while it is held, and lets it go on (or, if the callback throws, ends it where it stands so
+// no held process outlives a failed test).
+export async function whenReached<T>(hold: Hold, callback: () => Promise<T> | T, timeoutMs = 120_000): Promise<T> {
+  const end = Date.now() + timeoutMs;
+  while (!holdReached(hold)) {
+    if (Date.now() > end) throw new Error(`the process never reached the held point ${hold.env['AVARICE_FAULT']}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  try {
+    const result = await callback();
+    releaseHold(hold);
+    return result;
+  } catch (e) {
+    releaseHold(hold, 'kill');
+    throw e;
+  }
+}
+
+// What a held process reported when it reached its point.
+export const heldProcess = (hold: Hold): { pid: number; argv: string[] } => JSON.parse(readFileSync(join(hold.dir, 'reached'), 'utf8')) as { pid: number; argv: string[] };
+
+export interface ExitRecord {
+  pid: number;
+  argv: string[];
+  code: number | null;
+}
+
+// The exit records the test CLI wrote to AVARICE_TEST_EXIT_LOG (a process killed by a signal writes none).
+export function exitRecords(file: string): ExitRecord[] {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line) as ExitRecord);
+}
+
+export interface LeaseSample {
+  holder: string | null;
+  fence: number;
+}
+
+// Samples the run's lease while a test drives a race: every change of holder or fence, in order. The fences must only grow and no holder may reappear after
+// another took the lease, which is what "at most one supervisor holds the lease at a time" means as far as a sampler can see it.
+export function watchLease(roots: CliRoots, runId: string, everyMs = 15): { stop(): LeaseSample[] } {
+  const db = openRaw(roots);
+  const samples: LeaseSample[] = [];
+  const read = db.prepare('SELECT lease_holder, lease_fence FROM runs WHERE run_id = ?');
+  const tick = (): void => {
+    const row = read.get(runId) as { lease_holder: string | null; lease_fence: number } | undefined;
+    if (row === undefined) return;
+    const last = samples.at(-1);
+    if (last === undefined || last.holder !== row.lease_holder || last.fence !== row.lease_fence) samples.push({ holder: row.lease_holder, fence: row.lease_fence });
+  };
+  const timer = setInterval(tick, everyMs);
+  // A test that fails before it stops the watcher must not keep the process alive.
+  timer.unref();
+  tick();
+  return {
+    stop: () => {
+      clearInterval(timer);
+      tick();
+      db.close();
+      return samples;
+    },
   };
 }

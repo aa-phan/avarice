@@ -1,0 +1,1062 @@
+{
+  "schema": 1,
+  "plan": "03-65",
+  "checkedAt": "2026-11-11T17:13:54.592Z",
+  "source": "~/aa-phan-portfolio-v2",
+  "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+  "conventionsRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:2183c31788bce25a7b14e5b961e6ec3518c50b6a5f0b4240151ae54bdd4eeb55"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823"
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd"
+    }
+  ],
+  "spentUsd": 0,
+  "modelHostLaunched": false,
+  "installs": false,
+  "network": false,
+  "node": "v26.9.0",
+  "unitSandbox": "the production sandboxed executor stands in for the host's own sandbox, which cannot be started without the host",
+  "nodeModules": {
+    "from": "~/aa-phan-portfolio-v2/node_modules",
+    "lockfile": "package-lock.json",
+    "lockfileSha256": "sha256:fafeb7d6d4de89ce2e150e8a6d5b2dc62cd5749a74e37f55379ae8fcc374ba93",
+    "matchesPin": true,
+    "copy": "clone",
+    "copiedWithoutFollowingSymlinks": true
+  },
+  "unitEnvironment": [
+    "AVARICE_RUN",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS",
+    "CLAUDE_CONFIG_DIR",
+    "GIT_ATTR_NOSYSTEM",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_KEY_0",
+    "GIT_CONFIG_KEY_1",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_CONFIG_VALUE_0",
+    "GIT_CONFIG_VALUE_1",
+    "GIT_OPTIONAL_LOCKS",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "TMPDIR",
+    "USER",
+    "npm_config_cache",
+    "npm_config_update_notifier"
+  ],
+  "supervisorEnvironment": [
+    "CI",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TMPDIR",
+    "VITE_SITE_ORIGIN",
+    "npm_config_cache"
+  ],
+  "checks": [
+    {
+      "name": "typecheck",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run typecheck",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 3661,
+        "outputSha256": "sha256:ef9f0f878ec00709c680bed3b8db2e27782b1c9e6be455bee9329cd1fa2c6ec6",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 typecheck",
+            "> tsc -b"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 2932,
+        "outputSha256": "sha256:ef9f0f878ec00709c680bed3b8db2e27782b1c9e6be455bee9329cd1fa2c6ec6",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 typecheck",
+            "> tsc -b"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "lint",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run lint",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 588,
+        "outputSha256": "sha256:b0ff2a4aff6ed1a0f179510bccc737f6bbbe80f0c893376efd85aafd85faadf6",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 lint",
+            "> oxlint --deny-warnings --ignore-path .oxlintignore",
+            "",
+            "Found 0 warnings and 0 errors.",
+            "Finished in 70ms on 142 files with 119 rules using 10 threads."
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 500,
+        "outputSha256": "sha256:42da5bbb481d03effcfb4145efab0af452d256eef906fbb587df51d4fffb1e2c",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 lint",
+            "> oxlint --deny-warnings --ignore-path .oxlintignore",
+            "",
+            "Found 0 warnings and 0 errors.",
+            "Finished in 55ms on 142 files with 119 rules using 10 threads."
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "format:check",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run format:check",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "failed",
+        "exitCode": 1,
+        "durationMs": 1514,
+        "outputSha256": "sha256:ecfde662fc81a4a819a8862b4eaf3cb220c863c3deb014cf479878692eb769e5",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 format:check",
+            "> prettier --check .",
+            "",
+            "Checking formatting..."
+          ],
+          "stderr": [
+            "[warn] index.html",
+            "[warn] Code style issues found in the above file. Run Prettier with --write to fix."
+          ]
+        }
+      },
+      "supervisor": {
+        "status": "failed",
+        "exitCode": 1,
+        "durationMs": 1216,
+        "outputSha256": "sha256:6ec3c62c663f2fb4298b3f2b1577600615b753c853b6f0bcfea294138d6d8b22",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 format:check",
+            "> prettier --check .",
+            "",
+            "Checking formatting..."
+          ],
+          "stderr": [
+            "[\u001b[33mwarn\u001b[39m] index.html",
+            "[\u001b[33mwarn\u001b[39m] Code style issues found in the above file. Run Prettier with --write to fix."
+          ]
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "test",
+      "required": true,
+      "target": true,
+      "unitCommand": "npm run test",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 16709,
+        "outputSha256": "sha256:06f8688948f969e381426343c59fb381527f6373a1c262d90c1884eaaa8fbee6",
+        "tail": {
+          "stdout": [
+            "   \u001b[32m✓\u001b[39m check-no-phone \u001b[2m(93)\u001b[22m",
+            "     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m does not flag a bare tel key in minified JS (React DOM input-type list)\u001b[33m 498\u001b[2mms\u001b[22m\u001b[39m",
+            "     \u001b[32m✓\u001b[39m PDF text layer \u001b[2m(13)\u001b[22m",
+            "       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m flags a contiguous ten-digit run in PDF text but not in xref offsets\u001b[33m 314\u001b[2mms\u001b[22m\u001b[39m",
+            "     \u001b[32m✓\u001b[39m PDF read with pdfjs \u001b[2m(19)\u001b[22m",
+            "       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m does not flag mailto and https link annotations\u001b[33m 321\u001b[2mms\u001b[22m\u001b[39m",
+            "",
+            "\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m23 passed\u001b[39m\u001b[22m\u001b[90m (23)\u001b[39m",
+            "\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m408 passed\u001b[39m\u001b[22m\u001b[90m (408)\u001b[39m",
+            "\u001b[2m   Start at \u001b[22m 11:14:31",
+            "\u001b[2m   Duration \u001b[22m 15.62s\u001b[2m (tests 50%, environment 34%, transform 7%, setup 5%, import 3%)\u001b[22m",
+            "",
+            "\u001b[2mEnvironment \u001b[22m \u001b[33mjsdom was created 23 times\u001b[39m\u001b[2m · 13.62s total, 34% of tracked time\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mcreate it once per worker with \u001b[22m\u001b[33mpool: 'vmThreads'\u001b[39m\u001b[2m (keeps per-file isolation) or \u001b[22m\u001b[33misolate: false\u001b[39m\u001b[2m (shares it across files)\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mlearn more: https://vitest.dev/guide/improving-performance#test-environments\u001b[22m"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 15813,
+        "outputSha256": "sha256:2dd7c9c0f44724122ea2112f53c2631328454f1519c99d6582b2b2b6742f442a",
+        "tail": {
+          "stdout": [
+            " \u001b[32m✓\u001b[39m tests/unit/dates.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 2\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/use-theme.test.tsx \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 58\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/motion-features.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 112\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/gates.test.ts \u001b[2m(\u001b[22m\u001b[2m159 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 13647\u001b[2mms\u001b[22m\u001b[39m",
+            "   \u001b[32m✓\u001b[39m check-no-phone \u001b[2m(93)\u001b[22m",
+            "     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m does not flag a bare tel key in minified JS (React DOM input-type list)\u001b[33m 514\u001b[2mms\u001b[22m\u001b[39m",
+            "",
+            "\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m23 passed\u001b[39m\u001b[22m\u001b[90m (23)\u001b[39m",
+            "\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m408 passed\u001b[39m\u001b[22m\u001b[90m (408)\u001b[39m",
+            "\u001b[2m   Start at \u001b[22m 11:14:02",
+            "\u001b[2m   Duration \u001b[22m 14.67s\u001b[2m (tests 49%, environment 33%, transform 9%, setup 5%, import 4%)\u001b[22m",
+            "",
+            "\u001b[2mEnvironment \u001b[22m \u001b[33mjsdom was created 23 times\u001b[39m\u001b[2m · 13.21s total, 33% of tracked time\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mcreate it once per worker with \u001b[22m\u001b[33mpool: 'vmThreads'\u001b[39m\u001b[2m (keeps per-file isolation) or \u001b[22m\u001b[33misolate: false\u001b[39m\u001b[2m (shares it across files)\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mlearn more: https://vitest.dev/guide/improving-performance#test-environments\u001b[22m"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:case",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:case",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 233,
+        "outputSha256": "sha256:13ac56cb4fecdf98bd997e039e9dfeca5e62ff57ee24693f7910dafe317c4450",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:case",
+            "> node scripts/check-path-case.mjs",
+            "",
+            "path-case: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 250,
+        "outputSha256": "sha256:13ac56cb4fecdf98bd997e039e9dfeca5e62ff57ee24693f7910dafe317c4450",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:case",
+            "> node scripts/check-path-case.mjs",
+            "",
+            "path-case: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:colors",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:colors",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 167,
+        "outputSha256": "sha256:b67d00c3bf4dc8d6d2c91e93fe174deed767bfe248aa74e7faa131229d263f60",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:colors",
+            "> node scripts/check-colors.mjs",
+            "",
+            "colors: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 170,
+        "outputSha256": "sha256:b67d00c3bf4dc8d6d2c91e93fe174deed767bfe248aa74e7faa131229d263f60",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:colors",
+            "> node scripts/check-colors.mjs",
+            "",
+            "colors: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:contrast",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:contrast",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 141,
+        "outputSha256": "sha256:4f7e0d012cfc737e37412baea66418f2548b26af326565018e4dd370be6aa7ee",
+        "tail": {
+          "stdout": [
+            "band-on-dark --background on --text text 18.11 min 4.5 PASS CTA flood label, toast, skip link, pill and dialog inverted labels",
+            "band-on-dark --muted on --secondary text 7.75 min 4.5 PASS #experience dates on the row hover wash",
+            "band-on-dark --text on --sleeve-personal text 11.01 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve title and label",
+            "band-on-dark --muted on --sleeve-personal text 5.24 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-personal focus 11.01 min 3.0 PASS #projects RecipeCart and Smart Mirror sleeve focus ring",
+            "band-on-dark --text on --sleeve-employer text 9.56 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve title and label",
+            "band-on-dark --muted on --sleeve-employer text 4.55 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-employer focus 9.56 min 3.0 PASS #projects A.T.L.A.S and Suspect Genie sleeve focus ring",
+            "band-on-dark --text on --sleeve-hackathon text 16.29 min 4.5 PASS #projects MediaDash sleeve title and label",
+            "band-on-dark --muted on --sleeve-hackathon text 7.75 min 4.5 PASS #projects MediaDash sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-hackathon focus 16.29 min 3.0 PASS #projects MediaDash sleeve focus ring",
+            "band-on-dark --text on --sleeve-course text 14.43 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve title and label",
+            "band-on-dark --muted on --sleeve-course text 6.87 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-course focus 14.43 min 3.0 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve focus ring",
+            "RESULT: PASS checks=116"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 142,
+        "outputSha256": "sha256:4f7e0d012cfc737e37412baea66418f2548b26af326565018e4dd370be6aa7ee",
+        "tail": {
+          "stdout": [
+            "band-on-dark --background on --text text 18.11 min 4.5 PASS CTA flood label, toast, skip link, pill and dialog inverted labels",
+            "band-on-dark --muted on --secondary text 7.75 min 4.5 PASS #experience dates on the row hover wash",
+            "band-on-dark --text on --sleeve-personal text 11.01 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve title and label",
+            "band-on-dark --muted on --sleeve-personal text 5.24 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-personal focus 11.01 min 3.0 PASS #projects RecipeCart and Smart Mirror sleeve focus ring",
+            "band-on-dark --text on --sleeve-employer text 9.56 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve title and label",
+            "band-on-dark --muted on --sleeve-employer text 4.55 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-employer focus 9.56 min 3.0 PASS #projects A.T.L.A.S and Suspect Genie sleeve focus ring",
+            "band-on-dark --text on --sleeve-hackathon text 16.29 min 4.5 PASS #projects MediaDash sleeve title and label",
+            "band-on-dark --muted on --sleeve-hackathon text 7.75 min 4.5 PASS #projects MediaDash sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-hackathon focus 16.29 min 3.0 PASS #projects MediaDash sleeve focus ring",
+            "band-on-dark --text on --sleeve-course text 14.43 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve title and label",
+            "band-on-dark --muted on --sleeve-course text 6.87 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-course focus 14.43 min 3.0 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve focus ring",
+            "RESULT: PASS checks=116"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "build",
+      "required": true,
+      "target": false,
+      "unitCommand": "VITE_SITE_ORIGIN=https://aa-phan.github.io npm run build",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 3571,
+        "outputSha256": "sha256:e516e2d4f025dcd6696fc74442836a1bb1b3aa5ce8339f098a0dcdb682134cc3",
+        "tail": {
+          "stdout": [
+            "dist/assets/about-dj-LahcaZyM.webp                          18.42 kB",
+            "dist/assets/about-dj-CiqOSpOj.webp                          28.58 kB",
+            "dist/assets/archivo-vietnamese-wdth-normal-rJmnGBSt.woff2   34.46 kB",
+            "dist/assets/archivo-latin-ext-wdth-normal-7khWdh9v.woff2    86.24 kB",
+            "dist/assets/archivo-latin-wdth-normal-DY7AcnAa.woff2        90.10 kB",
+            "dist/assets/LenisRoot-fOJvfYOR.css                           0.45 kB │ gzip:   0.22 kB",
+            "dist/assets/main-BS_dQaRr.css                               49.07 kB │ gzip:  10.07 kB",
+            "dist/assets/notFound-BCq_i7fe.css                           49.34 kB │ gzip:  10.18 kB",
+            "dist/assets/flipEngine-DWFdh-XL.js                           0.04 kB │ gzip:   0.06 kB",
+            "dist/assets/LenisRoot-BQqmlXAu.js                           20.70 kB │ gzip:   6.17 kB",
+            "dist/assets/animate-DfrTOlpX.js                             36.62 kB │ gzip:  14.32 kB",
+            "dist/assets/features-Bs0w0c3j.js                            60.78 kB │ gzip:  19.11 kB",
+            "dist/assets/main-DUwQZY-M.js                               401.54 kB │ gzip: 131.64 kB",
+            "",
+            "✓ built in 363ms"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 4128,
+        "outputSha256": "sha256:52f5f2610c2ac5eb5b64d1cc7a93783bd336b9aa04677cde0c2dd9cdf4aac68a",
+        "tail": {
+          "stdout": [
+            "dist/assets/about-dj-LahcaZyM.webp                          18.42 kB",
+            "dist/assets/about-dj-CiqOSpOj.webp                          28.58 kB",
+            "dist/assets/archivo-vietnamese-wdth-normal-rJmnGBSt.woff2   34.46 kB",
+            "dist/assets/archivo-latin-ext-wdth-normal-7khWdh9v.woff2    86.24 kB",
+            "dist/assets/archivo-latin-wdth-normal-DY7AcnAa.woff2        90.10 kB",
+            "dist/assets/LenisRoot-fOJvfYOR.css                           0.45 kB │ gzip:   0.22 kB",
+            "dist/assets/main-BS_dQaRr.css                               49.07 kB │ gzip:  10.07 kB",
+            "dist/assets/notFound-BCq_i7fe.css                           49.34 kB │ gzip:  10.18 kB",
+            "dist/assets/flipEngine-DWFdh-XL.js                           0.04 kB │ gzip:   0.06 kB",
+            "dist/assets/LenisRoot-BQqmlXAu.js                           20.70 kB │ gzip:   6.17 kB",
+            "dist/assets/animate-DfrTOlpX.js                             36.62 kB │ gzip:  14.32 kB",
+            "dist/assets/features-Bs0w0c3j.js                            60.78 kB │ gzip:  19.11 kB",
+            "dist/assets/main-DUwQZY-M.js                               401.54 kB │ gzip: 131.64 kB",
+            "",
+            "\u001b[32m✓ built in 440ms\u001b[39m"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:meta",
+      "required": true,
+      "target": false,
+      "unitCommand": "VITE_SITE_ORIGIN=https://aa-phan.github.io npm run check:meta",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 138,
+        "outputSha256": "sha256:608a5640fc88c6c4259f8444e3f980e7cf8bf6234d54c0ec7025f9fca3f43578",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:meta",
+            "> node scripts/check-meta.mjs",
+            "",
+            "meta: PASS (https://aa-phan.github.io/)"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 170,
+        "outputSha256": "sha256:608a5640fc88c6c4259f8444e3f980e7cf8bf6234d54c0ec7025f9fca3f43578",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:meta",
+            "> node scripts/check-meta.mjs",
+            "",
+            "meta: PASS (https://aa-phan.github.io/)"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:budget",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:budget",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 150,
+        "outputSha256": "sha256:0dff941498cd91a26be7a2c5b327d0e7a3454b6ccb312aab3e695aebb72b617f",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:budget",
+            "> node scripts/check-js-budget.mjs",
+            "",
+            "  129885 B gz  assets/main-DUwQZY-M.js",
+            "initial JS: 129885 B gzipped (129.9 kB) of 150000 B budget"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 180,
+        "outputSha256": "sha256:0dff941498cd91a26be7a2c5b327d0e7a3454b6ccb312aab3e695aebb72b617f",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:budget",
+            "> node scripts/check-js-budget.mjs",
+            "",
+            "  129885 B gz  assets/main-DUwQZY-M.js",
+            "initial JS: 129885 B gzipped (129.9 kB) of 150000 B budget"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:no-phone",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:no-phone",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 260,
+        "outputSha256": "sha256:182f6fcfb413222a38e96041c1eb5574ad12ae8089230e29fb6ceb11938aac2c",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:no-phone",
+            "> node scripts/check-no-phone.mjs",
+            "",
+            "no-phone: dist/resume.pdf metadata keys: Author, CreationDate, Creator, Keywords, ModDate, Custom, Producer, Subject, Title, Trapped",
+            "no-phone: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 319,
+        "outputSha256": "sha256:182f6fcfb413222a38e96041c1eb5574ad12ae8089230e29fb6ceb11938aac2c",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:no-phone",
+            "> node scripts/check-no-phone.mjs",
+            "",
+            "no-phone: dist/resume.pdf metadata keys: Author, CreationDate, Creator, Keywords, ModDate, Custom, Producer, Subject, Title, Trapped",
+            "no-phone: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    },
+    {
+      "name": "check:images",
+      "required": true,
+      "target": false,
+      "unitCommand": "npm run check:images",
+      "listed": true,
+      "hook": {
+        "decision": "allow",
+        "rule": "agent-command"
+      },
+      "unit": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 149,
+        "outputSha256": "sha256:eb9f3b513142908fcaf4a8d32e6842715c623cc52a70a3ee4cc8c994fa313dea",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:images",
+            "> node scripts/check-images.mjs",
+            "",
+            "check-images: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "supervisor": {
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 175,
+        "outputSha256": "sha256:eb9f3b513142908fcaf4a8d32e6842715c623cc52a70a3ee4cc8c994fa313dea",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:images",
+            "> node scripts/check-images.mjs",
+            "",
+            "check-images: OK"
+          ],
+          "stderr": []
+        }
+      },
+      "parity": true
+    }
+  ],
+  "mismatches": [],
+  "preFix": {
+    "note": "each check by its bare argument vector, the list the unit was given before plan 03-64; evidence of run 2 attempt 2, not part of the verdict",
+    "checks": [
+      {
+        "name": "typecheck",
+        "command": "npm run typecheck",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 2799,
+        "outputSha256": "sha256:ef9f0f878ec00709c680bed3b8db2e27782b1c9e6be455bee9329cd1fa2c6ec6",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 typecheck",
+            "> tsc -b"
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "lint",
+        "command": "npm run lint",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 495,
+        "outputSha256": "sha256:42da5bbb481d03effcfb4145efab0af452d256eef906fbb587df51d4fffb1e2c",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 lint",
+            "> oxlint --deny-warnings --ignore-path .oxlintignore",
+            "",
+            "Found 0 warnings and 0 errors.",
+            "Finished in 55ms on 142 files with 119 rules using 10 threads."
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "format:check",
+        "command": "npm run format:check",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "failed",
+        "exitCode": 1,
+        "durationMs": 1214,
+        "outputSha256": "sha256:ecfde662fc81a4a819a8862b4eaf3cb220c863c3deb014cf479878692eb769e5",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 format:check",
+            "> prettier --check .",
+            "",
+            "Checking formatting..."
+          ],
+          "stderr": [
+            "[warn] index.html",
+            "[warn] Code style issues found in the above file. Run Prettier with --write to fix."
+          ]
+        }
+      },
+      {
+        "name": "test",
+        "command": "npm run test",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 15059,
+        "outputSha256": "sha256:8ac8210200015515c17a5aafe806de1e3fc4a9e5ba98c02d5a4ef3f1353e0abc",
+        "tail": {
+          "stdout": [
+            " \u001b[32m✓\u001b[39m tests/unit/dates.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 2\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/use-theme.test.tsx \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 62\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/motion-features.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 114\u001b[2mms\u001b[22m\u001b[39m",
+            " \u001b[32m✓\u001b[39m tests/unit/gates.test.ts \u001b[2m(\u001b[22m\u001b[2m159 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 13050\u001b[2mms\u001b[22m\u001b[39m",
+            "   \u001b[32m✓\u001b[39m check-no-phone \u001b[2m(93)\u001b[22m",
+            "     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m does not flag a bare tel key in minified JS (React DOM input-type list)\u001b[33m 476\u001b[2mms\u001b[22m\u001b[39m",
+            "",
+            "\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m23 passed\u001b[39m\u001b[22m\u001b[90m (23)\u001b[39m",
+            "\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m408 passed\u001b[39m\u001b[22m\u001b[90m (408)\u001b[39m",
+            "\u001b[2m   Start at \u001b[22m 11:14:58",
+            "\u001b[2m   Duration \u001b[22m 14.01s\u001b[2m (tests 50%, environment 33%, transform 8%, setup 5%, import 3%)\u001b[22m",
+            "",
+            "\u001b[2mEnvironment \u001b[22m \u001b[33mjsdom was created 23 times\u001b[39m\u001b[2m · 12.22s total, 33% of tracked time\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mcreate it once per worker with \u001b[22m\u001b[33mpool: 'vmThreads'\u001b[39m\u001b[2m (keeps per-file isolation) or \u001b[22m\u001b[33misolate: false\u001b[39m\u001b[2m (shares it across files)\u001b[22m",
+            "\u001b[2m            \u001b[22m \u001b[2mlearn more: https://vitest.dev/guide/improving-performance#test-environments\u001b[22m"
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "check:case",
+        "command": "npm run check:case",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 230,
+        "outputSha256": "sha256:13ac56cb4fecdf98bd997e039e9dfeca5e62ff57ee24693f7910dafe317c4450",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:case",
+            "> node scripts/check-path-case.mjs",
+            "",
+            "path-case: OK"
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "check:colors",
+        "command": "npm run check:colors",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 180,
+        "outputSha256": "sha256:b67d00c3bf4dc8d6d2c91e93fe174deed767bfe248aa74e7faa131229d263f60",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:colors",
+            "> node scripts/check-colors.mjs",
+            "",
+            "colors: OK"
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "check:contrast",
+        "command": "npm run check:contrast",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 142,
+        "outputSha256": "sha256:4f7e0d012cfc737e37412baea66418f2548b26af326565018e4dd370be6aa7ee",
+        "tail": {
+          "stdout": [
+            "band-on-dark --background on --text text 18.11 min 4.5 PASS CTA flood label, toast, skip link, pill and dialog inverted labels",
+            "band-on-dark --muted on --secondary text 7.75 min 4.5 PASS #experience dates on the row hover wash",
+            "band-on-dark --text on --sleeve-personal text 11.01 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve title and label",
+            "band-on-dark --muted on --sleeve-personal text 5.24 min 4.5 PASS #projects RecipeCart and Smart Mirror sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-personal focus 11.01 min 3.0 PASS #projects RecipeCart and Smart Mirror sleeve focus ring",
+            "band-on-dark --text on --sleeve-employer text 9.56 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve title and label",
+            "band-on-dark --muted on --sleeve-employer text 4.55 min 4.5 PASS #projects A.T.L.A.S and Suspect Genie sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-employer focus 9.56 min 3.0 PASS #projects A.T.L.A.S and Suspect Genie sleeve focus ring",
+            "band-on-dark --text on --sleeve-hackathon text 16.29 min 4.5 PASS #projects MediaDash sleeve title and label",
+            "band-on-dark --muted on --sleeve-hackathon text 7.75 min 4.5 PASS #projects MediaDash sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-hackathon focus 16.29 min 3.0 PASS #projects MediaDash sleeve focus ring",
+            "band-on-dark --text on --sleeve-course text 14.43 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve title and label",
+            "band-on-dark --muted on --sleeve-course text 6.87 min 4.5 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve dates and stack",
+            "band-on-dark --focus-ring on --sleeve-course focus 14.43 min 3.0 PASS #projects Full-Stack Library Simulator and FPGA-Based Stopwatch sleeve focus ring",
+            "RESULT: PASS checks=116"
+          ],
+          "stderr": []
+        }
+      },
+      {
+        "name": "build",
+        "command": "npm run build",
+        "hook": {
+          "decision": "deny",
+          "rule": "shell-not-allowed"
+        },
+        "status": "failed",
+        "exitCode": 1,
+        "durationMs": 3143,
+        "outputSha256": "sha256:44ff9608a6b349fb2a8e6d66794545e48d6f2110b49cbb27278601fa155f6cd7",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 build",
+            "> tsc -b && vite build"
+          ],
+          "stderr": [
+            "failed to load config from /private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/vite.config.ts",
+            "error during build:",
+            "Error: VITE_SITE_ORIGIN is empty: set it in .env (canonical, og:url and sitemap need it)",
+            "    at file:///private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/node_modules/.vite-temp/vite.config.ts.timestamp-1794417316173-e936452b619258.mjs:39:21",
+            "    at loadConfigFromFile (file:///private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/node_modules/vite/dist/node/chunks/node.js:37940:62)",
+            "    at async resolveConfig (file:///private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/node_modules/vite/dist/node/chunks/node.js:37540:22)",
+            "    at async createBuilder (file:///private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/node_modules/vite/dist/node/chunks/node.js:35112:17)",
+            "    at async CAC.<anonymous> (file:///private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-parity-nA18jP/work/run_01M75SNWDH5RSDQ2AYEMNTTV47/validate/node_modules/vite/dist/node/cli.js:769:19)"
+          ]
+        }
+      },
+      {
+        "name": "check:meta",
+        "command": "npm run check:meta",
+        "hook": {
+          "decision": "deny",
+          "rule": "shell-not-allowed"
+        },
+        "status": "failed",
+        "exitCode": 2,
+        "durationMs": 139,
+        "outputSha256": "sha256:f2d4e8e313b4dae91eb1f5587c2caf88e4fb25ef6a218dc46b43b1547fcfd6a3",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:meta",
+            "> node scripts/check-meta.mjs"
+          ],
+          "stderr": [
+            "check:meta: VITE_SITE_ORIGIN is not set in the environment or .env"
+          ]
+        }
+      },
+      {
+        "name": "check:budget",
+        "command": "npm run check:budget",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "failed",
+        "exitCode": 2,
+        "durationMs": 138,
+        "outputSha256": "sha256:7f48beb00a2f11b0b0e1c76eda9ee275b407736cac0a311cf08d9cf8f937433b",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:budget",
+            "> node scripts/check-js-budget.mjs"
+          ],
+          "stderr": [
+            "check:budget: dist/index.html not found, run the build first"
+          ]
+        }
+      },
+      {
+        "name": "check:no-phone",
+        "command": "npm run check:no-phone",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "failed",
+        "exitCode": 2,
+        "durationMs": 142,
+        "outputSha256": "sha256:b885f970818a90298a95460295c3a17d6648f99a25101ac00e2ed71dc4022163",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:no-phone",
+            "> node scripts/check-no-phone.mjs"
+          ],
+          "stderr": [
+            "no-phone: dist not found, run the build first"
+          ]
+        }
+      },
+      {
+        "name": "check:images",
+        "command": "npm run check:images",
+        "hook": {
+          "decision": "allow",
+          "rule": "agent-command"
+        },
+        "status": "failed",
+        "exitCode": 2,
+        "durationMs": 137,
+        "outputSha256": "sha256:69f8cf083b2a2ed665f6c7b379bd28d548eaa61d7fb28188c7e9085da0ca5cab",
+        "tail": {
+          "stdout": [
+            "",
+            "> aa-phan-portfolio-v2@0.0.0 check:images",
+            "> node scripts/check-images.mjs"
+          ],
+          "stderr": [
+            "check-images: dist not found, run the build first"
+          ]
+        }
+      }
+    ],
+    "mismatches": [
+      "build",
+      "check:meta",
+      "check:budget",
+      "check:no-phone",
+      "check:images"
+    ]
+  },
+  "anchor": {
+    "evidence": "~/avarice/.claude/worktrees/phase-03/.planning/phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json",
+    "runId": "run_01M75NPTEF7FKDNW8ABQ9Q16WS",
+    "compared": [
+      {
+        "name": "typecheck",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "lint",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "format:check",
+        "recorded": "failed",
+        "measured": "failed"
+      },
+      {
+        "name": "test",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:case",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:colors",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:contrast",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "build",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:meta",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:budget",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:no-phone",
+        "recorded": "passed",
+        "measured": "passed"
+      },
+      {
+        "name": "check:images",
+        "recorded": "passed",
+        "measured": "passed"
+      }
+    ],
+    "matches": true,
+    "problems": []
+  },
+  "checkout": {
+    "before": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1,
+      "nodeModulesDigest": "8d6e08c10aac78a8cc4934abc890e2d52f4ac07eafa2fc5db5236cd920260480"
+    },
+    "after": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1,
+      "nodeModulesDigest": "8d6e08c10aac78a8cc4934abc890e2d52f4ac07eafa2fc5db5236cd920260480"
+    },
+    "unchanged": true,
+    "nodeModulesDigestCovers": "every top-level entry of node_modules by lstat (type, size, mtime), the entries below each @scope directory, and every file under .tmp, .vite, .vite-temp, .vitest, .vitest-cache and .cache by relative path, size and mtime; not package file contents",
+    "runCwdInsideSourceCheckout": false
+  },
+  "parity": true,
+  "problems": [],
+  "durationMs": 84464
+}

@@ -5,7 +5,9 @@
 //                 killed supervisor): it is ended by the session ID its step recorded. Every reap completes before any row is marked or anything is
 //                 read from the clone, and a reap that fails stops the resume with every row still `started` (T-02-56, FR-7); so does a started launch that cannot be reaped at all (no recorded session ID, or a host with no reap).
 //   2. reconcile  by the run's state: a `running` run whose item was in flight is put back to its attempt's snapshot and retried once (CON-16) or, when
-//                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); a `verifying` run is shown
+//                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); an in-flight attempt that was a
+//                 resume of an answered item's session (plan 03-22) is put back to its snapshot (which takes the unparked delta out) and goes to the fresh
+//                 unit that carries the owner's answer, or, when it never launched its unit, resumes again (the unpark is repeatable); a `verifying` run is shown
 //                 `paused (verification interrupted)`, the checks of the interrupted final pass that never finished get `inconclusive` evidence (T-02-58),
 //                 and the run goes back to `verifying`, which re-verifies on the current revision.
 //   3. the stage loop continues from the committed state.
@@ -22,6 +24,7 @@ import type { RunRow, RunStepRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { getRunStatuses } from './run-status.ts';
 import { reconcileItem } from './run-stages/item.ts';
+import { isBlockedRunContinuable } from './run-stages/schedule.ts';
 import type { RunStageContext } from './run-stages/stage.ts';
 
 const LAUNCH_PREFIX = 'launch:';
@@ -44,7 +47,12 @@ export function resumeRun(deps: AppDeps, runId: string): Result<ResumeDecision> 
   const found = deps.ledger.getRun(runId);
   if (!found.ok) return found;
   const run = found.value;
-  if (isRunStopState(run.state) || !isRunResumable(run.state)) return ok({ kind: 'stopped', run });
+  // A run blocked at an item decision that an answer has made continuable is picked up like an interrupted one (D-16, research Pitfall 3): `decide` starts a
+  // supervisor only when no live lease is held, so an answer written under the lease of a supervisor that then died (it was killed right after it blocked the run)
+  // would otherwise wait for nobody, since nothing polls. Every other stop state, and a blocked run with nothing to continue, is only reported.
+  const continuable = run.state === 'blocked_on_decision' ? isBlockedRunContinuable(deps, run) : ok(false);
+  if (!continuable.ok) return continuable;
+  if (!continuable.value && (isRunStopState(run.state) || !isRunResumable(run.state))) return ok({ kind: 'stopped', run });
   const nowMs = deps.clock.nowMs();
   // The lease of a live supervisor is never taken: the stage loop fences it out only once it has lapsed.
   if (leaseIsLive(run, nowMs)) {
@@ -68,8 +76,9 @@ export function resumeRun(deps: AppDeps, runId: string): Result<ResumeDecision> 
 
 // Ends the host of every `launch:*` step the previous holder left `started`, then marks those steps `interrupted`. Every reap completes before any
 // row is marked, so a reap that fails leaves every row `started` and the next resume tries again. A started launch that cannot be reaped at all (the
-// host has no reap, or the step recorded no session ID) stops the resume the same way.
-async function reapStartedLaunches(ctx: RunStageContext): Promise<Result<void>> {
+// host has no reap, or the step recorded no session ID) stops the resume the same way. `avarice cancel` of a run with no live supervisor reaps the same way
+// (plan 03-24) before it withdraws anything, so no host runs beside the cancelled run.
+export async function reapRunLaunches(ctx: RunStageContext): Promise<Result<void>> {
   const { deps, runId } = ctx;
   const steps = deps.ledger.getRunSteps(runId);
   if (!steps.ok) return steps;
@@ -174,9 +183,9 @@ function markInterruptedChecks(ctx: RunStageContext, row: RunRow, contract: RunC
   for (const { spec } of checksToRun(contract)) {
     // The pass runs only checks that passed validation (ONB-10): one that was never going to run is not an interrupted check.
     if (verdicts.value.get(spec.name)?.verdict !== 'active' || finished.has(spec.name)) continue;
+    // The final pass proves the whole run, so its rows name no item (the rows the pass itself writes name none either).
     const recorded = deps.ledger.recordEvidence({
       attemptId: attempt.attemptId,
-      workItem: 'A',
       kind: 'check',
       name: spec.name,
       status: 'inconclusive',
@@ -246,8 +255,12 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   const { deps } = ctx;
   const items = deps.ledger.listWorkItems(ctx.runId);
   if (!items.ok) return items;
-  const item = items.value[0];
-  const inFlight = item !== undefined && (item.state === 'delegated' || item.state === 'gated');
+  // Items run one at a time, so at most one is in flight (delegated or gated): that one is reconciled. More than one is a ledger the scheduler never wrote.
+  // An implemented item is in flight only when its gate blocked it and the supervisor died inside the block (it has a park step); the reconcile of such
+  // an item finishes the block, and any other implemented item is continued by the stage as it is.
+  const flying = items.value.filter((i) => i.state === 'delegated' || i.state === 'gated' || i.state === 'implemented');
+  if (flying.length > 1) return err({ kind: 'internal', cause: `run ${ctx.runId} has ${flying.length} work items in flight (${flying.map((i) => i.itemId).join(', ')}); items run one at a time` });
+  const item = flying.at(0);
 
   let current = run;
   if (item?.state === 'delegated' && current.state === 'running') {
@@ -256,8 +269,8 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
     current = paused.value;
   }
   let outcome: string = 'none';
-  if (inFlight) {
-    const reconciled = reconcileItem(ctx, current);
+  if (item !== undefined) {
+    const reconciled = reconcileItem(ctx, current, item.itemId);
     if (!reconciled.ok) return reconciled;
     outcome = reconciled.value;
     // A reconcile that blocked the run has already moved it to blocked_on_decision.
@@ -278,7 +291,7 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
 }
 
 async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
-  const reaped = await reapStartedLaunches(ctx);
+  const reaped = await reapRunLaunches(ctx);
   if (!reaped.ok) return reaped;
   // Every host of this run is gone and nothing holds a reservation but a dead supervisor: its invocations are spent (CON-13), whatever the run does next.
   const charged = chargeRunOrphans(ctx.deps, ctx.runId);
@@ -293,7 +306,7 @@ async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
     // A previous reconcile paused the run and was killed before it put it back: the item's state says which way back it was going.
     const items = ctx.deps.ledger.listWorkItems(ctx.runId);
     if (!items.ok) return items;
-    return items.value[0]?.state === 'done' ? reconcileVerifying(ctx, run) : reconcileRunning(ctx, run);
+    return items.value.length > 0 && items.value.every((i) => i.state === 'done') ? reconcileVerifying(ctx, run) : reconcileRunning(ctx, run);
   }
   // contract_ready: the stage repeats the actions whose step is not recorded, and a fresh run has nothing to reap.
   return ok(undefined);

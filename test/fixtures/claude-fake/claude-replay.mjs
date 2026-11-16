@@ -18,6 +18,7 @@
 //   stamp            string | false   last_mapped_commit for the documents (default: git HEAD of the working directory)
 //   writes           { relPath: content }   other files to write, relative to the working directory
 //   extraLines       string[]  raw lines printed before the transcript's result (for example text a secret scan must catch)
+//   resultText       string    replaces the `result` text of the transcript's result line (a pause question, for example)
 //   sleepMs          number    sleep before writing anything
 //   sleepFirstOnly   boolean   sleep only on the first launch (the log says which launch this is)
 //   chunkBytes       number    print stdout in pieces of this size, splitting lines
@@ -50,7 +51,8 @@ const flag = (name) => {
   const at = argv.indexOf(name);
   return at === -1 ? undefined : argv[at + 1];
 };
-const sessionId = flag('--session-id') ?? 'no-session';
+// A fresh launch names its session with `--session-id`, a resumed one with `--resume`; both are logged in argv.jsonl.
+const sessionId = flag('--session-id') ?? flag('--resume') ?? 'no-session';
 
 let launch = 1;
 if (dir !== undefined) {
@@ -106,6 +108,7 @@ if (script.commit === true) git('-c', 'user.name=Fake', '-c', 'user.email=fake@e
 if (script.transcript !== undefined && script.transcript !== null) {
   const lines = transcript(script.transcript, sessionId).split('\n');
   const result = lines.findIndex((l) => l.startsWith('{"type":"result"'));
+  if (script.resultText !== undefined && result !== -1) lines[result] = JSON.stringify({ ...JSON.parse(lines[result]), result: script.resultText });
   const withExtra = [...lines.slice(0, result), ...(script.extraLines ?? []), ...lines.slice(result)].join('\n');
   if (script.chunkBytes === undefined) {
     process.stdout.write(withExtra);

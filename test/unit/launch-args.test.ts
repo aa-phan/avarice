@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
+import { SEARCH_TOOLS_ALLOWED, assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
 import type { LaunchArgsInput } from '../../src/adapters/host-claude/launch-args.ts';
 
 const SESSION = '3f2b8c1e-5a47-4d0b-9c1a-0e5d6f7a8b9c';
@@ -139,6 +139,23 @@ describe('assertLaunchArgsSafe', () => {
     }
   });
 
+  it('admits --allowedTools only as the generated Glob and Grep pair, and refuses every other form (T-03-195)', () => {
+    const RULE = /^launch_args:widen: --allowedTools/;
+    for (const value of ['Glob,Grep,Bash', 'Grep', 'Glob Grep Bash', 'Read(//etc/**)']) {
+      assert.match(refused(replaceValue('--allowedTools', value)), RULE, value);
+    }
+    // The `=` form of the very same pair.
+    const equalsForm = good().flatMap((token, i, all) => (token === '--allowedTools' ? [`--allowedTools=${SEARCH_TOOLS_ALLOWED}`] : all[i - 1] === '--allowedTools' ? [] : [token]));
+    assert.ok(equalsForm.includes('--allowedTools=Glob,Grep'));
+    assert.match(refused(equalsForm), RULE);
+    // A second occurrence, even of the same pair.
+    assert.match(refused([...good(), '--allowedTools', SEARCH_TOOLS_ALLOWED]), RULE);
+    // The flag with no value after it.
+    assert.match(refused([...without('--allowedTools', true), '--allowedTools']), RULE);
+    // The other spelling stays refused outright, whatever its value.
+    assert.match(refused([...good(), '--allowed-tools', SEARCH_TOOLS_ALLOWED]), /^launch_args:widen: --allowed-tools/);
+  });
+
   it('judges flags, not prompt text: a prompt that mentions --bare is fine', () => {
     const verdict = assertLaunchArgsSafe(buildLaunchArgs(input({ prompt: 'explain what --bare does' })));
     assert.ok(verdict.ok, JSON.stringify(verdict));
@@ -151,5 +168,69 @@ describe('assertLaunchArgsSafe', () => {
 
   it('refuses an empty argv', () => {
     assert.match(refused([]), /prompt|settings/);
+  });
+});
+
+describe('buildLaunchArgs keeps the host\'s search tools (plan 03-69)', () => {
+  const RESUMED = '7a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
+
+  it('names the pair Glob,Grep', () => {
+    assert.equal(SEARCH_TOOLS_ALLOWED, 'Glob,Grep');
+  });
+
+  it('holds --allowedTools exactly once, followed by Glob,Grep, on a fresh line, a resume line and a line with a named agent, each accepted', () => {
+    for (const argv of [buildLaunchArgs(input()), buildLaunchArgs(input({ resumeSessionId: RESUMED })), buildLaunchArgs(input({ agent: 'gsd-verifier' }))]) {
+      assert.equal(argv.filter((token) => token === '--allowedTools').length, 1);
+      assert.equal(valueOf(argv, '--allowedTools'), 'Glob,Grep');
+      const verdict = assertLaunchArgsSafe(argv);
+      assert.ok(verdict.ok, JSON.stringify(verdict));
+    }
+  });
+});
+
+describe('buildLaunchArgs with resumeSessionId (D-08, plan 03-08)', () => {
+  const RESUMED = '7a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
+
+  it('ends with --resume <id>, carries no --session-id and never forks the session', () => {
+    const argv = buildLaunchArgs(input({ resumeSessionId: RESUMED }));
+    assert.deepEqual(argv.slice(-2), ['--resume', RESUMED]);
+    assert.ok(!argv.includes('--session-id'), 'the CLI refuses --session-id together with --resume');
+    assert.ok(!argv.includes('--fork-session'));
+    assert.equal(argv.filter((token) => token === '--resume').length, 1);
+  });
+
+  it('keeps every containment flag of the fresh launch line', () => {
+    const fresh = buildLaunchArgs(input());
+    const resumed = buildLaunchArgs(input({ resumeSessionId: RESUMED }));
+    assert.deepEqual(resumed.slice(0, -2), fresh.slice(0, -2), 'only the final flag pair differs');
+    assert.equal(valueOf(resumed, '--settings'), '/inv/host-settings.json');
+    assert.equal(valueOf(resumed, '--setting-sources'), '');
+    assert.equal(valueOf(resumed, '--permission-mode'), 'dontAsk');
+    assert.equal(valueOf(resumed, '--permission-prompts'), 'none');
+    assert.ok(resumed.includes('--strict-mcp-config'));
+    assert.equal(valueOf(resumed, '--max-budget-usd'), '1');
+  });
+
+  it("is byte-identical to today's line when no resume is asked for", () => {
+    const argv = buildLaunchArgs(input());
+    assert.deepEqual(argv.slice(-2), ['--session-id', SESSION]);
+    assert.ok(!argv.includes('--resume'));
+  });
+
+  it('builds a resume line that assertLaunchArgsSafe accepts, and still refuses one that lost a containment flag', () => {
+    const good = buildLaunchArgs(input({ resumeSessionId: RESUMED, agent: 'gsd-intel-updater' }));
+    const verdict = assertLaunchArgsSafe(good);
+    assert.ok(verdict.ok, JSON.stringify(verdict));
+    const drop = (flag: string): string[] => {
+      const argv = [...good];
+      argv.splice(argv.indexOf(flag), 2);
+      return argv;
+    };
+    for (const [flag, rule] of [['--settings', /settings/], ['--permission-mode', /permission-mode/], ['--max-budget-usd', /max-budget-usd/]] as const) {
+      const refusal = assertLaunchArgsSafe(drop(flag));
+      assert.ok(!refusal.ok, flag);
+      assert.match(refusal.ok ? '' : refusal.error.kind === 'denied' ? refusal.error.rule : '', rule);
+    }
+    assert.ok(!assertLaunchArgsSafe([...good, '--dangerously-skip-permissions']).ok);
   });
 });

@@ -50,7 +50,7 @@
         "state": "ready_for_review",
         "reason": null,
         "lastCheckpoint": {
-          "seq": 16,
+          "seq": 17,
           "nextAction": "handoff:fetch",
           "revision": "git:<sha1>",
           "at": "<iso>"
@@ -74,6 +74,11 @@
             "revision": "<sha1>"
           },
           {
+            "gate": "G1",
+            "passed": true,
+            "revision": "tree:sha256:<sha256>"
+          },
+          {
             "gate": "G2",
             "passed": true,
             "revision": "tree:sha256:<sha256>"
@@ -89,7 +94,7 @@
           {
             "name": "costUsd",
             "used": 0,
-            "limit": 5
+            "limit": 10
           },
           {
             "name": "invocations",
@@ -109,7 +114,7 @@
           {
             "name": "wallClockMs",
             "used": 0,
-            "limit": 3600000
+            "limit": 7200000
           }
         ],
         "references": [
@@ -123,7 +128,25 @@
             "id": ".avarice/config.json",
             "revision": "<sha1>"
           }
-        ]
+        ],
+        "items": [
+          {
+            "itemId": "A",
+            "state": "done",
+            "size": "medium",
+            "model": "sonnet",
+            "dependsOn": [],
+            "attempts": 1
+          }
+        ],
+        "decisions": [],
+        "notifications": {
+          "delivered": 1,
+          "pending": 0,
+          "held": 0,
+          "failed": 0,
+          "lastError": null
+        }
       }
     ]
   }

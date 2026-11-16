@@ -1,0 +1,3128 @@
+{
+  "schema": 1,
+  "plan": "03-55",
+  "checkedAt": "2026-11-11T03:29:46.682Z",
+  "source": "~/aa-phan-portfolio-v2",
+  "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+  "conventionsRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+  "readOnly": true,
+  "modelHostLaunched": false,
+  "spentUsd": 0,
+  "portfolio": {
+    "before": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "after": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "unchanged": true
+  },
+  "briefs": {
+    "p3-run1-copy-fallback": {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "digest": "sha256:2183c31788bce25a7b14e5b961e6ec3518c50b6a5f0b4240151ae54bdd4eeb55",
+      "write": [
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts",
+        "src/lib/copy.ts",
+        "tests/unit/copy.test.ts",
+        "src/sections/Contact/Contact.tsx",
+        "tests/unit/contact-fallback.test.tsx"
+      ],
+      "needles": [
+        {
+          "name": "monthYear",
+          "kind": "identifier"
+        },
+        {
+          "name": "isIsoYearMonth",
+          "kind": "identifier"
+        },
+        {
+          "name": "copyFallback",
+          "kind": "identifier"
+        },
+        {
+          "name": "COPY_FALLBACK",
+          "kind": "identifier",
+          "definedAt": "src/lib/copy.ts:5",
+          "value": "Couldn’t copy the address. Opening your mail app instead."
+        },
+        {
+          "name": "COPY_SUCCESS",
+          "kind": "identifier",
+          "definedAt": "src/lib/copy.ts:2",
+          "value": "Email copied to clipboard"
+        },
+        {
+          "name": "useCopyEmail",
+          "kind": "identifier"
+        }
+      ],
+      "findings": [
+        {
+          "path": "src/sections/Education/Education.tsx",
+          "line": 2,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "import { monthYear } from '@/lib/dates'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Education/Education.tsx:2",
+          "reason": "imports monthYear to show the education date; item A exports isIsoYearMonth and calls it inside monthYear, and leaves monthYear exported with the same signature and output"
+        },
+        {
+          "path": "src/sections/Education/Education.tsx",
+          "line": 26,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "<p className=\"text-xl tabular-nums\">{monthYear(current.dates.end)}</p>",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Education/Education.tsx:26",
+          "reason": "renders monthYear(current.dates.end) as the education date text; item A does not change the Month YYYY text monthYear returns for a valid year-month"
+        },
+        {
+          "path": "tests/unit/date-copy.test.ts",
+          "line": 7,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "import { monthYear } from '@/lib/dates'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/date-copy.test.ts:7",
+          "reason": "imports monthYear for the graduation-date copy test; item A keeps it exported with the same behaviour"
+        },
+        {
+          "path": "tests/unit/date-copy.test.ts",
+          "line": 16,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "const expected = monthYear(end)",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/date-copy.test.ts:16",
+          "reason": "builds the expected Month YYYY text from monthYear(end) and checks four copy places contain it; item A changes how monthYear validates, not what it returns for a valid year-month"
+        },
+        {
+          "path": "src/components/ui/useCopyEmail.ts",
+          "line": 2,
+          "needle": "COPY_FALLBACK",
+          "kind": "identifier",
+          "text": "import { COPY_FALLBACK, COPY_SUCCESS, copyText, openMail } from '@/lib/copy'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/components/ui/useCopyEmail.ts:2",
+          "reason": "imports COPY_FALLBACK and COPY_SUCCESS from the copy module; item B keeps COPY_FALLBACK exported and unchanged, and no item edits useCopyEmail.ts"
+        },
+        {
+          "path": "src/components/ui/useCopyEmail.ts",
+          "line": 18,
+          "needle": "COPY_FALLBACK",
+          "kind": "identifier",
+          "text": "show(COPY_FALLBACK)",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/components/ui/useCopyEmail.ts:18",
+          "reason": "show(COPY_FALLBACK) puts the constant in the toast and the live region when copying fails; no item edits this call or the constant, and item C adds a separate paragraph to the Contact section instead"
+        },
+        {
+          "path": "tests/e2e/copy-email.spec.ts",
+          "line": 5,
+          "needle": "COPY_FALLBACK",
+          "kind": "value",
+          "text": "const FALLBACK = 'Couldn’t copy the address. Opening your mail app instead.'",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/copy-email.spec.ts:5",
+          "reason": "the protected spec asserts the status region and the visual toast equal the value of COPY_FALLBACK, Couldn’t copy the address. Opening your mail app instead.; item B keeps COPY_FALLBACK unchanged and item C leaves the toast and live-region text alone, so the assertion holds whichever wording the owner picks"
+        },
+        {
+          "path": "src/components/ui/useCopyEmail.ts",
+          "line": 2,
+          "needle": "COPY_SUCCESS",
+          "kind": "identifier",
+          "text": "import { COPY_FALLBACK, COPY_SUCCESS, copyText, openMail } from '@/lib/copy'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/components/ui/useCopyEmail.ts:2",
+          "reason": "imports COPY_SUCCESS with COPY_FALLBACK from the copy module; neither constant changes and useCopyEmail.ts is not edited"
+        },
+        {
+          "path": "src/components/ui/useCopyEmail.ts",
+          "line": 16,
+          "needle": "COPY_SUCCESS",
+          "kind": "identifier",
+          "text": "show(COPY_SUCCESS)",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/components/ui/useCopyEmail.ts:16",
+          "reason": "show(COPY_SUCCESS) confirms a successful copy in the toast and live region; no item touches this call or COPY_SUCCESS"
+        },
+        {
+          "path": "tests/e2e/contact.spec.ts",
+          "line": 6,
+          "needle": "COPY_SUCCESS",
+          "kind": "value",
+          "text": "const SUCCESS = 'Email copied to clipboard'",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/contact.spec.ts:6",
+          "reason": "SUCCESS equals the value of COPY_SUCCESS and is asserted on the status region after the Contact button copies the address; COPY_SUCCESS and the live region stay as they are"
+        },
+        {
+          "path": "tests/e2e/copy-email.spec.ts",
+          "line": 4,
+          "needle": "COPY_SUCCESS",
+          "kind": "value",
+          "text": "const SUCCESS = 'Email copied to clipboard'",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/copy-email.spec.ts:4",
+          "reason": "SUCCESS equals the value of COPY_SUCCESS and is asserted on the status region and the visual toast after the hero link copies the address; COPY_SUCCESS, the toast and the live region stay as they are"
+        },
+        {
+          "path": "tests/e2e/mobile/ten-second.spec.ts",
+          "line": 95,
+          "needle": "COPY_SUCCESS",
+          "kind": "value",
+          "text": "await expect(page.getByRole('status')).toHaveText('Email copied to clipboard')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/ten-second.spec.ts:95",
+          "reason": "asserts the single status region reads Email copied to clipboard after the hero copy click; item C adds a paragraph with no status role, so the page still has exactly one status region and its text is unchanged"
+        },
+        {
+          "path": "src/components/ui/useCopyEmail.ts",
+          "line": 10,
+          "needle": "useCopyEmail",
+          "kind": "identifier",
+          "text": "export function useCopyEmail(address: string) {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/components/ui/useCopyEmail.ts:10",
+          "reason": "defines useCopyEmail(address); the Exclusions say useCopyEmail is not changed, and no Write entry names its file"
+        },
+        {
+          "path": "src/sections/Hero/Hero.tsx",
+          "line": 2,
+          "needle": "useCopyEmail",
+          "kind": "identifier",
+          "text": "import { useCopyEmail } from '@/components/ui/useCopyEmail'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Hero/Hero.tsx:2",
+          "reason": "imports useCopyEmail into the hero; Hero.tsx is outside the Write list and the hook is unchanged"
+        },
+        {
+          "path": "src/sections/Hero/Hero.tsx",
+          "line": 12,
+          "needle": "useCopyEmail",
+          "kind": "identifier",
+          "text": "const copyEmail = useCopyEmail(email)",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Hero/Hero.tsx:12",
+          "reason": "const copyEmail = useCopyEmail(email) wires the hero link click to the hook; neither the hero nor the hook is edited by any item"
+        }
+      ],
+      "lines": [
+        "src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+        "src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+        "tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+        "tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)",
+        "src/components/ui/useCopyEmail.ts:2 holds COPY_FALLBACK (writable: no, protected: no)",
+        "src/components/ui/useCopyEmail.ts:18 holds COPY_FALLBACK (writable: no, protected: no)",
+        "tests/e2e/copy-email.spec.ts:5 holds COPY_FALLBACK's value \"Couldn’t copy the address. Opening your mail app instead.\" (writable: no, protected: yes)",
+        "src/components/ui/useCopyEmail.ts:2 holds COPY_SUCCESS (writable: no, protected: no)",
+        "src/components/ui/useCopyEmail.ts:16 holds COPY_SUCCESS (writable: no, protected: no)",
+        "tests/e2e/contact.spec.ts:6 holds COPY_SUCCESS's value \"Email copied to clipboard\" (writable: no, protected: yes)",
+        "tests/e2e/copy-email.spec.ts:4 holds COPY_SUCCESS's value \"Email copied to clipboard\" (writable: no, protected: yes)",
+        "tests/e2e/mobile/ten-second.spec.ts:95 holds COPY_SUCCESS's value \"Email copied to clipboard\" (writable: no, protected: yes)",
+        "src/components/ui/useCopyEmail.ts:10 holds useCopyEmail (writable: no, protected: no)",
+        "src/sections/Hero/Hero.tsx:2 holds useCopyEmail (writable: no, protected: no)",
+        "src/sections/Hero/Hero.tsx:12 holds useCopyEmail (writable: no, protected: no)"
+      ],
+      "truncated": {},
+      "problems": 4,
+      "byNeedle": {
+        "monthYear": [
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "lines": [
+              2,
+              26
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "lines": [
+              7,
+              16
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "COPY_FALLBACK": [
+          {
+            "path": "src/components/ui/useCopyEmail.ts",
+            "lines": [
+              2,
+              18
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/copy-email.spec.ts",
+            "lines": [
+              5
+            ],
+            "kind": "value",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          }
+        ],
+        "COPY_SUCCESS": [
+          {
+            "path": "src/components/ui/useCopyEmail.ts",
+            "lines": [
+              2,
+              16
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/contact.spec.ts",
+            "lines": [
+              6
+            ],
+            "kind": "value",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/copy-email.spec.ts",
+            "lines": [
+              4
+            ],
+            "kind": "value",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/mobile/ten-second.spec.ts",
+            "lines": [
+              95
+            ],
+            "kind": "value",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          }
+        ],
+        "useCopyEmail": [
+          {
+            "path": "src/components/ui/useCopyEmail.ts",
+            "lines": [
+              10
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Hero/Hero.tsx",
+            "lines": [
+              2,
+              12
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ]
+      },
+      "protectedGlobs": [
+        ".avarice/**",
+        ".github/**",
+        ".claude/**",
+        ".git/**",
+        "package.json",
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".gitignore",
+        "CLAUDE.md",
+        "scripts/**",
+        "tests/e2e/**",
+        "tests/fixtures/**",
+        "tests/setup.ts",
+        "vite.config.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json",
+        "tsconfig.scripts.json",
+        "tsconfig.test.json",
+        ".oxlintrc.json",
+        ".oxlintignore",
+        "prettier.config.mjs",
+        ".prettierignore"
+      ],
+      "assessment": {
+        "schema": 1,
+        "after": "plan 03-55 redrafted item C under D-32: the old item C removed COPY_FALLBACK and changed what the toast shows, which collides with tests/e2e/copy-email.spec.ts:5 whichever wording the owner picks; the new item C leaves both alone",
+        "surface": {
+          "file": "src/sections/Contact/Contact.tsx",
+          "change": "one paragraph rendering copyFallback(email), in the muted small text style the hero facts use, as the last child of the section's grid element after the links list; no role, no aria-live; plus tests/unit/contact-fallback.test.tsx (created by the run)",
+          "whatTheVisitorSees": "the wording item B chose, with the address, as a visible line under the Copy email button and the channel links in the Contact section",
+          "whyThisSurface": "it shows the planted wording to every visitor without touching COPY_FALLBACK, COPY_SUCCESS, the toast component, the live-region text or useCopyEmail; placed after the links list so the button and the links keep their row in the grid",
+          "consideredAndRejected": [
+            "the toast and the live region (protected spec asserts their text)",
+            "a mailto subject or body from openMail (the wording would be the body of an email to the owner, and the hand-off is a no-op in the spec browser, so no visitor reads it)"
+          ]
+        },
+        "invariantsAtPin": {
+          "COPY_FALLBACK": "src/lib/copy.ts:5, exported, value Couldn’t copy the address. Opening your mail app instead.; item B keeps it exported and unchanged",
+          "COPY_SUCCESS": "src/lib/copy.ts:2, exported, value Email copied to clipboard; unchanged",
+          "toastAndLiveRegion": "src/components/ui/useCopyEmail.ts:16 and :18 call show(COPY_SUCCESS) and show(COPY_FALLBACK); src/components/ui/Toast.tsx:43 is the only role=\"status\" element; no item edits them",
+          "protectedSpecLiteral": "tests/e2e/copy-email.spec.ts:5 and its failure test (lines 51 and 52) assert the status role text and the visual toast equal that literal; they still hold"
+        },
+        "greps": [
+          {
+            "label": "wording fragments of both options, and of the old wording, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"Couldn’t copy\" -e \"Email me at\" -e \"Opening your mail app\" -e \"copy the address\" 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/copy-email.spec.ts:5:const FALLBACK = 'Couldn’t copy the address. Opening your mail app instead.'",
+              "tests/unit/copy.test.ts:69:    expect(COPY_FALLBACK).toBe('Couldn’t copy the address. Opening your mail app instead.')"
+            ]
+          },
+          {
+            "label": "the wording of either option with the address, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"Email me at aaron\" -e \"mail app to aaron\" 9f1cd8d -- tests",
+            "hits": []
+          },
+          {
+            "label": "the lead line and selectors of the Contact section, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"fastest way\" -e #contact -e contact-section -e contact-copy-hint -e contact-address 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/contact.spec.ts:23:const contact = (page: Page) => page.locator('#contact')",
+              "tests/e2e/contact.spec.ts:42:    await expect(contact(page).getByText('The fastest way to reach me is email.')).toBeVisible()",
+              "tests/e2e/contact.spec.ts:66:    const metrics = await page.locator('.contact-address').evaluate((el) => {",
+              "tests/e2e/contact.spec.ts:163:        contact: document.querySelector('#contact')!.getBoundingClientRect().height,",
+              "tests/e2e/geometry.spec.ts:70:      const heading = page.locator('#contact-heading')",
+              "tests/e2e/resume.spec.ts:36:      const contact = page.locator('#contact').getByRole('link', { name: 'Resume', exact: true })",
+              "tests/unit/gates.test.ts:339:        '    <a href=\"#contact\">Contact</a>',"
+            ]
+          },
+          {
+            "label": "status role and live regions, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"getByRole('status')\" -e aria-live -e \"role=\\\"status\\\"\" 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/contact.spec.ts:34:    await expect(page.getByRole('status')).toHaveText(SUCCESS)",
+              "tests/e2e/copy-email.spec.ts:22:    await expect(page.getByRole('status')).toHaveText(SUCCESS)",
+              "tests/e2e/copy-email.spec.ts:51:    await expect(page.getByRole('status')).toHaveText(FALLBACK)",
+              "tests/e2e/copy-email.spec.ts:112:    await expect(page.getByRole('status')).toHaveText(SUCCESS)",
+              "tests/e2e/mobile/ten-second.spec.ts:95:    await expect(page.getByRole('status')).toHaveText('Email copied to clipboard')"
+            ]
+          },
+          {
+            "label": "status role and live regions, in src",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"role=\\\"status\\\"\" -e aria-live 9f1cd8d -- src",
+            "hits": [
+              "src/components/ui/Toast.tsx:43:      <div role=\"status\" aria-live=\"polite\" className=\"sr-only\">"
+            ]
+          },
+          {
+            "label": "text queries on the address, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"getByText(ADDRESS\" -e \"getByText(EMAIL\" -e \"getByText(`\" 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/mobile/project-sheet.spec.ts:69:  await expect(dialog(page).getByText(`${String(n).padStart(2, '0')} / 07`)).toBeVisible()"
+            ]
+          },
+          {
+            "label": "paragraph queries, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -E -e \"locator\\\\('p\" -e \"querySelectorAll\\\\('p\" -e \"getByRole\\\\('paragraph\" 9f1cd8d -- tests",
+            "hits": [
+              "tests/unit/sections.test.tsx:59:    expect(container.querySelectorAll('picture source[type=\"image/avif\"]')).toHaveLength(3)",
+              "tests/unit/sections.test.tsx:61:    expect(container.querySelectorAll('picture source[type=\"image/webp\"]')).toHaveLength(2)",
+              "tests/unit/sections.test.tsx:63:    const sources = Array.from(container.querySelectorAll('picture source'))",
+              "tests/unit/sections.test.tsx:147:    const index = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === '1 / 7')"
+            ]
+          },
+          {
+            "label": "the hand-off to the mail app, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e openMail -e window.location -e mailto: 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/copy-email.spec.ts:48:    // The mail app hand-off navigates to mailto:, which Chromium treats as a download-less no-op.",
+              "tests/e2e/copy-email.spec.ts:128:    await expect(copyLink(page)).toHaveAttribute('href', `mailto:${ADDRESS}`)",
+              "tests/e2e/mobile/ten-second.spec.ts:118:    await expect(items.email).toHaveAttribute('href', `mailto:${ADDRESS}`)",
+              "tests/e2e/smoke.spec.ts:3:const EMAIL = 'mailto:aaron.phan240@gmail.com'",
+              "tests/unit/content-inventory.test.ts:140:    expect(sameCopy(label('CON-01', 'Value'), contactHref('email').replace(/^mailto:/, ''))).toBe(",
+              "tests/unit/content.test.ts:64:    expect(email?.href.startsWith('mailto:')).toBe(true)",
+              "tests/unit/gates.test.ts:754:      const mail = makePdf({ text: realText(), annotationUri: 'mailto:someone@example.com' })"
+            ]
+          },
+          {
+            "label": "unit tests that mention Contact",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e Contact 9f1cd8d -- tests/unit",
+            "hits": [
+              "tests/unit/active-section.test.ts:62:      'Contact',",
+              "tests/unit/active-section.test.ts:70:      'Contact Me',",
+              "tests/unit/content-inventory.test.ts:356:  const isPublicContact = (id: string) => /^(https:\\/\\/|[^\\s@]+@[^\\s@]+$)/.test(label(id, 'Value'))",
+              "tests/unit/content-inventory.test.ts:373:    const publicIds = idsWith('CON').filter(isPublicContact)",
+              "tests/unit/gates.test.ts:339:        '    <a href=\"#contact\">Contact</a>',",
+              "tests/unit/gates.test.ts:719:      write(root, 'dist/resume.pdf', makePdf({ text: `Contact ${probe} today` }))",
+              "tests/unit/gates.test.ts:728:      write(root, 'dist/resume.pdf', makePdf({ text: `Contact ${probe}`, compressed: true }))"
+            ]
+          },
+          {
+            "label": "unit tests that render the whole page",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"render(<Page\" 9f1cd8d -- tests",
+            "hits": [
+              "tests/unit/hero-parity.test.tsx:57:  const { container } = render(<Page />)"
+            ]
+          },
+          {
+            "label": "tests of the hook and the new function",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e useCopyEmail -e copyFallback -e sections/Contact 9f1cd8d -- tests",
+            "hits": []
+          },
+          {
+            "label": "full-text comparisons of main, in tests",
+            "command": "git -C ~/aa-phan-portfolio-v2 grep -n -F -e \"locator('main').innerText\" -e toMatchAriaSnapshot -e toHaveScreenshot -e toMatchSnapshot 9f1cd8d -- tests",
+            "hits": [
+              "tests/e2e/wordmark.spec.ts:148:    texts.push(await page.locator('main').innerText())"
+            ]
+          }
+        ],
+        "readings": {
+          "protectedSpecsOfTheSection": "tests/e2e/contact.spec.ts finds the section by #contact and the button by role and exact name Copy email <address>, the lead line by getByText of The fastest way to reach me is email. (a substring match the new paragraph does not contain), the profile and resume links by role and name, the address by .contact-address, and the viewport fill by heights (a taller section only helps the at-least check). No spec queries the section by paragraph, by the address as text or by child count.",
+          "statusRegion": "Every getByRole(status) in the specs expects one element, the Toast live region. The new paragraph has no role and no aria-live, so it is not a second one.",
+          "bothThemesSameText": "tests/e2e/wordmark.spec.ts:148 compares main.innerText between light and dark; the new paragraph is static text identical in both.",
+          "unitTests": "No unit test renders Contact. tests/unit/hero-parity.test.tsx renders the whole page but compares only the hero and the id and heading skeleton of main; a paragraph changes neither.",
+          "phoneDeadBands": "tests/e2e/mobile/dead-bands.spec.ts limits the vertical gap between content boxes; the new paragraph is one more box below the links list and can only shrink a gap."
+        },
+        "conclusions": {
+          "option1": {
+            "wording": "Couldn’t copy. Email me at <address>.",
+            "collidesWithProtectedSpecs": 0,
+            "collidesWithUnitTests": 0,
+            "why": "no test contains the wording or any of its fragments (the first two greps), and the line is a plain paragraph outside the toast and the live region"
+          },
+          "option2": {
+            "wording": "Couldn’t copy the address. Opening your mail app to <address>.",
+            "collidesWithProtectedSpecs": 0,
+            "collidesWithUnitTests": 0,
+            "why": "it shares the prefix Couldn’t copy the address. Opening your mail app with COPY_FALLBACK's value but differs after it, the specs match the toast by the whole value of COPY_FALLBACK and the visual toast through an aria-hidden element, and the new paragraph is neither aria-hidden nor a status region"
+          }
+        },
+        "verdict": "no collision for either wording with a protected spec or a unit test; every finding below is kept"
+      }
+    },
+    "p3-run2-graduation-label": {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "write": [
+        "src/lib/theme.ts",
+        "tests/unit/theme.test.ts",
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts"
+      ],
+      "needles": [
+        {
+          "name": "isTheme",
+          "kind": "identifier"
+        },
+        {
+          "name": "graduationLabel",
+          "kind": "identifier"
+        },
+        {
+          "name": "monthYear",
+          "kind": "identifier"
+        }
+      ],
+      "findings": [
+        {
+          "path": "src/sections/Education/Education.tsx",
+          "line": 2,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "import { monthYear } from '@/lib/dates'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Education/Education.tsx:2",
+          "reason": "imports monthYear to show the education date; item B adds graduationLabel to the dates module and calls monthYear(end) for the Expected text, and leaves monthYear itself unchanged"
+        },
+        {
+          "path": "src/sections/Education/Education.tsx",
+          "line": 26,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "<p className=\"text-xl tabular-nums\">{monthYear(current.dates.end)}</p>",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Education/Education.tsx:26",
+          "reason": "renders monthYear(current.dates.end) directly, not through graduationLabel; item B changes no rendered date and not monthYear"
+        },
+        {
+          "path": "tests/unit/date-copy.test.ts",
+          "line": 7,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "import { monthYear } from '@/lib/dates'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/date-copy.test.ts:7",
+          "reason": "imports monthYear for the graduation-date copy test; monthYear stays exported with the same behaviour"
+        },
+        {
+          "path": "tests/unit/date-copy.test.ts",
+          "line": 16,
+          "needle": "monthYear",
+          "kind": "identifier",
+          "text": "const expected = monthYear(end)",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/date-copy.test.ts:16",
+          "reason": "builds the expected Month YYYY text from monthYear(end) for four copy places; item B adds graduationLabel and does not change monthYear or any of those places (the comment there leaves the wording after the end month to the owner)"
+        }
+      ],
+      "lines": [
+        "src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+        "src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+        "tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+        "tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)"
+      ],
+      "truncated": {},
+      "problems": 0,
+      "byNeedle": {
+        "monthYear": [
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "lines": [
+              2,
+              26
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "lines": [
+              7,
+              16
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ]
+      },
+      "protectedGlobs": [
+        ".avarice/**",
+        ".github/**",
+        ".claude/**",
+        ".git/**",
+        "package.json",
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".gitignore",
+        "CLAUDE.md",
+        "scripts/**",
+        "tests/e2e/**",
+        "tests/fixtures/**",
+        "tests/setup.ts",
+        "vite.config.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json",
+        "tsconfig.scripts.json",
+        "tsconfig.test.json",
+        ".oxlintrc.json",
+        ".oxlintignore",
+        "prettier.config.mjs",
+        ".prettierignore"
+      ],
+      "assessment": {
+        "schema": 1,
+        "redraftedUnderD32": false,
+        "digestUnchangedSince": "03-49",
+        "note": "plan 03-49's check found this brief clean; the uncapped check lists the same four monthYear lines, each read and kept"
+      }
+    },
+    "p3-run3-theme-toggle": {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "digest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+      "write": [
+        "src/lib/theme.ts",
+        "src/components/ui/ThemeToggle.tsx",
+        "tests/unit/theme-toggle.test.tsx",
+        "tests/unit/use-theme.test.tsx"
+      ],
+      "needles": [
+        {
+          "name": "data-theme",
+          "kind": "identifier"
+        },
+        {
+          "name": "ThemeToggle",
+          "kind": "identifier"
+        },
+        {
+          "name": "aria-pressed",
+          "kind": "identifier"
+        },
+        {
+          "name": "aria-describedby",
+          "kind": "identifier"
+        },
+        {
+          "name": "Dark theme",
+          "kind": "literal"
+        },
+        {
+          "name": "Switches between the light and dark theme",
+          "kind": "literal"
+        }
+      ],
+      "findings": [
+        {
+          "path": "404.html",
+          "line": 2,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "<html lang=\"en\" data-theme=\"light\">",
+          "protected": false,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "404.html:2",
+          "reason": "starts the 404 page at data-theme light; the brief's Exclusions leave the theme script in the HTML shell untouched and item A keeps the attribute name"
+        },
+        {
+          "path": "404.html",
+          "line": 27,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', t)",
+          "protected": false,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "404.html:27",
+          "reason": "sets html's data-theme to t; the brief's Exclusions leave the theme script in the HTML shell untouched and item A keeps the attribute name"
+        },
+        {
+          "path": "index.html",
+          "line": 36,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', t)",
+          "protected": false,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "index.html:36",
+          "reason": "sets html's data-theme to t; the brief's Exclusions leave the theme script in the HTML shell untouched and item A keeps the attribute name"
+        },
+        {
+          "path": "scripts/lib/tokens.mjs",
+          "line": 44,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "// themes: with data-theme dark in the selector it is the band on the dark page, otherwise the",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "scripts/lib/tokens.mjs:44",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; a protected script that no item touches; item A keeps the attribute name and values"
+        },
+        {
+          "path": "scripts/lib/tokens.mjs",
+          "line": 45,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "// band on the light page. Of the rest, a block naming data-theme dark is the dark theme and",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "scripts/lib/tokens.mjs:45",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; a protected script that no item touches; item A keeps the attribute name and values"
+        },
+        {
+          "path": "scripts/lib/tokens.mjs",
+          "line": 69,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const isDark = /data-theme\\s*=\\s*['\"]?dark['\"]?/.test(selector)",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "scripts/lib/tokens.mjs:69",
+          "reason": "matches the data-theme dark selector text in the token checker; a protected script that no item touches; item A keeps the attribute name and values"
+        },
+        {
+          "path": "scripts/qa-extra-shots.mjs",
+          "line": 65,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const applied = await page.evaluate(\"document.documentElement.getAttribute('data-theme')\")",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "scripts/qa-extra-shots.mjs:65",
+          "reason": "reads html's data-theme; a protected script that no item touches; item A keeps the attribute name and values"
+        },
+        {
+          "path": "scripts/qa-extra-shots.mjs",
+          "line": 66,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "console.log(`${prefix} ${theme}: data-theme=${applied}`)",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "scripts/qa-extra-shots.mjs:66",
+          "reason": "prints the data-theme value html has to the QA log; a protected script that no item touches; item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/anim/declarative/GlyphFlip.tsx",
+          "line": 132,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* Mounted once. Watches html[data-theme] and turns the newly visible glyphs up from edge-on, so a",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/anim/declarative/GlyphFlip.tsx:132",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item edits this file and item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/anim/declarative/GlyphFlip.tsx",
+          "line": 176,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "attributeFilter: ['data-theme'],",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/anim/declarative/GlyphFlip.tsx:176",
+          "reason": "observes changes of the data-theme attribute; no item edits this file and item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/hooks/useTheme.ts",
+          "line": 7,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* The one theme store, read from html[data-theme]. Every ThemeToggle and anything else that",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/hooks/useTheme.ts:7",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item edits this file and item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/layout/Wordmark.tsx",
+          "line": 10,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* PHAN by day, PHVNTM by night (D-01). Both strings are always in the DOM; CSS on html[data-theme]",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/Wordmark.tsx:10",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item edits this file and item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/sections/Hero/HeroGlyph.tsx",
+          "line": 7,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* html[data-theme] shows one, and the glyph flip controller (plan 04-12) turns it on a theme change.",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Hero/HeroGlyph.tsx:7",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item edits this file and item A keeps the attribute name and values"
+        },
+        {
+          "path": "src/styles/index.css",
+          "line": 9,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/index.css:9",
+          "reason": "defines the dark variant on the data-theme dark selector; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 24,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* swap through the same html[data-theme] rule as the wordmark.",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:24",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 47,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .hero-glyph-day,",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:47",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 48,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] .hero-glyph-night {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:48",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 231,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] .theme-groove {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:231",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 235,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .theme-groove {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:235",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 250,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .theme-groove {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:250",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 257,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "* html[data-theme] shows one (the repo has no dark variant utilities). Night widens the",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:257",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 272,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .wordmark-day,",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:272",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/interactions.css",
+          "line": 273,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] .wordmark-night {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/interactions.css:273",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/tokens.css",
+          "line": 2,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/tokens.css:2",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/tokens.css",
+          "line": 28,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/tokens.css:28",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/tokens.css",
+          "line": 60,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] .band-invert {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/tokens.css:60",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "src/styles/tokens.css",
+          "line": 85,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .band-invert {",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/styles/tokens.css:85",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; no item changes a stylesheet, and item A keeps the attribute name and values the selector keys on"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 38,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "theme: document.documentElement.getAttribute('data-theme'),",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:38",
+          "reason": "reads html's data-theme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 75,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:75",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 102,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:102",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 120,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:120",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 207,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:207",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/mobile/pill.spec.ts",
+          "line": 144,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const before = await page.locator('html').getAttribute('data-theme')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/pill.spec.ts:144",
+          "reason": "reads html's data-theme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/mobile/pill.spec.ts",
+          "line": 146,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).not.toHaveAttribute('data-theme', before ?? '')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/pill.spec.ts:146",
+          "reason": "asserts html's data-theme changed after the toggle was pressed; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/mobile/pill.spec.ts",
+          "line": 179,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', theme)",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/pill.spec.ts:179",
+          "reason": "asserts html's data-theme equals theme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 255,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:255",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/nav.spec.ts",
+          "line": 77,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const before = await page.locator('html').getAttribute('data-theme')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/nav.spec.ts:77",
+          "reason": "reads html's data-theme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/nav.spec.ts",
+          "line": 79,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).not.toHaveAttribute('data-theme', before ?? '')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/nav.spec.ts:79",
+          "reason": "asserts html's data-theme changed after the toggle was pressed; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/not-found.spec.ts",
+          "line": 5,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "// data-theme=\"light\" so the page reads as the light theme without script. The dark cases turn",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/not-found.spec.ts:5",
+          "reason": "a comment that describes the data-theme attribute and the light and dark selectors; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/not-found.spec.ts",
+          "line": 65,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/not-found.spec.ts:65",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/not-found.spec.ts",
+          "line": 79,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/not-found.spec.ts:79",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 24,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:24",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 30,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:30",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 46,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:46",
+          "reason": "asserts html's data-theme equals scheme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 63,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:63",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 80,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:80",
+          "reason": "asserts html's data-theme equals scheme; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 110,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:110",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 114,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:114",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 136,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:136",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 153,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:153",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 158,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:158",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 162,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:162",
+          "reason": "asserts html's data-theme equals 'light'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 105,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:105",
+          "reason": "asserts html's data-theme equals 'dark'; a protected spec; item A keeps the attribute name and its light and dark values and item B changes neither the toggle's name nor its aria-pressed, so the assertion still holds"
+        },
+        {
+          "path": "tests/unit/theme-script.test.ts",
+          "line": 19,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "return document.documentElement.getAttribute('data-theme')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme-script.test.ts:19",
+          "reason": "reads html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme-script.test.ts",
+          "line": 23,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.removeAttribute('data-theme')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme-script.test.ts:23",
+          "reason": "clears html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 6,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.removeAttribute('data-theme')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:6",
+          "reason": "clears html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 13,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "expect(document.documentElement.getAttribute('data-theme')).toBe('dark')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:13",
+          "reason": "reads html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 22,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "expect(document.documentElement.getAttribute('data-theme')).toBe('dark')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:22",
+          "reason": "reads html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 36,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'dark')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:36",
+          "reason": "sets html's data-theme to 'dark'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 41,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:41",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 43,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.removeAttribute('data-theme')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:43",
+          "reason": "clears html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 45,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'purple')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:45",
+          "reason": "sets html's data-theme to 'purple'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 52,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const theme = () => document.documentElement.getAttribute('data-theme')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:52",
+          "reason": "reads html's data-theme; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 59,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:59",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 70,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:70",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 84,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:84",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 99,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:99",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 111,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:111",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 123,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:123",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 132,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:132",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 143,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'dark')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:143",
+          "reason": "sets html's data-theme to 'dark'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/theme.test.ts",
+          "line": 147,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "document.documentElement.setAttribute('data-theme', 'light')",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/theme.test.ts:147",
+          "reason": "sets html's data-theme to 'light'; item A only names the attribute with THEME_ATTRIBUTE inside src/lib/theme.ts and keeps its behaviour, so the test still holds"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 156,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": ":root, [data-theme='light'] { --text: oklch(0.2 0 0); --z-base: 0; }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:156",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 158,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] { --text: oklch(0.9 0 0); }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:158",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 183,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": ":root, [data-theme='light'] { --text: oklch(0.2 0 0); --muted: oklch(0.4 0 0); }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:183",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 184,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] { --text: oklch(0.9 0 0); --muted: oklch(0.7 0 0); }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:184",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 185,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='light'] .band-invert { --text: oklch(0.91 0 0); --muted: oklch(0.71 0 0); }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:185",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 186,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "[data-theme='dark'] .band-invert { --text: oklch(0.21 0 0); --muted: oklch(0.41 0 0) }",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:186",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 271,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const block = /(\\[data-theme='light'\\] \\.band-invert \\{[^}]*?--muted:)[^;]+;/",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:271",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 287,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "const block = /(\\[data-theme='dark'\\] \\.band-invert \\{[^}]*?--sleeve-employer:)[^;]+;/",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:287",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "tests/unit/tokens.test.ts",
+          "line": 348,
+          "needle": "data-theme",
+          "kind": "identifier",
+          "text": "/(\\[data-theme='dark'\\] \\.band-invert \\{[^}]*?)--surface:[^;]+;/,",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/tokens.test.ts:348",
+          "reason": "a stylesheet or fixture selector keyed on data-theme light or dark; a CSS fixture for the token tests; no item changes a stylesheet or the attribute"
+        },
+        {
+          "path": "src/hooks/useTheme.ts",
+          "line": 7,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "* The one theme store, read from html[data-theme]. Every ThemeToggle and anything else that",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/hooks/useTheme.ts:7",
+          "reason": "a comment saying every ThemeToggle shares the one theme store; item B keeps the component's name, file and the store it reads"
+        },
+        {
+          "path": "src/layout/PillNav.tsx",
+          "line": 5,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "import { ThemeToggle } from '@/components/ui/ThemeToggle'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/PillNav.tsx:5",
+          "reason": "imports ThemeToggle from its file; item B edits the component in place and keeps its name, its file and its export"
+        },
+        {
+          "path": "src/layout/PillNav.tsx",
+          "line": 123,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "<ThemeToggle />",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/PillNav.tsx:123",
+          "reason": "renders <ThemeToggle /> with no props; item B keeps the component's name and props (option 2 gives each instance its own description id inside the component)"
+        },
+        {
+          "path": "src/layout/SiteHeader.tsx",
+          "line": 3,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "import { ThemeToggle } from '@/components/ui/ThemeToggle'",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/SiteHeader.tsx:3",
+          "reason": "imports ThemeToggle from its file; item B edits the component in place and keeps its name, its file and its export"
+        },
+        {
+          "path": "src/layout/SiteHeader.tsx",
+          "line": 44,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "<ThemeToggle />",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/SiteHeader.tsx:44",
+          "reason": "renders <ThemeToggle /> with no props; item B keeps the component's name and props (option 2 gives each instance its own description id inside the component)"
+        },
+        {
+          "path": "src/layout/SiteHeader.tsx",
+          "line": 75,
+          "needle": "ThemeToggle",
+          "kind": "identifier",
+          "text": "<ThemeToggle />",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/layout/SiteHeader.tsx:75",
+          "reason": "renders <ThemeToggle /> with no props; item B keeps the component's name and props (option 2 gives each instance its own description id inside the component)"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 11,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:11",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 18,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "const button = visible<HTMLButtonElement>('button[aria-pressed]')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:18",
+          "reason": "finds the theme toggle button by its aria-pressed attribute; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 49,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "'aria-pressed',",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:49",
+          "reason": "the attribute argument of a toHaveAttribute assertion on the Dark theme button; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 61,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "const button = visible<HTMLButtonElement>('button[aria-pressed]')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:61",
+          "reason": "finds the theme toggle button by its aria-pressed attribute; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/press.spec.ts",
+          "line": 177,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/press.spec.ts:177",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/press.spec.ts",
+          "line": 185,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/press.spec.ts:185",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 21,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:21",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 25,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:25",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 32,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "'aria-pressed',",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:32",
+          "reason": "the attribute argument of a toHaveAttribute assertion on the Dark theme button; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 49,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', scheme === 'dark' ? 'true' : 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:49",
+          "reason": "asserts the theme toggle's aria-pressed is scheme === 'dark' ? 'true' : 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 65,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "'aria-pressed',",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:65",
+          "reason": "the attribute argument of a toHaveAttribute assertion on the Dark theme button; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 111,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:111",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 115,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:115",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 150,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:150",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 154,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:154",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 163,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:163",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 126,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:126",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 128,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:128",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 133,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:133",
+          "reason": "asserts the theme toggle's aria-pressed is 'true'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 137,
+          "needle": "aria-pressed",
+          "kind": "identifier",
+          "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'false')",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:137",
+          "reason": "asserts the theme toggle's aria-pressed is 'false'; both options keep aria-pressed exactly as it is, so the assertion still holds"
+        },
+        {
+          "path": "src/sections/Contact/Contact.tsx",
+          "line": 72,
+          "needle": "aria-describedby",
+          "kind": "identifier",
+          "text": "aria-describedby={describedBy}",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Contact/Contact.tsx:72",
+          "reason": "the contact links point aria-describedby at their new-tab note; run 3 adds aria-describedby only to the theme toggle, and run 1's paragraph in the same file does not touch this line"
+        },
+        {
+          "path": "src/sections/Projects/Sleeve.tsx",
+          "line": 96,
+          "needle": "aria-describedby",
+          "kind": "identifier",
+          "text": "aria-describedby={descriptionId}",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "src/sections/Projects/Sleeve.tsx:96",
+          "reason": "the project sleeve points aria-describedby at its description; run 3 adds aria-describedby only to the theme toggle"
+        },
+        {
+          "path": "tests/e2e/rail.spec.ts",
+          "line": 200,
+          "needle": "aria-describedby",
+          "kind": "identifier",
+          "text": "described: await sleeve(page, 3).evaluate((el) => el.getAttribute('aria-describedby')),",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/rail.spec.ts:200",
+          "reason": "reads aria-describedby of project sleeve 3 for the rail checks; run 3 adds aria-describedby only to the theme toggle, which this spec never reads"
+        },
+        {
+          "path": "tests/e2e/rail.spec.ts",
+          "line": 210,
+          "needle": "aria-describedby",
+          "kind": "identifier",
+          "text": "described: await sleeve(page, 3).evaluate((el) => el.getAttribute('aria-describedby')),",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/rail.spec.ts:210",
+          "reason": "reads aria-describedby of project sleeve 3 for the rail checks; run 3 adds aria-describedby only to the theme toggle, which this spec never reads"
+        },
+        {
+          "path": "tests/unit/sections.test.tsx",
+          "line": 128,
+          "needle": "aria-describedby",
+          "kind": "identifier",
+          "text": "expect(atlas.getAttribute('aria-describedby')).toBeTruthy()",
+          "protected": false,
+          "insideConventions": true,
+          "problem": false,
+          "classification": "kept",
+          "assertedAt": "tests/unit/sections.test.tsx:128",
+          "reason": "asserts the atlas project sleeve has an aria-describedby; run 3 adds aria-describedby only to the theme toggle"
+        },
+        {
+          "path": "tests/e2e/glyph-flip.spec.ts",
+          "line": 13,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/glyph-flip.spec.ts:13",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/mobile/pill.spec.ts",
+          "line": 89,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expect(panel.getByRole('button', { name: 'Dark theme' })).toBeVisible()",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/pill.spec.ts:89",
+          "reason": "asserts the button named Dark theme is visible; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/mobile/pill.spec.ts",
+          "line": 145,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await page.locator('#pill-panel').getByRole('button', { name: 'Dark theme' }).click()",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/mobile/pill.spec.ts:145",
+          "reason": "finds the theme toggle by role button and name Dark theme and clicks it; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 10,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:10",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 48,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:48",
+          "reason": "asserts an attribute of the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 218,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:218",
+          "reason": "asserts the button named Dark theme is visible; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/motion.spec.ts",
+          "line": 254,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await page.getByRole('button', { name: 'Dark theme' }).click()",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/motion.spec.ts:254",
+          "reason": "finds the theme toggle by role button and name Dark theme and clicks it; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/nav.spec.ts",
+          "line": 76,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.locator('header').getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/nav.spec.ts:76",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/press.spec.ts",
+          "line": 136,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const themeToggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/press.spec.ts:136",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/press.spec.ts",
+          "line": 194,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expectSquishWhileHeld(page, pill(page).getByRole('button', { name: 'Dark theme' }))",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/press.spec.ts:194",
+          "reason": "asserts the button named Dark theme squishes while held; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 19,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:19",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 31,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:31",
+          "reason": "asserts an attribute of the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 47,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:47",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 64,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:64",
+          "reason": "asserts an attribute of the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 108,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:108",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/theme.spec.ts",
+          "line": 149,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/theme.spec.ts:149",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        },
+        {
+          "path": "tests/e2e/wordmark.spec.ts",
+          "line": 8,
+          "needle": "Dark theme",
+          "kind": "literal",
+          "text": "const toggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+          "protected": true,
+          "insideConventions": false,
+          "problem": true,
+          "classification": "kept",
+          "assertedAt": "tests/e2e/wordmark.spec.ts:8",
+          "reason": "defines the locator of the theme toggle as the button named Dark theme; both options keep the accessible name Dark theme exactly as it is, so the locator still finds the toggle"
+        }
+      ],
+      "lines": [
+        "404.html:2 holds data-theme (writable: no, protected: no)",
+        "404.html:27 holds data-theme (writable: no, protected: no)",
+        "index.html:36 holds data-theme (writable: no, protected: no)",
+        "scripts/lib/tokens.mjs:44 holds data-theme (writable: no, protected: yes)",
+        "scripts/lib/tokens.mjs:45 holds data-theme (writable: no, protected: yes)",
+        "scripts/lib/tokens.mjs:69 holds data-theme (writable: no, protected: yes)",
+        "scripts/qa-extra-shots.mjs:65 holds data-theme (writable: no, protected: yes)",
+        "scripts/qa-extra-shots.mjs:66 holds data-theme (writable: no, protected: yes)",
+        "src/anim/declarative/GlyphFlip.tsx:132 holds data-theme (writable: no, protected: no)",
+        "src/anim/declarative/GlyphFlip.tsx:176 holds data-theme (writable: no, protected: no)",
+        "src/hooks/useTheme.ts:7 holds data-theme (writable: no, protected: no)",
+        "src/layout/Wordmark.tsx:10 holds data-theme (writable: no, protected: no)",
+        "src/sections/Hero/HeroGlyph.tsx:7 holds data-theme (writable: no, protected: no)",
+        "src/styles/index.css:9 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:24 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:47 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:48 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:231 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:235 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:250 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:257 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:272 holds data-theme (writable: no, protected: no)",
+        "src/styles/interactions.css:273 holds data-theme (writable: no, protected: no)",
+        "src/styles/tokens.css:2 holds data-theme (writable: no, protected: no)",
+        "src/styles/tokens.css:28 holds data-theme (writable: no, protected: no)",
+        "src/styles/tokens.css:60 holds data-theme (writable: no, protected: no)",
+        "src/styles/tokens.css:85 holds data-theme (writable: no, protected: no)",
+        "tests/e2e/glyph-flip.spec.ts:38 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/glyph-flip.spec.ts:75 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/glyph-flip.spec.ts:102 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/glyph-flip.spec.ts:120 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/glyph-flip.spec.ts:207 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/mobile/pill.spec.ts:144 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/mobile/pill.spec.ts:146 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/mobile/pill.spec.ts:179 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:255 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/nav.spec.ts:77 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/nav.spec.ts:79 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/not-found.spec.ts:5 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/not-found.spec.ts:65 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/not-found.spec.ts:79 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:24 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:30 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:46 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:63 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:80 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:110 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:114 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:136 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:153 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:158 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:162 holds data-theme (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:105 holds data-theme (writable: no, protected: yes)",
+        "tests/unit/theme-script.test.ts:19 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme-script.test.ts:23 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:6 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:13 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:22 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:36 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:41 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:43 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:45 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:52 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:59 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:70 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:84 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:99 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:111 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:123 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:132 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:143 holds data-theme (writable: no, protected: no)",
+        "tests/unit/theme.test.ts:147 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:156 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:158 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:183 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:184 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:185 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:186 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:271 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:287 holds data-theme (writable: no, protected: no)",
+        "tests/unit/tokens.test.ts:348 holds data-theme (writable: no, protected: no)",
+        "src/hooks/useTheme.ts:7 holds ThemeToggle (writable: no, protected: no)",
+        "src/layout/PillNav.tsx:5 holds ThemeToggle (writable: no, protected: no)",
+        "src/layout/PillNav.tsx:123 holds ThemeToggle (writable: no, protected: no)",
+        "src/layout/SiteHeader.tsx:3 holds ThemeToggle (writable: no, protected: no)",
+        "src/layout/SiteHeader.tsx:44 holds ThemeToggle (writable: no, protected: no)",
+        "src/layout/SiteHeader.tsx:75 holds ThemeToggle (writable: no, protected: no)",
+        "tests/e2e/motion.spec.ts:11 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:18 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:61 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/press.spec.ts:177 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/press.spec.ts:185 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:21 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:25 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:32 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:65 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:111 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:115 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:150 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:154 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:163 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:126 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:128 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:133 holds aria-pressed (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:137 holds aria-pressed (writable: no, protected: yes)",
+        "src/sections/Contact/Contact.tsx:72 holds aria-describedby (writable: no, protected: no)",
+        "src/sections/Projects/Sleeve.tsx:96 holds aria-describedby (writable: no, protected: no)",
+        "tests/e2e/rail.spec.ts:200 holds aria-describedby (writable: no, protected: yes)",
+        "tests/e2e/rail.spec.ts:210 holds aria-describedby (writable: no, protected: yes)",
+        "tests/unit/sections.test.tsx:128 holds aria-describedby (writable: no, protected: no)",
+        "tests/e2e/glyph-flip.spec.ts:13 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/mobile/pill.spec.ts:89 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/mobile/pill.spec.ts:145 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:10 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:48 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:218 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/motion.spec.ts:254 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/nav.spec.ts:76 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/press.spec.ts:136 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/press.spec.ts:194 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:19 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:31 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:47 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:64 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:108 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/theme.spec.ts:149 holds \"Dark theme\" (writable: no, protected: yes)",
+        "tests/e2e/wordmark.spec.ts:8 holds \"Dark theme\" (writable: no, protected: yes)"
+      ],
+      "truncated": {},
+      "problems": 73,
+      "byNeedle": {
+        "data-theme": [
+          {
+            "path": "404.html",
+            "lines": [
+              2,
+              27
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "index.html",
+            "lines": [
+              36
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/lib/tokens.mjs",
+            "lines": [
+              44,
+              45,
+              69
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/qa-extra-shots.mjs",
+            "lines": [
+              65,
+              66
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "src/anim/declarative/GlyphFlip.tsx",
+            "lines": [
+              132,
+              176
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/hooks/useTheme.ts",
+            "lines": [
+              7
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/Wordmark.tsx",
+            "lines": [
+              10
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Hero/HeroGlyph.tsx",
+            "lines": [
+              7
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/index.css",
+            "lines": [
+              9
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "lines": [
+              24,
+              47,
+              48,
+              231,
+              235,
+              250,
+              257,
+              272,
+              273
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/tokens.css",
+            "lines": [
+              2,
+              28,
+              60,
+              85
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/glyph-flip.spec.ts",
+            "lines": [
+              38,
+              75,
+              102,
+              120,
+              207
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/mobile/pill.spec.ts",
+            "lines": [
+              144,
+              146,
+              179
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "lines": [
+              255
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/nav.spec.ts",
+            "lines": [
+              77,
+              79
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/not-found.spec.ts",
+            "lines": [
+              5,
+              65,
+              79
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "lines": [
+              24,
+              30,
+              46,
+              63,
+              80,
+              110,
+              114,
+              136,
+              153,
+              158,
+              162
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "lines": [
+              105
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/unit/theme-script.test.ts",
+            "lines": [
+              19,
+              23
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/theme.test.ts",
+            "lines": [
+              6,
+              13,
+              22,
+              36,
+              41,
+              43,
+              45,
+              52,
+              59,
+              70,
+              84,
+              99,
+              111,
+              123,
+              132,
+              143,
+              147
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/tokens.test.ts",
+            "lines": [
+              156,
+              158,
+              183,
+              184,
+              185,
+              186,
+              271,
+              287,
+              348
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "ThemeToggle": [
+          {
+            "path": "src/hooks/useTheme.ts",
+            "lines": [
+              7
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/PillNav.tsx",
+            "lines": [
+              5,
+              123
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/SiteHeader.tsx",
+            "lines": [
+              3,
+              44,
+              75
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "aria-pressed": [
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "lines": [
+              11,
+              18,
+              49,
+              61
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "lines": [
+              177,
+              185
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "lines": [
+              21,
+              25,
+              32,
+              49,
+              65,
+              111,
+              115,
+              150,
+              154,
+              163
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "lines": [
+              126,
+              128,
+              133,
+              137
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          }
+        ],
+        "aria-describedby": [
+          {
+            "path": "src/sections/Contact/Contact.tsx",
+            "lines": [
+              72
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Projects/Sleeve.tsx",
+            "lines": [
+              96
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/rail.spec.ts",
+            "lines": [
+              200,
+              210
+            ],
+            "kind": "identifier",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/unit/sections.test.tsx",
+            "lines": [
+              128
+            ],
+            "kind": "identifier",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "Dark theme": [
+          {
+            "path": "tests/e2e/glyph-flip.spec.ts",
+            "lines": [
+              13
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/mobile/pill.spec.ts",
+            "lines": [
+              89,
+              145
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "lines": [
+              10,
+              48,
+              218,
+              254
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/nav.spec.ts",
+            "lines": [
+              76
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "lines": [
+              136,
+              194
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "lines": [
+              19,
+              31,
+              47,
+              64,
+              108,
+              149
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "lines": [
+              8
+            ],
+            "kind": "literal",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          }
+        ]
+      },
+      "protectedGlobs": [
+        ".avarice/**",
+        ".github/**",
+        ".claude/**",
+        ".git/**",
+        "package.json",
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".gitignore",
+        "CLAUDE.md",
+        "scripts/**",
+        "tests/e2e/**",
+        "tests/fixtures/**",
+        "tests/setup.ts",
+        "vite.config.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json",
+        "tsconfig.scripts.json",
+        "tsconfig.test.json",
+        ".oxlintrc.json",
+        ".oxlintignore",
+        "prettier.config.mjs",
+        ".prettierignore"
+      ],
+      "assessment": {
+        "schema": 1,
+        "redraftedUnderD32": false,
+        "digestUnchangedSince": "03-49",
+        "note": "plan 03-49 assessed this brief at the capped check (47 problems, 0 real collisions, see 03-49-brief-check-after.json); the uncapped check lists every line (129 findings), each read and kept: item A keeps the data-theme value, item B keeps the name Dark theme and aria-pressed in both options and only adds a visually hidden description in option 2",
+        "uncappedAdds": "the cap hid 56 data-theme lines (src/styles, tests/unit and protected specs); all assert the attribute name and light and dark values that item A keeps"
+      }
+    }
+  },
+  "uncapped": true,
+  "classifiedBy": "claude",
+  "classifiedAt": "2026-11-11T03:32:31.196Z",
+  "summary": {
+    "note": "plan 03-55: run 1 redrafted (D-32); runs 2 and 3 unchanged since plan 03-49; every finding of an uncapped check at the pin classified",
+    "counts": {
+      "p3-run1-copy-fallback": {
+        "kept": 15,
+        "changed": 0
+      },
+      "p3-run2-graduation-label": {
+        "kept": 4,
+        "changed": 0
+      },
+      "p3-run3-theme-toggle": {
+        "kept": 129,
+        "changed": 0
+      }
+    },
+    "digests": {
+      "p3-run1-copy-fallback": "sha256:2183c31788bce25a7b14e5b961e6ec3518c50b6a5f0b4240151ae54bdd4eeb55",
+      "p3-run2-graduation-label": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "p3-run3-theme-toggle": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd"
+    }
+  }
+}

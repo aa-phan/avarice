@@ -1,45 +1,41 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-milestone_name: Contained Kernel
-current_phase: 3
-current_phase_name: Decisions, independent work and amendments
-status: planning
-stopped_at: Phase 3 context gathered
-last_updated: "2026-11-08T22:04:34.193Z"
-last_activity: 2026-11-08
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 2c2a92b997ef34f6df74d958bc7dff6d3a3fe0d5
+status: "Phase 3 shipped — PR #4"
+stopped_at: Milestone v1.0 complete, ready to start v1.1
+last_updated: "2026-11-16T00:05:55.508Z"
+last_activity: 2026-11-15
+state_head: eb680ba6c4d620b1b8fda7fb14fddd2696978683
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 61
-  completed_plans: 61
-  percent: 25
+  completed_phases: 3
+  total_plans: 134
+  completed_plans: 134
+milestone_name: Contained Kernel
+current_phase: 4
+current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-08)
+See: .planning/PROJECT.md (updated 2026-11-15)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Phase 03 — Decisions, independent work and amendments
+**Current focus:** Milestone v1.0 shipped 2026-11-15; next is v1.1 MVP Completion (Phase 4). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
 
 ## Current Position
 
-Phase: 3 — Decisions, independent work and amendments
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-11-08 — Phase 02 complete, transitioned to Phase 3
-
-Progress: [███░░░░░░░] 25%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Phase 3 shipped — PR #4
+Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 61
+- Total plans completed: 134
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -49,6 +45,7 @@ Progress: [███░░░░░░░] 25%
 |-------|-------|-------|----------|
 | 01 | 26 | - | - |
 | 02 | 35 | - | - |
+| 03 | 73 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -118,6 +115,53 @@ Progress: [███░░░░░░░] 25%
 | Phase 02 P33 | 50 min | 3 tasks | 17 files |
 | Phase 02 P34 | 21 min | 3 tasks | 9 files |
 | Phase 02 P35 | 2h10m | 3 tasks | 25 files |
+| Phase 03 P01 | 35 min | 2 tasks | 12 files |
+| Phase 03 P02 | 55 min | 3 tasks | 14 files |
+| Phase 03 P04 | 12 min | 2 tasks | 6 files |
+| Phase 03 P05 | 45 min | 3 tasks | 9 files |
+| Phase 03 P06 | 35 min | 3 tasks | 9 files |
+| Phase 03 P07 | 12 min | 2 tasks | 4 files |
+| Phase 03 P08 | 45 min | 3 tasks | 12 files |
+| Phase 03 P09 | 41 min | 2 tasks | 5 files |
+| Phase 03 P03 | 31 min | 3 tasks | 11 files |
+| Phase 03 P11 | 35 min | 2 tasks | 4 files |
+| Phase 03 P12 | 70 min | 3 tasks | 9 files |
+| Phase 03 P13 | 15 min | 2 tasks | 7 files |
+| Phase 03 P10 | 35 min | 2 tasks | 6 files |
+| Phase 03 P14 | 40 min | 2 tasks | 10 files |
+| Phase 03 P16 | 11 min | 3 tasks | 14 files |
+| Phase 03 P15 | 32 min | 3 tasks | 16 files |
+| Phase 03 P17 | 50min | 2 tasks | 11 files |
+| Phase 03 P18 | 120 min | 3 tasks | 26 files |
+| Phase 03 P19 | 75 min | 3 tasks | 29 files |
+| Phase 03 P20 | 30 min | 3 tasks | 10 files |
+| Phase 03 P21 | 40 min | 2 tasks | 12 files |
+| Phase 03 P22 | 45 min | 3 tasks | 16 files |
+| Phase 03 P23 | 75min | 3 tasks | 18 files |
+| Phase 03 P24 | 41 min | 3 tasks | 16 files |
+| Phase 03 P25 | 25 min | 2 tasks | 11 files |
+| Phase 03 P26 | 70 min | 3 tasks | 14 files |
+| Phase 03 P34 | 75 min | 3 tasks | 12 files |
+| Phase 03 P35 | 45 min | 3 tasks | 7 files |
+| Phase 03 P37 | 1h 10m | 1 tasks | 8 files |
+| Phase 03 P38 | 1h 15m | 1 tasks | 8 files |
+| Phase 03 P39 | 50 min | 3 tasks | 12 files |
+| Phase 03 P28 | continuation | 2 tasks | 10 files |
+| Phase 03 P40 | 100 min | 3 tasks | 14 files |
+| Phase 03 P41 | 120 min | 2 tasks | 7 files |
+| Phase 03 P44 | 3h | 2 tasks | 7 files |
+| Phase 03 P46 | 60 min | 2 tasks | 6 files |
+| Phase 03 P47 | 3h | 2 tasks | 5 files |
+| Phase 03 P48 | 40 min | 2 tasks | 3 files |
+| Phase 03 P49 | continuation | 3 tasks | 10 files |
+| Phase 03 P66 | 16 min | 3 tasks | 4 files |
+| Phase 03 P67 | 12 min | 2 tasks | 5 files |
+| Phase 03 P69 | 60min | 3 tasks | 14 files |
+| Phase 03 P71 | 45min | 3 tasks | 14 files |
+| Phase 03 P72 | 10 min | 3 tasks | 4 files |
+| Phase 03 P59 | one live attempt, 19.5 min run | 3 tasks | 2 files |
+| Phase 03 P31 | 2h | 3 tasks | 8 files |
+| Phase 03 P32 | 15 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -251,6 +295,100 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 02]: 02-34: the install proxy vets every resolved address (isPublicAddress) and dials the vetted address; the conventions refuse localhost, single-label and IP-spelled registry hosts; private-network registries are unsupported — R-WR-02 needs both layers, since a syntactic refusal cannot cover a public name that resolves to a private address; the test-only resolve option is pinned out of production by a footprint scan
 - [Phase 02]: 02-35: containment.md owns the egress proxy rules and the private-network limit; other docs/system documents link to it — Fresh reviewers flagged one fact stated in three documents
 - [Phase 02]: UAT 2026-11-08: owner accepted 02-35-REVIEW WR-01..WR-03 as built (proxy dials the first vetted address; any failed lease renewal aborts the unit; current invisible-character set); deferred WR-04, IN-01..IN-06 and the open owner decisions to backlog 999.4 and 999.5
+- [Phase 03]: Phase 3 live spend is one ledger (live-spend-phase3.jsonl) with a lower-only 25 USD ceiling (D-05) — Mirrors Phase 2 D-15; guard enforced by the harness
+- [Phase 03]: Claude Code 2.1.319 admitted on a 22-test live containment run, 0 containment failures, 0.1515 USD — CON-3: admission only on recorded live evidence
+- [Phase 03]: 03-02: answerDecision, reopenStaleDecision and withdrawDecision are single ledger transactions under the run lock; an answer releases only items no other open decision lists, and events never carry the answer text
+- [Phase 03]: 03-04: runDisposition order is in-flight item, first ready item, all-done, blocked (open decision), undeliverable; isContinuableBlocked is true when an item is ready or no open decision remains — One pure rule shared by the running stage, the supervisor and decide; reaching undeliverable after a withdrawal instead of waiting forever
+- [Phase 03]: 03-05: a choice is routine only when the contract lists it as delegated (and not human) or the plan declared an auto_select; both are assumptions that open no decision. A contract default lifts only a decision that offers a real answer; withdraw-only and prohibited decisions never take one, and buildDecisionRecord re-checks a claimed default against the contract. — AUT-1 and AUT-2: no model text or confidence can make a consequential choice proceed, and the unit's recommendation is never an authorized default.
+- [Phase 03]: 03-05: validateResponse rejects carry a stage (D-15 check) and a code; an empty digest on either side is stale; a withdraw is the one answer applied whatever the digest says; the facts hold no time field. computeStateDigest adds sorted ticket revisions only for non-brief references, so a manual brief equals the Phase 2 digest. The printed amend command carries <decision-id> until the caller passes the ledger's ID. — D-15, AUT-4, AUT-5: silence and time cannot approve, and decisions opened before this phase keep matching.
+- [Phase 03]: 03-06: plan-cites-acceptance is a G1 advisory behind PLAN_CITES_ACCEPTANCE_HARD=false until spike S3-A (03-13) flips it — A live quick PLAN is not yet proven to cite contract acceptance IDs; GateVerdict.advisories keeps existing verdict tests deep-equal
+- [Phase 03]: 03-06: G3 judges the failing test at file level; repair-limit fails when attempts >= limit, so the routine preset limit of 0 fails on first look — Flagged assumption A7; a repair that must edit such a test goes to a decision, and only an amendment-authorized path is exempt
+- [Phase 03]: 03-07: unknown keys under notify and notify.local are refused with their field path, so a typo cannot silently turn quiet hours off
+- [Phase 03]: 03-07: nextAttemptAt takes attempts already made (3 or more gives null); nextDigestAt returns the first digest time strictly after the given minute, or null when none is set
+- [Phase 03]: 03-08: a resumed session wins over a caller-chosen sessionId, so the launch line never carries both --resume and --session-id — The CLI refuses both together; the resume must keep every containment flag
+- [Phase 03]: 03-08: the final result text tail (last 2000 stripped characters) is returned only as InvocationOutcome.question, never in an event, step result or detail — AVARICE needs the pause question as data; model text must stay out of the ledger and logs
+- [Phase 03]: 03-09: unpark keeps the park ref; the caller drops it once the item resumed or committed; re-park of the same content returns the same record, a different delta under the ref is a conflict
+- [Phase 03]: Fake run host: perAttempt counts fresh calls per item, a resumed call plays base + perItem.<ID>.resume (else resume), missingSession affects only a resumed call, and the outcome session is resumeSessionId, else sessionId, else a made-up one
+- [Phase 03]: 03-12: amendRunContract takes no lease fence; it checks expectVersion inside the transaction under the run lock and is the only statement that changes a budget limit (D-19)
+- [Phase 03]: 03-12: notification state machine is pending to held|delivered|failed and held to delivered|failed; failed is final, so plan 03-23 cannot move a failed row to delivered with setNotificationState
+- [Phase 03]: 03-13: A3 held in round 1, so RUN_DECISION_SENTENCE is unchanged; PLAN_CITES_ACCEPTANCE_HARD stays false after one live PLAN — A resume of an unknown session ends with an error_during_execution result event, so plan 03-22 keys its fresh-unit fallback on structural fields, not on a missing result
+- [Phase 03]: 03-10: an amendment that leaves a per-invocation cost cap above the per-run cap, or a concurrent subagent cap above the total, is refused rather than adjusted, so an amendment edits only named fields
+- [Phase 03]: 03-14: the baseline attempt and any block before the first unit name the item the scheduler starts first (dependency order, then declaration order); a non-final item's attempt ends committed and the last ends handed-off; the Work item prompt line appears only for a contract with several items; final evidence, interrupted-check rows and G4 name no item — D-09, AUT-3: that item adopts the baseline attempt even when the first declared item depends on a later one, and a one-item run records exactly what it did in Phase 2
+- [Phase 03]: 03-16: open-decision banners carry the run ID and a count, not decision IDs; every attempt is recorded on every row a banner covers; a throwing notifier is a notifier-error failure — Follows the plan's tracer body text; keeps model and repository text off the lock screen; keeps rows of one banner in agreement
+- [Phase 03]: 03-16: readProfileNotify opens the profile config with O_NOFOLLOW and reads at most 64 KiB from the open descriptor — Closes the check-then-read window of lstat and keeps a planted link or huge file from steering a notification
+- [Phase 03]: 03-15: contract amend refuses inside a run, off a terminal and from a run's process tree in usage(), before the profile is resolved, exiting 64 and creating nothing — CS-11 and D-18: the run must never reach the amend path; ps failure counts as inside the tree (fail closed); only main.ts names the ancestry test seam (footprint pin)
+- [Phase 03]: 03-15: a command's confirmation goes through Io.ask; the shell passes its own prompt, the one-shot CLI reads one line from stdin; declining exits 0, a moved contract version, an ended run or a closed decision exits 3 — D-18: the amend confirmation uses the shell prompt, with no amend menu action; the ledger transaction under expectVersion makes a racing amendment a conflict
+- [Phase 03]: 03-17: a stale index answer is used when its cited path is still at HEAD; the start summary prints one marked line per work item instead of one model line — Start always runs after the conventions commit, so every index built at the pin is stale by commit identity; a fresh-only rule would never use an index. Marking derived fields shows what the compiler filled in before the run starts (S-50).
+- [Phase 03]: 03-18: an item-local block writes its park step started (with the block descriptor) before the park checkpoint, so a resume finishes the block from the step and never runs the unit again
+- [Phase 03]: 03-18: a blocked run is continued only from a block that came from running (or paused during a resume's reconcile); decide must use isBlockedRunContinuable
+- [Phase 03]: 03-18: budget endings are decision class budget (withdraw only, amendable); the Phase 2 class permission is replaced in six offline tests and one live case
+- [Phase 03]: 03-19: a check is repaired only when it failed and passed at the item's start; every other failing check, and a failed repair, is a decision with the reproducer — an item's start is the last committed item's G2 result over the baseline, so a regression is charged to the item that caused it
+- [Phase 03]: 03-19: G1 judges only a progressed unit; a decision G1 opens is tagged in its evidence references, and G3 authorizes no test path until an amendment can name one — S3-A: a paused unit has no PLAN; the tag says which owner choices an answer settled; the amendment plan owns authorized test paths
+- [Phase 03]: 03-20: a refusal on identity is not recorded; a refusal about the decision is decision.rejected with the run, the decision and the check name only — An identity refusal says nothing about the decision; the run's own attempt is on record by the hook's deny event (D-14, CS-11)
+- [Phase 03]: 03-20: decide withdraws through withdrawDecision, never answerDecision with the text withdraw; an option key on a withdraw-only record that carries an amend command records amendment.requested and applies nothing — answerDecision would release the items to ready; a Phase 2 record (options []) answered by a key stays an unlisted option (D-17, owner decision 2)
+- [Phase 03]: 03-21: RunStatus items, decisions and notifications are optional keys in the type (the read model always fills them); an inbox decision with several banner rows shows the worst state (failed over held, pending, delivered)
+- [Phase 03]: 03-22: an answered item resumes its own session only with a completed park record and a gsd_session that is a UUID; every other answered item runs a fresh unit with the answer — The session ID comes from the ledger and is checked again before it reaches a launch line (T-03-42); a stored value the host would refuse must not stop the item, so the fresh unit of plan 03-18 stays the road for it.
+- [Phase 03]: 03-22: a resume never retries as a resume: an unknown session, a crash, an interrupted resume and an unparkable delta all discard to the item base and run a fresh unit with the answer (reason answer); an unpark conflict opens no new decision — The owner's answer still applies when the session or the delta is gone, so the item keeps the answered question answered; the fresh unit has its own CON-16 retry, nothing is written over another item's change, and item.unpark_conflict records the count of paths (T-03-43).
+- [Phase 03]: 03-22: the resumed unit is classified against the item base taken before the unpark, and the park ref is dropped when the host is launched, not after the commit — A snapshot taken after the unpark would not see the parked records or the parked in-scope change, so a unit that only finishes the item would read as no_progress; a ref that outlives the launch would meet the next park of an item that asks again.
+- [Phase 03]: 03-23: the ledger gains the edge failed -> delivered, reachable only through setNotificationState and used only when a successful digest covers the row; recordNotificationAttempt still refuses a failed row, so failed stays final for a single banner retry path (orchestrator resolution of the 03-12 conflict) — A delivered digest must mark the held and failed banners it covered as delivered; all other 03-12 edges are unchanged and the 03-12 notification-state tests gained a case for the new edge.
+- [Phase 03]: 03-23: the digest LaunchAgent is a fixed, validated, XML-escaped plist (label io.avarice.digest.PROFILE, marker line, integer Hour and Minute intervals) linted with plutil and loaded with launchctl bootstrap and bootout; A1 holds: real launchd accepted StartCalendarInterval as an array of Hour and Minute dictionaries — Mitigates T-03-44 and T-03-45; the gated real round trip with a test-only label bootstrapped, listed and removed the agent and left nothing behind.
+- [Phase 03]: 03-24: cancel commits the owner's request first, even with no live lease, so supervise as well as cancel finishes a cancel that died
+- [Phase 03]: 03-24: a cancel with a live lease only records the request; the lease timer aborts the unit and the attempt ends cancelled with its invocation charged; a cancel with no live lease takes a lease of at most 60 s
+- [Phase 03]: 03-24: cancel kill points are CANCEL_KILL_POINTS, not RUN_KILL_POINTS, because the kill suite runs every RUN_KILL_POINTS entry against a run that is never cancelled
+- [Phase 03]: 03-25: decide <id> on a terminal prompts after the record (keys, withdraw, text, amend); an empty line leaves it open, exit 0. amend chains into contract amend (renderAmendmentPreview, confirmAndCommit) pre-filled from the record's measured request, one y writes contract v(n+1) and answers the decision together. — D-13 and D-17: one engine for the command and the prompt, widening only through a confirmed amendment.
+- [Phase 03]: 03-25: the shell's Decide action (keys 7, d) lists getInbox decisions and runs decide <id> through ctx.command with the shell's ask; the one-shot command reads standard input only when both streams are terminals. — ADR-013: the shell is a presentation layer over the command modules.
+- [Phase 03]: 03-26: a blocked_on_decision run that isBlockedRunContinuable is resumable, and resume --wait lets the supervisor take it up — decide starts no supervisor under a live lease, so an answer written under a killed supervisor's lease waited for nobody; found by the race suite (kill at the block), fixed RED-first
+- [Phase 03]: 03-26: RECONCILE_KILL_POINTS names the paused stage's reconcile checkpoint with its own suite (run-reconcile); the kill-point lists stay separate and the coverage test checks their union and that each has its own suite
+- [Phase 03]: 03-26: the test CLI holds a process at an armed fault point (AVARICE_TEST_HOLD) and logs exit codes (AVARICE_TEST_EXIT_LOG), test-only, so a test writes in the window between two writes of a detached supervisor
+- [Phase 03]: 03-27: the tracer gate halted the plan after its one re-run; no expansion case was started — s17-s51 failed twice on the same item (A, haiku), a real verdict, so the executor protocol forbids expanding and the orchestrator's rule forbids a second re-run
+- [Phase 03]: 03-27: no requirement marked complete — CON-15, AUT-3, AUT-4, AUT-10, AUT-16, RC-7 and RC-8 are each declared by other incomplete plans and the live evidence for them is incomplete or negative
+- [Phase 03]: Owner decision 2026-11-09 after the 03-27 halt: stop Phase 3 execution and replan the small-item (haiku) failure with `/gsd-plan-phase 3 --gaps` before any more live spend; none of "small runs on sonnet", "keep haiku and change the cases" or "pin item A to sonnet" was chosen, so the gap plan decides the fix
+- [Phase 03]: Owner decision 2026-11-09: plan 03-27's live spend cap rises from 6.00 to 10.00 USD for its resumed cases (3.4561 USD already spent); the Phase 3 ceiling stays 25 USD
+- [Phase 03]: 03-27 run 2 raised one invocation's cost cap from 1.60 to 2.00 USD (inside the plan and phase caps) against the orchestrator's no-raise instruction; recorded so the gap plan sets explicit per-case caps
+- [Phase 03]: Plan 03-34: the small-unit failure is fixed in the prompt, the shell refusal reasons and the run agents' note; modelBySize, the loop limit and every containment list are unchanged — Owner decision 1 of 2026-11-09 forbids the quick fixes; the cause is a self-contradicting prompt, unstated shell rules and bare refusals, proven offline, live proof is plan 03-35
+- [Phase 03]: Owner decision (plan 03-35 Task 3, 2026-11-09): proceed-haiku. Small items stay on haiku (D-10, RC-8 map unchanged) and plan 03-36 runs as planned; probe-small-2 and -3 not run — Both probe-small-1 runs completed the whole quick workflow on haiku for 0.0819 and 0.1019 USD with no refusal loop or decision; the only failed fact is an extra test/slug.test.ts edit attributed to the probe brief's fixed Behavior text and inside the write set. Plan 03-36's itemsBriefText cases carry the same sentence
+- [Phase 03]: Owner decision 2026-11-09 after the 03-36 halt (s21 not exercised: the haiku unit read scripts/tamper.mjs, declined to run it and opened a decision): move the tamper and write probes out of the unit's reach — a harness-only change (no src/, gate, hook, containment-list, model-map or docs/system change) so the case, not the model, performs the tamper and G2/G3 judge the tree it leaves; cs5 must still have the write genuinely issued from a subagent, so its new shape needs care. Re-run s21, cs5, s52 and s17-s51 under the existing per-case caps and the 10.00 USD group guard (3.8735 spent); s50, cs15 and s18-short keep their 03-36 PASS lines
+- [Phase 03]: Owner decision 2026-11-09 (plan 03-37): pin every live command to the admitted host 2.1.319 with AVARICE_LIVE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319 so the Phase 3 run-purpose evidence stays on one host version; AVARICE_LIVE_ADMIT_CLAUDE_VERSION unused, ADMITTED_CLAUDE_VERSIONS and the installed default binary untouched — The installed Claude Code auto-updated to 2.1.321, which is not admitted; admitting it is out of scope for 03-37
+- [Phase 03]: Owner decision 2026-11-09 after the 03-37 halt (s21 not exercised twice: the haiku planner stopped at an acceptance question because the shared itemsBriefText Behavior sentence "the slug rules are covered by tests" contradicts s21's auth acceptance): fix ALL remaining live briefs in one harness-only gap plan — each of s21, cs5, s52 and s17-s51 gets its own brief text matching its acceptance criteria and stating the intended direction so nothing is left to ask, except s17-s51's item B, which must still ask; built in test/helpers/live-phase3-fixtures.ts (as cs5BriefText is); no change to src/, docs/system/, test/helpers/run-fixtures.ts, gates, hook, containment lists, ROUTINE_PRESET or caps; still pinned to 2.1.319; s50, cs15 and s18-short keep their 03-36 PASS lines
+- [Phase 03]: Plan 03-38 halted at s21: FAIL on the pinned 2.1.319 host after the per-case briefs worked (the unit reached the gates) — The harness tamper deleted a test outside the empty delete globs, so G2 failed on deletion-scope and no-new-overrides and the run blocked with a permission decision; the inventory rules removed-test and new-skip-marker run only when every other G2 rule passes, and repeated_failure follows a repair that a scope breach never reaches. Not cause (a), (b) or (c), so no re-run; owner decision needed on how S-21 is proven
+- [Phase 03]: Owner decision 2026-11-09 after the 03-38 halt: judge S-21 on the BUILT behaviour — re-judge the existing 03-38 s21 run from its kept evidence (no new spend) on the safety property the code enforces (G2 fails, each harness-made tamper is caught by a G2 rule, nothing committed, the run never reaches ready_for_review, it blocks with a decision); record the S-21 scenario-vs-code disagreement (scenario expects removed-test/new-skip-marker and repeated_failure after a repair; the built run treats a deletion as a scope breach and checks the inventory only when the other G2 rules pass) as one file:line line in docs/system/findings.md for the owner to decide which side moves; the per-rule paths stay proven offline (03-19); then run cs5, s52, s17-s51 in the same gap plan, still harness-only, pinned to 2.1.319, same caps
+- [Phase 03]: Plan 03-39: S-21 judged on the built behaviour from the kept 03-38 run; cs5, s52 and s17-s51 PASS on pinned 2.1.319; 03-27, 03-36, 03-37 and 03-38 completed — G2 failed with deletion-scope and no-new-overrides, nothing committed, never ready_for_review; the skip marker is not separately evaluated because the inventory runs only when every other G2 rule passes; one findings line records the scenario-versus-code disagreement for the owner. Spend 2.8563 USD; group 6.8812 of 10.00; Phase 3 7.9739 of 25
+- [Phase 03]: 03-28: owner approved the three exit briefs with a per-run cap of 5.67 USD (ceiling stays 25 USD)
+- [Phase 03]: 03-28: exit runs pinned to host 2.1.319; plans 03-29 and 03-30 run every avarice start, and every owner-terminal decide or resume, with AVARICE_CLAUDE_BIN=/Users/aphan/.local/share/claude/versions/2.1.319; ADMITTED_CLAUDE_VERSIONS and the default binary unchanged
+- [Phase 03]: 03-28: item A stays small (haiku) in all three exit briefs
+- [Phase 03]: Owner decision 2026-11-09 after the 03-29 D-03 stop (run_01M71BDV8MWGEG7XSAWH1GZ80W: item A's unit finished and verified its own work, then repeated item B's open numbered choice; detectPause parked A, giving two decisions instead of one): fix BOTH (1) prompt scope — each item's unit sees only its own item's brief text, not other items' open choices — and (2) pause attribution — a numbered choice that belongs to another item's open decision does not pause a unit whose own work is done and verified; src/ change with docs/system update and offline tests; then repeat all three exit runs (D-03)
+- [Phase 03]: Owner decision 2026-11-09: the repeated exit's per-run cap is 5.62 USD (lower-only from 5.67; 16.8830 USD headroom fits three runs); ceiling stays 25 USD; host pin 2.1.319 unchanged. Run 1 of 03-29 stays open in the owner's profile until the owner cancels it; Claude never answers or cancels a portfolio run
+- [Phase 03]: 03-40: an item prompt carries only its own item's Behavior paragraphs (labelled 'Item <id>:' or 'Work item <id>:') and the shared ones, no run title; a Behavior with no labelled paragraph is given whole — Exit run 1: item A's unit read item B's owner choice and ended with it
+- [Phase 03]: 03-40: a numbered choice is attributed to another item only for a verified, otherwise progressed unit whose every choice line equals one other owner-choice item's options and none of its own or shared options; any doubt keeps the pause — Fail-closed attribution; classify records pauseAttributedTo and never the question text
+- [Phase 03]: 03-41: the exit tools refuse a start while the run an evidence file supersedes is not failed, cancelled or closed in the owner's ledger; the repeated exit records under 03-42-evidence-exit.json and the halted 03-29 file stays untouched — D-03 no silent repeat; the owner cancelled run_01M71BDV8MWGEG7XSAWH1GZ80W and confirmed the 5.62 USD authorization (ownerConfirmedAt 2026-11-10T01:45:20Z), portfolio unchanged, 0 USD spent
+- [Phase 03]: Owner decision 2026-11-10 after the 03-42 D-03 stop (run_01M71J9AVJ3N1BEKC4EM2P0GGF: the run was started under CLAUDE_CONFIG_DIR=/Users/aphan/.claude-edu, the owner's decide started the supervisor under the default ~/.claude, so claude -p --resume a8cdde62-… found no conversation; the fresh fallback session 9ea84e6b-… cost 0.8280 USD and failed G2 with "GSD VERIFICATION status is missing, not passed"): FIX IN PRODUCT — a run records its host config directory at start and every later launch of that run (the supervisor started by decide or resume) uses it; decide and resume refuse visibly when it cannot be honoured; diagnose the fallback's G2 VERIFICATION-missing failure offline; src/ change with docs/system and offline tests; then repeat all three exit runs (D-03)
+- [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 5.27 USD (lower-only; 15.8149 USD headroom at 9.1851 spent fits three runs, no room for a further repeat); ceiling stays 25 USD; host pin 2.1.319 unchanged. run_01M71J9AVJ3N1BEKC4EM2P0GGF stays open (blocked on gate decision dec_01M71M4PB9EQJFNH0S75HTYWSR) until the owner cancels it; Claude never answers or cancels a portfolio run
+- [Phase 03]: Plan 03-43: a run records its host configuration directory as the run step host:config-dir at start; supervisorEnv(deps, runId) launches every supervisor with it; decide and resume refuse (exit 3) and supervise refuses (exit 70) when it cannot be honoured — claude -p --resume finds a session only in the launching process's configuration directory; no column or migration needed, the run step table keys facts by run and step
+- [Phase 03]: Plan 03-43: the unit prompt's records sentence has the unit, not the verifier, write SUMMARY.md and VERIFICATION.md from the subagents' returned text — The transcripts show the host refusing a subagent a report file (the executor's SUMMARY.md); the fresh fallback's verifier was also told not to write files, so G2 read the verification status as missing
+- [Phase 03]: Plan 03-44: the exit evidence entry carries hostConfigDir (the run's recorded host:config-dir) and the start judge requires it; 03-45-evidence-exit.json supersedes the cancelled run_01M71J9AVJ3N1BEKC4EM2P0GGF; the owner confirmed the 5.27 USD per-run authorization (ownerConfirmedAt 2026-11-10T06:20:42Z) after cancelling run 1 in their own terminal (a first attempt through the session's ! shell was refused by the identity rule) - D-03 repeat from run 1; 0 USD spent, portfolio unchanged
+- [Phase 03]: Owner decision 2026-11-10 after the 03-45 D-03 stop (run_01M7220WKE6WAP7N0FTPSH95RV: 03-40 and 03-43 proven live — A committed, only B blocked, B's delegated session 4006c6cb-… resumed with no fresh attempt; but B's resumed unit wrote VERIFICATION.md with a bare 'status: passed' first line and no '---' fences, the gate parser failed closed to gaps_found, and G2 parked B on dec_01M7274XVDJAH8MC3XZ6M89DR4): FIX THE WORDING — the unit prompt's records sentence states the exact VERIFICATION.md shape (a '---' line, 'status: <value>', a '---' line) with an offline test that the stated shape passes the real gate parser; the parser stays fail-closed; ALSO fix the exit tool's --finish so a second stop is judged and recorded instead of exiting 2; src/ + docs/system + offline tests; then repeat all three exit runs (D-03)
+- [Phase 03]: Owner decision 2026-11-10: the repeated exit's per-run cap is 4.95 USD (lower-only; 14.8706 USD headroom at 10.1294 spent; worst case 14.85 keeps Phase 3 within 25; no further repeat fits); ceiling 25; host pin 2.1.319. run_01M7220WKE6WAP7N0FTPSH95RV stays open until the owner cancels it in their own terminal; Claude never answers or cancels a portfolio run
+- [Phase 03]: 03-46: the records sentence states the fenced VERIFICATION shape (parser and gates unchanged); --finish exits 2 only while a start-stage pause decision is open and records a second stop with exit 1
+- [Phase 03]: 03-47: the exit script defaults to 03-48-evidence-exit.json; the owner cancelled run_01M7220WKE6WAP7N0FTPSH95RV in their own terminal and confirmed the 4.95 USD per-run authorization (ownerConfirmedAt 2026-11-10T22:20:30Z); 03-48-evidence-exit.json is seeded with runs [] and a supersedes block; authorize passes on the pinned 2.1.319 host; 0 USD spent, portfolio unchanged (composite sha256:36b38e48...), three runs at 4.95 cap 14.85 of 14.8706 headroom so no further repeat fits
+- [Phase 03]: 03-48 (D-03 stop at Task 2): the resume is proven (B's delegated session 9673ee64 requested and reported by five init events, no fresh answer attempt, B G2 passed, B committed 0db1f45) but item C parked on dec_01M73THARNM0VENR94QDX62BJ3 because removing COPY_FALLBACK breaks tests/e2e/copy-email.spec.ts, outside the brief's Write list; run 2 not started; 03-29, 03-42 and 03-45 untouched; Phase 3 at 11.1923 of 25 USD; nothing answered, cancelled or retried by Claude
+- [Phase 03]: Owner decision 2026-11-10 after the 03-48 stop: FINISH RUN 1 IN PLACE — D-03 is relaxed for run 1 only: run_01M73RX3RF0ZJETYWVF52WFZ5B counts as exit run 1 with one extra, legitimate decision (item C correctly stopped because the Claude-drafted brief's Write list omitted tests/e2e/copy-email.spec.ts, whose line 5 holds the old toast literal). The owner, in their own terminal, amends the run's write set (contract amend --add-write tests/e2e/copy-email.spec.ts) and answers C's question; the run then completes. All three product fixes (03-40, 03-43, 03-46) are proven live on this run. Runs 2 and 3 proceed as planned after their briefs are checked offline (no spend) for the same pattern — a change that breaks a test literal outside the write set — with any brief change re-approved by the owner. Caps: run 1 stays under its 4.95 cap; runs 2 and 3 at 4.95 each (worst case 24.98 of 25); Claude never answers, amends or cancels a portfolio run
+- [Phase 03]: Owner decision 2026-11-10 at the 03-49 Task 3 checkpoint: run 1 is finished by answer-2-in-place (the owner runs `decide dec_01M73THARNM0VENR94QDX62BJ3 2` in their own terminal in plan 03-50; C finishes inside the write set; D-03 is relaxed for run 1 only and Claude records it with the relax record in plan 03-50; the owner updates tests/e2e/copy-email.spec.ts after review); run 2's brief stays unchanged; run 3's brief takes R3-3 and R3-1 (R3-2 dropped), new digest sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd; 03-49-exit-authorization.json (selection answer-2-in-place, cap 4.95, ceiling 25, pin 2.1.319, ownerConfirmedAt 2026-11-11T00:00:06Z) supersedes 03-47's — Plan 03-49 measured that the protected add-write is refused (exit 64, nothing written), that answering C's option 2 reaches ready_for_review inside the write set, and that run 3's option 2 collided with seven protected e2e specs. Run 3's option 2 is now the same toggle button (name "Dark theme", aria-pressed) with a visually hidden description linked by aria-describedby, and tests/unit/use-theme.test.tsx joins its Write list: no collision for either option. Worst case 11.1923 + 3.8871 (run 1 left) + 4.95 + 4.95 = 24.9794 of 25 USD
+- [Phase 03]: Finding for the documentation plans 03-31 to 03-33 and findings.md (owner decision 4, 2026-11-10): a declared, non-required check (test:e2e) is never run by the supervisor (src/app/checks.ts checksToRun runs only the required and the target checks), so a delivered tree can fail it with nothing recorded; exit run 1 under answer-2-in-place will leave tests/e2e/copy-email.spec.ts failing with no record of it — Measured in plan 03-49 scenario N: the run reached ready_for_review while test:e2e would have failed. The owner asked for the finding to be recorded; the product is unchanged (src/ untouched) and the owner decides whether the supervisor should run or record declared non-required checks
+- [Phase 03]: Owner decision 2026-11-10/11 after run 1's third stop (plan 03-50): STOP AND RE-DISCUSS. Live exit work stops now; run 2 and run 3 are not started; no relax record is written (the owner stopped instead of accepting run 1); the owner cancels run 1 in their own terminal; the exit criteria (D-03; briefs vs. protected conventions) are re-discussed with /gsd-discuss-phase 3 before any more spend; the remaining Phase 3 budget (13.7014 of 25 USD) stays unspent — Run 1's resumed C unit finished inside the write set, but tests/e2e/copy-email.spec.ts (protected, line 5, old toast literal) still fails, so its verifier reported gaps_found and G2 parked C on dec_01M74276ZA17K36XWT9GJHRWDW. AVARICE behaved correctly: containment refused the protected write, the verifier reported the real gap, G2 refused to pass it
+- [Phase 03]: 03-50 findings: three product defects fixed and proven live (03-40 item prompt scope and pause attribution; 03-43 recorded host config directory; 03-46 fenced VERIFICATION record); two brief defects (run 1's change breaks the protected e2e literal outside the write set; run 3's original option 2 collided with seven protected e2e specs, fixed in 03-49 with R3-3 and R3-1); a declared non-required check (test:e2e) is never run by the supervisor, so a delivered tree can fail it with nothing recorded (for the documentation plans and findings.md) — Recorded in 03-50-SUMMARY.md and 03-48-evidence-exit.json; no src change in this plan
+- [Phase 03]: 03-66: the exit tools' stop-loss counts failed attempts within the run's own epoch (stopLossEpochOf), begun only by an owner-confirmed reset with D-37's proofs; D-26's epoch and the verdict are unchanged (D-36, D-39)
+- [Phase 03]: 03-66: reset --confirm acts only on the run's latest reset when it has no confirmation, so a stale unconfirmed proposal cannot be confirmed behind a later one
+- [Phase 3]: 03-68: run 2's attempt 3 passed and the owner confirmed it with continue; run 2 counts toward 3 of 3. Run 1 headroom after it is 7.8582 USD (25 - 4.50 - 12.6418); 03-63-SUMMARY.md is superseded
+- [Phase 3]: 03-58: run 3's attempt 1 stopped on two open pause decisions because the unit's verifier and executor subagents had no content-search route (Grep tool absent from their sessions, shell grep denied by the hook); the owner ruled brief-harness-defect, fix first, overriding Claude's product-defect proposal. Halted; a gap plan fixes the route, then run 3's attempt 2 of 2 runs before run 1. Spend 0.2520 USD; ledger 12.8938 of 25; run 1 headroom 7.6062 USD. The owner's profile config still forces the banner failure
+- [Phase 03]: 03-69: the launch line keeps the host's search tools with --allowedTools Glob,Grep (judge admits only that pair, once); shell grep stays refused; offline probe of the pinned 2.1.319 host plus scenario S prove it
+- [Phase 03]: 03-71: the agent command list holds only the checks the run executes (required or target); declared checks no gate judges are named in the prompt as judged by no gate; contract amend --check +name adds the check's command with an execution.commands diff entry
+- [Phase 03]: 03-60: the exit verdict is 3/3 ready_for_review over the D-26 epoch (run 2 attempt 4, run 3 attempt 3, run 1 attempt 1); LIVE-CASES.md keeps the heading Exit (plans 03-57 to 03-68) and lists every attempt under it
+- [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
+- [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
+
+### Roadmap Evolution
+
+- Phase 9 added: v1.0 tech-debt cleanup (2026-11-15, at the v1.0 close; runs after the last implemented phase; scope from milestones/v1.0-MILESTONE-AUDIT.md)
 
 ### Pending Todos
 
@@ -283,15 +421,12 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.4]: A host that ends with no result event is charged its full reservation even when it spent nothing (02-35-REVIEW WR-04); IN-01..IN-06 untriaged (UAT test 4, deferred)
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
+- Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 261104-jnc | Close P-3 grep -d/--directories recursion bypass and fix review warnings WR-01, WR-03, WR-04 | 2026-11-04 | 974d8b1 | [261104-jnc-close-p-3-grep-d-directories-recursion-b](./quick/261104-jnc-close-p-3-grep-d-directories-recursion-b/) |
-| 261104-l3t | Resolve WR-02: drop grep from the shell read-only commands (shell grep denied by name; search via Grep tool) and deny bfs find -rm | 2026-11-04 | 07e6a34 | [261104-l3t-resolve-wr-02-establish-which-grep-the-c](./quick/261104-l3t-resolve-wr-02-establish-which-grep-the-c/) |
-| 261104-nxh | Fix Phase 1 code review warnings WR-01 (runtime check that workRoot is a normalized absolute path) and WR-02 (npm test now exercises the missing-work-root guard) | 2026-11-04 | e50de6f | [261104-nxh-fix-phase-1-code-review-warnings-wr-01-a](./quick/261104-nxh-fix-phase-1-code-review-warnings-wr-01-a/) |
-| 261105-2i2 | Fix phase 01 code-review findings WR-05..WR-08 (parseArgs prototype names, gsd_run argument checks, sandbox probe retry, exit-run spend guard) | 2026-11-05 | 4ac1127 | [261105-2i2-fix-phase-01-code-review-findings-wr-05-](./quick/261105-2i2-fix-phase-01-code-review-findings-wr-05-/) |
 
 ## Deferred Items
 
@@ -299,10 +434,31 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| debug_sessions | git-object-name-symlink-secret-bypass | diagnosed | 2026-11-15 | v1.0 |
+| debug_sessions | knowledge-pass-reads-originals | diagnosed | 2026-11-15 | v1.0 |
+| debug_sessions | phase2-review-findings-triage | diagnosed | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Validation path-references rejects the real haiku fast map on a generated scratch repository (blocks the T3 c… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: The stored transcript artifact can contain a line that is not valid JSON. redactSecrets replaces the GSD secr… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: The 01-15 hook-denial fixture text differs from the real host. The real tool_result is PreToolUse:{Tool} hook… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Update 2026-11-02 (gap fix for item 1, plan 01-16) - Item 1, path-references part: fixed (commits 792ccb8 RED… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Resolved 2026-11-02 (gap fix, plan 01-16) - Item 1: Resolved. Commits 792ccb8 (RED), b05f0b7 (GREEN). The use… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03 (plan 01-19 blockers, items 9, 10, 11, 12) Decided by the user; spend-free (no model call,… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03, second owner decision on item 10 - Item 10: Resolved. RED fb53444, GREEN 34eac4b. The use… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: 2026-11-03, claude 2.1.317 admission (plan 01-16 follow-up) - Item 12, the default claude on PATH: Resolved.… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Gap fix 2026-11-03, plan 01-19 rehearsal 4 findings (items 13 to 15 of the 01-19 numbering) Decided by the us… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 01/deferred-items.md: Resolved 2026-11-04 (plan 01-19 exit run complete) - Items 9 to 11, 13 to 15: resolved by the orchestrator's… | acknowledged | 2026-11-15 | v1.0 |
+| deferred_items | 02/deferred-items.md: 02-01: knowledge pass on Claude Code 2.1.318 writes with the /var path form - Found by: plan 02-01, live case… | acknowledged | 2026-11-15 | v1.0 |
 | Requirement | FR-23 review-only reconciliation (unscheduled, extension catalog entry 13) | Deferred | 2026-11-01 | v1.0 |
 
 ## Session Continuity
 
-Last session: 2026-11-08T22:04:34.078Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-decisions-independent-work-and-amendments/03-CONTEXT.md
+Last session: 2026-11-15T06:54:20.672Z
+Stopped at: Milestone v1.0 complete, ready to start v1.1
+Resume file: None
+
+## Operator Next Steps
+
+- Ship the phase 3 branch (worktree-phase-03) through its PR with a merge commit; the v1.0 close rides in it
+- After the merge, tag v1.0 on main (`git tag -a v1.0` on the merge commit) and push the tag
+- Start the next milestone with /gsd-new-milestone (v1.1, Phases 4-5)
+- Phase 9 (v1.0 tech-debt cleanup) is planned last, after every implemented phase

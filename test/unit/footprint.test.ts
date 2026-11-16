@@ -97,9 +97,9 @@ describe('the supervisor spawn is the one deliberate detached process and it is 
     assert.match(source, /\[\.\.\.process\.execArgv, request\.entry, 'supervise', request\.runId\]/);
   });
 
-  it('is imported by the start and resume commands and nothing else (resume continues a run with the same detached supervisor, plan 02-17)', () => {
+  it('is imported by the decide, resume and start commands and nothing else (resume continues a run with the same detached supervisor, plan 02-17; decide starts one when an answer makes a blocked run continuable and no supervisor holds the lease, D-16)', () => {
     const importers = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => f !== SUPERVISOR_SPAWN && /spawn-supervisor\.ts['"]/.test(readFileSync(f, 'utf8')));
-    assert.deepEqual(importers.map((f) => basename(f)).sort(), ['resume.ts', 'start.ts']);
+    assert.deepEqual(importers.map((f) => basename(f)).sort(), ['decide.ts', 'resume.ts', 'start.ts']);
   });
 });
 
@@ -146,6 +146,91 @@ describe("the proxy's resolver seam stays out of production", () => {
     assert.equal(/resolve/i.test(classBody), false, 'no resolver token in the class body');
     assert.equal(classBody.includes('...'), false, 'no spread or rest in the class body');
     assert.equal(/startAllowlistProxy\s*\(\s*input\b/.test(classBody), false, 'the input object is not passed to the call whole');
+  });
+});
+
+// AUT-4: a decision is answered, re-opened or withdrawn by a person, never because time passed. The ledger calls that move a decision (the `answerDecision`,
+// `reopenStaleDecision` and `withdrawDecision` of the port) are made by `decide`, which runs only from a terminal outside the run, and by nothing else in the
+// source: no supervisor stage, timer or notification retry can reach them (plan 03-20). The one other caller is the cancel of a run (plan 03-24), which
+// withdraws the open decisions of the run it cancels with the reason `cancel` and never answers or reopens one; a later plan that adds a caller names itself here.
+describe('only the decide service answers a decision (AUT-4)', () => {
+  it('no production file other than the ledger, the decide service and the cancel service calls the three calls that move a decision', () => {
+    const ledgerFiles = [join(REPO_ROOT, 'src', 'ports', 'ledger.ts'), join(REPO_ROOT, 'src', 'adapters', 'sqlite', 'ledger.ts')];
+    const callers = sourceFiles(join(REPO_ROOT, 'src'))
+      .filter((f) => !ledgerFiles.includes(f))
+      .filter((f) => /\.(?:answerDecision|reopenStaleDecision|withdrawDecision)\s*\(/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(
+      callers.map((f) => basename(f)),
+      ['cancel.ts', 'decide.ts'],
+    );
+  });
+
+  it('the cancel service only withdraws, with the reason cancel, and never answers or reopens a decision', () => {
+    const source = readFileSync(join(REPO_ROOT, 'src', 'app', 'cancel.ts'), 'utf8');
+    assert.equal(/\.(?:answerDecision|reopenStaleDecision)\s*\(/.test(source), false);
+    const withdrawals = source.match(/\.withdrawDecision\s*\(\{[^}]*\}\)/g) ?? [];
+    assert.equal(withdrawals.length, 1, 'one withdrawal in the cancel service');
+    assert.match(withdrawals[0] as string, /reason:\s*'cancel'/);
+  });
+});
+
+// `contract amend` refuses a caller whose process tree holds a run's supervisor. The reader of that tree is an override of main() so a test can
+// supply a chain; a production path that passed or read the override could make the refusal look at a chain someone chose (plan 03-15, T-03-27).
+describe('the ancestry seam stays out of production', () => {
+  const MAIN = join(REPO_ROOT, 'src', 'cli', 'main.ts');
+  const mainSource = readFileSync(MAIN, 'utf8');
+
+  it('no production file other than src/cli/main.ts reads or declares the ancestry override of MainOverrides', () => {
+    const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== MAIN);
+    assert.ok(files.length > 20, 'the scan found the source tree');
+    const names = /\boverrides\??\.ancestry\b|\bancestry\s*\?\s*\(/;
+    assert.deepEqual(files.filter((f) => names.test(readFileSync(f, 'utf8'))), []);
+  });
+
+  it('bin/avarice.ts never mentions the ancestry reader', () => {
+    assert.equal(/ancestry/i.test(readFileSync(PRODUCTION_ENTRY, 'utf8')), false);
+  });
+
+  it('main.ts reads the override once and defaults to the real process walk', () => {
+    assert.equal((mainSource.match(/\boverrides\.ancestry\b/g) ?? []).length, 1, 'one read of the override');
+    assert.match(mainSource, /overrides\.ancestry\s*\?\?\s*\(\(\)\s*=>\s*processAncestry\(process\.pid\)\)/);
+    assert.match(mainSource, /import \{ processAncestry \} from '\.\.\/adapters\/proc\/ancestry\.ts'/);
+  });
+});
+
+// `schedule install` writes a file that makes launchd run a program (plan 03-23, T-03-44). The agents directory, the launchctl and plutil paths and
+// the uid are an override of main() so a test can aim them at a temporary directory and a fake; a production path that passed or read the override
+// could point the writer anywhere. Only main.ts reads it, only the schedule command receives it, and the bin script never mentions it.
+describe('the scheduler seam stays out of production', () => {
+  const MAIN = join(REPO_ROOT, 'src', 'cli', 'main.ts');
+  const mainSource = readFileSync(MAIN, 'utf8');
+  const SCHEDULE = join(REPO_ROOT, 'src', 'cli', 'commands', 'schedule.ts');
+
+  it('no production file other than src/cli/main.ts reads the scheduler override of MainOverrides', () => {
+    const files = [...sourceFiles(join(REPO_ROOT, 'src')), PRODUCTION_ENTRY].filter((f) => f !== MAIN);
+    assert.ok(files.length > 20, 'the scan found the source tree');
+    assert.deepEqual(files.filter((f) => /\boverrides\??\.scheduler\b/.test(readFileSync(f, 'utf8'))), []);
+  });
+
+  it('bin/avarice.ts never mentions the scheduler', () => {
+    assert.equal(/scheduler/i.test(readFileSync(PRODUCTION_ENTRY, 'utf8')), false);
+  });
+
+  it('main.ts reads the override once and hands it to the command module as an extra, nowhere else', () => {
+    assert.equal((mainSource.match(/\boverrides\.scheduler\b/g) ?? []).length, 1, 'one read of the override');
+    assert.match(mainSource, /const scheduler = overrides\.scheduler;\s*\n\s*const extras: CommandExtras = scheduler === undefined \? \{\} : \{ scheduler \};/);
+  });
+
+  it('only the schedule command module constructs the LaunchAgent writer', () => {
+    const users = sourceFiles(join(REPO_ROOT, 'src')).filter((f) => /\bnew\s+LaunchdScheduler\b/.test(readFileSync(f, 'utf8')));
+    assert.deepEqual(users, [SCHEDULE]);
+  });
+
+  it('the launchctl argv names bootstrap and bootout and never the deprecated load and unload', () => {
+    const source = readFileSync(join(REPO_ROOT, 'src', 'adapters', 'schedule', 'launchd.ts'), 'utf8');
+    assert.equal(/'load'|'unload'/.test(source), false);
+    assert.match(source, /'bootstrap'/);
+    assert.match(source, /'bootout'/);
   });
 });
 

@@ -236,7 +236,7 @@ describe('what is never retried (CON-16, FR-4)', () => {
     const result = start(f, { perAttempt: [{ crash: { afterFiles: TWO_FILES } }, FIX] }, ['--budget', 'invocations=1']);
     const runId = runIdOf(result.stdout);
     assert.equal(lastLine(result.stdout), `run ${runId}: blocked_on_decision (budget_exhausted)`);
-    assert.equal(decisionsOf(f, runId)[0]?.class, 'permission');
+    assert.equal(decisionsOf(f, runId)[0]?.class, 'budget');
     assert.match(decisionsOf(f, runId)[0]?.issue ?? '', /invocations/);
     assert.equal(attemptsOf(f, runId).length, 1);
     assert.equal(stepsNamed(f, runId, 'discard').length, 0, 'the crashed unit\'s files are left in the clone for the owner to see');

@@ -1,0 +1,69 @@
+@startuml
+title Independent work around an open decision
+
+actor Owner
+participant Supervisor
+participant Scheduler
+database Ledger
+participant "Run clone" as Clone
+participant "Claude Code host" as Host
+participant "Local notification" as Banner
+
+note over Scheduler : items B, C and A; C depends on B; B is declared first
+
+== Item B stops to ask ==
+Supervisor -> Scheduler : what next?
+Scheduler --> Supervisor : start B
+Supervisor -> Host : unit for B
+Host --> Supervisor : ends with a question and numbered choices
+Supervisor -> Clone : classify from measured facts: paused
+Supervisor -> Ledger : park step started, with what the decision will say
+Supervisor -> Clone : delta of B kept under a ref, tree back to the base
+Supervisor -> Ledger : decision opened, affecting B and C
+Supervisor -> Ledger : attempt ends blocked, one notice queued
+Supervisor -> Ledger : item B blocked_on_decision
+
+== The run goes on ==
+Supervisor -> Scheduler : what next?
+note over Scheduler : B is blocked, C waits behind B,\nA depends on nothing that is open
+Scheduler --> Supervisor : start A
+Supervisor -> Ledger : run running to running, next action the pack of A
+Supervisor -> Host : unit for A
+Host --> Supervisor : result
+Supervisor -> Ledger : gates, then commit of A on the base content
+note over Clone : nothing of B is in A's tree or commit
+alt batch window has passed and not in quiet hours
+  Supervisor -> Banner : one banner for the queued notices
+  note over Banner : up to three tries, 0, 10 and 60 seconds;\nthe outcome never changes the run
+else batch window has passed and quiet hours
+  Supervisor -> Ledger : notice held for the next digest
+else batch window still open, in quiet hours or not
+  note over Supervisor : the notice stays queued
+end
+
+== Nothing left that can run ==
+Supervisor -> Scheduler : what next?
+note over Scheduler : B is blocked, C waits behind B,\nA is done, a decision is open
+Scheduler --> Supervisor : blocked
+Supervisor -> Ledger : run blocked_on_decision, reason decision,\nopen decisions named
+Supervisor -> Ledger : release the lease
+Supervisor -> Ledger : read items and decisions again
+alt an answer arrived in that window
+  Supervisor -> Ledger : run goes on in this process
+else none
+  alt not in quiet hours
+    Supervisor -> Banner : one banner covering every queued notice
+  else quiet hours
+    Supervisor -> Ledger : queued notices held for the next digest
+  end
+  Supervisor --> Owner : exit; status and inbox list the decision
+end
+note over Owner, Ledger : an answer later starts a supervisor again:\nsee the decide and resume flow
+
+== Other endings ==
+alt every item is done
+  Supervisor -> Ledger : run moves to verifying
+else a decision was withdrawn and nothing else can run
+  Supervisor -> Ledger : run failed, undelivered items and withdrawn decisions named
+end
+@enduml

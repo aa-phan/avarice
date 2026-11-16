@@ -4,10 +4,15 @@
 // (is_error, subtype, terminal_reason, permission_denials, total_cost_usd, num_turns, duration_ms, session_id,
 // subagent_stats).
 //
-// Model text never leaves this file: assistant messages, tool inputs and the `result` text field are not kept.
+// Model text stays in this file with one exception: assistant messages and tool inputs are not kept, and of the
+// `result` text only a bounded tail is (`finalTextTail`: the last 2000 characters, control characters stripped). That
+// tail is how a paused unit's question reaches the supervisor (plan 03-08, AUT-1); it is model text, so the one caller
+// treats it as data and never as an instruction, an event field or a log line.
 // A denied tool is recorded by name only; its input (a command, a path) is dropped. Nothing here throws on
 // malformed input: a line that is not a JSON object is counted and skipped.
 import { StringDecoder } from 'node:string_decoder';
+
+import { storedText } from '../../domain/quick-record.ts';
 
 export interface StreamInit {
   sessionId?: string;
@@ -43,6 +48,8 @@ export interface StreamResult {
   durationMs: number;
   sessionId?: string;
   subagentStats?: SubagentStats;
+  // The last FINAL_TEXT_TAIL_CHARS characters of the result's text, stripped of control characters; absent when the result has no text.
+  finalTextTail?: string;
 }
 
 export interface ParsedStream {
@@ -65,6 +72,8 @@ export interface StreamJsonOptions {
 const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024;
 const MAX_NAME_CHARS = 128;
 const MAX_LIST = 64;
+// How much of the final result text is kept: enough for a question and its numbered choices, not a transcript.
+export const FINAL_TEXT_TAIL_CHARS = 2000;
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -74,6 +83,17 @@ const text = (value: unknown, max = MAX_NAME_CHARS): string | undefined => (type
 // A finite number that is not negative; anything else is 0.
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+// The tail of a result's text as data: controls removed first (so they never use up the budget), then the last characters, never
+// starting inside a surrogate pair. A result with no string text, or only blank text, has none.
+function finalTail(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const clean = storedText(value, value.length);
+  if (clean.trim() === '') return undefined;
+  const tail = clean.slice(-FINAL_TEXT_TAIL_CHARS);
+  const first = tail.charCodeAt(0);
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }
 
 function names(value: unknown): string[] {
@@ -213,6 +233,7 @@ export class StreamJsonParser {
     const terminalReason = text(event['terminal_reason']);
     const sessionId = text(event['session_id']);
     const stats = subagentStats(event['subagent_stats']);
+    const tail = finalTail(event['result']);
     this.#result = {
       isError: typeof event['is_error'] === 'boolean' ? event['is_error'] : undefined,
       ...(subtype !== undefined ? { subtype } : {}),
@@ -223,6 +244,7 @@ export class StreamJsonParser {
       durationMs: count(event['duration_ms']),
       ...(sessionId !== undefined ? { sessionId } : {}),
       ...(stats !== undefined ? { subagentStats: stats } : {}),
+      ...(tail !== undefined ? { finalTextTail: tail } : {}),
     };
   }
 }

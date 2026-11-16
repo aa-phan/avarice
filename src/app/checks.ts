@@ -84,11 +84,26 @@ export function canonical(path: string): string {
   }
 }
 
-// The checks to run, in declaration order: every required check and every target check.
-export function checksToRun(contract: RunContract): Array<{ spec: RunContract['execution']['checks'][number]; required: boolean; target: boolean }> {
+// Whether a declared check runs: it is required or a target. The one predicate checksToRun and checksNotRun share, so the two lists partition the declared checks.
+function runsCheck(contract: Pick<RunContract, 'verification'>): (name: string) => boolean {
   const required = new Set(contract.verification.requiredChecks);
   const targets = new Set(contract.verification.targetChecks);
-  return contract.execution.checks.filter((check) => required.has(check.name) || targets.has(check.name)).map((spec) => ({ spec, required: required.has(spec.name), target: targets.has(spec.name) }));
+  return (name) => required.has(name) || targets.has(name);
+}
+
+// The checks to run, in declaration order: every required check and every target check.
+export function checksToRun(contract: RunContract): Array<{ spec: RunContract['execution']['checks'][number]; required: boolean; target: boolean }> {
+  const runs = runsCheck(contract);
+  const required = new Set(contract.verification.requiredChecks);
+  const targets = new Set(contract.verification.targetChecks);
+  return contract.execution.checks.filter((check) => runs(check.name)).map((spec) => ({ spec, required: required.has(spec.name), target: targets.has(spec.name) }));
+}
+
+// The D-35 list: the declared checks that are neither required nor a target, in declaration order. They are reported as `not run: not required`; this changes nothing
+// that runs and no gate judges differently.
+export function checksNotRun(contract: Pick<RunContract, 'execution' | 'verification'>): string[] {
+  const runs = runsCheck(contract);
+  return contract.execution.checks.map((check) => check.name).filter((name) => !runs(name));
 }
 
 // ---- the sandbox every check, install and list command runs in -----------------------------------------------------------------
@@ -509,11 +524,14 @@ export async function measureInventory(deps: AppDeps, run: RunRow, contract: Run
 }
 
 // The inventory recorded at a phase, rebuilt from its evidence row and artifact; null when the conventions declare none or none was recorded.
-// The latest row of the phase counts.
-export function recordedInventory(deps: AppDeps, runId: string, phase: 'base' | 'item'): Result<InventoryMeasure | null> {
+// The latest row of the phase counts, or the latest of one work item's rows when `workItem` is named (the inventory an item started from is the
+// one the item before it ended with, plan 03-19).
+export function recordedInventory(deps: AppDeps, runId: string, phase: 'base' | 'item', options: { workItem?: string } = {}): Result<InventoryMeasure | null> {
   const evidence = deps.ledger.listEvidence(runId);
   if (!evidence.ok) return evidence;
-  const row = [...evidence.value].reverse().find((e) => e.kind === 'test-inventory' && e.environment['label'] === PHASE_LABEL[phase]);
+  const row = [...evidence.value]
+    .reverse()
+    .find((e) => e.kind === 'test-inventory' && e.environment['label'] === PHASE_LABEL[phase] && (options.workItem === undefined || e.workItem === options.workItem));
   if (row === undefined) return ok(null);
   if (row.artifactDigest === null || row.artifactDigest === undefined) return err({ kind: 'internal', cause: `the ${phase} test inventory ${row.evidenceId} has no artifact` });
   const bytes = deps.artifacts.get(row.artifactDigest);

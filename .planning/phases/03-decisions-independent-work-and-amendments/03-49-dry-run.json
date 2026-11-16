@@ -1,0 +1,1548 @@
+{
+  "schema": 1,
+  "plan": "03-49",
+  "startedAt": "2026-11-10T23:58:57.571Z",
+  "source": "~/aa-phan-portfolio-v2",
+  "pin": "9f1cd8d",
+  "node": "v26.9.0",
+  "spentUsd": 0,
+  "installs": false,
+  "modelHostLaunched": false,
+  "readOnly": true,
+  "preflight": [
+    "ok   pin 9f1cd8d, source HEAD 9f63d91",
+    "staleness: ok (HEAD descends from the pin; 0 commit(s) outside .avarice/ and .planning/ past the pin; the pin tree has .planning/ROADMAP.md)",
+    "conventions: ok (revision 9f63d9114c5d3d720b8496b08cec85382cfaa357, checks digest sha256:43b374ff784bfcab7e7533545e462d29edac345015ccb4b4328ff9041e99c214 equals the draft's, 13 checks)"
+  ],
+  "pinSha": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+  "conventionsRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+  "conventionsRead": "git objects of the portfolio (the revision that holds .avarice/config.json), not the working tree",
+  "spend": {
+    "ledger": "test/containment/live-spend-phase3.jsonl",
+    "spentUsd": 11.1923,
+    "ceilingUsd": 25,
+    "headroomUsd": 13.8077,
+    "runs": 3,
+    "routineCapUsdPerRun": 10,
+    "fullCapsTotalUsd": 30,
+    "fullCapsFit": false,
+    "largestPerRunCapThatFitsExactUsd": 4.60256,
+    "largestPerRunCapThatFitsUsd": 4.6,
+    "totalAtThatCapUsd": 13.8,
+    "flag": "--budget costUsdPerRun=4.6",
+    "fullCapGuard": {
+      "eachRunStartsOnlyIfSpendBeforeItIsAtMostUsd": 15,
+      "runsOneAndTwoMayCostAtMostInTotalUsd": 3.8077
+    }
+  },
+  "briefs": [
+    {
+      "path": "test/benchmark/phase3/p3-run1-copy-fallback.md",
+      "title": "The copy fallback names the address",
+      "compiled": true,
+      "digest": "sha256:1a30e04c02129a985c65e413d87931135eafb4a4977fbb90ee201e7cc38915b0",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts",
+        "src/lib/copy.ts",
+        "tests/unit/copy.test.ts",
+        "src/components/ui/useCopyEmail.ts"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 7,
+        "toolCalls": 1200,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 7,
+        "toolCalls": 1200,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.6,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "fallback-wording"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "test:isIsoYearMonth"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:fallback-wording",
+            "check:test",
+            "test:copyFallback names the address"
+          ]
+        },
+        {
+          "id": "AC4",
+          "item": "C",
+          "verifiedBy": [
+            "check:typecheck",
+            "check:lint",
+            "check:test"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export isIsoYearMonth from src/lib/dates.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "files": [
+            "src/lib/dates.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Add copyFallback(address) to src/lib/copy.ts",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC3"
+          ],
+          "files": [
+            "src/lib/copy.ts"
+          ],
+          "role": "planted"
+        },
+        {
+          "id": "C",
+          "title": "Use copyFallback in src/components/ui/useCopyEmail.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [
+            "B"
+          ],
+          "acceptance": [
+            "AC4"
+          ],
+          "files": [
+            "src/components/ui/useCopyEmail.ts"
+          ],
+          "role": "dependent"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        },
+        "C": {
+          "otherItemOptions": 0
+        }
+      },
+      "writeSet": {
+        "needles": [
+          {
+            "name": "monthYear",
+            "kind": "identifier"
+          },
+          {
+            "name": "isIsoYearMonth",
+            "kind": "identifier"
+          },
+          {
+            "name": "copyFallback",
+            "kind": "identifier"
+          },
+          {
+            "name": "COPY_FALLBACK",
+            "kind": "identifier",
+            "definedAt": "src/lib/copy.ts:5",
+            "value": "Couldn’t copy the address. Opening your mail app instead."
+          },
+          {
+            "name": "useCopyEmail",
+            "kind": "identifier"
+          }
+        ],
+        "findings": [
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "line": 2,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "import { monthYear } from '@/lib/dates'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "line": 26,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "<p className=\"text-xl tabular-nums\">{monthYear(current.dates.end)}</p>",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "line": 7,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "import { monthYear } from '@/lib/dates'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "line": 16,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "const expected = monthYear(end)",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/copy-email.spec.ts",
+            "line": 5,
+            "needle": "COPY_FALLBACK",
+            "kind": "value",
+            "text": "const FALLBACK = 'Couldn’t copy the address. Opening your mail app instead.'",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "src/sections/Contact/Contact.tsx",
+            "line": 7,
+            "needle": "useCopyEmail",
+            "kind": "identifier",
+            "text": "import { useCopyEmail } from '@/components/ui/useCopyEmail'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Contact/Contact.tsx",
+            "line": 42,
+            "needle": "useCopyEmail",
+            "kind": "identifier",
+            "text": "const copyEmail = useCopyEmail(email)",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Hero/Hero.tsx",
+            "line": 2,
+            "needle": "useCopyEmail",
+            "kind": "identifier",
+            "text": "import { useCopyEmail } from '@/components/ui/useCopyEmail'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Hero/Hero.tsx",
+            "line": 12,
+            "needle": "useCopyEmail",
+            "kind": "identifier",
+            "text": "const copyEmail = useCopyEmail(email)",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "lines": [
+          "src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+          "src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+          "tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+          "tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)",
+          "tests/e2e/copy-email.spec.ts:5 holds COPY_FALLBACK's value \"Couldn’t copy the address. Opening your mail app instead.\" (writable: no, protected: yes)",
+          "src/sections/Contact/Contact.tsx:7 holds useCopyEmail (writable: no, protected: no)",
+          "src/sections/Contact/Contact.tsx:42 holds useCopyEmail (writable: no, protected: no)",
+          "src/sections/Hero/Hero.tsx:2 holds useCopyEmail (writable: no, protected: no)",
+          "src/sections/Hero/Hero.tsx:12 holds useCopyEmail (writable: no, protected: no)"
+        ],
+        "truncated": {}
+      }
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run2-graduation-label.md",
+      "title": "Graduation label for the education entry",
+      "compiled": true,
+      "digest": "sha256:f0c9395bc0fddda5ef7e3b7c0844c5f0ae38444a9b8a27a4f4f716694abc7823",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/theme.ts",
+        "tests/unit/theme.test.ts",
+        "src/lib/dates.ts",
+        "tests/unit/dates.test.ts"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.6,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "graduation-wording"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "test:isTheme accepts only light and dark"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "B",
+          "verifiedBy": [
+            "check:test",
+            "test:graduationLabel"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:graduation-wording",
+            "check:test",
+            "check:typecheck"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export isTheme from src/lib/theme.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1"
+          ],
+          "files": [
+            "src/lib/theme.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Add graduationLabel(end, today) to src/lib/dates.ts",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC2",
+            "AC3"
+          ],
+          "files": [
+            "src/lib/dates.ts"
+          ],
+          "role": "planted"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        }
+      },
+      "writeSet": {
+        "needles": [
+          {
+            "name": "isTheme",
+            "kind": "identifier"
+          },
+          {
+            "name": "graduationLabel",
+            "kind": "identifier"
+          },
+          {
+            "name": "monthYear",
+            "kind": "identifier"
+          }
+        ],
+        "findings": [
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "line": 2,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "import { monthYear } from '@/lib/dates'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Education/Education.tsx",
+            "line": 26,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "<p className=\"text-xl tabular-nums\">{monthYear(current.dates.end)}</p>",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "line": 7,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "import { monthYear } from '@/lib/dates'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/unit/date-copy.test.ts",
+            "line": 16,
+            "needle": "monthYear",
+            "kind": "identifier",
+            "text": "const expected = monthYear(end)",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          }
+        ],
+        "lines": [
+          "src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+          "src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+          "tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+          "tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)"
+        ],
+        "truncated": {}
+      }
+    },
+    {
+      "path": "test/benchmark/phase3/p3-run3-theme-toggle.md",
+      "title": "Theme attribute constant and the toggle's accessible name",
+      "compiled": true,
+      "digest": "sha256:fe8742f43a9b1bfd2a01c8f1fbce1e6bccfa361807ae38b0906b20133f4052bd",
+      "expectedDecisions": 1,
+      "write": [
+        "src/lib/theme.ts",
+        "src/components/ui/ThemeToggle.tsx",
+        "tests/unit/theme-toggle.test.tsx",
+        "tests/unit/use-theme.test.tsx"
+      ],
+      "targetChecks": [
+        "test"
+      ],
+      "budgets": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 10,
+        "adjustments": []
+      },
+      "budgetsAtFittingCap": {
+        "wallClockMinutes": 120,
+        "invocations": 5,
+        "toolCalls": 800,
+        "costUsdPerInvocation": 2,
+        "costUsdPerRun": 4.6,
+        "adjustments": []
+      },
+      "decisionKeys": [
+        "toggle-pattern"
+      ],
+      "acceptance": [
+        {
+          "id": "AC1",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:typecheck"
+          ]
+        },
+        {
+          "id": "AC2",
+          "item": "A",
+          "verifiedBy": [
+            "check:test",
+            "check:lint"
+          ]
+        },
+        {
+          "id": "AC3",
+          "item": "B",
+          "verifiedBy": [
+            "decision:toggle-pattern",
+            "check:test",
+            "test:theme toggle accessible name"
+          ]
+        }
+      ],
+      "items": [
+        {
+          "id": "A",
+          "title": "Export THEME_ATTRIBUTE from src/lib/theme.ts",
+          "size": "small",
+          "model": "haiku",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC1",
+            "AC2"
+          ],
+          "files": [
+            "src/lib/theme.ts"
+          ],
+          "role": "independent"
+        },
+        {
+          "id": "B",
+          "title": "Accessible name of ThemeToggle in src/components/ui/ThemeToggle.tsx",
+          "size": "medium",
+          "model": "sonnet",
+          "modelSource": "modelBySize",
+          "dependsOn": [],
+          "acceptance": [
+            "AC3"
+          ],
+          "files": [
+            "src/components/ui/ThemeToggle.tsx"
+          ],
+          "role": "planted"
+        }
+      ],
+      "promptScope": {
+        "A": {
+          "otherItemOptions": 0
+        },
+        "B": {
+          "otherItemOptions": 0
+        }
+      },
+      "writeSet": {
+        "needles": [
+          {
+            "name": "data-theme",
+            "kind": "identifier"
+          },
+          {
+            "name": "ThemeToggle",
+            "kind": "identifier"
+          },
+          {
+            "name": "aria-pressed",
+            "kind": "identifier"
+          },
+          {
+            "name": "aria-describedby",
+            "kind": "identifier"
+          },
+          {
+            "name": "Dark theme",
+            "kind": "literal"
+          },
+          {
+            "name": "Switches between the light and dark theme",
+            "kind": "literal"
+          }
+        ],
+        "findings": [
+          {
+            "path": "404.html",
+            "line": 2,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "<html lang=\"en\" data-theme=\"light\">",
+            "protected": false,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "404.html",
+            "line": 27,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "document.documentElement.setAttribute('data-theme', t)",
+            "protected": false,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "index.html",
+            "line": 36,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "document.documentElement.setAttribute('data-theme', t)",
+            "protected": false,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/lib/tokens.mjs",
+            "line": 44,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "// themes: with data-theme dark in the selector it is the band on the dark page, otherwise the",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/lib/tokens.mjs",
+            "line": 45,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "// band on the light page. Of the rest, a block naming data-theme dark is the dark theme and",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/lib/tokens.mjs",
+            "line": 69,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "const isDark = /data-theme\\s*=\\s*['\"]?dark['\"]?/.test(selector)",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/qa-extra-shots.mjs",
+            "line": 65,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "const applied = await page.evaluate(\"document.documentElement.getAttribute('data-theme')\")",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "scripts/qa-extra-shots.mjs",
+            "line": 66,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "console.log(`${prefix} ${theme}: data-theme=${applied}`)",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "src/anim/declarative/GlyphFlip.tsx",
+            "line": 132,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* Mounted once. Watches html[data-theme] and turns the newly visible glyphs up from edge-on, so a",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/anim/declarative/GlyphFlip.tsx",
+            "line": 176,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "attributeFilter: ['data-theme'],",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/hooks/useTheme.ts",
+            "line": 7,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* The one theme store, read from html[data-theme]. Every ThemeToggle and anything else that",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/Wordmark.tsx",
+            "line": 10,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* PHAN by day, PHVNTM by night (D-01). Both strings are always in the DOM; CSS on html[data-theme]",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Hero/HeroGlyph.tsx",
+            "line": 7,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* html[data-theme] shows one, and the glyph flip controller (plan 04-12) turns it on a theme change.",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/index.css",
+            "line": 9,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 24,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* swap through the same html[data-theme] rule as the wordmark.",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 47,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='dark'] .hero-glyph-day,",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 48,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='light'] .hero-glyph-night {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 231,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='light'] .theme-groove {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 235,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='dark'] .theme-groove {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 250,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='dark'] .theme-groove {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 257,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "* html[data-theme] shows one (the repo has no dark variant utilities). Night widens the",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 272,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='dark'] .wordmark-day,",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/interactions.css",
+            "line": 273,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='light'] .wordmark-night {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/tokens.css",
+            "line": 2,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='light'] {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/styles/tokens.css",
+            "line": 28,
+            "needle": "data-theme",
+            "kind": "identifier",
+            "text": "[data-theme='dark'] {",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/hooks/useTheme.ts",
+            "line": 7,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "* The one theme store, read from html[data-theme]. Every ThemeToggle and anything else that",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/PillNav.tsx",
+            "line": 5,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "import { ThemeToggle } from '@/components/ui/ThemeToggle'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/PillNav.tsx",
+            "line": 123,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "<ThemeToggle />",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/SiteHeader.tsx",
+            "line": 3,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "import { ThemeToggle } from '@/components/ui/ThemeToggle'",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/SiteHeader.tsx",
+            "line": 44,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "<ThemeToggle />",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/layout/SiteHeader.tsx",
+            "line": 75,
+            "needle": "ThemeToggle",
+            "kind": "identifier",
+            "text": "<ThemeToggle />",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 11,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 18,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "const button = visible<HTMLButtonElement>('button[aria-pressed]')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 49,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "'aria-pressed',",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 61,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "const button = visible<HTMLButtonElement>('button[aria-pressed]')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "line": 177,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "line": 185,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 21,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 25,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 32,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "'aria-pressed',",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 49,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', scheme === 'dark' ? 'true' : 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 65,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "'aria-pressed',",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 111,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 115,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 150,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 154,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 163,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "line": 126,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "line": 128,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "line": 133,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "line": 137,
+            "needle": "aria-pressed",
+            "kind": "identifier",
+            "text": "await expect(toggle(page)).toHaveAttribute('aria-pressed', 'false')",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "src/sections/Contact/Contact.tsx",
+            "line": 72,
+            "needle": "aria-describedby",
+            "kind": "identifier",
+            "text": "aria-describedby={describedBy}",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "src/sections/Projects/Sleeve.tsx",
+            "line": 96,
+            "needle": "aria-describedby",
+            "kind": "identifier",
+            "text": "aria-describedby={descriptionId}",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/rail.spec.ts",
+            "line": 200,
+            "needle": "aria-describedby",
+            "kind": "identifier",
+            "text": "described: await sleeve(page, 3).evaluate((el) => el.getAttribute('aria-describedby')),",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/rail.spec.ts",
+            "line": 210,
+            "needle": "aria-describedby",
+            "kind": "identifier",
+            "text": "described: await sleeve(page, 3).evaluate((el) => el.getAttribute('aria-describedby')),",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/unit/sections.test.tsx",
+            "line": 128,
+            "needle": "aria-describedby",
+            "kind": "identifier",
+            "text": "expect(atlas.getAttribute('aria-describedby')).toBeTruthy()",
+            "protected": false,
+            "insideConventions": true,
+            "problem": false
+          },
+          {
+            "path": "tests/e2e/glyph-flip.spec.ts",
+            "line": 13,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/mobile/pill.spec.ts",
+            "line": 89,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expect(panel.getByRole('button', { name: 'Dark theme' })).toBeVisible()",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/mobile/pill.spec.ts",
+            "line": 145,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await page.locator('#pill-panel').getByRole('button', { name: 'Dark theme' }).click()",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 10,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 48,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 218,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/motion.spec.ts",
+            "line": 254,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await page.getByRole('button', { name: 'Dark theme' }).click()",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/nav.spec.ts",
+            "line": 76,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.locator('header').getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "line": 136,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const themeToggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/press.spec.ts",
+            "line": 194,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expectSquishWhileHeld(page, pill(page).getByRole('button', { name: 'Dark theme' }))",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 19,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 31,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 47,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 64,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 108,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/theme.spec.ts",
+            "line": 149,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          },
+          {
+            "path": "tests/e2e/wordmark.spec.ts",
+            "line": 8,
+            "needle": "Dark theme",
+            "kind": "literal",
+            "text": "const toggle = (page: Page) => page.getByRole('button', { name: 'Dark theme' })",
+            "protected": true,
+            "insideConventions": false,
+            "problem": true
+          }
+        ],
+        "lines": [
+          "404.html:2 holds data-theme (writable: no, protected: no)",
+          "404.html:27 holds data-theme (writable: no, protected: no)",
+          "index.html:36 holds data-theme (writable: no, protected: no)",
+          "scripts/lib/tokens.mjs:44 holds data-theme (writable: no, protected: yes)",
+          "scripts/lib/tokens.mjs:45 holds data-theme (writable: no, protected: yes)",
+          "scripts/lib/tokens.mjs:69 holds data-theme (writable: no, protected: yes)",
+          "scripts/qa-extra-shots.mjs:65 holds data-theme (writable: no, protected: yes)",
+          "scripts/qa-extra-shots.mjs:66 holds data-theme (writable: no, protected: yes)",
+          "src/anim/declarative/GlyphFlip.tsx:132 holds data-theme (writable: no, protected: no)",
+          "src/anim/declarative/GlyphFlip.tsx:176 holds data-theme (writable: no, protected: no)",
+          "src/hooks/useTheme.ts:7 holds data-theme (writable: no, protected: no)",
+          "src/layout/Wordmark.tsx:10 holds data-theme (writable: no, protected: no)",
+          "src/sections/Hero/HeroGlyph.tsx:7 holds data-theme (writable: no, protected: no)",
+          "src/styles/index.css:9 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:24 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:47 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:48 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:231 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:235 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:250 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:257 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:272 holds data-theme (writable: no, protected: no)",
+          "src/styles/interactions.css:273 holds data-theme (writable: no, protected: no)",
+          "src/styles/tokens.css:2 holds data-theme (writable: no, protected: no)",
+          "src/styles/tokens.css:28 holds data-theme (writable: no, protected: no)",
+          "src/hooks/useTheme.ts:7 holds ThemeToggle (writable: no, protected: no)",
+          "src/layout/PillNav.tsx:5 holds ThemeToggle (writable: no, protected: no)",
+          "src/layout/PillNav.tsx:123 holds ThemeToggle (writable: no, protected: no)",
+          "src/layout/SiteHeader.tsx:3 holds ThemeToggle (writable: no, protected: no)",
+          "src/layout/SiteHeader.tsx:44 holds ThemeToggle (writable: no, protected: no)",
+          "src/layout/SiteHeader.tsx:75 holds ThemeToggle (writable: no, protected: no)",
+          "tests/e2e/motion.spec.ts:11 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:18 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:61 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/press.spec.ts:177 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/press.spec.ts:185 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:21 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:25 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:32 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:65 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:111 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:115 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:150 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:154 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:163 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/wordmark.spec.ts:126 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/wordmark.spec.ts:128 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/wordmark.spec.ts:133 holds aria-pressed (writable: no, protected: yes)",
+          "tests/e2e/wordmark.spec.ts:137 holds aria-pressed (writable: no, protected: yes)",
+          "src/sections/Contact/Contact.tsx:72 holds aria-describedby (writable: no, protected: no)",
+          "src/sections/Projects/Sleeve.tsx:96 holds aria-describedby (writable: no, protected: no)",
+          "tests/e2e/rail.spec.ts:200 holds aria-describedby (writable: no, protected: yes)",
+          "tests/e2e/rail.spec.ts:210 holds aria-describedby (writable: no, protected: yes)",
+          "tests/unit/sections.test.tsx:128 holds aria-describedby (writable: no, protected: no)",
+          "tests/e2e/glyph-flip.spec.ts:13 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/mobile/pill.spec.ts:89 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/mobile/pill.spec.ts:145 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:10 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:48 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:218 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/motion.spec.ts:254 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/nav.spec.ts:76 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/press.spec.ts:136 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/press.spec.ts:194 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:19 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:31 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:47 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:64 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:108 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/theme.spec.ts:149 holds \"Dark theme\" (writable: no, protected: yes)",
+          "tests/e2e/wordmark.spec.ts:8 holds \"Dark theme\" (writable: no, protected: yes)"
+        ],
+        "truncated": {
+          "data-theme": 56
+        }
+      }
+    }
+  ],
+  "host": {
+    "executed": false,
+    "admittedVersions": [
+      "2.1.312",
+      "2.1.316",
+      "2.1.317",
+      "2.1.318",
+      "2.1.319"
+    ],
+    "claudeOnPath": [
+      "~/.local/bin/claude"
+    ],
+    "versionsDirectory": "~/.local/share/claude/versions",
+    "installedVersionNames": [
+      "2.1.317",
+      "2.1.318",
+      "2.1.319",
+      "2.1.321"
+    ],
+    "installedAndAdmittedByName": [
+      "2.1.317",
+      "2.1.318",
+      "2.1.319"
+    ],
+    "installedButNotAdmittedByName": [
+      "2.1.321"
+    ]
+  },
+  "portfolio": {
+    "before": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "after": {
+      "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+      "composite": "sha256:36b38e4807e83638677632b41d5e2593cb07a47cdc2332fb66ca042e1a8a7b67",
+      "refCount": 6,
+      "statusEntries": 1
+    },
+    "unchanged": true
+  },
+  "problems": [
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: tests/e2e/copy-email.spec.ts:5 holds COPY_FALLBACK's value \"Couldn’t copy the address. Opening your mail app instead.\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: 404.html:2 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: 404.html:27 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: index.html:36 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: scripts/lib/tokens.mjs:44 holds data-theme (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: scripts/lib/tokens.mjs:45 holds data-theme (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: scripts/lib/tokens.mjs:69 holds data-theme (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: scripts/qa-extra-shots.mjs:65 holds data-theme (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: scripts/qa-extra-shots.mjs:66 holds data-theme (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:11 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:18 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:61 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/press.spec.ts:177 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/press.spec.ts:185 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:21 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:25 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:32 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:49 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:65 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:111 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:115 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:150 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:154 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:163 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/wordmark.spec.ts:126 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/wordmark.spec.ts:128 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/wordmark.spec.ts:133 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/wordmark.spec.ts:137 holds aria-pressed (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/rail.spec.ts:200 holds aria-describedby (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/rail.spec.ts:210 holds aria-describedby (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/glyph-flip.spec.ts:13 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/mobile/pill.spec.ts:89 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/mobile/pill.spec.ts:145 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:10 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:48 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:218 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/motion.spec.ts:254 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/nav.spec.ts:76 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/press.spec.ts:136 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/press.spec.ts:194 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:19 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:31 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:47 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:64 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:108 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/theme.spec.ts:149 holds \"Dark theme\" (writable: no, protected: yes)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/e2e/wordmark.spec.ts:8 holds \"Dark theme\" (writable: no, protected: yes)"
+  ],
+  "warnings": [
+    "three routine caps of 10.00 USD (30.00) do not fit the headroom 13.8077 USD: the owner chooses a lower cap or a decision about the ceiling",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Contact/Contact.tsx:7 holds useCopyEmail (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Contact/Contact.tsx:42 holds useCopyEmail (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Hero/Hero.tsx:2 holds useCopyEmail (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run1-copy-fallback.md: write-set check: src/sections/Hero/Hero.tsx:12 holds useCopyEmail (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run2-graduation-label.md: write-set check: src/sections/Education/Education.tsx:2 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run2-graduation-label.md: write-set check: src/sections/Education/Education.tsx:26 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run2-graduation-label.md: write-set check: tests/unit/date-copy.test.ts:7 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run2-graduation-label.md: write-set check: tests/unit/date-copy.test.ts:16 holds monthYear (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/anim/declarative/GlyphFlip.tsx:132 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/anim/declarative/GlyphFlip.tsx:176 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/hooks/useTheme.ts:7 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/Wordmark.tsx:10 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/sections/Hero/HeroGlyph.tsx:7 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/index.css:9 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:24 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:47 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:48 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:231 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:235 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:250 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:257 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:272 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/interactions.css:273 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/tokens.css:2 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/styles/tokens.css:28 holds data-theme (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/hooks/useTheme.ts:7 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/PillNav.tsx:5 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/PillNav.tsx:123 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/SiteHeader.tsx:3 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/SiteHeader.tsx:44 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/layout/SiteHeader.tsx:75 holds ThemeToggle (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/sections/Contact/Contact.tsx:72 holds aria-describedby (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: src/sections/Projects/Sleeve.tsx:96 holds aria-describedby (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: write-set check: tests/unit/sections.test.tsx:128 holds aria-describedby (writable: no, protected: no)",
+    "test/benchmark/phase3/p3-run3-theme-toggle.md: tests/unit/theme-toggle.test.tsx is created by the run (absent at the pin)"
+  ],
+  "wallSeconds": 1
+}

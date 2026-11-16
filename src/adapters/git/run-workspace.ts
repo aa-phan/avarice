@@ -22,6 +22,7 @@ import type {
   FetchIntoSourceInput,
   HandoffResult,
   HeadTrailers,
+  ParkRecord,
   PathChange,
   PrepareRunInput,
   PrepareValidationInput,
@@ -45,6 +46,17 @@ const TREE_TIMEOUT_MS = 120_000;
 const FETCH_TIMEOUT_MS = 120_000;
 const MAX_IGNORED = 10_000;
 const RESTORE_CHUNK = 200;
+// A run ID or work item ID in a park ref: a plain name, so the ref cannot climb out of `refs/avarice/park/`, carry a space, a dot or a leading dash.
+const PARK_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
+const PARK_REF = /^refs\/avarice\/park\/[A-Za-z0-9_][A-Za-z0-9_-]{0,63}\/[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
+const ZERO_OID = '0'.repeat(40);
+const GITLINK_MODE = '160000';
+const MAX_NAMED_PATHS = 20;
+
+interface TreeEntry {
+  mode: string;
+  sha: string;
+}
 
 interface RunTarget {
   runDir: string;
@@ -139,6 +151,56 @@ function clearDirectoryInTheWay(root: string, rel: string): Result<void> {
   }
   return ok(undefined);
 }
+
+// The directories a deleted file leaves empty, from its own directory up to but not including the clone root. A directory with anything
+// in it stays; a link is never followed (rmdir fails on it).
+function removeEmptyParents(root: string, rel: string): void {
+  const parts = rel.split('/');
+  for (let depth = parts.length - 1; depth > 0; depth -= 1) {
+    try {
+      rmdirSync(join(root, ...parts.slice(0, depth)));
+    } catch {
+      break;
+    }
+  }
+}
+
+// A path inside a park: normalized, relative, inside the clone, never git's own directory. A leading dash is allowed because every path
+// reaches git after `--`.
+function checkParkPath(path: unknown): Result<string> {
+  if (typeof path !== 'string' || path.length === 0) return invalid('paths', 'every path must be a non-empty string');
+  const checked = checkRelative(path);
+  if (!checked.ok) return invalid('paths', `${JSON.stringify(path)} is not a clone-relative path`);
+  if (checked.value.some((segment) => segment.toLowerCase() === '.git')) return invalid('paths', `${JSON.stringify(path)} names git's own directory`);
+  const normal = checked.value.join('/');
+  if (normal !== path) return invalid('paths', `${JSON.stringify(path)} is not in normal form`);
+  return ok(normal);
+}
+
+// Before a parked path is written or deleted, every directory above it that exists must be a real directory: a link there (planted by the
+// work that ran meanwhile) would lead the write out of the clone.
+function checkNoLinkedParents(root: string, rel: string): Result<void> {
+  const parts = rel.split('/');
+  let current = root;
+  for (const part of parts.slice(0, -1)) {
+    current = join(current, part);
+    let stat;
+    try {
+      stat = lstatSync(current);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') return ok(undefined);
+      return err({ kind: 'internal', cause: `unpark ${rel}: ${code ?? String(error)}` });
+    }
+    if (stat.isSymbolicLink()) return err({ kind: 'denied', rule: 'unpark-stays-inside-the-clone', enforcer: 'avarice' });
+    if (!stat.isDirectory()) return err({ kind: 'conflict', expected: `a directory above ${rel}`, actual: 'a file where a directory belongs' });
+  }
+  return ok(undefined);
+}
+
+const sameEntry = (a: TreeEntry | undefined, b: TreeEntry | undefined): boolean => (a === undefined || b === undefined ? a === b : a.mode === b.mode && a.sha === b.sha);
+
+const namedPaths = (paths: readonly string[]): string => (paths.length > MAX_NAMED_PATHS ? `${paths.slice(0, MAX_NAMED_PATHS).join(', ')} and ${paths.length - MAX_NAMED_PATHS} more` : paths.join(', '));
 
 export class CloneRunWorkspace implements RunWorkspace {
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo> {
@@ -373,17 +435,198 @@ export class CloneRunWorkspace implements RunWorkspace {
       if (!gone.ok) return gone;
       if (gone.value) removed.push(rel);
       // The directories the file leaves empty go too; a directory with anything in it stays.
-      const parts = rel.split('/');
-      for (let depth = parts.length - 1; depth > 0; depth -= 1) {
-        const dir = join(root, ...parts.slice(0, depth));
-        try {
-          rmdirSync(dir);
-        } catch {
-          break;
-        }
-      }
+      removeEmptyParents(root, rel);
     }
     return ok(removed);
+  }
+
+  // AUT-3 (research Pitfall 1): a paused item's delta leaves the tree and stays reachable by a ref in the clone. The delta is a commit object
+  // (tree of the working content, parent the base HEAD) written with commit-tree, so no hook and no index is involved; the ref is created
+  // before the tree is put back, so an interruption between the two loses nothing and a second park of the same content finds the ref.
+  park(path: string, input: { base: WorkspaceSnapshot; runId: string; itemId: string }): Result<ParkRecord> {
+    const { base, runId, itemId } = input;
+    if (typeof runId !== 'string' || !PARK_NAME.test(runId)) return invalid('runId', 'letters, digits, underscore and hyphen only, not starting with a hyphen');
+    if (typeof itemId !== 'string' || !PARK_NAME.test(itemId)) return invalid('itemId', 'letters, digits, underscore and hyphen only, not starting with a hyphen');
+    if (!COMMIT_SHA.test(base.head) || !COMMIT_SHA.test(base.tree)) return invalid('base', 'a snapshot with a full head and tree id is required');
+    const ref = `refs/avarice/park/${runId}/${itemId}`;
+
+    const head = this.head(path);
+    if (!head.ok) return head;
+    if (head.value !== base.head) return err({ kind: 'conflict', expected: `head-moved: HEAD at ${base.head}`, actual: `HEAD at ${head.value}` });
+    const tree = this.treeOfWorkingContent(path);
+    if (!tree.ok) return tree;
+    const changes = this.diffTrees(path, base.tree, tree.value);
+    if (!changes.ok) return changes;
+    const paths: string[] = [];
+    for (const change of changes.value) {
+      const checked = checkParkPath(change.path);
+      if (!checked.ok) return checked;
+      paths.push(checked.value);
+    }
+    const parkedEntries = this.parkEntries(path, tree.value, paths);
+    if (!parkedEntries.ok) return parkedEntries;
+    for (const [rel, entry] of parkedEntries.value) {
+      if (entry.mode === GITLINK_MODE) return invalid('paths', `${JSON.stringify(rel)} is a nested repository, which a park does not keep`);
+    }
+
+    const existing = runGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: path, acceptExit: [1] });
+    if (!existing.ok) return failure(existing.error);
+    let commit = existing.value.stdout.trim();
+    if (commit.length > 0) {
+      // The same item parked the same content before and was interrupted before the tree was put back: keep that commit.
+      const shape = runGit(['log', '-1', '--format=%T %P', commit], { cwd: path });
+      if (!shape.ok) return failure(shape.error);
+      if (shape.value.stdout.trim() !== `${tree.value} ${base.head}`) {
+        return err({ kind: 'conflict', expected: `${ref} absent or holding this delta`, actual: `${ref} holds a different delta at ${commit}` });
+      }
+    } else {
+      const created = runGit(['commit-tree', tree.value, '-p', base.head, '-m', `avarice park ${runId} ${itemId}`], { cwd: path, identity: AVARICE_COMMIT_IDENTITY, timeoutMs: TREE_TIMEOUT_MS });
+      if (!created.ok) return failure(created.error);
+      commit = created.value.stdout.trim();
+      if (!COMMIT_SHA.test(commit)) return err({ kind: 'internal', cause: 'git commit-tree did not print a commit id' });
+      const pointed = runGit(['update-ref', ref, commit, ZERO_OID], { cwd: path });
+      if (!pointed.ok) return failure(pointed.error);
+    }
+
+    const restored = this.discard(path, base);
+    if (!restored.ok) return restored;
+    let root: string;
+    try {
+      root = realpathSync(path);
+    } catch {
+      return err({ kind: 'not_found', ref: path });
+    }
+    for (const rel of restored.value.removed) removeEmptyParents(root, rel);
+    return ok({ ref, commit, tree: tree.value, baseHead: base.head, paths });
+  }
+
+  // AUT-3: the parked delta goes back on top of the current HEAD, or nothing changes. A parked path is applied only when it is not what the
+  // park had already put there (then it is skipped, which makes a second call a no-op), did not change between the base HEAD and HEAD, and
+  // holds the HEAD content now. Files are written one batch at a time from the park tree with `restore --source`, which keeps the file mode
+  // and writes a link as a link; a deletion is an unlink of the leaf, never through a link, never of a directory.
+  unpark(path: string, record: ParkRecord): Result<{ applied: string[] }> {
+    const checked = this.parkCheckRecord(record);
+    if (!checked.ok) return checked;
+    const paths = checked.value;
+
+    const target = runGit(['rev-parse', '--verify', '--quiet', `${record.ref}^{commit}`], { cwd: path, acceptExit: [1] });
+    if (!target.ok) return failure(target.error);
+    const commit = target.value.stdout.trim();
+    if (commit.length === 0) return err({ kind: 'not_found', ref: record.ref });
+    const shape = runGit(['log', '-1', '--format=%T %P', commit], { cwd: path });
+    if (!shape.ok) return failure(shape.error);
+    if (commit !== record.commit || shape.value.stdout.trim() !== `${record.tree} ${record.baseHead}`) {
+      return err({ kind: 'conflict', expected: `${record.ref} at ${record.commit} with tree ${record.tree}`, actual: `${record.ref} at ${commit}` });
+    }
+    if (paths.length === 0) return ok({ applied: [] });
+
+    const head = this.head(path);
+    if (!head.ok) return head;
+    const working = this.treeOfWorkingContent(path);
+    if (!working.ok) return working;
+    const parked = this.parkEntries(path, record.tree, paths);
+    if (!parked.ok) return parked;
+    const atBase = this.parkEntries(path, record.baseHead, paths);
+    if (!atBase.ok) return atBase;
+    const atHead = this.parkEntries(path, head.value, paths);
+    if (!atHead.ok) return atHead;
+    const now = this.parkEntries(path, working.value, paths);
+    if (!now.ok) return now;
+
+    const movedAtHead: string[] = [];
+    const modifiedNow: string[] = [];
+    const pending: string[] = [];
+    for (const rel of paths) {
+      if (sameEntry(parked.value.get(rel), now.value.get(rel))) continue; // already what the park holds
+      pending.push(rel);
+      if (!sameEntry(atBase.value.get(rel), atHead.value.get(rel))) movedAtHead.push(rel);
+      else if (!sameEntry(atHead.value.get(rel), now.value.get(rel))) modifiedNow.push(rel);
+    }
+    if (movedAtHead.length > 0 || modifiedNow.length > 0) {
+      const parts = [
+        ...(movedAtHead.length > 0 ? [`changed at HEAD since the park: ${namedPaths(movedAtHead)}`] : []),
+        ...(modifiedNow.length > 0 ? [`modified in the working tree: ${namedPaths(modifiedNow)}`] : []),
+      ];
+      return err({ kind: 'conflict', expected: 'every parked path unchanged since the park and unmodified now', actual: parts.join('; ') });
+    }
+
+    let root: string;
+    try {
+      root = realpathSync(path);
+    } catch {
+      return err({ kind: 'not_found', ref: path });
+    }
+    for (const rel of pending) {
+      const linked = checkNoLinkedParents(root, rel);
+      if (!linked.ok) return linked;
+    }
+
+    const toWrite = pending.filter((rel) => parked.value.has(rel));
+    for (const rel of pending.filter((p) => !parked.value.has(p))) {
+      const gone = removeAddedPath(root, rel);
+      if (!gone.ok) return gone;
+    }
+    for (const rel of toWrite) {
+      const cleared = clearDirectoryInTheWay(root, rel);
+      if (!cleared.ok) return cleared;
+    }
+    for (let start = 0; start < toWrite.length; start += RESTORE_CHUNK) {
+      const batch = toWrite.slice(start, start + RESTORE_CHUNK);
+      const done = runGit(['restore', `--source=${record.tree}`, '--worktree', '--', ...batch], { cwd: path, neutralizeFilters: true, literalPathspecs: true, timeoutMs: TREE_TIMEOUT_MS });
+      if (!done.ok) return failure(done.error);
+    }
+
+    const after = this.treeOfWorkingContent(path);
+    if (!after.ok) return after;
+    const landed = this.parkEntries(path, after.value, paths);
+    if (!landed.ok) return landed;
+    const missed = paths.filter((rel) => !sameEntry(parked.value.get(rel), landed.value.get(rel)));
+    if (missed.length > 0) return err({ kind: 'internal', cause: `unpark did not reach the parked content; still different: ${namedPaths(missed)}` });
+    return ok({ applied: paths });
+  }
+
+  // AUT-3: ends one park. Only the park ref goes; the objects stay until git collects them. A ref that is already gone is success.
+  dropPark(path: string, ref: string): Result<void> {
+    if (typeof ref !== 'string' || !PARK_REF.test(ref)) return invalid('ref', 'refs/avarice/park/<runId>/<itemId> is required');
+    const present = runGit(['rev-parse', '--verify', '--quiet', ref], { cwd: path, acceptExit: [1] });
+    if (!present.ok) return failure(present.error);
+    if (present.value.stdout.trim().length === 0) return ok(undefined);
+    const dropped = runGit(['update-ref', '-d', ref], { cwd: path });
+    return dropped.ok ? ok(undefined) : failure(dropped.error);
+  }
+
+  // The record is data the supervisor kept between calls: its ref must be a park ref, its ids full SHAs and its paths normal and unique.
+  private parkCheckRecord(record: ParkRecord): Result<string[]> {
+    if (typeof record !== 'object' || record === null) return invalid('record', 'a park record is required');
+    if (typeof record.ref !== 'string' || !PARK_REF.test(record.ref)) return invalid('record.ref', 'refs/avarice/park/<runId>/<itemId> is required');
+    for (const field of ['commit', 'tree', 'baseHead'] as const) {
+      if (typeof record[field] !== 'string' || !COMMIT_SHA.test(record[field])) return invalid(`record.${field}`, 'a full lowercase object id is required');
+    }
+    if (!Array.isArray(record.paths)) return invalid('record.paths', 'a list of paths is required');
+    const paths: string[] = [];
+    for (const candidate of record.paths) {
+      const checked = checkParkPath(candidate);
+      if (!checked.ok) return checked;
+      paths.push(checked.value);
+    }
+    return ok(sortedUnique(paths));
+  }
+
+  // The tree entries (mode and object id) of exactly the given paths in a tree or commit; a path the tree does not have is absent from the map.
+  private parkEntries(path: string, treeish: string, paths: readonly string[]): Result<Map<string, TreeEntry>> {
+    const found = new Map<string, TreeEntry>();
+    for (let start = 0; start < paths.length; start += RESTORE_CHUNK) {
+      const batch = paths.slice(start, start + RESTORE_CHUNK);
+      const listed = runGit(['ls-tree', '-z', treeish, '--', ...batch], { cwd: path, literalPathspecs: true, timeoutMs: TREE_TIMEOUT_MS });
+      if (!listed.ok) return failure(listed.error);
+      for (const line of nulSplit(listed.value.stdout)) {
+        const tab = line.indexOf('\t');
+        const match = tab === -1 ? null : /^(\d{6}) \w+ ([0-9a-f]{40})$/.exec(line.slice(0, tab));
+        if (match === null) return err({ kind: 'internal', cause: 'git ls-tree printed an entry that could not be read' });
+        found.set(line.slice(tab + 1), { mode: match[1] as string, sha: match[2] as string });
+      }
+    }
+    return ok(found);
   }
 
   diffCommits(path: string, from: string, to: string): Result<PathChange[]> {

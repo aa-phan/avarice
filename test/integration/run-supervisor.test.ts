@@ -51,8 +51,9 @@ function fixture(): Fixture {
   return { roots, repo, pin, brief };
 }
 
+// The supervisor writes while these reads poll; wait out its write lock instead of failing on SQLITE_BUSY.
 function db(roots: CliRoots): DatabaseSync {
-  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  return new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true, timeout: 5000 });
 }
 
 function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
@@ -274,7 +275,7 @@ describe('supervise: the stage loop under the run lease', () => {
     assert.equal(run.lease_fence, 1);
     assert.equal(run.workspace_path, join(f.roots.AVARICE_WORK_ROOT, runId, 'clone'));
     assert.equal(run.branch, `avarice/${runId}`);
-    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none']);
+    assert.deepEqual(checkpointsOf(f.roots, runId), ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'park', 'none']);
     const g0 = only(rows<{ passed: number }>(f.roots, "SELECT passed FROM gate_results WHERE run_id = ? AND gate = 'G0'", runId), 'one G0 row');
     assert.equal(g0.passed, 1);
   });
@@ -445,7 +446,7 @@ describe('one supervisor per run', () => {
     assert.equal(run.state, 'blocked_on_decision');
     assert.deepEqual(
       checkpointsOf(f.roots, runId),
-      ['prepare-workspace', 'prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'none'],
+      ['prepare-workspace', 'prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'context-pack', 'context-pack', 'launch:run', 'classify', 'park', 'none'],
       'the killed side effect was repeated once, nothing else',
     );
     assert.ok(existsSync(join(f.roots.AVARICE_WORK_ROOT, runId, 'clone', '.git')));

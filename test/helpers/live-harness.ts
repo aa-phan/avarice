@@ -19,6 +19,7 @@ import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
+import { configPathFor } from '../../src/adapters/fs/profile-paths.ts';
 import { fingerprintGsdPreamble } from '../../src/adapters/gsd/preamble.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
@@ -30,8 +31,8 @@ import { assertLaunchArgsSafe, buildLaunchArgs } from '../../src/adapters/host-c
 import { StreamJsonParser } from '../../src/adapters/host-claude/stream-json.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
-import { RUN_GSD_SETTINGS, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
-import type { RunPromptContract } from '../../src/app/run-gsd-config.ts';
+import { RUN_GSD_SETTINGS, runResumePrompt, runUnitPrompt } from '../../src/app/run-gsd-config.ts';
+import type { RunPromptContract, RunPromptItem } from '../../src/app/run-gsd-config.ts';
 import { runSupervisor } from '../../src/app/run-service.ts';
 import { startRun } from '../../src/app/run-start.ts';
 import { createDeps } from '../../src/cli/composition.ts';
@@ -181,79 +182,127 @@ export function recordedSpend(): number {
     .reduce((sum, line) => sum + (JSON.parse(line) as SpendEntry).costUsd, 0);
 }
 
-// Every host run is also added to the one Phase 2 ledger (plan 02-01, D-15), under the plan named in AVARICE_PHASE2_PLAN.
+// Every host run is also added to the current phase's ledger (Phase 3, D-05), under the plan named in AVARICE_PHASE3_PLAN.
 export function recordSpend(entry: Omit<SpendEntry, 'at'>, claudeVersionForLedger = 'unknown'): void {
   appendFileSync(spendLedgerPath(), JSON.stringify({ ...entry, at: new Date().toISOString() }) + '\n');
-  recordPhase2Spend({ plan: process.env['AVARICE_PHASE2_PLAN'] ?? 'unknown', case: entry.case, costUsd: entry.costUsd, claudeVersion: claudeVersionForLedger });
+  currentSpendLedger.record({ plan: currentSpendLedger.plan(), case: entry.case, costUsd: entry.costUsd, claudeVersion: claudeVersionForLedger });
 }
 
-// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total and under the Phase 2 ceiling.
+// Whether a run that may cost up to `capUsdForRun` still fits under the authorized total and under the current phase's ceiling.
 export function fitsCap(capUsdForRun: number): boolean {
-  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9 && fitsPhase2Ceiling(capUsdForRun);
+  return recordedSpend() + capUsdForRun <= capUsd() + 1e-9 && currentSpendLedger.fits(capUsdForRun);
 }
 
-// The skip text for a case that does not fit, or undefined when it fits. The Phase 2 ceiling is judged first.
+// The skip text for a case that does not fit, or undefined when it fits. The current phase's ceiling is judged first.
 export function spendRefusal(capUsdForRun: number): string | undefined {
-  if (!fitsPhase2Ceiling(capUsdForRun)) {
-    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
-  }
+  if (!currentSpendLedger.fits(capUsdForRun)) return ceilingRefusal('case', capUsdForRun);
   if (!fitsCap(capUsdForRun)) return `not run: recorded spend ${recordedSpend().toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass the authorized ${capUsd().toFixed(2)}`;
   return undefined;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Phase 2 spend ledger (D-15): the total live-model spend of Phase 2 may not pass 25 USD
+// Per-phase live-spend ledgers: Phase 2 (D-15) and Phase 3 (D-05) may each spend at most 25 USD of live-model budget
 // ---------------------------------------------------------------------------------------------------------------
 
 export const PHASE2_CEILING_USD = 25;
+export const PHASE3_CEILING_USD = 25;
 
-export const phase2LedgerPath = (): string => process.env['AVARICE_PHASE2_LEDGER'] ?? join(REPO_ROOT, 'test', 'containment', 'live-spend-phase2.jsonl');
+// The phase whose ledger every new live spend is checked against and recorded in. Phase 2 stays readable for history.
+export const CURRENT_SPEND_PHASE = 3;
 
-// AVARICE_PHASE2_CEILING_USD may lower the ceiling and never raise it; anything that is not a positive number is ignored.
-export function phase2Ceiling(): number {
-  const raw = Number(process.env['AVARICE_PHASE2_CEILING_USD']);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, PHASE2_CEILING_USD) : PHASE2_CEILING_USD;
-}
-
-export interface Phase2SpendEntry {
+export interface PhaseSpendEntry {
   plan: string;
   case: string;
   costUsd: number;
   claudeVersion: string;
 }
 
-// The recorded Phase 2 spend: the sum of costUsd over the ledger. No ledger is 0; a line that is not a JSON object with a
-// finite non-negative costUsd throws, so a corrupt ledger never reads as 0 and never lets a case run.
-export function phase2Spent(): number {
-  const path = phase2LedgerPath();
-  if (!existsSync(path)) return 0;
-  let total = 0;
-  readFileSync(path, 'utf8')
-    .split('\n')
-    .forEach((text, index) => {
-      if (text === '') return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} is not valid JSON`);
-      }
-      const cost = isObject(parsed) ? parsed['costUsd'] : undefined;
-      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) throw new Error(`Phase 2 spend ledger ${path} line ${index + 1} has no finite non-negative costUsd`);
-      total += cost;
-    });
-  return total;
+export type Phase2SpendEntry = PhaseSpendEntry;
+export type Phase3SpendEntry = PhaseSpendEntry;
+
+export interface PhaseSpendLedger {
+  path(): string;
+  ceiling(): number;
+  spent(): number;
+  spentByPlan(plan: string): number;
+  fits(capUsdForRun: number): boolean;
+  record(entry: PhaseSpendEntry): void;
+  // The plan new spend is recorded under: AVARICE_PHASE<n>_PLAN, or `fallback`.
+  plan(fallback?: string): string;
 }
 
-// Whether a run that may cost up to `capUsdForRun` still fits under the Phase 2 ceiling.
-export function fitsPhase2Ceiling(capUsdForRun: number): boolean {
-  return phase2Spent() + capUsdForRun <= phase2Ceiling() + 1e-9;
+const PHASE_CEILING_USD: Record<2 | 3, number> = { 2: PHASE2_CEILING_USD, 3: PHASE3_CEILING_USD };
+
+// One ledger per phase: its own default file, AVARICE_PHASE<n>_LEDGER, AVARICE_PHASE<n>_CEILING_USD (lowers the ceiling and never raises it;
+// anything that is not a positive number is ignored) and AVARICE_PHASE<n>_PLAN. The environment is read on every call.
+export function phaseSpendLedger(phase: 2 | 3): PhaseSpendLedger {
+  const prefix = `AVARICE_PHASE${phase}`;
+  const path = (): string => process.env[`${prefix}_LEDGER`] ?? join(REPO_ROOT, 'test', 'containment', `live-spend-phase${phase}.jsonl`);
+  const ceiling = (): number => {
+    const raw = Number(process.env[`${prefix}_CEILING_USD`]);
+    return Number.isFinite(raw) && raw > 0 ? Math.min(raw, PHASE_CEILING_USD[phase]) : PHASE_CEILING_USD[phase];
+  };
+  // The recorded spend: the sum of costUsd over the ledger, optionally for one plan. No ledger is 0; a line that is not a JSON object with a
+  // finite non-negative costUsd throws, so a corrupt ledger never reads as 0 and never lets a case run.
+  const sum = (plan: string | undefined): number => {
+    const file = path();
+    if (!existsSync(file)) return 0;
+    let total = 0;
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .forEach((text, index) => {
+        if (text === '') return;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new Error(`Phase ${phase} spend ledger ${file} line ${index + 1} is not valid JSON`);
+        }
+        const cost = isObject(parsed) ? parsed['costUsd'] : undefined;
+        if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) throw new Error(`Phase ${phase} spend ledger ${file} line ${index + 1} has no finite non-negative costUsd`);
+        if (plan === undefined || (isObject(parsed) && parsed['plan'] === plan)) total += cost;
+      });
+    return total;
+  };
+  return {
+    path,
+    ceiling,
+    spent: () => sum(undefined),
+    spentByPlan: (plan) => sum(plan),
+    fits: (capUsdForRun) => sum(undefined) + capUsdForRun <= ceiling() + 1e-9,
+    record(entry) {
+      if (!Number.isFinite(entry.costUsd) || entry.costUsd < 0) throw new Error(`refusing to record a Phase ${phase} cost of ${String(entry.costUsd)}`);
+      appendFileSync(path(), JSON.stringify({ plan: entry.plan, case: entry.case, costUsd: entry.costUsd, claudeVersion: entry.claudeVersion, at: new Date().toISOString() }) + '\n');
+    },
+    plan: (fallback = 'unknown') => process.env[`${prefix}_PLAN`] ?? fallback,
+  };
 }
 
-export function recordPhase2Spend(entry: Phase2SpendEntry): void {
-  if (!Number.isFinite(entry.costUsd) || entry.costUsd < 0) throw new Error(`refusing to record a Phase 2 cost of ${String(entry.costUsd)}`);
-  appendFileSync(phase2LedgerPath(), JSON.stringify({ plan: entry.plan, case: entry.case, costUsd: entry.costUsd, claudeVersion: entry.claudeVersion, at: new Date().toISOString() }) + '\n');
+const phase2Ledger = phaseSpendLedger(2);
+const phase3Ledger = phaseSpendLedger(3);
+// The ledger of the current phase: every spend guard and recorder below goes through it.
+export const currentSpendLedger: PhaseSpendLedger = CURRENT_SPEND_PHASE === 3 ? phase3Ledger : phase2Ledger;
+
+// The text of every skip for a case, round, session or run that does not fit under the current phase's ceiling.
+export function ceilingRefusal(what: string, capUsdForRun: number): string {
+  const tag = CURRENT_SPEND_PHASE === 3 ? 'D-05' : 'D-15';
+  return `not run: Phase ${CURRENT_SPEND_PHASE} spend ${currentSpendLedger.spent().toFixed(4)} plus this ${what}'s cap ${capUsdForRun.toFixed(2)} would pass the ${currentSpendLedger.ceiling().toFixed(2)} USD ceiling (${tag}); ask the owner`;
 }
+
+// Phase 2 names: thin wrappers over the Phase 2 ledger, kept so its history and its tests read the same values. No new spend is recorded here.
+export const phase2LedgerPath = (): string => phase2Ledger.path();
+export const phase2Ceiling = (): number => phase2Ledger.ceiling();
+export const phase2Spent = (): number => phase2Ledger.spent();
+export const fitsPhase2Ceiling = (capUsdForRun: number): boolean => phase2Ledger.fits(capUsdForRun);
+export const recordPhase2Spend = (entry: Phase2SpendEntry): void => phase2Ledger.record(entry);
+
+// Phase 3 names.
+export const phase3LedgerPath = (): string => phase3Ledger.path();
+export const phase3Ceiling = (): number => phase3Ledger.ceiling();
+export const phase3Spent = (): number => phase3Ledger.spent();
+export const fitsPhase3Ceiling = (capUsdForRun: number): boolean => phase3Ledger.fits(capUsdForRun);
+export const recordPhase3Spend = (entry: Phase3SpendEntry): void => phase3Ledger.record(entry);
+
 
 // ---------------------------------------------------------------------------------------------------------------
 // The installed host
@@ -418,7 +467,7 @@ export function parseTranscript(text: string): ParsedTranscript {
 // ---------------------------------------------------------------------------------------------------------------
 
 export function ledgerRows<T>(dataRoot: string, sql: string, ...params: Array<string | number>): T[] {
-  const db = new DatabaseSync(join(dataRoot, 'state.db'), { readOnly: true });
+  const db = new DatabaseSync(join(dataRoot, 'state.db'), { readOnly: true, timeout: 5000 });
   try {
     return (db.prepare(sql).all(...params) as Array<Record<string, unknown>>).map((r) => ({ ...r }) as T);
   } finally {
@@ -968,25 +1017,59 @@ export const SPIKE_PLAN = '02-09';
 // The most plan 02-09 may spend in total over its two rounds.
 export const SPIKE_TOTAL_CAP_USD = 4.0;
 
-// Plan 02-09's own spend in the Phase 2 ledger.
-export function phase2SpentByPlan(plan: string): number {
-  const path = phase2LedgerPath();
-  if (!existsSync(path)) return 0;
-  return readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((line) => line !== '')
-    .map((line) => JSON.parse(line) as Phase2SpendEntry)
-    .filter((entry) => entry.plan === plan)
-    .reduce((sum, entry) => sum + entry.costUsd, 0);
+// One plan's own spend in the Phase 2 ledger (history; the live attended suite still reads it).
+export const phase2SpentByPlan = (plan: string): number => phase2Ledger.spentByPlan(plan);
+
+// One plan's own spend in the current phase's ledger.
+export const spentByPlan = (plan: string): number => currentSpendLedger.spentByPlan(plan);
+
+// The skip text for a spike round that does not fit, or undefined: judged against the current phase's ceiling (D-05) and the spike's own total.
+export function spikeRefusal(capUsdForRun: number): string | undefined {
+  if (!currentSpendLedger.fits(capUsdForRun)) return ceilingRefusal('round', capUsdForRun);
+  if (spentByPlan(SPIKE_PLAN) + capUsdForRun > SPIKE_TOTAL_CAP_USD + 1e-9) {
+    return `not run: plan ${SPIKE_PLAN} spend ${spentByPlan(SPIKE_PLAN).toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE_TOTAL_CAP_USD.toFixed(2)} USD total`;
+  }
+  return undefined;
 }
 
-// The skip text for a spike round that does not fit, or undefined: judged against the Phase 2 ceiling (D-15) and the spike's own total.
-export function spikeRefusal(capUsdForRun: number): string | undefined {
-  if (!fitsPhase2Ceiling(capUsdForRun)) {
-    return `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+// Spike S3-A (plan 03-13): the live pause and resume. At most 4.00 USD in all, under the Phase 3 ceiling (D-05), on a generated scratch repository.
+export const SPIKE3_PLAN = '03-13';
+export const SPIKE3_TOTAL_CAP_USD = 4.0;
+
+// The skip text for a Phase 3 spike start that does not fit, or undefined: judged against the Phase 3 ledger (ceiling) and the plan's own total.
+// A start is refused when the Phase 3 ledger plus the cap would pass 25 USD, or the spike's recorded spend plus the cap would pass 4.00 USD.
+export function spike3Refusal(capUsdForRun: number): string | undefined {
+  if (!phase3Ledger.fits(capUsdForRun)) return ceilingRefusal('round', capUsdForRun);
+  const spent = phase3Ledger.spentByPlan(SPIKE3_PLAN);
+  if (spent + capUsdForRun > SPIKE3_TOTAL_CAP_USD + 1e-9) {
+    return `not run: plan ${SPIKE3_PLAN} spend ${spent.toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE3_TOTAL_CAP_USD.toFixed(2)} USD total`;
   }
-  if (phase2SpentByPlan(SPIKE_PLAN) + capUsdForRun > SPIKE_TOTAL_CAP_USD + 1e-9) {
-    return `not run: plan ${SPIKE_PLAN} spend ${phase2SpentByPlan(SPIKE_PLAN).toFixed(4)} plus this round's cap ${capUsdForRun.toFixed(2)} would pass its ${SPIKE_TOTAL_CAP_USD.toFixed(2)} USD total`;
+  return undefined;
+}
+
+// Plan 03-27: the live run-purpose cases of Slice 2, under the Phase 3 ceiling (D-05), on generated scratch repositories. Owner decision 2 of 2026-11-09 raised
+// plan 03-27's total from 6.00 to 10.00 USD for its resumed cases, including any probe; the probes of plan 03-35 and the cases of plan 03-36 are recorded under
+// their own plan IDs, so the 10.00 USD is shared by the group of the plans and judged over their summed spend. Plan 03-37 (the cases moved out of the unit's reach
+// after 03-36 halted at s21) joins the group, and so do plan 03-38 (the per-case briefs, after 03-37 halted at s21) and plan 03-39 (S-21 judged on the built gates, then the last three cases).
+export const LIVE_PLAN_03_27 = '03-27';
+export const LIVE_PLAN_03_27_GROUP: readonly string[] = ['03-27', '03-35', '03-36', '03-37', '03-38', '03-39'];
+export const LIVE_PLAN_03_27_TOTAL_USD = 10.0;
+
+// The skip text for a start of `plan` whose cap would take the plan's recorded spend in the current phase's ledger past `totalUsd`, or undefined.
+export function planTotalRefusal(plan: string, totalUsd: number, capUsdForRun: number): string | undefined {
+  const spent = currentSpendLedger.spentByPlan(plan);
+  if (spent + capUsdForRun > totalUsd + 1e-9) {
+    return `not run: plan ${plan} spend ${spent.toFixed(4)} plus this case's cap ${capUsdForRun.toFixed(2)} would pass its ${totalUsd.toFixed(2)} USD total`;
+  }
+  return undefined;
+}
+
+// The skip text for a start whose cap would take the summed recorded spend of every plan in `plans` (current phase's ledger) past `totalUsd`, or undefined.
+// Plans outside the group are not counted.
+export function planGroupTotalRefusal(plans: readonly string[], totalUsd: number, capUsdForRun: number): string | undefined {
+  const spent = plans.reduce((sum, plan) => sum + currentSpendLedger.spentByPlan(plan), 0);
+  if (spent + capUsdForRun > totalUsd + 1e-9) {
+    return `not run: plans ${plans.join(', ')} spend ${spent.toFixed(4)} together plus this case's cap ${capUsdForRun.toFixed(2)} would pass their ${totalUsd.toFixed(2)} USD total`;
   }
   return undefined;
 }
@@ -1026,6 +1109,8 @@ export interface PrepareRunUnitOptions {
   setup?: (repo: ScratchRepo) => void;
   // The conventions committed after onboarding (default: the run conventions with `npm test` as the one command).
   conventions?: unknown;
+  // The brief text the run starts from (default: the one-item run brief).
+  brief?: string;
 }
 
 export function prepareRunUnit(options: PrepareRunUnitOptions = {}): RunUnitFixture {
@@ -1034,7 +1119,7 @@ export function prepareRunUnit(options: PrepareRunUnitOptions = {}): RunUnitFixt
   options.setup?.(repo);
   onboardRunRepo(roots, repo);
   commitConventions(repo, options.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
-  const briefPath = writeBrief(join(roots.base, 'briefs'));
+  const briefPath = options.brief === undefined ? writeBrief(join(roots.base, 'briefs')) : writeBrief(join(roots.base, 'briefs'), options.brief);
   const env: NodeJS.ProcessEnv = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
   const composed = createDeps(env, {});
   if (!composed.ok) throw new Error(`composition failed: ${composed.message}`);
@@ -1128,7 +1213,7 @@ export interface RunUnitSpec {
   wallClockMs?: number;
   // Replaces runUnitPrompt (the contract and an empty pack) when a round must change the prompt. `ctx` names the real paths.
   prompt?: (contract: RunPromptContract, ctx: RunUnitContext) => string;
-  // The plan the cost is recorded under in the Phase 2 ledger (default plan 02-09's spike); a plan other than the spike's is gated by the ceiling only.
+  // The plan the cost is recorded under in the current phase's ledger (default plan 02-09's spike); a plan other than the spike's is gated by the ceiling only.
   plan?: string;
   // The model of the invocation (default: the contract's work item model).
   model?: string;
@@ -1150,6 +1235,59 @@ export interface RunUnitSpec {
   ensureDirs?: readonly string[];
   // Settings applied before launch (default RUN_GSD_SETTINGS).
   settings?: readonly GsdSetting[];
+  // Plan 03-13: after the first invocation, a second one resumes its session (or `sessionId`) through the same adapter, fixture and clone with
+  // the owner's answer in the prompt (runResumePrompt for the first work item, or `itemId`). It runs only when the first invocation returned an
+  // outcome, and only when the spike's own caps still fit its `costCapUsd` (default: the first invocation's cap).
+  resume?: { answer: string; sessionId?: string; itemId?: string; costCapUsd?: number };
+  // Plan 03-13: the one and only invocation is a resume of `sessionId` (a session that does not exist) with runResumePrompt for `itemId` (default:
+  // the first work item). There is no first unit; the main fields of the result describe this resume.
+  resumeOnly?: { sessionId: string; answer: string; itemId?: string };
+  // The work item the first invocation's prompt is built for (runUnitPrompt with that item); without it the harness builds the prompt as before.
+  itemId?: string;
+  // Runs against the clone after each invocation and returns small ground-truth facts (what a file contains), recorded by the caller.
+  probe?: (clone: string) => Record<string, unknown>;
+  // Plan 03-27: the most `plan` may spend in all; a start whose cap would pass it is refused before anything is prepared.
+  planTotalUsd?: number;
+  // Plan 03-35: the plans whose summed spend `planTotalUsd` limits (the group of plans 03-27, 03-35 and 03-36); without it only `plan` counts.
+  planGroup?: readonly string[];
+  // Plan 03-27: the directory the adapter reads the agent definitions from, given the real one and the evidence directory (a copy whose
+  // definition carries `permissionMode`, for CS-15). The scope's read roots still name the real directory.
+  agentsDir?: (realAgentsDir: string, evidenceDir: string) => string;
+}
+
+// The facts of the clone after one invocation, and of the invocation itself.
+export interface CloneFacts {
+  changedPaths: Array<{ path: string; status: string }>;
+  outsideWriteSet: string[];
+  headAfter: string;
+  summaryFiles: string[];
+  quickFiles: string[];
+  // The text of the first PLAN file under `.planning/quick`, or null (read as data by the caller; never stored in results).
+  planText: string | null;
+  verificationStatus: string | undefined;
+  probe: Record<string, unknown>;
+}
+
+// The second invocation of a spec with `resume`: facts of the resumed session and of the clone after it.
+export interface ResumedUnit extends CloneFacts {
+  // Why it did not run, when it did not.
+  skipped?: string;
+  invocationId: string;
+  sessionId: string;
+  outcome: Result<InvocationOutcome>;
+  hostStarted: boolean;
+  costUsd: number;
+  costAssumed: boolean;
+  exitCode: number | null | undefined;
+  streamSubtype: string | undefined;
+  resultSeen: boolean | undefined;
+  isError: boolean | undefined;
+  transcript: string;
+  parsed: ParsedTranscript;
+  hookDecisions: HookEvent[];
+  toolCompleted: CompletedTool[];
+  durationMs: number;
+  prompt: string;
 }
 
 export interface LiveRunUnitResult {
@@ -1198,6 +1336,12 @@ export interface LiveRunUnitResult {
   cloneOutsideAfter: string;
   // `direct` launch details (exit code of the host process).
   directExit: number | null | undefined;
+  // Plan 03-13: the clone's quick files, the quick PLAN text and the probe, after the first invocation (the main fields above are the same moment).
+  quickFiles: string[];
+  planText: string | null;
+  probe: Record<string, unknown>;
+  // The resumed invocation, when the spec asked for one.
+  resumed?: ResumedUnit;
   dispose(): void;
 }
 
@@ -1244,8 +1388,10 @@ function describeDenials(parsed: ParsedTranscript, fixture: RunUnitFixture): Run
 export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const plan = spec.plan ?? SPIKE_PLAN;
   const spends = spec.noLaunch !== true;
-  const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : fitsPhase2Ceiling(spec.costCapUsd) ? undefined : `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this case's cap ${spec.costCapUsd.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner`;
+  const refusal = !spends ? undefined : plan === SPIKE_PLAN ? spikeRefusal(spec.costCapUsd) : plan === SPIKE3_PLAN ? spike3Refusal(spec.costCapUsd) : currentSpendLedger.fits(spec.costCapUsd) ? undefined : ceilingRefusal('case', spec.costCapUsd);
   if (refusal !== undefined) return { skipped: refusal };
+  const overPlan = !spends || spec.planTotalUsd === undefined ? undefined : spec.planGroup !== undefined ? planGroupTotalRefusal(spec.planGroup, spec.planTotalUsd, spec.costCapUsd) : planTotalRefusal(plan, spec.planTotalUsd, spec.costCapUsd);
+  if (overPlan !== undefined) return { skipped: overPlan };
 
   const fixture = prepareRunUnit(spec.project);
   const { deps, contract, clone, scratch, runId } = fixture;
@@ -1303,7 +1449,15 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     ledgerFile: join(fixture.dataRoot, 'state.db'),
   };
   spec.beforeLaunch?.(ctx);
-  const prompt = spec.prompt !== undefined ? spec.prompt(contract, ctx) : runUnitPrompt(contract, '');
+  const itemOf = (id: string | undefined): RunPromptItem => promptItemOf(contract, id);
+  const prompt =
+    spec.resumeOnly !== undefined
+      ? runResumePrompt(spec.resumeOnly.answer, itemOf(spec.resumeOnly.itemId))
+      : spec.prompt !== undefined
+        ? spec.prompt(contract, ctx)
+        : spec.itemId !== undefined
+          ? runUnitPrompt(contract, '', itemOf(spec.itemId))
+          : runUnitPrompt(contract, '');
   const extensions = PURPOSE_EXTENSIONS.run;
   const request: InvocationRequest = {
     onboardingId: 'onb_spike',
@@ -1321,6 +1475,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     extensions: { skills: [...extensions.skills], agents: [...extensions.agents] },
     expectedFiles: [],
     sessionId: randomUUID(),
+    ...(spec.resumeOnly !== undefined ? { resumeSessionId: spec.resumeOnly.sessionId } : {}),
     ownerKind: 'run',
     ownerId: runId,
   };
@@ -1328,7 +1483,8 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   const preamble = fingerprintGsdPreamble(fixture.gsdCoreDir);
   if (!preamble.ok) throw new Error('the GSD preamble was not found');
   const configDir = fixture.env['CLAUDE_CONFIG_DIR'] !== undefined && fixture.env['CLAUDE_CONFIG_DIR'] !== '' ? fixture.env['CLAUDE_CONFIG_DIR'] : join(deps.home ?? homedir(), '.claude');
-  const gsdLocations = { gsdCoreDir: fixture.gsdCoreDir, agentsDir: join(fixture.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir };
+  const realAgentsDir = join(fixture.gsdCoreDir, '..', 'agents');
+  const gsdLocations = { gsdCoreDir: fixture.gsdCoreDir, agentsDir: spec.agentsDir?.(realAgentsDir, evidenceDir) ?? realAgentsDir, skillsRoot: join(configDir, 'skills'), configDir };
   const writeGlobsOfContract = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
   const cloneOutside = (): string => treeDigest(clone, (rel) => rel === '.claude' || rel.startsWith('.claude/') || matchesAny(rel, writeGlobsOfContract));
   const contractVersions = (): number[] => ledgerRows<{ version: number }>(fixture.dataRoot, 'SELECT version FROM contracts WHERE run_id = ? ORDER BY version', runId).map((r) => r.version);
@@ -1404,9 +1560,89 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     }
   }
   const hostStarted = existsSync(wrapper.marker);
+  // The first invocation's own duration: the resume that may follow is timed in `resumed`.
+  const firstDurationMs = Date.now() - started;
   if (!outcome.ok && spec.launch !== 'direct') costAssumed = hostStarted;
   const recorded = costAssumed ? spec.costCapUsd : costUsd;
-  if (hostStarted) recordPhase2Spend({ plan, case: spec.name, costUsd: recorded, claudeVersion: versionNumber(version) });
+  if (hostStarted) currentSpendLedger.record({ plan, case: spec.name, costUsd: recorded, claudeVersion: versionNumber(version) });
+
+  // The clone's facts at this moment (the first invocation's), then the resume when the spec asks for one.
+  const writeGlobsForFacts = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
+  const cloneFacts = (): CloneFacts => {
+    const changed = workspace.changedSince(clone, snapshot.value);
+    const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
+    const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobsForFacts) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
+    const files = walkFiles(clone);
+    const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
+    const quickFiles = files.filter((f) => f.startsWith('.planning/quick/'));
+    const planFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*PLAN\.md$/.test(f));
+    const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
+    const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
+    const headNow = workspace.head(clone);
+    return {
+      changedPaths,
+      outsideWriteSet,
+      headAfter: headNow.ok ? headNow.value : 'unreadable',
+      summaryFiles,
+      quickFiles,
+      planText: planFile === undefined ? null : readFileSync(join(clone, planFile), 'utf8'),
+      verificationStatus,
+      probe: spec.probe?.(clone) ?? {},
+    };
+  };
+  const firstFacts = cloneFacts();
+
+  let resumed: ResumedUnit | undefined;
+  if (spec.resume !== undefined && spec.launch !== 'direct' && spec.noLaunch !== true && outcome.ok) {
+    const resumeCap = spec.resume.costCapUsd ?? spec.costCapUsd;
+    const resumeRefusal = plan === SPIKE3_PLAN ? spike3Refusal(resumeCap) : currentSpendLedger.fits(resumeCap) ? undefined : ceilingRefusal('resume', resumeCap);
+    const resumeInvocationId = deps.ids.next('inv_');
+    const resumeSession = spec.resume.sessionId ?? outcome.value.sessionId;
+    if (resumeRefusal !== undefined) {
+      resumed = { ...firstFacts, skipped: resumeRefusal, invocationId: resumeInvocationId, sessionId: resumeSession, outcome: err({ kind: 'unavailable', cause: 'not run' }), hostStarted: false, costUsd: 0, costAssumed: false, exitCode: undefined, streamSubtype: undefined, resultSeen: undefined, isError: undefined, transcript: '', parsed: parseTranscript(''), hookDecisions: [], toolCompleted: [], durationMs: 0, prompt: '' };
+    } else {
+      const resumePrompt = runResumePrompt(spec.resume.answer, itemOf(spec.resume.itemId));
+      const resumeRequest: InvocationRequest = { ...request, invocationId: resumeInvocationId, prompt: resumePrompt, costCapUsd: resumeCap, resumeSessionId: resumeSession };
+      rmSync(wrapper.marker, { force: true });
+      const resumeStarted = Date.now();
+      const resumedOutcome = await adapter.invoke(resumeRequest, new AbortController().signal);
+      const resumeHostStarted = existsSync(wrapper.marker);
+      let resumeTranscript = '';
+      let resumeCost = 0;
+      let resumeAssumed = false;
+      if (resumedOutcome.ok) {
+        resumeCost = resumedOutcome.value.costUsd;
+        const bytes = resumedOutcome.value.transcriptArtifact === undefined ? undefined : deps.artifacts.get(resumedOutcome.value.transcriptArtifact);
+        if (bytes?.ok) resumeTranscript = new TextDecoder().decode(bytes.value);
+        resumeAssumed = resumedOutcome.value.details?.resultSeen !== true;
+      } else {
+        resumeAssumed = resumeHostStarted;
+      }
+      const resumeRecorded = resumeAssumed ? resumeCap : resumeCost;
+      if (resumeHostStarted) currentSpendLedger.record({ plan, case: `${spec.name}-resume`, costUsd: resumeRecorded, claudeVersion: versionNumber(version) });
+      const resumedFacts = cloneFacts();
+      resumed = {
+        ...resumedFacts,
+        invocationId: resumeInvocationId,
+        sessionId: resumeSession,
+        outcome: resumedOutcome,
+        hostStarted: resumeHostStarted,
+        costUsd: resumeHostStarted ? resumeRecorded : 0,
+        costAssumed: resumeAssumed,
+        exitCode: resumedOutcome.ok ? resumedOutcome.value.details?.exitCode : undefined,
+        streamSubtype: resumedOutcome.ok ? resumedOutcome.value.details?.subtype : undefined,
+        resultSeen: resumedOutcome.ok ? resumedOutcome.value.details?.resultSeen : undefined,
+        isError: resumedOutcome.ok ? resumedOutcome.value.details?.isError : undefined,
+        transcript: resumeTranscript,
+        parsed: parseTranscript(resumeTranscript),
+        hookDecisions: hookDecisions(fixture.dataRoot, resumeInvocationId),
+        toolCompleted: toolCompleted(fixture.dataRoot, resumeInvocationId),
+        durationMs: Date.now() - resumeStarted,
+        prompt: resumePrompt,
+      };
+      writeFileSync(join(evidenceDir, 'transcript-resume.jsonl'), resumeTranscript);
+    }
+  }
 
   const steps = deps.ledger.getRunSteps(runId);
   const configureStep = steps.ok ? steps.value.find((s) => s.step === 'gsd:configure') : undefined;
@@ -1414,15 +1650,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   // The evidence directory keeps the redacted transcript beside the profile until the caller removes it.
   writeFileSync(join(evidenceDir, 'transcript.jsonl'), transcript);
   const hooks = hookDecisions(fixture.dataRoot, request.invocationId);
-  const changed = workspace.changedSince(clone, snapshot.value);
-  const changedPaths = changed.ok ? changed.value.map((c) => ({ path: c.path, status: c.status })) : [];
-  const writeGlobs = [...contract.files.write, ...contract.files.create, ...contract.files.artifacts];
-  const outsideWriteSet = changedPaths.filter((c) => !matchesAny(c.path, writeGlobs) || matchesAny(c.path, [...contract.files.protected, '.git/**', '.planning/config.json'])).map((c) => c.path);
-  const files = walkFiles(clone);
-  const summaryFiles = files.filter((f) => /^\.planning\/quick\/[^/]+\/[^/]*SUMMARY\.md$/.test(f));
-  const verificationFile = files.find((f) => /^\.planning\/quick\/[^/]+\/[^/]*VERIFICATION\.md$/.test(f));
-  const verificationStatus = verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((line) => /^\W*status\W*:/i.test(line.trim()));
-  const headNow = workspace.head(clone);
+  const { changedPaths, outsideWriteSet, summaryFiles, verificationStatus } = firstFacts;
 
   return {
     name: spec.name,
@@ -1437,7 +1665,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     toolCompleted: toolCompleted(fixture.dataRoot, request.invocationId),
     denials: describeDenials(parsed, fixture),
     headBefore: snapshot.value.head,
-    headAfter: headNow.ok ? headNow.value : 'unreadable',
+    headAfter: firstFacts.headAfter,
     changedPaths,
     outsideWriteSet,
     summaryFiles,
@@ -1454,7 +1682,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     claudeVersion: version,
     evidenceDir,
     prompt,
-    durationMs: Date.now() - started,
+    durationMs: firstDurationMs,
     ctx,
     watchedBefore,
     watchedAfter: Object.fromEntries(watchPaths.map((p) => [p, fileDigest(p)])),
@@ -1465,6 +1693,10 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     cloneOutsideBefore: before.cloneOutside,
     cloneOutsideAfter: cloneOutside(),
     directExit,
+    quickFiles: firstFacts.quickFiles,
+    planText: firstFacts.planText,
+    probe: firstFacts.probe,
+    ...(resumed !== undefined ? { resumed } : {}),
     dispose: () => {
       fixture.close();
       rmSync(fixture.roots.base, { recursive: true, force: true });
@@ -1473,11 +1705,22 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
   };
 }
 
+// The work item of a compiled contract as a prompt states it: its own task and the acceptance criteria it owns, each as `ID: text`.
+export function promptItemOf(contract: RunContract, id: string | undefined): RunPromptItem {
+  const item = id === undefined ? contract.intent.workItems[0] : contract.intent.workItems.find((candidate) => candidate.id === id);
+  if (item === undefined) throw new Error(`the contract has no work item ${id ?? '(first)'}`);
+  const acceptance = item.acceptance.map((ref) => {
+    const criterion = contract.intent.acceptance.find((candidate) => candidate.id === ref);
+    return criterion === undefined ? ref : `${criterion.id}: ${criterion.text}`;
+  });
+  return { id: item.id, task: item.task, acceptance, specFiles: item.spec.derived.includes('files') ? [] : item.spec.files };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // A whole unattended run on the real host (plan 02-20, S-12, S-3, S-20, S-41, S-42)
 // ---------------------------------------------------------------------------------------------------------------
 
-export const LIVE_RUN_PLAN = process.env['AVARICE_PHASE2_PLAN'] ?? '02-20';
+export const LIVE_RUN_PLAN = process.env['AVARICE_PHASE3_PLAN'] ?? 'unknown';
 
 // Profile roots under /tmp (a real path of about 12 characters, where $TMPDIR is about 50).
 export function makeShortRoots(): CliRoots {
@@ -1512,10 +1755,47 @@ export function liveBrief(model: 'haiku' | 'sonnet'): string {
 
 export type RunFault = 'mid-verify';
 
+// A command run through the production CLI after the run has stopped (plan 03-27): `inbox --json`, `status --json`, `digest`, or `decide` on a
+// pseudo-terminal (the identity rule needs a terminal).
+export interface LiveCliStep {
+  name: string;
+  // Milliseconds to wait before the command.
+  waitMs?: number;
+  argv: (context: { runId: string; roots: CliRoots; decisionId: string | undefined }) => string[];
+  // Run on a pseudo-terminal through test/helpers/pty-drive.py.
+  pty?: boolean;
+  timeoutMs?: number;
+}
+
+export interface LiveCliStepResult {
+  name: string;
+  argv: string[];
+  result: CliResult;
+}
+
+// The pseudo-terminal wrapper of a `pty` step: 24 rows by 80 columns, standard input closed (the command needs no typing).
+const PTY_WRAP: readonly string[] = ['python3', '-I', join(REPO_ROOT, 'test', 'helpers', 'pty-drive.py'), '24', '80'];
+
 export interface LiveRunSpec {
   name: string;
-  model: 'haiku' | 'sonnet';
-  // Gates the start (fitsPhase2Ceiling) and becomes the run's and the invocation's cost budget.
+  // The model of the default one-item brief (liveBrief); ignored when `brief` is given.
+  model?: 'haiku' | 'sonnet';
+  // Plan 03-27: the brief text of the run (replaces liveBrief), the tracked files of the scratch project beyond the defaults, the conventions committed after
+  // onboarding (default: the run conventions with `npm test` as the one agent command), and whether the project is onboarded with the fixture indexes
+  // (default true; false onboards with the fake host only).
+  brief?: string;
+  repoFiles?: Readonly<Record<string, string>>;
+  conventions?: unknown;
+  indexes?: boolean;
+  // Extra keys of the profile's config file (the `notify` block with an osascript path that does not exist: no real banner), written after onboarding.
+  profile?: Record<string, unknown>;
+  // Commands run after the run stopped, in order, with their results in `cli`.
+  steps?: readonly LiveCliStep[];
+  // How long to wait, after `start` returned, for the supervisor's notification rows to leave `pending` (it raises its banner just before it exits).
+  settleNotificationsMs?: number;
+  // Refuse the start when this plan's recorded spend plus `capUsd` would pass `totalUsd`; with `group`, when the summed spend of every plan of the group would.
+  planCap?: { plan: string; totalUsd: number; group?: readonly string[] };
+  // Gates the start (the current phase's ceiling) and becomes the run's and the invocation's cost budget.
   capUsd: number;
   // Kills the first supervisor at this point; `status --json` is captured, then `resume <id> --wait` runs.
   fault?: RunFault;
@@ -1528,6 +1808,10 @@ export interface LiveRunSpec {
   shortRoots?: boolean;
   // Replaces the launch wrapper: given the real binary, the evidence directory and the marker path, the shell script text of the `claude` the supervisor starts.
   wrapperScript?: (real: string, dir: string, marker: string) => string;
+  // Plan 03-37: a step the harness itself runs after the host process of every `-p` launch exits and before the supervisor classifies the unit. `script` is given the
+  // profile's work root (the clone is under it) and returns the text of a node ES module; runLiveRun writes it to `after-unit.mjs` in the evidence directory (outside
+  // every clone's read set) and uses afterUnitWrapperScript as the launch wrapper, whatever `wrapperScript` says (the wrapper also logs each `--model` flag).
+  afterUnit?: { script: (workRoot: string) => string };
   // Extra budget overrides (`name=value`).
   budgets?: readonly string[];
   // How long a lease lasts, ms (the killed supervisor's lease must lapse before the resume).
@@ -1547,6 +1831,8 @@ export interface LiveRunResult {
   repo: ScratchRepo;
   runId: string;
   start: CliResult;
+  // The results of the spec's `steps`, in order.
+  cli: LiveCliStepResult[];
   interruptedStatus: Record<string, unknown> | undefined;
   interruptedRun: Record<string, unknown> | undefined;
   // `status` (the text view) while the run was interrupted.
@@ -1582,6 +1868,8 @@ export interface LiveRunResult {
   clone: string | undefined;
   quickFiles: string[];
   verificationStatus: string | undefined;
+  // The lines the spec's `afterUnit` step wrote to `after-unit.log` (plan 03-37), or an empty list when there is no such step or no log.
+  afterUnitLog: string[];
   costUsd: number;
   hostStarted: boolean;
   claudeVersion: string;
@@ -1719,18 +2007,118 @@ export function readThenEditOf(parsed: ParsedTranscript, hooks: readonly HookEve
   };
 }
 
+// The launch wrapper of plan 03-27: as the marker wrapper, and it also appends the value of each `--model` flag the host is launched with to
+// `launch-models.log` in `dir` (the flag the supervisor passed, S-51), never the prompt. A `claude` that is called without `-p` runs untouched.
+export function modelLoggingWrapperScript(real: string, dir: string, marker: string): string {
+  const override = admissionOverride(versionNumber(claudeVersion(real)));
+  const versionCase = override === undefined ? '' : `case "$1" in --version) exec /bin/echo '${override.as} (Claude Code, harness-only admission override; real host ${override.reported})';; esac\n`;
+  const log = join(dir, 'launch-models.log');
+  return [
+    '#!/bin/sh',
+    `${versionCase}case "$1" in -p) : > '${marker}'`,
+    "  prev=''",
+    '  for a in "$@"; do',
+    `    if [ "$prev" = "--model" ]; then echo "$a" >> '${log}'; fi`,
+    '    prev="$a"',
+    '  done;;',
+    'esac',
+    `exec '${real}' "$@"`,
+    '',
+  ].join('\n');
+}
+
+// Plan 03-37: the launch wrapper of a case whose tamper is made by the harness. As modelLoggingWrapperScript, except that a `-p` launch runs the real host as a child
+// (not exec), keeps its exit code, and then runs `scriptPath` with the node that runs the harness (an absolute path: the supervisor's scrubbed environment may have
+// no node on PATH), given the log path as its argument. The post-step's output (stdout and stderr) goes to `<dir>/after-unit.log`; the host's own stdout and exit
+// code are what the wrapper passes on, so the supervisor reads the host's result and classifies the unit only after the post-step has finished (the adapter waits
+// for the exit of the process it started). Every other first argument (`--version`) keeps the exec form and runs no post-step.
+export function afterUnitWrapperScript(real: string, dir: string, marker: string, scriptPath: string): string {
+  const override = admissionOverride(versionNumber(claudeVersion(real)));
+  const versionCase = override === undefined ? '' : `case "$1" in --version) exec /bin/echo '${override.as} (Claude Code, harness-only admission override; real host ${override.reported})';; esac\n`;
+  const log = join(dir, 'launch-models.log');
+  const afterLog = join(dir, 'after-unit.log');
+  return [
+    '#!/bin/sh',
+    `${versionCase}case "$1" in -p) : > '${marker}'`,
+    "  prev=''",
+    '  for a in "$@"; do',
+    `    if [ "$prev" = "--model" ]; then echo "$a" >> '${log}'; fi`,
+    '    prev="$a"',
+    '  done',
+    `  '${real}' "$@"`,
+    '  code=$?',
+    `  '${process.execPath}' '${scriptPath}' '${afterLog}' >> '${afterLog}' 2>&1`,
+    '  exit $code;;',
+    'esac',
+    `exec '${real}' "$@"`,
+    '',
+  ].join('\n');
+}
+
+// The `--model` values the host was launched with, in launch order (from the wrapper above).
+export function launchModelsOf(dir: string): string[] {
+  const file = join(dir, 'launch-models.log');
+  return existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((l) => l !== '') : [];
+}
+
+// One contained invocation of a run as the ledger and its transcript record it: the `launch:run` step (item, model, kind, cost), the host's own
+// init event, and the hook decisions of the invocation.
+export interface InvocationRecord {
+  invocationId: string;
+  itemId: string | undefined;
+  model: string;
+  status: string;
+  kind: string | undefined;
+  costUsd: number;
+  attempt: number;
+  parsed: ParsedTranscript;
+  hooks: HookEvent[];
+}
+
+export function invocationRecords(dataRoot: string, runId?: string): InvocationRecord[] {
+  const store = new LocalArtifactStore(dataRoot);
+  const rows = runId === undefined
+    ? ledgerRows<{ attempt: number; status: string; result_json: string }>(dataRoot, "SELECT attempt, status, result_json FROM run_steps WHERE step = 'launch:run' ORDER BY rowid")
+    : ledgerRows<{ attempt: number; status: string; result_json: string }>(dataRoot, "SELECT attempt, status, result_json FROM run_steps WHERE step = 'launch:run' AND run_id = ? ORDER BY rowid", runId);
+  return rows.map((row) => {
+    const result = JSON.parse(row.result_json) as Record<string, unknown>;
+    const digest = typeof result['transcript'] === 'string' ? result['transcript'] : undefined;
+    const bytes = digest === undefined ? undefined : store.get(digest);
+    const invocationId = String(result['invocationId']);
+    return {
+      invocationId,
+      itemId: typeof result['itemId'] === 'string' ? result['itemId'] : undefined,
+      model: String(result['model']),
+      status: row.status,
+      kind: typeof result['kind'] === 'string' ? result['kind'] : undefined,
+      costUsd: typeof result['costUsd'] === 'number' ? result['costUsd'] : 0,
+      attempt: row.attempt,
+      parsed: parseTranscript(bytes?.ok ? new TextDecoder().decode(bytes.value) : ''),
+      hooks: hookDecisions(dataRoot, invocationId),
+    };
+  });
+}
+
 // One run on a generated GSD scratch project through the production CLI (`start --brief --policy routine --wait`) with the real host. The scratch
 // repository gets an uncommitted tracked change, an untracked file and an ignored file (S-20) after it is committed and onboarded with fixture
 // indexes (no model spend). Everything returned is ground truth: ledger rows, the transcripts of the host, the digests of the user's checkout.
 export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
-  if (!fitsPhase2Ceiling(spec.capUsd)) {
-    return { skipped: `not run: Phase 2 spend ${phase2Spent().toFixed(4)} plus this run's cap ${spec.capUsd.toFixed(2)} would pass the ${phase2Ceiling().toFixed(2)} USD ceiling (D-15); ask the owner` };
-  }
+  if (!currentSpendLedger.fits(spec.capUsd)) return { skipped: ceilingRefusal('run', spec.capUsd) };
+  const overPlan = spec.planCap === undefined ? undefined : spec.planCap.group !== undefined ? planGroupTotalRefusal(spec.planCap.group, spec.planCap.totalUsd, spec.capUsd) : planTotalRefusal(spec.planCap.plan, spec.planCap.totalUsd, spec.capUsd);
+  if (overPlan !== undefined) return { skipped: overPlan };
   const roots = spec.shortRoots === true ? makeShortRoots() : makeRoots();
-  const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n' });
-  await onboardRunRepoWithIndexes(roots, repo, 'answer');
-  commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
-  const briefPath = writeBrief(join(roots.base, 'briefs'), liveBrief(spec.model));
+  const repo = makeRunRepo({ 'NOTES.md': 'notes\n', '.gitignore': 'ignored.log\n', ...(spec.repoFiles ?? {}) });
+  if (spec.indexes === false) onboardRunRepo(roots, repo);
+  else await onboardRunRepoWithIndexes(roots, repo, 'answer');
+  commitConventions(repo, spec.conventions ?? { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+  const briefPath = writeBrief(join(roots.base, 'briefs'), spec.brief ?? liveBrief(spec.model ?? 'haiku'));
+  // A profile config edited by hand: the notify block names an osascript path that does not exist, so no banner is ever posted (plan 03-27). Written after the
+  // onboarding, which may have created the default file.
+  if (spec.profile !== undefined) {
+    const configPath = configPathFor(roots.AVARICE_CONFIG_HOME, 'personal-local');
+    mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
+    writeFileSync(configPath, `${JSON.stringify({ schema: 1, profile: 'personal-local', dataRoot: roots.AVARICE_DATA_ROOT, workRoot: roots.AVARICE_WORK_ROOT, ...spec.profile }, null, 2)}\n`, { mode: 0o600 });
+  }
   // The user's checkout is dirty in the three ways S-20 names; the run must leave every one of them as it is.
   writeFileSync(join(repo.path, 'NOTES.md'), 'notes, edited by the user and not committed\n');
   writeFileSync(join(repo.path, 'draft.txt'), 'an untracked file of the user\n');
@@ -1741,7 +2129,15 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   const version = claudeVersion(realClaude);
   const marker = join(roots.base, 'host-started.marker');
   let wrapperBin: string;
-  if (spec.wrapperScript !== undefined) {
+  if (spec.afterUnit !== undefined) {
+    // Plan 03-37: the harness makes its changes after the host exits. The script sits directly in the evidence directory, outside the clone and every read root of
+    // the unit; it is told the profile's work root and refuses any other directory.
+    const scriptPath = join(roots.base, 'after-unit.mjs');
+    writeFileSync(scriptPath, spec.afterUnit.script(roots.AVARICE_WORK_ROOT));
+    wrapperBin = join(roots.base, 'claude-wrapper');
+    writeFileSync(wrapperBin, afterUnitWrapperScript(realClaude, roots.base, marker, scriptPath));
+    chmodSync(wrapperBin, 0o755);
+  } else if (spec.wrapperScript !== undefined) {
     wrapperBin = join(roots.base, 'claude-wrapper');
     writeFileSync(wrapperBin, spec.wrapperScript(realClaude, roots.base, marker));
     chmodSync(wrapperBin, 0o755);
@@ -1794,6 +2190,21 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
 
   const dataRoot = roots.AVARICE_DATA_ROOT;
   const hostStarted = existsSync(marker);
+  // `start --wait` returns when the run stops; the supervisor raises its banner (three attempts, about 70 seconds when every one fails) just before it exits.
+  if (spec.settleNotificationsMs !== undefined && runId !== '') {
+    const deadline = Date.now() + spec.settleNotificationsMs;
+    while (Date.now() < deadline && ledgerRows<{ n: number }>(dataRoot, "SELECT COUNT(*) AS n FROM notifications WHERE state = 'pending' AND (run_id = ? OR run_id IS NULL)", runId)[0]?.n !== 0) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_000);
+    }
+  }
+  const cli: LiveCliStepResult[] = [];
+  for (const step of spec.steps ?? []) {
+    if (step.waitMs !== undefined) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, step.waitMs);
+    const decisionId = ledgerRows<{ decision_id: string }>(dataRoot, "SELECT decision_id FROM decisions WHERE run_id = ? AND state = 'open' ORDER BY opened_at, rowid LIMIT 1", runId)[0]?.decision_id;
+    const argv = step.argv({ runId, roots, decisionId });
+    const result = runCli(argv, { ...cliOptions, cwd: repo.path, timeoutMs: step.timeoutMs ?? 5 * 60_000, env: baseEnv, ...(step.pty === true ? { wrap: PTY_WRAP } : {}) });
+    cli.push({ name: step.name, argv, result });
+  }
   const [run] = ledgerRows<{ state: string; reason: string | null; workspace_path: string | null; base_revision: string }>(dataRoot, 'SELECT state, reason, workspace_path, base_revision FROM runs WHERE run_id = ?', runId);
   const attempts = ledgerRows<{ attempt_id: string; ordinal: number; outcome: string | null }>(dataRoot, 'SELECT attempt_id, ordinal, outcome FROM attempts WHERE run_id = ? ORDER BY ordinal', runId).map((a) => ({ attemptId: a.attempt_id, ordinal: a.ordinal, outcome: a.outcome }));
   const steps = ledgerRows<{ step: string; status: string; attempt: number; result_json: string }>(dataRoot, 'SELECT step, status, attempt, result_json FROM run_steps WHERE run_id = ? ORDER BY rowid', runId).map((s) => ({ step: s.step, status: s.status, attempt: s.attempt, result: JSON.parse(s.result_json) as Record<string, unknown> }));
@@ -1832,9 +2243,11 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   const quickFiles = clone === undefined || !existsSync(clone) ? [] : walkFiles(clone).filter((f) => f.startsWith('.planning/quick/'));
   const verificationFile = quickFiles.find((f) => /VERIFICATION\.md$/.test(f));
   const verificationStatus = clone === undefined || verificationFile === undefined ? undefined : readFileSync(join(clone, verificationFile), 'utf8').split('\n').find((l) => /^\W*status\W*:/i.test(l.trim()));
+  const afterUnitLogFile = join(roots.base, 'after-unit.log');
+  const afterUnitLog = existsSync(afterUnitLogFile) ? readFileSync(afterUnitLogFile, 'utf8').split('\n').filter((l) => l !== '') : [];
   const invocationEvents = ledgerEvents(dataRoot).map((e) => ({ type: e.type, data: e.data }));
   const costUsd = hostStarted ? budgetsSpent : 0;
-  if (hostStarted) recordPhase2Spend({ plan: LIVE_RUN_PLAN, case: spec.name, costUsd, claudeVersion: versionNumber(version) });
+  if (hostStarted) currentSpendLedger.record({ plan: LIVE_RUN_PLAN, case: spec.name, costUsd, claudeVersion: versionNumber(version) });
 
   return {
     name: spec.name,
@@ -1842,6 +2255,7 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
     repo,
     runId,
     start,
+    cli,
     interruptedStatus,
     interruptedRun,
     interruptedStatusText,
@@ -1875,6 +2289,7 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
     clone,
     quickFiles,
     verificationStatus,
+    afterUnitLog,
     costUsd,
     hostStarted,
     claudeVersion: version,
