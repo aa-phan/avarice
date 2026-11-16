@@ -244,7 +244,7 @@ describe('avarice repo add (ONB-3, ONB-6)', () => {
     assert.deepEqual(preflight['request'], { repoPath: repo.path, policy: 'onboarding', promote: 'none', mode: 'full', budgetOverrides: {} });
     assert.deepEqual(preflight['notMapped'], ['.env', 'nested-app/', 'scratch/notes.txt', 'src/index.ts']);
     assert.deepEqual(preflight['untracked'], ['.env', 'nested-app/', 'scratch/notes.txt']);
-    assert.deepEqual(preflight['existingState'], { planningExists: true, codebaseMap: 'none', adoptionDeferred: false, outcome: 'isolated-regeneration' });
+    assert.deepEqual(preflight['existingState'], { planningExists: true, codebaseMap: 'none', outcome: 'map', drift: null, userOwned: [] });
     assert.deepEqual(preflight['instructionFiles'], ['.claude/', 'CLAUDE.md', 'packages/a/AGENTS.md']);
     assert.deepEqual(preflight['submodules'], ['vendor/sub']);
     assert.deepEqual(preflight['workspaceManifests'], ['package.json', 'turbo.json']);

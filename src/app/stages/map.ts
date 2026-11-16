@@ -1,6 +1,7 @@
 // Stage for `mapping`: one contained host invocation that writes the codebase map into the staging
-// worktree, in the mode the workspace stage planned (`mapping:plan`): `skip` invokes nothing, `fast` runs
-// `/gsd-map-codebase --fast`, `full` runs `/gsd-map-codebase`; both maps are then stamped by AVARICE. This file writes no
+// worktree, in the mode the workspace stage planned (`mapping:plan`): `skip` and `adopt` invoke nothing (an adopted map is already in
+// staging, committed at the pin), `fast` runs `/gsd-map-codebase --fast`, `paths` runs `/gsd-map-codebase --paths <p1,p2>`, `full` runs
+// `/gsd-map-codebase`; these maps are then stamped by AVARICE. This file writes no
 // map document itself (ONB-2). The step `launch:map` is recorded before the host is called. The host's outcome
 // decides the next state; the map itself is judged by validation, never by the outcome.
 import { err, ok } from '../../domain/result.ts';
@@ -10,15 +11,26 @@ import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import { isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
-import { requiredFilesFor } from '../../domain/mapping.ts';
+import { isScopePath, requiredFilesFor } from '../../domain/mapping.ts';
 import { completeInvocation, prepareInvocation } from '../invocation.ts';
 
 const MAP_PROMPT = '/gsd-map-codebase';
 const FAST_MAP_PROMPT = '/gsd-map-codebase --fast';
 
-// The mapper is asked GSD's own question about an existing map up front, with the contract's answer.
-function promptFor(mode: MappingMode, existingMapAnswer: string | undefined): string {
-  const base = mode === 'fast' ? FAST_MAP_PROMPT : MAP_PROMPT;
+const MAX_PATHS = 50;
+
+// The scope of a `paths` map, checked again where it becomes part of the mapper's prompt (T-04-27): the stored list is data from the ledger.
+function scopeOf(paths: readonly string[] | undefined): Result<string[]> {
+  if (paths === undefined || paths.length === 0 || paths.length > MAX_PATHS || !paths.every(isScopePath)) {
+    return err({ kind: 'internal', cause: 'the stored mapping plan has no valid path scope for a paths map' });
+  }
+  return ok([...paths]);
+}
+
+// The mapper is asked GSD's own question about an existing map up front, with the contract's answer. The path scope is one comma-separated
+// value of `--paths`; every path was validated to plain characters, so no path can end the value or start another option.
+function promptFor(mode: MappingMode, existingMapAnswer: string | undefined, paths: readonly string[] = []): string {
+  const base = mode === 'fast' ? FAST_MAP_PROMPT : mode === 'paths' ? `${MAP_PROMPT} --paths ${paths.join(',')}` : MAP_PROMPT;
   if (existingMapAnswer === undefined) return base;
   const label = existingMapAnswer.charAt(0).toUpperCase() + existingMapAnswer.slice(1);
   return `${base}\nIf .planning/codebase already exists, answer the question about it with: ${label}.`;
@@ -37,15 +49,22 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   const plan = loadMappingPlan(deps, row.onboardingId);
   if (!plan.ok) return plan;
   const mode: MappingMode = plan.value?.mode ?? contract.value.body.mapping.mode;
-  if (mode === 'skip') {
-    // Nothing to map (not brownfield, or skipped on request): no invocation, straight to validation.
-    ctx.note('mapping skipped: no invocation');
+  if (mode === 'skip' || mode === 'adopt') {
+    // Nothing to map (not brownfield, skipped on request, or an existing map adopted after GSD's drift check passed in staging): no
+    // invocation and no budget, straight to validation, which judges the adopted files like any other.
+    ctx.note(mode === 'adopt' ? 'existing map adopted: no invocation' : 'mapping skipped: no invocation');
     const moved = ctx.transition(row, 'validating', 'validate', { data: { mode } });
     return moved.ok ? ok(undefined) : moved;
   }
+  let scope: string[] = [];
+  if (mode === 'paths') {
+    const checked = scopeOf(plan.value?.paths);
+    if (!checked.ok) return checked;
+    scope = checked.value;
+  }
 
   // Reserve the invocation and prepare its request (scope, session ID, step `launch:map` recorded as started).
-  const prepared = prepareInvocation(deps, row, 'map', promptFor(mode, plan.value?.existingMapAnswer), { expectedFiles: [...requiredFilesFor(mode)] });
+  const prepared = prepareInvocation(deps, row, 'map', promptFor(mode, plan.value?.existingMapAnswer, scope), { expectedFiles: [...requiredFilesFor(mode)] });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) {
     ctx.note(`the ${prepared.value.budget} budget is exhausted, so no map invocation was started`);

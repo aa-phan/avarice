@@ -23,7 +23,7 @@ export interface ProjectRecordInput {
   stagingPath: string;
   codebase: readonly CodebaseArtifact[];
   snapshot: string;
-  mapping: { mode: MappingMode; scope: readonly string[]; mappedAt: string; freshness?: 'fresh' | 'stale' };
+  mapping: { mode: MappingMode; scope: readonly string[]; mappedAt: string; freshness?: 'fresh' | 'stale'; provenance?: 'adopted' };
   notMapped: readonly string[];
   // Version reported by the located gsd-core (`runtime-identity`); `unknown` when none was recorded.
   gsdVersion?: string;
@@ -144,6 +144,8 @@ export interface ProjectRecord {
     completeness: Completeness;
     mappedAt: string;
     freshness: 'fresh' | 'stale';
+    // Present only for a map nobody ran: an existing GSD map adopted after GSD's drift check passed in staging.
+    provenance?: 'adopted';
   };
   indexes: RecordIndexes;
   notMapped: string[];
@@ -195,9 +197,11 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     mapping: {
       mode: input.mapping.mode,
       scope: [...input.mapping.scope],
-      completeness: completenessFor(input.mapping.mode),
+      // An adopted map is complete only when every full-map file is among those recorded (ONB-7).
+      completeness: completenessFor(input.mapping.mode, input.codebase.map((c) => c.path)),
       mappedAt: input.mapping.mappedAt,
       freshness: input.mapping.freshness ?? 'fresh',
+      ...(input.mapping.provenance !== undefined ? { provenance: input.mapping.provenance } : {}),
     },
     indexes: copyIndexes(input.indexes),
     notMapped: [...input.notMapped],

@@ -47,9 +47,32 @@ export interface RepoFacts {
 
 export type ExistingMapClass = 'none' | 'stamped-complete' | 'stamped-partial' | 'unstamped' | 'unknown-format' | 'user-edited';
 
-// Adoption of an existing map is Phase 4: until then every class is regenerated in staging and the user's
-// `.planning/` is never touched (docs "Migration steps").
-export const EXISTING_MAP_OUTCOME = 'isolated-regeneration';
+// What happens to the map a repository already has (docs/repository-onboarding.md "Repositories already using GSD"). Every outcome
+// other than `adopt` writes only in staging; the user's `.planning/` is never touched (docs "Migration steps").
+export type ExistingMapOutcome = 'adopt' | 'refresh' | 'full-in-staging' | 'isolated-regeneration' | 'map';
+
+// What GSD's `verify codebase-drift` said in staging about a stamped-complete map. `unreadable` covers a verdict GSD could not give: an
+// unresolvable stamp, no stamp, no STRUCTURE.md, a failed run.
+export type DriftVerdict = 'pass' | 'block' | 'unreadable';
+
+// The outcome per class. The stamp alone never makes a map adoptable (T-04-26): a stamped-complete map is adopted on a drift `pass`, refreshed on a
+// `block`, and mapped in full in staging on anything else, including a drift check that has not run (`null`).
+export function existingMapOutcome(cls: ExistingMapClass, drift: DriftVerdict | null): ExistingMapOutcome {
+  switch (cls) {
+    case 'none':
+      return 'map';
+    case 'stamped-complete':
+      return drift === 'pass' ? 'adopt' : drift === 'block' ? 'refresh' : 'full-in-staging';
+    case 'stamped-partial':
+    case 'unstamped':
+      return 'full-in-staging';
+    case 'unknown-format':
+    case 'user-edited':
+      return 'isolated-regeneration';
+    default:
+      throw new TypeError(`unknown existing-map class ${String(cls)}`);
+  }
+}
 
 // Lists in `preflight_json` are bounded; a cut is recorded under `truncated`, never silent.
 const MAX_LIST = 1000;
@@ -75,6 +98,15 @@ export function classifyExistingMap(facts: Pick<RepoFacts, 'codebaseMapFiles' | 
   if (files.some((file) => file.lastMappedCommit === null)) return 'unstamped';
   const present = new Set(files.map((file) => file.path));
   return FULL_MAP_FILES.every((path) => present.has(path)) ? 'stamped-complete' : 'stamped-partial';
+}
+
+// The paths of the user's checkout that stay as they are: for an edited map the files edited after their stamp commit and every changed
+// file under `.planning/`; for a map of another format every file of it. Names only. Sorted.
+export function userOwnedPaths(facts: Pick<RepoFacts, 'codebaseMapFiles' | 'modified' | 'untracked'>, cls: ExistingMapClass): string[] {
+  if (cls === 'unknown-format') return sortedUnique(facts.codebaseMapFiles.map((file) => file.path));
+  if (cls !== 'user-edited') return [];
+  const dirty = [...facts.modified, ...facts.untracked].filter((name) => name.startsWith('.planning/'));
+  return sortedUnique([...facts.codebaseMapFiles.filter(editedAfterStamp).map((file) => file.path), ...dirty]);
 }
 
 export interface LedgerView {
@@ -139,11 +171,15 @@ export function classifyPreflight(facts: RepoFacts, view: LedgerView, request: P
     notMapped: bounded('notMapped', dirty),
     untracked: bounded('untracked', facts.untracked),
     instructionFiles: bounded('instructionFiles', facts.instructionFiles),
+    // Preflight reads the checkout only, so the drift of a stamped-complete map is not known yet (`drift: null`) and its outcome is the one
+    // without a drift pass; the workspace stage runs GSD's drift check in staging and records the final outcome and the drift result in the
+    // `mapping:plan` step and in the project record's `existingState`.
     existingState: {
       planningExists: facts.planningFiles.length > 0 || dirty.some((name) => name.startsWith('.planning/')),
       codebaseMap,
-      adoptionDeferred: codebaseMap === 'stamped-complete',
-      outcome: EXISTING_MAP_OUTCOME,
+      outcome: existingMapOutcome(codebaseMap, null),
+      drift: null,
+      userOwned: bounded('userOwned', userOwnedPaths(facts, codebaseMap)),
     },
     submodules: bounded('submodules', facts.submodules),
     nestedRepos: bounded('nestedRepos', facts.nestedRepos),

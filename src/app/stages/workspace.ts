@@ -11,7 +11,9 @@ import { requireCapabilities } from '../capabilities.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { GsdSetting } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
-import type { ExistingMapClass } from '../../domain/preflight.ts';
+import { existingMapOutcome } from '../../domain/preflight.ts';
+import type { DriftVerdict, ExistingMapClass } from '../../domain/preflight.ts';
+import type { GsdOnboarding } from '../../ports/gsd-onboarding.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { loadContract, stopIncompatible } from './shared.ts';
 
@@ -29,6 +31,26 @@ function existingMapOf(preflight: unknown): ExistingMapClass {
   const state = typeof preflight === 'object' && preflight !== null ? (preflight as Record<string, unknown>)['existingState'] : undefined;
   const value = typeof state === 'object' && state !== null ? (state as Record<string, unknown>)['codebaseMap'] : undefined;
   return typeof value === 'string' && EXISTING_MAP_CLASSES.includes(value) ? (value as ExistingMapClass) : 'none';
+}
+
+// What GSD's own `verify codebase-drift` said in staging, reduced to the verdict the outcome rule reads. Only a clean answer is a `pass`: a verdict
+// GSD skipped (no STRUCTURE.md, no stamp, not a repository), could not give (an unresolvable stamp, exit 69) or that failed to run is `unreadable`,
+// so a stamp alone, forged or stale, never makes a map adoptable (T-04-26).
+interface DriftFinding {
+  verdict: DriftVerdict;
+  affectedPaths: string[];
+  threshold: number | null;
+  reason: string | null;
+}
+
+const MAX_RECORDED_PATHS = 50;
+
+async function driftOf(gsd: GsdOnboarding, staging: string): Promise<DriftFinding> {
+  const drift = await gsd.checkDrift(staging);
+  if (!drift.ok) return { verdict: 'unreadable', affectedPaths: [], threshold: null, reason: drift.error.kind };
+  const d = drift.value;
+  const verdict: DriftVerdict = d.block ? 'block' : d.skipped ? 'unreadable' : 'pass';
+  return { verdict, affectedPaths: d.affectedPaths.slice(0, MAX_RECORDED_PATHS), threshold: d.threshold, reason: d.reason };
 }
 
 export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRow): Promise<Result<void>> => {
@@ -73,8 +95,20 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
   });
   if (!probed.ok) return probed;
 
+  // A complete stamped map is adopted only when GSD's drift check, run here in staging (never in the user's checkout), passes. No other class
+  // has a drift question: the others are regenerated in staging whatever the drift is (docs "Repositories already using GSD").
   const existingMap = existingMapOf(row.preflight);
-  const decision = chooseMappingMode({ isBrownfield: probe.value.isBrownfield, requested: contract.value.body.mapping.mode, existingMap });
+  const drift = existingMap === 'stamped-complete' ? await driftOf(gsd, stagingPath) : null;
+  const outcome = existingMapOutcome(existingMap, drift?.verdict ?? null);
+  const decision = chooseMappingMode({
+    isBrownfield: probe.value.isBrownfield,
+    requested: contract.value.body.mapping.mode,
+    existingMap,
+    outcome,
+    readScope: contract.value.body.files.read,
+    ...(drift !== null ? { driftAffectedPaths: drift.affectedPaths } : {}),
+    ...(drift?.threshold != null ? { driftThreshold: drift.threshold } : {}),
+  });
   if (!decision.ok) {
     if (decision.error.kind !== 'unsupported') return decision;
     ctx.note(`mapping mode ${contract.value.body.mapping.mode} is not available: ${decision.error.detail ?? decision.error.capability}`);
@@ -105,8 +139,11 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     mode: decision.value.mode,
     completeness: decision.value.completeness,
     existingMap,
+    outcome: decision.value.outcome,
     reason: decision.value.reason,
     requested: contract.value.body.mapping.mode,
+    ...(decision.value.paths !== undefined ? { paths: decision.value.paths } : {}),
+    drift: drift === null ? null : { verdict: drift.verdict, affectedPaths: drift.affectedPaths, threshold: drift.threshold, reason: drift.reason },
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
   };
   const planned = deps.ledger.recordStepResult(row.onboardingId, {

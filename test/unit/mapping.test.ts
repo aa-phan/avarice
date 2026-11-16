@@ -1,5 +1,4 @@
-// chooseMappingMode: the decision table of docs/repository-onboarding.md "Mapping-mode decision table", as far
-// as Phase 1 implements it (skip, fast, full; adoption and path scope arrive in Phase 4).
+// chooseMappingMode: the decision table of docs/repository-onboarding.md "Mapping-mode decision table".
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chooseMappingMode } from '../../src/domain/mapping.ts';
@@ -33,12 +32,10 @@ describe('chooseMappingMode', () => {
     }
   });
 
-  it('answers unsupported with reduced mode fast for a path-scoped request (Phase 4)', () => {
-    const decision = chooseMappingMode({ isBrownfield: true, requested: 'paths' });
+  it('refuses a path-scoped request as invalid when the contract read scope is the whole repository', () => {
+    const decision = chooseMappingMode({ isBrownfield: true, requested: 'paths', readScope: ['**'] });
     assert.ok(!decision.ok);
-    assert.equal(decision.error.kind, 'unsupported');
-    assert.ok(decision.error.kind === 'unsupported');
-    assert.equal(decision.error.reducedMode, 'fast');
+    assert.equal(decision.error.kind, 'invalid');
   });
 
   it('regenerates in staging (full) for every existing-map classification, and keeps the classification', () => {
@@ -56,7 +53,7 @@ describe('chooseMappingMode', () => {
     assert.equal(decision.value.mode, 'fast');
   });
 
-  it('refuses a mode name it does not know and adoption (deferred)', () => {
+  it('refuses a mode name it does not know, and adoption of a map that is not adoptable', () => {
     const unknown = chooseMappingMode({ isBrownfield: true, requested: 'sideways' });
     assert.ok(!unknown.ok);
     assert.equal(unknown.error.kind, 'invalid');

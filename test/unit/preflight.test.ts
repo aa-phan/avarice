@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 
 import { ONBOARDING_STATES } from '../../src/domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
-import { EXISTING_MAP_OUTCOME, classifyExistingMap, classifyPreflight } from '../../src/domain/preflight.ts';
+import { classifyExistingMap, classifyPreflight } from '../../src/domain/preflight.ts';
 import type { LedgerView, MapFileFacts, RepoFacts } from '../../src/domain/preflight.ts';
 
 const SEVEN = ['STACK', 'ARCHITECTURE', 'STRUCTURE', 'CONVENTIONS', 'TESTING', 'INTEGRATIONS', 'CONCERNS'];
@@ -100,22 +100,22 @@ describe('classifyPreflight findings', () => {
     assert.deepEqual(findings['runtimes'], ['.nvmrc:22']);
     assert.equal(findings['trackedFiles'], 42);
     assert.equal(findings['trackedBytes'], 4242);
-    assert.deepEqual(findings['existingState'], { planningExists: true, codebaseMap: 'none', adoptionDeferred: false, outcome: EXISTING_MAP_OUTCOME });
+    assert.deepEqual(findings['existingState'], { planningExists: true, codebaseMap: 'none', outcome: 'map', drift: null, userOwned: [] });
   });
 
   it('a repository like the target (committed PROJECT, ROADMAP and STATE, no map) proceeds with planningExists true and codebaseMap none', () => {
     const result = classifyPreflight(facts({ planningFiles: ['.planning/PROJECT.md', '.planning/ROADMAP.md', '.planning/STATE.md'] }), NO_STATE, {});
     assert.ok(result.ok);
-    assert.deepEqual(result.value.findings['existingState'], { planningExists: true, codebaseMap: 'none', adoptionDeferred: false, outcome: 'isolated-regeneration' });
+    assert.deepEqual(result.value.findings['existingState'], { planningExists: true, codebaseMap: 'none', outcome: 'map', drift: null, userOwned: [] });
   });
 
-  it('every existing map regenerates in isolation, and only a complete stamped map defers adoption', () => {
+  it('records the class and the outcome without a drift verdict: a complete stamped map waits for GSD in staging, a partial one is mapped in full', () => {
     const complete = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => mapFile(n)), planningFiles: ['.planning/codebase/STACK.md'] }), NO_STATE, {});
     assert.ok(complete.ok);
-    assert.deepEqual(complete.value.findings['existingState'], { planningExists: true, codebaseMap: 'stamped-complete', adoptionDeferred: true, outcome: 'isolated-regeneration' });
+    assert.deepEqual(complete.value.findings['existingState'], { planningExists: true, codebaseMap: 'stamped-complete', outcome: 'full-in-staging', drift: null, userOwned: [] });
     const partial = classifyPreflight(facts({ codebaseMapFiles: FOUR.map((n) => mapFile(n)) }), NO_STATE, {});
     assert.ok(partial.ok);
-    assert.deepEqual(partial.value.findings['existingState'], { planningExists: false, codebaseMap: 'stamped-partial', adoptionDeferred: false, outcome: 'isolated-regeneration' });
+    assert.deepEqual(partial.value.findings['existingState'], { planningExists: false, codebaseMap: 'stamped-partial', outcome: 'full-in-staging', drift: null, userOwned: [] });
   });
 });
 

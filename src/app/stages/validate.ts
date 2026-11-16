@@ -13,7 +13,7 @@ import { VALIDATION_LIMITS, validateMapArtifacts, writeSetsFor } from '../../dom
 import type { MapValidation } from '../../domain/validation.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { effectiveMappingMode, extraMapFiles, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { effectiveMappingPlan, extraMapFiles, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
 
 const MAX_PATHS_IN_EVENT = 20;
 const MAX_PATH_CHARS = 200;
@@ -52,9 +52,9 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
 
   const head = deps.staging.head(staging.value);
   if (!head.ok) return head;
-  const mode = effectiveMappingMode(deps, row.onboardingId, contract.value.body);
-  if (!mode.ok) return mode;
-  const documents = readMapDocuments(deps.staging, staging.value, mode.value);
+  const mapping = effectiveMappingPlan(deps, row.onboardingId, contract.value.body);
+  if (!mapping.ok) return mapping;
+  const documents = readMapDocuments(deps.staging, staging.value, mapping.value.mode);
   if (!documents.ok) return documents;
 
   const pin = contract.value.body.workspace.baseRevision;
@@ -98,7 +98,7 @@ export const validateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
       moduleNames: sources.value.moduleNames,
       actionRefs: sources.value.actionRefs,
     },
-    { mode: mode.value },
+    mapping.value,
     VALIDATION_LIMITS,
   );
 

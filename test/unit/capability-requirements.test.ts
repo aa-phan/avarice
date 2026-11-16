@@ -107,16 +107,20 @@ describe('checkRequirements', () => {
 });
 
 describe('requireCapabilities against the composed dependencies', () => {
-  it('onboarding.map.paths on the real GSD descriptor (map-paths: false) names gsd-onboarding.map-paths and "full map in staging"', () => {
-    const refused = refusal(requireCapabilities(depsWith({ gsd: realGsd() }), 'onboarding.map.paths'));
-    assert.equal(refused.capability, 'gsd-onboarding.map-paths');
-    assert.equal(refused.reducedMode, 'full map in staging');
+  it('onboarding.map.paths and onboarding.map.adopt on a GSD descriptor without map-paths and adopt-map name the capability and "full map in staging"', () => {
+    const gsd = { descriptor: { port: 'gsd-onboarding', adapter: 'g', version: '1', capabilities: { 'map-paths': false }, offline: true } };
+    const deps = depsWith({ gsd } as unknown as Partial<AppDeps>);
+    const paths = refusal(requireCapabilities(deps, 'onboarding.map.paths'));
+    assert.equal(paths.capability, 'gsd-onboarding.map-paths');
+    assert.equal(paths.reducedMode, 'full map in staging');
+    assert.equal(refusal(requireCapabilities(deps, 'onboarding.map.adopt')).capability, 'gsd-onboarding.adopt-map');
   });
 
-  it('onboarding.map.full and onboarding.map.fast pass on the real GSD descriptor', () => {
+  it('every onboarding mapping step passes on the real GSD descriptor: full, fast, paths and adopt', () => {
     const deps = depsWith({ gsd: realGsd() });
-    assert.equal(requireCapabilities(deps, 'onboarding.map.full').ok, true);
-    assert.equal(requireCapabilities(deps, 'onboarding.map.fast').ok, true);
+    for (const step of ['onboarding.map.full', 'onboarding.map.fast', 'onboarding.map.paths', 'onboarding.map.adopt', 'onboarding.map.skip'] as const) {
+      assert.equal(requireCapabilities(deps, step).ok, true, step);
+    }
   });
 
   it('onboarding.planning.init stays unsupported and names the manual equivalent, not a phase number', () => {

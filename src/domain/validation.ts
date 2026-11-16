@@ -202,15 +202,17 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
     detail: missing.length === 0 ? `${required.length} required file(s) present` : `missing: ${missing.join(', ')}`,
   };
 
-  // 2. Stamp.
+  // 2. Stamp. A map AVARICE had made is stamped with the staging HEAD. An adopted map keeps the stamp of the commit it was mapped at; what
+  // makes it adoptable is GSD's drift check in staging (the workspace stage), so here every file only has to carry a stamp.
   const head = bare(facts.stagingHead);
+  const adopted = plan.mode === 'adopt';
   const badStamps: string[] = [];
-  for (const path of required) {
+  for (const path of adopted ? [...stampsByPath.keys()] : required) {
     const stamps = stampsByPath.get(path);
     if (!stamps) continue;
     for (const stamp of stamps) {
       const value = stamp === null ? '' : bare(stamp);
-      if (head === '' || value === '' || value !== head) {
+      if (value === '' || (!adopted && (head === '' || value !== head))) {
         badStamps.push(`${path} (${stamp === null || value === '' ? 'no stamp' : `stamped ${value}`})`);
       }
     }
@@ -218,8 +220,11 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   const stamp: ValidationCheck = {
     name: 'stamp',
     passed: badStamps.length === 0,
-    detail:
-      badStamps.length === 0
+    detail: adopted
+      ? badStamps.length === 0
+        ? `every adopted file carries the stamp of the commit it was mapped at (${stampsByPath.size} file(s))`
+        : `adopted file(s) without a stamp: ${badStamps.join(', ')}`
+      : badStamps.length === 0
         ? `last_mapped_commit equals the staging HEAD in ${required.length} file(s)`
         : `${head === '' ? 'staging HEAD is empty; ' : ''}not equal to staging HEAD ${head}: ${badStamps.join(', ')}`,
   };

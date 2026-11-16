@@ -57,6 +57,22 @@ function oneLine(value: unknown): string {
   return stripControl(String(value)).replace(/[\n\t]+/g, ' ');
 }
 
+// What onboarding will do with the map the repository already has; the final outcome of a complete stamped map waits for GSD's drift check in staging.
+function mapNote(codebaseMap: string | undefined): string {
+  switch (codebaseMap) {
+    case 'stamped-complete':
+      return ' (adopted if the drift check in staging passes, else refreshed in staging)';
+    case 'stamped-partial':
+    case 'unstamped':
+      return ' (mapped in full in staging)';
+    case 'unknown-format':
+    case 'user-edited':
+      return ' (left untouched; mapped in isolation in staging)';
+    default:
+      return '';
+  }
+}
+
 function list(label: string, values: unknown): string | null {
   if (!Array.isArray(values) || values.length === 0) return null;
   return `${label}: ${values.map(oneLine).join(', ')}`;
@@ -97,7 +113,7 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     return EXIT_INTERNAL;
   }
   const preflight = (typeof row.value.preflight === 'object' && row.value.preflight !== null ? row.value.preflight : {}) as Record<string, unknown>;
-  const state = preflight['existingState'] as { planningExists?: boolean; codebaseMap?: string; adoptionDeferred?: boolean } | undefined;
+  const state = preflight['existingState'] as { planningExists?: boolean; codebaseMap?: string; userOwned?: string[] } | undefined;
 
   const lines = [
     resultLine(`project ${registered.value.projectId}`, 'registered'),
@@ -105,13 +121,14 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     `repository ${oneLine(preflight['gitRoot'])}`,
     `pin ${oneLine(preflight['pin'])}${typeof preflight['branch'] === 'string' && preflight['branch'] !== '' ? ` (branch ${oneLine(preflight['branch'])})` : ' (detached HEAD)'}`,
     `tracked files ${oneLine(preflight['trackedFiles'])}, ${oneLine(preflight['trackedBytes'])} bytes`,
-    `existing .planning/: ${state?.planningExists === true ? 'yes' : 'no'}; codebase map: ${oneLine(state?.codebaseMap ?? 'unknown')}${state?.adoptionDeferred === true ? ' (adoption deferred, regenerated in staging)' : ''}`,
+    `existing .planning/: ${state?.planningExists === true ? 'yes' : 'no'}; codebase map: ${oneLine(state?.codebaseMap ?? 'unknown')}${mapNote(state?.codebaseMap)}`,
     list('instruction files', preflight['instructionFiles']),
     list('workspace manifests', preflight['workspaceManifests']),
     list('ADR directories', preflight['adrDirs']),
     list('runtimes', preflight['runtimes']),
     list('submodules', preflight['submodules']),
     list('nested repositories', preflight['nestedRepos']),
+    list('user-owned planning files (left untouched)', state?.userOwned),
     list('not mapped (uncommitted or untracked, names only)', preflight['notMapped']),
   ].filter((line): line is string => line !== null);
   io.out(`${lines.join('\n')}\nnext: avarice onboard --policy ${ONBOARDING_POLICY} ${oneLine(repoPath)}\n`);
