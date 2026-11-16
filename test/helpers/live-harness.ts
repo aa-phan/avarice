@@ -201,14 +201,15 @@ export function spendRefusal(capUsdForRun: number): string | undefined {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Per-phase live-spend ledgers: Phase 2 (D-15) and Phase 3 (D-05) may each spend at most 25 USD of live-model budget
+// Per-phase live-spend ledgers: Phase 2 (D-15) and Phase 3 (D-05) may each spend at most 25 USD of live-model budget, Phase 4 (D-03) 40 USD
 // ---------------------------------------------------------------------------------------------------------------
 
 export const PHASE2_CEILING_USD = 25;
 export const PHASE3_CEILING_USD = 25;
+export const PHASE4_CEILING_USD = 40;
 
-// The phase whose ledger every new live spend is checked against and recorded in. Phase 2 stays readable for history.
-export const CURRENT_SPEND_PHASE = 3;
+// The phase whose ledger every new live spend is checked against and recorded in. Phases 2 and 3 stay readable for history.
+export const CURRENT_SPEND_PHASE = 4;
 
 export interface PhaseSpendEntry {
   plan: string;
@@ -219,6 +220,7 @@ export interface PhaseSpendEntry {
 
 export type Phase2SpendEntry = PhaseSpendEntry;
 export type Phase3SpendEntry = PhaseSpendEntry;
+export type Phase4SpendEntry = PhaseSpendEntry;
 
 export interface PhaseSpendLedger {
   path(): string;
@@ -231,11 +233,11 @@ export interface PhaseSpendLedger {
   plan(fallback?: string): string;
 }
 
-const PHASE_CEILING_USD: Record<2 | 3, number> = { 2: PHASE2_CEILING_USD, 3: PHASE3_CEILING_USD };
+const PHASE_CEILING_USD: Record<2 | 3 | 4, number> = { 2: PHASE2_CEILING_USD, 3: PHASE3_CEILING_USD, 4: PHASE4_CEILING_USD };
 
 // One ledger per phase: its own default file, AVARICE_PHASE<n>_LEDGER, AVARICE_PHASE<n>_CEILING_USD (lowers the ceiling and never raises it;
 // anything that is not a positive number is ignored) and AVARICE_PHASE<n>_PLAN. The environment is read on every call.
-export function phaseSpendLedger(phase: 2 | 3): PhaseSpendLedger {
+export function phaseSpendLedger(phase: 2 | 3 | 4): PhaseSpendLedger {
   const prefix = `AVARICE_PHASE${phase}`;
   const path = (): string => process.env[`${prefix}_LEDGER`] ?? join(REPO_ROOT, 'test', 'containment', `live-spend-phase${phase}.jsonl`);
   const ceiling = (): number => {
@@ -280,12 +282,17 @@ export function phaseSpendLedger(phase: 2 | 3): PhaseSpendLedger {
 
 const phase2Ledger = phaseSpendLedger(2);
 const phase3Ledger = phaseSpendLedger(3);
+const phase4Ledger = phaseSpendLedger(4);
 // The ledger of the current phase: every spend guard and recorder below goes through it.
-export const currentSpendLedger: PhaseSpendLedger = CURRENT_SPEND_PHASE === 3 ? phase3Ledger : phase2Ledger;
+const LEDGER_BY_PHASE: Record<2 | 3 | 4, PhaseSpendLedger> = { 2: phase2Ledger, 3: phase3Ledger, 4: phase4Ledger };
+export const currentSpendLedger: PhaseSpendLedger = LEDGER_BY_PHASE[CURRENT_SPEND_PHASE];
+
+// The owner decision that set each phase's ceiling.
+const CEILING_DECISION: Record<2 | 3 | 4, string> = { 2: 'D-15', 3: 'D-05', 4: 'D-03' };
 
 // The text of every skip for a case, round, session or run that does not fit under the current phase's ceiling.
 export function ceilingRefusal(what: string, capUsdForRun: number): string {
-  const tag = CURRENT_SPEND_PHASE === 3 ? 'D-05' : 'D-15';
+  const tag = CEILING_DECISION[CURRENT_SPEND_PHASE];
   return `not run: Phase ${CURRENT_SPEND_PHASE} spend ${currentSpendLedger.spent().toFixed(4)} plus this ${what}'s cap ${capUsdForRun.toFixed(2)} would pass the ${currentSpendLedger.ceiling().toFixed(2)} USD ceiling (${tag}); ask the owner`;
 }
 
@@ -296,12 +303,12 @@ export const phase2Spent = (): number => phase2Ledger.spent();
 export const fitsPhase2Ceiling = (capUsdForRun: number): boolean => phase2Ledger.fits(capUsdForRun);
 export const recordPhase2Spend = (entry: Phase2SpendEntry): void => phase2Ledger.record(entry);
 
-// Phase 4 names (RED scaffold: the exports exist but still read the Phase 3 ledger and ceiling; the next commit gives Phase 4 its own).
-export const PHASE4_CEILING_USD = 40;
-export const phase4Ceiling = (): number => phase3Ledger.ceiling();
-export const phase4Spent = (): number => phase3Ledger.spent();
-export const fitsPhase4Ceiling = (capUsdForRun: number): boolean => phase3Ledger.fits(capUsdForRun);
-export const recordPhase4Spend = (entry: Phase3SpendEntry): void => phase3Ledger.record(entry);
+// Phase 4 names.
+export const phase4LedgerPath = (): string => phase4Ledger.path();
+export const phase4Ceiling = (): number => phase4Ledger.ceiling();
+export const phase4Spent = (): number => phase4Ledger.spent();
+export const fitsPhase4Ceiling = (capUsdForRun: number): boolean => phase4Ledger.fits(capUsdForRun);
+export const recordPhase4Spend = (entry: Phase4SpendEntry): void => phase4Ledger.record(entry);
 
 // Phase 3 names.
 export const phase3LedgerPath = (): string => phase3Ledger.path();
