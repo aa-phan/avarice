@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "approvedBy": null,
+  "approvedAt": null,
+  "decision": "D-05",
+  "passBar": "5 of 5 repositories reach an active profile with no source change and 0 containment failures",
+  "repositories": [
+    {
+      "id": "aa-phan-portfolio-v2",
+      "stack": "typescript",
+      "source": "~/aa-phan-portfolio-v2",
+      "sourceKind": "owner-path",
+      "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+      "hasPlanning": true,
+      "planningTrackedFiles": 174,
+      "hasCodebaseMap": false,
+      "trackedFiles": 363,
+      "notes": "Owner portfolio (React, Vite, Vitest). Committed GSD planning at the pin, no .planning/codebase map. Also the Phase 2 and Phase 3 exit repository."
+    }
+  ]
+}

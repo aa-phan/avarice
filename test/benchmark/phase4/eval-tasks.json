@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "approvedBy": null,
+  "approvedAt": null,
+  "decision": "D-07",
+  "arms": {
+    "A": {
+      "name": "Baseline: GSD map plus self-found files",
+      "description": "The agent reads the repository GSD codebase map (generated at the task parent when the repository carries none there) and finds any other files itself with ordinary search and reads. No AVARICE pack. This is the D-06 baseline, taken from docs/operations-and-testing.md, not the full repository."
+    },
+    "B": {
+      "name": "Pack with the code-only graph",
+      "description": "The AVARICE context pack built at the task parent with the gsd-intel and gsd-graph adapters, the knowledge pass off: code nodes only."
+    },
+    "C": {
+      "name": "Pack with the knowledge graph",
+      "description": "The same pack with the knowledge pass on: code nodes plus document nodes."
+    }
+  },
+  "specMapping": "The spec names three arms: document section reads, the code-only graph, and the graph with document nodes (docs/operations-and-testing.md, Context retrieval evaluation). Here arm A is the D-06 baseline, B is the code-only graph and C is the graph with document nodes. The difference from the spec is recorded as a findings line by plan 04-39.",
+  "successRule": "A task succeeds when every required check passes at the end of the run and the held-out test, copied from the target commit after the agent finishes, passes. Reviewer judgment is a sampled owner spot-check, not a gate.",
+  "passRule": {
+    "text": "AC-8 passes when the task success rate of arm B or arm C is at least the success rate of arm A and its total tokens are no more than 50% of arm A total tokens, over the 20 tasks.",
+    "maxTokenShare": 0.5
+  },
+  "knowledgeRule": {
+    "text": "D-08: the knowledge pass stays on unless arm C shows no task-success gain over arm B and also costs more tokens than arm B. The outcome is recorded as an ADR in docs/decisions/ either way."
+  },
+  "tokenMetric": {
+    "text": "Tokens are the sum, over distinct assistant messages, of input, cache-creation, cache-read and output tokens (A2). USD cost is recorded beside them."
+  },
+  "isolation": {
+    "text": "Each arm runs in a checkout at the task parent with no history after it and no remote. The held-out test files are never placed where an arm can read them: deniedReads takes precedence over allowedReads, and the held-out tests are copied in only after the agent has stopped. The index and the pack are built at the parent, never at the target commit."
+  },
+  "tasks": [
+    {
+      "id": "T01",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "890ba197d5118fa793419ae8917b917806976429",
+      "parent": "5e0810b5aaaeb2efff798f1f05d0162553789160",
+      "subject": "fix(03-23): load the motion feature bundle when reduced motion turns off mid-visit",
+      "brief": "fix(03-23): load the motion feature bundle when reduced motion turns off mid-visit\n\n- Hold the LazyMotion loader pending while reduced and release it when the preference flips\n- Add unit and e2e coverage for the reduced-then-off case",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/motion-features.test.tsx",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/motion-features.test.tsx"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/motion.spec.ts",
+        "tests/unit/motion-features.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 24
+    }
+  ]
+}
