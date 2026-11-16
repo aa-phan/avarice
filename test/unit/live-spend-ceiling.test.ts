@@ -15,6 +15,7 @@ import {
   PHASE2_CEILING_USD,
   PHASE3_CEILING_USD,
   PHASE4_CEILING_USD,
+  currentSpendLedger,
   fitsCap,
   fitsPhase2Ceiling,
   fitsPhase3Ceiling,
@@ -31,6 +32,7 @@ import {
   recordPhase4Spend,
   recordSpend,
   spendRefusal,
+  spentByPlan,
   spikeRefusal,
 } from '../helpers/live-harness.ts';
 
@@ -364,6 +366,18 @@ describe('Phase 4 live-spend ledger and ceiling (D-03)', () => {
     assert.equal(fitsPhase2Ceiling(23), true);
     assert.equal(fitsPhase3Ceiling(22), true);
     assert.equal(fitsPhase3Ceiling(22.01), false);
+  });
+
+  it('points the current ledger at the Phase 4 default file when no override is set', () => {
+    delete process.env[P4_LEDGER_ENV];
+    assert.ok(currentSpendLedger.path().endsWith('live-spend-phase4.jsonl'), currentSpendLedger.path());
+  });
+
+  it('sums only the entries of the named plan in spentByPlan', () => {
+    writeFileSync(ledger4, line4(1.5, '04-31') + line4(2, '04-34') + line4(0.25, '04-31') + line4(9, '04-310'));
+    assert.ok(Math.abs(spentByPlan('04-31') - 1.75) < 1e-9);
+    assert.equal(spentByPlan('04-34'), 2);
+    assert.equal(spentByPlan('04-99'), 0);
   });
 });
 
