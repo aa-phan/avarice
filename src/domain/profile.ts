@@ -91,3 +91,36 @@ export function matchesRemotePattern(remote: string, pattern: string): boolean {
   if (wanted.length !== actual.length) return false;
   return wanted.every((part, index) => segmentMatches(part, actual[index] as string));
 }
+
+// The profile config file (SEC-1, OPS-5). The key set is closed: a key outside it is refused by name.
+export const PROFILE_CONFIG_KEYS: readonly string[] = [
+  'schema',
+  'profile',
+  'dataRoot',
+  'workRoot',
+  'notify',
+  'limits',
+  'retrieval',
+  'credentials',
+  'adapters',
+  'retention',
+  'policy',
+  'remotePatterns',
+  'workspaceRoots',
+  'freshnessWindowHours',
+];
+
+export type SectionKey = 'notify' | 'limits' | 'retrieval' | 'credentials' | 'adapters' | 'retention' | 'policy' | 'remotePatterns' | 'workspaceRoots' | 'freshnessWindowHours';
+
+export interface ProfileConfig {
+  schema: 1;
+  id: string;
+  class: ProfileClass;
+  dataRoot?: string;
+  workRoot?: string;
+  sections: Partial<Record<SectionKey, unknown>>;
+}
+
+export function parseProfileConfig(_raw: unknown, _expectedProfile: string): Result<ProfileConfig> {
+  return err({ kind: 'internal', cause: 'parseProfileConfig is not implemented' });
+}

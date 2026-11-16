@@ -4,9 +4,14 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { parseProfileNotify, NOTIFY_DEFAULTS } from '../../domain/notify-policy.ts';
 import type { ProfileNotify } from '../../domain/notify-policy.ts';
+import type { ProfileConfig } from '../../domain/profile.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { configPathFor } from './profile-paths.ts';
+
+export function readProfileConfig(_configHome: string, _profile: string): Result<ProfileConfig> {
+  return err({ kind: 'internal', cause: 'readProfileConfig is not implemented' });
+}
 
 export const MAX_PROFILE_CONFIG_BYTES = 64 * 1024;
 
