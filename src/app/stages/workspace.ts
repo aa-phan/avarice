@@ -7,6 +7,7 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { chooseMappingMode } from '../../domain/mapping.ts';
+import { requireCapabilities } from '../capabilities.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { GsdSetting } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
@@ -80,6 +81,18 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     const blocked = ctx.transition(row, 'blocked', 'none', {
       reason: 'scope_unavailable',
       data: { capability: decision.error.capability, ...(decision.error.reducedMode !== undefined ? { reducedMode: decision.error.reducedMode } : {}) },
+    });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
+  // FR-16: the mapping the decision chose needs what the admitted GSD declares; a step whose capability is missing stops here, before staging
+  // is configured or any host starts, naming the capability and the reduced mode. Nothing is simulated.
+  const capable = requireCapabilities(deps, `onboarding.map.${decision.value.mode}`);
+  if (!capable.ok) {
+    if (capable.error.kind !== 'unsupported') return capable;
+    ctx.note(`mapping mode ${decision.value.mode} is not available: ${capable.error.capability}${capable.error.reducedMode !== undefined ? `; reduced mode: ${capable.error.reducedMode}` : ''}`);
+    const blocked = ctx.transition(row, 'blocked', 'none', {
+      reason: 'scope_unavailable',
+      data: { capability: capable.error.capability, ...(capable.error.reducedMode !== undefined ? { reducedMode: capable.error.reducedMode } : {}) },
     });
     return blocked.ok ? ok(undefined) : blocked;
   }

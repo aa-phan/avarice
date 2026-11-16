@@ -17,6 +17,7 @@ import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
 import { blockingOf, validateChecks } from '../check-validation.ts';
 import { installDependencies, measureInventory, runRequiredChecks } from '../checks.ts';
 import type { InstallResult } from '../checks.ts';
+import { requireCapabilities } from '../capabilities.ts';
 import type { AppDeps } from '../deps.ts';
 import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
 import { blockRun } from './blocked.ts';
@@ -357,10 +358,19 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
   // host can answer, whether it enforces containment (CON-3).
   const failures: G0Failure[] = checkG0Static(contract);
   const enforcement = deps.host.descriptor.attributes?.['enforcement'];
-  const hostFailed = enforcement !== 'enforced';
-  if (hostFailed) {
+  const enforcementFailed = enforcement !== 'enforced';
+  if (enforcementFailed) {
     failures.push({ rule: 'host-enforcement', detail: `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}`.slice(0, MAX_DETAIL) });
   }
+  // FR-16: a host that enforces containment but does not declare what a unit needs is refused here, before any invocation, naming the capability and
+  // the reduced mode. A host that failed enforcement is already refused above, so the capability failure is not a second row for the same cause.
+  const required = requireCapabilities(deps, 'run.unit');
+  const unsupported = !required.ok && required.error.kind === 'unsupported' ? required.error : undefined;
+  if (unsupported !== undefined && !enforcementFailed) {
+    failures.push({ rule: 'capability', detail: `${unsupported.capability} is not declared by the host; reduced mode: ${unsupported.reducedMode ?? 'none'}`.slice(0, MAX_DETAIL) });
+  }
+  if (!required.ok && unsupported === undefined) return required;
+  const hostFailed = enforcementFailed || unsupported !== undefined;
   // A kill between this insert and the transition repeats the action on resume. Gate rows are insert-only and tell the truth about each
   // evaluation, but a repeat that finds the identical verdict already recorded for the same contract, policy and revision adds nothing.
   const contractVersion = loaded.value?.version ?? 1;
@@ -401,12 +411,19 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
     }
     ctx.note(
       hostFailed
-        ? `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`
+        ? unsupported !== undefined && !enforcementFailed
+          ? `host ${deps.host.descriptor.adapter} does not declare ${unsupported.capability}; reduced mode: ${unsupported.reducedMode ?? 'none'}`
+          : `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`
         : `G0 failed: ${failures.map((f) => f.rule).join(', ')}`.slice(0, MAX_DETAIL),
     );
     const blocked = ctx.transition(row, 'blocked_on_decision', 'none', {
       reason: hostFailed ? 'enforcement_failure' : 'decision',
-      data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown', gate: 'G0' },
+      data: {
+        host: deps.host.descriptor.adapter,
+        enforcement: enforcement ?? 'unknown',
+        gate: 'G0',
+        ...(unsupported !== undefined ? { capability: unsupported.capability, ...(unsupported.reducedMode !== undefined ? { reducedMode: unsupported.reducedMode } : {}) } : {}),
+      },
       ...place,
     });
     return blocked.ok ? ok('moved') : blocked;

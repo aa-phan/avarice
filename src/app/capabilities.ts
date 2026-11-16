@@ -1,15 +1,18 @@
 // The composition-time capability check (FR-16): every descriptor the composed dependencies publish, and the refusal a step gets
 // when what it requires is not declared by one of them.
-import { ok } from '../domain/result.ts';
-import type { Result } from '../domain/result.ts';
+import { checkRequirements } from '../domain/capability-requirements.ts';
 import type { StepName } from '../domain/capability-requirements.ts';
+import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from '../ports/capability.ts';
 import type { AppDeps } from './deps.ts';
 
-export function descriptorsOf(_deps: AppDeps): CapabilityDescriptor[] {
-  return [];
+// Every descriptor present in the dependencies; an adapter composition did not supply publishes none.
+export function descriptorsOf(deps: AppDeps): CapabilityDescriptor[] {
+  const candidates: Array<{ descriptor: CapabilityDescriptor } | undefined> = [deps.host, deps.executor, deps.graph, deps.gsd, deps.context?.intel, deps.context?.graph, deps.notify?.notifier];
+  return candidates.flatMap((adapter) => (adapter === undefined ? [] : [adapter.descriptor]));
 }
 
-export function requireCapabilities(_deps: AppDeps, _step: StepName): Result<void> {
-  return ok(undefined);
+// `unsupported` naming the first missing capability and its reduced mode, or ok. The caller stops the step on an error; the step never starts.
+export function requireCapabilities(deps: AppDeps, step: StepName): Result<void> {
+  return checkRequirements(step, descriptorsOf(deps));
 }
