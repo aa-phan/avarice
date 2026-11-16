@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newId } from '../domain/ids.ts';
 import type { IdPrefix } from '../domain/ids.ts';
@@ -17,8 +17,10 @@ import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../adapters/sqlite/migrations/0003-decisions.ts';
 import { MIGRATION_0004 } from '../adapters/sqlite/migrations/0004-profiles.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
-import { resolveProfile } from '../adapters/fs/profile-paths.ts';
+import { configPathFor, resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { readProfileNotify } from '../adapters/fs/profile-config.ts';
+import { backfillBindings } from '../adapters/fs/profile-bindings.ts';
+import { readOrganizationPolicy, readRepositoryPolicy } from '../adapters/fs/policy-sources.ts';
 import { LocalNotifier } from '../adapters/notify/local-notifier.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
@@ -36,7 +38,10 @@ import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
 import { digestOf } from '../domain/digest.ts';
-import { err } from '../domain/result.ts';
+import { parsePolicyFile, policySources } from '../domain/policy.ts';
+import type { PolicyFile, PolicySources } from '../domain/policy.ts';
+import { err, ok } from '../domain/result.ts';
+import type { Result } from '../domain/result.ts';
 import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
@@ -47,7 +52,7 @@ import type { CommandExecutor } from '../ports/command-executor.ts';
 import type { EgressProxy } from '../ports/egress-proxy.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
-import type { AppDeps, Clock, GsdProblem, IdSource, NotifyDeps } from '../app/deps.ts';
+import type { AppDeps, Clock, GsdProblem, IdSource, NotifyDeps, ProfilePaths } from '../app/deps.ts';
 
 export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003, MIGRATION_0004];
 export const EXIT_INTERNAL = 70;
@@ -108,6 +113,58 @@ function refuseForeignStore(db: Db, dbPath: string, selected: string): Compositi
   db.close();
   const shown = owner.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 64);
   return { ok: false, code: EXIT_INTERNAL, message: `store at ${dbPath} belongs to profile ${shown}, not ${selected}; run it under that profile (--profile ${shown}) or point the roots at a store of ${selected}` };
+}
+
+interface BasePolicy {
+  organization: Result<PolicyFile> | 'absent';
+  user?: PolicyFile;
+}
+
+// The file and the rules the profile's `policy` section holds: `organizationFile` names the rank-1 file, and the rest of the section
+// (`schema`, `rules`) is the user's own policy.
+function readBasePolicy(profile: ProfilePaths): Result<BasePolicy> {
+  const section = profile.config.sections.policy;
+  if (section !== undefined && (typeof section !== 'object' || section === null || Array.isArray(section))) {
+    return err({ kind: 'invalid', field: 'policy', reason: 'expected an object in the profile config' });
+  }
+  const { organizationFile, ...own } = (section ?? {}) as Record<string, unknown>;
+  let organization: BasePolicy['organization'] = 'absent';
+  // Only an enterprise profile has an organization file (SEC-4): a personal profile that names one does not read it.
+  if (profile.class === 'enterprise' && organizationFile !== undefined) {
+    if (typeof organizationFile !== 'string' || organizationFile === '' || organizationFile.length > 1024 || /[\u0000-\u001f\u007f-\u009f]/.test(organizationFile)) {
+      return err({ kind: 'invalid', field: 'policy.organizationFile', reason: 'expected a path without control characters' });
+    }
+    const read = readOrganizationPolicy(resolve(dirname(configPathFor(profile.configHome, profile.profile)), organizationFile));
+    organization = !read.ok && read.error.kind === 'not_found' ? 'absent' : read;
+  }
+  if (Object.keys(own).length === 0) return ok({ organization });
+  const user = parsePolicyFile(own, 'user');
+  if (!user.ok) return user;
+  return ok({ organization, user: user.value });
+}
+
+// AppDeps.policy: the organization file and the user section are read at the first call and kept, so a file edited while a command runs
+// applies from the next command (SEC-4); a repository's policy is read at its pin, which no later edit can change, and kept by pin.
+function policyLoader(profile: ProfilePaths): AppDeps['policy'] {
+  let base: Result<BasePolicy> | undefined;
+  const repositories = new Map<string, Result<PolicyFile | null>>();
+  return (repo) => {
+    base ??= readBasePolicy(profile);
+    if (!base.ok) return base;
+    const input: Record<string, unknown> = { profileClass: profile.class, organization: base.value.organization };
+    if (base.value.user !== undefined) input['user'] = base.value.user;
+    if (repo !== undefined) {
+      const key = `${repo.path}\0${repo.pin}`;
+      let read = repositories.get(key);
+      if (read === undefined) {
+        read = readRepositoryPolicy(repo.path, repo.pin);
+        repositories.set(key, read);
+      }
+      if (!read.ok) return read;
+      if (read.value !== null) input['repository'] = read.value;
+    }
+    return policySources(input);
+  };
 }
 
 export function systemClock(): Clock {
@@ -215,6 +272,20 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   }
   const store = db;
   const ledger = new SqliteLedger(store, (prefix) => ids.next(prefix));
+  // D-18: a project already in this store belongs to this store's profile. The first command that may write makes that explicit in the
+  // binding registry, so the repository can no longer be run under another profile. A read-only command writes nothing.
+  if (options.readOnly !== true) {
+    const projects = ledger.listProjects();
+    if (!projects.ok) {
+      store.close();
+      return failure('cannot list the projects of the store', describeError(projects.error));
+    }
+    const bound = backfillBindings(profile.configHome, profile.profile, projects.value, clock.nowMs());
+    if (!bound.ok) {
+      store.close();
+      return failure('cannot bind the projects of the store to its profile', describeError(bound.error));
+    }
+  }
   // The executor for AVARICE's own subprocesses. A read-only command never runs one, so it neither probes the
   // sandbox nor records the executor.
   const executor = overrides.executor ?? new SandboxedExecutor();
@@ -327,7 +398,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home, policy: () => err({ kind: 'internal', cause: 'policy is not implemented' }) },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home, policy: policyLoader(profile) },
       close: () => {
         try {
           store.close();

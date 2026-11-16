@@ -4,7 +4,7 @@
 // link and read only when it is a regular file of at most 64 KiB, so a planted link or a huge file cannot steer which store opens.
 // Entries are validated by hand: a file that does not validate is refused whole (nothing is skipped), because a skipped entry would
 // silently let a bound repository open under another profile.
-import { closeSync, constants, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseProfileName, profileClass } from '../../domain/profile.ts';
 import { err, ok } from '../../domain/result.ts';
@@ -102,6 +102,32 @@ export function readBindings(configHome: string): Result<Binding[]> {
     out.push(parsed.value);
   }
   return ok(out);
+}
+
+// The identity of every project a store holds, bound to `profile` when it has no binding yet (D-18: a project already in a store belongs to the
+// profile of that store, so the first command that may write makes that explicit). A project whose repository path is no longer on disk has no
+// git root to bind and is skipped. A project that is already bound to the same profile is left alone; one bound to another profile is a
+// `conflict` naming the repository and that profile, and nothing is written for the projects after it.
+export function backfillBindings(configHome: string, profile: string, projects: ReadonlyArray<{ rootCommit: string; repoPath: string }>, nowMs: number): Result<number> {
+  let added = 0;
+  for (const project of projects) {
+    let gitRoot: string;
+    try {
+      gitRoot = realpathSync(project.repoPath);
+    } catch {
+      continue;
+    }
+    const existing = findBinding(configHome, { gitRoot, rootCommit: project.rootCommit });
+    if (!existing.ok) return existing;
+    if (existing.value !== undefined) {
+      if (existing.value.profile === profile) continue;
+      return err({ kind: 'conflict', expected: profile, actual: `repository ${gitRoot} is bound to ${existing.value.profile}` });
+    }
+    const written = writeBinding(configHome, { gitRoot, rootCommit: project.rootCommit, profile, boundAt: new Date(nowMs).toISOString() });
+    if (!written.ok) return written;
+    added += 1;
+  }
+  return ok(added);
 }
 
 // The binding of a repository: the entry whose git root and root commit are both the repository's.
