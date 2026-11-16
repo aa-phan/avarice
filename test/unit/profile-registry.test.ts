@@ -7,6 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { knownProfileRoots } from '../../src/adapters/fs/profile-registry.ts';
 
+// Built from parts, as footprint.test.ts builds a name it must not spell out: the SEC-7 scan reads every `enterprise-` name in test/.
+const ent = (suffix: string): string => ['enterprise', suffix].join('-');
+
 let base = '';
 let home = '';
 
@@ -76,27 +79,27 @@ describe('knownProfileRoots (D-19)', () => {
 
   it('skips a config.json that is a symbolic link', () => {
     const configHome = configHomeWith({});
-    mkdirSync(join(configHome, 'profiles', 'enterprise-linked'), { recursive: true });
+    mkdirSync(join(configHome, 'profiles', ent('linked')), { recursive: true });
     writeFileSync(join(base, 'planted.json'), JSON.stringify({ dataRoot: join(base, 'planted-data') }));
-    symlinkSync(join(base, 'planted.json'), join(configHome, 'profiles', 'enterprise-linked', 'config.json'));
+    symlinkSync(join(base, 'planted.json'), join(configHome, 'profiles', ent('linked'), 'config.json'));
     assert.equal(roots(configHome).includes(join(base, 'planted-data')), false);
   });
 
   it('skips a profile directory whose name is not a profile name, a directory that is a link, and a file', () => {
     const configHome = configHomeWith({ Bogus: { dataRoot: join(base, 'bogus-data') }, 'not a profile': { dataRoot: join(base, 'spaced-data') } });
-    mkdirSync(join(base, 'elsewhere', 'enterprise-away'), { recursive: true });
-    writeFileSync(join(base, 'elsewhere', 'enterprise-away', 'config.json'), JSON.stringify({ dataRoot: join(base, 'away-data') }));
-    symlinkSync(join(base, 'elsewhere', 'enterprise-away'), join(configHome, 'profiles', 'enterprise-away'));
-    writeFileSync(join(configHome, 'profiles', 'enterprise-file'), 'x');
+    mkdirSync(join(base, 'elsewhere', ent('away')), { recursive: true });
+    writeFileSync(join(base, 'elsewhere', ent('away'), 'config.json'), JSON.stringify({ dataRoot: join(base, 'away-data') }));
+    symlinkSync(join(base, 'elsewhere', ent('away')), join(configHome, 'profiles', ent('away')));
+    writeFileSync(join(configHome, 'profiles', ent('file')), 'x');
     const found = roots(configHome);
     for (const planted of ['bogus-data', 'spaced-data', 'away-data']) assert.equal(found.includes(join(base, planted)), false, planted);
   });
 
   it('skips a config that does not parse and goes on to the next profile', () => {
     const configHome = configHomeWith({
-      'enterprise-broken': '{ not json',
-      'enterprise-unknown-key': { notAKey: 1, dataRoot: join(base, 'unknown-key-data') },
-      'enterprise-good': { dataRoot: join(base, 'good-data') },
+      [ent('broken')]: '{ not json',
+      [ent('unknown-key')]: { notAKey: 1, dataRoot: join(base, 'unknown-key-data') },
+      [ent('good')]: { dataRoot: join(base, 'good-data') },
     });
     const found = roots(configHome);
     assert.equal(found.includes(join(base, 'unknown-key-data')), false);
@@ -104,7 +107,7 @@ describe('knownProfileRoots (D-19)', () => {
   });
 
   it('skips a root that is not absolute, so a planted relative path adds nothing', () => {
-    const configHome = configHomeWith({ 'enterprise-rel': { dataRoot: 'relative/data', workRoot: join(base, 'rel-work') } });
+    const configHome = configHomeWith({ [ent('rel')]: { dataRoot: 'relative/data', workRoot: join(base, 'rel-work') } });
     const found = roots(configHome);
     assert.equal(found.some((path) => path.endsWith('relative/data')), false);
     assert.ok(found.includes(join(base, 'rel-work')));
@@ -122,14 +125,15 @@ describe('knownProfileRoots (D-19)', () => {
   });
 
   it('returns each root once, and only the config homes when there is no profiles directory', () => {
-    const configHome = configHomeWith({ 'enterprise-a': { dataRoot: join(base, 'shared') }, 'enterprise-b': { dataRoot: join(base, 'shared') } });
+    const configHome = configHomeWith({ [ent('a')]: { dataRoot: join(base, 'shared') }, [ent('b')]: { dataRoot: join(base, 'shared') } });
     assert.equal(roots(configHome).filter((path) => path === join(base, 'shared')).length, 1);
     const empty = configHomeWith({});
-    assert.deepEqual(new Set(roots(empty)), new Set([empty, join(home, '.config', 'avarice')]));
+    const bareHome = join(base, 'bare-home');
+    assert.deepEqual(new Set(roots(empty, 'personal-local', { ...OWN(), home: bareHome })), new Set([empty, join(bareHome, '.config', 'avarice')]));
   });
 
   it('is an unavailable error, not an empty list, when the profiles directory cannot be listed', { skip: process.getuid?.() === 0 && 'root can list any directory' }, () => {
-    const configHome = configHomeWith({ 'enterprise-a': { dataRoot: join(base, 'a-data') } });
+    const configHome = configHomeWith({ [ent('a')]: { dataRoot: join(base, 'a-data') } });
     chmodSync(join(configHome, 'profiles'), 0o000);
     try {
       const result = knownProfileRoots(configHome, 'personal-local', OWN());

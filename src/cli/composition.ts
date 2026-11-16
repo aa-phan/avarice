@@ -17,7 +17,8 @@ import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../adapters/sqlite/migrations/0003-decisions.ts';
 import { MIGRATION_0004 } from '../adapters/sqlite/migrations/0004-profiles.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
-import { configPathFor, resolveProfile } from '../adapters/fs/profile-paths.ts';
+import { configPathFor, realpathNearest, resolveProfile } from '../adapters/fs/profile-paths.ts';
+import { knownProfileRoots } from '../adapters/fs/profile-registry.ts';
 import { readProfileNotify } from '../adapters/fs/profile-config.ts';
 import { backfillBindings } from '../adapters/fs/profile-bindings.ts';
 import { readOrganizationPolicy, readRepositoryPolicy } from '../adapters/fs/policy-sources.ts';
@@ -233,7 +234,12 @@ function productionHost(inputs: HostInputs): AgentHost {
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
   const resolved = resolveProfile(env, {}, options.profile);
   if (!resolved.ok) return failure('cannot prepare the profile directories', describeError(resolved.error));
-  const profile: ProfilePaths = { ...resolved.value, otherRoots: [] };
+  // D-19: the roots every run sandbox of this profile denies beside the default parents, read from the profile configs: the data root, work root
+  // and config home of every other known profile wherever it was moved, and the config homes this one and the default one use.
+  const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
+  const others = knownProfileRoots(resolved.value.configHome, resolved.value.profile, { home, ownDataRoot: resolved.value.dataRoot, ownWorkRoot: resolved.value.workRoot });
+  if (!others.ok) return failure('cannot read the other profiles of this machine', describeError(others.error));
+  const profile: ProfilePaths = { ...resolved.value, otherRoots: [...new Set([...others.value, realpathNearest(resolved.value.configHome)])] };
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
   const ids = overrides.ids ?? systemIds(clock);
@@ -305,7 +311,6 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   }
   // The graph tool. Building its descriptor executes nothing; the graphify version is read by locate() when the
   // index stage uses it. A missing graphify is not a composition failure.
-  const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
   const graph = new GraphifyTool(executor, { env, dataRoot: profile.dataRoot, home });
   if (options.readOnly !== true) {
     const recorded = ledger.upsertAdapterConfig({

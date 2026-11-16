@@ -1,17 +1,66 @@
-// The other profiles on this machine (SEC-1, D-19). A run's sandbox denies the roots of every profile but its own; the roots of a profile whose
-// data root, work root or config home were moved by an environment variable sit outside the default parents, so they are read from the profile
-// configs: <configHome>/profiles/<profile>/config.json names the roots in use, and is written once with them.
-import { ok } from '../../domain/result.ts';
+// The other profiles on this machine (SEC-1, D-19). A run's sandbox denies the roots of every profile but its own. The default parents cover the
+// default roots; a profile whose data root, work root or config home were moved by an environment variable sits outside them, and is named only
+// by its own config: <configHome>/profiles/<profile>/config.json, written once with the roots in use and read back on every command.
+//
+// The registry reads those configs and returns paths to deny, so a planted or hostile file can only add a deny, never open a path. Each config is
+// read as the profile config always is (no link followed, a regular file, a size cap, the closed key set); a directory that is not a profile
+// name, a profile directory that is a link, a file that does not parse and a root that is not absolute are skipped. A profile whose config
+// home was never seen from here cannot be found; that residual is documented.
+import { lstatSync, readdirSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
+import { join } from 'node:path';
+import { parseProfileName } from '../../domain/profile.ts';
+import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import { readProfileConfig } from './profile-config.ts';
+import { configRoot, realpathNearest, resolveConfigHome } from './profile-paths.ts';
 
 export interface KnownProfileOptions {
-  // The home the default config home is taken from, when this config home was moved.
+  // The home the default config home is taken from, when this config home was moved, and a leading `~/` of a configured root is expanded against.
   home: string;
   // The roots of the selected profile itself, which are never returned.
   ownDataRoot: string;
   ownWorkRoot: string;
 }
 
-export function knownProfileRoots(_configHome: string, _selected: string, _options: KnownProfileOptions): Result<string[]> {
-  return ok([]);
+const unavailable = (cause: string): Result<never> => err({ kind: 'unavailable', cause });
+
+// The data root and work root of every profile config under this config home and the default one, except the selected profile's own roots, and the
+// config homes themselves (the one in use and the default), all realpath'd and listed once. An unreadable profiles directory is `unavailable`: a deny
+// list that could not be computed must not read as an empty one.
+export function knownProfileRoots(configHome: string, selected: string, options: KnownProfileOptions): Result<string[]> {
+  try {
+    const own = new Set([realpathNearest(options.ownDataRoot), realpathNearest(options.ownWorkRoot)]);
+    const homes = [...new Set([realpathNearest(configHome), realpathNearest(resolveConfigHome({ HOME: options.home }))])];
+    const inUse = realpathNearest(configHome);
+    const roots = new Set<string>();
+    for (const home of homes) {
+      let entries: Dirent[];
+      try {
+        entries = readdirSync(join(home, 'profiles'), { withFileTypes: true });
+      } catch (e) {
+        const code = (e as { code?: unknown }).code;
+        if (code === 'ENOENT' || code === 'ENOTDIR') continue;
+        return unavailable(`cannot list the profiles under ${home}: ${typeof code === 'string' ? code : 'read failed'}`);
+      }
+      for (const entry of entries.map((dirent) => dirent.name).sort()) {
+        // A link or a file named like a profile is not a profile directory; a name outside the grammar is not a profile.
+        if (!lstatSync(join(home, 'profiles', entry)).isDirectory() || !parseProfileName(entry).ok) continue;
+        // The selected profile's own config, in the config home it runs from, names its own roots.
+        if (home === inUse && entry === selected) continue;
+        const config = readProfileConfig(home, entry);
+        if (!config.ok) continue;
+        for (const [field, value] of [['dataRoot', config.value.dataRoot], ['workRoot', config.value.workRoot]] as const) {
+          const root = configRoot(value, options.home, field);
+          if (!root.ok || root.value === undefined) continue;
+          const real = realpathNearest(root.value);
+          if (!own.has(real)) roots.add(real);
+        }
+      }
+    }
+    for (const home of homes) roots.add(home);
+    return ok([...roots]);
+  } catch (e) {
+    return unavailable(`cannot read the other profiles: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }

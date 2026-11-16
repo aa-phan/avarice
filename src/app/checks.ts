@@ -119,7 +119,9 @@ interface SandboxSetup {
 
 // `cwd` is the working tree the command runs in (the run's clone, the validation clone or the baseline clone): the only part of the work
 // root, besides the scratch directory, a command may read. The default parents of every profile's roots are denied (plan 02-20): another
-// profile's data root, config and run clones are out of reach; a profile placed elsewhere by an environment variable is not covered.
+// profile's data root, config and run clones are out of reach; so are the data root, work root and config home of every other known profile
+// wherever it was moved (plan 04-12, D-19), and this profile's own config home. The profile configs name them; a profile whose configs were
+// never seen here is not covered.
 export function sandboxSetup(deps: AppDeps, run: RunRow, cwd: string): Result<SandboxSetup> {
   const scratch = join(canonical(deps.profile.workRoot), run.runId, 'scratch');
   try {
@@ -133,7 +135,7 @@ export function sandboxSetup(deps: AppDeps, run: RunRow, cwd: string): Result<Sa
   return ok({
     scratch: scratchReal,
     env: { PATH: path, HOME: scratchReal, TMPDIR: scratchReal, npm_config_cache: join(scratchReal, 'npm-cache'), CI: '1', LANG: 'C' },
-    denyReadPaths: [...credentialPaths(home), canonical(deps.profile.dataRoot), ...defaultAvariceParents(home)],
+    denyReadPaths: [...new Set([...credentialPaths(home), canonical(deps.profile.dataRoot), ...defaultAvariceParents(home), ...deps.profile.otherRoots])],
     allowReadPaths: [canonical(cwd), scratchReal],
   });
 }

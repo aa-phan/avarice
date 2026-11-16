@@ -64,7 +64,7 @@ export function resolveConfigHome(env: NodeJS.ProcessEnv): string {
 }
 
 // A root written in the config: absolute, or starting with `~/` for the home directory.
-function configRoot(value: string | undefined, home: string, field: 'dataRoot' | 'workRoot'): Result<string | undefined> {
+export function configRoot(value: string | undefined, home: string, field: 'dataRoot' | 'workRoot'): Result<string | undefined> {
   if (value === undefined) return ok(undefined);
   const expanded = value === '~' ? home : value.startsWith('~/') ? join(home, value.slice(2)) : value;
   if (!isAbsolute(expanded)) return err({ kind: 'invalid', field, reason: `${field} in the profile config must be an absolute path or start with ~/` });

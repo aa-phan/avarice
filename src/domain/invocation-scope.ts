@@ -292,7 +292,9 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
   // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
-  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot])];
+  // The roots of the other profiles come after the work root, so every earlier entry keeps its place (SEC-1, D-19).
+  const profileRoots = input.profileRoots.map((root) => normalizedAbsoluteRoot(root, 'computeInvocationScope: profileRoots'));
+  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot, ...profileRoots])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
   const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
@@ -381,8 +383,8 @@ const uniqueInOrder = (items: Iterable<string>): string[] => [...new Set(items)]
 // The default parents of every AVARICE profile's roots (profile-paths.ts): all default data roots, the config home and all default work
 // roots (which hold other profiles' run clones). A run may read none of them; its own clone and scratch, which lie under the work parent,
 // are re-allowed one by one (plan 02-20: a declared command could read another profile's data root). A profile whose roots were placed
-// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is not covered (docs/containment.md). `home` is the
-// symlink-resolved home the credential directories already use.
+// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is covered by the profile roots a scope is given (profileRoots,
+// read from the profile configs by knownProfileRoots). `home` is the symlink-resolved home the credential directories already use.
 export function defaultAvariceParents(home: string): string[] {
   const root = trimTrailingSlashes(home);
   return [join(root, '.local/share/avarice'), join(root, '.config/avarice'), join(root, '.local/share/avarice-work')];
@@ -475,6 +477,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
   // The same refusal as Phase 1 (WR-01), for every root this function turns into a rule: a relative or non-normalized root would match
   // no canonical path, so the rule would not apply.
   const workRoot = normalizedAbsoluteRoot(input.workRoot, 'computeRunScope: workRoot');
+  const profileRoots = input.profileRoots.map((root) => normalizedAbsoluteRoot(root, 'computeRunScope: profileRoots'));
   const clone = normalizedAbsoluteRoot(input.clonePath, 'computeRunScope: clonePath');
   const scratch = normalizedAbsoluteRoot(input.scratchDir, 'computeRunScope: scratchDir');
   const { contract, workspace } = input;
@@ -547,7 +550,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.
-    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home)]),
+    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home), ...profileRoots]),
     denyReadGlobs: [...contract.files.secretGlobs],
     allowRead: [...workspace.repoReadAllow.map(trimTrailingSlashes), clone, scratch],
     readRoots: input.readRoots.map(trimTrailingSlashes),
