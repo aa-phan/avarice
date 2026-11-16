@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-11-16T20:58:32.540Z"
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-11-16T21:23:00.526Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: de07b7638bfaeb2c40b8dd86f9f093b1a6c42ca8
+state_head: c1c98cd014beea7b9eaa041a43e9c3d834263ba1
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 10 of 39
+Plan: 11 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -172,6 +172,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P07 | 60 min | 2 tasks | 8 files |
 | Phase 04 P08 | 36 min | 3 tasks | 14 files |
 | Phase 04 P09 | 30 min | 2 tasks | 7 files |
+| Phase 04 P10 | 35min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -413,6 +414,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: Plan 04-08: deps.policy() reads policy.organizationFile for enterprise profiles only; absent or missing means organization absent (privileged denied); the rest of the policy section is the user source
 - [Phase 04]: 04-09: intel keeps its half-budget cap inside the first-fit pick; an intel handle above half the budget is never read — Existing FR-20 cap test holds; S-54 numbers tested with the 3,000 handle in the graph. Owner review: cap could bind only when the graph competes
 - [Phase 04]: 04-09: a containment edge seen from the child is one-hop; handle readRule uses that effective rule — Plan did not say how to read an edge from its target side; descendants follow downward only
+- [Phase 04]: 04-10: preflight_json is immutable and precedes staging, so it records the class, the no-drift outcome and drift null; the final existing-map outcome and GSD's drift verdict are in the mapping:plan step and the project record existingState
+- [Phase 04]: 04-10: a drift verdict that is skipped, unreadable or a failed run maps in full in staging; only GSD's own drift pass adopts a stamped map (T-04-26)
+- [Phase 04]: 04-10: files.delete is the map directory when the existing-map answer is Refresh and a map exists (the preset answer is always Refresh); an adopted map is validated on stamp presence, not equality with the staging HEAD
 
 ### Roadmap Evolution
 
@@ -480,8 +484,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T20:58:32.514Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-11-16T21:23:00.498Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
