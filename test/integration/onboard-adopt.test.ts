@@ -13,7 +13,8 @@ import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
 import type { FakeHostOptions } from '../helpers/fake-agent-host.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
-import { treeDigest } from '../helpers/scratch-repo.ts';
+import { EXPIRY_WAIT_MS, onboardingIdOf, resumeCli, runWithFault, sleepSync } from '../helpers/fault-run.ts';
+import { checkoutSnapshot, treeDigest } from '../helpers/scratch-repo.ts';
 import { makeStampedMapRepo } from '../helpers/stamped-map-fixture.ts';
 import type { StampedMapOptions, StampedMapRepo } from '../helpers/stamped-map-fixture.ts';
 
@@ -163,5 +164,147 @@ describe('the GSD adapter descriptor', () => {
     } finally {
       composed.value.close();
     }
+  });
+});
+
+describe('user-owned map files are never overwritten (S-28, ONB-6)', () => {
+  it('treats a map edited in a commit after its stamp commit as user-edited: regenerated in staging, edited files listed under userOwned, checkout byte-identical', async () => {
+    const { roots, repo } = fixture({ editedAfterStamp: ['STACK.md', 'TESTING.md'] });
+    const before = treeDigest(repo.path);
+
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 1, 'the map is regenerated, in staging');
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.existingMap, 'user-edited');
+    assert.equal(plan?.outcome, 'isolated-regeneration');
+    assert.equal(plan?.mode, 'full');
+    assert.equal(plan?.drift, null, 'no drift question for a class that is regenerated whatever the drift is');
+
+    const [onboarding] = rows<{ preflight_json: string }>(roots, 'SELECT preflight_json FROM onboardings');
+    const existing = (JSON.parse(onboarding?.preflight_json as string) as { existingState: { codebaseMap: string; userOwned: string[] } }).existingState;
+    assert.equal(existing.codebaseMap, 'user-edited');
+    assert.deepEqual(existing.userOwned, ['.planning/codebase/STACK.md', '.planning/codebase/TESTING.md']);
+    const [record] = rows<{ body_json: string }>(roots, 'SELECT body_json FROM project_records');
+    const state = (JSON.parse(record?.body_json as string) as { existingState: { userOwned: string[]; outcome: string } }).existingState;
+    assert.deepEqual(state.userOwned, ['.planning/codebase/STACK.md', '.planning/codebase/TESTING.md']);
+    assert.equal(state.outcome, 'isolated-regeneration');
+
+    assert.equal(treeDigest(repo.path), before, 'the edited files, and everything else, are byte-identical in the checkout');
+  });
+
+  it('treats uncommitted changes under .planning/ as user-owned too, and leaves them as they are', async () => {
+    const { roots, repo } = fixture({ modified: { '.planning/codebase/STACK.md': '# Stack\n\nuncommitted notes\n' }, untracked: { '.planning/notes.md': 'my notes\n' } });
+    const before = treeDigest(repo.path);
+    const { outcome } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    const [onboarding] = rows<{ preflight_json: string }>(roots, 'SELECT preflight_json FROM onboardings');
+    const existing = (JSON.parse(onboarding?.preflight_json as string) as { existingState: { codebaseMap: string; userOwned: string[] } }).existingState;
+    assert.equal(existing.codebaseMap, 'user-edited');
+    assert.deepEqual(existing.userOwned, ['.planning/codebase/STACK.md', '.planning/notes.md']);
+    assert.equal(treeDigest(repo.path), before);
+  });
+
+  it('leaves a map of another format untouched and regenerates in isolation in staging, recording the outcome', async () => {
+    const { roots, repo } = fixture({ extraMapFiles: { '.planning/codebase/NOTES.md': '# Notes from another tool\n' } });
+    const before = treeDigest(repo.path);
+
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 1);
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.existingMap, 'unknown-format');
+    assert.equal(plan?.outcome, 'isolated-regeneration');
+    assert.equal(plan?.mode, 'full');
+    const [onboarding] = rows<{ preflight_json: string }>(roots, 'SELECT preflight_json FROM onboardings');
+    const existing = (JSON.parse(onboarding?.preflight_json as string) as { existingState: { userOwned: string[] } }).existingState;
+    assert.equal(existing.userOwned.length, 8, 'every file of the other format is the owner\'s');
+    assert.ok(existing.userOwned.includes('.planning/codebase/NOTES.md'));
+    assert.equal(treeDigest(repo.path), before);
+  });
+
+  it('maps in full in staging, labelled by its class, for a partial and for an unstamped map', async () => {
+    for (const options of [{ files: ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md'] }, { unstamped: true }] as const) {
+      const { roots, repo } = fixture(options);
+      const before = treeDigest(repo.path);
+      const { outcome, mapCalls } = await onboard(roots, repo);
+      assert.equal(outcome.state, 'active', outcome.message ?? '');
+      assert.equal(mapCalls.length, 1);
+      const plan = step<PlanStep>(roots, 'mapping:plan');
+      assert.equal(plan?.existingMap, 'files' in options ? 'stamped-partial' : 'unstamped');
+      assert.equal(plan?.outcome, 'full-in-staging');
+      assert.equal(plan?.mode, 'full');
+      assert.equal(treeDigest(repo.path), before);
+    }
+  });
+});
+
+describe('a stamp alone never makes a map adoptable (T-04-26)', () => {
+  it('maps in full in staging when the stamp names a commit the repository does not have, because GSD cannot give a drift verdict', async () => {
+    const { roots, repo } = fixture({ stamp: 'deadbeef'.repeat(5) });
+    const before = treeDigest(repo.path);
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 1, 'the mapper ran');
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.existingMap, 'stamped-complete', 'the class is read from the stamp');
+    assert.equal(plan?.drift?.verdict, 'unreadable');
+    assert.equal(plan?.outcome, 'full-in-staging');
+    assert.equal(plan?.mode, 'full');
+    const [record] = rows<{ mapping_mode: string; body_json: string }>(roots, 'SELECT mapping_mode, body_json FROM project_records');
+    assert.equal(record?.mapping_mode, 'full');
+    assert.equal((JSON.parse(record?.body_json as string) as { mapping: { provenance?: string } }).mapping.provenance, undefined);
+    assert.equal(treeDigest(repo.path), before);
+  });
+});
+
+describe('an onboarding killed after classification and resumed reaches the same outcome (S-29, ONB-6)', () => {
+  const dirty = { modified: { 'src/index.ts': 'export const answer = 43; // uncommitted\n' }, untracked: { 'scratch/todo.txt': 'local only\n' } };
+
+  it('a drift-blocked map killed during the mapper invocation: same plan after the resume, checkout byte-identical, both files recorded as not mapped', () => {
+    const repo = makeStampedMapRepo({ after: [NEW_DIRS], ...dirty });
+    const roots = makeRoots();
+    cleanup.push(roots.base, repo.base);
+    const before = checkoutSnapshot(repo.path);
+
+    runWithFault(roots, repo, 'mid-invocation');
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'unchanged after the kill');
+    const planBefore = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(planBefore?.outcome, 'refresh');
+
+    sleepSync(EXPIRY_WAIT_MS);
+    const resumed = resumeCli(roots, onboardingIdOf(roots));
+    assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+    assert.match(resumed.stdout, /: active/);
+    assert.deepEqual(step<PlanStep>(roots, 'mapping:plan'), planBefore, 'the outcome after the resume equals the outcome before the kill');
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'unchanged after the resume');
+    const [record] = rows<{ body_json: string }>(roots, 'SELECT body_json FROM project_records');
+    assert.deepEqual((JSON.parse(record?.body_json as string) as { notMapped: string[] }).notMapped, ['scratch/todo.txt', 'src/index.ts']);
+  });
+
+  it('an adopted map killed right after the classification: adopted again after the resume, no mapper invocation, checkout byte-identical', () => {
+    const repo = makeStampedMapRepo(dirty);
+    const roots = makeRoots();
+    cleanup.push(roots.base, repo.base);
+    const before = checkoutSnapshot(repo.path);
+
+    runWithFault(roots, repo, 'after-checkpoint:verify-enforcement');
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'unchanged after the kill');
+    const planBefore = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(planBefore?.outcome, 'adopt');
+
+    sleepSync(EXPIRY_WAIT_MS);
+    const resumed = resumeCli(roots, onboardingIdOf(roots));
+    assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+    assert.match(resumed.stdout, /: active/);
+    const planAfter = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(planAfter?.outcome, 'adopt');
+    assert.equal(planAfter?.mode, 'adopt');
+    assert.equal(planAfter?.drift?.verdict, 'pass');
+    assert.equal(step(roots, 'launch:map'), null, 'no mapper invocation on either side of the kill');
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'unchanged after the resume');
+    const [record] = rows<{ mapping_mode: string; body_json: string }>(roots, 'SELECT mapping_mode, body_json FROM project_records');
+    assert.equal(record?.mapping_mode, 'adopt');
+    assert.deepEqual((JSON.parse(record?.body_json as string) as { notMapped: string[] }).notMapped, ['scratch/todo.txt', 'src/index.ts']);
   });
 });

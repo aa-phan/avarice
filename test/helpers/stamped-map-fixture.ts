@@ -20,8 +20,13 @@ export interface StampedMapOptions {
   files?: readonly string[];
   // Write the files without a stamp (an unstamped map).
   unstamped?: boolean;
+  // Stamp the files with this value instead of the source commit (a forged or stale stamp that names no commit of the repository).
+  stamp?: string;
   // Extra files under `.planning/codebase/` in the map commit (a different file set makes the map an unknown format).
   extraMapFiles?: Readonly<Record<string, string>>;
+  // Map files (by name) the owner edits in a commit after the map commit: a line is appended, the stamp is kept, so the stamp commit stays
+  // before the last commit of the file (an edit after the stamp).
+  editedAfterStamp?: readonly string[];
   // Each entry is one further commit after the map commit: path to content, written and committed (drift, or an edit of a map file).
   after?: ReadonlyArray<Readonly<Record<string, string>>>;
   // Uncommitted state left in the checkout after the last commit.
@@ -59,12 +64,23 @@ export function makeStampedMapRepo(options: StampedMapOptions = {}): StampedMapR
   const names = options.files ?? ALL_MAP_FILES;
   const documents: Record<string, string> = {};
   for (const name of names) {
-    documents[`.planning/codebase/${name}`] = fakeMapDocument(name, options.unstamped === true ? false : sourceCommit, tracked, undefined);
+    documents[`.planning/codebase/${name}`] = fakeMapDocument(name, options.unstamped === true ? false : (options.stamp ?? sourceCommit), tracked, undefined);
   }
   write(repo.path, documents);
   write(repo.path, options.extraMapFiles ?? {});
   const mapCommit = commitAll(repo.path, 'map the codebase');
   const shas = [...repo.shas, mapCommit];
+  if (options.editedAfterStamp !== undefined && options.editedAfterStamp.length > 0) {
+    const edits: Record<string, string> = {};
+    for (const name of options.editedAfterStamp) {
+      const path = `.planning/codebase/${name}`;
+      const original = documents[path];
+      if (original === undefined) throw new Error(`${name} is not a map file of this fixture`);
+      edits[path] = `${original}\nEdited by the owner after the stamp.\n`;
+    }
+    write(repo.path, edits);
+    shas.push(commitAll(repo.path, 'owner edits the map'));
+  }
   for (const [index, files] of (options.after ?? []).entries()) {
     write(repo.path, files);
     shas.push(commitAll(repo.path, `after the map ${index + 1}`));

@@ -5,8 +5,8 @@ import { describe, it } from 'node:test';
 
 import { ONBOARDING_STATES } from '../../src/domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
-import { classifyExistingMap, classifyPreflight } from '../../src/domain/preflight.ts';
-import type { LedgerView, MapFileFacts, RepoFacts } from '../../src/domain/preflight.ts';
+import { classifyExistingMap, classifyPreflight, existingMapOutcome, userOwnedPaths } from '../../src/domain/preflight.ts';
+import type { ExistingMapClass, LedgerView, MapFileFacts, RepoFacts } from '../../src/domain/preflight.ts';
 
 const SEVEN = ['STACK', 'ARCHITECTURE', 'STRUCTURE', 'CONVENTIONS', 'TESTING', 'INTEGRATIONS', 'CONCERNS'];
 const FOUR = ['STACK', 'INTEGRATIONS', 'ARCHITECTURE', 'STRUCTURE'];
@@ -182,5 +182,71 @@ describe('classifyPreflight refusals (ONB-6)', () => {
   it('reports a promotion request before a state conflict', () => {
     const r = refusal(classifyPreflight(facts(), { activeRecord: true, onboardings: [] }, { promote: 'copy' }));
     assert.equal(r.kind, 'invalid');
+  });
+});
+
+describe('existingMapOutcome (ONB-6, D-10)', () => {
+  type Drift = 'pass' | 'block' | 'unreadable' | null;
+  const DRIFTS: Drift[] = ['pass', 'block', 'unreadable', null];
+  // The oracle is the table of docs/repository-onboarding.md "Repositories already using GSD", written out per class and drift value.
+  const expected: Record<ExistingMapClass, Record<string, string>> = {
+    none: { pass: 'map', block: 'map', unreadable: 'map', null: 'map' },
+    'stamped-complete': { pass: 'adopt', block: 'refresh', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    'stamped-partial': { pass: 'full-in-staging', block: 'full-in-staging', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    unstamped: { pass: 'full-in-staging', block: 'full-in-staging', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    'unknown-format': { pass: 'isolated-regeneration', block: 'isolated-regeneration', unreadable: 'isolated-regeneration', null: 'isolated-regeneration' },
+    'user-edited': { pass: 'isolated-regeneration', block: 'isolated-regeneration', unreadable: 'isolated-regeneration', null: 'isolated-regeneration' },
+  };
+  for (const [cls, byDrift] of Object.entries(expected) as Array<[ExistingMapClass, Record<string, string>]>) {
+    for (const drift of DRIFTS) {
+      it(`${cls} with drift ${String(drift)} is ${byDrift[String(drift)]}`, () => {
+        assert.equal(existingMapOutcome(cls, drift), byDrift[String(drift)]);
+      });
+    }
+  }
+
+  it('adopts nothing without a drift pass: the stamp alone never makes a map adoptable (T-04-26)', () => {
+    for (const cls of Object.keys(expected) as ExistingMapClass[]) {
+      for (const drift of DRIFTS.filter((d) => d !== 'pass')) assert.notEqual(existingMapOutcome(cls, drift), 'adopt', `${cls} ${String(drift)}`);
+    }
+    for (const cls of Object.keys(expected).filter((c) => c !== 'stamped-complete') as ExistingMapClass[]) assert.notEqual(existingMapOutcome(cls, 'pass'), 'adopt', cls);
+  });
+
+  it('refuses a class it does not know', () => {
+    assert.throws(() => existingMapOutcome('sideways' as ExistingMapClass, 'pass'), TypeError);
+  });
+});
+
+describe('userOwnedPaths (ONB-6)', () => {
+  const edited = (n: string): MapFileFacts => mapFile(n, { lastCommit: C2 });
+
+  it('lists the map files edited after their stamp commit, and every changed file under .planning/, for an edited map', () => {
+    const map = facts({
+      codebaseMapFiles: SEVEN.map((n) => (n === 'TESTING' || n === 'STACK' ? edited(n) : mapFile(n))),
+      modified: ['.planning/codebase/CONCERNS.md', 'src/a.ts'],
+      untracked: ['.planning/notes.md', 'scratch.txt'],
+    });
+    assert.equal(classifyExistingMap(map), 'user-edited');
+    assert.deepEqual(userOwnedPaths(map, 'user-edited'), ['.planning/codebase/CONCERNS.md', '.planning/codebase/STACK.md', '.planning/codebase/TESTING.md', '.planning/notes.md']);
+  });
+
+  it('lists every file of a map of another format, and nothing for the classes that are the owner\'s generated output', () => {
+    const other = facts({ codebaseMapFiles: [mapFile('STACK'), mapFile('NOTES')] });
+    assert.deepEqual(userOwnedPaths(other, 'unknown-format'), ['.planning/codebase/NOTES.md', '.planning/codebase/STACK.md']);
+    for (const cls of ['none', 'stamped-complete', 'stamped-partial', 'unstamped'] as const) {
+      assert.deepEqual(userOwnedPaths(facts({ codebaseMapFiles: SEVEN.map((n) => edited(n)), modified: ['.planning/x.md'] }), cls), [], cls);
+    }
+  });
+
+  it('is part of the findings for an edited map and for a map of another format, and empty otherwise', () => {
+    const editedMap = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => (n === 'STACK' ? edited(n) : mapFile(n))) }), NO_STATE, {});
+    assert.ok(editedMap.ok);
+    assert.deepEqual(editedMap.value.findings['existingState'], { planningExists: false, codebaseMap: 'user-edited', outcome: 'isolated-regeneration', drift: null, userOwned: ['.planning/codebase/STACK.md'] });
+    const unknown = classifyPreflight(facts({ codebaseMapFiles: [mapFile('STACK'), mapFile('NOTES')] }), NO_STATE, {});
+    assert.ok(unknown.ok);
+    assert.deepEqual((unknown.value.findings['existingState'] as { userOwned: string[] }).userOwned, ['.planning/codebase/NOTES.md', '.planning/codebase/STACK.md']);
+    const clean = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => mapFile(n)) }), NO_STATE, {});
+    assert.ok(clean.ok);
+    assert.deepEqual((clean.value.findings['existingState'] as { userOwned: string[] }).userOwned, []);
   });
 });
