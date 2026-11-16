@@ -2,15 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: MVP Completion
+current_phase: 4
+current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: planning
-last_updated: "2026-11-16T00:19:37.237Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-11-16T05:34:09.557Z"
 last_activity: 2026-11-15
+last_activity_desc: Milestone v1.1 started
+state_head: 0f2f359a7b6ccc08aae1fe87489deafd735a17fd
 progress:
-  total_phases: 0
-  completed_phases: 0
+  total_phases: 6
+  completed_phases: 3
   total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
@@ -449,9 +453,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-15T06:54:20.672Z
-Stopped at: Milestone v1.0 complete, ready to start v1.1
-Resume file: None
+Last session: 2026-11-16T05:34:09.539Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-CONTEXT.md
 
 ## Operator Next Steps
 
