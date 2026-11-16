@@ -7,6 +7,7 @@
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { DEFAULT_PROFILE_NAME, parseProfileName } from '../../domain/profile.ts';
 import { checkRoots } from '../../domain/root-rules.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -24,7 +25,7 @@ export interface ProfileProbes {
   isLocalMount?: (path: string) => Result<boolean>;
 }
 
-export const DEFAULT_PROFILE = 'personal-local';
+export const DEFAULT_PROFILE = DEFAULT_PROFILE_NAME;
 export const CONFIG_SCHEMA = 1;
 
 // realpath of the nearest existing ancestor of `path`, followed by the segments that do not exist yet.
@@ -49,17 +50,30 @@ export function configPathFor(configHome: string, profile: string): string {
   return join(configHome, 'profiles', profile, 'config.json');
 }
 
-export function resolveProfile(env: NodeJS.ProcessEnv, probes: ProfileProbes = {}): Result<ResolvedProfile> {
+// The config home, decided from the environment alone: nothing is created. Profile selection reads the binding registry and the
+// enterprise profile configs from here before any profile is resolved.
+export function resolveConfigHome(env: NodeJS.ProcessEnv): string {
+  const value = env['AVARICE_CONFIG_HOME'];
+  if (value && value.length > 0) return resolve(value);
+  const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
+  return resolve(join(home, '.config', 'avarice'));
+}
+
+// `profileName` is a name that already follows the profile grammar (parseProfileName): it becomes a path segment. The three root
+// overrides in the environment apply to the profile that was selected, whichever it is.
+export function resolveProfile(env: NodeJS.ProcessEnv, probes: ProfileProbes = {}, profileName: string = DEFAULT_PROFILE): Result<ResolvedProfile> {
+  const named = parseProfileName(profileName);
+  if (!named.ok) return named;
   try {
     const home = env['HOME'] && env['HOME'].length > 0 ? env['HOME'] : homedir();
     const pick = (name: string, fallback: string): string => {
       const value = env[name];
       return resolve(value && value.length > 0 ? value : fallback);
     };
-    const profile = DEFAULT_PROFILE;
+    const profile = profileName;
     const resolved: ResolvedProfile = {
       profile,
-      configHome: pick('AVARICE_CONFIG_HOME', join(home, '.config', 'avarice')),
+      configHome: resolveConfigHome(env),
       dataRoot: pick('AVARICE_DATA_ROOT', join(home, '.local', 'share', 'avarice', profile)),
       workRoot: pick('AVARICE_WORK_ROOT', join(home, '.local', 'share', 'avarice-work', profile)),
     };

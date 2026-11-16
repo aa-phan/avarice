@@ -8,11 +8,13 @@ import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
 import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
+import { describeError } from '../adapters/sqlite/db.ts';
 import { errorLine } from './render/style.ts';
 import { processAncestry } from '../adapters/proc/ancestry.ts';
 import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
 import type { IdentityContext } from './identity.ts';
+import { parseProfileName, selectProfile } from '../domain/profile.ts';
 
 export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel'] as const;
 export const EXIT_USAGE = 64;
@@ -110,7 +112,29 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return EXIT_USAGE;
   }
 
-  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true });
+  // D-16, D-17: which profile this command runs under is decided here, before any directory or store exists. A name that does not
+  // follow the grammar ends the command with the usage exit and creates nothing.
+  const flag = args.flags['profile'];
+  const envProfile = env['AVARICE_PROFILE'];
+  if (flag === true) {
+    io.err(`${errorLine(name, '--profile needs a profile name')}\n`);
+    return EXIT_USAGE;
+  }
+  if (flag !== undefined) {
+    const named = parseProfileName(flag);
+    if (!named.ok) {
+      io.err(`${errorLine(name, describeError(named.error))}\n`);
+      return EXIT_USAGE;
+    }
+  }
+  const envDefault = envProfile !== undefined && envProfile !== '' ? envProfile : undefined;
+  const selected = selectProfile({ ...(flag !== undefined ? { flag } : {}), ...(envDefault !== undefined ? { envDefault } : {}) });
+  if (!selected.ok) {
+    io.err(`${errorLine(name, `AVARICE_PROFILE: ${describeError(selected.error)}`)}\n`);
+    return EXIT_USAGE;
+  }
+
+  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true, profile: selected.value });
   if (!composed.ok) {
     io.err(`${errorLine(name, composed.message)}\n`);
     return composed.code;

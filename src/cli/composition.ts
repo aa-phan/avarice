@@ -73,6 +73,8 @@ export interface CreateDepsOptions {
   // Locate GSD even though the store is read-only: a command that only reads the indexes through GSD's own readers
   // (`context`) needs the adapter but records nothing.
   gsd?: boolean;
+  // The profile main() selected (D-16); a name that follows the profile grammar. Absent means personal-local.
+  profile?: string;
 }
 
 export interface Composition {
@@ -150,7 +152,7 @@ function productionHost(inputs: HostInputs): AgentHost {
 }
 
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
-  const resolved = resolveProfile(env);
+  const resolved = resolveProfile(env, {}, options.profile);
   if (!resolved.ok) return failure('cannot prepare the profile directories', describeError(resolved.error));
   const profile = resolved.value;
   const dbPath = join(profile.dataRoot, 'state.db');
