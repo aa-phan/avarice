@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-11-16T19:00:05.199Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-11-16T19:13:45.292Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: c9778029d6bb60bb3ff5121d07e2ce691722ec0b
+state_head: 78a58d3f6b4a0bde61613cb82e1075c88f990cf2
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 6 of 39
+Plan: 7 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -168,6 +168,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P04 | 25 min | 3 tasks | 16 files |
 | Phase 04 P03 | n/a | 3 tasks | 4 files |
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
+| Phase 04 P06 | 21min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -399,6 +400,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: Policy evaluation order: fixed SEC-5 rule, broken rank 1 (deny every privileged action), organization-stated rule, built-in rule (replaceable by a personal user rule), then ranks 3 and 4 only restrict; the repository never loosens — D-17 and SEC-4; the organization file is the only source that can loosen a built-in default under an enterprise profile
 - [Phase 04]: PolicySources.organization left out means no organization policy applies; 'absent' means a file was expected and is missing (denies privileged actions under an enterprise profile); an error result denies under any profile — Callers (profile config reader, later plan) must choose between them; fail closed when a file is expected
 - [Phase 04]: SEC-5 made concrete as built-in fixed deny rules sec5.tls, sec5.authentication, sec5.egress on three privileged net.* actions; ids prefixed builtin. or sec5., and org.invalid-or-missing, are reserved in every policy file — The plan exempts SEC-5 from personal loosening but named no rule to exempt
+- [Phase 04]: 04-06: run.unit requires agent-host contained-invocation (not resume, which the production Claude host publishes false); a G0 capability failure blocks with enforcement_failure
+- [Phase 04]: 04-06: enforcement map has 18 rows; rows for controls built later are unverified 'proved by plan 04-NN'; host limitation 3 and 4 rows are not-claimed
 
 ### Roadmap Evolution
 
@@ -466,8 +469,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T19:00:05.174Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-11-16T19:13:45.267Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
