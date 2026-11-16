@@ -185,3 +185,8 @@ export function evaluatePolicy(sources: PolicySources, action: string, params: R
   if (stated !== undefined) return { effect: stated.effect, ruleId: stated.id, rank: 1 };
   return { effect: builtin.effect, ruleId: builtin.id, rank: 2 };
 }
+
+// Skeleton: the closed constructor arrives with the loosening rules.
+export function policySources(_input: Readonly<Record<string, unknown>>): Result<PolicySources> {
+  return err({ kind: 'unavailable', cause: 'skeleton' });
+}
