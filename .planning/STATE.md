@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-11-16T07:19:09.572Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-11-16T07:44:39.441Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 9396523e2de2b0e339b91d55e410708e71893104
+state_head: 7ff2c3c0a1d88ac2812f7453e1fa149e3aeddebd
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 2 of 39
+Plan: 3 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -164,6 +164,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 03 P31 | 2h | 3 tasks | 8 files |
 | Phase 03 P32 | 15 min | 3 tasks | 8 files |
 | Phase 04 P01 | 14 min | 2 tasks | 4 files |
+| Phase 04 P02 | 25 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -388,6 +389,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
 - [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
 - [Phase 04]: 04-01: CURRENT_SPEND_PHASE = 4; Phase 4 live spend is capped at 40 USD (D-03) by a lower-only guard, ledger test/containment/live-spend-phase4.jsonl
+- [Phase 04]: 04-02: plan 04-17 uses full code-only extraction plus a node-level diff; a path-subset merge by node ID loses edges that leave the extracted set
+- [Phase 04]: 04-02: uses relation mapped id-only; Claude Code 2.1.325 is not admitted and needs a live T3 run in 04-11
 
 ### Roadmap Evolution
 
@@ -455,8 +458,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T07:19:09.549Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-11-16T07:44:39.419Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
