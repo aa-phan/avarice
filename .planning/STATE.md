@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
-status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-11-16T07:08:02.309Z"
-last_activity: 2026-11-15
-last_activity_desc: Milestone v1.1 started
-state_head: 29d3c6ef00fac651354138a3ed9b392d678a26e8
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-11-16T07:19:09.572Z"
+last_activity: 2026-11-16
+last_activity_desc: Phase 04 execution started
+state_head: 9396523e2de2b0e339b91d55e410708e71893104
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-15)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Milestone v1.1 MVP Completion — Phase 4 (Profiles, retrieval budgets, restricted mode and the portability proof). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
+**Current focus:** Phase 04 — Profiles, retrieval budgets, restricted mode and the portability proof
 
 ## Current Position
 
-Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — READY TO EXECUTE
-Plan: —
-Status: Ready to discuss Phase 4 (v1.1 requirements and roadmap adopted as specified)
-Last activity: 2026-11-15 — Milestone v1.1 started
+Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
+Plan: 2 of 39
+Status: Ready to execute
+Last activity: 2026-11-16 — Phase 04 execution started
 
 ## Performance Metrics
 
@@ -163,6 +163,7 @@ Last activity: 2026-11-15 — Milestone v1.1 started
 | Phase 03 P59 | one live attempt, 19.5 min run | 3 tasks | 2 files |
 | Phase 03 P31 | 2h | 3 tasks | 8 files |
 | Phase 03 P32 | 15 min | 3 tasks | 8 files |
+| Phase 04 P01 | 14 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -386,6 +387,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-60: the exit verdict is 3/3 ready_for_review over the D-26 epoch (run 2 attempt 4, run 3 attempt 3, run 1 attempt 1); LIVE-CASES.md keeps the heading Exit (plans 03-57 to 03-68) and lists every attempt under it
 - [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
 - [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
+- [Phase 04]: 04-01: CURRENT_SPEND_PHASE = 4; Phase 4 live spend is capped at 40 USD (D-03) by a lower-only guard, ledger test/containment/live-spend-phase4.jsonl
 
 ### Roadmap Evolution
 
@@ -453,9 +455,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T05:34:09.539Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-CONTEXT.md
+Last session: 2026-11-16T07:19:09.549Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
