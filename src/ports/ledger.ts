@@ -285,6 +285,21 @@ export interface RunRow {
   cancelRequestedAt: string | null;
 }
 
+// Everything `status` reads about one run, as the nine per-run list methods return it (same rows, same order), plus the run's attempts.
+export interface RunStatusInputs {
+  checkpoints: RunCheckpointRow[];
+  evidence: EvidenceRow[];
+  gateResults: GateResultRow[];
+  decisions: DecisionRow[];
+  workItems: WorkItemRow[];
+  notifications: NotificationRow[];
+  budgets: BudgetRow[];
+  // The highest contract version, or null.
+  contract: ContractRow | null;
+  steps: RunStepRow[];
+  attempts: AttemptRow[];
+}
+
 export interface NewRun {
   runId: string;
   projectId: string;
@@ -740,6 +755,11 @@ export interface Ledger {
   transitionRun(runId: string, guard: TransitionGuard, t: RunTransitionInput): Result<RunRow>;
   // Oldest first, without Phase 1 onboarding carrier rows. Without a project ID, every run.
   listRuns(projectId?: string): Result<RunRow[]>;
+
+  // Every per-run table `status` reads, for all the named runs, in one batch (OPS-5, AC-2): one query per table for each chunk of at most
+  // 500 IDs, so the number of statements does not grow with the number of runs. Each run's lists hold the rows and the order the per-run
+  // read methods return. Read-only. An ID that is not a run (or is an onboarding carrier) is `not_found`, as it is for those methods.
+  loadRunStatusInputs(runIds: readonly string[]): Result<Map<string, RunStatusInputs>>;
 
   // Run leases mirror the onboarding leases: one UPDATE takes a free or strictly expired lease and bumps the fence;
   // renewal and release check holder and fence.

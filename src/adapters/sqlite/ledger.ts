@@ -62,6 +62,7 @@ import type {
   RunCheckpointInput,
   RunCheckpointRow,
   RunRow,
+  RunStatusInputs,
   ReopenStaleDecisionInput,
   RunStepRow,
   RunTransitionInput,
@@ -81,6 +82,9 @@ import { appendEventRow, EventDataError } from './events.ts';
 import type { Db } from './db.ts';
 
 type Row = Record<string, unknown>;
+
+// The most run IDs one `IN (...)` list of loadRunStatusInputs holds; well under SQLite's limit on bound parameters.
+const STATUS_CHUNK = 500;
 
 function guarded<T>(fn: () => T): Result<T> {
   try {
@@ -1097,6 +1101,53 @@ export class SqliteLedger implements Ledger {
       const contract = this.db.prepare('SELECT * FROM contracts WHERE run_id = ? ORDER BY version DESC LIMIT 1').get(runId) as Row | undefined;
       return contract ? toContract(contract) : null;
     });
+  }
+
+  // One query per table for each chunk of at most STATUS_CHUNK distinct IDs (OPS-5, AC-2). The IDs are only ever bound parameters: the
+  // SQL text carries one `?` per ID and nothing else. Within a chunk each table is read once, in the order its per-run read uses, and the
+  // rows are dealt to their run, so a run's list is that read's list: for any one run a global sort by the same keys is the same order.
+  loadRunStatusInputs(runIds: readonly string[]): Result<Map<string, RunStatusInputs>> {
+    return guarded(() => {
+      const distinct = [...new Set(runIds)];
+      const out = new Map<string, RunStatusInputs>();
+      for (let at = 0; at < distinct.length; at += STATUS_CHUNK) this.loadStatusChunk(distinct.slice(at, at + STATUS_CHUNK), out);
+      return out;
+    });
+  }
+
+  private loadStatusChunk(ids: readonly string[], out: Map<string, RunStatusInputs>): void {
+    const marks = ids.map(() => '?').join(', ');
+    const select = (sql: string): Row[] => this.db.prepare(sql).all(...ids) as Row[];
+    const found = new Set(select(`SELECT run_id FROM runs WHERE state <> 'onboarding' AND run_id IN (${marks})`).map((r) => str(r['run_id'])));
+    for (const id of ids) if (!found.has(id)) throw notFound(`run ${id}`);
+
+    const inputs = new Map<string, RunStatusInputs>();
+    for (const id of ids) {
+      inputs.set(id, { checkpoints: [], evidence: [], gateResults: [], decisions: [], workItems: [], notifications: [], budgets: [], contract: null, steps: [], attempts: [] });
+    }
+    const deal = <T>(rows: Row[], convert: (row: Row) => T, into: (run: RunStatusInputs) => T[]): void => {
+      for (const row of rows) {
+        const run = inputs.get(str(row['run_id']));
+        if (run !== undefined) into(run).push(convert(row));
+      }
+    };
+    deal(select(`SELECT * FROM checkpoints WHERE run_id IN (${marks}) ORDER BY seq, rowid`), toRunCheckpoint, (r) => r.checkpoints);
+    deal(select(`SELECT e.*, a.run_id AS run_id FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id IN (${marks}) ORDER BY e.rowid`), toEvidence, (r) => r.evidence);
+    deal(select(`SELECT * FROM gate_results WHERE run_id IN (${marks}) ORDER BY rowid`), toGateResult, (r) => r.gateResults);
+    deal(select(`SELECT * FROM decisions WHERE run_id IN (${marks}) ORDER BY opened_at, rowid`), toDecision, (r) => r.decisions);
+    deal(select(`SELECT * FROM work_items WHERE run_id IN (${marks}) ORDER BY rowid`), toWorkItem, (r) => r.workItems);
+    deal(select(`SELECT * FROM notifications WHERE run_id IN (${marks}) ORDER BY created_at, rowid`), toNotification, (r) => r.notifications);
+    deal(select(`SELECT * FROM budgets WHERE run_id IN (${marks}) ORDER BY name`), toBudget, (r) => r.budgets);
+    deal(select(`SELECT * FROM run_steps WHERE run_id IN (${marks}) ORDER BY rowid`), toRunStep, (r) => r.steps);
+    deal(select(`SELECT * FROM attempts WHERE run_id IN (${marks}) ORDER BY ordinal`), toAttempt, (r) => r.attempts);
+    // The highest contract version of each run: the join keeps one row per run, so the older bodies are never read.
+    for (const row of select(
+      `SELECT c.* FROM contracts c JOIN (SELECT run_id, MAX(version) AS version FROM contracts WHERE run_id IN (${marks}) GROUP BY run_id) m ON m.run_id = c.run_id AND m.version = c.version`,
+    )) {
+      const run = inputs.get(str(row['run_id']));
+      if (run !== undefined) run.contract = toContract(row);
+    }
+    for (const [id, value] of inputs) out.set(id, value);
   }
 
   recordRunStep(runId: string, input: StepResultInput, guard?: { fence: number }): Result<RunStepRow> {
