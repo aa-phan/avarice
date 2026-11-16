@@ -30,6 +30,8 @@ const NO_CONTAINED_HOST = 'none; no unit runs without a contained agent host';
 const NO_SANDBOXED_CHECKS = 'none; checks run only in the OS sandbox with cancellation';
 const NO_MAP_WORKFLOW = 'none; onboarding stops until an admitted gsd-core offers the map workflow';
 const FULL_MAP_IN_STAGING = 'full map in staging';
+// Planning initialization through GSD's ingest-docs is not driven by AVARICE; the owner runs the attended command and AVARICE records the result.
+export const PLANNING_INIT_REDUCED_MODE = 'initialize planning attended with /gsd-new-project; AVARICE records the result';
 
 // The capability keys are the ones the production adapters publish in their descriptors (agent-host: `contained-invocation`, `headless`,
 // `resume`; executor: `remote`, `cancel`, `process-group-kill`; graph-tool: `extract-code`, `cluster`, `knowledge-pass`; gsd-onboarding:
@@ -52,7 +54,7 @@ export const STEP_REQUIREMENTS: Readonly<Record<StepName, readonly StepRequireme
     { port: 'graph-tool', capability: 'cluster', reducedMode: 'index recorded absent' },
   ],
   'onboarding.planning.init': [
-    { port: 'gsd-onboarding', capability: 'ingest-docs', reducedMode: 'initialize planning attended with /gsd-new-project; AVARICE records the result' },
+    { port: 'gsd-onboarding', capability: 'ingest-docs', reducedMode: PLANNING_INIT_REDUCED_MODE },
   ],
 };
 

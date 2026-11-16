@@ -191,6 +191,6 @@ export interface GsdOnboarding {
   intelQuery(staging: string, term: string): Promise<Result<GsdIntelQueryResult>>;
   // `graphify query <term> --budget <n>` with cwd = staging: GSD's own reader, never the standalone `graphify query`.
   graphifyQuery(staging: string, term: string, budget: number): Promise<Result<GsdGraphQueryResult>>;
-  // Planning initialization is out of scope for Phase 1; always `unsupported`.
+  // Planning initialization is not driven by AVARICE; always `unsupported`, with the attended command as the reduced mode.
   initPlanning(): Result<never>;
 }

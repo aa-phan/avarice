@@ -4,6 +4,7 @@
 // edits `.planning/codebase/*.md` itself (ONB-2): the only writes this adapter causes are `config-set` and
 // `stamp-codebase-map`, both GSD's own, and (plan 01-14) `graphify build snapshot`, which writes the diff snapshot
 // of the graph AVARICE installed into `.planning/graphs`.
+import { PLANNING_INIT_REDUCED_MODE } from '../../domain/capability-requirements.ts';
 import { credentialPaths } from '../../domain/invocation-scope.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -50,7 +51,8 @@ const MAX_GRAPH_BUDGET = 1_000_000;
 const MAX_TERM_CHARS = 200;
 
 // Static capabilities of the 1.17.x surface this adapter drives. `map-paths` and `ingest-docs` exist in GSD
-// but belong to Phase 4, so they are reported false here.
+// but this adapter does not drive them, so they are reported false; a step that needs one is refused with its reduced mode
+// (src/domain/capability-requirements.ts).
 const CAPABILITIES: Readonly<Record<string, boolean>> = {
   'init-onboard': true,
   'map-full': true,
@@ -376,6 +378,6 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
   }
 
   initPlanning(): Result<never> {
-    return err({ kind: 'unsupported', capability: 'init-planning', reducedMode: 'out of scope for Phase 1; planning initialization arrives in Phase 4' });
+    return err({ kind: 'unsupported', capability: 'init-planning', reducedMode: PLANNING_INIT_REDUCED_MODE });
   }
 }
