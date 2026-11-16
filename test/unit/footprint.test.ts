@@ -5,7 +5,7 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -374,5 +374,98 @@ describe('scripts/ac1-timing.sh', () => {
     assert.equal(r.status, 2, r.stdout + r.stderr);
     assert.match(r.stderr, /AC-1 refused/);
     assert.deepEqual(readdirSync(tmp), []);
+  });
+});
+
+// SEC-7: employer configuration, adapters and data live in an employer-owned repository, never here. Two things would show an employer
+// in this tree: an `enterprise-<org>` profile name for a real organization and a host that belongs to one. The guard reads every file in the
+// working set (tracked, or new and not ignored, so a file is caught before it is committed) under src, docs, scripts, bin and test, and
+// the fixture organization package is held to the reserved `example.com` alone.
+describe('employer configuration stays outside the distribution (SEC-7)', () => {
+  // The names after `enterprise-` that may appear: the reserved fixture organization, the name of docs/enterprise-adaptation.md, the compound
+  // `enterprise-onboarding`, and the spellings the profile-name grammar tests feed to the parser (valid, too short, doubled hyphen).
+  const ENTERPRISE_NAMES: ReadonlySet<string> = new Set(['acme', 'adaptation', 'onboarding', 'other', 'a1-b2', '0', 'ac', '-acme']);
+  const HOSTS: ReadonlySet<string> = new Set([
+    'github.com',
+    'api.github.com',
+    'registry.npmjs.org',
+    'code.claude.com',
+    'docs.anthropic.com',
+    'localhost',
+    '127.0.0.1',
+    'example.com',
+    // The owner's own portfolio site (the benchmark repository's configuration), the plist document type definition that launchd files
+    // name, and a look-alike spelling a profile test feeds to the remote pattern matcher.
+    'aa-phan.github.io',
+    'www.apple.com',
+    'githubxexample.com',
+  ]);
+  // Names nobody can register: subdomains of example.com, the TLDs reserved for tests and documentation (RFC 2606, RFC 6761) and for private use.
+  const RESERVED_SUFFIXES = ['.example.com', '.test', '.invalid', '.example', '.localhost', '.internal'];
+
+  const hostAllowed = (host: string): boolean => HOSTS.has(host) || RESERVED_SUFFIXES.some((suffix) => host.endsWith(suffix));
+
+  function profileNamesIn(text: string): string[] {
+    return [...text.matchAll(/enterprise-([a-z0-9-]+)/g)].map((m) => m[1] as string).filter((name) => !ENTERPRISE_NAMES.has(name));
+  }
+
+  // Dotted hosts after `://` (userinfo and port skipped) and the host part of each string in a `remotePatterns` list or value.
+  function hostsIn(text: string): string[] {
+    const hosts = [...text.matchAll(/:\/\/(?:[^\s/@'"`<>]*@)?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g)].map((m) => (m[1] as string).toLowerCase());
+    for (const list of text.matchAll(/remotePatterns['"]?\s*[:=]\s*(\[[^\]]*\]|['"][^'"]*['"])/g)) {
+      for (const entry of (list[1] as string).matchAll(/['"]([^'"]+)['"]/g)) {
+        const host = (entry[1] as string).split('/')[0]?.replace(/^\*\./, '').toLowerCase() ?? '';
+        if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(host)) hosts.push(host);
+      }
+    }
+    return hosts.filter((host) => !hostAllowed(host));
+  }
+
+  // Files of the working set under the given directories; a file that is gone, binary or over 2 MiB is not text to scan.
+  function workingSet(dirs: readonly string[], skip: (path: string) => boolean = () => false): Array<{ path: string; text: string }> {
+    const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...dirs], { cwd: REPO_ROOT, encoding: 'utf8' });
+    assert.equal(listed.status, 0, listed.stderr);
+    const files: Array<{ path: string; text: string }> = [];
+    for (const path of listed.stdout.split('\0').filter((p) => p !== '' && !skip(p))) {
+      const full = join(REPO_ROOT, path);
+      if (!existsSync(full) || !statSync(full).isFile() || statSync(full).size > 2 * 1024 * 1024) continue;
+      const bytes = readFileSync(full);
+      if (bytes.includes(0)) continue;
+      files.push({ path, text: bytes.toString('utf8') });
+    }
+    return files;
+  }
+
+  const inFixtures = (path: string): boolean => path.startsWith('test/fixtures/');
+
+  it('names no enterprise profile other than the reserved fixture organization', () => {
+    const files = workingSet(['src', 'docs', 'scripts', 'bin', 'test'], inFixtures);
+    assert.ok(files.length > 100, `the scan found the working set (${files.length} files)`);
+    const offenders = files.flatMap((f) => profileNamesIn(f.text).map((name) => `${f.path}: enterprise-${name}`));
+    assert.deepEqual(offenders, []);
+  });
+
+  it('names no host outside the allowlist in src, bin, scripts or test', () => {
+    const files = workingSet(['src', 'scripts', 'bin', 'test'], inFixtures);
+    assert.ok(files.length > 100, `the scan found the working set (${files.length} files)`);
+    const offenders = files.flatMap((f) => hostsIn(f.text).map((host) => `${f.path}: ${host}`));
+    assert.deepEqual(offenders, []);
+  });
+
+  it('keeps the fixture organization package to example.com', () => {
+    const files = workingSet(['test/fixtures/org-acme']);
+    assert.deepEqual(files.map((f) => f.path).sort(), ['test/fixtures/org-acme/config.json', 'test/fixtures/org-acme/policy-invalid.json', 'test/fixtures/org-acme/policy.json']);
+    const strict = (host: string): boolean => host === 'example.com' || host.endsWith('.example.com');
+    const offenders = files.flatMap((f) => [...hostsIn(f.text), ...[...f.text.matchAll(/:\/\/([A-Za-z0-9.-]+)/g)].map((m) => m[1] as string)].filter((h) => !strict(h)).map((h) => `${f.path}: ${h}`));
+    assert.deepEqual(offenders, []);
+    assert.deepEqual(files.flatMap((f) => profileNamesIn(f.text)), []);
+  });
+
+  it('flags an employer profile name and an employer host (control)', () => {
+    assert.deepEqual(profileNamesIn(`profile ${['enterprise', 'megacorp'].join('-')} and enterprise-acme`), ['megacorp']);
+    assert.deepEqual(profileNamesIn('enterprise-<org> is only a placeholder'), []);
+    assert.deepEqual(hostsIn(`remote https://git.${'megacorp'}.com/x and https://github.com/y and https://git.example.com/z`), ['git.megacorp.com']);
+    assert.deepEqual(hostsIn(`{ "remotePatterns": ["git.${'megacorp'}.com/team/*", "github.example.com/acme/*"] }`), ['git.megacorp.com']);
+    assert.deepEqual(hostsIn(`remotePatterns = '*.${'megacorp'}.com/x/*'`), ['megacorp.com']);
   });
 });
