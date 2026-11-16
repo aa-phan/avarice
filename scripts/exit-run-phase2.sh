@@ -14,7 +14,7 @@
 #       and refs, `avarice start --brief B --policy routine --wait` with cwd the portfolio and the owner's profile, a second snapshot, and
 #       the tools' `evidence` (spend line into the Phase 2 ledger, the run's record into the exit evidence JSON). The script stops at the
 #       first run that does not end `ready_for_review` (D-08: no run is retried by hand) with the diagnosis in the evidence file.
-#       Environment: EXIT_EVIDENCE_FILE (default .planning/phases/02-.../02-22-evidence-exit.json), EXIT_RUN_OUT_DIR (the runs' output).
+#       Environment: EXIT_EVIDENCE_FILE (default .planning/milestones/v1.0-phases/02-.../02-22-evidence-exit.json), EXIT_RUN_OUT_DIR (the runs' output).
 #
 # Realpath note: the allow rules AVARICE generates name symlink-resolved paths (macOS: $TMPDIR is /var/folders/..., really
 # /private/var/folders/...). Every path in the conventions file is repository-relative, so none needs resolving; the exit runs use the
@@ -57,7 +57,7 @@ if [ "$RUN" = 1 ]; then
   [ "$DRY" = 0 ] && [ ${#RUN_BRIEFS[@]} -gt 0 ] || usage
   [ -n "$AUTH" ] && [ -f "$AUTH" ] || { echo "exit-run-phase2: refusing to spend without --authorization-file (the owner's recorded decision)" >&2; exit 2; }
   AVARICE=("$NODE" --disable-warning=ExperimentalWarning "$HERE/bin/avarice.ts")
-  EVID="${EXIT_EVIDENCE_FILE:-$HERE/.planning/phases/02-contained-unattended-run-of-one-work-item/02-22-evidence-exit.json}"
+  EVID="${EXIT_EVIDENCE_FILE:-$HERE/.planning/milestones/v1.0-phases/02-contained-unattended-run-of-one-work-item/02-22-evidence-exit.json}"
   LEDGER="$HERE/test/containment/live-spend-phase2.jsonl"
   REAL_TMP="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
   case "$REAL_TMP/" in "$HOME"/.claude*) echo "exit-run-phase2: TMPDIR $REAL_TMP is under a Claude config directory; set TMPDIR elsewhere" >&2; exit 2 ;; esac

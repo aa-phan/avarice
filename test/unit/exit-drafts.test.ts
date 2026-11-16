@@ -373,7 +373,7 @@ describe('the three Phase 3 exit briefs (plan 03-28, D-02 to D-04)', () => {
 
   // The latest dry run: plan 03-55 redrafted run 1 (D-32), so the dry runs of 03-28 to 03-49 name its earlier digest.
   it('the recorded dry run (03-55-dry-run.json) names the digest of each brief file as it is now', () => {
-    const record = join(ROOT, '.planning', 'phases', '03-decisions-independent-work-and-amendments', '03-55-dry-run.json');
+    const record = join(ROOT, '.planning', 'milestones', 'v1.0-phases', '03-decisions-independent-work-and-amendments', '03-55-dry-run.json');
     assert.ok(existsSync(record), 'run scripts/exit-run-phase3.sh --dry-run with EXIT_DRY_RUN_OUT set to this file');
     const dry = JSON.parse(readFileSync(record, 'utf8')) as { briefs: Array<{ path: string; digest: string; compiled: boolean }>; spentUsd: number };
     assert.equal(dry.spentUsd, 0);
