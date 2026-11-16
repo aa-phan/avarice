@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-11-16T18:48:50.395Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-11-16T19:00:05.199Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 91d02ab54da937588345bc95f512e36ea4376d1d
+state_head: c9778029d6bb60bb3ff5121d07e2ce691722ec0b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 5 of 39
+Plan: 6 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -167,6 +167,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P02 | 25 min | 3 tasks | 5 files |
 | Phase 04 P04 | 25 min | 3 tasks | 16 files |
 | Phase 04 P03 | n/a | 3 tasks | 4 files |
+| Phase 04 P05 | 12min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -395,6 +396,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-02: uses relation mapped id-only; Claude Code 2.1.325 is not admitted and needs a live T3 run in 04-11
 - [Phase 04]: 04-04: a repository binding matches only when both the realpath git root and the root commit equal the recorded pair; repo add binds only when --profile is given — A pair is what the plan keys the registry by; a clone at another path is caught by the enterprise remote patterns, and an unflagged add must never lock a repository to a profile.
 - [Phase 04]: 04-04: an untrusted bindings file or enterprise config (link, not regular, over 64 KiB, bad JSON, bad entry) refuses the command; git is not run while no binding and no remotePatterns exist — A skipped entry would let a bound repository open under another profile; skipping git keeps users of no profile feature at zero cost.
+- [Phase 04]: Policy evaluation order: fixed SEC-5 rule, broken rank 1 (deny every privileged action), organization-stated rule, built-in rule (replaceable by a personal user rule), then ranks 3 and 4 only restrict; the repository never loosens — D-17 and SEC-4; the organization file is the only source that can loosen a built-in default under an enterprise profile
+- [Phase 04]: PolicySources.organization left out means no organization policy applies; 'absent' means a file was expected and is missing (denies privileged actions under an enterprise profile); an error result denies under any profile — Callers (profile config reader, later plan) must choose between them; fail closed when a file is expected
+- [Phase 04]: SEC-5 made concrete as built-in fixed deny rules sec5.tls, sec5.authentication, sec5.egress on three privileged net.* actions; ids prefixed builtin. or sec5., and org.invalid-or-missing, are reserved in every policy file — The plan exempts SEC-5 from personal loosening but named no rule to exempt
 
 ### Roadmap Evolution
 
@@ -462,8 +466,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T18:48:50.371Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-11-16T19:00:05.174Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
