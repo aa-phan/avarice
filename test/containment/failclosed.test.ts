@@ -234,10 +234,23 @@ describe('launch preflight refuses (no launch)', () => {
     assert.equal(rule, 'enforcement_failure:sandbox-unavailable');
   });
 
-  it('when claude --version reports a version that is not admitted (2.1.400)', () => {
+  it('when claude --version reports a minor that is not verified (2.2.0)', () => {
+    const c = fakeClaude('2.2.0');
+    const rule = refusal(checkLaunchReady({ settingsFile: settingsFile(), claudeBin: c.bin, sandboxProbe: PROBE_OK }));
+    assert.equal(rule, 'enforcement_failure:host-minor-unverified');
+  });
+
+  it('when claude --version reports a patch below the verified range (2.1.311)', () => {
+    const c = fakeClaude('2.1.311');
+    const rule = refusal(checkLaunchReady({ settingsFile: settingsFile(), claudeBin: c.bin, sandboxProbe: PROBE_OK }));
+    assert.equal(rule, 'enforcement_failure:host-patch-below-range');
+  });
+
+  it('when claude --version reports an unverified patch (2.1.400) whose --help cannot be read', () => {
+    // The fake answers --version only and exits 9 for --help.
     const c = fakeClaude('2.1.400');
     const rule = refusal(checkLaunchReady({ settingsFile: settingsFile(), claudeBin: c.bin, sandboxProbe: PROBE_OK }));
-    assert.equal(rule, 'enforcement_failure:host-version-not-admitted:2.1.400');
+    assert.equal(rule, 'enforcement_failure:host-unavailable');
   });
 
   it('when claude --version prints something that is not a version', () => {

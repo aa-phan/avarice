@@ -455,8 +455,8 @@ describe('fail closed before any process starts (SC3)', () => {
     assertBlockedBeforeLaunch(s, onboard(s, { AVARICE_HOOK_ENTRY: '/nonexistent/pre-tool-use.ts' }));
   });
 
-  it('blocks with enforcement_failure when claude reports a version that is not admitted', () => {
-    const s = setup({ version: '2.1.400 (Claude Code)', transcript: 'success', mapFiles: 'all' });
+  it('blocks with enforcement_failure when claude reports a minor that is not verified', () => {
+    const s = setup({ version: '2.2.0 (Claude Code)', transcript: 'success', mapFiles: 'all' });
     assertBlockedBeforeLaunch(s, onboard(s));
   });
 
@@ -686,13 +686,13 @@ describe('every containment layer is checked at launch, after the files are writ
   });
 
   it('records why the production host is the unavailable one, in the descriptor adapter_configs keeps', () => {
-    const s = setup({ version: '2.1.400 (Claude Code)', transcript: 'success' });
+    const s = setup({ version: '2.2.0 (Claude Code)', transcript: 'success' });
     onboard(s);
     const [host] = rows<{ adapter: string; descriptor_json: string }>(s.roots, "SELECT adapter, descriptor_json FROM adapter_configs WHERE port = 'agent-host'");
     assert.equal(host?.adapter, 'unavailable');
     const attributes = (JSON.parse(host?.descriptor_json ?? '{}') as { attributes: Record<string, string> }).attributes;
     assert.equal(attributes['enforcement'], 'none');
-    assert.equal(attributes['reason'], 'enforcement_failure:host-version-not-admitted:2.1.400');
+    assert.equal(attributes['reason'], 'enforcement_failure:host-minor-unverified');
   });
 });
 

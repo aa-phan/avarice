@@ -1,7 +1,7 @@
 // Fail-closed launch readiness check (ONB-12, CON-3, CS-13; docs/containment.md "Fail-closed behavior").
 // Nothing starts the contained host unless the generated settings carry every required key, the AVARICE hook
 // is configured to block on failure and its script can be read, the sandbox runs, and `claude --version` is a
-// version AVARICE has tested. Every refusal is `denied` with rule `enforcement_failure:{reason}`, so the
+// version AVARICE has tested or a patch of a tested minor whose flags are all still listed (D-20). Every refusal is `denied` with rule `enforcement_failure:{reason}`, so the
 // onboarding blocks with reason enforcement_failure. Plan 01-15 adds the hook self-test and calls this before every
 // launch.
 import { accessSync, constants, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -9,19 +9,18 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { REQUIRED_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
+import type { HostAdmission } from '../../domain/host-admission.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { openDb } from '../sqlite/db.ts';
 import { migrate } from '../sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../sqlite/migrations/0001-initial.ts';
 
-// Host versions the containment suite has run against (spike S0 and the pre-slice spike; the live T3 suite on 2.1.316,
-// 2.1.317, 2.1.318 and 2.1.319). A version is added only after a live T3 run on it shows 0 containment failures
-// (test/containment/LIVE-CASES.md). 2.1.318 was admitted on 2026-11-05 (plan 02-01) after test/containment/live-run-phase2-admission.jsonl
-// recorded 22 live cases, all PASS, 0 containment failures, 0.1596 USD. 2.1.319 was admitted on 2026-11-08 (plan 03-01) after
-// test/containment/live-run-phase3-admission.jsonl recorded the same 22 live cases, all PASS in their last run, 0 containment failures,
-// 0.1515 USD (case 06a was not exercised once, the model made no tool call, and passed on its re-run).
-export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319'];
+// Host versions the containment suite has run against are VERIFIED_HOST_VERSIONS (src/domain/host-admission.ts); this alias
+// keeps the name existing importers use. A patch of the verified 2.1 minor that is not in the list is admitted as an unverified
+// patch when the launch probes pass (D-20, ADR-014); a new minor waits for a live T3 run.
+export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = VERIFIED_HOST_VERSIONS;
 
 // Seatbelt must be able to apply a profile; /usr/bin/true is the confined process.
 const DEFAULT_SANDBOX_PROBE: readonly string[] = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'];
@@ -128,8 +127,32 @@ function checkSandbox(sandboxProbe: readonly string[] | undefined, timeout: numb
   return ok(undefined);
 }
 
-// The host is a version the containment suite has run against.
-function checkHostVersion(claudeBin: string, timeout: number): Result<{ claudeVersion: string }> {
+// `claude --help` lists every flag the launch line relies on. It proves presence, never behaviour: a host that renamed a flag is
+// caught before the launch, a host that ignores one is not (only a live T3 run shows that).
+function checkHelpFlags(claudeBin: string, timeout: number): Result<void> {
+  const help = spawnSync(claudeBin, ['--help'], {
+    timeout,
+    killSignal: 'SIGKILL',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    env: probeEnv(),
+  });
+  if (help.error !== undefined || help.status !== 0) return refuse('host-unavailable');
+  for (const flag of REQUIRED_HELP_FLAGS) {
+    // The flag as a whole word: `--settings` is not met by `--settings-profile` or `--setting-sources`.
+    const listed = new RegExp(`(^|[\\s,|\\[(])${flag}(?![\\w-])`, 'm');
+    if (!listed.test(help.stdout)) return refuse(`host-flag-missing:${flag}`);
+  }
+  return ok(undefined);
+}
+
+export interface HostVersionOk {
+  claudeVersion: string;
+  admission: HostAdmission;
+}
+
+// The host is a version the containment suite has run against, or a patch of a tested minor that still lists its flags.
+function checkHostVersion(claudeBin: string, timeout: number): Result<HostVersionOk> {
   const version = spawnSync(claudeBin, ['--version'], {
     timeout,
     killSignal: 'SIGKILL',
@@ -140,8 +163,13 @@ function checkHostVersion(claudeBin: string, timeout: number): Result<{ claudeVe
   if (version.error !== undefined || version.status !== 0) return refuse('host-unavailable');
   const reported = /^\s*(\d+\.\d+\.\d+)\b/.exec(version.stdout)?.[1];
   if (reported === undefined) return refuse('host-version-unreadable');
-  if (!ADMITTED_CLAUDE_VERSIONS.includes(reported)) return refuse(`host-version-not-admitted:${reported}`);
-  return ok({ claudeVersion: reported });
+  const admitted = admitHostVersion(reported);
+  if ('refused' in admitted) return refuse(admitted.refused);
+  if (admitted.admission === 'unverified-patch') {
+    const flags = checkHelpFlags(claudeBin, timeout);
+    if (!flags.ok) return flags;
+  }
+  return ok({ claudeVersion: reported, admission: admitted.admission });
 }
 
 export interface HostReadyInput {
@@ -153,8 +181,8 @@ export interface HostReadyInput {
 }
 
 // The startup check behind the host's `enforced` descriptor: the hook entry can be read, the sandbox runs and
-// `claude --version` is a version AVARICE has tested. Nothing is started that could run a model.
-export function checkHostReady(input: HostReadyInput): Result<{ claudeVersion: string }> {
+// `claude --version` is a version AVARICE has tested (or an unverified patch that lists its flags). Nothing is started that could run a model.
+export function checkHostReady(input: HostReadyInput): Result<HostVersionOk> {
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   if (!readable(input.hookEntry)) return refuse('hook-script-unreadable');
   const sandbox = checkSandbox(input.sandboxProbe, timeout);
@@ -234,7 +262,7 @@ export function hookSelfTest(input: HookSelfTestInput): Result<void> {
   }
 }
 
-export function checkLaunchReady(input: LaunchReadyInput): Result<{ claudeVersion: string }> {
+export function checkLaunchReady(input: LaunchReadyInput): Result<HostVersionOk> {
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   // 1. Generated settings: present, valid, and carrying every required key.
@@ -290,6 +318,6 @@ export function checkLaunchReady(input: LaunchReadyInput): Result<{ claudeVersio
   const sandbox = checkSandbox(input.sandboxProbe, timeout);
   if (!sandbox.ok) return sandbox;
 
-  // 4. The host is a version the containment suite has run against.
+  // 4. The host is a verified version, or an unverified patch that lists every flag the launch line uses.
   return checkHostVersion(input.claudeBin, timeout);
 }
