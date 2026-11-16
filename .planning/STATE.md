@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-11-16T07:44:39.441Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-11-16T18:46:52.576Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 7ff2c3c0a1d88ac2812f7453e1fa149e3aeddebd
+state_head: 04ec748978d383340e140972c8f259a7ee8b620d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 3 of 39
+Plan: 4 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -165,6 +165,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 03 P32 | 15 min | 3 tasks | 8 files |
 | Phase 04 P01 | 14 min | 2 tasks | 4 files |
 | Phase 04 P02 | 25 min | 3 tasks | 5 files |
+| Phase 04 P04 | 25 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -391,6 +392,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-01: CURRENT_SPEND_PHASE = 4; Phase 4 live spend is capped at 40 USD (D-03) by a lower-only guard, ledger test/containment/live-spend-phase4.jsonl
 - [Phase 04]: 04-02: plan 04-17 uses full code-only extraction plus a node-level diff; a path-subset merge by node ID loses edges that leave the extracted set
 - [Phase 04]: 04-02: uses relation mapped id-only; Claude Code 2.1.325 is not admitted and needs a live T3 run in 04-11
+- [Phase 04]: 04-04: a repository binding matches only when both the realpath git root and the root commit equal the recorded pair; repo add binds only when --profile is given — A pair is what the plan keys the registry by; a clone at another path is caught by the enterprise remote patterns, and an unflagged add must never lock a repository to a profile.
+- [Phase 04]: 04-04: an untrusted bindings file or enterprise config (link, not regular, over 64 KiB, bad JSON, bad entry) refuses the command; git is not run while no binding and no remotePatterns exist — A skipped entry would let a bound repository open under another profile; skipping git keeps users of no profile feature at zero cost.
 
 ### Roadmap Evolution
 
@@ -458,8 +461,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T07:44:39.419Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-11-16T18:46:52.547Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
