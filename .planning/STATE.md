@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-11-16T19:13:45.292Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-11-16T19:39:51.292Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 78a58d3f6b4a0bde61613cb82e1075c88f990cf2
+state_head: 98ac1d477b1cce564e633a1f04acb77417768578
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 7 of 39
+Plan: 8 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -169,6 +169,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P03 | n/a | 3 tasks | 4 files |
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
 | Phase 04 P06 | 21min | 3 tasks | 15 files |
+| Phase 04 P07 | 60 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -402,6 +403,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: SEC-5 made concrete as built-in fixed deny rules sec5.tls, sec5.authentication, sec5.egress on three privileged net.* actions; ids prefixed builtin. or sec5., and org.invalid-or-missing, are reserved in every policy file — The plan exempts SEC-5 from personal loosening but named no rule to exempt
 - [Phase 04]: 04-06: run.unit requires agent-host contained-invocation (not resume, which the production Claude host publishes false); a G0 capability failure blocks with enforcement_failure
 - [Phase 04]: 04-06: enforcement map has 18 rows; rows for controls built later are unverified 'proved by plan 04-NN'; host limitation 3 and 4 rows are not-claimed
+- [Phase 04]: Redaction runs inside appendEventRow; overlapping seeded literals merge into one [REDACTED:seeded] marker; a seeded literal under 8 characters is refused
 
 ### Roadmap Evolution
 
@@ -469,8 +471,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T19:13:45.267Z
-Stopped at: Completed 04-06-PLAN.md
+Last session: 2026-11-16T19:39:46.098Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
