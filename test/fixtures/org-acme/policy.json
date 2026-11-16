@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "rules": [
+    { "id": "org.no-push-protected", "action": "git.push", "when": { "branch": "protected" }, "effect": "deny" },
+    { "id": "org.pr-needs-approval", "action": "scm.pr.create", "effect": "require-approval", "approvalSource": "local-user" },
+    { "id": "org.no-export", "action": "export", "when": { "targetClass": "personal" }, "effect": "deny" }
+  ]
+}
