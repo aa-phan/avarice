@@ -16,6 +16,58 @@
       "hasCodebaseMap": false,
       "trackedFiles": 363,
       "notes": "Owner portfolio (React, Vite, Vitest). Committed GSD planning at the pin, no .planning/codebase map. Also the Phase 2 and Phase 3 exit repository."
+    },
+    {
+      "id": "auto_search_workflow",
+      "stack": "python",
+      "source": "~/auto_search_workflow",
+      "sourceKind": "owner-path",
+      "pin": "c81c2313c5c2611cfff7dc4628795a0c7137d451",
+      "hasPlanning": true,
+      "planningTrackedFiles": 96,
+      "hasCodebaseMap": true,
+      "trackedFiles": 150,
+      "notes": "Owner job-search pipeline (Python 3, unittest, offline fakes). Tracked .planning with seven .planning/codebase files that carry GSD last_mapped_commit stamps, so the ONB-6 adoption path is exercised."
+    },
+    {
+      "id": "GroceriesGPT",
+      "stack": "typescript",
+      "source": "~/GroceriesGPT",
+      "sourceKind": "owner-path",
+      "pin": "1913423d24ede5af790683a1117a3a83ba9e47db",
+      "hasPlanning": false,
+      "planningTrackedFiles": 0,
+      "hasCodebaseMap": false,
+      "trackedFiles": 217,
+      "notes": "Owner TikTok-recipe to Kroger-cart service (Node, Fastify, Vitest). No GSD artifacts: the plain brownfield case. The checkout has uncommitted edits; the pin is a commit."
+    },
+    {
+      "id": "spf13-cobra",
+      "stack": "go",
+      "source": "https://github.com/spf13/cobra",
+      "sourceKind": "public-url",
+      "pin": "88b30ab89da2d0d0abb153818746c5a2d30eccec",
+      "hasPlanning": false,
+      "planningTrackedFiles": 0,
+      "hasCodebaseMap": false,
+      "trackedFiles": 66,
+      "licence": "Apache-2.0",
+      "release": "v1.10.2",
+      "notes": "Public Go CLI library. Mapping-only: Go is not installed here, so the AC-14 run builds the index and profile and does not run the repository checks."
+    },
+    {
+      "id": "BurntSushi-ripgrep",
+      "stack": "rust",
+      "source": "https://github.com/BurntSushi/ripgrep",
+      "sourceKind": "public-url",
+      "pin": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+      "hasPlanning": false,
+      "planningTrackedFiles": 0,
+      "hasCodebaseMap": false,
+      "trackedFiles": 222,
+      "licence": "Unlicense OR MIT",
+      "release": "15.2.0",
+      "notes": "Public Rust workspace. Mapping-only: Cargo is not installed here, so the AC-14 run builds the index and profile and does not run the repository checks."
     }
   ]
 }
