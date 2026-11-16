@@ -369,6 +369,11 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
   return ok(budgets);
 }
 
+// Skeleton for the RED run; the rule arrives with the next commit.
+export function filesDeleteFor(_answer: string, _existingMap: string): string[] {
+  return [];
+}
+
 export function compileOnboardingContract(input: CompileInput): Result<OnboardingContract> {
   const { request, preflight } = input;
 
