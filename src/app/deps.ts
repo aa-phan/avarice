@@ -1,6 +1,7 @@
 // Application dependencies (SKELETON.md "Application").
 import type { IdPrefix } from '../domain/ids.ts';
 import type { ProfileNotify } from '../domain/notify-policy.ts';
+import type { ProfileClass, ProfileConfig } from '../domain/profile.ts';
 import type { Result } from '../domain/result.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
@@ -25,6 +26,10 @@ export interface IdSource {
 
 export interface ProfilePaths {
   profile: string;
+  // personal or enterprise, by the profile's name.
+  class: ProfileClass;
+  // The profile's config.json as parsed (SEC-1, OPS-5): its roots and its sections, raw, for each consumer to parse its own.
+  config: ProfileConfig;
   configHome: string;
   dataRoot: string;
   workRoot: string;

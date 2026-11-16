@@ -93,7 +93,7 @@ export function matchesRemotePattern(remote: string, pattern: string): boolean {
 }
 
 // The profile config file (SEC-1, OPS-5). The key set is closed: a key outside it is refused by name.
-export const PROFILE_CONFIG_KEYS: readonly string[] = [
+export const PROFILE_CONFIG_KEYS: readonly string[] = Object.freeze([
   'schema',
   'profile',
   'dataRoot',
@@ -108,7 +108,7 @@ export const PROFILE_CONFIG_KEYS: readonly string[] = [
   'remotePatterns',
   'workspaceRoots',
   'freshnessWindowHours',
-];
+]);
 
 export type SectionKey = 'notify' | 'limits' | 'retrieval' | 'credentials' | 'adapters' | 'retention' | 'policy' | 'remotePatterns' | 'workspaceRoots' | 'freshnessWindowHours';
 
@@ -121,6 +121,68 @@ export interface ProfileConfig {
   sections: Partial<Record<SectionKey, unknown>>;
 }
 
-export function parseProfileConfig(_raw: unknown, _expectedProfile: string): Result<ProfileConfig> {
-  return err({ kind: 'internal', cause: 'parseProfileConfig is not implemented' });
+const SECTION_KEYS: readonly SectionKey[] = ['notify', 'limits', 'retrieval', 'credentials', 'adapters', 'retention', 'policy', 'remotePatterns', 'workspaceRoots', 'freshnessWindowHours'];
+const MAX_ROOT_CHARS = 4096;
+// Every C0 control character (tab and newline included), DEL and the C1 controls.
+const ANY_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const invalid = (field: string, reason: string): Result<never> => err({ kind: 'invalid', field, reason });
+
+// A key from a hand-edited file goes into a field path that a terminal prints: drop control characters and cap it.
+function fieldKey(key: string): string {
+  return key.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 40);
+}
+
+function parseRoot(value: unknown, field: 'dataRoot' | 'workRoot'): Result<string> {
+  if (typeof value !== 'string' || value === '' || value.length > MAX_ROOT_CHARS || ANY_CONTROL.test(value)) {
+    return invalid(field, `expected a path of at most ${MAX_ROOT_CHARS} characters without control characters`);
+  }
+  return ok(value);
+}
+
+// `profile` is the written string form (`"personal-local"`) or `{ id, class }`; either must name the selected profile, and a class must be
+// the class its id has.
+function parseIdentity(value: unknown, expectedProfile: string): Result<true> {
+  if (typeof value === 'string') {
+    return value === expectedProfile ? ok(true) : invalid('profile', `the file names profile '${printable(value)}', not the selected profile '${expectedProfile}'`);
+  }
+  if (!isRecord(value)) return invalid('profile', "expected a profile id or an object with 'id' and 'class'");
+  for (const key of Object.keys(value)) {
+    if (key !== 'id' && key !== 'class') return invalid('profile', `unknown key '${fieldKey(key)}'; expected id and class`);
+  }
+  if (value['id'] !== expectedProfile) return invalid('profile', `the file names profile '${printable(String(value['id']))}', not the selected profile '${expectedProfile}'`);
+  if (value['class'] !== undefined && value['class'] !== profileClass(expectedProfile)) {
+    return invalid('profile', `the class '${printable(String(value['class']))}' is not the class of ${expectedProfile} (${profileClass(expectedProfile)})`);
+  }
+  return ok(true);
+}
+
+// The whole profile config file as a typed value. The key set is closed (PROFILE_CONFIG_KEYS): an unknown top-level key, a schema other
+// than 1 and a profile other than `expectedProfile` are refused naming the key. `schema` and `profile` may be left out of a hand-written
+// file. The roots are checked for shape only; the sections stay raw, because each consumer parses its own section in its own module.
+export function parseProfileConfig(raw: unknown, expectedProfile: string): Result<ProfileConfig> {
+  const named = parseProfileName(expectedProfile);
+  if (!named.ok) return named;
+  if (!isRecord(raw)) return invalid('config', 'expected an object');
+  for (const key of Object.keys(raw)) {
+    if (!PROFILE_CONFIG_KEYS.includes(key)) return invalid(fieldKey(key), `unknown key; expected ${PROFILE_CONFIG_KEYS.join(', ')}`);
+  }
+  if (raw['schema'] !== undefined && raw['schema'] !== 1) return invalid('schema', 'expected 1');
+  if (raw['profile'] !== undefined) {
+    const identity = parseIdentity(raw['profile'], expectedProfile);
+    if (!identity.ok) return identity;
+  }
+  const config: ProfileConfig = { schema: 1, id: expectedProfile, class: profileClass(expectedProfile), sections: {} };
+  for (const field of ['dataRoot', 'workRoot'] as const) {
+    if (raw[field] === undefined) continue;
+    const root = parseRoot(raw[field], field);
+    if (!root.ok) return root;
+    config[field] = root.value;
+  }
+  for (const key of SECTION_KEYS) {
+    if (raw[key] !== undefined) config.sections[key] = raw[key];
+  }
+  return ok(config);
 }
