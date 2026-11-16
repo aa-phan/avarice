@@ -1,18 +1,24 @@
-// avarice init [--profile personal-local]
+// avarice init [--profile <name>]
+// `<name>` is personal-local (the default), personal-extended or enterprise-<org>; main() has already selected the profile.
 // First-run path: the composition root has already checked the root placement rules, created the profile
 // config (0600), the data root and the work root (0700) and opened and migrated the ledger, so init reports
 // what it resolved. Idempotent: a second run changes nothing.
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
-import { configPathFor, DEFAULT_PROFILE } from '../../adapters/fs/profile-paths.ts';
+import { configPathFor } from '../../adapters/fs/profile-paths.ts';
 import { describeError, openDb } from '../../adapters/sqlite/db.ts';
+import { parseProfileName } from '../../domain/profile.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { errorLine, resultLine, stripControl } from '../render/style.ts';
 
 export function usage(args: ParsedArgs): string | undefined {
   const profile = args.flags['profile'];
-  if (profile !== undefined && profile !== DEFAULT_PROFILE) return `only ${DEFAULT_PROFILE} in Phase 1`;
+  if (profile === true) return '--profile needs a profile name';
+  if (profile !== undefined) {
+    const named = parseProfileName(profile);
+    if (!named.ok) return describeError(named.error);
+  }
   if (args.positionals.length > 0) return `unexpected argument '${args.positionals[0]}'`;
   return undefined;
 }
