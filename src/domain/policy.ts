@@ -175,18 +175,88 @@ function builtinFor(action: string): BuiltinRule | undefined {
   return strictest(BUILTIN_POLICY.filter((rule) => rule.action === action || (rule.action === undefined && rule.actionClass === cls)));
 }
 
+const usable = (file: PolicyFile | undefined, kind: PolicySourceKind): PolicyFile | undefined => (file !== undefined && PARSED_AS.get(file) === kind ? file : undefined);
+
+// The most restrictive rule of one file that applies to the action and the parameters.
+const statedBy = (file: PolicyFile | undefined, action: string, params: Readonly<Record<string, string>>): PolicyRule | undefined =>
+  strictest((file?.rules ?? []).filter((rule) => appliesTo(rule, action, params)));
+
+// Rank 1 is broken when a file was expected and cannot be used: an error result (unreadable or invalid), a value that was not parsed as an
+// organization file, or `'absent'` under an enterprise profile. A personal profile that names no file passes `organization` out altogether.
+function organizationBroken(sources: PolicySources): boolean {
+  const organization = sources.organization;
+  if (organization === undefined) return false;
+  if (organization === 'absent') return sources.profileClass === 'enterprise';
+  return !organization.ok || usable(organization.value, 'organization') === undefined;
+}
+
+// The decision for one action, by rank (docs/enterprise-adaptation.md "Sources and precedence"):
+//   - a fixed SEC-5 rule decides first and nothing changes it;
+//   - a broken rank 1 denies every privileged action (D-17), whatever the other ranks say;
+//   - a rule the organization states decides its own rank and cannot be loosened by a lower rank;
+//   - otherwise the built-in rule decides, and under a personal profile the user's rule may replace it (loosen or restrict);
+//   - ranks 3 and 4 then only restrict: a rule of the user (enterprise profile, or any rule over an organization rule) or of the repository
+//     replaces the answer only when it is stricter. The repository never loosens, in any profile.
+// A file that was not produced by `parsePolicyFile` for its own source is unusable: at rank 1 that is a broken file, at ranks 3 and 4 it is
+// absent, which can only leave the stricter built-in default in force.
 export function evaluatePolicy(sources: PolicySources, action: string, params: Readonly<Record<string, string>>): PolicyDecision {
   const builtin = builtinFor(action);
   // Every action matches the built-in rule of its class, so this is always found; deny is the answer if the table ever loses one.
   if (builtin === undefined) return { effect: 'deny', ruleId: 'builtin.no-rule', rank: 2 };
   if (builtin.fixed === true) return { effect: builtin.effect, ruleId: builtin.id, rank: 2 };
-  const organization = sources.organization !== undefined && sources.organization !== 'absent' && sources.organization.ok ? sources.organization.value : undefined;
-  const stated = strictest((organization?.rules ?? []).filter((rule) => appliesTo(rule, action, params)));
-  if (stated !== undefined) return { effect: stated.effect, ruleId: stated.id, rank: 1 };
-  return { effect: builtin.effect, ruleId: builtin.id, rank: 2 };
+  if (organizationBroken(sources) && classifyAction(action) === 'privileged') return { effect: 'deny', ruleId: INVALID_ORGANIZATION_RULE_ID, rank: 1 };
+
+  const organization = sources.organization !== undefined && sources.organization !== 'absent' && sources.organization.ok ? usable(sources.organization.value, 'organization') : undefined;
+  const orgRule = statedBy(organization, action, params);
+  const userRule = statedBy(usable(sources.user, 'user'), action, params);
+  const repositoryRule = statedBy(usable(sources.repository, 'repository'), action, params);
+
+  let decision: PolicyDecision;
+  if (orgRule !== undefined) decision = { effect: orgRule.effect, ruleId: orgRule.id, rank: 1 };
+  else if (userRule !== undefined && sources.profileClass === 'personal') decision = { effect: userRule.effect, ruleId: userRule.id, rank: 3 };
+  else decision = { effect: builtin.effect, ruleId: builtin.id, rank: 2 };
+
+  for (const [rule, rank] of [[userRule, 3], [repositoryRule, 4]] as const) {
+    if (rule !== undefined && STRICTNESS[rule.effect] > STRICTNESS[decision.effect]) decision = { effect: rule.effect, ruleId: rule.id, rank };
+  }
+  return decision;
 }
 
-// Skeleton: the closed constructor arrives with the loosening rules.
-export function policySources(_input: Readonly<Record<string, unknown>>): Result<PolicySources> {
-  return err({ kind: 'unavailable', cause: 'skeleton' });
+const SOURCE_FIELDS: ReadonlySet<string> = new Set(['profileClass', 'organization', 'user', 'repository']);
+
+const invalidSources = (reason: string): Result<never> => err({ kind: 'invalid', field: 'policy sources', reason });
+
+// The only way to build `PolicySources` from values whose type is not known at the call site (FR-14, T-04-12). The sources are the four
+// declared kinds and nothing else: a field that names anything other than the profile class and the three files is refused, and each file
+// must be what `parsePolicyFile` returned for that source. Text from a brief, a context item, tool output or model output has no field to
+// go into and no way to become a parsed file of its own accord. The evaluator has no parameter that takes such text either.
+export function policySources(input: Readonly<Record<string, unknown>>): Result<PolicySources> {
+  for (const key of Object.keys(input)) {
+    if (!SOURCE_FIELDS.has(key)) return invalidSources('only profileClass, organization, user and repository are policy sources');
+  }
+  const profileClass = input['profileClass'];
+  if (profileClass !== 'personal' && profileClass !== 'enterprise') return invalidSources('profileClass is not personal or enterprise');
+  const sources: PolicySources = { profileClass };
+
+  const organization = input['organization'];
+  if (organization !== undefined) {
+    if (organization === 'absent') {
+      sources.organization = 'absent';
+    } else if (isRecord(organization) && organization['ok'] === true) {
+      const value = organization['value'] as PolicyFile;
+      if (usable(value, 'organization') === undefined) return invalidSources('organization is not a parsed organization policy file');
+      sources.organization = ok(value);
+    } else if (isRecord(organization) && organization['ok'] === false && isRecord(organization['error']) && typeof organization['error']['kind'] === 'string') {
+      sources.organization = organization as unknown as Result<never>;
+    } else {
+      return invalidSources('organization is not absent and not the result of reading the organization file');
+    }
+  }
+  for (const kind of ['user', 'repository'] as const) {
+    const file = input[kind];
+    if (file === undefined) continue;
+    if (usable(file as PolicyFile, kind) === undefined) return invalidSources(`${kind} is not a parsed ${kind} policy file`);
+    sources[kind] = file as PolicyFile;
+  }
+  return ok(sources);
 }
