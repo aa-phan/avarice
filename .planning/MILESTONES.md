@@ -22,6 +22,6 @@
 - Phase 1 and phase 2 verifications read `stale` at close (later phases changed files they covered); the owner chose to proceed on the 2026-11-15 milestone audit, which re-checked cross-phase integration (7/7 seams, 3/3 flows, no blockers).
 - Audit status `tech_debt`: 17 items, scheduled as Phase 9 (end-of-roadmap cleanup). See `milestones/v1.0-MILESTONE-AUDIT.md`.
 
-**Archive:** `milestones/v1.0-ROADMAP.md`, `milestones/v1.0-REQUIREMENTS.md`, `milestones/v1.0-MILESTONE-AUDIT.md`, `milestones/v1.0-quick/`. Phase directories stay in `.planning/phases/`.
+**Archive:** `milestones/v1.0-ROADMAP.md`, `milestones/v1.0-REQUIREMENTS.md`, `milestones/v1.0-MILESTONE-AUDIT.md`, `milestones/v1.0-quick/`. Phase directories moved to `milestones/v1.0-phases/` at the start of v1.1.
 
 ---

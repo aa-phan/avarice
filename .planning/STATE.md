@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.0
-status: "Phase 3 shipped — PR #4"
-stopped_at: Milestone v1.0 complete, ready to start v1.1
-last_updated: "2026-11-16T00:05:55.508Z"
+milestone: v1.1
+milestone_name: MVP Completion
+status: planning
+last_updated: "2026-11-16T00:19:37.237Z"
 last_activity: 2026-11-15
-state_head: eb680ba6c4d620b1b8fda7fb14fddd2696978683
 progress:
-  total_phases: 8
-  completed_phases: 3
-  total_plans: 134
-  completed_plans: 134
-milestone_name: Contained Kernel
-current_phase: 4
-current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -23,14 +20,14 @@ current_phase_name: Profiles, retrieval budgets, restricted mode and the portabi
 See: .planning/PROJECT.md (updated 2026-11-15)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Milestone v1.0 shipped 2026-11-15; next is v1.1 MVP Completion (Phase 4). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
+**Current focus:** Milestone v1.1 MVP Completion — Phase 4 (Profiles, retrieval budgets, restricted mode and the portability proof). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
+Phase: 4 — Profiles, retrieval budgets, restricted mode and the portability proof (not started)
 Plan: —
-Status: Phase 3 shipped — PR #4
-Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
+Status: Ready to discuss Phase 4 (v1.1 requirements and roadmap adopted as specified)
+Last activity: 2026-11-15 — Milestone v1.1 started
 
 ## Performance Metrics
 
@@ -458,7 +455,6 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Ship the phase 3 branch (worktree-phase-03) through its PR with a merge commit; the v1.0 close rides in it
-- After the merge, tag v1.0 on main (`git tag -a v1.0` on the merge commit) and push the tag
-- Start the next milestone with /gsd-new-milestone (v1.1, Phases 4-5)
+- Discuss Phase 4 with /gsd-discuss-phase 4 (28 requirements; its roadmap note suggests considering a split at planning time)
+- Phase 4 work, including this milestone start, ships in one PR from worktree-phase-04
 - Phase 9 (v1.0 tech-debt cleanup) is planned last, after every implemented phase

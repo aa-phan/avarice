@@ -7,7 +7,7 @@ AVARICE is built in eight vertical slices; Phase N mirrors slice N−1 of `docs/
 ## Milestones
 
 - ✅ **v1.0 Contained Kernel** - Phases 1-3 (slices 0-2; shipped 2026-11-15)
-- 📋 **v1.1 MVP Completion** - Phases 4-5 (slices 3-4; completes the PRD's MVP)
+- 🚧 **v1.1 MVP Completion** - Phases 4-5 (slices 3-4; completes the PRD's MVP; started 2026-11-15)
 - 📋 **v2.0 Post-MVP Extensions** - Phases 6-8 (slices 5-7; trigger-driven)
 
 ## Phases

@@ -8,6 +8,16 @@ AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination E
 
 Set a goal and the operating boundaries, leave the desk, and come back to a verified, reviewable change or to a short list of genuine blocking decisions, with containment and evidence that do not depend on the model behaving.
 
+## Current Milestone: v1.1 MVP Completion
+
+**Goal:** Complete the PRD's MVP: AVARICE runs under separate profiles with capped, handle-first retrieval and an explicit restricted mode, and carries a verified change from `ready_for_review` to a draft PR and back on review feedback.
+
+**Target features:**
+- Separate profiles with no fallback, retrieval capped by budgets, parameter-bound approvals for privileged actions, restricted mode and `doctor`, adoption of existing GSD artifacts, and the adapter-portability proof (Phase 4, 28 requirements)
+- Draft PR delivery with no duplicates, review and CI feedback as new attempts, the mutation gate, the architecture-model check, the static dashboard, and backup, restore and uninstall (Phase 5, 13 requirements)
+
+Scope is adopted as specified at the v1.0 close (ROADMAP.md Phases 4-5, REQUIREMENTS.md traceability); no re-research or re-roadmap. Phase 9 (v1.0 tech-debt cleanup) stays last on the roadmap.
+
 ## Requirements
 
 Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are the PRD's own (`docs/requirements.md`). 105 normative requirements exist; 104 are mapped to phases and 1 (FR-23) is deferred.
@@ -21,7 +31,7 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 
 ### Active
 
-Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
+Milestone v1.1 MVP Completion (Phases 4-5, current milestone, started 2026-11-15; completes the PRD's MVP):
 
 - [ ] Profiles, handle-first retrieval with caps, restricted mode, privileged-action approvals, `doctor`, existing-GSD adoption and refresh, portability proof (Phase 4)
 - [ ] Delivery to a draft PR, review feedback attempts, mutation gate, architecture-model check, static dashboard, backup and uninstall (Phase 5)
@@ -114,7 +124,7 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Milestone v1.0 closed with tech debt accepted; the cleanup is the last roadmap phase (Phase 9), after every implemented phase | Owner choice at close; none of the 17 items breaks a success criterion | 2026-11-15 — Pending |
 
 ---
-*Last updated: 2026-11-15 after v1.0 milestone*
+*Last updated: 2026-11-15 at the start of milestone v1.1*
 
 ## Evolution
 

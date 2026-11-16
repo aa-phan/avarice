@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.0",
+  "milestone": "v1.1",
   "phases": [
     {
       "number": "1",
@@ -42,12 +42,17 @@
       "number": "8",
       "name": "Cross-repository runs and project groups",
       "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "v1.0 tech-debt cleanup",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd-progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd-discuss-phase",
+    "label": "Discuss the first phase",
+    "reason": "Project initialized — plan your first phase"
   },
-  "updated_at": "2026-11-15T23:56:21.287Z"
+  "updated_at": "2026-11-16T00:19:37.242Z"
 }
