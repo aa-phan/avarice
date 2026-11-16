@@ -3,7 +3,7 @@
 // ones under test and nothing here touches the real profile locations.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -120,6 +120,58 @@ describe('profile selection (D-16, D-17)', () => {
     assert.equal(r.code, 64, r.stderr);
     assert.match(r.stderr, /AVARICE_PROFILE/);
     assert.deepEqual(listAll(home), []);
+  });
+});
+
+describe('init and existing data (D-17, D-18)', () => {
+  it('initializes every valid profile in its own roots', () => {
+    const home = tempDir('avarice-home-');
+    for (const profile of ['personal-extended', 'enterprise-acme', 'enterprise-a1-b2']) {
+      const r = runCli(['init', '--profile', profile], { env: homeEnv(home) });
+      assert.equal(r.code, 0, r.stderr);
+      assert.equal(r.stdout.split('\n')[0], `profile ${profile}: initialized`);
+      assert.match(r.stdout, new RegExp(`config:\\s+${join(home, '.config', 'avarice', 'profiles', profile, 'config.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+      assert.equal(storedProfile(home, profile), profile);
+      assert.ok(existsSync(join(home, '.local', 'share', 'avarice-work', profile)));
+    }
+    assert.equal(existsSync(dataRootOf(home, 'personal-local')), false);
+  });
+
+  it('exits 64 for init --profile bogus and creates nothing', () => {
+    const home = tempDir('avarice-home-');
+    for (const argv of [['init', '--profile', 'bogus'], ['init', '--profile'], ['init', '--profile', 'enterprise-']]) {
+      const r = runCli(argv, { env: homeEnv(home) });
+      assert.equal(r.code, 64, r.stderr);
+      assert.deepEqual(listAll(home), []);
+    }
+  });
+
+  it('opens an existing personal-local store with its records unchanged, with no flag', () => {
+    const home = tempDir('avarice-home-');
+    const dir = dataRootOf(home, 'personal-local');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    copyFileSync(join(import.meta.dirname, '..', 'fixtures', 'db', 'schema-v1.sqlite'), join(dir, 'state.db'));
+    const count = (table: string): number => {
+      const db = new DatabaseSync(join(dir, 'state.db'), { readOnly: true });
+      try {
+        return (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+      } finally {
+        db.close();
+      }
+    };
+    const tables = ['projects', 'onboardings', 'events', 'contracts', 'project_records'];
+    const before = tables.map(count);
+    assert.deepEqual(before, [1, 1, 11, 1, 1]);
+
+    const r = runCli(['status', '--json'], { env: homeEnv(home) });
+    assert.equal(r.code, 0, r.stderr);
+    const fixture = new DatabaseSync(join(dir, 'state.db'), { readOnly: true });
+    const projectId = String((fixture.prepare('SELECT project_id FROM projects').get() as { project_id: string }).project_id);
+    fixture.close();
+    assert.ok(r.stdout.includes(projectId), 'status lists the project the fixture holds');
+    assert.deepEqual(tables.map(count), before);
+    assert.equal(storedProfile(home, 'personal-local'), 'personal-local');
+    assert.equal(existsSync(dataRootOf(home, 'personal-extended')), false);
   });
 });
 

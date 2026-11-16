@@ -118,12 +118,12 @@ describe('avarice init', () => {
     assert.ok(second.stdout.includes(roots.AVARICE_WORK_ROOT), 'the roots follow the result line');
   });
 
-  it('accepts --profile personal-local and refuses any other profile name', () => {
+  it('accepts --profile personal-local and refuses a name that is not a profile name', () => {
     const roots = freshRoots();
     assert.equal(runCli(['init', '--profile', 'personal-local'], { roots }).code, 0);
     const other = runCli(['init', '--profile', 'team'], { roots: freshRoots() });
     assert.equal(other.code, 64);
-    assert.match(other.stderr, /only personal-local in Phase 1/);
+    assert.match(other.stderr, /not a profile name/);
   });
 
   it('refuses another profile name before anything is created', () => {
