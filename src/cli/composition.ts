@@ -15,6 +15,7 @@ import type { Migration } from '../adapters/sqlite/migrate.ts';
 import { MIGRATION_0001 } from '../adapters/sqlite/migrations/0001-initial.ts';
 import { MIGRATION_0002 } from '../adapters/sqlite/migrations/0002-run.ts';
 import { MIGRATION_0003 } from '../adapters/sqlite/migrations/0003-decisions.ts';
+import { MIGRATION_0004 } from '../adapters/sqlite/migrations/0004-profiles.ts';
 import { SqliteLedger } from '../adapters/sqlite/ledger.ts';
 import { resolveProfile } from '../adapters/fs/profile-paths.ts';
 import { readProfileNotify } from '../adapters/fs/profile-config.ts';
@@ -47,7 +48,7 @@ import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboardin
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { AppDeps, Clock, GsdProblem, IdSource, NotifyDeps } from '../app/deps.ts';
 
-export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003];
+export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003, MIGRATION_0004];
 export const EXIT_INTERNAL = 70;
 
 export interface DepsOverrides {
@@ -86,6 +87,26 @@ export type CompositionResult = { ok: true; value: Composition } | { ok: false; 
 
 function failure(what: string, message: string): CompositionResult {
   return { ok: false, code: EXIT_INTERNAL, message: `${what}: ${message}` };
+}
+
+// The profile a store was created for (meta.profile_id, written by migrate), or undefined for a store that has none yet.
+function storeProfile(db: Db): string | undefined {
+  try {
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'profile_id'").get() as { value?: unknown } | undefined;
+    return typeof row?.value === 'string' ? row.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A store belongs to the profile it was created for (D-18, T-04-19): one that names another profile is closed untouched, before any
+// migration, backup or record write, so a store copied or pointed at between profiles is never read or changed under the wrong one.
+function refuseForeignStore(db: Db, dbPath: string, selected: string): CompositionResult | undefined {
+  const owner = storeProfile(db);
+  if (owner === undefined || owner === selected) return undefined;
+  db.close();
+  const shown = owner.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 64);
+  return { ok: false, code: EXIT_INTERNAL, message: `store at ${dbPath} belongs to profile ${shown}, not ${selected}; run it under that profile (--profile ${shown}) or point the roots at a store of ${selected}` };
 }
 
 export function systemClock(): Clock {
@@ -163,6 +184,8 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   if (options.readOnly === true && existsSync(dbPath)) {
     const opened = openDb(dbPath, { readOnly: true });
     if (!opened.ok) return failure(`cannot open ${dbPath}`, describeError(opened.error));
+    const foreign = refuseForeignStore(opened.value, dbPath, profile.profile);
+    if (foreign !== undefined) return foreign;
     const pending = pendingMigrations(opened.value, MIGRATIONS);
     if (!pending.ok) {
       opened.value.close();
@@ -174,6 +197,8 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   if (db === undefined) {
     const opened = openDb(dbPath);
     if (!opened.ok) return failure(`cannot open ${dbPath}`, describeError(opened.error));
+    const foreign = refuseForeignStore(opened.value, dbPath, profile.profile);
+    if (foreign !== undefined) return foreign;
     const migrated = migrate(opened.value, MIGRATIONS, { profileId: profile.profile, nowMs: clock.nowMs() });
     if (!migrated.ok) {
       opened.value.close();
