@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "approvedBy": null,
-  "approvedAt": null,
+  "approvedBy": "Aaron Phan",
+  "approvedAt": "2026-11-16T18:47:56Z",
   "decision": "D-05",
   "passBar": "5 of 5 repositories reach an active profile with no source change and 0 containment failures",
   "repositories": [

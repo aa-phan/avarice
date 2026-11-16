@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "approvedBy": null,
-  "approvedAt": null,
+  "approvedBy": "Aaron Phan",
+  "approvedAt": "2026-11-16T18:47:56Z",
   "decision": "D-07",
   "arms": {
     "A": {
