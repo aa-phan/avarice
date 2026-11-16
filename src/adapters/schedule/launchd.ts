@@ -3,7 +3,7 @@
 // in a loop (AUT-6). The file is the only thing written outside the profile roots: `<agentsDir>/<label>.plist`, mode 0644, no admin rights.
 //
 // The plist is a fixed template whose only variable parts are validated values: the label (a-z, 0-9, dot and dash after a fixed prefix), integer
-// Hour and Minute from HH:MM digits, absolute paths without control characters, and three environment names AVARICE reads. Every value is also
+// Hour and Minute from HH:MM digits, absolute paths without control characters, and four environment names AVARICE reads (the three roots and the profile name). Every value is also
 // XML-escaped, so a value that slipped past a check could still not add a key. The program is the Node binary and the CLI entry of the running install,
 // both required to exist. The file is written through a temporary name and a rename, linted with plutil before it is renamed into place, and
 // bootstrapped with `launchctl bootstrap gui/<uid>`; `remove` uses `launchctl bootout gui/<uid>/<label>` (never the deprecated load and unload).
@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
+import { parseProfileName } from '../../domain/profile.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 
@@ -30,7 +31,7 @@ export interface DigestPlistInput {
   entryPath: string;
   // `HH:MM`, two digits each.
   times: readonly string[];
-  // The profile roots the digest reads, by their three variable names.
+  // The profile roots the digest reads, by their three variable names, and the profile itself (AVARICE_PROFILE, a profile name and not a path).
   env: Readonly<Record<string, string>>;
   // Where launchd writes standard output and standard error of the digest.
   logPath: string;
@@ -69,7 +70,8 @@ const LABEL = /^io\.avarice\.digest\.[a-z0-9][a-z0-9.-]*$/;
 const LABEL_MAX_CHARS = 128;
 const CLOCK_TIME = /^([01][0-9]|2[0-3]):([0-5][0-9])$/;
 const MAX_TIMES = 6;
-const ENV_NAMES: readonly string[] = ['AVARICE_CONFIG_HOME', 'AVARICE_DATA_ROOT', 'AVARICE_WORK_ROOT'];
+const PROFILE_ENV = 'AVARICE_PROFILE';
+const ENV_NAMES: readonly string[] = ['AVARICE_CONFIG_HOME', 'AVARICE_DATA_ROOT', 'AVARICE_WORK_ROOT', PROFILE_ENV];
 const NODE_ARG = /^--disable-warning=[A-Za-z]{1,40}$/;
 const PATH_MAX_CHARS = 1024;
 const ANY_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
@@ -91,6 +93,12 @@ function absolutePath(value: unknown, field: string): Result<string> {
     return invalid(field, 'expected an absolute path without control characters');
   }
   return ok(value);
+}
+
+function profileValue(value: unknown): Result<string> {
+  if (typeof value !== 'string') return invalid(`env.${PROFILE_ENV}`, 'expected a profile name');
+  const named = parseProfileName(value);
+  return named.ok ? named : invalid(`env.${PROFILE_ENV}`, 'expected a profile name: personal-local, personal-extended or enterprise-<org>');
 }
 
 // The text of the agent, or the first value that is not allowed. Pure: nothing is read or written.
@@ -118,9 +126,10 @@ export function renderDigestPlist(input: DigestPlistInput): Result<string> {
   const variables: string[] = [];
   for (const [name, value] of Object.entries(input.env)) {
     if (!ENV_NAMES.includes(name)) return invalid(`env.${name.slice(0, 40).replace(ANY_CONTROL, '')}`, `only ${ENV_NAMES.join(', ')} are carried`);
-    const path = absolutePath(value, `env.${name}`);
-    if (!path.ok) return path;
-    variables.push(`    <key>${name}</key><string>${xml(path.value)}</string>`);
+    // The profile is a name that follows the grammar (it becomes a path segment); every other variable is an absolute path.
+    const checked = name === PROFILE_ENV ? profileValue(value) : absolutePath(value, `env.${name}`);
+    if (!checked.ok) return checked;
+    variables.push(`    <key>${name}</key><string>${xml(checked.value)}</string>`);
   }
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',

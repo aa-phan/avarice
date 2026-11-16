@@ -113,7 +113,7 @@ describe('renderDigestPlist (T-03-44)', () => {
     assert.ok(!renderDigestPlist(plistInput({ env: { AVARICE_DATA_ROOT: 'data' } })).ok);
   });
 
-  it('refuses a label outside a-z, 0-9, dot and dash, or without the digest prefix, and an environment name that is not one of the three roots', () => {
+  it('refuses a label outside a-z, 0-9, dot and dash, or without the digest prefix, and an environment name that is not one of the three roots or the profile', () => {
     for (const label of ['IO.avarice.digest.x', `${DIGEST_LABEL_PREFIX}a b`, `${DIGEST_LABEL_PREFIX}a/b`, `${DIGEST_LABEL_PREFIX}</string>`, `${DIGEST_LABEL_PREFIX}../x`, 'com.example.other', DIGEST_LABEL_PREFIX]) {
       assert.ok(!renderDigestPlist(plistInput({ label })).ok, `${label} must be refused`);
     }
@@ -218,7 +218,7 @@ describe('schedule install (D-23; T-03-44, T-03-45)', () => {
       { Hour: 16, Minute: 45 },
     ]);
     assert.deepEqual(json['ProgramArguments'], [process.execPath, ENTRY, 'digest']);
-    assert.deepEqual(json['EnvironmentVariables'], { AVARICE_CONFIG_HOME: b.roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: b.roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: b.roots.AVARICE_WORK_ROOT });
+    assert.deepEqual(json['EnvironmentVariables'], { AVARICE_CONFIG_HOME: b.roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: b.roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: b.roots.AVARICE_WORK_ROOT, AVARICE_PROFILE: 'personal-local' });
     const logPath = join(b.roots.AVARICE_DATA_ROOT, 'logs', 'digest.log');
     assert.equal(json['StandardOutPath'], logPath);
     assert.equal(json['StandardErrorPath'], logPath);
