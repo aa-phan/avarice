@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { sandboxSetup } from '../../src/app/checks.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import type { RunRow } from '../../src/ports/ledger.ts';
 import type { CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
 import { TEST_PATH } from '../helpers/sandbox.ts';
@@ -50,7 +51,7 @@ before(() => {
   writeFileSync(join(dirs.otherWork, 'run_C/clone/src/c.ts'), 'other profile clone');
   writeFileSync(join(outside, 'canary'), 'outside the default parents');
   own = { dataRoot: dirs.ownData, workRoot: dirs.ownWork, clone: join(dirs.ownWork, 'run_A/clone'), scratch: join(dirs.ownWork, 'run_A/scratch') };
-  deps = { home, profile: { dataRoot: own.dataRoot, workRoot: own.workRoot } } as unknown as AppDeps;
+  deps = { home, profile: { dataRoot: own.dataRoot, workRoot: own.workRoot, otherRoots: [] } } as unknown as AppDeps;
 });
 after(() => rmSync(base, { recursive: true, force: true }));
 
@@ -152,7 +153,7 @@ describe('the sandbox of a run command denies the default AVARICE parents (cs7-o
   });
 
   it('documented limit: a profile whose roots sit outside the default parents is not covered', async () => {
-    const custom = { ...deps, profile: { dataRoot: join(outside, 'custom-data'), workRoot: join(outside, 'custom-work') } } as unknown as AppDeps;
+    const custom = { ...deps, profile: { dataRoot: join(outside, 'custom-data'), workRoot: join(outside, 'custom-work'), otherRoots: [] } } as unknown as AppDeps;
     mkdirSync(join(outside, 'custom-data'), { recursive: true });
     mkdirSync(join(outside, 'custom-work/run_A/clone'), { recursive: true });
     writeFileSync(join(outside, 'other-profile-custom-data'), 'a profile placed elsewhere by AVARICE_DATA_ROOT');
@@ -162,6 +163,82 @@ describe('the sandbox of a run command denies the default AVARICE parents (cs7-o
     const result = await new SandboxedExecutor().run({ ...command(['/bin/cat', join(outside, 'other-profile-custom-data')]), denyReadPaths: sandbox.value.denyReadPaths, allowReadPaths: sandbox.value.allowReadPaths, cwd: join(outside, 'custom-work/run_A/clone') });
     assert.ok(result.ok);
     assert.equal(result.value.exitCode, 0, 'outside the default parents and the own roots: readable, as documented');
+  });
+});
+
+// Plan 04-12 (D-19, T-04-30). A profile whose data root, work root or config home were moved by an environment variable is named only by its own config.json,
+// which is written once with the roots in use. The composition reads those configs, and every sandbox a run's commands use denies what they name.
+describe('composition and the sandbox setup deny the moved roots of every other profile (D-19, T-04-30)', () => {
+  let moved = '';
+  let acme: { data: string; work: string };
+  let composedDefault: ReturnType<typeof createDeps> | undefined;
+  let composedMoved: ReturnType<typeof createDeps> | undefined;
+  let movedConfigHome = '';
+  let defaultConfigHome = '';
+  let homeDir = '';
+  let rootBase = '';
+
+  function envFor(extra: Record<string, string>): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, CLAUDE_CONFIG_DIR: join(homeDir, '.claude'), AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude', ...extra };
+    for (const name of ['AVARICE_CONFIG_HOME', 'AVARICE_DATA_ROOT', 'AVARICE_WORK_ROOT', 'AVARICE_PROFILE']) if (!(name in extra)) delete env[name];
+    return env;
+  }
+
+  before(() => {
+    rootBase = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-moved-roots-')));
+    homeDir = join(rootBase, 'home');
+    moved = join(rootBase, 'moved');
+    acme = { data: join(moved, 'acme-data'), work: join(moved, 'acme-work') };
+    defaultConfigHome = join(homeDir, '.config', 'avarice');
+    movedConfigHome = join(rootBase, 'moved-config');
+    mkdirSync(join(acme.work, 'run_Z/clone'), { recursive: true });
+    mkdirSync(acme.data, { recursive: true });
+    writeFileSync(join(acme.data, 'state.db'), 'CANARY-ACME-DATA');
+    writeFileSync(join(acme.work, 'run_Z/clone/secret.txt'), 'CANARY-ACME-CLONE');
+    mkdirSync(join(defaultConfigHome, 'profiles', 'enterprise-acme'), { recursive: true });
+    writeFileSync(join(defaultConfigHome, 'profiles', 'enterprise-acme', 'config.json'), JSON.stringify({ schema: 1, profile: 'enterprise-acme', dataRoot: acme.data, workRoot: acme.work }));
+    composedDefault = createDeps(envFor({}), {}, { profile: 'personal-local' });
+    composedMoved = createDeps(
+      envFor({ AVARICE_CONFIG_HOME: movedConfigHome, AVARICE_DATA_ROOT: join(rootBase, 'moved-own-data'), AVARICE_WORK_ROOT: join(rootBase, 'moved-own-work') }),
+      {},
+      { profile: 'personal-local' },
+    );
+  });
+  after(() => {
+    if (composedDefault?.ok === true) composedDefault.value.close();
+    if (composedMoved?.ok === true) composedMoved.value.close();
+    rmSync(rootBase, { recursive: true, force: true });
+  });
+
+  function depsOf(composed: ReturnType<typeof createDeps> | undefined): AppDeps {
+    assert.ok(composed?.ok === true, composed?.ok === false ? composed.message : 'not composed');
+    return composed.value.deps;
+  }
+
+  it('fills deps.profile.otherRoots with the moved roots of another profile and the config home, and none of its own data or work root', () => {
+    const profile = depsOf(composedDefault).profile;
+    assert.ok(profile.otherRoots.includes(acme.data), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(acme.work), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(defaultConfigHome));
+    assert.equal(profile.otherRoots.includes(profile.dataRoot), false);
+    assert.equal(profile.otherRoots.includes(profile.workRoot), false);
+  });
+
+  it('names this profile own config home and the default one when its own was moved, and still finds the other profile in the default one', () => {
+    const profile = depsOf(composedMoved).profile;
+    assert.ok(profile.otherRoots.includes(movedConfigHome), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(defaultConfigHome));
+    assert.ok(profile.otherRoots.includes(acme.data));
+  });
+
+  it('the sandbox of a declared check, a validation, the baseline and npm ci denies those roots, and re-allows only the run clone and scratch', () => {
+    const d = depsOf(composedMoved);
+    const clone = join(d.profile.workRoot, 'run_A', 'clone');
+    mkdirSync(clone, { recursive: true });
+    const sandbox = sandboxSetup(d, run, clone);
+    assert.ok(sandbox.ok, JSON.stringify(sandbox));
+    for (const path of [acme.data, acme.work, movedConfigHome, defaultConfigHome]) assert.ok(sandbox.value.denyReadPaths.includes(path), path);
+    assert.deepEqual(sandbox.value.allowReadPaths, [realpathSync(clone), sandbox.value.scratch]);
   });
 });
 

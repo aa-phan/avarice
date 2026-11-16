@@ -60,9 +60,25 @@ function scopeFor(purpose: InvocationPurpose, over: Partial<ScopeInput> = {}) {
     workspace: workspace(),
     readRoots: ['/gsd/core', '/gsd/agents'],
     workRoot: '/work',
+    profileRoots: [],
     ...over,
   });
 }
+
+describe('computeInvocationScope: the roots of the other profiles (SEC-1, D-19)', () => {
+  it('denies each profile root it is given beside the work root, and leaves the staging path re-allowed', () => {
+    const scope = scopeFor('map', { profileRoots: ['/srv/moved/acme-data', '/srv/moved/config'] });
+    assert.ok(scope.denyRead.includes('/srv/moved/acme-data'));
+    assert.ok(scope.denyRead.includes('/srv/moved/config'));
+    assert.ok(scope.denyRead.includes('/work'));
+    assert.ok(scope.allowRead.includes(scope.stagingPath));
+    assert.equal(new Set(scope.denyRead).size, scope.denyRead.length);
+  });
+
+  it('refuses a profile root that is not a normalized absolute path', () => {
+    assert.throws(() => scopeFor('map', { profileRoots: ['relative/root'] }), /profileRoots/);
+  });
+});
 
 describe('computeInvocationScope: map', () => {
   it('allows writes only to .planning/codebase and runs in the staging directory', () => {

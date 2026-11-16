@@ -958,7 +958,7 @@ describe('compileRunContract: a check is listed for the agent with its environme
   it('pins SUPERVISOR_CHECK_ENV_NAMES to the names sandboxSetup gives every supervisor check', () => {
     const base = mkdtempSync(join(tmpdir(), 'avarice-supervisor-env-'));
     try {
-      const deps = { home: join(base, 'home'), profile: { dataRoot: join(base, 'data'), workRoot: join(base, 'work') } } as unknown as AppDeps;
+      const deps = { home: join(base, 'home'), profile: { dataRoot: join(base, 'data'), workRoot: join(base, 'work'), otherRoots: [] } } as unknown as AppDeps;
       mkdirSync(join(base, 'home'), { recursive: true });
       mkdirSync(join(base, 'work'), { recursive: true });
       const sandbox = sandboxSetup(deps, { runId: 'run_A' } as unknown as RunRow, join(base, 'clone'));

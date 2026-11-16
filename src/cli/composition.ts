@@ -233,7 +233,7 @@ function productionHost(inputs: HostInputs): AgentHost {
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
   const resolved = resolveProfile(env, {}, options.profile);
   if (!resolved.ok) return failure('cannot prepare the profile directories', describeError(resolved.error));
-  const profile = resolved.value;
+  const profile: ProfilePaths = { ...resolved.value, otherRoots: [] };
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
   const ids = overrides.ids ?? systemIds(clock);

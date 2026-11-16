@@ -127,6 +127,7 @@ function bareRequest(over: Partial<InvocationRequest>): { req: InvocationRequest
     dataRoot: data,
     home: data,
     workRoot: data,
+    profileRoots: [],
     scratchDir: join(data, 'scratch'),
     workspace: { topLevelEntries: ['src'], entriesByDir: {}, gitPaths: [], repoReadAllow: [] },
     readRoots: [],

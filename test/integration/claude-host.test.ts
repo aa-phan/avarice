@@ -876,6 +876,7 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
       dataRoot: roots.AVARICE_DATA_ROOT,
       home: join(roots.base, 'home'),
       workRoot: roots.AVARICE_WORK_ROOT,
+      profileRoots: [],
       scratchDir: scratch,
       workspace: {
         topLevelEntries: readdirSync(repo.path).filter((name) => name !== '.git'),

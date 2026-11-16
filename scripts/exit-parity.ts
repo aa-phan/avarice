@@ -361,6 +361,7 @@ function unitSetup(ctx: PassContext, clone: string, runId: string, gsdCoreBin: s
     dataRoot: realpathSync(ctx.dataRoot),
     home: realpathSync(homedir()),
     workRoot: realpathSync(ctx.workRoot),
+    profileRoots: [],
     scratchDir,
     workspace: described.value,
     readRoots: [],

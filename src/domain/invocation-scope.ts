@@ -235,6 +235,9 @@ export interface ScopeInput {
   // root or '/' would deny every read, including the read roots, and a relative or non-normalized root would match no canonical
   // path, so the deny would not apply. Either one throws a TypeError that names the field. Trailing slashes are trimmed.
   workRoot: string;
+  // The data root, work root and config home of every other known profile, and this profile's config home (SEC-1, D-19), denied beside the
+  // work root. Required, so no caller can leave another profile's moved roots readable.
+  profileRoots: readonly string[];
   workspace: WorkspaceShape;
   // Directories outside staging the invocation may read: the gsd-core directory, the agents directory and the
   // realpath of each allowed skill.
@@ -356,6 +359,8 @@ export interface RunScopeInput {
   dataRoot: string;
   home: string;
   workRoot: string;
+  // As ScopeInput.profileRoots.
+  profileRoots: readonly string[];
   // `{workRoot}/{runId}/scratch`: writable and readable beside the clone; TMPDIR and the npm cache live under it.
   scratchDir: string;
   workspace: RunWorkspaceShape;

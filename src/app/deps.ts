@@ -34,6 +34,9 @@ export interface ProfilePaths {
   configHome: string;
   dataRoot: string;
   workRoot: string;
+  // The paths no run of this profile may read (SEC-1, D-19): the data root, work root and config home of every other known profile, wherever
+  // they were moved, and the config homes this one and the default one use. Realpath'd; read by the run sandboxes.
+  otherRoots: string[];
 }
 
 export interface GsdProblem {
