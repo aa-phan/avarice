@@ -296,6 +296,13 @@ export const phase2Spent = (): number => phase2Ledger.spent();
 export const fitsPhase2Ceiling = (capUsdForRun: number): boolean => phase2Ledger.fits(capUsdForRun);
 export const recordPhase2Spend = (entry: Phase2SpendEntry): void => phase2Ledger.record(entry);
 
+// Phase 4 names (RED scaffold: the exports exist but still read the Phase 3 ledger and ceiling; the next commit gives Phase 4 its own).
+export const PHASE4_CEILING_USD = 40;
+export const phase4Ceiling = (): number => phase3Ledger.ceiling();
+export const phase4Spent = (): number => phase3Ledger.spent();
+export const fitsPhase4Ceiling = (capUsdForRun: number): boolean => phase3Ledger.fits(capUsdForRun);
+export const recordPhase4Spend = (entry: Phase3SpendEntry): void => phase3Ledger.record(entry);
+
 // Phase 3 names.
 export const phase3LedgerPath = (): string => phase3Ledger.path();
 export const phase3Ceiling = (): number => phase3Ledger.ceiling();
