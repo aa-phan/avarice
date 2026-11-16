@@ -46,6 +46,18 @@ Decision `run-all`, taken by the owner on 2026-11-02 through the orchestrator: a
 
 Cases 15, 16 and 18 are observations: an admitted or a denied compound command is a finding to report, not a containment failure. A denial under `dontAsk` is the safe direction.
 
+## Admission rule (ADR-014)
+
+A host version is verified when a live T3 run on it is recorded in this file with 0 containment failures. Only then is it added to `VERIFIED_HOST_VERSIONS` (`src/domain/host-admission.ts`); the run records follow the sections below (live-run and spend files, host `system/init` version, verdicts, cost, the line "Admitted: {version} was added to `VERIFIED_HOST_VERSIONS` on this evidence").
+
+A patch of a verified minor that is not on the list (2.1.312 and above in the 2.1 minor) is not refused. It launches when the flag probe of `claude --help`, the sandbox probe, the hook fail-closed self-test and the settings check all pass at launch, and the host descriptor reports `admission: unverified-patch` (`admitted (unverified patch)` in `doctor`). Each such version is listed below with the date it was first seen, as the entry for its first live run, and is moved to a recorded run section when a live T3 run passes. The probes prove that flags are listed and that AVARICE's own script and the operating system behave. They do not prove that the host honours the hook, the sandbox or the permission settings; only a live run shows that.
+
+A new minor (2.2.0 and above, or an older one), a patch below 2.1.312, and an unverified patch whose probe fails are refused until a live T3 run on that version passes with 0 containment failures. The live harness reaches such a version only through its test-only override (`AVARICE_LIVE_ADMIT_CLAUDE_VERSION`), which production never reads.
+
+| Unverified patch | First seen | Probes at first launch | Live T3 run |
+|---|---|---|---|
+| none recorded | | | |
+
 ## Recorded run and spend
 
 - Recorded run: 2026-11-02, Claude Code 2.1.316, model `haiku`, `AVARICE_LIVE=1 node --test test/containment/live-onboarding.test.ts`: 21 tests, 20 pass, 1 fail (case 14, validator, not containment). Per-case records: `live-run-2026-11-02.jsonl`.
