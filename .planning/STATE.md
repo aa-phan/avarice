@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-11-16T19:39:51.292Z"
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-11-16T20:47:55.631Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 98ac1d477b1cce564e633a1f04acb77417768578
+state_head: c7da1fbff1fe570db94c901c1c603e0f5a8254e4
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 8 of 39
+Plan: 9 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -170,6 +170,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
 | Phase 04 P06 | 21min | 3 tasks | 15 files |
 | Phase 04 P07 | 60 min | 2 tasks | 8 files |
+| Phase 04 P08 | 36 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -404,6 +405,11 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-06: run.unit requires agent-host contained-invocation (not resume, which the production Claude host publishes false); a G0 capability failure blocks with enforcement_failure
 - [Phase 04]: 04-06: enforcement map has 18 rows; rows for controls built later are unverified 'proved by plan 04-NN'; host limitation 3 and 4 rows are not-claimed
 - [Phase 04]: Redaction runs inside appendEventRow; overlapping seeded literals merge into one [REDACTED:seeded] marker; a seeded literal under 8 characters is refused
+- [Phase 04]: Plan 04-08: schema and profile are optional in config.json; when present schema must be 1 and profile the selected profile, an unknown key is refused by name
+- [Phase 04]: Plan 04-08: meta.profile_id is asserted right after the store opens and before migration, so a store of another profile is not migrated or backed up (exit 70)
+- [Phase 04]: Plan 04-08: migration 0004 adds no profile column; per-store meta.profile_id is the D-18 scoping, and approvals become append-only except consumed_at and revoked_at once
+- [Phase 04]: Plan 04-08: the first non-read-only command binds every project of the store to its profile; a project bound to another profile fails composition (exit 70), a project whose path is gone is skipped
+- [Phase 04]: Plan 04-08: deps.policy() reads policy.organizationFile for enterprise profiles only; absent or missing means organization absent (privileged denied); the rest of the policy section is the user source
 
 ### Roadmap Evolution
 
@@ -471,8 +477,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T19:39:46.098Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-11-16T20:47:55.606Z
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
