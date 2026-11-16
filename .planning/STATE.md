@@ -1,18 +1,17 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-milestone_name: Contained Kernel
-status: Awaiting next milestone
+status: "Phase 3 shipped — PR #4"
 stopped_at: Milestone v1.0 complete, ready to start v1.1
-last_updated: "2026-11-15T23:54:06.930Z"
+last_updated: "2026-11-16T00:05:55.508Z"
 last_activity: 2026-11-15
-last_activity_desc: Milestone v1.0 completed and archived
-state_head: 71225b0fe962daaf840b13f1b2ff2d5ac4d35d65
+state_head: eb680ba6c4d620b1b8fda7fb14fddd2696978683
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 134
   completed_plans: 134
+milestone_name: Contained Kernel
 current_phase: 4
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 ---
@@ -30,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 
 Phase: Milestone v1.0 complete
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-15 — Milestone v1.0 completed and archived
+Status: Phase 3 shipped — PR #4
+Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
 
 ## Performance Metrics
 
