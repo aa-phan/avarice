@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-10-PLAN.md
-last_updated: "2026-11-16T21:23:00.526Z"
+stopped_at: Completed 04-11-PLAN.md
+last_updated: "2026-11-16T21:31:53.049Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: c1c98cd014beea7b9eaa041a43e9c3d834263ba1
+state_head: a88915048ebd3d4b75d7dd9c37d96f819d62ea3d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 11 of 39
+Plan: 12 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -173,6 +173,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P08 | 36 min | 3 tasks | 14 files |
 | Phase 04 P09 | 30 min | 2 tasks | 7 files |
 | Phase 04 P10 | 35min | 3 tasks | 21 files |
+| Phase 04 P11 | 35 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -417,6 +418,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-10: preflight_json is immutable and precedes staging, so it records the class, the no-drift outcome and drift null; the final existing-map outcome and GSD's drift verdict are in the mapping:plan step and the project record existingState
 - [Phase 04]: 04-10: a drift verdict that is skipped, unreadable or a failed run maps in full in staging; only GSD's own drift pass adopts a stamped map (T-04-26)
 - [Phase 04]: 04-10: files.delete is the map directory when the existing-map answer is Refresh and a map exists (the preset answer is always Refresh); an adopted map is validated on stamp presence, not equality with the staging HEAD
+- [Phase 04]: Host admission by patch range: a 2.1 patch at or above 2.1.312 is admitted as unverified-patch after the flag, sandbox and hook probes pass; other minors refuse (ADR-014, D-20)
 
 ### Roadmap Evolution
 
@@ -484,8 +486,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T21:23:00.498Z
-Stopped at: Completed 04-10-PLAN.md
+Last session: 2026-11-16T21:31:53.023Z
+Stopped at: Completed 04-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
