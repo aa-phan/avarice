@@ -13,6 +13,8 @@ import {
   admitHostVersion,
   compareVersions,
 } from '../../src/domain/host-admission.ts';
+import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
+import type { ClaudeHostOptions } from '../../src/adapters/host-claude/claude-host.ts';
 import { ADMITTED_CLAUDE_VERSIONS, checkHostReady, checkLaunchReady } from '../../src/adapters/host-claude/launch-preflight.ts';
 
 const PROBE_OK = ['/usr/bin/true'] as const;
@@ -254,5 +256,35 @@ describe('checkLaunchReady: an unverified patch still has to pass the sandbox pr
     const { settingsFile } = launchInput(host, hookScript);
     const result = checkLaunchReady({ settingsFile, claudeBin: host.bin, sandboxProbe: PROBE_OK });
     assert.equal(rule(result), 'enforcement_failure:host-minor-unverified');
+  });
+});
+
+// Only claudeBin, hookEntry and sandboxProbe are read by the descriptor, so the other options are left out.
+function adapterFor(bin: string): ClaudeHostAdapter {
+  return new ClaudeHostAdapter({ claudeBin: bin, hookEntry: hookScript, sandboxProbe: PROBE_OK } as unknown as ClaudeHostOptions);
+}
+
+describe('the host descriptor carries the admission (D-20, OPS-6)', () => {
+  it('has attributes.admission verified for a verified version', () => {
+    const descriptor = adapterFor(fakeHost('2.1.319', []).bin).descriptor;
+    assert.equal(descriptor.attributes?.['enforcement'], 'enforced');
+    assert.equal(descriptor.attributes?.['claudeVersion'], '2.1.319');
+    assert.equal(descriptor.attributes?.['admission'], 'verified');
+    assert.equal(descriptor.capabilities['contained-invocation'], true);
+  });
+
+  it('has attributes.admission unverified-patch for an unverified patch that passes its flag probe', () => {
+    const descriptor = adapterFor(fakeHost('2.1.325').bin).descriptor;
+    assert.equal(descriptor.attributes?.['enforcement'], 'enforced');
+    assert.equal(descriptor.attributes?.['claudeVersion'], '2.1.325');
+    assert.equal(descriptor.attributes?.['admission'], 'unverified-patch');
+  });
+
+  it('has no admission and no contained invocation when the host is refused, and gives the reason', () => {
+    const descriptor = adapterFor(fakeHost('2.2.0').bin).descriptor;
+    assert.equal(descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(descriptor.attributes?.['reason'], 'enforcement_failure:host-minor-unverified');
+    assert.equal(descriptor.attributes?.['admission'], undefined);
+    assert.equal(descriptor.capabilities['contained-invocation'], false);
   });
 });

@@ -27,6 +27,7 @@ import { buildInvocationEnv } from './env.ts';
 import { canonicalPath } from './settings.ts';
 import { assertLaunchArgsSafe, buildLaunchArgs } from './launch-args.ts';
 import { checkHostReady, checkLaunchReady } from './launch-preflight.ts';
+import type { HostVersionOk } from './launch-preflight.ts';
 import { writeInvocationFiles } from './invocation-files.ts';
 import type { GsdLocations, InvocationFiles } from './invocation-files.ts';
 import type { PreambleFingerprint } from './hook-policy.ts';
@@ -88,15 +89,16 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 export class ClaudeHostAdapter implements AgentHost {
   readonly #o: ClaudeHostOptions;
-  #ready: Result<{ claudeVersion: string }> | undefined;
+  #ready: Result<HostVersionOk> | undefined;
 
   constructor(options: ClaudeHostOptions) {
     this.#o = options;
   }
 
   // The startup check runs on first use of the descriptor (once per adapter): `enforced` only when the hook entry
-  // can be read, the sandbox runs and `claude --version` is an admitted version.
-  #readiness(): Result<{ claudeVersion: string }> {
+  // can be read, the sandbox runs and `claude --version` is a verified version or an unverified patch whose flags are listed; the
+  // descriptor says which (`admission`, D-20).
+  #readiness(): Result<HostVersionOk> {
     this.#ready ??= checkHostReady({
       claudeBin: this.#o.claudeBin,
       hookEntry: this.#o.hookEntry,
@@ -113,7 +115,7 @@ export class ClaudeHostAdapter implements AgentHost {
       version: ADAPTER_VERSION,
       capabilities: { 'contained-invocation': ready.ok, headless: true, resume: false },
       attributes: ready.ok
-        ? { enforcement: 'enforced', claudeVersion: ready.value.claudeVersion }
+        ? { enforcement: 'enforced', claudeVersion: ready.value.claudeVersion, admission: ready.value.admission }
         : { enforcement: 'none', reason: ready.error.kind === 'denied' ? ready.error.rule : ready.error.kind },
       offline: false,
     };
