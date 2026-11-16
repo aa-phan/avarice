@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-11-16T20:47:55.631Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-11-16T20:58:32.540Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: c7da1fbff1fe570db94c901c1c603e0f5a8254e4
+state_head: de07b7638bfaeb2c40b8dd86f9f093b1a6c42ca8
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 9 of 39
+Plan: 10 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -171,6 +171,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P06 | 21min | 3 tasks | 15 files |
 | Phase 04 P07 | 60 min | 2 tasks | 8 files |
 | Phase 04 P08 | 36 min | 3 tasks | 14 files |
+| Phase 04 P09 | 30 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -410,6 +411,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: Plan 04-08: migration 0004 adds no profile column; per-store meta.profile_id is the D-18 scoping, and approvals become append-only except consumed_at and revoked_at once
 - [Phase 04]: Plan 04-08: the first non-read-only command binds every project of the store to its profile; a project bound to another profile fails composition (exit 70), a project whose path is gone is skipped
 - [Phase 04]: Plan 04-08: deps.policy() reads policy.organizationFile for enterprise profiles only; absent or missing means organization absent (privileged denied); the rest of the policy section is the user source
+- [Phase 04]: 04-09: intel keeps its half-budget cap inside the first-fit pick; an intel handle above half the budget is never read — Existing FR-20 cap test holds; S-54 numbers tested with the 3,000 handle in the graph. Owner review: cap could bind only when the graph competes
+- [Phase 04]: 04-09: a containment edge seen from the child is one-hop; handle readRule uses that effective rule — Plan did not say how to read an edge from its target side; descendants follow downward only
 
 ### Roadmap Evolution
 
@@ -477,8 +480,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T20:47:55.606Z
-Stopped at: Completed 04-08-PLAN.md
+Last session: 2026-11-16T20:58:32.514Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
