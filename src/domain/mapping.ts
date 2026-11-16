@@ -118,19 +118,19 @@ const MANIFEST_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 const basenameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
-const topDirectoryOf = (path: string): string | null => (path.includes('/') ? (path.slice(0, path.indexOf('/')) as string) : null);
+const topOf = (path: string): string => (path.includes('/') ? (path.slice(0, path.indexOf('/')) as string) : path);
 
-// The paths of a path-scoped refresh after a drift `block` (docs "Mapping-mode decision table"): the affected paths, when every one is inside a
-// directory, none is a manifest, and they span no more top-level directories than the drift threshold. Otherwise null: a full remap.
+// The paths of a path-scoped refresh after a drift `block` (docs "Mapping-mode decision table"). GSD names the affected paths as top-level
+// directories (a new directory) or file paths (a changed documented file), and itself suggests `--paths` over them. They are scoped when each is a
+// plain path, none is a manifest, and they span no more top-level entries than the drift threshold; otherwise null: a full remap. No affected
+// path at all is a full remap too: there is nothing to scope to.
 export function refreshScope(affectedPaths: readonly string[], threshold: number = DEFAULT_DRIFT_THRESHOLD): string[] | null {
   const unique = [...new Set(affectedPaths)].sort();
   if (unique.length === 0 || unique.length > MAX_SCOPE_PATHS) return null;
   const tops = new Set<string>();
   for (const path of unique) {
     if (!isScopePath(path) || MANIFEST_NAMES.has(basenameOf(path))) return null;
-    const top = topDirectoryOf(path);
-    if (top === null) return null;
-    tops.add(top);
+    tops.add(topOf(path));
   }
   return tops.size > threshold ? null : unique;
 }
@@ -224,8 +224,8 @@ export function chooseMappingMode(input: MappingModeInput): Result<MappingModeDe
   if (outcome === 'refresh') {
     const paths = refreshScope(input.driftAffectedPaths ?? [], input.driftThreshold ?? DEFAULT_DRIFT_THRESHOLD);
     return paths === null
-      ? decide('full', 'drift block over manifests, several areas or paths outside a directory: full remap in staging')
-      : scoped('drift block inside mapped directories: path-scoped refresh in staging', paths);
+      ? decide('full', 'drift block over a manifest, more areas than the drift threshold or paths that cannot be scoped: full remap in staging')
+      : scoped('drift block inside mapped territory: path-scoped refresh in staging', paths);
   }
   if (narrower !== null) return scoped('contract read scope narrower than the repository: path-scoped map', narrower);
   return decide('full', existingMap === 'none' ? 'brownfield repository, full map' : `existing map (${existingMap}) regenerated in staging, full map`);

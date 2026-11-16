@@ -99,3 +99,69 @@ describe('tracer: a committed, stamped, drift-free GSD map is adopted (ONB-6, D-
     assert.equal(treeDigest(repo.path), before, 'the checkout is byte-identical');
   });
 });
+
+const NEW_DIRS = { 'alpha/a.ts': 'export const a = 1;\n', 'beta/b.ts': 'export const b = 1;\n', 'gamma/c.ts': 'export const c = 1;\n' };
+
+describe('a stamped map whose drift check blocks is refreshed in staging', () => {
+  it('maps only the affected paths, with --paths, when GSD names directories inside the mapped territory (D-10)', async () => {
+    const { roots, repo } = fixture({ after: [NEW_DIRS] });
+    const before = treeDigest(repo.path);
+
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 1, 'one mapper invocation');
+    assert.match(mapCalls[0]?.prompt ?? '', /^\/gsd-map-codebase --paths alpha,beta,gamma\n/);
+
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.mode, 'paths');
+    assert.equal(plan?.outcome, 'refresh');
+    assert.equal(plan?.existingMap, 'stamped-complete');
+    assert.equal(plan?.completeness, 'partial');
+    assert.deepEqual(plan?.paths, ['alpha', 'beta', 'gamma']);
+    assert.equal(plan?.drift?.verdict, 'block');
+    assert.deepEqual(plan?.drift?.affectedPaths, ['alpha', 'beta', 'gamma'], 'what GSD itself reported');
+
+    const [record] = rows<{ mapping_mode: string; completeness: string; mapping_scope_json: string; body_json: string }>(roots, 'SELECT mapping_mode, completeness, mapping_scope_json, body_json FROM project_records');
+    assert.equal(record?.mapping_mode, 'paths');
+    assert.equal(record?.completeness, 'partial');
+    assert.deepEqual(JSON.parse(record?.mapping_scope_json as string), ['alpha', 'beta', 'gamma']);
+    const body = JSON.parse(record?.body_json as string) as { mapping: { provenance?: string }; existingState: Record<string, unknown> };
+    assert.equal(body.mapping.provenance, undefined, 'a regenerated map is not adopted');
+    assert.equal(body.existingState['outcome'], 'refresh');
+    assert.equal(body.existingState['drift'], 'block');
+    assert.equal(treeDigest(repo.path), before, 'the checkout is byte-identical');
+  });
+
+  it('maps in full when the drift touches a manifest', async () => {
+    const { roots, repo } = fixture({ after: [{ ...NEW_DIRS, 'package.json': '{"name":"stamped-fixture","version":"2"}\n' }] });
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 1);
+    assert.match(mapCalls[0]?.prompt ?? '', /^\/gsd-map-codebase\n/, 'no --paths');
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.mode, 'full');
+    assert.equal(plan?.outcome, 'refresh');
+    assert.equal(plan?.completeness, 'complete');
+    assert.equal(plan?.paths, undefined);
+    assert.equal(plan?.drift?.verdict, 'block');
+    assert.ok(plan?.drift?.affectedPaths.includes('package.json'));
+  });
+});
+
+describe('the GSD adapter descriptor', () => {
+  it('declares map-paths and adopt-map, and still not ingest-docs', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    const env = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+    const composed = createDeps(env, { host: new FakeAgentHost({}) });
+    assert.ok(composed.ok);
+    try {
+      const capabilities = composed.value.deps.gsd?.descriptor.capabilities;
+      assert.equal(capabilities?.['map-paths'], true);
+      assert.equal(capabilities?.['adopt-map'], true);
+      assert.equal(capabilities?.['ingest-docs'], false);
+    } finally {
+      composed.value.close();
+    }
+  });
+});

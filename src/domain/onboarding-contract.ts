@@ -369,9 +369,17 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
   return ok(budgets);
 }
 
-// Skeleton for the RED run; the rule arrives with the next commit.
-export function filesDeleteFor(_answer: string, _existingMap: string): string[] {
-  return [];
+// `files.delete` (docs "Onboarding contract"): the map directory is deletable only when the existing-map answer is Refresh, and only when there is a
+// map to refresh. It is a statement about the staging worktree, where every regeneration happens; the user's checkout is never written (ONB-6).
+export function filesDeleteFor(answer: string, existingMap: string): string[] {
+  return answer === 'refresh' && existingMap !== 'none' ? [...WRITE_SETS.map] : [];
+}
+
+// The classification preflight recorded for the map the repository already has; `none` when absent or not a string.
+function existingMapOf(preflight: ContractPreflight): string {
+  const state = preflight['existingState'];
+  const value = typeof state === 'object' && state !== null ? (state as Record<string, unknown>)['codebaseMap'] : undefined;
+  return typeof value === 'string' && value !== '' ? value : 'none';
 }
 
 export function compileOnboardingContract(input: CompileInput): Result<OnboardingContract> {
@@ -429,7 +437,7 @@ export function compileOnboardingContract(input: CompileInput): Result<Onboardin
         knowledge: [...WRITE_SETS.knowledge],
       },
       avariceWrite: [...ONBOARDING_PRESET.avariceWrite],
-      delete: [],
+      delete: filesDeleteFor(ONBOARDING_PRESET.existingMapAnswer, existingMapOf(preflight)),
     },
     knowledge: {
       documents: unique([
