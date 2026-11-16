@@ -36,6 +36,7 @@ import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
 import { digestOf } from '../domain/digest.ts';
+import { err } from '../domain/result.ts';
 import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
@@ -326,7 +327,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home, policy: () => err({ kind: 'internal', cause: 'policy is not implemented' }) },
       close: () => {
         try {
           store.close();

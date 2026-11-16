@@ -8,6 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ONBOARDING_POLICY } from '../../src/app/onboarding-service.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import { evaluatePolicy, parsedAs } from '../../src/domain/policy.ts';
+import type { PolicySources } from '../../src/domain/policy.ts';
+import type { Result } from '../../src/domain/result.ts';
 import { runCli } from '../helpers/run-cli.ts';
 import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -406,3 +410,278 @@ describe('enterprise remote refusal (D-16, T-04-09)', () => {
     assert.match(r.stderr, /remotePatterns/);
   });
 });
+
+// The bindings a store's existing projects get on the first command that may write (D-18).
+describe('binding backfill for projects already in a store (D-18)', () => {
+  function bindings(home: string): Array<{ gitRoot: string; rootCommit: string; profile: string }> {
+    return readBindingFile(home).bindings;
+  }
+
+  it('binds the existing project too on the first non-read-only command, and writes nothing for a read-only one', () => {
+    const home = tempDir('avarice-home-');
+    const first = scratchRepo();
+    const second = scratchRepo();
+    assert.equal(runCli(['repo', 'add', first.path], { env: homeEnv(home) }).code, 0);
+    assert.equal(existsSync(bindingsPath(home)), false, 'nothing was in the store when that command opened it');
+
+    const status = runCli(['status', '--json'], { env: homeEnv(home) });
+    assert.equal(status.code, 0, status.stderr);
+    assert.equal(existsSync(bindingsPath(home)), false, 'status is read-only and writes no bindings file');
+
+    const added = runCli(['repo', 'add', '--profile', 'personal-local', second.path], { env: homeEnv(home) });
+    assert.equal(added.code, 0, added.stderr);
+    const all = bindings(home);
+    assert.deepEqual(all.map((b) => [b.gitRoot, b.rootCommit, b.profile]).sort(), [
+      [first.path, first.shas[0], 'personal-local'],
+      [second.path, second.shas[0], 'personal-local'],
+    ].sort());
+    assert.equal(statSync(bindingsPath(home)).mode & 0o777, 0o600);
+  });
+
+  it('refuses the existing project under another profile afterwards, exit 3 with the binding named', () => {
+    const home = tempDir('avarice-home-');
+    const first = scratchRepo();
+    const second = scratchRepo();
+    assert.equal(runCli(['repo', 'add', first.path], { env: homeEnv(home) }).code, 0);
+    assert.equal(runCli(['repo', 'add', second.path], { env: homeEnv(home) }).code, 0);
+    assert.equal(bindings(home).length, 1, 'the second command bound the project the first one registered');
+
+    const refused = runCli(['status', '--profile', 'personal-extended'], { env: homeEnv(home), cwd: first.path });
+    assert.equal(refused.code, 3, refused.stderr);
+    assert.match(refused.stderr, /repository bound to personal-local/);
+    assert.equal(existsSync(dataRootOf(home, 'personal-extended')), false);
+  });
+
+  it('leaves a binding it finds for the same profile as it was', () => {
+    const home = tempDir('avarice-home-');
+    const repo = scratchRepo();
+    assert.equal(runCli(['repo', 'add', '--profile', 'personal-local', repo.path], { env: homeEnv(home) }).code, 0);
+    const before = readFileSync(bindingsPath(home), 'utf8');
+    assert.equal(runCli(['repo', 'add', '--profile', 'personal-local', scratchRepo().path], { env: homeEnv(home) }).code, 0);
+    const after = bindings(home);
+    assert.equal(after.length, 2);
+    assert.ok(readFileSync(bindingsPath(home), 'utf8').startsWith(before.slice(0, before.indexOf('"bindings"'))), 'the registry keeps its shape');
+    assert.deepEqual(after.filter((b) => b.gitRoot === repo.path).length, 1);
+  });
+
+  it('fails composition, naming the other profile, when the store holds a project that is bound to another profile', () => {
+    const home = tempDir('avarice-home-');
+    const first = scratchRepo();
+    assert.equal(runCli(['repo', 'add', first.path], { env: homeEnv(home) }).code, 0);
+    mkdirSync(join(home, '.config', 'avarice'), { recursive: true });
+    writeFileSync(bindingsPath(home), JSON.stringify({ schema: 1, bindings: [{ gitRoot: first.path, rootCommit: first.shas[0], profile: 'personal-extended', boundAt: '2026-11-16T00:00:00.000Z' }] }));
+    const before = readFileSync(bindingsPath(home), 'utf8');
+    const r = runCli(['repo', 'add', scratchRepo().path], { env: homeEnv(home), cwd: home });
+    assert.equal(r.code, 70, r.stderr);
+    assert.match(r.stderr, /bound to personal-extended/);
+    assert.equal(readFileSync(bindingsPath(home), 'utf8'), before);
+  });
+
+  it('skips a project whose repository is no longer on disk instead of failing the command', () => {
+    const home = tempDir('avarice-home-');
+    const dir = dataRootOf(home, 'personal-local');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    copyFileSync(join(import.meta.dirname, '..', 'fixtures', 'db', 'schema-v1.sqlite'), join(dir, 'state.db'));
+    const r = runCli(['init'], { env: homeEnv(home) });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(existsSync(bindingsPath(home)), false);
+  });
+});
+
+const ORG_FIXTURE = join(import.meta.dirname, '..', 'fixtures', 'org-acme');
+
+function composeFor(home: string, profile: string): ReturnType<typeof createDeps> {
+  return createDeps({ ...process.env, ...homeEnv(home) } as NodeJS.ProcessEnv, {}, { readOnly: true, profile });
+}
+
+function installAcme(home: string, patch: (config: Record<string, unknown>) => void = () => undefined): string {
+  const dir = join(home, '.config', 'avarice', 'profiles', 'enterprise-acme');
+  mkdirSync(dir, { recursive: true });
+  const config = JSON.parse(readFileSync(join(ORG_FIXTURE, 'config.json'), 'utf8')) as Record<string, unknown>;
+  patch(config);
+  writeFileSync(join(dir, 'config.json'), JSON.stringify(config, null, 2));
+  copyFileSync(join(ORG_FIXTURE, 'policy.json'), join(dir, 'policy.json'));
+  return dir;
+}
+
+function sources(result: Result<PolicySources>): PolicySources {
+  assert.ok(result.ok, result.ok ? '' : JSON.stringify(result.error));
+  return result.value;
+}
+
+describe('AppDeps.policy: the policy sources of a profile (SEC-4, D-17)', () => {
+  it('returns an absent organization file under personal-local and no repository file without a repository', () => {
+    const home = tempDir('avarice-home-');
+    const composed = composeFor(home, 'personal-local');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const got = sources(composed.value.deps.policy());
+      assert.equal(got.profileClass, 'personal');
+      assert.equal(got.organization, 'absent');
+      assert.equal(got.user, undefined);
+      assert.equal(got.repository, undefined);
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('returns the fixture organization file under enterprise-acme as a rank-1 source that denies a protected push', () => {
+    const home = tempDir('avarice-home-');
+    installAcme(home);
+    const composed = composeFor(home, 'enterprise-acme');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const got = sources(composed.value.deps.policy());
+      assert.equal(got.profileClass, 'enterprise');
+      const organization = got.organization;
+      assert.ok(organization !== undefined && organization !== 'absent' && organization.ok);
+      assert.equal(organization.value.rules.length, 3);
+      assert.equal(parsedAs(organization.value), 'organization');
+      assert.deepEqual(evaluatePolicy(got, 'git.push', { branch: 'protected' }), { effect: 'deny', ruleId: 'org.no-push-protected', rank: 1 });
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('reads the organization file only for an enterprise profile: a personal profile that names one ignores it', () => {
+    const home = tempDir('avarice-home-');
+    const dir = join(home, '.config', 'avarice', 'profiles', 'personal-local');
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(join(ORG_FIXTURE, 'policy.json'), join(dir, 'policy.json'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ schema: 1, profile: 'personal-local', policy: { organizationFile: 'policy.json' } }));
+    const composed = composeFor(home, 'personal-local');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      assert.equal(sources(composed.value.deps.policy()).organization, 'absent');
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('is absent under an enterprise profile that names no file, and the invalid or missing file denies privileged actions', () => {
+    const home = tempDir('avarice-home-');
+    installAcme(home, (config) => {
+      delete config['policy'];
+    });
+    const none = composeFor(home, 'enterprise-acme');
+    assert.ok(none.ok, none.ok ? '' : none.message);
+    try {
+      const got = sources(none.value.deps.policy());
+      assert.equal(got.organization, 'absent');
+      assert.equal(evaluatePolicy(got, 'git.push', {}).effect, 'deny');
+    } finally {
+      none.value.close();
+    }
+
+    const home2 = tempDir('avarice-home-');
+    const dir = installAcme(home2);
+    copyFileSync(join(ORG_FIXTURE, 'policy-invalid.json'), join(dir, 'policy.json'));
+    const invalid = composeFor(home2, 'enterprise-acme');
+    assert.ok(invalid.ok, invalid.ok ? '' : invalid.message);
+    try {
+      const got = sources(invalid.value.deps.policy());
+      assert.ok(got.organization !== undefined && got.organization !== 'absent' && !got.organization.ok);
+      assert.deepEqual(evaluatePolicy(got, 'git.push', {}), { effect: 'deny', ruleId: 'org.invalid-or-missing', rank: 1 });
+    } finally {
+      invalid.value.close();
+    }
+
+    const home3 = tempDir('avarice-home-');
+    const dir3 = installAcme(home3);
+    rmSync(join(dir3, 'policy.json'));
+    const missing = composeFor(home3, 'enterprise-acme');
+    assert.ok(missing.ok, missing.ok ? '' : missing.message);
+    try {
+      assert.equal(sources(missing.value.deps.policy()).organization, 'absent');
+    } finally {
+      missing.value.close();
+    }
+  });
+
+  it('parses the profile\'s own policy section as the user source, apart from organizationFile', () => {
+    const home = tempDir('avarice-home-');
+    installAcme(home, (config) => {
+      config['policy'] = { organizationFile: 'policy.json', schema: 1, rules: [{ id: 'user.pr-denied', action: 'scm.pr.create', effect: 'deny' }] };
+    });
+    const composed = composeFor(home, 'enterprise-acme');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const got = sources(composed.value.deps.policy());
+      assert.equal(got.user?.rules.length, 1);
+      assert.equal(parsedAs(got.user as never), 'user');
+      // The organization requires approval for a pull request; the user may only restrict further under an enterprise profile.
+      assert.deepEqual(evaluatePolicy(got, 'scm.pr.create', {}), { effect: 'deny', ruleId: 'user.pr-denied', rank: 3 });
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('refuses a policy section that does not parse, as an invalid result and not as a composition failure', () => {
+    const home = tempDir('avarice-home-');
+    installAcme(home, (config) => {
+      config['policy'] = { organizationFile: 'policy.json', schema: 1, rules: 'nope' };
+    });
+    const composed = composeFor(home, 'enterprise-acme');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const result = composed.value.deps.policy();
+      assert.ok(!result.ok);
+      assert.equal(result.error.kind, 'invalid');
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('adds the repository policy read at the pin, and ignores the working tree', () => {
+    const home = tempDir('avarice-home-');
+    const policy = { schema: 1, rules: [{ id: 'repo.no-push', action: 'git.push', effect: 'deny' }] };
+    const repo = scratchRepo();
+    const pinned = makeRepoWithPolicy(policy);
+    const composed = composeFor(home, 'personal-local');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const got = sources(composed.value.deps.policy({ path: pinned.path, pin: pinned.head }));
+      assert.equal(parsedAs(got.repository as never), 'repository');
+      assert.deepEqual(evaluatePolicy(got, 'git.push', {}), { effect: 'deny', ruleId: 'repo.no-push', rank: 4 });
+      // An uncommitted edit of the file does not change the answer at the pin.
+      writeFileSync(join(pinned.path, '.avarice', 'policy.json'), JSON.stringify({ schema: 1, rules: [] }));
+      const again = sources(composed.value.deps.policy({ path: pinned.path, pin: pinned.head }));
+      assert.equal(evaluatePolicy(again, 'git.push', {}).effect, 'deny');
+      // A pin the repository does not contain is an error result, not a silently absent file.
+      assert.ok(!composed.value.deps.policy({ path: pinned.path, pin: 'f'.repeat(40) }).ok);
+      // A repository without the file adds nothing.
+      assert.equal(sources(composed.value.deps.policy({ path: repo.path, pin: repo.head })).repository, undefined);
+    } finally {
+      composed.value.close();
+    }
+  });
+
+  it('reads the organization file once per command: an edit made after the first answer applies from the next command', () => {
+    const home = tempDir('avarice-home-');
+    const dir = installAcme(home);
+    const composed = composeFor(home, 'enterprise-acme');
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const first = sources(composed.value.deps.policy());
+      writeFileSync(join(dir, 'policy.json'), JSON.stringify({ schema: 1, rules: [] }));
+      const second = sources(composed.value.deps.policy());
+      assert.equal(evaluatePolicy(second, 'git.push', { branch: 'protected' }).ruleId, evaluatePolicy(first, 'git.push', { branch: 'protected' }).ruleId);
+      assert.equal(evaluatePolicy(second, 'git.push', { branch: 'protected' }).ruleId, 'org.no-push-protected');
+    } finally {
+      composed.value.close();
+    }
+    const next = composeFor(home, 'enterprise-acme');
+    assert.ok(next.ok, next.ok ? '' : next.message);
+    try {
+      assert.equal(evaluatePolicy(sources(next.value.deps.policy()), 'git.push', { branch: 'protected' }).ruleId, 'builtin.privileged-needs-approval');
+    } finally {
+      next.value.close();
+    }
+  });
+});
+
+function makeRepoWithPolicy(policy: unknown): ScratchRepo {
+  const repo = makeScratchRepo({ files: { 'README.md': '# scratch\n', '.avarice/policy.json': JSON.stringify(policy) } });
+  cleanup.push(repo.base);
+  return repo;
+}

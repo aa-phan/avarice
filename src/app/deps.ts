@@ -1,6 +1,7 @@
 // Application dependencies (SKELETON.md "Application").
 import type { IdPrefix } from '../domain/ids.ts';
 import type { ProfileNotify } from '../domain/notify-policy.ts';
+import type { PolicySources } from '../domain/policy.ts';
 import type { ProfileClass, ProfileConfig } from '../domain/profile.ts';
 import type { Result } from '../domain/result.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
@@ -82,6 +83,9 @@ export interface AppDeps {
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;
+  // The policy sources of this profile (SEC-4, D-17): the organization file (enterprise profiles only), the profile's own policy section
+  // and, when a repository and its pin are given, that repository's `.avarice/policy.json` at the pin. Read once per command.
+  policy(repo?: { path: string; pin: string }): Result<PolicySources>;
   // The user's home directory as composition resolved it ($HOME, else the OS answer): the credential directories an
   // invocation may not read are named from it. Absent only in a hand-built AppDeps.
   home?: string;
