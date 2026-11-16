@@ -106,21 +106,44 @@ function recordedRevision(indexes: Record<string, unknown>, index: 'intel' | 'gr
   return { missing: `the ${index} index is not in the project record${reason !== undefined ? ` (absent: ${reason})` : ''}` };
 }
 
-// Handles in the source's order, while they fit the budget; a handle that does not fit is left out, not cut, and a
-// smaller one after it may still fit.
-function pick(handles: readonly ContextHandle[], budget: number, seen: Set<string>): { picked: ContextHandle[]; left: ContextHandle[]; used: number } {
-  const picked: ContextHandle[] = [];
-  const left: ContextHandle[] = [];
+// Lower is better; the same order GSD's reader and the graph adapter use. A handle with no edge tier ranks between
+// code-derived and model-derived evidence.
+const TIER_RANK: Readonly<Record<ContextConfidence, number>> = { EXTRACTED: 0, INFERRED: 2, AMBIGUOUS: 3 };
+const NO_TIER_RANK = 1;
+
+// A handle found by one source, with where it stands in the ranking: source order first, then edge tier, then the
+// order the source returned it in (the sort is stable, so equal ranks keep that order).
+interface Candidate {
+  handle: ContextHandle;
+  sourceIndex: number;
+  tier: number;
+  index: number;
+}
+
+const refKey = (handle: ContextHandle): string => [handle.ref.provider, handle.ref.kind, handle.ref.id].join('\u0000');
+
+// Ranks every handle, drops later copies of a ref already seen, and takes handles first-fit: a handle that does not
+// fit the budget (or its source's cap) is left out, not cut, and a smaller one after it may still fit.
+function pick(candidates: readonly Candidate[], budget: number, caps: ReadonlyMap<number, number>): { picked: Candidate[]; left: Candidate[]; used: number } {
+  const ranked = [...candidates].sort((a, b) => a.sourceIndex - b.sourceIndex || a.tier - b.tier || a.index - b.index);
+  const seen = new Set<string>();
+  const usedBySource = new Map<number, number>();
+  const picked: Candidate[] = [];
+  const left: Candidate[] = [];
   let used = 0;
-  for (const handle of handles) {
-    const key = `${handle.ref.provider}\u0000${handle.ref.id}`;
+  for (const candidate of ranked) {
+    const key = refKey(candidate.handle);
     if (seen.has(key)) continue;
     seen.add(key);
-    if (used + handle.estTokens <= budget) {
-      picked.push(handle);
-      used += handle.estTokens;
+    const cap = caps.get(candidate.sourceIndex) ?? budget;
+    const own = usedBySource.get(candidate.sourceIndex) ?? 0;
+    const tokens = candidate.handle.estTokens;
+    if (used + tokens <= budget && own + tokens <= cap) {
+      picked.push(candidate);
+      used += tokens;
+      usedBySource.set(candidate.sourceIndex, own + tokens);
     } else {
-      left.push(handle);
+      left.push(candidate);
     }
   }
   return { picked, left, used };
@@ -154,16 +177,18 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
   const items: PackItem[] = [];
   const omitted: OmittedItem[] = [];
   const notes: string[] = [];
-  const seen = new Set<string>();
-  let used = 0;
 
   // Intel first, then the graph: the structured indexes are asked in this order, before any file would be read. Intel
   // may use at most half of the budget, so the graph is always asked.
-  const order: Array<{ name: 'intel' | 'graph'; source: ContextSource | undefined; label: PackItem['source']; share: (left: number) => number }> = [
-    { name: 'intel', source: sources.intel, label: 'gsd-intel', share: (left) => Math.ceil(left / 2) },
-    { name: 'graph', source: sources.graph, label: 'gsd-graph', share: (left) => left },
+  const order: Array<{ name: 'intel' | 'graph'; source: ContextSource | undefined; label: PackItem['source']; share: number }> = [
+    { name: 'intel', source: sources.intel, label: 'gsd-intel', share: Math.ceil(request.budget / 2) },
+    { name: 'graph', source: sources.graph, label: 'gsd-graph', share: request.budget },
   ];
-  for (const { name, source, label, share } of order) {
+
+  // Phase 1: find. Every source is asked before anything is read; a handle carries no content (FR-22).
+  const candidates: Candidate[] = [];
+  const asked: Array<{ sourceIndex: number; name: 'intel' | 'graph'; source: ContextSource; label: PackItem['source']; share: number }> = [];
+  for (const [sourceIndex, { name, source, label, share }] of order.entries()) {
     const recorded = recordedRevision(indexes, name);
     if ('missing' in recorded) {
       notes.push(recorded.missing);
@@ -173,27 +198,37 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
       notes.push(`no ${name} source is configured`);
       continue;
     }
-    const left = request.budget - used;
-    if (left <= 0) {
-      notes.push(`the ${name} index was not asked: the token budget is spent`);
-      continue;
-    }
-    const allowance = share(left);
     const query = { term: request.term, workspace: { stagingPath: staging, repoPath: project.repoPath }, indexRevision: recorded.revision };
-    const found = await source.find(query, allowance);
+    const found = await source.find(query, share);
     if (!found.ok) {
       notes.push(`the ${name} index cannot answer: ${found.error.kind === 'unavailable' ? found.error.cause : found.error.kind}`);
       continue;
     }
-    const chosen = pick(found.value, allowance, seen);
-    for (const handle of chosen.left) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens });
-    const read = await source.read(chosen.picked, allowance);
+    asked.push({ sourceIndex, name, source, label, share });
+    found.value.forEach((handle, index) => candidates.push({ handle, sourceIndex, tier: handle.confidence === undefined ? NO_TIER_RANK : TIER_RANK[handle.confidence], index }));
+  }
+
+  // Phase 2: rank, deduplicate and pick first-fit within the budget (and intel within its half).
+  const caps = new Map(order.map((o, sourceIndex) => [sourceIndex, o.share] as const));
+  const chosen = pick(candidates, request.budget, caps);
+  const labelOf = (sourceIndex: number): PackItem['source'] => (order[sourceIndex] as (typeof order)[number]).label;
+  for (const { handle, sourceIndex } of chosen.left) omitted.push({ source: labelOf(sourceIndex), id: handle.ref.id, title: handle.title, estTokens: handle.estTokens });
+
+  // Phase 3: read only the picked handles, one call per source that has any.
+  let used = 0;
+  for (const { sourceIndex, name, source, label, share } of asked) {
+    const mine = chosen.picked.filter((c) => c.sourceIndex === sourceIndex);
+    if (mine.length === 0) continue;
+    const read = await source.read(
+      mine.map((c) => c.handle),
+      share,
+    );
     if (!read.ok) {
       notes.push(`the ${name} index cannot be read: ${read.error.kind}`);
       continue;
     }
     for (const item of read.value) items.push(packItem(label, item));
-    used += chosen.used;
+    used += mine.reduce((sum, c) => sum + c.handle.estTokens, 0);
   }
 
   return ok({
