@@ -1,0 +1,101 @@
+// Plan 04-10 (ONB-6, D-10): what onboarding does with a map the repository already has. A stamped, drift-free GSD map is adopted with no mapper
+// invocation; the other classes are refreshed or regenerated in staging; the user's checkout is never written. Real gsd-core (its own
+// `verify codebase-drift` runs in staging), scratch repositories, the fake host.
+import { after, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { createDeps } from '../../src/cli/composition.ts';
+import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
+import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
+import type { FakeHostOptions } from '../helpers/fake-agent-host.ts';
+import { makeRoots } from '../helpers/run-cli.ts';
+import type { CliRoots } from '../helpers/run-cli.ts';
+import { treeDigest } from '../helpers/scratch-repo.ts';
+import { makeStampedMapRepo } from '../helpers/stamped-map-fixture.ts';
+import type { StampedMapOptions, StampedMapRepo } from '../helpers/stamped-map-fixture.ts';
+
+const cleanup: string[] = [];
+after(() => {
+  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
+});
+
+function fixture(options: StampedMapOptions = {}): { roots: CliRoots; repo: StampedMapRepo } {
+  const roots = makeRoots();
+  const repo = makeStampedMapRepo(options);
+  cleanup.push(roots.base, repo.base);
+  return { roots, repo };
+}
+
+function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>): T[] {
+  const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  try {
+    return (db.prepare(sql).all(...params) as Array<Record<string, unknown>>).map((r) => ({ ...r }) as T);
+  } finally {
+    db.close();
+  }
+}
+
+function step<T>(roots: CliRoots, name: string): T | null {
+  const [row] = rows<{ result_json: string }>(roots, 'SELECT result_json FROM onboarding_steps WHERE step = ? ORDER BY attempt DESC', name);
+  return row === undefined ? null : (JSON.parse(row.result_json) as T);
+}
+
+interface PlanStep {
+  mode: string;
+  outcome: string;
+  existingMap: string;
+  completeness: string;
+  paths?: string[];
+  drift: { verdict: string | null; affectedPaths: string[] } | null;
+}
+
+// In-process onboarding through the production composition and the real gsd-core, with a fake host that keeps every request it was given.
+async function onboard(roots: CliRoots, repo: StampedMapRepo, hostOptions: FakeHostOptions = {}) {
+  const host = new FakeAgentHost(hostOptions);
+  const env = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+  const composed = createDeps(env, { host });
+  assert.ok(composed.ok, 'composition');
+  try {
+    const started = startOnboarding(composed.value.deps, { repoPath: repo.path, policy: 'onboarding' });
+    assert.ok(started.ok, JSON.stringify(started));
+    const outcome = await runOnboarding(composed.value.deps, started.value.onboardingId);
+    assert.ok(outcome.ok, JSON.stringify(outcome));
+    return { outcome: outcome.value, host, mapCalls: host.calls.filter((call) => call.purpose === 'map'), onboardingId: started.value.onboardingId };
+  } finally {
+    composed.value.close();
+  }
+}
+
+describe('tracer: a committed, stamped, drift-free GSD map is adopted (ONB-6, D-10)', () => {
+  it('reaches active with mode adopt, provenance adopted and no mapper invocation, and leaves the checkout byte-identical', async () => {
+    const { roots, repo } = fixture();
+    const before = treeDigest(repo.path);
+
+    const { outcome, mapCalls } = await onboard(roots, repo);
+    assert.equal(outcome.state, 'active', outcome.message ?? '');
+    assert.equal(mapCalls.length, 0, 'no mapper invocation');
+    assert.equal(step(roots, 'launch:map'), null, 'no map invocation was reserved or recorded');
+
+    const plan = step<PlanStep>(roots, 'mapping:plan');
+    assert.equal(plan?.mode, 'adopt');
+    assert.equal(plan?.outcome, 'adopt');
+    assert.equal(plan?.existingMap, 'stamped-complete');
+    assert.equal(plan?.completeness, 'complete');
+    assert.equal(plan?.drift?.verdict, 'pass', 'GSD itself reported no drift in staging');
+
+    const [record] = rows<{ mapping_mode: string; completeness: string; body_json: string }>(roots, 'SELECT mapping_mode, completeness, body_json FROM project_records');
+    assert.equal(record?.mapping_mode, 'adopt');
+    assert.equal(record?.completeness, 'complete', 'completeness comes from the files present');
+    const body = JSON.parse(record?.body_json as string) as { mapping: { provenance?: string }; existingState: Record<string, unknown> };
+    assert.equal(body.mapping.provenance, 'adopted');
+    assert.equal(body.existingState['codebaseMap'], 'stamped-complete');
+    assert.equal(body.existingState['outcome'], 'adopt');
+    assert.equal(body.existingState['drift'], 'pass');
+    assert.equal('adoptionDeferred' in body.existingState, false);
+
+    assert.equal(treeDigest(repo.path), before, 'the checkout is byte-identical');
+  });
+});
