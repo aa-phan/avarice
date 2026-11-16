@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-12-PLAN.md
-last_updated: "2026-11-16T23:47:05.947Z"
+stopped_at: Completed 04-13-PLAN.md
+last_updated: "2026-11-16T23:56:35.022Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: bc88b3ef892cd9b7be9d9533ec0f23d6c7eb3c8d
+state_head: d67026f4cee16d7d422bb9d89d5607bf6634e4b0
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 13 of 39
+Plan: 14 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -175,6 +175,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P10 | 35min | 3 tasks | 21 files |
 | Phase 04 P11 | 35 min | 3 tasks | 11 files |
 | Phase 04 P12 | 35 min | 3 tasks | 26 files |
+| Phase 04 P13 | 40 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -422,6 +423,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: Host admission by patch range: a 2.1 patch at or above 2.1.312 is admitted as unverified-patch after the flag, sandbox and hook probes pass; other minors refuse (ADR-014, D-20)
 - [Phase 04]: 04-12: supervisor child selects its profile from AVARICE_PROFILE alone; supervisorEnv and the launchd plist carry it (plist value checked as a profile name); schedule accepts --profile
 - [Phase 04]: 04-12: knownProfileRoots fails closed on an unlistable profiles directory (exit 70) and skips an unparsable, linked or relative-root config of another profile; otherRoots holds this and the default config home
+- [Phase 04]: 04-13: status reads every per-run table through Ledger.loadRunStatusInputs in bound IN chunks of 500 runs; measured 1,000-run status p95 192-212 ms — Statement count no longer grows with runs up to 500 per chunk; output byte-identical
 
 ### Roadmap Evolution
 
@@ -489,8 +491,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-16T23:47:05.918Z
-Stopped at: Completed 04-12-PLAN.md
+Last session: 2026-11-16T23:56:30.003Z
+Stopped at: Completed 04-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
