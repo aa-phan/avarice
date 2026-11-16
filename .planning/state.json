@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.1",
+  "milestone": "v1.1 — MVP Completion",
   "phases": [
     {
       "number": "1",
@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Profiles, retrieval budgets, restricted mode and the portability proof",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "5",
@@ -50,9 +50,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step (plan phase 04)",
+    "reason": "Phase 1 of 6 — needs a plan"
   },
-  "updated_at": "2026-11-16T00:19:37.242Z"
+  "updated_at": "2026-11-16T07:08:02.324Z"
 }

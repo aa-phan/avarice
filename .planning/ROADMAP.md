@@ -63,7 +63,84 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: TBD
+**Plans**: 39 plans in 18 waves (one branch, one PR, D-01)
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Phase 4 spend ledger and 40 USD lower-only ceiling (D-03)
+- [ ] 04-02-PLAN.md — Wave 0 spikes: graphify edge relations, node-ID stability, installed host flags
+- [ ] 04-03-PLAN.md — AC-14 repository list and 20 evaluation tasks drafted, owner-approved
+- [ ] 04-04-PLAN.md — Profile selection, `--profile`, repository binding, S-9 refusal
+- [ ] 04-05-PLAN.md — Action classification, policy precedence, fixture org, SEC-7 guard
+- [ ] 04-06-PLAN.md — Capability requirements and `unsupported`, extension namespacing, SEC-6 enforcement map
+- [ ] 04-07-PLAN.md — Redactor at the event and shell-history boundaries
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-08-PLAN.md — Profile config read-back, migration 0004, store profile scoping, policy loader
+- [ ] 04-09-PLAN.md — Per-edge read rules and handle-first assembly (S-54)
+- [ ] 04-10-PLAN.md — Adoption of existing GSD maps, adopt and paths modes (ONB-6)
+- [ ] 04-11-PLAN.md — Host admission by patch range with launch self-check, ADR-014 (D-20)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-12-PLAN.md — Profile propagation to children, moved-root isolation (D-19)
+- [ ] 04-13-PLAN.md — `status` under 300 ms with 1,000 runs (AC-2)
+- [ ] 04-14-PLAN.md — Refresh planner: incremental, path-scoped or full (ONB-11)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-15-PLAN.md — Credential broker: keychain, cmd, delegated; env refused (SEC-2)
+- [ ] 04-16-PLAN.md — Parameter-bound approvals, `avarice approve`, no replay (FR-12, FR-13, FR-15)
+- [ ] 04-17-PLAN.md — Incremental graph and knowledge refresh (ONB-11, ONB-15)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-18-PLAN.md — Transcript redaction before the cap, summary retention, artifact redaction (D-14)
+- [ ] 04-19-PLAN.md — Privileged shell forms at the hook, attended hook install, untrusted authority
+- [ ] 04-20-PLAN.md — Reference refresh on resume, task_refs, ref_changed (FR-8)
+- [ ] 04-21-PLAN.md — Promotion copy and commit through the approval gate (D-15)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-22-PLAN.md — AC-6 isolation and AC-5 redaction exit suites
+- [ ] 04-23-PLAN.md — Restricted mode for runs (CON-4, D-12)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 04-24-PLAN.md — Restricted onboarding, `partial (restricted)`
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 04-25-PLAN.md — `avarice doctor` offline, versions, enforcement, S-38 (OPS-1, OPS-6)
+- [ ] 04-26-PLAN.md — git-files and gsd-planning context adapters
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 04-27-PLAN.md — Manual equivalents: context add, evidence add, pr record, comment --print (FR-19)
+- [ ] 04-28-PLAN.md — Retrieval caps, broad discovery, exact counters, cache scope (CON-10 to CON-12)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 04-29-PLAN.md — Agent search budget and broad-discovery rule at the hook (S-16)
+- [ ] 04-30-PLAN.md — Resource bounds and the 24,000-token pack resolution (OPS-5, D-13)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 04-31-PLAN.md — Token capture, knowledge-pass switch, three-arm evaluation harness
+- [ ] 04-32-PLAN.md — Capability descriptors on every port, artifacts seam
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 04-33-PLAN.md — Fake-remote adapters, contract suite, portability proof (AC-7)
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 04-34-PLAN.md — Offline exit gate and owner-authorized live T3 cases
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 04-35-PLAN.md — AC-14: five brownfield onboardings live
+
+**Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 04-36-PLAN.md — AC-8: pilot and three-arm evaluation, D-08 knowledge-pass rule
+
+**Wave 16** *(blocked on Wave 15 completion)*
+- [ ] 04-37-PLAN.md — Documentation: new subsystem documents and ADR-015
+
+**Wave 17** *(blocked on Wave 16 completion)*
+- [ ] 04-38-PLAN.md — Documentation: existing documents updated
+
+**Wave 18** *(blocked on Wave 17 completion)*
+- [ ] 04-39-PLAN.md — Documentation: findings, README tables, coverage, fresh reviews
+
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
 
 ### Phase 5: Delivery, test strength, review feedback and data safety
@@ -144,6 +221,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   - Phase 1 review findings (01-REVIEW.md): WR-01 and IN-01 to IN-05 open; the `mid-invocation:knowledge` kill point that skips without graphify
   - Integration gaps: the active record's graph, intel and knowledge commits are never compared at `start`; `status`, `inbox` and the run view do not show the contract version, amendment history or parked deltas; the "Phase 2 invocation" wording in the discard stage
   - Bookkeeping: the 01 and 02 VERIFICATION.md bodies that still read `human_needed`, the stale phase 1 and 2 verifications at the v1.0 close, the duplicate FR-1 traceability row, ONB-6 listed as completed by a phase 1 SUMMARY
+
 **Success Criteria** (what must be TRUE):
   1. Every finding in 01-REVIEW.md, 02-35-REVIEW.md and 03-REVIEW.md has a recorded final disposition (`fixed`, `rejected` with a reason, or `deferred` with an owner, a reason and a backlog entry); none reads `open`, and each `fixed` row names a failing-then-passing test
   2. A relative Glob pattern with `..` segments, or a brace pattern with an absolute alternative, is judged against the read set and denied when it reaches outside it, with a hook test and a containment test
@@ -165,7 +243,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
-| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/TBD | Not started | - |
+| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 0/39 | Planned | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |
