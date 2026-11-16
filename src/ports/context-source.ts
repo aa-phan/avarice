@@ -3,6 +3,7 @@
 // (FR-22), and `read` returns the content of the handles the assembler picked within a token budget. A source never
 // reads a whole file. Phase 1 has two local adapters, `gsd-intel` and `gsd-graph`, both reading the indexes onboarding
 // built and both through GSD's own readers.
+import type { ReadRule } from '../domain/retrieval-rules.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
 
@@ -50,7 +51,8 @@ export interface ContextHandle {
   title: string;
   estTokens: number;
   reason: string;
-  readRule?: 'descendants' | 'one-hop' | 'id-only';
+  // How far a read of this handle expands along its edges (docs/contracts-and-state.md "ContextSource").
+  readRule?: ReadRule;
   // The best edge tier the item has (graph items); absent when it has no edge in the answer.
   confidence?: ContextConfidence;
   // Text that came from a document or from a model reading one: a consumer prints it as data, never as instruction.

@@ -6,6 +6,8 @@
 // It reads no file itself and writes nothing.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import { ruleFor, widestRule } from '../../domain/retrieval-rules.ts';
+import type { ReadRule } from '../../domain/retrieval-rules.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextSource, ExternalRef, TokenBudget } from '../../ports/context-source.ts';
 import type { GsdGraphEdge, GsdGraphNode, GsdOnboarding } from '../../ports/gsd-onboarding.ts';
@@ -14,6 +16,8 @@ import { currentHead, estimateTokens, freshnessAt, isCitablePath, pathExistsAtHe
 
 const GRAPH_PATH = '.planning/graphs/graph.json';
 const MAX_EDGES_IN_EXCERPT = 5;
+// How far below a node a containment chain is followed (T-04-23).
+const MAX_DESCENT_DEPTH = 3;
 const MAX_TEXT_CHARS = 300;
 // What GSD's reader is asked when the caller gives no budget.
 const DEFAULT_BUDGET = 4000;
@@ -51,18 +55,63 @@ function neighbourName(other: GsdGraphNode | undefined, id: string): string {
   return other.fileType === 'code' ? clip(other.label) : `a ${other.fileType ?? 'non-code'} node`;
 }
 
+// What an edge adds about the node at its far end, by the read rule of its relation (FR-22): the ID alone, or the label
+// with the source file for a code node.
+function describeNeighbour(rule: ReadRule, other: GsdGraphNode | undefined, id: string): string {
+  if (rule === 'id-only') return clip(id);
+  const name = neighbourName(other, id);
+  return other !== undefined && other.fileType === 'code' && other.sourceFile !== null ? `${name} in ${clip(other.sourceFile)}` : name;
+}
+
+const byTier = (a: GsdGraphEdge, b: GsdGraphEdge): number => rankOf(a.confidence ?? undefined) - rankOf(b.confidence ?? undefined);
+
+// The rule an edge has for the node reading it: a containment edge pointing down is followed to its descendants, the same
+// edge seen from the child only names the parent, like a dependency.
+function ruleAt(edge: GsdGraphEdge, nodeId: string): ReadRule {
+  const rule = ruleFor(edge.relation);
+  return rule === 'descendants' && edge.source !== nodeId ? 'one-hop' : rule;
+}
+
+// The rule that governs how a node's edges are read: the widest of its edges' rules.
+function readRuleOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[]): ReadRule {
+  return widestRule(edges.filter((e) => e.source === node.id || e.target === node.id).map((e) => ruleAt(e, node.id)));
+}
+
 function excerptOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[], byId: ReadonlyMap<string, GsdGraphNode>): string {
-  const touching = edges
-    .filter((e) => e.source === node.id || e.target === node.id)
-    .sort((a, b) => rankOf(a.confidence ?? undefined) - rankOf(b.confidence ?? undefined));
   const lines = [`${clip(node.label)} [${node.fileType ?? 'unknown'}]${node.sourceFile !== null ? ` in ${node.sourceFile}` : ''}`];
   if (node.description !== null) lines.push(clip(node.description));
-  for (const edge of touching.slice(0, MAX_EDGES_IN_EXCERPT)) {
+  const edgeLines: string[] = [];
+  const full = (): boolean => edgeLines.length >= MAX_EDGES_IN_EXCERPT;
+  const shown = new Set<string>([node.id]);
+
+  // A containment edge pointing down is followed to its descendants, to a depth bound and the excerpt cap; the same edge
+  // seen from the child names the parent like a dependency, and nothing above it is followed.
+  const descend = (parentId: string, depth: number): void => {
+    if (depth > MAX_DESCENT_DEPTH) return;
+    for (const edge of edges.filter((e) => e.source === parentId && ruleFor(e.relation) === 'descendants').sort(byTier)) {
+      if (full()) return;
+      if (shown.has(edge.target)) continue;
+      shown.add(edge.target);
+      edgeLines.push(`${'  '.repeat(depth - 1)}-> ${edge.relation ?? 'related to'} ${describeNeighbour('descendants', byId.get(edge.target), edge.target)} (${edge.confidence ?? 'no tier'})`);
+      descend(edge.target, depth + 1);
+    }
+  };
+
+  for (const edge of edges.filter((e) => e.source === node.id || e.target === node.id).sort(byTier)) {
+    if (full()) break;
     const outgoing = edge.source === node.id;
     const other = outgoing ? edge.target : edge.source;
-    lines.push(`${outgoing ? '->' : '<-'} ${edge.relation ?? 'related to'} ${neighbourName(byId.get(other), other)} (${edge.confidence ?? 'no tier'})`);
+    const rule = ruleAt(edge, node.id);
+    if (rule === 'descendants') {
+      if (shown.has(other)) continue;
+      shown.add(other);
+      edgeLines.push(`-> ${edge.relation ?? 'related to'} ${describeNeighbour(rule, byId.get(other), other)} (${edge.confidence ?? 'no tier'})`);
+      descend(other, 2);
+      continue;
+    }
+    edgeLines.push(`${outgoing ? '->' : '<-'} ${edge.relation ?? 'related to'} ${describeNeighbour(rule, byId.get(other), other)} (${edge.confidence ?? 'no tier'})`);
   }
-  return lines.join('\n');
+  return [...lines, ...edgeLines].join('\n');
 }
 
 export class GsdGraphContext implements ContextSource {
@@ -116,7 +165,7 @@ export class GsdGraphContext implements ContextSource {
         title: node.label,
         estTokens: estimateTokens(excerpt),
         reason: `matched "${query.term}"${confidence !== undefined ? `, best edge ${confidence}` : ''}`,
-        readRule: 'one-hop',
+        readRule: readRuleOf(node, edges),
         ...(confidence !== undefined ? { confidence } : {}),
         // Anything that is not code (a document, or a concept or rationale a model read out of one) is data, not
         // instruction: its text is printed fenced and never acted on.
