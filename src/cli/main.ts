@@ -14,7 +14,8 @@ import { processAncestry } from '../adapters/proc/ancestry.ts';
 import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
 import type { IdentityContext } from './identity.ts';
-import { parseProfileName, selectProfile } from '../domain/profile.ts';
+import { parseProfileName, profileClass, selectProfile } from '../domain/profile.ts';
+import { EXIT_PROFILE_REFUSED, readRepositoryContext } from './profile-gate.ts';
 
 export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel'] as const;
 export const EXIT_USAGE = 64;
@@ -128,10 +129,27 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     }
   }
   const envDefault = envProfile !== undefined && envProfile !== '' ? envProfile : undefined;
-  const selected = selectProfile({ ...(flag !== undefined ? { flag } : {}), ...(envDefault !== undefined ? { envDefault } : {}) });
+  // S-9: the repository the command works on may be bound to a profile, and may belong to an enterprise one. Both are read from files in
+  // the config home and from git, never from a store, so a refusal below has opened nothing.
+  const repository = readRepositoryContext(env, mod.repository?.(args), process.cwd());
+  if (!repository.ok) {
+    io.err(`${errorLine(name, repository.message)}\n`);
+    return repository.code;
+  }
+  const { bound, enterprise } = repository.value;
+  const selected = selectProfile({ ...(flag !== undefined ? { flag } : {}), ...(bound !== undefined ? { bound } : {}), ...(envDefault !== undefined ? { envDefault } : {}) });
   if (!selected.ok) {
+    if (selected.error.kind === 'denied') {
+      io.err(`${errorLine(name, `refused: repository bound to ${bound ?? ''}; run it under that profile (--profile ${bound ?? ''}) or leave --profile out`)}\n`);
+      return EXIT_PROFILE_REFUSED;
+    }
     io.err(`${errorLine(name, `AVARICE_PROFILE: ${describeError(selected.error)}`)}\n`);
     return EXIT_USAGE;
+  }
+  // D-16: a repository that an enterprise profile claims by its remote is never run under a personal profile and never re-bound to one.
+  if (enterprise !== undefined && profileClass(selected.value) === 'personal') {
+    io.err(`${errorLine(name, `refused: the repository's remote belongs to ${enterprise}, not to ${selected.value}; run it under ${enterprise} (--profile ${enterprise})`)}\n`);
+    return EXIT_PROFILE_REFUSED;
   }
 
   const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true, profile: selected.value });

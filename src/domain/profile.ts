@@ -54,3 +54,40 @@ export function selectProfile(input: ProfileSelectionInput): Result<string> {
   }
   return parseProfileName(input.bound ?? input.flag ?? input.envDefault ?? DEFAULT_PROFILE_NAME);
 }
+
+// A remote URL reduced to `host/path` for matching: no scheme, no user or password, no port, no trailing `.git` or slash, lower case.
+// Both `https://user:token@host/org/repo.git` and the scp form `git@host:org/repo.git` reduce to `host/org/repo`.
+export function normalizeRemote(remote: string): string {
+  let rest = remote.trim();
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\//i.exec(rest);
+  if (scheme !== null) {
+    rest = rest.slice(scheme[0].length).replace(/^[^/@]*@/, '');
+  } else {
+    const scp = /^(?:[^@/:]+@)?([^:/]+):(?!\/\/)(.*)$/.exec(rest);
+    if (scp !== null) rest = `${scp[1] ?? ''}/${scp[2] ?? ''}`;
+  }
+  const slash = rest.indexOf('/');
+  const host = (slash === -1 ? rest : rest.slice(0, slash)).replace(/:\d*$/, '');
+  const path = slash === -1 ? '' : rest.slice(slash + 1);
+  return `${host}/${path}`.replace(/\/+$/, '').replace(/\.git$/i, '').replace(/\/+$/, '').toLowerCase();
+}
+
+function segmentMatches(pattern: string, segment: string): boolean {
+  if (!pattern.includes('*')) return pattern === segment;
+  const source = pattern
+    .split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[^/]*');
+  return new RegExp(`^${source}$`).test(segment);
+}
+
+// Whether a remote falls under a `remotePatterns` entry of an enterprise profile config: a `host/path` glob where `*` stands for
+// characters within one path segment, matched over the credential-free, normalized remote and without regard to case, so that a
+// difference of case never lets an enterprise repository through. The segment counts must be equal: `host/org/*` matches
+// `host/org/tool` and not `host/org` or `host/org/team/tool`.
+export function matchesRemotePattern(remote: string, pattern: string): boolean {
+  const wanted = normalizeRemote(pattern).split('/');
+  const actual = normalizeRemote(remote).split('/');
+  if (wanted.length !== actual.length) return false;
+  return wanted.every((part, index) => segmentMatches(part, actual[index] as string));
+}

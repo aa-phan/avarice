@@ -206,6 +206,25 @@ describe('repository binding (D-16, S-9)', () => {
     assert.deepEqual(storeFingerprint(enterpriseStore), before);
   });
 
+  it('creates neither profile\'s store when a binding that no store knows about refuses the command', () => {
+    const home = tempDir('avarice-home-');
+    const repo = scratchRepo();
+    mkdirSync(join(home, '.config', 'avarice'), { recursive: true });
+    writeFileSync(
+      bindingsPath(home),
+      JSON.stringify({ schema: 1, bindings: [{ gitRoot: repo.path, rootCommit: repo.shas[0], profile: 'enterprise-acme', boundAt: '2026-01-01T00:00:00.000Z' }] }),
+    );
+    for (const argv of [['status', '--json', '--profile', 'personal-local'], ['status', '--json', '--profile', 'personal-extended'], ['status', '--json', '--profile=enterprise-other']]) {
+      const r = runCli(argv, { env: homeEnv(home), cwd: repo.path });
+      assert.equal(r.code, 3, r.stderr);
+      assert.match(r.stderr, /repository bound to enterprise-acme/);
+    }
+    for (const profile of ['personal-local', 'personal-extended', 'enterprise-acme', 'enterprise-other']) {
+      assert.equal(existsSync(join(dataRootOf(home, profile), 'state.db')), false, `${profile} store`);
+    }
+    assert.equal(existsSync(join(home, '.local')), false);
+  });
+
   it('selects the bound profile when no flag is given, and AVARICE_PROFILE never overrides the binding', () => {
     const home = tempDir('avarice-home-');
     const repo = scratchRepo();

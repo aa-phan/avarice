@@ -3,6 +3,9 @@
 // `discovered`. It creates no staging workspace and runs nothing; `avarice onboard <path>` continues the same
 // onboarding. Exit 0 on success, 3 when the repository is refused (existing_state_conflict), 64 for a usage
 // error or a path that is not a git repository, 70 for an internal failure.
+import { resolve } from 'node:path';
+import { writeBinding } from '../../adapters/fs/profile-bindings.ts';
+import { readRepositoryFacts } from '../../adapters/git/repo-identity.ts';
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { ONBOARDING_POLICY } from '../../app/onboarding-service.ts';
 import { registerAndPreflight } from '../../app/stages/register.ts';
@@ -20,6 +23,33 @@ export function usage(args: ParsedArgs): string | undefined {
   if (args.positionals[0] !== 'add') return `unknown or missing subcommand\n${USAGE.trimEnd()}`;
   if (args.positionals.length !== 2) return `exactly one repository path is required\n${USAGE.trimEnd()}`;
   return undefined;
+}
+
+// The repository this command is about, so main() can read its binding before a store opens (D-16).
+export function repository(args: ParsedArgs): string | undefined {
+  return args.positionals[1];
+}
+
+// `repo add --profile <name> <path>` binds the repository to the profile it was just registered under (D-16, S-9): after this, a
+// command in that repository that names another profile is refused. Without `--profile` nothing is bound. Create-only: a repository
+// already bound to this profile is left as it is.
+function bindRepository(args: ParsedArgs, deps: AppDeps, repoPath: string, io: Io): number | undefined {
+  const flag = args.flags['profile'];
+  if (typeof flag !== 'string') return undefined;
+  const facts = readRepositoryFacts(resolve(repoPath));
+  if (facts === undefined) {
+    io.err(`${errorLine('repo add', `registered, but cannot bind: ${oneLine(repoPath)} has no git root and root commit to bind`)}\n`);
+    return EXIT_INTERNAL;
+  }
+  const bound = writeBinding(deps.profile.configHome, {
+    gitRoot: facts.gitRoot,
+    rootCommit: facts.rootCommit,
+    profile: deps.profile.profile,
+    boundAt: new Date(deps.clock.nowMs()).toISOString(),
+  });
+  if (bound.ok) return undefined;
+  io.err(`${errorLine('repo add', `registered, but cannot bind: ${describeError(bound.error)}`)}\n`);
+  return bound.error.kind === 'conflict' || bound.error.kind === 'invalid' ? EXIT_REFUSED : EXIT_INTERNAL;
 }
 
 // Recorded and repository-derived text on one line, without control characters (T-02-03): a file name may hold a newline.
@@ -59,6 +89,8 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     if (e.kind === 'conflict') return EXIT_REFUSED;
     return e.kind === 'invalid' || e.kind === 'not_found' ? EXIT_USAGE : EXIT_INTERNAL;
   }
+  const bindFailure = bindRepository(args, deps, repoPath, io);
+  if (bindFailure !== undefined) return bindFailure;
   const row = deps.ledger.getOnboarding(registered.value.onboardingId);
   if (!row.ok) {
     io.err(`${errorLine('repo add', describeError(row.error))}\n`);

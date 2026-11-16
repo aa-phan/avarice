@@ -99,4 +99,8 @@ export interface CommandModule<Deps> {
   // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
   // `context` tells a command that must not run inside a run where it runs: terminal facts and the process ancestry reader.
   usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv, context?: IdentityContext): string | undefined;
+  // The path of the repository the command names (`repo add`, `onboard`), so main() can find the profile that repository is bound to
+  // before any store is opened (D-16). A command that names none returns undefined and is judged by the repository its working
+  // directory is inside, if any. Called only after usage() accepted the arguments.
+  repository?(args: ParsedArgs): string | undefined;
 }

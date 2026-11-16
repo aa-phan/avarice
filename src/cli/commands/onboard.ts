@@ -19,6 +19,11 @@ function usage(io: Io, message: string): number {
   return EXIT_USAGE;
 }
 
+// The repository this command is about, so main() can read its binding before a store opens (D-16).
+export function repository(args: ParsedArgs): string | undefined {
+  return args.positionals[0];
+}
+
 export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<number> {
   const policy = args.flags['policy'];
   if (policy !== ONBOARDING_POLICY) return usage(io, `--policy ${ONBOARDING_POLICY} is required`);
