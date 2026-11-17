@@ -18,7 +18,7 @@ import type { InvocationScope } from '../domain/invocation-scope.ts';
 import { RootRefusedError } from '../domain/normalized-root.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { InvocationDetails, InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
-import type { OnboardingRow, RunRow, StepResultInput } from '../ports/ledger.ts';
+import type { OnboardingRow, RunRow, StepResultInput, StepResultRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { reserveInvocation, reserveRunInvocation, settleInvocation } from './budget.ts';
 import type { InvocationReservation, SettlementCharge } from './budget.ts';
@@ -53,6 +53,27 @@ export type PrepareOutcome = { granted: true; prepared: PreparedInvocation } | {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
+// Where GSD's inspect recorded the gsd-core and its agents for an onboarding. The one source of the invocation's read roots and of the absolute paths a
+// restricted map prompt names (plan 04-34), so the prompt can never name a path the hook policy does not admit.
+function gsdDirsRecorded(onboardingId: string, steps: readonly StepResultRow[]): Result<{ gsdCoreDir: string; agentsDir: string }> {
+  const inspected = steps.find((s) => s.step === 'gsd:inspect')?.result;
+  const gsdCoreDir = isObject(inspected) ? inspected['gsdCoreDir'] : undefined;
+  const agentsDir = isObject(inspected) ? inspected['agentsDir'] : undefined;
+  if (typeof gsdCoreDir !== 'string' || typeof agentsDir !== 'string') {
+    return err({ kind: 'internal', cause: `onboarding ${onboardingId} has no gsd:inspect step with the gsd-core directories` });
+  }
+  return ok({ gsdCoreDir, agentsDir });
+}
+
+// The directories in the form the hook policy holds them (its read roots are canonicalized), which is the form a model must be told to read.
+export function onboardingGsdDirs(deps: AppDeps, onboardingId: string): Result<{ gsdCoreDir: string; agentsDir: string }> {
+  const steps = deps.ledger.getStepResults(onboardingId);
+  if (!steps.ok) return steps;
+  const dirs = gsdDirsRecorded(onboardingId, steps.value);
+  if (!dirs.ok) return dirs;
+  return ok({ gsdCoreDir: canonical(dirs.value.gsdCoreDir), agentsDir: canonical(dirs.value.agentsDir) });
+}
+
 export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose, prompt: string, options: PrepareOptions): Result<PrepareOutcome> {
   const contract = loadContract(deps, onboarding.onboardingId);
   if (!contract.ok) return contract;
@@ -69,12 +90,9 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   const attempt = steps.value.filter((s) => s.step === step).length + 1;
 
   // What GSD's inspect recorded: where the gsd-core and its agents live, both readable to the invocation.
-  const inspected = steps.value.find((s) => s.step === 'gsd:inspect')?.result;
-  const gsdCoreDir = isObject(inspected) ? inspected['gsdCoreDir'] : undefined;
-  const agentsDir = isObject(inspected) ? inspected['agentsDir'] : undefined;
-  if (typeof gsdCoreDir !== 'string' || typeof agentsDir !== 'string') {
-    return err({ kind: 'internal', cause: `onboarding ${onboarding.onboardingId} has no gsd:inspect step with the gsd-core directories` });
-  }
+  const dirs = gsdDirsRecorded(onboarding.onboardingId, steps.value);
+  if (!dirs.ok) return dirs;
+  const { gsdCoreDir, agentsDir } = dirs.value;
 
   const project = deps.ledger.findProject({ projectId: onboarding.projectId });
   if (!project.ok) return project;

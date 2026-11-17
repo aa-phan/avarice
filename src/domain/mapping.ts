@@ -4,6 +4,7 @@ import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import type { ExistingMapClass, ExistingMapOutcome } from './preflight.ts';
 import type { RefreshPlan } from './refresh-plan.ts';
+import { normalizedAbsoluteRoot } from './normalized-root.ts';
 
 export const MAPPING_MODES = ['skip', 'adopt', 'fast', 'full', 'paths'] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
@@ -69,6 +70,22 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
     default:
       throw new TypeError(`unknown mapping mode ${String(mode)}`);
   }
+}
+
+// The prompt of a restricted onboarding's map. The restricted host has no shell, so the model cannot resolve a home directory and, left to guess, reads a path that
+// does not exist and that the hook refuses (the first live restricted onboarding, plan 04-34). The prompt therefore names the absolute workflow files the skill loads,
+// under the same gsd-core root the hook policy holds as a read root (the caller passes that value; nothing here reads the environment). A root that is not a
+// normalized absolute path throws a RootRefusedError, so a guess never reaches the model. The text names no home-directory form.
+export function restrictedMapPrompt(prompt: string, gsdCoreDir: string): string {
+  const root = normalizedAbsoluteRoot(gsdCoreDir, 'the gsd-core directory');
+  return [
+    prompt,
+    'This session has no shell, so no path can be looked up or expanded, and none may be guessed. GSD lives at one absolute path:',
+    `- gsd-core root: ${root}`,
+    `- map workflow: ${root}/workflows/map-codebase.md`,
+    `- fast scan workflow: ${root}/workflows/scan.md`,
+    'Read a workflow spec from the absolute path above with the Read tool, wherever the skill says it is. Any other file the specs name under gsd-core is under that root.',
+  ].join('\n');
 }
 
 // GSD's default `workflow.drift_threshold`; the refresh planner (refresh-plan.ts) reuses it as the number of new top-level directories that sends a

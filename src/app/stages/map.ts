@@ -11,8 +11,9 @@ import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import { hostOfOnboarding, isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
-import { isScopePath, requiredFilesFor } from '../../domain/mapping.ts';
-import { completeInvocation, prepareInvocation } from '../invocation.ts';
+import { isScopePath, requiredFilesFor, restrictedMapPrompt } from '../../domain/mapping.ts';
+import { RootRefusedError } from '../../domain/normalized-root.ts';
+import { completeInvocation, onboardingGsdDirs, prepareInvocation } from '../invocation.ts';
 
 const MAP_PROMPT = '/gsd-map-codebase';
 const FAST_MAP_PROMPT = '/gsd-map-codebase --fast';
@@ -77,8 +78,22 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   }
   if (host === undefined) return err({ kind: 'internal', cause: 'no host is composed' });
 
+  // The restricted host has no shell to resolve a home directory, so its prompt names the absolute gsd-core paths (plan 04-34), from the directories GSD's inspect
+  // recorded, the same source as the invocation's read roots. A root that cannot be named is refused here, before a unit of budget is reserved.
+  let prompt = promptFor(mode, plan.value?.existingMapAnswer, scope);
+  if (plan.value?.restricted === true) {
+    const dirs = onboardingGsdDirs(deps, row.onboardingId);
+    if (!dirs.ok) return dirs;
+    try {
+      prompt = restrictedMapPrompt(prompt, dirs.value.gsdCoreDir);
+    } catch (cause) {
+      if (!(cause instanceof RootRefusedError)) throw cause;
+      return err({ kind: 'invalid', field: 'gsdCoreDir', reason: cause.message });
+    }
+  }
+
   // Reserve the invocation and prepare its request (scope, session ID, step `launch:map` recorded as started).
-  const prepared = prepareInvocation(deps, row, 'map', promptFor(mode, plan.value?.existingMapAnswer, scope), { expectedFiles: [...requiredFilesFor(mode)] });
+  const prepared = prepareInvocation(deps, row, 'map', prompt, { expectedFiles: [...requiredFilesFor(mode)] });
   if (!prepared.ok) return prepared;
   if (!prepared.value.granted) {
     ctx.note(`the ${prepared.value.budget} budget is exhausted, so no map invocation was started`);
