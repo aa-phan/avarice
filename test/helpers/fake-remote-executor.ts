@@ -13,7 +13,7 @@ import { err } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import type { CommandExecutor, CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
-import { SeededFaults, sleep } from './seeded-faults.ts';
+import { SeededFaults, callId, sleep } from './seeded-faults.ts';
 
 // A dropped response is retried this many times in all; a link that loses this many in a row is a partition, which this proof does not claim to show.
 export const EXECUTOR_MAX_ATTEMPTS = 6;
@@ -32,6 +32,7 @@ export class FakeRemoteExecutor implements CommandExecutor {
   readonly faults: SeededFaults;
   private readonly inner: CommandExecutor;
   private readonly maxAttempts: number;
+  private calls = 0;
   // The server: the response text of a command by invocation key, kept from the first run until the client has received it.
   private readonly server = new Map<string, Promise<string>>();
 
@@ -61,20 +62,21 @@ export class FakeRemoteExecutor implements CommandExecutor {
       return err({ kind: 'invalid', field: 'cmd', reason: `cannot be serialized: ${error instanceof Error ? error.message : String(error)}` });
     }
     const key = invocationKey(cmd, wire);
+    const call = callId((this.calls += 1));
     const started = Date.now();
     try {
       for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
         await sleep(this.faults.latencyMs());
-        const response = await this.serve(key, wire, signal);
+        const response = await this.serve(key, call, wire, signal);
         await sleep(this.faults.latencyMs());
         if (this.faults.drop()) {
           // The response never arrives. The client cannot tell a lost request from a lost response, so it asks again by key.
-          this.faults.record({ port: 'executor', kind: 'drop', key });
+          this.faults.record({ port: 'executor', kind: 'drop', key, call });
           continue;
         }
         if (this.faults.duplicate()) {
           // The same response arrives twice; the second copy is for a key the client has already settled, so it is discarded.
-          this.faults.record({ port: 'executor', kind: 'duplicate', key });
+          this.faults.record({ port: 'executor', kind: 'duplicate', key, call });
         }
         this.server.delete(key);
         return JSON.parse(response) as Result<CommandResult>;
@@ -88,11 +90,11 @@ export class FakeRemoteExecutor implements CommandExecutor {
   }
 
   // The server side of one call: the first request for a key runs the command; any later request for the key gets the stored answer.
-  private serve(key: string, wire: string, signal: AbortSignal | undefined): Promise<string> {
+  private serve(key: string, call: string, wire: string, signal: AbortSignal | undefined): Promise<string> {
     const known = this.server.get(key);
     if (known !== undefined) return known;
     const answer = (async (): Promise<string> => {
-      this.faults.record({ port: 'executor', kind: 'inner-call', key });
+      this.faults.record({ port: 'executor', kind: 'inner-call', key, call });
       const result = await this.inner.run(JSON.parse(wire) as CommandSpec, signal);
       return JSON.stringify(result);
     })();

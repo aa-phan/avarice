@@ -23,6 +23,9 @@ export interface FaultEvent {
   kind: FaultKind;
   // The invocation key (executor) or the digest (artifact store) the event is about.
   key: string;
+  // The call the event belongs to, `<pid>.<n>`: n counts the calls of one fake. A call is one request of the client, retries included, so the invocation key alone
+  // cannot tell a retry from a second request that happens to carry the same key (the GSD adapter names every `graphify status` `gsd:graphify`).
+  call: string;
 }
 
 export interface FaultCounts {
@@ -99,6 +102,11 @@ export function countFaults(events: readonly FaultEvent[]): FaultCounts {
 }
 
 // A sink that appends each event as one JSON line, for a test entry whose events a parent test reads after the process is gone.
+// A call id for the next call of a fake: the process that made it and its ordinal.
+export function callId(ordinal: number): string {
+  return `${process.pid}.${ordinal}`;
+}
+
 export function fileSink(path: string): (event: FaultEvent) => void {
   return (event) => appendFileSync(path, `${JSON.stringify(event)}\n`);
 }

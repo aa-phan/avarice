@@ -13,7 +13,7 @@ import { err, ok } from '../../src/domain/result.ts';
 import type { PortError, Result } from '../../src/domain/result.ts';
 import type { ArtifactMeta, ArtifactStore } from '../../src/ports/artifact-store.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
-import { SeededFaults, sleepSync } from './seeded-faults.ts';
+import { SeededFaults, callId, sleepSync } from './seeded-faults.ts';
 
 export const STORE_MAX_ATTEMPTS = 3;
 
@@ -24,6 +24,7 @@ export class FakeRemoteArtifactStore implements ArtifactStore {
   readonly faults: SeededFaults;
   private readonly remote: LocalArtifactStore;
   private readonly maxAttempts: number;
+  private calls = 0;
 
   // `remoteRoot` is the data root of the store that plays the remote (its blobs are under `<remoteRoot>/artifacts`).
   constructor(remoteRoot: string, faults: SeededFaults, options: { maxAttempts?: number } = {}) {
@@ -61,16 +62,17 @@ export class FakeRemoteArtifactStore implements ArtifactStore {
   // One round trip: serialize the request, let the remote answer it, take the latency, and retry while the response is lost.
   private call<T>(op: string, request: string, serve: (wire: string) => string, decode: (value: unknown) => T, keyOf: (wire: string) => string): Result<T> {
     const key = keyOf(request);
+    const call = callId((this.calls += 1));
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       sleepSync(this.faults.latencyMs());
       // The remote answers every request that reaches it; a retry of an idempotent request is answered the same way.
       const response = serve(request);
       sleepSync(this.faults.latencyMs());
       if (this.faults.drop()) {
-        this.faults.record({ port: 'artifact-store', kind: 'drop', key });
+        this.faults.record({ port: 'artifact-store', kind: 'drop', key, call });
         continue;
       }
-      if (this.faults.duplicate()) this.faults.record({ port: 'artifact-store', kind: 'duplicate', key });
+      if (this.faults.duplicate()) this.faults.record({ port: 'artifact-store', kind: 'duplicate', key, call });
       const wire = JSON.parse(response) as WireResult;
       return wire.ok ? ok(decode(wire.value)) : err(wire.error);
     }
