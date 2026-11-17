@@ -48,6 +48,18 @@ export interface RunReferenceView {
   revision: string;
 }
 
+// A piece of evidence the owner brought in by hand (plan 04-27; `avarice evidence add`). It is never a measurement and never a gate input, so it is listed apart from
+// `evidence`. `ref` is where the owner said it lives, `recordedBy` the OS user who recorded it and `recordedAt` the time of the row.
+export interface RunManualEvidenceView {
+  evidenceId: string;
+  kind: string;
+  name: string;
+  status: string;
+  ref?: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
 // A reference the run recorded whose last refresh did not find it fresh (plan 04-20): `stale` (the index was built before the repository's current HEAD),
 // or `changed`, `deleted`, `access_revoked` or `unavailable`. The ID is the provider's own, verbatim.
 export interface RunStaleReferenceView {
@@ -140,6 +152,8 @@ export interface RunStatus {
   // Appended under the frozen-shapes rule (plan 04-23; D-12): present, and `true`, only for a run started with `--restricted` (its stored contract says so). A contained run has no
   // such key, so every output a contained run produced before stays byte-identical.
   restricted?: true;
+  // Appended under the frozen-shapes rule (plan 04-27): the evidence the owner recorded by hand, in the order it was recorded. Present only when there is one.
+  manualEvidence?: RunManualEvidenceView[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -168,6 +182,19 @@ function finalEvidence(rows: readonly EvidenceRow[]): EvidenceRow[] {
     if (held === undefined || isFinal || !heldFinal) picked.set(row.name, row);
   }
   return [...picked.values()];
+}
+
+// The evidence recorded by hand, in the order the rows were inserted (the ledger returns them by row). A row is manual when it says so in its environment and its kind is one
+// of the three the owner can record; no other row is listed, so a measured row can never appear here.
+const MANUAL_EVIDENCE_KINDS: readonly string[] = ['ci', 'review', 'manual'];
+function manualEvidenceOf(rows: readonly EvidenceRow[]): RunManualEvidenceView[] {
+  return rows
+    .filter((row) => MANUAL_EVIDENCE_KINDS.includes(row.kind) && row.environment['source'] === 'manual')
+    .map((row) => {
+      const ref = row.environment['ref'];
+      const by = row.environment['recordedBy'];
+      return { evidenceId: row.evidenceId, kind: row.kind, name: row.name, status: row.status, ...(typeof ref === 'string' ? { ref } : {}), recordedBy: typeof by === 'string' ? by : 'unknown', recordedAt: row.createdAt };
+    });
 }
 
 function latestGates(rows: readonly GateResultRow[]): GateResultRow[] {
@@ -273,6 +300,7 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
   const named = lastCheckpointOf(inputs.checkpoints);
   const evidence = finalEvidence(inputs.evidence);
   const notRun = checksNotRunOf(inputs.contract === null ? null : inputs.contract.body);
+  const manual = manualEvidenceOf(inputs.evidence);
   const stale = inputs.taskRefs.filter((r) => r.freshness !== 'fresh').map((r) => ({ provider: r.provider, kind: r.kind, id: r.id, freshness: r.freshness }));
 
   return {
@@ -297,6 +325,7 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
     ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
     ...(stale.length > 0 ? { staleReferences: stale } : {}),
     ...(isRestricted(inputs.contract === null ? null : inputs.contract.body) ? { restricted: true as const } : {}),
+    ...(manual.length > 0 ? { manualEvidence: manual } : {}),
   };
 }
 

@@ -117,6 +117,10 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
     ...(run.checksNotRun ?? []).map(notRunEntry),
   ];
   detail(evidenceEntries.length === 0 ? 'evidence: none' : `evidence: ${evidenceEntries.join(', ')}`);
+  // Evidence the owner recorded by hand (plan 04-27), in the order it was recorded; it is no check and no gate input, so it has its own line, and only when there is one.
+  if (run.manualEvidence !== undefined && run.manualEvidence.length > 0) {
+    detail(`manual evidence (satisfies no gate): ${run.manualEvidence.map((m) => `${stripControl(m.name)}${m.ref === undefined ? '' : ` ${stripControl(m.ref)}`}`).join('; ')}`);
+  }
   detail(run.gates.length === 0 ? 'gates: none' : `gates: ${run.gates.map((g) => `${stripControl(g.gate)} ${g.passed ? 'passed' : 'failed'}`).join(', ')}`);
   for (const item of run.items ?? []) detail(itemLine(run, item));
   if (run.openDecisions > 0) detail(`decisions: ${run.openDecisions} open (see avarice inbox)`);

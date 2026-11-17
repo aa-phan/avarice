@@ -450,3 +450,73 @@ describe('every manual command is listed by `avarice --help` (FR-19)', () => {
     for (const name of ['context', 'evidence', 'pr', 'comment', 'approve']) assert.match(help.stdout, new RegExp(`^  ${name}$`, 'm'));
   });
 });
+
+// ---- status lists manual evidence in the order it was recorded ----------------------------------------------------------------------------------------------------
+
+interface StatusRun {
+  runId: string;
+  evidence: Array<{ name: string; kind: string; status: string }>;
+  gates: unknown[];
+  manualEvidence?: Array<{ evidenceId: string; kind: string; name: string; status: string; ref?: string; recordedBy: string; recordedAt: string }>;
+  [key: string]: unknown;
+}
+
+describe('`status` lists the manual evidence of a run in the order it was recorded and leaves every other key as it was (FR-19)', () => {
+  const f = completedRun();
+  const readStatus = (): StatusRun => runStatusJson(f.roots, f.runId) as unknown as StatusRun;
+  const before = readStatus();
+
+  it('has no manualEvidence key before anything is recorded', () => {
+    assert.equal('manualEvidence' in before, false);
+  });
+
+  it('lists three rows in insertion order after three adds, each with its kind, name, ref, who recorded it and when', () => {
+    const adds: Array<{ kind: string; file: string; ref?: string }> = [
+      { kind: 'review', file: writeInput(f, 'b-review.md', 'Looks good.\n'), ref: 'https://review.example.com/r/4' },
+      { kind: 'ci', file: writeInput(f, 'a-ci.txt', 'all green\n'), ref: CI_URL },
+      { kind: 'manual', file: writeInput(f, 'c-note.txt', 'Checked by hand on the staging box.\n') },
+    ];
+    for (const add of adds) {
+      const ran = cli(f, ['evidence', 'add', '--kind', add.kind, '--file', add.file, ...(add.ref === undefined ? [] : ['--ref', add.ref]), '--run', f.runId]);
+      assert.equal(ran.code, 0, `${ran.stdout}${ran.stderr}`);
+    }
+    const listed = readStatus().manualEvidence ?? [];
+    assert.deepEqual(
+      listed.map((m) => [m.kind, m.name, m.ref]),
+      [
+        ['review', 'review:b-review.md', 'https://review.example.com/r/4'],
+        ['ci', 'ci:a-ci.txt', CI_URL],
+        ['manual', 'manual:c-note.txt', undefined],
+      ],
+      'in the order recorded, not sorted by kind or name',
+    );
+    for (const m of listed) {
+      assert.equal(m.status, 'inconclusive');
+      assert.ok(m.recordedBy !== '');
+      assert.ok(!Number.isNaN(Date.parse(m.recordedAt)));
+    }
+    const dbOrder = manualEvidence(f.roots, f.runId).map((e) => e.evidence_id);
+    assert.deepEqual(
+      listed.map((m) => m.evidenceId),
+      dbOrder,
+    );
+  });
+
+  it('changes no other key of the run: the measured evidence, the gates and every other field read as they did before', () => {
+    const { manualEvidence: _listed, ...rest } = readStatus();
+    assert.deepEqual(rest, before);
+  });
+
+  it('shows one line for them in the human view, after the measured evidence, and none for a run without any', () => {
+    const shown = cli(f, ['status']);
+    assert.equal(shown.code, 0, `${shown.stdout}${shown.stderr}`);
+    const lines = shown.stdout.split('\n');
+    const evidenceLine = lines.findIndex((l) => /^\s+evidence: /.test(l));
+    const manualLine = lines.findIndex((l) => /^\s+manual evidence \(satisfies no gate\): /.test(l));
+    assert.ok(evidenceLine !== -1 && manualLine === evidenceLine + 1, shown.stdout);
+    const [reviewAt, ciAt, noteAt] = ['review:b-review.md', 'ci:a-ci.txt', 'manual:c-note.txt'].map((name) => (lines[manualLine] as string).indexOf(name));
+    assert.ok((reviewAt as number) !== -1 && (reviewAt as number) < (ciAt as number) && (ciAt as number) < (noteAt as number), lines[manualLine]);
+    const plain = completedRun();
+    assert.ok(!/manual evidence/.test(cli(plain, ['status']).stdout));
+  });
+});
