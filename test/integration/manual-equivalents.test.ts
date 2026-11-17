@@ -9,11 +9,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
-import { makeRoots, runCli } from '../helpers/run-cli.ts';
-import { RUN_EXPIRY_WAIT_MS, resumeRunCli, rows, runRunWithFault, sleepSync } from '../helpers/fault-run.ts';
+import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { RUN_EXPIRY_WAIT_MS, resumeRunCli, rows, runIdFromOutput, runRunWithFault, runStatusJson, sleepSync } from '../helpers/fault-run.ts';
+import { offlineAvailable, runOffline } from '../helpers/offline.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { SECRET_CORPUS, scanForCorpus, scanTotal } from '../helpers/secret-corpus.ts';
-import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, makeRunRepo, onboardRunRepo, writeBrief } from '../helpers/run-fixtures.ts';
+import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, makeRunRepo, onboardRunRepo, startWithFakeRunHost, writeBrief } from '../helpers/run-fixtures.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
 const cleanup: string[] = [];
@@ -63,6 +64,23 @@ interface TaskRefDb {
 const taskRefsOf = (roots: CliRoots, runId: string): TaskRefDb[] =>
   rows<TaskRefDb>(roots, 'SELECT provider, kind, ext_id, revision, retrieved_at, scope, freshness FROM task_refs WHERE run_id = ? ORDER BY provider, kind, ext_id', runId);
 const manualRefs = (roots: CliRoots, runId: string): TaskRefDb[] => taskRefsOf(roots, runId).filter((r) => r.provider === 'manual-context');
+
+// Everything a profile holds as text: every file under the data root except the store's own files, and the text columns of the ledger that carry what was recorded.
+function dumpOf(f: Fixture, extra: readonly string[] = []): string[] {
+  const dumped: string[] = [...extra];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (!/^state\.db/.test(entry.name)) dumped.push(readFileSync(path, 'utf8'));
+    }
+  };
+  if (existsSync(f.roots.AVARICE_DATA_ROOT)) walk(f.roots.AVARICE_DATA_ROOT);
+  for (const sql of ['SELECT data_json AS t FROM events', 'SELECT result_json AS t FROM run_steps', 'SELECT ext_id || scope AS t FROM task_refs', 'SELECT environment_json AS t FROM evidence']) {
+    for (const row of rows<{ t: string }>(f.roots, sql)) dumped.push(row.t);
+  }
+  return dumped;
+}
 
 // ---- context add ---------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -193,19 +211,239 @@ describe('`context add` stores the excerpt redacted (T-04-75)', () => {
     // Not vacuous: the excerpt is stored, and what is stored carries the redaction markers where the secrets were.
     const stored = rows<{ digest: string }>(f.roots, "SELECT digest FROM artifacts WHERE run_id = ? AND kind = 'manual-context'", runId);
     assert.equal(stored.length, 1);
-    const dumped: string[] = [added.stdout, added.stderr];
-    const walk = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) walk(path);
-        else if (!/state\.db/.test(entry.name)) dumped.push(readFileSync(path, 'utf8'));
-      }
-    };
-    if (existsSync(f.roots.AVARICE_DATA_ROOT)) walk(f.roots.AVARICE_DATA_ROOT);
-    for (const sql of ['SELECT data_json AS t FROM events', 'SELECT result_json AS t FROM run_steps', 'SELECT ext_id || scope AS t FROM task_refs']) {
-      for (const row of rows<{ t: string }>(f.roots, sql)) dumped.push(row.t);
-    }
+    const dumped = dumpOf(f, [added.stdout, added.stderr]);
     assert.equal(scanTotal(scanForCorpus(dumped.join('\n'))), 0);
     assert.ok(dumped.some((text) => text.includes('[REDACTED')), 'the stored excerpt carries redaction markers');
+  });
+});
+
+// ---- evidence add, pr record and comment --print -------------------------------------------------------------------------------------------------------------
+
+interface Completed extends Fixture {
+  runId: string;
+}
+
+const runStateOf = (roots: CliRoots, runId: string): string | undefined => rows<{ state: string }>(roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state;
+
+// A run the fake host carried to the end: attempts, measured evidence and gate results exist, so manual rows have something to sit beside and to leave unchanged.
+function completedRun(): Completed {
+  const f = fixture();
+  const started = startWithFakeRunHost(f.roots, f.repo, f.brief, FIX as Record<string, unknown>);
+  const runId = runIdFromOutput(started.stdout);
+  assert.equal(runStateOf(f.roots, runId), 'ready_for_review', `${started.stdout}${started.stderr}`);
+  return { ...f, runId };
+}
+
+interface EvidenceDb {
+  evidence_id: string;
+  attempt_id: string;
+  kind: string;
+  name: string;
+  status: string;
+  revision: string;
+  independence: string;
+  environment_json: string;
+  artifact_digest: string | null;
+  created_at: string;
+}
+const MANUAL_KINDS = "('ci', 'review', 'manual')";
+const manualEvidence = (roots: CliRoots, runId: string): EvidenceDb[] =>
+  rows<EvidenceDb>(roots, `SELECT e.* FROM evidence e JOIN attempts a ON a.attempt_id = e.attempt_id WHERE a.run_id = ? AND e.kind IN ${MANUAL_KINDS} ORDER BY e.rowid`, runId);
+const gatesOf = (roots: CliRoots, runId: string): string => JSON.stringify(rows(roots, 'SELECT * FROM gate_results WHERE run_id = ? ORDER BY rowid', runId));
+const countOf = (roots: CliRoots, table: string): number => rows<{ n: number }>(roots, `SELECT count(*) AS n FROM ${table}`)[0]?.n ?? 0;
+const NO_SUCH_RUN = 'run_00000000000000000000000000';
+
+const CI_URL = 'https://ci.example.com/runs/9';
+
+describe('`evidence add` records a CI log or a review as manual evidence that never satisfies a gate (FR-19, T-04-74, T-04-75)', () => {
+  const f = completedRun();
+  const secrets = SECRET_CORPUS.map((e) => e.text).join('\n');
+  const log = writeInput(f, 'ci-log.txt', `step 1 ok\nstep 2 ok\n${secrets}\n`);
+  const note = writeInput(f, 'review.md', 'Approved with one nit: rename the helper.\n');
+  const gatesBefore = gatesOf(f.roots, f.runId);
+  const checkRowsBefore = countOf(f.roots, "evidence WHERE kind = 'check'");
+  let first: EvidenceDb;
+
+  it('exits 0, stores the log redacted as artifact kind manual-evidence and inserts one evidence row of kind ci with source manual and the ref', () => {
+    assert.ok(scanTotal(scanForCorpus(readFileSync(log, 'utf8'))) > 0, 'positive control: the log holds the corpus');
+    const added = cli(f, ['evidence', 'add', '--kind', 'ci', '--file', log, '--ref', CI_URL, '--run', f.runId]);
+    assert.equal(added.code, 0, `${added.stdout}${added.stderr}`);
+    const recorded = manualEvidence(f.roots, f.runId);
+    assert.equal(recorded.length, 1);
+    first = recorded[0] as EvidenceDb;
+    assert.equal(first.kind, 'ci');
+    const environment = JSON.parse(first.environment_json) as Record<string, unknown>;
+    assert.equal(environment['source'], 'manual');
+    assert.equal(environment['ref'], CI_URL);
+    assert.equal(environment['fileDigest'], sha256(readFileSync(log)));
+    assert.equal(typeof environment['recordedBy'], 'string');
+    assert.equal(first.independence, 'external');
+    assert.ok(first.artifact_digest !== null);
+    const artifact = rows<{ kind: string }>(f.roots, 'SELECT kind FROM artifacts WHERE digest = ?', first.artifact_digest as string);
+    assert.equal(artifact[0]?.kind, 'manual-evidence');
+    const dumped = dumpOf(f, [added.stdout, added.stderr]);
+    assert.equal(scanTotal(scanForCorpus(dumped.join('\n'))), 0, 'no corpus secret is stored anywhere');
+    assert.ok(dumped.some((text) => text.includes('[REDACTED')), 'the stored log carries redaction markers');
+  });
+
+  it('is not a measurement: the row is inconclusive and sits on a revision no gate judges, so no gate result and no run state changed', () => {
+    assert.equal(first.status, 'inconclusive');
+    assert.ok(first.revision.startsWith('manual:'), first.revision);
+    assert.equal(gatesOf(f.roots, f.runId), gatesBefore);
+    assert.equal(runStateOf(f.roots, f.runId), 'ready_for_review');
+    assert.equal(countOf(f.roots, "evidence WHERE kind = 'check'"), checkRowsBefore);
+  });
+
+  it('a second add inserts a second row and leaves the first exactly as it was', () => {
+    const added = cli(f, ['evidence', 'add', '--kind', 'review', '--file', note, '--run', f.runId]);
+    assert.equal(added.code, 0, `${added.stdout}${added.stderr}`);
+    const recorded = manualEvidence(f.roots, f.runId);
+    assert.equal(recorded.length, 2);
+    assert.deepEqual(recorded[0], first);
+    assert.equal((recorded[1] as EvidenceDb).kind, 'review');
+    assert.equal(gatesOf(f.roots, f.runId), gatesBefore);
+  });
+
+  it('an empty file exits 64 and records nothing (empty edge)', () => {
+    const empty = writeInput(f, 'empty.txt', '');
+    const artifactsBefore = countOf(f.roots, 'artifacts');
+    const refused = cli(f, ['evidence', 'add', '--kind', 'ci', '--file', empty, '--run', f.runId]);
+    assert.equal(refused.code, 64, `${refused.stdout}${refused.stderr}`);
+    assert.equal(manualEvidence(f.roots, f.runId).length, 2);
+    assert.equal(countOf(f.roots, 'artifacts'), artifactsBefore);
+  });
+
+  it('a kind outside ci, review and manual exits 64 and names the three', () => {
+    const refused = cli(f, ['evidence', 'add', '--kind', 'deploy', '--file', note, '--run', f.runId]);
+    assert.equal(refused.code, 64, `${refused.stdout}${refused.stderr}`);
+    for (const kind of ['ci', 'review', 'manual']) assert.match(refused.stderr, new RegExp(kind));
+    assert.equal(manualEvidence(f.roots, f.runId).length, 2);
+  });
+
+  it('exits 64 inside a run and without a file or a kind, and 3 for an unknown run, recording nothing', () => {
+    const inside = cli(f, ['evidence', 'add', '--kind', 'ci', '--file', note, '--run', f.runId], { AVARICE_RUN: f.runId });
+    assert.equal(inside.code, 64, `${inside.stdout}${inside.stderr}`);
+    assert.match(inside.stderr, /AVARICE_RUN/);
+    assert.equal(cli(f, ['evidence', 'add', '--kind', 'ci', '--run', f.runId]).code, 64);
+    assert.equal(cli(f, ['evidence', 'add', '--file', note, '--run', f.runId]).code, 64);
+    assert.equal(cli(f, ['evidence', 'add', '--kind', 'ci', '--file', note, '--run', NO_SUCH_RUN]).code, 3);
+    assert.equal(manualEvidence(f.roots, f.runId).length, 2);
+  });
+});
+
+describe('`evidence add` for a run that has no attempt yet exits 3 and records nothing (FR-19)', () => {
+  const f = fixture();
+  const { runId } = runRunWithFault(f.roots, f.repo, f.brief, 'after-checkpoint:context-pack', FIX);
+  it('has nothing to attach the evidence to', () => {
+    const note = writeInput(f, 'review.md', 'Approved.\n');
+    const refused = cli(f, ['evidence', 'add', '--kind', 'review', '--file', note, '--run', runId]);
+    assert.equal(refused.code, 3, `${refused.stdout}${refused.stderr}`);
+    assert.equal(manualEvidence(f.roots, runId).length, 0);
+  });
+});
+
+describe('`pr record` records a pull request opened in the web UI, offline (FR-19, FR-18, Open Question 9)', () => {
+  const f = completedRun();
+  const URL_OK = 'https://github.example.com/acme/tool/pull/123';
+  const record = (argv: readonly string[], env: Record<string, string | undefined> = {}): CliResult => cli(f, ['pr', 'record', ...argv], env);
+
+  it('records a github pull-request reference with the owner, repository and number verbatim and the URL as the scope, under a wrapper that denies the network', { skip: !offlineAvailable() }, () => {
+    const ran = runOffline(['pr', 'record', URL_OK, '--run', f.runId], { roots: f.roots, entry: PRODUCTION_ENTRY });
+    assert.equal(ran.code, 0, `${ran.stdout}${ran.stderr}`);
+    const refs = taskRefsOf(f.roots, f.runId).filter((r) => r.provider === 'github');
+    assert.equal(refs.length, 1);
+    const ref = refs[0] as TaskRefDb;
+    assert.equal(ref.kind, 'pull-request');
+    assert.equal(ref.ext_id, 'acme/tool#123');
+    assert.equal(ref.scope, URL_OK);
+    assert.equal(ref.freshness, 'fresh');
+  });
+
+  it('keeps the spelling of the owner and the repository, and records one reference for the same pull request twice', () => {
+    const first = record(['https://github.example.com/Acme-Corp/Tool.js/pull/7/', '--run', f.runId]);
+    assert.equal(first.code, 0, `${first.stdout}${first.stderr}`);
+    assert.equal(record(['https://github.example.com/Acme-Corp/Tool.js/pull/7', '--run', f.runId]).code, 0);
+    const refs = taskRefsOf(f.roots, f.runId).filter((r) => r.provider === 'github' && r.ext_id === 'Acme-Corp/Tool.js#7');
+    assert.equal(refs.length, 1);
+    assert.equal(refs[0]?.scope, 'https://github.example.com/Acme-Corp/Tool.js/pull/7');
+  });
+
+  it('refuses any other path, a URL that is not a pull request, one with credentials, another scheme and a word that is not a URL, each with exit 64', () => {
+    const before = taskRefsOf(f.roots, f.runId).length;
+    for (const bad of [
+      'https://github.example.com/acme/tool/issues/5',
+      'https://github.example.com/acme/tool/pull/abc',
+      'https://github.example.com/acme/tool/pull/0',
+      'https://github.example.com/acme/pull/5',
+      'https://github.example.com/acme/tool/pull/5/files',
+      'https://deploy:hunter2@github.example.com/acme/tool/pull/5',
+      'ftp://github.example.com/acme/tool/pull/5',
+      'not-a-url',
+    ]) {
+      const refused = record([bad, '--run', f.runId]);
+      assert.equal(refused.code, 64, `${bad}: ${refused.stdout}${refused.stderr}`);
+    }
+    assert.equal(taskRefsOf(f.roots, f.runId).length, before);
+  });
+
+  it('exits 64 inside a run and 3 for an unknown run', () => {
+    assert.equal(record([URL_OK, '--run', f.runId], { AVARICE_RUN: f.runId }).code, 64);
+    assert.equal(record([URL_OK, '--run', NO_SUCH_RUN]).code, 3);
+  });
+
+  it('a resume does not turn a recorded pull request into a warning or a block', () => {
+    const resumed = resumeRunCli(f.roots, f.runId, FIX);
+    assert.ok(!/could not be refreshed/.test(`${resumed.stdout}${resumed.stderr}`), `${resumed.stdout}${resumed.stderr}`);
+    assert.equal(runStateOf(f.roots, f.runId), 'ready_for_review');
+  });
+});
+
+describe('`comment --print` prints a body built only from ledger rows and writes nothing (FR-19)', () => {
+  const f = completedRun();
+  const tables = ['events', 'evidence', 'task_refs', 'artifacts', 'run_steps', 'runs', 'decisions', 'gate_results'];
+  const counts = (): number[] => tables.map((t) => countOf(f.roots, t));
+
+  it('lists the run, its item states and each passed check with its revision, and says there is no open decision', () => {
+    const status = runStatusJson(f.roots, f.runId) as unknown as { title: string; state: string; evidence: Array<{ name: string; status: string; revision: string }>; items: Array<{ itemId: string; state: string }> };
+    const before = counts();
+    const printed = cli(f, ['comment', '--print', '--run', f.runId]);
+    assert.equal(printed.code, 0, `${printed.stdout}${printed.stderr}`);
+    assert.ok(printed.stdout.includes(f.runId));
+    assert.ok(printed.stdout.includes(status.title));
+    assert.ok(printed.stdout.includes(status.state));
+    for (const item of status.items) assert.ok(printed.stdout.includes(`${item.itemId}: ${item.state}`), printed.stdout);
+    const passed = status.evidence.filter((e) => e.status === 'passed');
+    assert.ok(passed.length > 0, 'the run passed at least one check');
+    for (const e of passed) assert.ok(printed.stdout.includes(`${e.name} passed at ${e.revision}`), printed.stdout);
+    assert.match(printed.stdout, /open decisions: none/);
+    assert.deepEqual(counts(), before, 'nothing was written');
+  });
+
+  it('exits 64 without --print (nothing posts a comment) or without --run, and 3 for an unknown run', () => {
+    assert.equal(cli(f, ['comment', '--run', f.runId]).code, 64);
+    assert.equal(cli(f, ['comment', '--print', '--run', NO_SUCH_RUN]).code, 3);
+    assert.equal(cli(f, ['comment', '--print']).code, 64);
+  });
+
+  it('names an open decision of a blocked run', () => {
+    const blocked = fixture();
+    const killed = runRunWithFault(blocked.roots, blocked.repo, blocked.brief, 'after-checkpoint:context-pack#2', FIX);
+    sleepSync(RUN_EXPIRY_WAIT_MS);
+    writeFileSync(blocked.brief, `${readFileSync(blocked.brief, 'utf8')}\nA later line the run was not built from.\n`);
+    resumeRunCli(blocked.roots, killed.runId, FIX);
+    const decisions = rows<{ decision_id: string }>(blocked.roots, "SELECT decision_id FROM decisions WHERE run_id = ? AND state = 'open'", killed.runId);
+    assert.equal(decisions.length, 1);
+    const printed = cli(blocked, ['comment', '--print', '--run', killed.runId]);
+    assert.equal(printed.code, 0, `${printed.stdout}${printed.stderr}`);
+    assert.ok(printed.stdout.includes((decisions[0] as { decision_id: string }).decision_id), printed.stdout);
+    assert.ok(!/open decisions: none/.test(printed.stdout));
+  });
+});
+
+describe('every manual command is listed by `avarice --help` (FR-19)', () => {
+  it('names context, evidence, pr, comment and approve', () => {
+    const help = runCli(['--help']);
+    assert.equal(help.code, 0);
+    for (const name of ['context', 'evidence', 'pr', 'comment', 'approve']) assert.match(help.stdout, new RegExp(`^  ${name}$`, 'm'));
   });
 });
