@@ -9,7 +9,7 @@ import { createServer } from 'node:net';
 import type { Server } from 'node:net';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { startAllowlistProxy } from '../../src/adapters/exec/allowlist-proxy.ts';
+import { AllowlistEgressProxy, startAllowlistProxy } from '../../src/adapters/exec/allowlist-proxy.ts';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { buildInvocationEnv } from '../../src/adapters/host-claude/env.ts';
 import { err, ok } from '../../src/domain/result.ts';
@@ -47,7 +47,7 @@ async function registry(): Promise<number> {
 const TEST_REGISTRY = 'registry.avarice.test';
 function proxyAlso(extra: readonly string[]): EgressProxy {
   const resolve = (host: string): Promise<Result<string>> => Promise.resolve(host === TEST_REGISTRY ? ok('127.0.0.1') : err({ kind: 'invalid', field: 'host', reason: `${host} is not the test registry` }));
-  return { start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra], resolve }) };
+  return { descriptor: new AllowlistEgressProxy().descriptor, start: (input) => startAllowlistProxy({ ...input, allow: [...input.allow, ...extra], resolve }) };
 }
 
 interface Fixture {
@@ -175,7 +175,7 @@ describe('an install that goes wrong is a decision or an enforcement failure, ne
     assert.equal(stepNamed(f, first.runId, 'deps:install')?.status, 'failed');
 
     const g = fixture(install('registry.avarice.test:1'));
-    const noProxy: EgressProxy = { start: () => Promise.resolve(err({ kind: 'unavailable', cause: 'forced' })) };
+    const noProxy: EgressProxy = { descriptor: new AllowlistEgressProxy().descriptor, start: () => Promise.resolve(err({ kind: 'unavailable', cause: 'forced' })) };
     const second = await runInProcess(g.roots, g.repo, g.brief, FIX, { egress: noProxy });
     assert.deepEqual([second.state, second.reason], ['blocked_on_decision', 'enforcement_failure']);
     assert.equal(second.host.calls.length, 0);

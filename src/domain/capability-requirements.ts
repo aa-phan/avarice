@@ -7,12 +7,15 @@ import type { MappingMode } from './mapping.ts';
 export type StepName =
   | 'run.unit'
   | 'run.check'
+  | 'run.handoff'
+  | 'run.install'
+  | 'onboarding.stage'
   | `onboarding.map.${MappingMode}`
   | 'onboarding.index.graph'
   | 'onboarding.planning.init';
 
 export interface StepRequirement {
-  // The port of the descriptor that must declare it (`agent-host`, `executor`, `gsd-onboarding`, `graph-tool`).
+  // The port of the descriptor that must declare it (`agent-host`, `executor`, `gsd-onboarding`, `graph-tool`, `run-workspace`, `egress-proxy`, `staging-workspace`).
   port: string;
   capability: string;
   // What the owner can do instead, named in the refusal.
@@ -30,20 +33,26 @@ const NO_CONTAINED_HOST = 'none; no unit runs without a contained agent host';
 const NO_SANDBOXED_CHECKS = 'none; checks run only in the OS sandbox with cancellation';
 const NO_MAP_WORKFLOW = 'none; onboarding stops until an admitted gsd-core offers the map workflow';
 const FULL_MAP_IN_STAGING = 'full map in staging';
+const NO_HANDOFF = 'none; without a hand-off the run leaves no review branch in the source';
+const NO_INSTALL_STEP = 'run without the install step: declare no install check';
+const NO_STAGING = 'none; onboarding stops until a staging workspace can prepare a copy';
 // Planning initialization through GSD's ingest-docs is not driven by AVARICE; the owner runs the attended command and AVARICE records the result.
 export const PLANNING_INIT_REDUCED_MODE = 'initialize planning attended with /gsd-new-project; AVARICE records the result';
 
 // The capability keys are the ones the production adapters publish in their descriptors (agent-host: `contained-invocation`, `headless`,
 // `resume`; executor: `remote`, `cancel`, `process-group-kill`; graph-tool: `extract-code`, `cluster`, `knowledge-pass`; gsd-onboarding:
-// `init-onboard`, `map-full`, `map-fast`, `map-paths`, `stamp`, `verify-drift`, `ingest-docs`). A port without a descriptor today
-// (ArtifactStore, StagingWorkspace, RunSource, RunWorkspace, EgressProxy) has no row until it gets one. Declared order is the order a
-// refusal names a missing capability in. `adopt-map` is the name the mapping-mode decision already uses; no adapter declares it.
+// `init-onboard`, `map-full`, `map-fast`, `map-paths`, `stamp`, `verify-drift`, `ingest-docs`; run-workspace: one per method and `handoff`;
+// egress-proxy: `start`, `allowlist`; staging-workspace: one per method). Every port has a descriptor (plan 04-32); a step names a row only when
+// it needs a capability an adapter could lack. Declared order is the order a refusal names a missing capability in. `adopt-map` is the name the mapping-mode decision already uses; no adapter declares it.
 export const STEP_REQUIREMENTS: Readonly<Record<StepName, readonly StepRequirement[]>> = {
   'run.unit': [{ port: 'agent-host', capability: 'contained-invocation', reducedMode: NO_CONTAINED_HOST }],
   'run.check': [
     { port: 'executor', capability: 'cancel', reducedMode: NO_SANDBOXED_CHECKS },
     { port: 'executor', capability: 'process-group-kill', reducedMode: NO_SANDBOXED_CHECKS },
   ],
+  'run.handoff': [{ port: 'run-workspace', capability: 'handoff', reducedMode: NO_HANDOFF }],
+  'run.install': [{ port: 'egress-proxy', capability: 'allowlist', reducedMode: NO_INSTALL_STEP }],
+  'onboarding.stage': [{ port: 'staging-workspace', capability: 'prepare', reducedMode: NO_STAGING }],
   'onboarding.map.skip': [],
   'onboarding.map.adopt': [{ port: 'gsd-onboarding', capability: 'adopt-map', reducedMode: FULL_MAP_IN_STAGING }],
   'onboarding.map.fast': [{ port: 'gsd-onboarding', capability: 'map-fast', reducedMode: NO_MAP_WORKFLOW }],

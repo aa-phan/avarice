@@ -498,8 +498,14 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const artifacts = new RedactingArtifactStore(overrides.artifacts ?? new LocalArtifactStore(profile.dataRoot, {}, { mib: limits.artifactQuotaMiB, profile: profile.profile }), processRedactor);
   // Every composed adapter's descriptor is recorded (FR-16), so a later reader sees what this profile ran with. A read-only command records nothing.
   if (options.readOnly !== true) {
-    const composed: ReadonlyArray<{ name: string; descriptor: CapabilityDescriptor }> = [{ name: 'artifacts', descriptor: artifacts.descriptor }];
-    for (const { name, descriptor } of composed) {
+    const adapters: ReadonlyArray<{ name: string; descriptor: CapabilityDescriptor }> = [
+      { name: 'artifacts', descriptor: artifacts.descriptor },
+      { name: 'staging', descriptor: staging.descriptor },
+      { name: 'run-source', descriptor: runSource.descriptor },
+      { name: 'run-workspace', descriptor: runWorkspace.descriptor },
+      { name: 'egress', descriptor: egress.descriptor },
+    ];
+    for (const { name, descriptor } of adapters) {
       const recorded = ledger.upsertAdapterConfig({ name, port: descriptor.port, adapter: descriptor.adapter, configDigest: digestOf(descriptor), descriptor });
       if (!recorded.ok) {
         store.close();

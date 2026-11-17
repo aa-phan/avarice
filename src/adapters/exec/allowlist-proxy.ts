@@ -13,6 +13,7 @@ import { connect, isIP, isIPv4, isIPv6 } from 'node:net';
 import type { Socket } from 'node:net';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { EgressAttempt, EgressProxy, EgressProxyHandle } from '../../ports/egress-proxy.ts';
 
 // host:port with a plain DNS name or IPv4 literal host and a decimal port.
@@ -235,7 +236,14 @@ export async function startAllowlistProxy(input: { allow: readonly string[]; onA
   });
 }
 
+// One key per EgressProxy method, so a method added to the port cannot go undeclared; `allowlist` is the rule the proxy enforces (only an exact `host:port` is admitted), which a step requirement names.
+const EGRESS_CAPABILITIES: Record<Exclude<keyof EgressProxy, 'descriptor'>, true> & { allowlist: true } = { start: true, allowlist: true };
+// The proxy exists to reach the network on a step's behalf, so it is not offline; it listens on loopback only. The descriptor is built outside the class: a footprint test keeps the class body free of spreads.
+const EGRESS_DESCRIPTOR: CapabilityDescriptor = { port: 'egress-proxy', adapter: 'allowlist', version: '1.0.0', capabilities: { ...EGRESS_CAPABILITIES }, attributes: { loopbackOnly: 'true' }, offline: false };
+
 export class AllowlistEgressProxy implements EgressProxy {
+  readonly descriptor: CapabilityDescriptor = EGRESS_DESCRIPTOR;
+
   start({ allow, onAttempt }: { allow: readonly string[]; onAttempt?: (attempt: EgressAttempt) => void }): Promise<Result<EgressProxyHandle>> {
     return startAllowlistProxy({ allow, onAttempt });
   }

@@ -8,6 +8,9 @@ import { descriptorsOf, requireCapabilities } from '../../src/app/capabilities.t
 import type { AppDeps } from '../../src/app/deps.ts';
 import { GsdOnboardingAdapter } from '../../src/adapters/gsd/gsd-onboarding.ts';
 import { UnavailableAgentHost } from '../../src/adapters/host/unavailable-host.ts';
+import { AllowlistEgressProxy } from '../../src/adapters/exec/allowlist-proxy.ts';
+import { CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
+import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
 import type { CommandExecutor } from '../../src/ports/command-executor.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import type { PortError } from '../../src/domain/result.ts';
@@ -96,6 +99,10 @@ describe('checkRequirements', () => {
       'graph-tool': ['extract-code', 'cluster', 'knowledge-pass'],
       // `adopt-map` is the name the mapping-mode decision already uses for an adopted map; no adapter declares it today.
       'gsd-onboarding': ['init-onboard', 'map-full', 'map-fast', 'map-paths', 'stamp', 'verify-drift', 'ingest-docs', 'adopt-map'],
+      // Plan 04-32: the workspace, egress and staging adapters publish a capability per method, and the two rules named below.
+      'run-workspace': Object.keys(new CloneRunWorkspace().descriptor.capabilities),
+      'egress-proxy': Object.keys(new AllowlistEgressProxy().descriptor.capabilities),
+      'staging-workspace': Object.keys(new CloneStagingWorkspace().descriptor.capabilities),
     };
     for (const [step, rows] of Object.entries(STEP_REQUIREMENTS)) {
       for (const row of rows) {
@@ -138,6 +145,26 @@ describe('requireCapabilities against the composed dependencies', () => {
 
   it('a step that needs an adapter composition did not supply is refused, never skipped', () => {
     refusal(requireCapabilities(depsWith({}), 'onboarding.map.full'));
+  });
+
+  it('run.handoff, run.install and onboarding.stage pass on the production adapters and are refused unsupported, with the reduced mode, when the adapter lacks the capability (FR-16)', () => {
+    const real = depsWith({ runWorkspace: new CloneRunWorkspace(), egress: new AllowlistEgressProxy(), staging: new CloneStagingWorkspace() });
+    for (const step of ['run.handoff', 'run.install', 'onboarding.stage'] as const) assert.ok(requireCapabilities(real, step).ok, step);
+    const lacking = (descriptor: CapabilityDescriptor): { descriptor: CapabilityDescriptor } => ({ descriptor: { ...descriptor, capabilities: {} } });
+    const without = depsWith({
+      runWorkspace: lacking(new CloneRunWorkspace().descriptor),
+      egress: lacking(new AllowlistEgressProxy().descriptor),
+      staging: lacking(new CloneStagingWorkspace().descriptor),
+    } as unknown as Partial<AppDeps>);
+    const handoff = refusal(requireCapabilities(without, 'run.handoff'));
+    assert.equal(handoff.capability, 'run-workspace.handoff');
+    assert.ok((handoff.reducedMode ?? '').length > 0);
+    const install = refusal(requireCapabilities(without, 'run.install'));
+    assert.equal(install.capability, 'egress-proxy.allowlist');
+    assert.equal(install.reducedMode, 'run without the install step: declare no install check');
+    const stage = refusal(requireCapabilities(without, 'onboarding.stage'));
+    assert.equal(stage.capability, 'staging-workspace.prepare');
+    assert.ok((stage.reducedMode ?? '').length > 0);
   });
 
   it('descriptorsOf collects every present descriptor and ignores absent adapters', () => {

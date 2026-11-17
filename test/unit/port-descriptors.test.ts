@@ -13,12 +13,15 @@ import { RedactingArtifactStore } from '../../src/adapters/fs/redacting-artifact
 import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
 import { WorktreeStagingWorkspace } from '../../src/adapters/git/staging-worktree.ts';
 import { CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
+import { GitRunSource } from '../../src/adapters/git/run-source.ts';
+import { AllowlistEgressProxy } from '../../src/adapters/exec/allowlist-proxy.ts';
 import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import { err, ok } from '../../src/domain/result.ts';
 import { Redactor } from '../../src/domain/redactor.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { ArtifactMeta, ArtifactStore } from '../../src/ports/artifact-store.ts';
-import { makeRoots } from '../helpers/run-cli.ts';
+import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import { profileEnv } from '../helpers/run-fixtures.ts';
 
 const PORTS_DIR = join(import.meta.dirname, '../../src/ports');
@@ -170,10 +173,35 @@ describe('the staging and run workspace descriptors (FR-16)', () => {
   });
 });
 
-// ---- structural: every adapter port file declares a descriptor ---------------------------------------------
+describe('the run source and egress descriptors (FR-16)', () => {
+  it('GitRunSource declares run-source reading git objects, offline, with every method as a capability', () => {
+    const source = new GitRunSource();
+    assert.equal(source.descriptor.port, 'run-source');
+    assert.equal(source.descriptor.adapter, 'git-objects');
+    assert.equal(source.descriptor.offline, true);
+    assert.deepEqual(undeclaredMethods(source, []), []);
+    assert.equal(source.descriptor.capabilities['staleness'], true);
+  });
 
-// Ports whose descriptor lands in a later task of the plan; the structural cases for them are todo until then.
-const PENDING = new Set(['run-source.ts', 'egress-proxy.ts']);
+  it('AllowlistEgressProxy declares egress-proxy with the allowlist capability, loopback only, and is not offline', () => {
+    const proxy = new AllowlistEgressProxy();
+    assert.equal(proxy.descriptor.port, 'egress-proxy');
+    assert.equal(proxy.descriptor.adapter, 'allowlist');
+    assert.equal(proxy.descriptor.attributes?.['loopbackOnly'], 'true');
+    assert.equal(proxy.descriptor.offline, false);
+    assert.equal(proxy.descriptor.capabilities['allowlist'], true);
+    assert.deepEqual(undeclaredMethods(proxy, ['allowlist']), []);
+  });
+});
+
+// ---- structural: every adapter port file declares a descriptor, every adapter of a port implements it --------
+
+const ADAPTERS_DIR = join(import.meta.dirname, '../../src/adapters');
+const PORT_INTERFACES = ['ArtifactStore', 'StagingWorkspace', 'RunWorkspace', 'RunSource', 'EgressProxy'];
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : []));
+}
 
 describe('every adapter port declares a capability descriptor (FR-16)', () => {
   const files = readdirSync(PORTS_DIR).filter((name) => name.endsWith('.ts'));
@@ -183,9 +211,45 @@ describe('every adapter port declares a capability descriptor (FR-16)', () => {
   });
 
   for (const file of files.filter((name) => !NOT_ADAPTER_PORTS.has(name))) {
-    it(`${file} declares readonly descriptor: CapabilityDescriptor`, { todo: PENDING.has(file) ? 'declared by a later task of plan 04-32' : false }, () => {
+    it(`${file} declares readonly descriptor: CapabilityDescriptor`, () => {
       const text = readFileSync(join(PORTS_DIR, file), 'utf8');
       assert.match(text, /readonly descriptor: CapabilityDescriptor;/, `${file} must declare the descriptor`);
     });
   }
+
+  it('the production classes that implement one of the five ports are exactly the ones this suite instantiates, so a new adapter must be covered here', () => {
+    const found: string[] = [];
+    for (const file of sourceFiles(ADAPTERS_DIR)) {
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(/^export (?:abstract )?class (\w+)[^{]*\bimplements (\w+)/gm)) if (PORT_INTERFACES.includes(match[2] as string)) found.push(match[1] as string);
+    }
+    assert.deepEqual(found.sort(), ['AllowlistEgressProxy', 'CloneRunWorkspace', 'GitRunSource', 'GitStagingWorkspace', 'LocalArtifactStore', 'RedactingArtifactStore']);
+  });
+});
+
+describe('composition records every composed adapter of these ports (FR-16)', () => {
+  it('a composed `repo add` records adapter_configs rows for artifacts, staging, run-source, run-workspace and egress, each with its own descriptor', () => {
+    const roots = makeRoots();
+    const repo = makeScratchRepo();
+    cleanup.push(roots.base, repo.base);
+    const added = runCli(['repo', 'add', repo.path], { roots, entry: join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts'), env: { AVARICE_FAKE_HOST: '{}' } });
+    assert.equal(added.code, 0, added.stderr + added.stdout);
+    const byName = Object.fromEntries(adapterRows(roots.AVARICE_DATA_ROOT).map((r) => [r.name, r]));
+    const expected: Array<[string, string, string]> = [
+      ['artifacts', 'artifact-store', 'local-fs'],
+      ['staging', 'staging-workspace', 'clone'],
+      ['run-source', 'run-source', 'git-objects'],
+      ['run-workspace', 'run-workspace', 'clone'],
+      ['egress', 'egress-proxy', 'allowlist'],
+    ];
+    for (const [name, port, adapter] of expected) {
+      const row = byName[name];
+      assert.ok(row, `${name} is recorded`);
+      assert.equal(row.port, port, name);
+      assert.equal(row.adapter, adapter, name);
+      const descriptor = JSON.parse(row.descriptor_json) as CapabilityDescriptor;
+      assert.equal(descriptor.port, port, `${name} descriptor`);
+      assert.equal(descriptor.adapter, adapter, `${name} descriptor`);
+    }
+  });
 });

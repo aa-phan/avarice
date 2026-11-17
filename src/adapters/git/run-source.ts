@@ -8,6 +8,7 @@
 // that also changes anything else is not a candidate, so the conventions never come from a tree whose code differs from the pin.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { ConventionsAt, RunSource, Staleness } from '../../ports/run-source.ts';
 import { runGit } from './safe-git.ts';
 import { COMMIT_SHA, failure, invalid, nulSplit } from './staging-base.ts';
@@ -33,7 +34,12 @@ interface Resolved {
   root: string;
 }
 
+// One key per RunSource method, so a method added to the port cannot go undeclared.
+const RUN_SOURCE_CAPABILITIES: Record<Exclude<keyof RunSource, 'descriptor'>, true> = { head: true, conventionsAt: true, staleness: true, hasFile: true };
+
 export class GitRunSource implements RunSource {
+  readonly descriptor: CapabilityDescriptor = { port: 'run-source', adapter: 'git-objects', version: '1.0.0', capabilities: { ...RUN_SOURCE_CAPABILITIES }, attributes: { reads: 'git-objects' }, offline: true };
+
   head(repoPath: string): Result<string> {
     const head = runGit(['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: repoPath });
     if (!head.ok) return failure(head.error);
