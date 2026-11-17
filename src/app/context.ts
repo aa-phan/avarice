@@ -221,11 +221,44 @@ function packItem(source: PackItem['source'], item: ContextItem): PackItem {
   };
 }
 
-// Skeleton of plan 04-28 task 2: asks the source with no timeout yet.
-export async function findWithin(source: ContextSource, query: ContextQuery, share: number, _caps: RetrievalCaps): Promise<Result<ContextHandle[]>> {
-  return source.find(query, share);
+// One `find` under the caps (plan 04-28; CON-11, S-16): the source is given the caps, a stats slot to say it cut its answer, and an AbortSignal that fires when the query has
+// run for `queryTimeoutMs`. At that moment the assembler stops waiting and answers timeout with no side effect (a find reads and writes nothing); a source that can stop its
+// work does. The timer never outlives the call.
+export async function findWithin(source: ContextSource, query: ContextQuery, share: number, caps: RetrievalCaps): Promise<Result<ContextHandle[]>> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<Result<ContextHandle[]>>((resolve) => {
+    timer = setTimeout(() => {
+      // The answer is settled before the source hears the signal, so a source that answers `cancelled` at once cannot take the place of the timeout.
+      resolve(err({ kind: 'timeout', afterMs: caps.queryTimeoutMs, sideEffect: 'none' }));
+      controller.abort();
+    }, caps.queryTimeoutMs);
+  });
+  try {
+    return await Promise.race([source.find({ ...query, limits: caps, signal: controller.signal }, share), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
-// (the assembler does not call it yet)
+
+// The excerpts of one source's answer, cut so that together they hold at most `limit` bytes. An excerpt that does not fit is cut at the byte limit (never inside a
+// character) and ends with a marker; the ones after it keep only the marker. Titles and references are not text of the source's document and are left alone.
+function capBytes(items: readonly ContextItem[], limit: number): { items: ContextItem[]; cut: boolean } {
+  let left = limit;
+  let cut = false;
+  const out = items.map((item) => {
+    const size = Buffer.byteLength(item.excerpt);
+    if (size <= left) {
+      left -= size;
+      return item;
+    }
+    cut = true;
+    const kept = Buffer.from(item.excerpt).subarray(0, Math.max(0, left)).toString('utf8').replace(/�+$/, '');
+    left = 0;
+    return { ...item, excerpt: `${kept}${kept === '' ? '' : '\n'}[excerpt cut at the ${limit}-byte limit]` };
+  });
+  return { items: out, cut };
+}
 
 // What a run's own record fills in when the caller gave neither: the contract's read lists bound what a search may return, and the run's clone is what `git-files` searches.
 function runScopeOf(deps: AppDeps, runId: string): Result<{ readScope: ContextReadScope; worktreePath?: string }> {
@@ -317,14 +350,43 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
       notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} was not asked: ${spent.value.rule}`);
       continue;
     }
-    const query: ContextQuery = { term: request.term, workspace, indexRevision, readScope };
-    const found = await source.find(query, share);
+    const stats = { truncated: false };
+    const query: ContextQuery = { term: request.term, workspace, indexRevision, readScope, stats };
+    const what = name === 'intel' || name === 'graph' ? 'index' : 'source';
+    // A source that declares capability `paged` is asked page by page, each page a search, and never past the page cap (CON-11: no automatic unbounded paging).
+    const paged = source.descriptor.capabilities['paged'] === true;
+    let found = await findWithin(source, paged ? { ...query, page: 1 } : query, share, guard.caps);
+    if (found.ok && paged) {
+      const handles = [...found.value];
+      for (let page = 1; page < guard.caps.maxPages && found.ok && found.value.length > 0; page += 1) {
+        const more = guard.beginSearch('scoped');
+        if (!more.ok) return more;
+        if (!more.value.granted) {
+          notes.push(`the ${name} ${what} was not asked for page ${page + 1}: ${more.value.rule}`);
+          break;
+        }
+        found = await findWithin(source, { ...query, page: page + 1 }, share, guard.caps);
+        if (!found.ok) {
+          notes.push(`the ${name} ${what} cannot answer page ${page + 1}: ${found.error.kind}`);
+          break;
+        }
+        handles.push(...found.value);
+        if (page + 1 === guard.caps.maxPages && found.value.length > 0) notes.push(`the ${name} ${what} was stopped at the page cap (${guard.caps.maxPages} pages); later pages were not asked`);
+      }
+      found = ok(handles);
+    }
     if (!found.ok) {
-      notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot answer: ${found.error.kind === 'unavailable' ? found.error.cause : found.error.kind}`);
+      notes.push(`the ${name} ${what} cannot answer: ${found.error.kind === 'unavailable' ? found.error.cause : found.error.kind}`);
       continue;
     }
+    let handles = found.value;
+    if (handles.length > guard.caps.indexEntries) {
+      notes.push(`the ${name} ${what} returned ${handles.length} handles; only the first ${guard.caps.indexEntries} entries were considered`);
+      handles = handles.slice(0, guard.caps.indexEntries);
+    }
+    if (stats.truncated) notes.push(`the ${name} ${what} cut its answer at its cap of ${guard.caps.searchHits} hits; more matched`);
     asked.push({ sourceIndex, name, source, label, share });
-    found.value.forEach((handle, index) => candidates.push({ handle, sourceIndex, tier: handle.confidence === undefined ? NO_TIER_RANK : TIER_RANK[handle.confidence], index }));
+    handles.forEach((handle, index) => candidates.push({ handle, sourceIndex, tier: handle.confidence === undefined ? NO_TIER_RANK : TIER_RANK[handle.confidence], index }));
   }
 
   // Phase 2: rank, deduplicate and pick first-fit within the budget (and intel within its half).
@@ -335,8 +397,19 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
 
   // Phase 3: read only the picked handles, one call per source that has any.
   let used = 0;
+  let snippetsRead = 0;
   for (const { sourceIndex, name, source, label, share } of asked) {
-    const mine = chosen.picked.filter((c) => c.sourceIndex === sourceIndex);
+    let mine = chosen.picked.filter((c) => c.sourceIndex === sourceIndex);
+    // At most 30 bounded snippets go into one pack; the ones past it are left out like any handle that did not fit, and the pack says so.
+    const snippets = mine.filter((c) => c.handle.ref.kind === 'snippet');
+    const allowed = Math.max(0, guard.beginSnippets(snippetsRead + snippets.length).count - snippetsRead);
+    if (allowed < snippets.length) {
+      const dropped = new Set(snippets.slice(allowed));
+      for (const { handle } of dropped) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens });
+      notes.push(`${dropped.size} snippets from the ${name} source were left out: at most ${guard.caps.snippets} snippets are read for one pack`);
+      mine = mine.filter((c) => !dropped.has(c));
+    }
+    snippetsRead += Math.min(allowed, snippets.length);
     if (mine.length === 0) continue;
     const read = await source.read(
       mine.map((c) => c.handle),
@@ -348,7 +421,10 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     }
     const confirmed = confirmCitedPaths(read.value, sources.gitFiles, workspace);
     notes.push(...confirmed.notes);
-    for (const item of confirmed.items) items.push(packItem(label, item));
+    // One source's answer carries at most `returnedBytes` bytes of text, whatever it sent.
+    const capped = capBytes(confirmed.items, guard.caps.returnedBytes);
+    if (capped.cut) notes.push(`the ${name} source's answer was cut at the ${guard.caps.returnedBytes}-byte limit`);
+    for (const item of capped.items) items.push(packItem(label, item));
     used += mine.reduce((sum, c) => sum + c.handle.estTokens, 0);
   }
 

@@ -6,6 +6,7 @@
 import { defaultContextReadScope } from '../../domain/context-adapters.ts';
 import type { ContextReadScope } from '../../domain/context-adapters.ts';
 import { matchesAny } from '../../domain/glob.ts';
+import { RETRIEVAL_CAPS } from '../../domain/retrieval-rules.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
@@ -14,15 +15,12 @@ import { runGit } from '../git/safe-git.ts';
 import { commitOf, currentHead, estimateTokens, isCitablePath, pathExistsAtHead } from './freshness.ts';
 import type { ContextAdapterOptions } from './gsd-intel.ts';
 
-// The search's own bounds. Plan 04-28 makes them profile and contract values; these are the documented defaults (docs/containment.md "Retrieval").
-const MAX_HITS = 200;
+// The search's own bounds that no profile or contract moves. The hit cap, the query timeout and the snippet length come with the query (plan 04-28; `ContextQuery.limits`,
+// defaulting to the documented caps in docs/containment.md "Retrieval and resource safeguards").
 const MAX_HITS_PER_FILE = 5;
-const SEARCH_TIMEOUT_MS = 10_000;
 const MAX_TERM_CHARS = 200;
 const MAX_READ_GLOBS = 100;
-// A snippet is the hit line, 20 lines before it and 19 after: 40 lines at most.
-const LINES_BEFORE = 20;
-const MAX_SNIPPET_LINES = 40;
+// A snippet is the hit line, the half of the line cap before it and the rest after: 40 lines at most by default, 20 before the hit and 19 after.
 const MAX_EXCERPT_CHARS = 1500;
 // A snippet is never read from a file larger than this.
 const MAX_BLOB_BYTES = 1024 * 1024;
@@ -37,6 +35,9 @@ interface Found {
   line: number;
   head: string;
   root: string;
+  // The caps of the query that found it: how long a read may take and how many lines a snippet may hold.
+  timeoutMs: number;
+  snippetLines: number;
 }
 
 const rootOf = (workspace: ContextQuery['workspace']): string => workspace.worktreePath ?? workspace.repoPath;
@@ -65,11 +66,11 @@ function parseHit(row: string, head: string): { path: string; line: number } | u
 }
 
 // The window of at most 40 lines around `line` (1-based), each prefixed with its number, narrowed from its far side until it fits the excerpt cap.
-function snippetOf(text: string, line: number): string {
+function snippetOf(text: string, line: number, maxLines: number): string {
   const all = text.split('\n').map((l) => l.replace(/\r$/, ''));
   if (all[all.length - 1] === '') all.pop();
-  let first = Math.max(1, line - LINES_BEFORE);
-  let last = Math.min(all.length, first + MAX_SNIPPET_LINES - 1);
+  let first = Math.max(1, line - Math.floor(maxLines / 2));
+  let last = Math.min(all.length, first + maxLines - 1);
   const render = (): string[] => all.slice(first - 1, last).map((l, i) => `${first + i}: ${l}`);
   let joined = render().join('\n');
   while (joined.length > MAX_EXCERPT_CHARS && (first < line || last > line)) {
@@ -99,31 +100,40 @@ export class GitFilesContext implements GitFilesSource {
 
   async find(query: ContextQuery, _budget: TokenBudget): Promise<Result<ContextHandle[]>> {
     this.#found = new Map();
+    // A query the assembler already gave up on starts nothing.
+    if (query.signal?.aborted === true) return err({ kind: 'cancelled', sideEffect: 'none' });
+    const limits = query.limits ?? RETRIEVAL_CAPS;
+    const scope = query.readScope ?? defaultContextReadScope();
+    // A query that names no path to search is unscoped, and an unscoped search is refused (CON-10, S-16); the term alone is not a scope.
+    if (scope.read.length === 0) return err({ kind: 'denied', rule: 'retrieval:unscoped-query', enforcer: 'avarice' });
     const root = rootOf(query.workspace);
     const head = currentHead(root);
     if (head === null) return err({ kind: 'unavailable', cause: `the revision of ${root} cannot be read` });
     const term = query.term;
     // A term that is empty, long or not one line cannot be a search for a name; it finds nothing rather than being cut or reinterpreted.
     if (term.trim() === '' || term.length > MAX_TERM_CHARS || CONTROL.test(term)) return ok([]);
-    const scope = query.readScope ?? defaultContextReadScope();
     // The term follows `-e` and the search is `--fixed-strings`, so it is a pattern and never an option or a regular expression; the paths follow `--`.
     const ran = runGit(['grep', '-n', '-z', '--fixed-strings', '-I', '--no-color', '--max-count', String(MAX_HITS_PER_FILE), '-e', term, head, '--', ...pathspecsOf(scope)], {
       cwd: root,
-      timeoutMs: SEARCH_TIMEOUT_MS,
+      timeoutMs: limits.queryTimeoutMs,
       acceptExit: [1],
     });
     if (!ran.ok) return ran.error.kind === 'internal' ? err({ kind: 'unavailable', cause: 'the search could not run in the repository' }) : ran;
     const retrievedAt = new Date(this.#nowMs()).toISOString();
     const handles: ContextHandle[] = [];
     for (const row of ran.value.stdout.split('\n')) {
-      if (handles.length >= MAX_HITS) break;
       const hit = parseHit(row, head);
       if (hit === undefined || !inScope(hit.path, scope)) continue;
       const id = `${hit.path}:${hit.line}`;
       if (this.#found.has(id)) continue;
+      // One more hit past the cap is what makes the answer truncated; it is not returned.
+      if (handles.length >= limits.searchHits) {
+        if (query.stats !== undefined) query.stats.truncated = true;
+        break;
+      }
       const ref: ExternalRef = { provider: 'git-files', kind: 'snippet', id, revision: `git:${head}`, retrievedAt, scope: hit.path, freshness: 'fresh' };
       const handle: ContextHandle = { ref, title: id, estTokens: SNIPPET_EST_TOKENS, reason: `matched "${term}" in ${hit.path}`, readRule: 'id-only', untrusted: true, citedPath: hit.path };
-      this.#found.set(id, { handle, path: hit.path, line: hit.line, head, root });
+      this.#found.set(id, { handle, path: hit.path, line: hit.line, head, root, timeoutMs: limits.queryTimeoutMs, snippetLines: Math.min(limits.snippetLines, RETRIEVAL_CAPS.snippetLines) });
       handles.push(handle);
     }
     return ok(handles);
@@ -150,12 +160,12 @@ export class GitFilesContext implements GitFilesSource {
   // The lines around a hit at the revision the search ran at; a file that is too large, not a blob or gone says so instead of a snippet.
   #snippet(found: Found): string {
     const object = `${found.head}:${found.path}`;
-    const size = runGit(['cat-file', '-s', object], { cwd: found.root, timeoutMs: SEARCH_TIMEOUT_MS });
+    const size = runGit(['cat-file', '-s', object], { cwd: found.root, timeoutMs: found.timeoutMs });
     if (!size.ok) return '[the file cannot be read at this revision]';
     if (!/^[0-9]+$/.test(size.value.stdout.trim()) || Number(size.value.stdout.trim()) > MAX_BLOB_BYTES) return `[the file is larger than ${MAX_BLOB_BYTES} bytes; no snippet is read from it]`;
-    const blob = runGit(['cat-file', 'blob', object], { cwd: found.root, timeoutMs: SEARCH_TIMEOUT_MS });
+    const blob = runGit(['cat-file', 'blob', object], { cwd: found.root, timeoutMs: found.timeoutMs });
     if (!blob.ok) return '[the file cannot be read at this revision]';
-    return snippetOf(blob.value.stdout, found.line);
+    return snippetOf(blob.value.stdout, found.line, found.snippetLines);
   }
 
   // A snippet is judged by the tree it was found in and the repository as it is now: the path gone at HEAD is `deleted`, HEAD still the revision it was found at is
