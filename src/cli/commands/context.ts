@@ -12,8 +12,9 @@
 // error or a file that cannot be stored, 70 an internal failure.
 import { basename, resolve } from 'node:path';
 import { describeError } from '../../adapters/sqlite/db.ts';
-import { DEFAULT_CONTEXT_BUDGET, MAX_CONTEXT_BUDGET, queryContext, renderContext } from '../../app/context.ts';
+import { MAX_CONTEXT_BUDGET, queryContext, renderContext } from '../../app/context.ts';
 import type { AppDeps } from '../../app/deps.ts';
+import { profileLimits } from '../../app/resource-limits.ts';
 import { MANUAL_CONTEXT_MAX_BYTES, SOURCE_MAX_CHARS, readInputFile, recordManualContext } from '../../app/manual-inputs.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { refuseInsideRun, responderName } from '../identity.ts';
@@ -36,9 +37,10 @@ export const readOnly = (args: ParsedArgs): boolean => !isAdd(args);
 export const needsGsd = (args: ParsedArgs): boolean => !isAdd(args);
 export const booleanFlags = ['json'] as const;
 
-function budgetOf(args: ParsedArgs): number | string {
+// The `--budget` the owner typed: a number, a refusal text, or undefined when none was given (the profile's limits.contextTokens is the budget then).
+function budgetOf(args: ParsedArgs): number | string | undefined {
   const raw = args.flags['budget'];
-  if (raw === undefined) return DEFAULT_CONTEXT_BUDGET;
+  if (raw === undefined) return undefined;
   if (raw === true || !/^[1-9][0-9]{0,5}$/.test(raw) || Number(raw) > MAX_CONTEXT_BUDGET) return `--budget must be a whole number of tokens from 1 to ${MAX_CONTEXT_BUDGET}`;
   return Number(raw);
 }
@@ -92,10 +94,20 @@ function runAdd(args: ParsedArgs, deps: AppDeps, io: Io): number {
 
 export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<number> {
   if (isAdd(args)) return runAdd(args, deps, io);
-  const budget = budgetOf(args);
-  if (typeof budget === 'string') {
-    io.err(`avarice context: ${budget}\n`);
+  const typed = budgetOf(args);
+  if (typeof typed === 'string') {
+    io.err(`avarice context: ${typed}\n`);
     return EXIT_USAGE;
+  }
+  // No --budget: the profile's ceiling (limits.contextTokens, 24,000 by default). A limits section that cannot be read is a usage problem naming the key, not a silent default.
+  let budget = typed;
+  if (budget === undefined) {
+    const limits = profileLimits(deps);
+    if (!limits.ok) {
+      io.err(`avarice context: ${describeError(limits.error)}\n`);
+      return EXIT_USAGE;
+    }
+    budget = limits.value.contextTokens;
   }
   const project = args.flags['project'];
   const report = await queryContext(deps, {

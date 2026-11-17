@@ -19,7 +19,6 @@ import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { RetrievalGuard, profileRetrievalCaps } from './retrieval-guard.ts';
 
-export const DEFAULT_CONTEXT_BUDGET = 4000;
 export const MAX_CONTEXT_BUDGET = 100_000;
 
 export interface ContextRequest {
