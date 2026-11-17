@@ -12,7 +12,7 @@ import type { HookPolicy } from '../../src/domain/hook-decision.ts';
 import { computeInvocationScope, computeRunScope } from '../../src/domain/invocation-scope.ts';
 import type { RunScopeInput } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
-import { budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook } from '../helpers/hook-fixture.ts';
+import { budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook, runHookAsync } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 
 const fixtures: HookFixture[] = [];
@@ -202,5 +202,68 @@ describe('the retrieval limits reach the policy file only for a run scope', () =
       readRoots: [],
     });
     assert.equal('retrieval' in written(fx, scope), false);
+  });
+});
+
+// S-16 and CS-16 on the agent side: the retrieval counter is one row, spent inside the hook's BEGIN IMMEDIATE transaction, so parallel hook processes (a parent and its
+// subagents each run their own) never spend more than the limit and the row's `used` equals the calls the hook allowed.
+describe('parallel subagents share one exact counter (S-16, CS-16, T-04-80)', () => {
+  const LIMIT = 10;
+  const WORKERS = 6;
+  const SEARCHES_EACH = 3;
+  const ITERATIONS = 10;
+  const raceFixture = (): HookFixture => retrievalFixture(LIMIT, false, { limits: { subagentsTotal: 20 }, policy: { subagentsConcurrent: 2, subagentTypes: ['gsd-codebase-mapper'] } });
+  const agentCall = (n: number) => ({ tool_name: 'Agent', tool_use_id: `sub${n}`, tool_input: { subagent_type: 'gsd-codebase-mapper', prompt: 'x' } });
+
+  it(`six processes issuing ${SEARCHES_EACH} scoped searches each against retrieval.searches ${LIMIT}: exactly ${LIMIT} allowed, ${WORKERS * SEARCHES_EACH - LIMIT} denied, used ${LIMIT}, over ${ITERATIONS} iterations`, async () => {
+    for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+      const fx = retrievalFixture(LIMIT, false);
+      const workers = Array.from({ length: WORKERS }, async (_, worker) => {
+        const outcomes: string[] = [];
+        for (let n = 0; n < SEARCHES_EACH; n += 1) {
+          const result = await runHookAsync(fx, 'pre', { ...scoped(fx), agent_id: `agent${worker}` });
+          assert.equal(result.code, 0, result.stderr);
+          outcomes.push(outcome(result.stdout));
+        }
+        return outcomes;
+      });
+      const all = (await Promise.all(workers)).flat();
+      const allowed = all.filter((o) => o === 'allowed').length;
+      assert.equal(allowed, LIMIT, `iteration ${iteration}: ${all.join(' ')}`);
+      assert.equal(all.filter((o) => o === 'budget:retrieval.searches').length, WORKERS * SEARCHES_EACH - LIMIT, `iteration ${iteration}`);
+      assert.equal(budgetUsed(fx, 'retrieval.searches'), allowed, `iteration ${iteration}: used is the allowed count`);
+      assert.equal(budgetUsed(fx, 'toolCalls'), allowed, `iteration ${iteration}: a refused search charges no tool call`);
+      assert.equal(decisions(fx).filter((d) => d.decision === 'allow').length, allowed);
+      assert.ok(chainIsIntact(fx.ledgerPath));
+    }
+  });
+
+  it(`six subagents as Agent calls under subagentsConcurrent 2: two are admitted, and every search of all six draws on the same ${LIMIT}, over ${ITERATIONS} iterations`, async () => {
+    for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+      const fx = raceFixture();
+      const workers = Array.from({ length: WORKERS }, async (_, worker) => {
+        const admitted = await runHookAsync(fx, 'pre', { ...agentCall(worker), agent_id: 'parent' });
+        assert.equal(admitted.code, 0, admitted.stderr);
+        const outcomes: string[] = [];
+        for (let n = 0; n < SEARCHES_EACH; n += 1) {
+          const result = await runHookAsync(fx, 'pre', { ...scoped(fx), agent_id: `sub${worker}` });
+          assert.equal(result.code, 0, result.stderr);
+          outcomes.push(outcome(result.stdout));
+        }
+        return { admitted: outcome(admitted.stdout), outcomes };
+      });
+      const results = await Promise.all(workers);
+      assert.equal(results.filter((r) => r.admitted === 'allowed').length, 2, `iteration ${iteration}: at most two subagents in flight`);
+      assert.equal(results.filter((r) => r.admitted === 'budget:subagentsConcurrent').length, WORKERS - 2, `iteration ${iteration}`);
+      const searches = results.flatMap((r) => r.outcomes);
+      const allowed = searches.filter((o) => o === 'allowed').length;
+      assert.equal(allowed, LIMIT, `iteration ${iteration}: ${searches.join(' ')}`);
+      assert.equal(budgetUsed(fx, 'retrieval.searches'), allowed, `iteration ${iteration}`);
+      assert.equal(budgetUsed(fx, 'subagentsTotal'), 2, `iteration ${iteration}`);
+      assert.equal(budgetUsed(fx, 'toolCalls'), allowed, `iteration ${iteration}: the Agent calls charge subagentsTotal, the searches toolCalls`);
+      const searchers = new Set(decisions(fx).filter((d) => d.tool === 'Grep' && d.decision === 'allow').map((d) => (d as { agentId?: string }).agentId));
+      assert.ok(searchers.size > 1, `iteration ${iteration}: the allowed searches came from more than one agent (${[...searchers].join(', ')})`);
+      assert.ok(chainIsIntact(fx.ledgerPath));
+    }
   });
 });
