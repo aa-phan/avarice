@@ -48,7 +48,8 @@ export interface ContextReport {
   term: string;
   budget: number;
   usedTokens: number;
-  project: { projectId: string; repoPath: string; recordVersion: number; onboardedRevision: string };
+  // `restricted` (plan 04-24; CON-4): present only, and then `true`, when the record's map was made by `onboard --restricted`; the pack then labels the project `partial (restricted)`.
+  project: { projectId: string; repoPath: string; recordVersion: number; onboardedRevision: string; restricted?: true };
   items: PackItem[];
   omitted: OmittedItem[];
   // Why an index gave nothing: not recorded, unavailable, or not asked for lack of budget.
@@ -247,7 +248,13 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     term: request.term,
     budget: request.budget,
     usedTokens: used,
-    project: { projectId: project.projectId, repoPath: project.repoPath, recordVersion: record.version, onboardedRevision: record.onboardedRevision },
+    project: {
+      projectId: project.projectId,
+      repoPath: project.repoPath,
+      recordVersion: record.version,
+      onboardedRevision: record.onboardedRevision,
+      ...(record.body['restricted'] === true ? { restricted: true as const } : {}),
+    },
     items,
     omitted,
     notes,
@@ -285,7 +292,7 @@ function describeFreshness(item: PackItem): string {
 
 export function renderContext(report: ContextReport): string {
   const lines: string[] = [];
-  lines.push(`context for "${printable(report.term)}" in ${printable(report.project.repoPath)} [${report.project.projectId}] (record v${report.project.recordVersion} at ${printable(report.project.onboardedRevision)})`);
+  lines.push(`context for "${printable(report.term)}" in ${printable(report.project.repoPath)} [${report.project.projectId}] (record v${report.project.recordVersion} at ${printable(report.project.onboardedRevision)}${report.project.restricted === true ? '; map: partial (restricted)' : ''})`);
   lines.push(`budget ${report.budget} tokens, used about ${report.usedTokens}`);
   if (report.items.length === 0) lines.push('no index entry matches');
   report.items.forEach((item, index) => {

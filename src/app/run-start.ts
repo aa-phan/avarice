@@ -208,6 +208,14 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (!active.ok) return internal(describeError(active.error));
   const record: ActiveRecord | null = active.value;
   if (record === null) return refused('no-active-record', `${project.repoPath} has no active project record; onboard it first (avarice onboard --policy onboarding ${project.repoPath})`);
+  // A map made under the restricted launch is a partial map that nothing contained its mapper (plan 04-24; CON-4, T-04-65): it is never taken for the whole-repository, contained map a
+  // contained run is planned from, so only a restricted run may start on it. The owner replaces it with a contained onboarding on an enforced host.
+  if (record.body['restricted'] === true && request.restricted !== true) {
+    return refused(
+      'restricted-record',
+      `the active project record of ${project.repoPath} was made by a restricted onboarding (partial (restricted)); a contained run needs a contained map: onboard it on an enforced host with avarice onboard --policy onboarding ${project.repoPath}, or start the run with --restricted`,
+    );
+  }
   const pin = record.onboardedRevision.replace(GIT_PREFIX, '');
 
   // The facts come from repository objects only (D-04, D-16): an uncommitted edit, a dirty checkout or a half-written file

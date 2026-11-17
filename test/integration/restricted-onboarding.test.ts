@@ -209,7 +209,7 @@ describe('a restricted record is never presented as whole-repository coverage (O
     assert.match(r.stderr, /refused: .*restricted onboarding \(partial \(restricted\)\)/, r.stderr);
     assert.match(r.stderr, /avarice onboard --policy onboarding /, 'it names the onboarding that replaces the record');
     assert.match(r.stderr, /enforced host/);
-    assert.deepEqual(rows(f.roots, 'SELECT run_id FROM runs'), [], 'nothing was stored');
+    assert.deepEqual(rows(f.roots, "SELECT run_id FROM runs WHERE state != 'onboarding'"), [], 'no run was stored (the onboarding keeps its own runs row)');
   });
 
   it('lets `start --restricted` run on it: the restricted line launches in the run clone and the run ends blocked as any restricted run does', () => {
