@@ -121,6 +121,8 @@ function clearOwnPartial(partial: string, repoRoot: string): Result<void> {
 }
 
 export class CloneStagingWorkspace extends GitStagingWorkspace {
+  protected readonly strategy = 'clone' as const;
+
   protected gitAccess(gitDir: string): { gitPaths: string[]; repoReadAllow: string[] } {
     return { gitPaths: [gitDir], repoReadAllow: [] };
   }

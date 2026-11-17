@@ -5,6 +5,7 @@
 // (ONB-3, T-01-16).
 import type { RepoFacts } from '../domain/preflight.ts';
 import type { Result } from '../domain/result.ts';
+import type { CapabilityDescriptor } from './capability.ts';
 
 export type { MapFileFacts, RepoFacts } from '../domain/preflight.ts';
 
@@ -72,6 +73,8 @@ export interface CommitPromotionOutcome {
 }
 
 export interface StagingWorkspace {
+  // What the adapter can do (FR-16); composition records it and a step requirement can name it.
+  readonly descriptor: CapabilityDescriptor;
   prepare(input: PrepareInput): Result<StagingInfo>;
   head(path: string): Result<string>;
   changes(path: string, pin: string): Result<StagingChanges>;

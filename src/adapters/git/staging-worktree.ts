@@ -16,6 +16,8 @@ const LOCK_REASON = 'avarice-onboarding';
 const CHECKOUT_TIMEOUT_MS = 120_000;
 
 export class WorktreeStagingWorkspace extends GitStagingWorkspace {
+  protected readonly strategy = 'worktree' as const;
+
   protected gitAccess(gitDir: string, commonDir: string): { gitPaths: string[]; repoReadAllow: string[] } {
     return { gitPaths: sortedUnique([gitDir, commonDir]), repoReadAllow: [commonDir] };
   }

@@ -205,6 +205,7 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
     const real = composed.value.deps;
     ledger = real.ledger;
     const spyStaging: typeof real.staging = {
+      descriptor: real.staging.descriptor,
       prepare: (input) => {
         observed.push(`prepare after ${latest()}`);
         return real.staging.prepare(input);
@@ -479,6 +480,7 @@ describe('activation re-checks the whole staging diff against every write set (p
     const real = composed.value.deps;
     let reads = 0;
     const staging: typeof real.staging = {
+      descriptor: real.staging.descriptor,
       prepare: (input) => real.staging.prepare(input),
       head: (p) => real.staging.head(p),
       changes: (p, pin) => {

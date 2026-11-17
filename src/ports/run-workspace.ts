@@ -7,6 +7,7 @@
 // Nothing here writes to the user's checkout except `fetchIntoSource`, and that creates exactly one ref
 // (`refs/heads/avarice/<runId>`): no checkout, no reset, no clean, no index or working-tree change.
 import type { Result } from '../domain/result.ts';
+import type { CapabilityDescriptor } from './capability.ts';
 
 export interface PrepareRunInput {
   // The user's repository; prepare never writes to it.
@@ -110,6 +111,8 @@ export interface ParkRecord {
 }
 
 export interface RunWorkspace {
+  // What the adapter can do (FR-16); composition records it and a step requirement can name it.
+  readonly descriptor: CapabilityDescriptor;
   // Clone at the pin, on `avarice/<runId>`, built in clone.partial and renamed when complete.
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo>;
   // ONB-10: a scratch clone of the source at the pin, detached, with no branch, where a declared check is run to see what it writes. Returns its

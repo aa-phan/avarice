@@ -10,6 +10,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { createDeps } from '../../src/cli/composition.ts';
 import { LocalArtifactStore } from '../../src/adapters/fs/artifact-store.ts';
 import { RedactingArtifactStore } from '../../src/adapters/fs/redacting-artifact-store.ts';
+import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
+import { WorktreeStagingWorkspace } from '../../src/adapters/git/staging-worktree.ts';
+import { CloneRunWorkspace } from '../../src/adapters/git/run-workspace.ts';
+import type { CapabilityDescriptor } from '../../src/ports/capability.ts';
 import { err, ok } from '../../src/domain/result.ts';
 import { Redactor } from '../../src/domain/redactor.ts';
 import type { Result } from '../../src/domain/result.ts';
@@ -137,10 +141,39 @@ describe('the artifacts override (NFR-4, T-04-88)', () => {
   });
 });
 
+// A capability key is either a method the adapter has or one of the named extras the port documents (a rule or an identity, not a call).
+function undeclaredMethods(adapter: { descriptor: CapabilityDescriptor }, extras: readonly string[]): string[] {
+  return Object.keys(adapter.descriptor.capabilities).filter((key) => !extras.includes(key) && typeof (adapter as unknown as Record<string, unknown>)[key] !== 'function');
+}
+
+describe('the staging and run workspace descriptors (FR-16)', () => {
+  it('both staging adapters declare the staging-workspace port under their strategy name, every capability a method, and are offline', () => {
+    for (const [adapter, name] of [[new CloneStagingWorkspace(), 'clone'], [new WorktreeStagingWorkspace(), 'worktree']] as const) {
+      assert.equal(adapter.descriptor.port, 'staging-workspace');
+      assert.equal(adapter.descriptor.adapter, name);
+      assert.equal(adapter.descriptor.attributes?.['strategy'], name);
+      assert.equal(adapter.descriptor.offline, true);
+      assert.equal(adapter.descriptor.capabilities['prepare'], true);
+      assert.equal(adapter.descriptor.capabilities['commitPromotion'], true);
+      assert.deepEqual(undeclaredMethods(adapter, []), [], `${name}: every capability names a method`);
+    }
+  });
+
+  it('CloneRunWorkspace declares the run-workspace port with the handoff capability and every method', () => {
+    const workspace = new CloneRunWorkspace();
+    assert.equal(workspace.descriptor.port, 'run-workspace');
+    assert.equal(workspace.descriptor.adapter, 'clone');
+    assert.equal(workspace.descriptor.offline, true);
+    assert.equal(workspace.descriptor.capabilities['handoff'], true);
+    assert.equal(workspace.descriptor.capabilities['fetchIntoSource'], true);
+    assert.deepEqual(undeclaredMethods(workspace, ['handoff']), []);
+  });
+});
+
 // ---- structural: every adapter port file declares a descriptor ---------------------------------------------
 
 // Ports whose descriptor lands in a later task of the plan; the structural cases for them are todo until then.
-const PENDING = new Set(['staging-workspace.ts', 'run-workspace.ts', 'run-source.ts', 'egress-proxy.ts']);
+const PENDING = new Set(['run-source.ts', 'egress-proxy.ts']);
 
 describe('every adapter port declares a capability descriptor (FR-16)', () => {
   const files = readdirSync(PORTS_DIR).filter((name) => name.endsWith('.ts'));

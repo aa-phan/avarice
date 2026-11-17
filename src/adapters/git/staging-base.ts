@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type {
   CommitPromotionInput,
   CommitPromotionOutcome,
@@ -192,7 +193,31 @@ export function ensureConfinedDir(path: string, relPath: string): Result<void> {
   return ok(undefined);
 }
 
+// One key per StagingWorkspace method, so a method added to the port cannot go undeclared.
+const STAGING_CAPABILITIES: Record<Exclude<keyof StagingWorkspace, 'descriptor'>, true> = {
+  prepare: true,
+  head: true,
+  changes: true,
+  describe: true,
+  listTracked: true,
+  changedBetween: true,
+  readTrackedAtPin: true,
+  ignoredByCommittedRules: true,
+  read: true,
+  ensureDir: true,
+  inspectRepo: true,
+  copyIntoCheckout: true,
+  commitPromotion: true,
+};
+
 export abstract class GitStagingWorkspace implements StagingWorkspace {
+  // The strategy the subclass builds a staging copy with; it is the adapter name in the descriptor.
+  protected abstract readonly strategy: StagingInfo['strategy'];
+
+  get descriptor(): CapabilityDescriptor {
+    return { port: 'staging-workspace', adapter: this.strategy, version: '1.0.0', capabilities: { ...STAGING_CAPABILITIES }, attributes: { strategy: this.strategy }, offline: true };
+  }
+
   abstract prepare(input: PrepareInput): Result<StagingInfo>;
 
   // The git directories the sandbox must deny and what it must still be able to read of the user repository.
