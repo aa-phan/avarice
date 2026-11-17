@@ -31,7 +31,10 @@ interface Line {
 
 function runChild(dbPath: string, label: string, rounds: ReadonlyArray<{ digest: string; startAtMs: number }>): Promise<Line[]> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CHILD, dbPath, SCOPE, ACTION, label, JSON.stringify(rounds)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CHILD, dbPath, SCOPE, ACTION, label, JSON.stringify(rounds)], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'NODE_TEST_CONTEXT')),
+    });
     let out = '';
     let err = '';
     child.stdout.setEncoding('utf8').on('data', (d: string) => (out += d));

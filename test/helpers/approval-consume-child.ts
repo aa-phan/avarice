@@ -4,30 +4,36 @@
 //   node approval-consume-child.ts <state.db> <scope> <action> <label> <rounds-json>
 //
 // `rounds-json` is a list of `{ digest, startAtMs }`. Every round of both processes names the same start time, so the two reach the ledger together.
+// `node --test` with no file list also loads every file under test/; under the runner NODE_TEST_CONTEXT is set (the race test deletes it for its real
+// children), so the helper does nothing there.
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
 
-const [dbPath, scope, action, label, roundsJson] = process.argv.slice(2) as [string, string, string, string, string];
-const rounds = JSON.parse(roundsJson) as Array<{ digest: string; startAtMs: number }>;
+function main(): void {
+  const [dbPath, scope, action, label, roundsJson] = process.argv.slice(2) as [string, string, string, string, string];
+  const rounds = JSON.parse(roundsJson) as Array<{ digest: string; startAtMs: number }>;
 
-const opened = openDb(dbPath);
-if (!opened.ok) {
-  process.stderr.write(`cannot open the store: ${JSON.stringify(opened.error)}\n`);
-  process.exit(2);
-}
-const ledger = new SqliteLedger(opened.value, (prefix) => `${prefix}child_${label}`);
-
-for (const round of rounds) {
-  while (Date.now() < round.startAtMs) {
-    // spin: the two processes leave this loop within a millisecond of each other
+  const opened = openDb(dbPath);
+  if (!opened.ok) {
+    process.stderr.write(`cannot open the store: ${JSON.stringify(opened.error)}\n`);
+    process.exit(2);
   }
-  const consumed = ledger.consumeApprovalAndStart({
-    scope,
-    action,
-    paramsDigest: round.digest,
-    nowMs: Date.now(),
-    startEvent: { type: 'action.started', runId: scope, data: { scope, action, paramsDigest: round.digest, source: 'approval', label } },
-  });
-  process.stdout.write(`${JSON.stringify({ label, digest: round.digest, consumed: consumed.ok ? (consumed.value?.approvalId ?? null) : `error:${consumed.error.kind}` })}\n`);
+  const ledger = new SqliteLedger(opened.value, (prefix) => `${prefix}child_${label}`);
+
+  for (const round of rounds) {
+    while (Date.now() < round.startAtMs) {
+      // spin: the two processes leave this loop within a millisecond of each other
+    }
+    const consumed = ledger.consumeApprovalAndStart({
+      scope,
+      action,
+      paramsDigest: round.digest,
+      nowMs: Date.now(),
+      startEvent: { type: 'action.started', runId: scope, data: { scope, action, paramsDigest: round.digest, source: 'approval', label } },
+    });
+    process.stdout.write(`${JSON.stringify({ label, digest: round.digest, consumed: consumed.ok ? (consumed.value?.approvalId ?? null) : `error:${consumed.error.kind}` })}\n`);
+  }
+  opened.value.close();
 }
-opened.value.close();
+
+if (process.env['NODE_TEST_CONTEXT'] === undefined) main();
