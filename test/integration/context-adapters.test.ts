@@ -9,9 +9,10 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { GitFilesContext } from '../../src/adapters/context/git-files.ts';
 import { GsdPlanningContext } from '../../src/adapters/context/gsd-planning.ts';
+import { configPathFor } from '../../src/adapters/fs/profile-config.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
-import { queryContext, renderContext } from '../../src/app/context.ts';
+import { confirmCitedPaths, queryContext, renderContext } from '../../src/app/context.ts';
 import type { ContextReport } from '../../src/app/context.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import type { ContextQuery } from '../../src/ports/context-source.ts';
@@ -50,7 +51,8 @@ interface Onboarded {
   staging: string;
 }
 
-async function onboardedDeps(files: Record<string, string> = REPO_FILES, configSections?: Record<string, unknown>): Promise<Onboarded> {
+// `adapters`: the profile config's `adapters.context` list, written before the first composition (absent: the key is left out, so the defaults apply).
+async function onboardedDeps(files: Record<string, string> = REPO_FILES, adapters?: readonly string[]): Promise<Onboarded> {
   const roots = makeRoots();
   const repo = makeScratchRepo({ files });
   const bins = mkdtempSync(join(tmpdir(), 'avarice-ctx-adapters-'));
@@ -62,6 +64,11 @@ async function onboardedDeps(files: Record<string, string> = REPO_FILES, configS
     AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
     AVARICE_GRAPHIFY_BIN: writeFakeGraphify(bins, 'ok'),
   };
+  if (adapters !== undefined) {
+    const path = configPathFor(roots.AVARICE_CONFIG_HOME, 'personal-local');
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ schema: 1, adapters: { context: adapters } }));
+  }
   const onboarding = createDeps(env, { host: new FakeIntelHost(new FakeAgentHost(), {}) });
   assert.ok(onboarding.ok, 'composition');
   try {
@@ -72,7 +79,6 @@ async function onboardedDeps(files: Record<string, string> = REPO_FILES, configS
   } finally {
     onboarding.value.close();
   }
-  void configSections;
   const composed = createDeps(env, {}, { readOnly: true, gsd: true });
   assert.ok(composed.ok);
   const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
@@ -381,6 +387,144 @@ describe('the document fallback: planning sections stand in when the graph has n
       assert.ok(report.items.some((i) => i.source === 'gsd-graph' && i.ref.id === 'doc1'), 'the graph answered with its document node');
       assert.deepEqual(report.items.filter((i) => i.source === 'gsd-planning'), []);
       assert.ok(report.notes.some((n) => /gsd-planning.*document node/.test(n)), report.notes.join(' | '));
+    } finally {
+      o.close();
+    }
+  });
+});
+
+// ---- stale citations, adapter selection and the recorded descriptors (task 3) ---------------------------------------------------------------
+
+function commitDeleting(repo: ScratchRepo, file: string): void {
+  git(repo.path, ['rm', '-q', file]);
+  git(repo.path, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-q', '-m', `drop ${file}`]);
+}
+
+function adapterRows(o: Onboarded): Array<{ name: string; port: string; adapter: string; descriptor: Record<string, unknown> }> {
+  const db = new DatabaseSync(join(o.roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+  try {
+    const rows = db.prepare("SELECT name, port, adapter, descriptor_json FROM adapter_configs WHERE port = 'context-source' ORDER BY name").all() as Array<{ name: string; port: string; adapter: string; descriptor_json: string }>;
+    return rows.map((r) => ({ name: r.name, port: r.port, adapter: r.adapter, descriptor: JSON.parse(r.descriptor_json) as Record<string, unknown> }));
+  } finally {
+    db.close();
+  }
+}
+
+describe('stale citations are confirmed with git-files before any content is used (docs/contracts-and-state.md:350)', () => {
+  const graphAt = (head: string) => ({
+    directed: false,
+    multigraph: false,
+    built_at_commit: head,
+    nodes: [
+      { id: 'g1', label: 'ledgerx index', file_type: 'code', source_file: 'src/index.ts' },
+      { id: 'g2', label: 'ledgerx checkout', file_type: 'code', source_file: 'src/pay/checkout.ts' },
+    ],
+    links: [],
+  });
+
+  it('keeps the item of a path that is still at HEAD, and withholds the content of one deleted at HEAD, listing it in the notes', async () => {
+    const o = await onboardedDeps();
+    try {
+      writeFileSync(join(o.staging, '.planning', 'graphs', 'graph.json'), JSON.stringify(graphAt(o.repo.head)));
+      commitDeleting(o.repo, 'src/pay/checkout.ts');
+      const report = await ask(o, 'ledgerx');
+      const byId = new Map(report.items.map((i) => [i.ref.id, i] as const));
+      const kept = byId.get('g1');
+      const gone = byId.get('g2');
+      assert.ok(kept && gone, JSON.stringify(report.items.map((i) => i.ref.id)));
+      assert.equal(kept.freshness, 'stale');
+      assert.equal(kept.confirmed, true);
+      assert.ok(kept.excerpt.includes('ledgerx'), 'a confirmed item is used as content');
+      assert.equal(gone.freshness, 'stale');
+      assert.equal(gone.confirmed, false);
+      assert.ok(!gone.excerpt.includes('ledgerx'), 'a path gone at HEAD is not used as content');
+      assert.match(gone.excerpt, /^\[content withheld: src\/pay\/checkout\.ts is not at the current revision\]$/);
+      assert.ok(report.notes.some((n) => n.includes('gsd-graph g2') && n.includes('src/pay/checkout.ts')), report.notes.join(' | '));
+    } finally {
+      o.close();
+    }
+  });
+
+  it('asks git-files about each stale item that cites a path and about no other item', () => {
+    const asked: string[] = [];
+    const gitFiles = {
+      pathExists: (_w: ContextQuery['workspace'], path: string) => {
+        asked.push(path);
+        return path !== 'gone.ts';
+      },
+    };
+    const item = (id: string, freshness: 'fresh' | 'stale', citedPath?: string, confirmed?: boolean) => ({
+      ref: { provider: 'gsd-graph', kind: 'graph-node', id, retrievedAt: '2026-11-17T00:00:00.000Z', scope: citedPath ?? '.planning/graphs/graph.json', freshness },
+      title: id,
+      excerpt: `body of ${id}`,
+      estTokens: 10,
+      reason: 'r',
+      ...(citedPath !== undefined ? { citedPath } : {}),
+      ...(confirmed !== undefined ? { confirmed } : {}),
+    });
+    const workspace = { stagingPath: '/s', repoPath: '/r' };
+    const result = confirmCitedPaths([item('fresh', 'fresh', 'a.ts'), item('kept', 'stale', 'kept.ts'), item('gone', 'stale', 'gone.ts', true), item('none', 'stale')], gitFiles as never, workspace);
+    assert.deepEqual(asked, ['kept.ts', 'gone.ts']);
+    const byId = new Map(result.items.map((i) => [i.ref.id, i] as const));
+    assert.equal(byId.get('fresh')?.confirmed, undefined);
+    assert.equal(byId.get('kept')?.confirmed, true);
+    assert.equal(byId.get('gone')?.confirmed, false, 'git-files overrides what the index adapter said');
+    assert.equal(byId.get('none')?.confirmed, undefined);
+    assert.equal(byId.get('none')?.excerpt, 'body of none');
+    assert.equal(result.notes.length, 1);
+    // With no git-files source the index adapter's own answer stands.
+    const alone = confirmCitedPaths([item('gone', 'stale', 'gone.ts', false)], undefined, workspace);
+    assert.equal(alone.items[0]?.confirmed, false);
+    assert.match(alone.items[0]?.excerpt ?? '', /^\[content withheld/);
+  });
+});
+
+describe('the profile config selects the context sources, and each is recorded with its descriptor (FR-3, FR-18)', () => {
+  it('composes the four local adapters by default and records each descriptor in adapter_configs', async () => {
+    const o = await onboardedDeps();
+    try {
+      assert.deepEqual(Object.keys(o.deps.context ?? {}).sort(), ['gitFiles', 'graph', 'intel', 'planning']);
+      const rows = adapterRows(o);
+      assert.deepEqual(rows.map((r) => r.name), ['context-git-files', 'context-gsd-graph', 'context-gsd-intel', 'context-gsd-planning']);
+      for (const row of rows) {
+        assert.equal(row.port, 'context-source');
+        assert.equal(`context-${row.adapter}`, row.name);
+        assert.equal(row.descriptor['adapter'], row.adapter);
+        assert.equal(row.descriptor['offline'], true);
+      }
+    } finally {
+      o.close();
+    }
+  });
+
+  it('composes only the sources adapters.context lists, and records only those', async () => {
+    const o = await onboardedDeps(REPO_FILES, ['gsd-intel', 'git-files']);
+    try {
+      assert.deepEqual(Object.keys(o.deps.context ?? {}).sort(), ['gitFiles', 'intel']);
+      assert.deepEqual(adapterRows(o).map((r) => r.name), ['context-git-files', 'context-gsd-intel']);
+      const report = await ask(o, 'handleCheckout');
+      assert.ok(report.items.length > 0 && report.items.every((i) => i.source === 'gsd-intel' || i.source === 'git-files'));
+    } finally {
+      o.close();
+    }
+  });
+
+  it('fails composition naming adapters.context for an unknown name, a repeated name, an empty list and a value that is not a list', async () => {
+    const o = await onboardedDeps();
+    try {
+      const path = configPathFor(o.roots.AVARICE_CONFIG_HOME, 'personal-local');
+      for (const [value, reason] of [[['bogus'], /unknown source "bogus"/], [['git-files', 'git-files'], /listed twice/], [[], /at least one/], ['git-files', /expected a list/]] as const) {
+        writeFileSync(path, JSON.stringify({ schema: 1, adapters: { context: value } }));
+        for (const options of [{ readOnly: true, gsd: true }, {}]) {
+          const composed = createDeps(o.env, {}, options);
+          if (composed.ok) {
+            composed.value.close();
+            assert.fail(`composition accepted ${JSON.stringify(value)}`);
+          } else {
+            assert.match(composed.message, new RegExp(`adapters\\.context.*${reason.source}`), composed.message);
+          }
+        }
+      }
     } finally {
       o.close();
     }

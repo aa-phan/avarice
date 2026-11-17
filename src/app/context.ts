@@ -173,6 +173,11 @@ function pick(candidates: readonly Candidate[], budget: number, caps: ReadonlyMa
   return { picked, left, used };
 }
 
+// Skeleton (plan 04-26 task 3 RED): returns the items as they are.
+export function confirmCitedPaths(items: readonly ContextItem[], _gitFiles: GitFilesSource | undefined, _workspace: ContextQuery['workspace']): { items: ContextItem[]; notes: string[] } {
+  return { items: [...items], notes: [] };
+}
+
 function packItem(source: PackItem['source'], item: ContextItem): PackItem {
   return {
     source,
