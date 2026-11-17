@@ -364,6 +364,12 @@ export function claudeVersion(bin: string): string {
 // mask any other version. The harness records the real version, and the host's own init event is checked against it.
 export const ADMIT_ENV = 'AVARICE_LIVE_ADMIT_CLAUDE_VERSION';
 
+// Live verdicts read whole transcripts (the model's tool calls, its session IDs), but a run keeps only a redacted summary and the digest
+// of the redacted transcript unless the owner opts in (D-14, SEC-3). Every environment this harness builds starts from process.env, the
+// adapters it builds read the same variable, and the exit tools that import it inherit it, so the opt-in is set once, here.
+export const DEBUG_TRANSCRIPTS_ENV = 'AVARICE_DEBUG_TRANSCRIPTS';
+process.env[DEBUG_TRANSCRIPTS_ENV] = '1';
+
 export function launchMarkerWrapperScript(real: string, marker: string, versionOverride?: { reported: string; as: string }): string {
   const versionCase =
     versionOverride === undefined

@@ -5,9 +5,10 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { configPathFor } from '../../src/adapters/fs/profile-paths.ts';
 import { fingerprintGsdPreamble } from '../../src/adapters/gsd/preamble.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
@@ -16,9 +17,10 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import type { AppDeps } from '../../src/app/deps.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { sha256Hex } from '../../src/domain/digest.ts';
+import { parseRetentionSection } from '../../src/domain/redactor.ts';
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
 import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
-import { REPO_ROOT, makeRoots } from '../helpers/run-cli.ts';
+import { PRODUCTION_ENTRY, REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
@@ -230,5 +232,68 @@ describe('tracer: a secret straddling the cap is redacted, and a default run sto
     assert.ok(stored.includes('[REDACTED:github-token]'));
     assert.equal(longestTokenFragment(stored), 0);
     assert.equal(`sha256:${sha256Hex(stored)}`, step['transcriptDigest']);
+  });
+});
+
+// The profile's own opt-in and refusal (D-14): the production composition reads the retention section of the profile config.
+function writeProfileConfig(roots: CliRoots, config: Record<string, unknown>): void {
+  const path = configPathFor(roots.AVARICE_CONFIG_HOME, 'personal-local');
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, `${JSON.stringify({ schema: 1, ...config }, null, 2)}\n`, { mode: 0o600 });
+}
+
+describe('profile retention (D-14)', () => {
+  it('stores the whole redacted transcript when the profile sets retention.transcripts to full, with no debug variable', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all', extraLines: [tokenLine] });
+    writeProfileConfig(s.roots, { retention: { transcripts: 'full' } });
+    const ran = runCli(['onboard', '--policy', 'onboarding', s.repo.path], {
+      roots: s.roots,
+      entry: PRODUCTION_ENTRY,
+      env: { AVARICE_CLAUDE_BIN: s.fake.bin, CLAUDE_CONFIG_DIR: s.configDir, AVARICE_GRAPHIFY_BIN: '/nonexistent', [DEBUG]: undefined },
+      timeoutMs: 180_000,
+    });
+    assert.equal(ran.code, 0, ran.stdout + ran.stderr);
+    assert.deepEqual(kindsOf(s.roots), ['transcript', 'transcript-summary']);
+    const step = launchResult(s.roots);
+    assert.equal(step['transcript'], step['transcriptDigest']);
+    const stored = blob(s.roots, step['transcript'] as string);
+    assert.ok(stored.includes('[REDACTED:github-token]'), 'the stored transcript is redacted');
+    assert.equal(longestTokenFragment(stored), 0);
+  });
+
+  it('keeps the summary default when the profile has no retention section', () => {
+    const s = setup({ transcript: 'success', mapFiles: 'all' });
+    writeProfileConfig(s.roots, {});
+    const ran = runCli(['onboard', '--policy', 'onboarding', s.repo.path], {
+      roots: s.roots,
+      entry: PRODUCTION_ENTRY,
+      env: { AVARICE_CLAUDE_BIN: s.fake.bin, CLAUDE_CONFIG_DIR: s.configDir, AVARICE_GRAPHIFY_BIN: '/nonexistent', [DEBUG]: undefined },
+      timeoutMs: 180_000,
+    });
+    assert.equal(ran.code, 0, ran.stdout + ran.stderr);
+    assert.deepEqual(kindsOf(s.roots), ['transcript-summary']);
+  });
+
+  it('refuses a retention.transcripts value that is not summary or full, naming the key, before a store is opened', () => {
+    const s = setup({ transcript: 'success' });
+    writeProfileConfig(s.roots, { retention: { transcripts: 'all' } });
+    const composed = createDeps(envFor(s));
+    assert.equal(composed.ok, false);
+    assert.ok(!composed.ok && /retention\.transcripts/.test(composed.message), `the refusal names the key: ${composed.ok ? '' : composed.message}`);
+  });
+
+  it('parses the retention section: absent and empty give summary, summary and full are read, anything else is refused by key', () => {
+    assert.deepEqual(parseRetentionSection(undefined), { ok: true, value: { transcripts: 'summary' } });
+    assert.deepEqual(parseRetentionSection({}), { ok: true, value: { transcripts: 'summary' } });
+    assert.deepEqual(parseRetentionSection({ transcripts: 'full', other: 1 }), { ok: true, value: { transcripts: 'full' } });
+    assert.deepEqual(parseRetentionSection({ transcripts: 'summary' }), { ok: true, value: { transcripts: 'summary' } });
+    for (const bad of [{ transcripts: 'all' }, { transcripts: true }, { transcripts: null }]) {
+      const parsed = parseRetentionSection(bad);
+      assert.ok(!parsed.ok && parsed.error.kind === 'invalid' && parsed.error.field === 'retention.transcripts', JSON.stringify(bad));
+    }
+    for (const bad of ['full', 3, null, ['full']]) {
+      const parsed = parseRetentionSection(bad);
+      assert.ok(!parsed.ok && parsed.error.kind === 'invalid' && parsed.error.field === 'retention', JSON.stringify(bad));
+    }
   });
 });
