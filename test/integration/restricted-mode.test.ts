@@ -158,3 +158,105 @@ describe('tracer: an unenforced host refuses naming --restricted, and start --re
     assert.ok(!existsSync(join(f.repo.path, '.avarice-restricted')), 'nothing written beside the clone');
   });
 });
+
+// ---- the decision list, the status label and resume (task 2) ---------------------------------------------------------------------------------
+
+const QUESTIONS = 'Should an empty title give an empty slug or an error?\nShould a non-ASCII letter be kept or dropped?\n';
+
+interface DecisionRow {
+  decision_id: string;
+  class: string;
+  state: string;
+  issue: string;
+  options_json: string;
+  evidence_refs_json: string;
+}
+
+describe('the decision list, the status label, and resume stays restricted (CON-4, D-12)', () => {
+  it('stores the question list as restricted-decisions and opens one permission decision that names the plan, the patch and the list', () => {
+    const f = fixture({ writes: { ...WRITES, '.avarice-restricted/QUESTIONS.md': QUESTIONS } });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+
+    const artifacts = artifactsOf(f.roots, runId);
+    assert.deepEqual(artifacts.map((a) => a.kind), ['restricted-decisions', 'restricted-patch', 'restricted-plan']);
+    const list = artifacts.find((a) => a.kind === 'restricted-decisions') as ArtifactRow;
+    assert.equal(artifactText(f.roots, list.digest), QUESTIONS);
+
+    const decisions = rows<DecisionRow>(f.roots, 'SELECT decision_id, class, state, issue, options_json, evidence_refs_json FROM decisions WHERE run_id = ?', runId);
+    assert.equal(decisions.length, 1, 'one decision');
+    const decision = decisions[0] as DecisionRow;
+    assert.deepEqual([decision.class, decision.state], ['permission', 'open']);
+    for (const artifact of artifacts) assert.ok(decision.issue.includes(artifact.digest), `the decision names the ${artifact.kind} digest`);
+    assert.match(decision.issue, /2 open questions/);
+    assert.match(decision.issue, /No check and no gate ran and nothing was committed or handed off/);
+    assert.match(decision.issue, /avarice cancel/);
+    // A permission decision offers only withdraw (owner decision 2); it applies nothing, and the run stays blocked until it is cancelled.
+    assert.deepEqual((JSON.parse(decision.options_json) as Array<{ key: string }>).map((o) => o.key), ['withdraw']);
+    assert.deepEqual((JSON.parse(decision.evidence_refs_json) as string[]).sort(), artifacts.map((a) => `artifact:${a.digest}`).sort());
+  });
+
+  it('labels the run restricted in text status and appends the optional `restricted` key last to the run entry of status --json; a contained run has neither', () => {
+    const f = fixture({ writes: { ...WRITES, '.avarice-restricted/QUESTIONS.md': QUESTIONS } });
+    const runId = runIdOf(start(f, '--restricted', '--wait').stdout);
+    const json = runCli(['status', '--json'], { roots: f.roots, env: { AVARICE_CLAUDE_BIN: f.fake.bin } });
+    assert.equal(json.code, 0, json.stderr);
+    const projects = JSON.parse(json.stdout) as Array<{ runs?: Array<Record<string, unknown>> }>;
+    const entry = projects.flatMap((p) => p.runs ?? []).find((r) => r['runId'] === runId) as Record<string, unknown>;
+    assert.equal(entry['restricted'], true);
+    assert.equal(Object.keys(entry).at(-1), 'restricted', 'appended last');
+
+    const text = runCli(['status'], { roots: f.roots, env: { AVARICE_CLAUDE_BIN: f.fake.bin } });
+    assert.equal(text.code, 0, text.stderr);
+    const tableRow = text.stdout.split('\n').find((line) => line.includes(runId) && line.includes('blocked_on_decision'));
+    assert.ok(tableRow !== undefined && tableRow.includes('restricted'), `the STATE column says restricted: ${tableRow ?? text.stdout}`);
+
+    // A contained run (no claude to run it on, so it blocks at G0 like any unenforced host) has no `restricted` key and no label.
+    const g = fixture();
+    const absent = { AVARICE_CLAUDE_BIN: '/nonexistent/claude' };
+    const contained = runCli(['start', '--brief', g.brief, '--policy', 'routine', '--wait'], { roots: g.roots, cwd: g.repo.path, env: absent, timeoutMs: 180_000 });
+    const containedId = runIdOf(contained.stdout);
+    const plain = JSON.parse(runCli(['status', '--json'], { roots: g.roots, env: absent }).stdout) as Array<{ runs?: Array<Record<string, unknown>> }>;
+    const plainEntry = plain.flatMap((p) => p.runs ?? []).find((r) => r['runId'] === containedId) as Record<string, unknown>;
+    assert.ok(!('restricted' in plainEntry), 'no restricted key on a contained run');
+    assert.ok(!runCli(['status'], { roots: g.roots, env: absent }).stdout.includes('restricted'), 'no restricted label on a contained run');
+  });
+
+  it('relaunches the restricted line when the supervisor is killed during the invocation and the run is resumed; no check runs and no gate row is written', async () => {
+    // The first launch sleeps; the supervisor dies with it running. The lease is short so the resume does not wait it out.
+    const f = fixture({ sleepMs: 600_000, sleepFirstOnly: true });
+    const env = { AVARICE_CLAUDE_BIN: f.fake.bin, AVARICE_LEASE_TTL_MS: '400' };
+    const started = runCli(['start', '--restricted', '--brief', f.brief, '--policy', 'routine'], { roots: f.roots, cwd: f.repo.path, env, timeoutMs: 180_000 });
+    assert.equal(started.code, 0, started.stdout + started.stderr);
+    const runId = runIdOf(started.stdout);
+    const waitFor = async (what: string, ready: () => boolean): Promise<void> => {
+      for (const deadline = Date.now() + 90_000; !ready(); await new Promise((resolve) => setTimeout(resolve, 100))) {
+        if (Date.now() > deadline) assert.fail(`timed out waiting for ${what}`);
+      }
+    };
+    await waitFor('the first restricted launch', () => f.fake.started());
+    const spawned = rows<{ result_json: string }>(f.roots, "SELECT result_json FROM run_steps WHERE run_id = ? AND step = 'supervisor:spawn'", runId)[0];
+    process.kill((JSON.parse(spawned?.result_json ?? '{}') as { pid: number }).pid, 'SIGKILL');
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const resumed = runCli(['resume', runId, '--wait'], { roots: f.roots, cwd: f.repo.path, env, timeoutMs: 180_000 });
+    assert.equal(resumed.code, 3, resumed.stdout + resumed.stderr);
+    assert.equal(resumed.stdout.split('\n').filter((l) => l !== '').at(-1), `run ${runId}: blocked_on_decision (enforcement_failure)`);
+
+    const launches = f.fake.argvs();
+    assert.equal(launches.length, 2, 'the interrupted launch and the relaunch');
+    for (const launch of launches) {
+      assert.ok(launch.argv.includes('--restricted'), 'every launch of a restricted run carries --restricted');
+      assert.ok(!launch.argv.includes('--allowedTools') && !launch.argv.includes('--plugin-dir'), 'never the contained line');
+    }
+    assert.deepEqual(rows(f.roots, 'SELECT gate FROM gate_results WHERE run_id = ?', runId), [], 'no gate row');
+    assert.deepEqual(rows(f.roots, "SELECT step FROM run_steps WHERE run_id = ? AND step IN ('deps:install', 'checks:validate', 'baseline', 'gsd:configure')", runId), [], 'no preparation step that runs repository code');
+    assert.deepEqual(rows(f.roots, 'SELECT evidence_id FROM evidence'), [], 'no check evidence');
+    const launchSteps = rows<{ attempt: number; status: string }>(f.roots, "SELECT attempt, status FROM run_steps WHERE run_id = ? AND step = 'launch:run' ORDER BY attempt", runId);
+    assert.deepEqual(launchSteps.map((s) => s.status), ['interrupted', 'completed']);
+    assert.deepEqual(artifactsOf(f.roots, runId).map((a) => a.kind), ['restricted-patch', 'restricted-plan']);
+    const contract = rows<{ body_json: string }>(f.roots, 'SELECT body_json FROM contracts WHERE run_id = ?', runId)[0];
+    assert.equal((JSON.parse(contract?.body_json ?? '{}') as { mode?: string }).mode, 'restricted', "the mode is still the contract's");
+  });
+});
