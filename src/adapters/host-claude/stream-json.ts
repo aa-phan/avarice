@@ -53,8 +53,18 @@ export interface StreamResult {
   finalTextTail?: string;
 }
 
+// The token counts of a run (AC-8, A2): for each distinct assistant message (by `message.id`) the host's own usage numbers, summed over the messages. All four
+// are 0 when the stream carried no usage.
+export interface StreamUsage {
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+}
+
 export interface ParsedStream {
   init?: StreamInit;
+  usage: StreamUsage;
   permissionDenied: StreamPermissionDenial[];
   result?: StreamResult;
   // Tool calls the assistant made, counted by tool name (at most MAX_LIST names; the rest are counted under OTHER_TOOLS).
@@ -129,6 +139,10 @@ export class StreamJsonParser {
   #permissionDenied: StreamPermissionDenial[] = [];
   #result: StreamResult | undefined;
   #toolUses = new Map<string, number>();
+  // The last usage printed under each assistant message id: the host prints one event per content block, and the later one carries the final output count.
+  // A message with no id is its own entry, keyed by arrival order.
+  #usage = new Map<string, StreamUsage>();
+  #anonymousMessages = 0;
   #resultCount = 0;
   #malformed = 0;
   #events = 0;
@@ -149,6 +163,7 @@ export class StreamJsonParser {
     this.#pending = '';
     return {
       ...(this.#init !== undefined ? { init: this.#init } : {}),
+      usage: this.#usageTotal(),
       permissionDenied: [...this.#permissionDenied],
       ...(this.#result !== undefined ? { result: this.#result } : {}),
       toolUses: Object.fromEntries([...this.#toolUses].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
@@ -214,8 +229,34 @@ export class StreamJsonParser {
   }
 
   // Counts the `tool_use` blocks of an assistant message by tool name; the input and the text of the message are not read.
+  #usageTotal(): StreamUsage {
+    const total: StreamUsage = { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+    for (const usage of this.#usage.values()) {
+      total.inputTokens += usage.inputTokens;
+      total.cacheCreationTokens += usage.cacheCreationTokens;
+      total.cacheReadTokens += usage.cacheReadTokens;
+      total.outputTokens += usage.outputTokens;
+    }
+    return total;
+  }
+
+  // Keeps the usage of an assistant message under its id (the later event of the same id replaces the earlier). Only the four counts are read.
+  #onUsage(message: unknown): void {
+    if (!isObject(message) || !isObject(message['usage'])) return;
+    const usage = message['usage'];
+    const id = text(message['id']);
+    const key = id ?? `(no id ${(this.#anonymousMessages += 1)})`;
+    this.#usage.set(key, {
+      inputTokens: count(usage['input_tokens']),
+      cacheCreationTokens: count(usage['cache_creation_input_tokens']),
+      cacheReadTokens: count(usage['cache_read_input_tokens']),
+      outputTokens: count(usage['output_tokens']),
+    });
+  }
+
   #onAssistant(event: Json): void {
     const message = event['message'];
+    this.#onUsage(message);
     const content = isObject(message) ? message['content'] : undefined;
     if (!Array.isArray(content)) return;
     for (const block of content) {

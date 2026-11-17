@@ -17,7 +17,7 @@ import { isScopePath } from '../domain/mapping.ts';
 import type { InvocationScope } from '../domain/invocation-scope.ts';
 import { RootRefusedError } from '../domain/normalized-root.ts';
 import type { RunContract } from '../domain/run-contract.ts';
-import type { InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
+import type { InvocationDetails, InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
 import type { OnboardingRow, RunRow, StepResultInput } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { reserveInvocation, reserveRunInvocation, settleInvocation } from './budget.ts';
@@ -158,6 +158,12 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
 
 const clip = (text: string): string => (text.length <= MAX_RULE_CHARS ? text : text.slice(0, MAX_RULE_CHARS));
 
+// The AC-8 token metric of one invocation (A2): input, cache-creation, cache-read and output tokens summed. Undefined when the adapter reported none of the four.
+function tokensOf(d: InvocationDetails): number | undefined {
+  if (d.inputTokens === undefined && d.cacheCreationTokens === undefined && d.cacheReadTokens === undefined && d.outputTokens === undefined) return undefined;
+  return (d.inputTokens ?? 0) + (d.cacheCreationTokens ?? 0) + (d.cacheReadTokens ?? 0) + (d.outputTokens ?? 0);
+}
+
 // Whether the invocation was killed or interrupted, so what it cost is not known: the host's process ended by a signal or by our
 // wall clock, or the host adapter reports a timeout or a cancel that may have left the process running. An error that says
 // nothing ran (it never started) is not a kill. An ending with no result event (a crash: a non-zero exit, or an exit 0 that printed no
@@ -292,6 +298,8 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
             hookDenies: d.hookDenies,
             hookBudgetDenies: d.hookBudgetDenies,
             numTurns: d.numTurns,
+            // The AC-8 token metric: the four usage counts summed. Present only when the host adapter measured them.
+            ...(tokensOf(d) !== undefined ? { tokens: tokensOf(d) } : {}),
             transcriptBytes: d.transcriptBytes,
             ...(o.transcriptDigest !== undefined ? { transcriptDigest: o.transcriptDigest } : {}),
             ...(d.subtype !== undefined ? { subtype: d.subtype } : {}),

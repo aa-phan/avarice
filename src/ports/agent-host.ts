@@ -92,6 +92,11 @@ export interface InvocationDetails {
   hookDenies: number;
   hookBudgetDenies: number;
   numTurns: number;
+  // The tokens the host reported for the invocation, summed over its distinct assistant messages (AC-8, A2). Absent when the adapter does not measure them.
+  inputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  outputTokens?: number;
   // Whether the host printed a final result at all, and its own `is_error` when it did: the run outcome classifier reads both, so an
   // ending with no result is never taken for success (plan 02-13).
   resultSeen: boolean;
