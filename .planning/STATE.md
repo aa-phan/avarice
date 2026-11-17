@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-18-PLAN.md
-last_updated: "2026-11-17T05:56:21.478Z"
+stopped_at: Completed 04-19-PLAN.md
+last_updated: "2026-11-17T06:19:04.407Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: e4247c427cbd2c39d9aadaa4b48832d3ee86c570
+state_head: 358937c00b3251239d609f4983e9a59f6f46de53
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 19 of 39
+Plan: 20 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -181,6 +181,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P16 | 85 min | 3 tasks | 16 files |
 | Phase 04 P17 | 70min | 3 tasks | 17 files |
 | Phase 04 P18 | 30 min | 3 tasks | 14 files |
+| Phase 04 P19 | 60 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -437,6 +438,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-16: authorizeAction order is policy deny, class allow, contract naming the same action and canonical digest, single-use approval consumed in the action.started transaction, else approval-required:<apr id>; a contract never overrides a policy deny — FR-12, D-15, T-04-41, T-04-42
 - [Phase 04]: 04-16: resume blocks a run with an unfinished privileged action on a withdraw-only permission decision using reason enforcement_failure, so no item continues beside it; the owner's exit is avarice cancel (needs owner review) — FR-15, T-04-44
 - [Phase 04]: 04-18: the transcript cap counts redacted bytes and cuts at a line boundary; a default invocation keeps a transcript-summary and the redacted transcript digest, the whole transcript only for retention.transcripts full or AVARICE_DEBUG_TRANSCRIPTS=1; RedactingArtifactStore redacts only listed text kinds (unlisted kinds stored as given, a source scan guards new kinds)
+- [Phase 04]: 04-19: the hook path (run and attended) does not enforce a policy rule's approvalSource and does not evaluate policy rules; an attended approval is any usable local-user row of the scope, action and digest — The hook stays lean (no application layer), so it asks no evaluatePolicy; in a run every privileged form is denied and nothing is consumed. Owner review: pass the evaluated policy to the hook or move the decision into a command it calls.
+- [Phase 04]: 04-19: gh api with a non-GET method (or fields with no method) is the privileged action scm.api.write, added to the action table; an approval binds option names, not values, and not the directory — No existing action fits an arbitrary SCM API write; binding names keeps a title or body out of the approval while --force stays in.
 
 ### Roadmap Evolution
 
@@ -504,8 +507,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T05:56:21.450Z
-Stopped at: Completed 04-18-PLAN.md
+Last session: 2026-11-17T06:18:57.749Z
+Stopped at: Completed 04-19-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
