@@ -5,7 +5,7 @@
 // own readers), `gsd-planning` (sections of the planning files, read-only from the staging copy) and `git-files` (a scoped
 // search of tracked files, then bounded snippets).
 import type { ContextReadScope } from '../domain/context-adapters.ts';
-import type { ReadRule } from '../domain/retrieval-rules.ts';
+import type { ReadRule, RetrievalCaps } from '../domain/retrieval-rules.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
 
@@ -47,6 +47,14 @@ export interface ContextQuery {
   readScope?: ContextReadScope;
   // The revision the project record says the index was built at (`git:` plus the commit).
   indexRevision: string;
+  // The caps this query runs under (plan 04-28; CON-11): the profile's, narrowed by the run's contract. Absent: the defaults.
+  limits?: RetrievalCaps;
+  // The query's timeout: the assembler aborts it when `limits.queryTimeoutMs` has passed, and a source that can stop its work stops it.
+  signal?: AbortSignal;
+  // Where a source says it cut its answer to a cap (`truncated`), so the assembler can name the cut in the pack's notes. The assembler gives one per query.
+  stats?: { truncated: boolean };
+  // For a source whose descriptor declares capability `paged`: the page asked for, from 1. The assembler stops asking at `limits.maxPages`.
+  page?: number;
 }
 
 // A budget in tokens, estimated as characters / 4 (the unit GSD's own reader uses for its `--budget`).

@@ -10,6 +10,7 @@ import { defaultContextReadScope } from '../domain/context-adapters.ts';
 import type { ContextReadScope } from '../domain/context-adapters.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import type { RetrievalCaps } from '../domain/retrieval-rules.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, GitFilesSource } from '../ports/context-source.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
@@ -219,6 +220,12 @@ function packItem(source: PackItem['source'], item: ContextItem): PackItem {
     ...(item.confirmed !== undefined ? { confirmed: item.confirmed } : {}),
   };
 }
+
+// Skeleton of plan 04-28 task 2: asks the source with no timeout yet.
+export async function findWithin(source: ContextSource, query: ContextQuery, share: number, _caps: RetrievalCaps): Promise<Result<ContextHandle[]>> {
+  return source.find(query, share);
+}
+// (the assembler does not call it yet)
 
 // What a run's own record fills in when the caller gave neither: the contract's read lists bound what a search may return, and the run's clone is what `git-files` searches.
 function runScopeOf(deps: AppDeps, runId: string): Result<{ readScope: ContextReadScope; worktreePath?: string }> {
