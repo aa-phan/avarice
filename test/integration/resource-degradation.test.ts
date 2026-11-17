@@ -599,6 +599,24 @@ function countingGitFiles(state: { revision: string; reads: string[] }): GitFile
   };
 }
 
+describe('a pack budget of 0 (no room left in the prompt) gives an empty pack with every handle listed as omitted, and nothing is read (the precision edge, D-13)', () => {
+  it('lists both handles as omitted and reads none of them', async () => {
+    const s = startedRun(cleanup);
+    try {
+      const state = { revision: 'git:0123456789abcdef', reads: [] as string[] };
+      const deps: AppDeps = { ...s.deps, context: { ...s.deps.context, gitFiles: countingGitFiles(state) } };
+      const result = await queryContext(deps, { projectId: s.contract.workspace.projectId, term: 'X', budget: 0, runId: s.runId });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.equal(result.value.items.filter((i) => i.source === 'git-files').length, 0);
+      assert.deepEqual(result.value.omitted.filter((o) => o.source === 'git-files').map((o) => o.id).sort(), ['src/a.ts:1', 'src/b.ts:1']);
+      assert.deepEqual(state.reads, []);
+      assert.equal(result.value.usedTokens, 0);
+    } finally {
+      s.close();
+    }
+  });
+});
+
 describe('a retried item reuses the previous pack items the cache rule allows and fetches the rest again (CON-12)', () => {
   const only = (items: readonly { source: string }[], source: string): number => items.filter((i) => i.source === source).length;
 
