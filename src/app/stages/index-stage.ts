@@ -7,7 +7,7 @@ import { ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
-import { INDEX_STEPS, indexStepKey } from './index-steps.ts';
+import { INDEX_STEPS, indexStepKey, profileDisabledStep } from './index-steps.ts';
 import type { IndexStep } from './index-steps.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { loadContract, loadMappingPlan, stagingPathOf } from './shared.ts';
@@ -73,7 +73,11 @@ export const indexStage: Stage = async (ctx: StageContext, row: OnboardingRow): 
     if (!checkpoint.ok) return checkpoint;
 
     const startedMs = deps.clock.nowMs();
-    const outcome = restricted && step.name !== 'code-graph' ? restrictedStep(step, contract.value) : await runStep(step, ctx, row, staging.value, head.value, contract.value);
+    // A restricted onboarding judges the step by its contract; otherwise a step the profile switched off (adapters.knowledgePass, D-08) is recorded disabled before anything runs.
+    const outcome =
+      restricted && step.name !== 'code-graph'
+        ? restrictedStep(step, contract.value)
+        : (profileDisabledStep(deps, step) ?? (await runStep(step, ctx, row, staging.value, head.value, contract.value)));
 
     if (outcome.status === 'absent') {
       const event = deps.ledger.appendEvent({

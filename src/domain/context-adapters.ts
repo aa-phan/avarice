@@ -32,6 +32,17 @@ export function parseContextAdapters(section: unknown): Result<ContextAdapterNam
   return ok(names);
 }
 
+// Whether onboarding runs the knowledge pass (plan 04-31; D-08): the profile config's `adapters.knowledgePass`, a boolean. An absent key, and an absent section, mean true. Any
+// other value is refused naming `adapters.knowledgePass`. False records the knowledge step as disabled and starts no knowledge invocation.
+export function parseKnowledgePass(section: unknown): Result<boolean> {
+  if (section === undefined) return ok(true);
+  if (!isRecord(section)) return err({ kind: 'invalid', field: 'adapters', reason: 'expected an object' });
+  const raw = section['knowledgePass'];
+  if (raw === undefined) return ok(true);
+  if (typeof raw !== 'boolean') return err({ kind: 'invalid', field: 'adapters.knowledgePass', reason: 'expected true or false' });
+  return ok(raw);
+}
+
 // The paths a search may return a hit from: `read` globs, minus `readExclude` (directories or globs) and `secretGlobs`, the same three lists a run contract's
 // `files` holds. A contract's own lists replace the default.
 export interface ContextReadScope {

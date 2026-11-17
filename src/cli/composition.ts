@@ -45,7 +45,7 @@ import { fingerprintGsdPreamble } from '../adapters/gsd/preamble.ts';
 import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
-import { parseContextAdapters } from '../domain/context-adapters.ts';
+import { parseContextAdapters, parseKnowledgePass } from '../domain/context-adapters.ts';
 import { parseCredentialSection, providersFor } from '../domain/credential-ref.ts';
 import type { CredentialSection, ProviderName } from '../domain/credential-ref.ts';
 import { DEFAULT_TRANSCRIPT_RETENTION, parseRetentionSection } from '../domain/redactor.ts';
@@ -334,6 +334,12 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const contextAdapters = parseContextAdapters(profile.config.sections.adapters);
   if (!contextAdapters.ok) {
     const e = contextAdapters.error;
+    return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config adapters: ${describeError(e)}` };
+  }
+  // D-08: whether onboarding runs the knowledge pass. A value that is not a boolean stops the command here, naming `adapters.knowledgePass`.
+  const knowledgePass = parseKnowledgePass(profile.config.sections.adapters);
+  if (!knowledgePass.ok) {
+    const e = knowledgePass.error;
     return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config adapters: ${describeError(e)}` };
   }
   const dbPath = join(profile.dataRoot, 'state.db');
