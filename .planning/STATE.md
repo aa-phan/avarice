@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-22-PLAN.md
-last_updated: "2026-11-17T08:14:18.773Z"
+stopped_at: Completed 04-23-PLAN.md
+last_updated: "2026-11-17T08:44:42.211Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 005a19093a883d5c02f6dbaea7812f2ea6a0b71b
+state_head: d97b5ae93042b0b1e15961ad43790d5e446c4a4f
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 23 of 39
+Plan: 24 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -185,6 +185,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P20 | 35 min | 3 tasks | 18 files |
 | Phase 04 P21 | 20 min | 3 tasks | 22 files |
 | Phase 04 P22 | 35min | 2 tasks | 10 files |
+| Phase 04 P23 | 28 min | 3 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -451,6 +452,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-22: a brief that holds a secret is redacted (AppDeps.redact before parseBrief), not refused; owner may prefer refusing
 - [Phase 04]: 04-22: hook_reads keyed by redacted path plus 16 hex of SHA-256 of the path; the hook process cannot redact a seeded credential value (owner review)
 - [Phase 04]: 04-22: AC-6 denies personal-local's profile config by contents (file-read-data); the registry reads other profiles' config.json on every command (D-19), a read the count cannot see (owner review)
+- [Phase 04]: 04-23: the restricted host is its own AppDeps member and a run's mode is read from its stored contract, so supervise and resume continue a restricted run restricted — supervise and resume are separate processes with no flag; a createDeps flag could not reach them
+- [Phase 04]: 04-23: a restricted run ends with the existing enforcement block (permission decision, withdraw only); owner review wanted on cancel/keep-open options — decision policy gives a permission decision one withdraw option, which applies nothing
 
 ### Roadmap Evolution
 
@@ -518,8 +521,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T08:14:18.743Z
-Stopped at: Completed 04-22-PLAN.md
+Last session: 2026-11-17T08:44:42.183Z
+Stopped at: Completed 04-23-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
