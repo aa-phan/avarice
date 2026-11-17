@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-20-PLAN.md
-last_updated: "2026-11-17T06:56:01.251Z"
+stopped_at: Completed 04-21-PLAN.md
+last_updated: "2026-11-17T07:21:44.638Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 8e42740c398195c2ad2dea04c5528d11bdc8e079
+state_head: c3df973bc57977eabbba8dad3eeba8dc9601e8d5
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 21 of 39
+Plan: 22 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -183,6 +183,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P18 | 30 min | 3 tasks | 14 files |
 | Phase 04 P19 | 60 min | 3 tasks | 15 files |
 | Phase 04 P20 | 35 min | 3 tasks | 18 files |
+| Phase 04 P21 | 20 min | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -444,6 +445,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-20: a reference block (ref_changed, ref_deleted, access_revoked) opens one withdraw-only decision and leaves work items and attempts untouched; the owner's only way out is avarice cancel until an accept-or-rebuild command exists
 - [Phase 04]: 04-20: a task reference keeps the revision the run was built from; a refresh changes freshness only, so a changed reference is found changed again on every resume
 - [Phase 04]: 04-20: ContextSource.refresh takes the project's index query as a second argument; block precedence is access_revoked, ref_deleted, ref_changed
+- [Phase 04]: 04-21: an onboarding's permission decisions are decisions rows on its carrier run (openOnboardingDecision), not shown by inbox and not answerable by decide — no run method can see the carrier; owner review item
+- [Phase 04]: 04-21: a refused, denied or failed promotion leaves the onboarding active (exit 0) and is recorded as step promote; a promotion that never started is not retried on resume — promotion runs after activation in the same lease; owner review items 2 and 3
 
 ### Roadmap Evolution
 
@@ -511,8 +514,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T06:56:01.195Z
-Stopped at: Completed 04-20-PLAN.md
+Last session: 2026-11-17T07:21:38.160Z
+Stopped at: Completed 04-21-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
