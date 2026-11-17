@@ -17,7 +17,7 @@ import type { IdentityContext } from './identity.ts';
 import { parseProfileName, profileClass, selectProfile } from '../domain/profile.ts';
 import { EXIT_PROFILE_REFUSED, readRepositoryContext } from './profile-gate.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel', 'approve'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel', 'approve', 'doctor'] as const;
 export const EXIT_USAGE = 64;
 
 // The terminal the interactive shell (FR-27, ADR-013) reads keys from and draws on. `isTTY` is how a stream says it is a terminal;
@@ -152,7 +152,13 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return EXIT_PROFILE_REFUSED;
   }
 
-  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true, profile: selected.value });
+  // `doctor` (plan 04-25) diagnoses what the normal composition refuses to start on, so its module composes its own read-only dependency set: no migration, no lease, no
+  // GSD or host requirement. A module that exports `composeDoctor` is composed by it instead of createDeps; only that module does.
+  const own = (mod as unknown as { composeDoctor?: (env: NodeJS.ProcessEnv, profile: string) => { ok: true; value: { deps: unknown; close(): void } } }).composeDoctor;
+  const composed =
+    typeof own === 'function'
+      ? (own(env, selected.value) as { ok: true; value: { deps: AppDeps; close(): void } })
+      : createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true, profile: selected.value });
   if (!composed.ok) {
     io.err(`${errorLine(name, composed.message)}\n`);
     return composed.code;

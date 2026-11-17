@@ -37,6 +37,11 @@ export const RESTRICTED_HELP_FLAGS: readonly string[] = [
 // What a restricted onboarding's line needs listed beyond the restricted run's (plan 04-24): the flags that deliver GSD's mapper.
 export const RESTRICTED_ONBOARDING_HELP_FLAGS: readonly string[] = [...RESTRICTED_HELP_FLAGS, '--plugin-dir', '--agents'];
 
+// Whether `claude --help` lists `flag` as a whole word: `--settings` is not met by `--settings-profile` or `--setting-sources`. It proves presence, never behaviour.
+export function helpListsFlag(helpText: string, flag: string): boolean {
+  return new RegExp(`(^|[\\s,|\\[(])${flag}(?![\\w-])`, 'm').test(helpText);
+}
+
 export type HostAdmission = 'verified' | 'unverified-patch';
 export type HostRefusal = 'host-minor-unverified' | 'host-patch-below-range' | 'host-version-unknown';
 

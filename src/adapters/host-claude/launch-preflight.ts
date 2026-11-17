@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, RESTRICTED_ONBOARDING_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
+import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, RESTRICTED_ONBOARDING_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion, helpListsFlag } from '../../domain/host-admission.ts';
 import type { HostAdmission } from '../../domain/host-admission.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -23,7 +23,7 @@ import { MIGRATION_0001 } from '../sqlite/migrations/0001-initial.ts';
 export const ADMITTED_CLAUDE_VERSIONS: readonly string[] = VERIFIED_HOST_VERSIONS;
 
 // Seatbelt must be able to apply a profile; /usr/bin/true is the confined process.
-const DEFAULT_SANDBOX_PROBE: readonly string[] = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'];
+export const DEFAULT_SANDBOX_PROBE: readonly string[] = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'];
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export interface LaunchReadyInput {
@@ -140,8 +140,7 @@ function checkHelpFlags(claudeBin: string, timeout: number, flags: readonly stri
   if (help.error !== undefined || help.status !== 0) return refuse('host-unavailable');
   for (const flag of flags) {
     // The flag as a whole word: `--settings` is not met by `--settings-profile` or `--setting-sources`.
-    const listed = new RegExp(`(^|[\\s,|\\[(])${flag}(?![\\w-])`, 'm');
-    if (!listed.test(help.stdout)) return refuse(`host-flag-missing:${flag}`);
+    if (!helpListsFlag(help.stdout, flag)) return refuse(`host-flag-missing:${flag}`);
   }
   return ok(undefined);
 }

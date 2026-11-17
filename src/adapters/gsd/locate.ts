@@ -8,12 +8,12 @@ import { spawnSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gsdVersionAdmitted } from '../../domain/gsd-version.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import { gsdEnv, gsdToolsPath } from './gsd-tools.ts';
 
-const ADMITTED_VERSION = /^1\.17\.\d+$/;
 const IDENTITY_TIMEOUT_MS = 5_000;
 
 export interface LocatedGsd {
@@ -50,34 +50,51 @@ function unsupported(detail: string): Result<never> {
   });
 }
 
-export function locateGsdCore(env: NodeJS.ProcessEnv): Result<LocatedGsd> {
+// What the candidate directories hold, before any judgement of the version: `absent` when none has bin/gsd-tools.cjs, `unreadable` when the first one that has it
+// does not answer `runtime-identity` with a package and a version, `found` otherwise. `doctor` reports a found version even when it is outside the admitted line,
+// and bounds the probe with its own timeout.
+export type GsdIdentity =
+  | { state: 'absent'; searched: string[] }
+  | { state: 'unreadable'; dir: string; detail: string }
+  | { state: 'found'; dir: string; packageName: string; version: string };
+
+export function identifyGsdCore(env: NodeJS.ProcessEnv, timeoutMs: number = IDENTITY_TIMEOUT_MS): GsdIdentity {
   const candidates = gsdCandidates(env);
   const dir = candidates.find((candidate) => isFile(gsdToolsPath(candidate)));
-  if (dir === undefined) {
-    return err({ kind: 'not_found', ref: candidates.length === 0 ? 'gsd-core (no GSD_HOME, CLAUDE_CONFIG_DIR or HOME set)' : `gsd-core (probed ${candidates.join(', ')})` });
-  }
+  if (dir === undefined) return { state: 'absent', searched: candidates };
 
   const ran = spawnSync(process.execPath, [gsdToolsPath(dir), 'runtime-identity', '--raw'], {
     cwd: tmpdir(),
     env: gsdEnv(env, dir),
     encoding: 'utf8',
-    timeout: IDENTITY_TIMEOUT_MS,
+    timeout: timeoutMs,
     maxBuffer: 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (ran.error || ran.status !== 0) {
-    return unsupported(`${dir}: runtime-identity did not run (${ran.error ? ((ran.error as NodeJS.ErrnoException).code ?? ran.error.message) : `exit ${String(ran.status)}`})`);
+    return { state: 'unreadable', dir, detail: `${dir}: runtime-identity did not run (${ran.error ? ((ran.error as NodeJS.ErrnoException).code ?? ran.error.message) : `exit ${String(ran.status)}`})` };
   }
   let identity: unknown;
   try {
     identity = JSON.parse((ran.stdout ?? '').trim());
   } catch {
-    return unsupported(`${dir}: runtime-identity did not print JSON`);
+    return { state: 'unreadable', dir, detail: `${dir}: runtime-identity did not print JSON` };
   }
   const packageName = typeof identity === 'object' && identity !== null ? (identity as Record<string, unknown>)['packageName'] : undefined;
   const version = typeof identity === 'object' && identity !== null ? (identity as Record<string, unknown>)['version'] : undefined;
-  if (typeof packageName !== 'string' || typeof version !== 'string') return unsupported(`${dir}: runtime-identity names no package and version`);
+  if (typeof packageName !== 'string' || typeof version !== 'string') return { state: 'unreadable', dir, detail: `${dir}: runtime-identity names no package and version` };
+  return { state: 'found', dir, packageName, version };
+}
+
+export function locateGsdCore(env: NodeJS.ProcessEnv): Result<LocatedGsd> {
+  const identity = identifyGsdCore(env);
+  if (identity.state === 'absent') {
+    const candidates = identity.searched;
+    return err({ kind: 'not_found', ref: candidates.length === 0 ? 'gsd-core (no GSD_HOME, CLAUDE_CONFIG_DIR or HOME set)' : `gsd-core (probed ${candidates.join(', ')})` });
+  }
+  if (identity.state === 'unreadable') return unsupported(identity.detail);
+  const { dir, packageName, version } = identity;
   if (packageName !== GSD_ADMITTED_PACKAGE) return unsupported(`found ${packageName} ${version} at ${dir}, not ${GSD_ADMITTED_PACKAGE}`);
-  if (!ADMITTED_VERSION.test(version)) return unsupported(`found ${packageName} ${version} at ${dir}`);
+  if (!gsdVersionAdmitted(version)) return unsupported(`found ${packageName} ${version} at ${dir}`);
   return ok({ gsdCoreDir: dir, version, packageName });
 }

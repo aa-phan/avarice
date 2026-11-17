@@ -190,7 +190,7 @@ export function systemIds(clock: Clock): IdSource {
 }
 
 // The first executable file named `name` on `pathEnv`, or undefined.
-function locateOnPath(name: string, pathEnv: string | undefined): string | undefined {
+export function locateOnPath(name: string, pathEnv: string | undefined): string | undefined {
   for (const dir of (pathEnv ?? '').split(':')) {
     if (dir === '') continue;
     const candidate = join(dir, name);
