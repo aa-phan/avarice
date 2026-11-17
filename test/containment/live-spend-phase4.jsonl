@@ -20,3 +20,9 @@
 {"plan":"04-34","case":"p4-restricted-run","costUsd":0.00483598,"claudeVersion":"2.1.326","at":"2026-11-17T18:46:45.262Z"}
 {"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0025031899999999998,"claudeVersion":"2.1.326","at":"2026-11-17T18:47:13.834Z"}
 {"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0031211500000000005,"claudeVersion":"2.1.326","at":"2026-11-17T18:49:07.253Z"}
+{"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0024973,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:01.609Z"}
+{"plan":"04-34","case":"p4-run-privileged-denial","costUsd":0.0046260599999999995,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:47.301Z"}
+{"plan":"04-34","case":"p4-attended-approve:deny","costUsd":0.0016811500000000002,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:57.270Z"}
+{"plan":"04-34","case":"p4-attended-approve:allow","costUsd":0.0005159800000000001,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:00.806Z"}
+{"plan":"04-34","case":"p4-hook-input-capture","costUsd":0.0025576600000000007,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:17.785Z"}
+{"plan":"04-34","case":"p4-agent-broad-search","costUsd":0.00414577,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:38.009Z"}

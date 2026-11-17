@@ -8,7 +8,7 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 
 | System | Direction | Protocol | Version expectation | When missing or wrong |
 |---|---|---|---|---|
-| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume` | exactly 2.1.312, 2.1.316, 2.1.317, 2.1.318 or 2.1.319 | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure |
+| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume` | exactly 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 or 2.1.326 | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure |
 | Claude configuration directory | AVARICE writes one file; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` written by `install-host`; GSD and user skills read | none | `install-host` refuses a link or an unmarked file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
 | GSD (`@opengsd/gsd-core`) | AVARICE spawns `gsd-tools.cjs` under Node; Claude Code runs GSD's own shell shim inside the host; a run drives GSD's quick workflow through the host | JSON on stdout, one verb per process | 1.17.x only | no GSD adapter; onboarding stops as incompatible; no host |
 | git | AVARICE spawns it | argv arrays, minimal environment, plain-text output | none checked | the failing call returns an error; the run or onboarding stops at that step |
@@ -138,7 +138,7 @@ The wall clock is enforced by AVARICE: at the limit the process group gets SIGTE
 
 ### Admitted versions and readiness
 
-Five versions are admitted: 2.1.312, 2.1.316, 2.1.317, 2.1.318 and 2.1.319. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. No range is accepted: any version not on the list is refused until added.
+Six versions are admitted: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 and 2.1.326. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. No range is accepted: any version not on the list is refused until added.
 
 Before every launch the adapter proves each layer, and any refusal is a denial with rule `enforcement_failure:<reason>` with nothing spawned. These checks prevent a launch. None of them asks the running host which sandbox it applied.
 
