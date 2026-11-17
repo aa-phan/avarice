@@ -935,6 +935,8 @@ export interface LiveOnboardingOptions {
   perInvocationCapUsd?: number;
   // Tracked files added to the scratch repository (the knowledge case adds Markdown documents).
   extraFiles?: Readonly<Record<string, string>>;
+  // Plan 04-34: `onboard --restricted` (the restricted fast map).
+  restricted?: boolean;
 }
 
 export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP_USD, options: LiveOnboardingOptions = {}): Promise<{ skipped: string } | LiveOnboardingResult> {
@@ -948,7 +950,7 @@ export async function runLiveFastOnboarding(name: string, costCap = FAST_MAP_CAP
   const before = { refs: refsDigest(repo.path), tree: treeDigest(repo.path) };
   const started = Date.now();
   const budgets = [`costUsdPerInvocation=${options.perInvocationCapUsd ?? costCap}`, `costUsdPerRun=${costCap}`, 'retry=1', `invocations=${options.invocations ?? 2}`, 'wallClockMinutes=15'].flatMap((b) => ['--budget', b]);
-  const cli = runCli(['onboard', '--policy', 'onboarding', '--mode', 'fast', ...budgets, repo.path], {
+  const cli = runCli(['onboard', '--policy', 'onboarding', '--mode', 'fast', ...(options.restricted === true ? ['--restricted'] : []), ...budgets, repo.path], {
     roots,
     env: { AVARICE_CLAUDE_BIN: wrapper.bin },
     timeoutMs: 18 * 60_000,
@@ -1844,6 +1846,8 @@ export interface LiveRunSpec {
   startEnv?: (roots: CliRoots) => Record<string, string | undefined>;
   // Called after the profile and repository exist and before `start` (replace the hook entry, and so on).
   beforeStart?: (roots: CliRoots, repo: ScratchRepo) => void;
+  // Plan 04-34: extra arguments of `start` (`--restricted`), placed after the budgets.
+  startArgs?: readonly string[];
 }
 
 export interface LiveRunResult {
@@ -2178,7 +2182,7 @@ export async function runLiveRun(spec: LiveRunSpec): Promise<LiveRun> {
   ].flatMap((b) => ['--budget', b]);
   const baseEnv: Record<string, string | undefined> = { AVARICE_CLAUDE_BIN: wrapperBin, AVARICE_LEASE_TTL_MS: String(lease) };
   const cliOptions = { roots, entry: PRODUCTION_ENTRY_FILE, timeoutMs: 25 * 60_000 };
-  const start = runCli(['start', '--brief', briefPath, '--policy', 'routine', '--wait', ...budgets], {
+  const start = runCli(['start', '--brief', briefPath, '--policy', 'routine', '--wait', ...budgets, ...(spec.startArgs ?? [])], {
     ...cliOptions,
     cwd: repo.path,
     env: { ...baseEnv, ...(spec.startEnv?.(roots) ?? {}), ...(spec.fault !== undefined ? { AVARICE_FAULT: spec.fault } : {}) },
