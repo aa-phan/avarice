@@ -6,6 +6,7 @@ import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { IdPrefix } from '../../domain/ids.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
+import { APPROVAL_TTL_MS, approvalKey, scopeRunId } from '../../domain/approval.ts';
 import { assertTransition, NEXT_ACTIONS } from '../../domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
 import { assertItemTransition, assertRunTransition, isRunTerminal, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
@@ -645,34 +646,141 @@ export class SqliteLedger implements Ledger {
     return tx(this.db, () => this.insertEvent(input));
   }
 
-  // ---- approvals (plan 04-16) --------------------------------------------------------------------
+  // ---- approvals (plan 04-16; FR-12, FR-15, ADR-005) -----------------------------------------------
+  // The approvals table holds granted approvals only (its granted_by column is NOT NULL); a request is the `approval.requested` event, found by its
+  // `apr_` ID in the event data. Every writer is one BEGIN IMMEDIATE transaction, so a consume and the start event it pays for commit together.
 
-  grantApproval(_input: GrantApprovalInput): Result<ApprovalRow> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  grantApproval(input: GrantApprovalInput): Result<ApprovalRow> {
+    return tx(this.db, () => {
+      checkApprovalKey(input.scope, input.action, input.paramsDigest);
+      if (input.grantedBy === '') abort({ kind: 'invalid', field: 'grantedBy', reason: 'an approval names who granted it' });
+      if (input.requestId !== undefined) {
+        const answered = this.db.prepare("SELECT 1 AS found FROM events WHERE type = 'approval.granted' AND json_extract(data_json, '$.requestId') = ? LIMIT 1").get(input.requestId);
+        if (answered !== undefined) abort({ kind: 'conflict', expected: 'a request that no approval answered yet', actual: `request ${input.requestId} was already approved` });
+      }
+      // The ordinal counts the earlier approvals of the same scope, action and digest, in this transaction, so two grants never share a key and a
+      // fresh approval after expiry inserts.
+      const earlier = this.db.prepare('SELECT count(*) AS n FROM approvals WHERE run_id = ? AND action = ? AND params_digest = ?').get(input.scope, input.action, input.paramsDigest) as Row;
+      const approvalId = this.newId('apv_');
+      const grantedAt = iso(input.nowMs);
+      const expiresAt = iso(input.nowMs + APPROVAL_TTL_MS);
+      this.db
+        .prepare(
+          `INSERT INTO approvals (approval_id, run_id, action, params_digest, idempotency_key, source, granted_by, granted_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, 'local-user', ?, ?, ?)`,
+        )
+        .run(approvalId, input.scope, input.action, input.paramsDigest, approvalKey(input.scope, input.action, input.paramsDigest, Number(earlier['n'])), input.grantedBy, grantedAt, expiresAt);
+      const runId = scopeRunId(input.scope);
+      this.insertEvent({
+        type: 'approval.granted',
+        ...(runId !== undefined ? { runId } : {}),
+        data: {
+          approvalId,
+          ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+          scope: input.scope,
+          action: input.action,
+          paramsDigest: input.paramsDigest,
+          grantedBy: input.grantedBy,
+          expiresAt,
+        },
+        nowMs: input.nowMs,
+      });
+      return this.readApproval(approvalId);
+    });
   }
 
-  revokeApproval(_approvalId: string, _nowMs: number): Result<ApprovalRow> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  // Sets `revoked_at` once. A revoked approval and a consumed one are a conflict: the first is already revoked, the second has already been spent.
+  revokeApproval(approvalId: string, nowMs: number): Result<ApprovalRow> {
+    return tx(this.db, () => {
+      const row = this.db.prepare('SELECT * FROM approvals WHERE approval_id = ?').get(approvalId) as Row | undefined;
+      if (row === undefined) throw notFound(`approval ${approvalId}`);
+      if (row['revoked_at'] !== null) abort({ kind: 'conflict', expected: 'an approval that is not revoked', actual: `approval ${approvalId} was revoked at ${str(row['revoked_at'])}` });
+      if (row['consumed_at'] !== null) abort({ kind: 'conflict', expected: 'an approval that is not consumed', actual: `approval ${approvalId} was consumed at ${str(row['consumed_at'])}` });
+      this.db.prepare('UPDATE approvals SET revoked_at = ? WHERE approval_id = ? AND revoked_at IS NULL AND consumed_at IS NULL').run(iso(nowMs), approvalId);
+      const scope = str(row['run_id']);
+      const runId = scopeRunId(scope);
+      this.insertEvent({
+        type: 'approval.revoked',
+        ...(runId !== undefined ? { runId } : {}),
+        data: { approvalId, scope, action: str(row['action']), paramsDigest: str(row['params_digest']) },
+        nowMs,
+      });
+      return this.readApproval(approvalId);
+    });
   }
 
-  consumeApprovalAndStart(_input: ConsumeApprovalInput): Result<ConsumedApproval | null> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  // Takes the oldest usable approval of the scope, action and digest and appends the start event, in one transaction: a process that consumes
+  // an approval has recorded the action's start, and an action that started has consumed exactly one approval (T-04-42). BEGIN IMMEDIATE
+  // serializes two processes on one store, and the UPDATE re-checks `consumed_at IS NULL`, so one approval is never taken twice. Usable means
+  // not revoked, not consumed and expiring strictly after `nowMs` (isUsable): the stored times are ISO-8601 UTC of one width, so the text compares.
+  consumeApprovalAndStart(input: ConsumeApprovalInput): Result<ConsumedApproval | null> {
+    return tx(this.db, () => {
+      checkApprovalKey(input.scope, input.action, input.paramsDigest);
+      const found = this.db
+        .prepare(
+          `SELECT approval_id FROM approvals
+           WHERE run_id = ? AND action = ? AND params_digest = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+           ORDER BY granted_at, rowid LIMIT 1`,
+        )
+        .get(input.scope, input.action, input.paramsDigest, iso(input.nowMs)) as Row | undefined;
+      if (found === undefined) return null;
+      const approvalId = str(found['approval_id']);
+      const changed = this.db.prepare('UPDATE approvals SET consumed_at = ? WHERE approval_id = ? AND consumed_at IS NULL AND revoked_at IS NULL').run(iso(input.nowMs), approvalId).changes;
+      if (Number(changed) !== 1) return null;
+      const started = this.insertEvent({
+        type: input.startEvent.type,
+        ...(input.startEvent.level !== undefined ? { level: input.startEvent.level } : {}),
+        ...(input.startEvent.runId !== undefined ? { runId: input.startEvent.runId } : {}),
+        data: { ...input.startEvent.data, approvalId },
+        nowMs: input.nowMs,
+      });
+      return { approvalId, startSeq: started.seq };
+    });
   }
 
-  listApprovals(_scope: string): Result<ApprovalRow[]> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  listApprovals(scope: string): Result<ApprovalRow[]> {
+    return guarded(() => (this.db.prepare('SELECT * FROM approvals WHERE run_id = ? ORDER BY rowid').all(scope) as Row[]).map(toApproval));
   }
 
-  findApprovalRequest(_requestId: string): Result<ApprovalRequestRow | null> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  findApprovalRequest(requestId: string): Result<ApprovalRequestRow | null> {
+    return guarded(() => {
+      const row = this.db.prepare("SELECT ts, data_json FROM events WHERE type = 'approval.requested' AND json_extract(data_json, '$.requestId') = ? ORDER BY seq LIMIT 1").get(requestId) as Row | undefined;
+      return row === undefined ? null : toApprovalRequest(row);
+    });
   }
 
-  findPendingApprovalRequest(_query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  findPendingApprovalRequest(query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null> {
+    return guarded(() => {
+      const row = this.db
+        .prepare(
+          `SELECT r.ts AS ts, r.data_json AS data_json FROM events r
+           WHERE r.type = 'approval.requested' AND r.run_id IS ?
+             AND json_extract(r.data_json, '$.scope') = ? AND json_extract(r.data_json, '$.action') = ? AND json_extract(r.data_json, '$.paramsDigest') = ?
+             AND NOT EXISTS (SELECT 1 FROM events g WHERE g.type = 'approval.granted' AND json_extract(g.data_json, '$.requestId') = json_extract(r.data_json, '$.requestId'))
+           ORDER BY r.seq DESC LIMIT 1`,
+        )
+        .get(scopeRunId(query.scope) ?? null, query.scope, query.action, query.paramsDigest) as Row | undefined;
+      return row === undefined ? null : toApprovalRequest(row);
+    });
   }
 
-  listActionEvents(_scope: string): Result<ActionEventRow[]> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  listActionEvents(scope: string): Result<ActionEventRow[]> {
+    return guarded(() => {
+      const rows = this.db
+        .prepare(
+          `SELECT seq, type, data_json FROM events
+           WHERE type IN ('action.started', 'action.finished', 'action.interrupted') AND run_id IS ? AND json_extract(data_json, '$.scope') = ?
+           ORDER BY seq`,
+        )
+        .all(scopeRunId(scope) ?? null, scope) as Row[];
+      return rows.map((r) => ({ seq: Number(r['seq']), type: str(r['type']), data: toRunEvent(r).data }));
+    });
+  }
+
+  private readApproval(approvalId: string): ApprovalRow {
+    const row = this.db.prepare('SELECT * FROM approvals WHERE approval_id = ?').get(approvalId) as Row | undefined;
+    if (row === undefined) throw notFound(`approval ${approvalId}`);
+    return toApproval(row);
   }
 
   listRunEvents(runId: string, limit: number): Result<RunEventRow[]> {
@@ -1811,6 +1919,40 @@ export class SqliteLedger implements Ledger {
 
 function notFound(ref: string): LedgerAbort {
   return new LedgerAbort({ kind: 'not_found', ref });
+}
+
+// A scope is the ID of a run or an onboarding, or `attended:<session id>`; an action is a dotted name; a digest is the SHA-256 form of paramsDigest.
+const APPROVAL_SCOPE = /^[A-Za-z0-9_.:-]{1,128}$/;
+const APPROVAL_ACTION = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const APPROVAL_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+function checkApprovalKey(scope: string, action: string, digest: string): void {
+  if (!APPROVAL_SCOPE.test(scope)) abort({ kind: 'invalid', field: 'scope', reason: 'an approval scope is a run ID, an onboarding ID or attended:<session id>' });
+  if (!APPROVAL_ACTION.test(action)) abort({ kind: 'invalid', field: 'action', reason: 'an approval names an action' });
+  if (!APPROVAL_DIGEST.test(digest)) abort({ kind: 'invalid', field: 'paramsDigest', reason: 'an approval binds the sha256 digest of the parameters' });
+}
+
+function toApproval(r: Row): ApprovalRow {
+  return {
+    approvalId: str(r['approval_id']),
+    scope: str(r['run_id']),
+    action: str(r['action']),
+    paramsDigest: str(r['params_digest']),
+    idempotencyKey: str(r['idempotency_key']),
+    source: str(r['source']),
+    grantedBy: str(r['granted_by']),
+    grantedAt: str(r['granted_at']),
+    expiresAt: str(r['expires_at']),
+    consumedAt: strOrNull(r['consumed_at']),
+    revokedAt: strOrNull(r['revoked_at']),
+  };
+}
+
+// An `approval.requested` event as a record. The data column is event JSON; a field that is not a string reads as empty.
+function toApprovalRequest(r: Row): ApprovalRequestRow {
+  const data = toRunEvent({ ...r, seq: 0, level: 'info', type: 'approval.requested' }).data;
+  const text = (key: string): string => (typeof data[key] === 'string' ? (data[key] as string) : '');
+  return { requestId: text('requestId'), scope: text('scope'), action: text('action'), paramsDigest: text('paramsDigest'), paramsSummary: text('paramsSummary'), requestedAt: str(r['ts']) };
 }
 
 function checkAmount(amount: number): void {
