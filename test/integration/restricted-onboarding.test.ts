@@ -6,8 +6,8 @@
 // temp directory.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
@@ -120,6 +120,26 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
 
     // The user's checkout is exactly as it was.
     assert.deepEqual(checkoutSnapshot(f.repo.path), before, 'the user checkout is unchanged (treeDigest, status, HEAD)');
+  });
+
+  // Product defect of the first live restricted onboarding (plan 04-34): no shell exists to resolve a home directory, so the prompt names the absolute gsd-core
+  // paths the map skill reads, taken from the same source as the hook policy's readRoots, and never a `~` or `$HOME` form.
+  it('names, in the map prompt, the absolute gsd-core path that the hook policy holds as a read root, and no home-directory form', () => {
+    const f = fixture();
+    assert.equal(onboard(f, '--restricted').code, 0);
+    const [launch] = f.fake.argvs() as Array<{ argv: string[] }>;
+    const prompt = launch?.argv[1] ?? '';
+    const [onboarding] = rows<{ onboarding_id: string }>(f.roots, 'SELECT onboarding_id FROM onboardings');
+    const dir = join(f.roots.AVARICE_DATA_ROOT, 'onboard', onboarding?.onboarding_id as string);
+    const mapDir = readdirSync(dir).find((name) => name.startsWith('map-'));
+    assert.ok(mapDir !== undefined, 'the map invocation directory is kept');
+    const policy = JSON.parse(readFileSync(join(dir, mapDir, 'hook-policy.json'), 'utf8')) as { readRoots: string[] };
+    const gsdCore = policy.readRoots.find((root) => root.endsWith('/gsd-core'));
+    assert.ok(gsdCore !== undefined && isAbsolute(gsdCore), 'the hook policy holds an absolute gsd-core read root');
+    assert.ok(prompt.includes(`${gsdCore}/workflows/map-codebase.md`), `the prompt names the map workflow under the read root: ${prompt}`);
+    assert.ok(prompt.includes(`${gsdCore}/workflows/scan.md`), `and the fast scan workflow: ${prompt}`);
+    assert.ok(!prompt.includes('~') && !/\$\{?HOME/.test(prompt), `no tilde and no $HOME in: ${prompt}`);
+    assert.ok(prompt.startsWith('/gsd-map-codebase --fast'), 'the map command still comes first');
   });
 
   it('shows `partial (restricted)` in status, and appends the optional `restricted` key last to the project entry of status --json', () => {
