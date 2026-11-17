@@ -317,6 +317,10 @@ None - no external service configuration required.
 
 None. Every new surface (retrieval caps, a ledger method, query fields) is inside the plan's threat model (T-04-77, T-04-78, T-04-79).
 
+## Self-Check: PASSED
+
+All created files exist on disk, all six task commits (`93446f9`, `2bb01fd`, `3f6d430`, `1a36e1a`, `1688fdf`, `ec6da4e`) and the summary commit `592e719` are on the branch, and the three RED records return `RED_EVIDENCE_OK`.
+
 ---
 *Phase: 04-profiles-retrieval-budgets-restricted-mode-and-the-portabili*
 *Completed: 2026-11-17*
