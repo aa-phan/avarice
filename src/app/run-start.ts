@@ -19,6 +19,7 @@ import { GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
+import { recordCompatibility } from './doctor.ts';
 
 export const BRIEF_MAX_BYTES = 64 * 1024;
 
@@ -91,6 +92,11 @@ export function describeError(error: PortError): string {
 
 const DAY_MS = 86_400_000;
 const GIT_PREFIX = /^git:/;
+
+// The refusal of a start on a record the installed GSD cannot be used with (S-38): what was built under what, and the one thing to do.
+function incompatibleMessage(repoPath: string, verdict: { incompatible: string; fix: string }): string {
+  return `the active project record of ${repoPath} is incompatible with the installed GSD: ${verdict.incompatible}; ${verdict.fix}`;
+}
 
 // The digest a reference to a brief file keeps: `sha256:` and the SHA-256 of the file's bytes as they were read (not of the decoded text, which drops a byte order mark).
 export const briefBytesDigest = (bytes: Uint8Array): string => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
@@ -189,6 +195,16 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   // A run is a GSD unit (FR-4): without an admitted gsd-core there is nothing to run, so nothing is created (RC-1).
   if (deps.gsd === undefined) {
     const problem = deps.gsdProblem;
+    // S-38: a project that already has an active record built under a GSD is told that the record is incompatible with what is installed now, and what to do about it.
+    // Derived here exactly as `doctor` derives it; nothing is written.
+    const known = findProject(deps, request);
+    if ('project' in known) {
+      const existing = deps.ledger.getActiveRecord(known.project.projectId);
+      if (existing.ok && existing.value !== null) {
+        const verdict = recordCompatibility({ gsdVersion: existing.value.gsdVersion }, undefined, problem?.found);
+        if (verdict !== 'compatible') return refused('record-incompatible', incompatibleMessage(known.project.repoPath, verdict));
+      }
+    }
     return refused('gsd-not-admitted', `GSD ${GSD_ADMITTED_RANGE} was not found${problem !== undefined ? ` (${problem.found}; admitted: ${problem.admitted})` : ''}`);
   }
 
@@ -208,6 +224,11 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (!active.ok) return internal(describeError(active.error));
   const record: ActiveRecord | null = active.value;
   if (record === null) return refused('no-active-record', `${project.repoPath} has no active project record; onboard it first (avarice onboard --policy onboarding ${project.repoPath})`);
+  // S-38, T-04-70: a record built under one GSD is not reinterpreted under another. The check is derived from the located GSD and the version the record carries (it is never
+  // written to the record), and it comes before anything is created.
+  const inspected = deps.gsd.inspect();
+  const compatibility = recordCompatibility({ gsdVersion: record.gsdVersion }, inspected.ok ? { version: inspected.value.version } : undefined, inspected.ok ? undefined : describeError(inspected.error));
+  if (compatibility !== 'compatible') return refused('record-incompatible', incompatibleMessage(project.repoPath, compatibility));
   // A map made under the restricted launch is a partial map that nothing contained its mapper (plan 04-24; CON-4, T-04-65): it is never taken for the whole-repository, contained map a
   // contained run is planned from, so only a restricted run may start on it. The owner replaces it with a contained onboarding on an enforced host.
   if (record.body['restricted'] === true && request.restricted !== true) {

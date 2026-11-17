@@ -66,7 +66,7 @@ export function renderDoctor(report: DoctorReport, nowMs: number): string {
   lines.push(row('store', s.state === 'absent' ? 'none yet (the first command that writes creates it)' : s.state === 'unchecked' ? 'not checked' : `schema ${s.schema ?? 'unknown'} (this build writes ${s.expectedSchema})  ${s.state}   journal ${s.journalMode ?? 'unknown'}   integrity ${s.integrity ?? 'unchecked'}   last backup ${backup}`));
 
   const h = report.host;
-  lines.push(row('host', h.claudeBin === null ? 'claude not found' : `claude ${h.claudeVersion ?? 'did not answer'}   admission: ${h.admission}${h.refusal === null ? '' : ` (${h.refusal})`}`));
+  lines.push(row('host', h.admission === 'absent' ? `claude not found${h.claudeBin === null ? '' : ` (${h.claudeBin})`}` : `claude ${h.claudeVersion ?? 'did not answer'}   admission: ${h.admission}${h.refusal === null ? '' : ` (${h.refusal})`}`));
   lines.push(more(`enforcement: ${h.enforcement}   sandbox: ${h.sandbox}   hook entry: ${h.hookEntry}   restricted launch: ${h.restricted ? 'available' : 'not available'}`));
   lines.push(more(`attended hook: ${h.attended}   config dir: ${h.configDir}`));
 
