@@ -233,6 +233,12 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     } else if (source === undefined) {
       continue;
     }
+    // The planning sections are the document fallback: when the graph already returned a document node for the term, they would only repeat it
+    // (docs/contracts-and-state.md "ContextSource").
+    if (name === 'planning' && candidates.some((c) => order[c.sourceIndex]?.name === 'graph' && c.handle.untrusted === true)) {
+      notes.push('the gsd-planning sections were not asked: the graph returned a document node for this term, so they would repeat it');
+      continue;
+    }
     const query: ContextQuery = { term: request.term, workspace, indexRevision, readScope };
     const found = await source.find(query, share);
     if (!found.ok) {
