@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-29-PLAN.md
-last_updated: "2026-11-17T12:50:35.013Z"
+stopped_at: Completed 04-30-PLAN.md
+last_updated: "2026-11-17T13:27:48.567Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 5c11d1838e248260f74e1d4d3a71e4fe11737acf
+state_head: 8c66f9be2edb264ebe5455c48cafda6429269983
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 30 of 39
+Plan: 31 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -192,6 +192,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P27 | 55 min | 3 tasks | 17 files |
 | Phase 04 P28 | 40 min | 3 tasks | 26 files |
 | Phase 04 P29 | 25min | 2 tasks | 7 files |
+| Phase 04 P30 | 110 min | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -472,6 +473,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-27: status gains an appended optional manualEvidence key; a resume leaves manual-context and github pull-request references as recorded
 - [Phase 04]: 04-28: retrieval counters are budget rows spent with the all-or-nothing Ledger.spendBudgets; broad discovery is authorized by brief frontmatter broadDiscovery true and happens once; every source find and page is one search; the 64 KiB returned-byte cap applies per source answer; a refused read leaves the ref out of the pack with reason access_revoked and is not recorded in task_refs; status keeps its five budgets
 - [Phase 04]: 04-29: hook retrieval rules are policy-gated; a multi-row charge is check-all-then-write-all in one transaction; a Glob whose pattern names every file counts as unfiltered for broad discovery
+- [Phase 04]: 04-30: limits.contextTokens is a pack ceiling; the run's effective pack budget is min(ceiling, floor((32 KiB prompt - contract bytes - fence bytes)/4)) and the context:pack step records both (D-13) — The unit prompt is capped at 32 KiB, so a 24,000-token pack cannot fit; recording both numbers says which bound applied.
+- [Phase 04]: 04-30: a bad limits section refuses start and context and is a doctor error, while the composition, checks and pack budget keep the defaults; the profile config may raise a limit (maxConcurrentChecks at most 2) and no run contract overrides it — A typo must never remove a bound; the plan's contract-may-only-lower rule had no contract field to land on (owner review).
+- [Phase 04]: 04-30: artifact quota refuses new blobs (counted lazily, approximate across processes), debug events past maxEventRows are refused and counted rather than pruned, pack reuse on retry is per handle from the stage pass's in-memory pack — No eviction until OPS-4 retention classes (Phase 5); the events table is insert-only; the ledger never stores excerpt text (S-41).
 
 ### Roadmap Evolution
 
@@ -539,8 +543,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T12:50:34.983Z
-Stopped at: Completed 04-29-PLAN.md
+Last session: 2026-11-17T13:27:48.537Z
+Stopped at: Completed 04-30-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
