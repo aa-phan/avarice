@@ -1,6 +1,6 @@
 {
   "term": "answer",
-  "budget": 4000,
+  "budget": 24000,
   "usedTokens": 432,
   "project": {
     "projectId": "<id>",

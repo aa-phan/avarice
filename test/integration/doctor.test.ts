@@ -24,7 +24,7 @@ describe('tracer: `avarice doctor --json` reports every section offline from its
     const r = doctor(f, ['--json']);
     assert.equal(r.code, 0, r.stdout + r.stderr);
     const rep = reportOf(r);
-    assert.deepEqual(Object.keys(rep), ['profile', 'runtime', 'store', 'host', 'gsd', 'graphify', 'adapters', 'runs', 'records', 'findings']);
+    assert.deepEqual(Object.keys(rep), ['profile', 'runtime', 'store', 'host', 'gsd', 'graphify', 'adapters', 'runs', 'records', 'events', 'findings']);
 
     assert.equal(rep.profile.name, 'personal-local');
     assert.equal(rep.profile.class, 'personal');

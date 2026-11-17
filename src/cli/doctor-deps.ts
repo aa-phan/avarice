@@ -35,6 +35,7 @@ export function createDoctorDeps(env: NodeJS.ProcessEnv, profileName: string): D
           workRoot: resolved.value.workRoot,
           configPath: configPathFor(resolved.value.configHome, resolved.value.profile),
           credentials: resolved.value.config.sections.credentials,
+          limits: resolved.value.config.sections.limits,
         },
       }
     : { ok: false, message: describeError(resolved.error) };

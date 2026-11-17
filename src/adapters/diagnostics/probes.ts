@@ -151,6 +151,13 @@ export class ProcessDiagnostics implements Diagnostics {
         facts.integrity = e instanceof Error ? e.message.slice(0, 120) : 'the check could not run';
       }
       try {
+        const rows = db.prepare('SELECT count(*) AS n FROM events').get() as { n?: unknown } | undefined;
+        const dropped = db.prepare("SELECT value FROM meta WHERE key = 'events_dropped_debug'").get() as { value?: unknown } | undefined;
+        if (typeof rows?.n === 'number' || typeof rows?.n === 'bigint') facts.events = { rows: Number(rows.n), droppedDebug: dropped?.value === undefined ? 0 : Number(dropped.value) || 0 };
+      } catch {
+        // no events table
+      }
+      try {
         facts.adapters = (db.prepare('SELECT name, port, adapter FROM adapter_configs ORDER BY name').all() as Array<{ name: unknown; port: unknown; adapter: unknown }>).map((r) => ({ name: String(r.name), port: String(r.port), adapter: String(r.adapter) }));
       } catch {
         // no adapter table

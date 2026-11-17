@@ -35,7 +35,7 @@ export function isRevoked(ref: CacheRef): boolean {
 
 // Why an entry may not be reused, or null when it may. Revocation is judged first: an entry the source refused is never reusable whatever else holds, and the reason a
 // reader needs is that access went away.
-function missOf(entry: CacheEntry, now: CacheNow): CacheMiss | null {
+export function cacheMiss(entry: CacheEntry, now: CacheNow): CacheMiss | null {
   if (isRevoked(entry.ref) || entry.answer === 'denied' || entry.answer === 'unauthenticated') return 'access_revoked';
   if (entry.profile !== now.profile) return 'profile';
   if (entry.accessScope !== now.accessScope) return 'access-scope';
@@ -44,7 +44,7 @@ function missOf(entry: CacheEntry, now: CacheNow): CacheMiss | null {
 }
 
 export function mayReuse(entry: CacheEntry, now: CacheNow): boolean {
-  return missOf(entry, now) === null;
+  return cacheMiss(entry, now) === null;
 }
 
 // The entries that may be reused, in their order, and the others with the reason each is refetched.
@@ -52,7 +52,7 @@ export function reusablePack<E extends CacheEntry>(previous: readonly E[], now: 
   const reusable: E[] = [];
   const refetch: Array<{ entry: E; reason: CacheMiss }> = [];
   for (const entry of previous) {
-    const miss = missOf(entry, now);
+    const miss = cacheMiss(entry, now);
     if (miss === null) reusable.push(entry);
     else refetch.push({ entry, reason: miss });
   }

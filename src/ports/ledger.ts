@@ -240,6 +240,8 @@ export interface EventInput {
 export interface EventReceipt {
   seq: number;
   rowHash: string;
+  // Set, with seq 0 and an empty hash, when the event was a debug event refused because the events table is at its bound (plan 04-30; OPS-5). Nothing was written.
+  dropped?: true;
 }
 
 // A granted approval (plan 04-16; FR-12, ADR-005). `scope` is the run ID, the onboarding ID, or `attended:<session id>`: it is stored in the

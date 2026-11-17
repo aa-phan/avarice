@@ -26,6 +26,8 @@ export interface StoreFacts {
   adapters: ReadonlyArray<{ name: string; port: string; adapter: string }>;
   // The modification time of the newest pre-migration backup beside the store.
   lastBackupMs?: number;
+  // The rows of the events table and the debug events refused because it was at its bound (`meta.events_dropped_debug`; plan 04-30). Absent when the table cannot be read.
+  events?: { rows: number; droppedDebug: number };
 }
 
 // What running `<bin> --version` did. `absent`: the file does not exist or is not executable. `failed`: it started and did not answer in time or exited non-zero.

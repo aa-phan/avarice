@@ -55,6 +55,7 @@ import { parsePolicyFile, policySources } from '../domain/policy.ts';
 import type { PolicyFile, PolicySources } from '../domain/policy.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import { LIMIT_DEFAULTS, parseLimitsSection } from '../domain/resource-bounds.ts';
 import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
@@ -372,7 +373,11 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
   }
   const store = db;
-  const ledger = new SqliteLedger(store, (prefix) => ids.next(prefix));
+  // OPS-5: the profile's limits bound the events table (debug events past it are refused) and the artifact store (new blobs past the quota are refused). A section that cannot
+  // be read leaves the documented defaults in force here, so a typo never removes a bound; `start` refuses it and `doctor` names it.
+  const limitsRead = parseLimitsSection(profile.config.sections.limits);
+  const limits = limitsRead.ok ? limitsRead.value : { ...LIMIT_DEFAULTS };
+  const ledger = new SqliteLedger(store, (prefix) => ids.next(prefix), { maxEventRows: limits.maxEventRows });
   // D-18: a project already in this store belongs to this store's profile. The first command that may write makes that explicit in the
   // binding registry, so the repository can no longer be run under another profile. A read-only command writes nothing.
   if (options.readOnly !== true) {
@@ -479,7 +484,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const runWorkspace = new CloneRunWorkspace();
   const egress = overrides.egress ?? new AllowlistEgressProxy();
   // SEC-3, D-14: every text artifact is redacted before it is stored, whoever writes it.
-  const artifacts = new RedactingArtifactStore(new LocalArtifactStore(profile.dataRoot), processRedactor);
+  const artifacts = new RedactingArtifactStore(new LocalArtifactStore(profile.dataRoot, {}, { mib: limits.artifactQuotaMiB, profile: profile.profile }), processRedactor);
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =
     overrides.host ??

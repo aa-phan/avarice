@@ -197,9 +197,13 @@ export class SqliteLedger implements Ledger {
   readonly db: Db;
   readonly newId: (prefix: IdPrefix) => string;
 
-  constructor(db: Db, newId: (prefix: IdPrefix) => string) {
+  // The most rows the events table holds before new `debug` events are refused (plan 04-30; OPS-5); undefined is no bound.
+  readonly #maxEventRows: number | undefined;
+
+  constructor(db: Db, newId: (prefix: IdPrefix) => string, options: { maxEventRows?: number } = {}) {
     this.db = db;
     this.newId = newId;
+    this.#maxEventRows = options.maxEventRows;
   }
 
   // ---- reads -------------------------------------------------------------------------------------
@@ -648,8 +652,19 @@ export class SqliteLedger implements Ledger {
 
   // ---- events, artifacts, adapter configs -----------------------------------------------------------
 
+  // The events table is insert-only with a hash chain (migration 0001's triggers), so a bound cannot prune old rows. Past `maxEventRows` a `debug` event is refused instead,
+  // and the refusal is counted in `meta.events_dropped_debug` in the same transaction; an event at `info` or above is always written (T-04-84).
   appendEvent(input: EventInput): Result<EventReceipt> {
-    return tx(this.db, () => this.insertEvent(input));
+    return tx(this.db, () => {
+      if (this.#maxEventRows !== undefined && input.level === 'debug') {
+        const rows = Number((this.db.prepare('SELECT count(*) AS n FROM events').get() as Row)['n']);
+        if (rows >= this.#maxEventRows) {
+          this.db.prepare("INSERT INTO meta (key, value) VALUES ('events_dropped_debug', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1").run();
+          return { seq: 0, rowHash: '', dropped: true as const };
+        }
+      }
+      return this.insertEvent(input);
+    });
   }
 
   // ---- approvals (plan 04-16; FR-12, FR-15, ADR-005) -----------------------------------------------

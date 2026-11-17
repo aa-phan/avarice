@@ -8,7 +8,8 @@
 // content, and the fence cannot be closed from inside because every fenced line is prefixed (S-46).
 import { defaultContextReadScope } from '../domain/context-adapters.ts';
 import type { ContextReadScope } from '../domain/context-adapters.ts';
-import { isRevoked } from '../domain/cache-scope.ts';
+import { cacheMiss, isRevoked, mayReuse } from '../domain/cache-scope.ts';
+import type { CacheMiss } from '../domain/cache-scope.ts';
 import { digestOf } from '../domain/digest.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
@@ -36,6 +37,10 @@ export interface ContextRequest {
   runId?: string;
   // The query is a whole-repository or whole-corpus discovery. A query with no term is one whether or not it says so. It needs the contract's authorization and is allowed once per run.
   broad?: boolean;
+  // The items of the pack this run built before (a retried item; plan 04-30, CON-12). A handle the new query picks that one of them already holds is not read again when the
+  // cache rule allows it (src/domain/cache-scope.ts): same profile, same access scope, the source still at the revision the item was read at, and the reference not revoked.
+  // The rest are read again. The answer says which was which in `reuse`. Absent: nothing is reused and the report has no `reuse`.
+  reuse?: readonly PackItem[];
 }
 
 export interface PackItem {
@@ -77,6 +82,9 @@ export interface ContextReport {
   omitted: OmittedItem[];
   // Why an index gave nothing: not recorded, unavailable, or not asked for lack of budget.
   notes: string[];
+  // Present only when the request gave previous items to reuse (plan 04-30): how many items were taken from them without a read, and, for each previous item that was not,
+  // why it was read again (or, for a revoked reference, left out). Never printed by `avarice context`, which has no previous pack.
+  reuse?: { reused: number; refetch: Array<{ source: string; id: string; reason: CacheMiss }> };
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -338,6 +346,11 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     for (const ref of recorded.value) if (isRevoked(ref)) revoked.add(keyOfRef(ref));
   }
 
+  // The previous pack of a retried item, by reference, and what became of each of its items (CON-12).
+  const prior = new Map((request.reuse ?? []).map((item) => [keyOfRef(item.ref), item] as const));
+  const refetch: Array<{ source: string; id: string; reason: CacheMiss }> = [];
+  let reused = 0;
+
   // Phase 1: find. Every source is asked before anything is read; a handle carries no content (FR-22).
   const candidates: Candidate[] = [];
   const asked: Array<{ sourceIndex: number; name: SourceName; source: ContextSource; label: PackItem['source']; share: number }> = [];
@@ -408,6 +421,7 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     const revokedHere = handles.filter((handle) => isRevoked(handle.ref) || revoked.has(refKey(handle)));
     if (revokedHere.length > 0) {
       for (const handle of revokedHere) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens, reason: 'access_revoked' });
+      for (const handle of revokedHere) if (prior.has(refKey(handle))) refetch.push({ source: label, id: handle.ref.id, reason: 'access_revoked' });
       notes.push(`${revokedHere.length} handle${revokedHere.length === 1 ? '' : 's'} from the ${name} ${what} were left out: access to ${revokedHere.length === 1 ? 'it was' : 'them was'} revoked`);
       handles = handles.filter((handle) => !revokedHere.includes(handle));
     }
@@ -437,24 +451,65 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     }
     snippetsRead += Math.min(allowed, snippets.length);
     if (mine.length === 0) continue;
-    const read = await source.read(
-      mine.map((c) => c.handle),
-      share,
-    );
-    if (!read.ok) {
-      notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot be read: ${read.error.kind}`);
-      // A source that refuses the read has revoked what it was asked for: none of it is in the pack, and it says so (CON-12).
-      if (read.error.kind === 'unauthenticated' || read.error.kind === 'denied') {
-        for (const { handle } of mine) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens, reason: 'access_revoked' });
-      }
-      continue;
+    // A picked handle the previous pack already holds is not read again when the cache rule allows it: same profile, same access scope, and the source still at the revision
+    // the item was read at (the handle's own revision, which the find just reported). The rest are read.
+    const kept = new Map<Candidate, PackItem>();
+    for (const c of mine) {
+      const old = prior.get(refKey(c.handle));
+      if (old === undefined) continue;
+      const entry = { ref: old.ref, profile: old.profile ?? '', accessScope: old.accessScope ?? '' };
+      const now = { ...stamp, revision: c.handle.ref.revision ?? '' };
+      if (mayReuse(entry, now)) kept.set(c, old);
+      else refetch.push({ source: label, id: old.ref.id, reason: cacheMiss(entry, now) as CacheMiss });
     }
-    const confirmed = confirmCitedPaths(read.value, sources.gitFiles, workspace);
-    notes.push(...confirmed.notes);
-    // One source's answer carries at most `returnedBytes` bytes of text, whatever it sent.
-    const capped = capBytes(confirmed.items, guard.caps.returnedBytes);
-    if (capped.cut) notes.push(`the ${name} source's answer was cut at the ${guard.caps.returnedBytes}-byte limit`);
-    for (const item of capped.items) items.push(packItem(label, item, stamp));
+    reused += kept.size;
+    const toRead = mine.filter((c) => !kept.has(c));
+    let capped: { items: ContextItem[]; cut: boolean } = { items: [], cut: false };
+    if (toRead.length > 0) {
+      const read = await source.read(
+        toRead.map((c) => c.handle),
+        share,
+      );
+      if (!read.ok) {
+        notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot be read: ${read.error.kind}`);
+        // A source that refuses the read has revoked what it was asked for: none of it is in the pack, and it says so (CON-12).
+        if (read.error.kind === 'unauthenticated' || read.error.kind === 'denied') {
+          for (const { handle } of toRead) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens, reason: 'access_revoked' });
+        }
+        // What was kept from the previous pack is still the pack's; only what had to be read is gone.
+        used += mine.filter((c) => kept.has(c)).reduce((sum, c) => sum + c.handle.estTokens, 0);
+        for (const c of mine) {
+          const old = kept.get(c);
+          if (old !== undefined) items.push(old);
+        }
+        continue;
+      }
+      const confirmed = confirmCitedPaths(read.value, sources.gitFiles, workspace);
+      notes.push(...confirmed.notes);
+      // One source's answer carries at most `returnedBytes` bytes of text, whatever it sent.
+      capped = capBytes(confirmed.items, guard.caps.returnedBytes);
+      if (capped.cut) notes.push(`the ${name} source's answer was cut at the ${guard.caps.returnedBytes}-byte limit`);
+    }
+    if (kept.size === 0) {
+      for (const item of capped.items) items.push(packItem(label, item, stamp));
+    } else {
+      // Kept and read items go in the order the handles were ranked; an item the source returned that no picked handle names follows.
+      const answered = new Map(capped.items.map((item) => [keyOfRef(item.ref), item] as const));
+      const placed = new Set<string>();
+      for (const c of mine) {
+        const old = kept.get(c);
+        if (old !== undefined) {
+          items.push(old);
+          continue;
+        }
+        const got = answered.get(refKey(c.handle));
+        if (got !== undefined) {
+          items.push(packItem(label, got, stamp));
+          placed.add(refKey(c.handle));
+        }
+      }
+      for (const item of capped.items) if (!placed.has(keyOfRef(item.ref))) items.push(packItem(label, item, stamp));
+    }
     used += mine.reduce((sum, c) => sum + c.handle.estTokens, 0);
   }
 
@@ -472,6 +527,7 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     items,
     omitted,
     notes,
+    ...(request.reuse !== undefined ? { reuse: { reused, refetch } } : {}),
   });
 }
 

@@ -64,6 +64,12 @@
     "interrupted": []
   },
   "records": [],
+  "events": {
+    "read": true,
+    "rows": 0,
+    "bound": 500000,
+    "droppedDebug": 0
+  },
   "findings": [
     {
       "level": "warning",

@@ -11,6 +11,7 @@ import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, VERIFIED_HOST_VERSIONS, adm
 import { parseCredentialRef, printable, providersFor } from '../domain/credential-ref.ts';
 import type { ProviderName } from '../domain/credential-ref.ts';
 import type { ProfileClass } from '../domain/profile.ts';
+import { LIMIT_DEFAULTS, parseLimitsSection } from '../domain/resource-bounds.ts';
 import type { Diagnostics, GsdFacts } from '../ports/diagnostics.ts';
 import { GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { Ledger } from '../ports/ledger.ts';
@@ -43,6 +44,8 @@ export interface DoctorProfile {
   configPath: string;
   // The profile config's `credentials` section as written (raw): references are read from it, never resolved.
   credentials: unknown;
+  // The profile config's `limits` section as written (raw), parsed here for the bounds the report shows and the finding it may raise (plan 04-30).
+  limits?: unknown;
 }
 
 export interface DoctorDeps {
@@ -124,6 +127,15 @@ export interface DoctorRuns {
   interrupted: DoctorInterrupted[];
 }
 
+// The events table against its bound (plan 04-30; OPS-5): the rows it holds, the bound `limits.maxEventRows` sets, and the debug events refused since the table reached it.
+// `read` is false when the store was not read as this build's schema; the numbers are then 0 and the bound is the configured one.
+export interface DoctorEvents {
+  read: boolean;
+  rows: number;
+  bound: number;
+  droppedDebug: number;
+}
+
 // An active project record, with the revision and the GSD version it is tied to and whether the installed GSD can still be used with it (S-38). Derived, never stored.
 export interface DoctorRecord {
   projectId: string;
@@ -164,6 +176,7 @@ export interface DoctorReport {
   adapters: Array<{ name: string; port: string; adapter: string }>;
   runs: DoctorRuns;
   records: DoctorRecord[];
+  events: DoctorEvents;
   findings: DoctorFinding[];
   // Present only when the flag asked for it.
   online?: DoctorOnline;
@@ -453,6 +466,8 @@ interface StoreOutcome {
   section: DoctorStore;
   adapters: Array<{ name: string; port: string; adapter: string }>;
   readable: boolean;
+  // What the store holds of the events table, when it was read.
+  events?: { rows: number; droppedDebug: number };
 }
 
 function storeSection(deps: DoctorDeps, findings: DoctorFinding[]): StoreOutcome {
@@ -522,7 +537,7 @@ function storeSection(deps: DoctorDeps, findings: DoctorFinding[]): StoreOutcome
   if (facts.journalMode !== undefined && facts.journalMode !== 'wal') {
     findings.push({ level: 'warning', area: 'store', message: `the store's journal mode is ${facts.journalMode}, not wal`, fix: 'move the data root to local storage; the next command that writes switches it to wal' });
   }
-  return { section, adapters, readable: true };
+  return { section, adapters, readable: true, ...(facts.events !== undefined ? { events: facts.events } : {}) };
 }
 
 function runsAndRecords(deps: DoctorDeps, located: { version: string } | undefined, found: string | undefined, readable: boolean, findings: DoctorFinding[]): { runs: DoctorRuns; records: DoctorRecord[] } {
@@ -641,6 +656,32 @@ function extensionsSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorE
   };
 }
 
+// The events table against `limits.maxEventRows`. A limits section that cannot be used is an error finding: `start` refuses it, and the bounds it was meant to set are the defaults
+// until it is fixed.
+function eventsSection(deps: DoctorDeps, store: StoreOutcome, findings: DoctorFinding[]): DoctorEvents {
+  const parsed = parseLimitsSection(deps.profile.ok ? deps.profile.value.limits : undefined);
+  if (!parsed.ok) {
+    const where = deps.profile.ok ? ` (${deps.profile.value.configPath})` : '';
+    findings.push({
+      level: 'error',
+      area: 'limits',
+      message: `profile config ${parsed.error.kind === 'invalid' ? `${parsed.error.field}: ${parsed.error.reason}` : 'limits cannot be read'}${where}`,
+      fix: SECTION_FIX_PROFILE,
+    });
+  }
+  const bound = parsed.ok ? parsed.value.maxEventRows : LIMIT_DEFAULTS.maxEventRows;
+  if (!store.readable || store.events === undefined) return { read: false, rows: 0, bound, droppedDebug: 0 };
+  if (store.events.droppedDebug > 0) {
+    findings.push({
+      level: 'warning',
+      area: 'events',
+      message: `${store.events.droppedDebug} debug event${store.events.droppedDebug === 1 ? ' was' : 's were'} refused because the events table reached its bound of ${bound} rows (${store.events.rows} rows now)`,
+      fix: 'raise limits.maxEventRows in the profile config if the table should keep growing; events at info and above are never refused',
+    });
+  }
+  return { read: true, rows: store.events.rows, bound, droppedDebug: store.events.droppedDebug };
+}
+
 // ---- the report ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 export async function runDoctor(deps: DoctorDeps, options: DoctorOptions = {}): Promise<DoctorReport> {
@@ -689,6 +730,7 @@ export async function runDoctor(deps: DoctorDeps, options: DoctorOptions = {}): 
     adapters: store.adapters,
     runs,
     records,
+    events: eventsSection(deps, store, findings),
     findings,
   };
   if (options.online === true) report.online = await onlineSection(deps, profile, references, findings);
