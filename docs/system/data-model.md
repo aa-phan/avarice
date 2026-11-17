@@ -341,7 +341,7 @@ Inside staging, under `.planning/`:
 - `intel/` holds the intel documents the agent writes and a refresh marker written by GSD's snapshot step.
 - Next to `.planning/`, `.avarice-knowledge/` holds copied documents for the knowledge pass and the extraction files the model writes. The knowledge manifest is kept in the data root, not inside the corpus.
 
-Nothing is promoted anywhere else: the record's promotion field is `none`, and the map documents leave staging only as artifact blobs and record digests.
+Nothing is promoted unless the owner asked for it with `--promote`: the record's promotion field is `none` whatever was asked, and the map documents leave staging as artifact blobs and record digests, or, when promotion was requested, as files in the checkout or one new branch (see [cli-reference.md](cli-reference.md#promotion)).
 
 ## Quirks to keep in mind
 

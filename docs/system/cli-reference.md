@@ -141,7 +141,7 @@ Side effects: writes project and onboarding rows to the ledger (nothing in the r
 
 ## onboard
 
-`avarice onboard --policy onboarding [--mode full|fast] [--promote none] [--budget name=value]... <repo>`
+`avarice onboard --policy onboarding [--mode full|fast] [--promote none|copy|commit] [--budget name=value]... <repo>`
 
 Registers the repository (as `repo add` does), then runs the onboarding stages under a lease until the onboarding reaches a stop state, and prints where it ended. The stages are described in [onboarding.md](onboarding.md).
 
@@ -149,19 +149,29 @@ Registers the repository (as `repo add` does), then runs the onboarding stages u
 |---|---|---|---|
 | `--policy` | string | none | Required, and must equal `onboarding`; anything else, including absence, is a usage error (64). |
 | `--mode` | `full` or `fast` | `full` | Any other value, or no value, is a usage error. |
-| `--promote` | string | `none` | A bare `--promote` is a usage error. Any value other than `none` is refused with exit 64 at registration (a continued onboarding is refused too), before any new row, contract or staging exists. |
+| `--promote` | string | `none` | What happens to the accepted map after activation: `none` promotes nothing, `copy` writes the accepted map files into the checkout, `commit` creates one branch (see [Promotion](#promotion)). A bare `--promote` is a usage error. Any other value is refused with exit 64 at registration, naming the allowed values (a continued onboarding is refused too), before any new row, contract or staging exists. |
 | `--budget` | `name=value`, repeatable | none | Each occurrence must match a letter-led alphanumeric name, `=`, and a finite number; otherwise 64. A bare `--budget` is a usage error. For a repeated name the last wins. Whether the name exists and whether the value is a permitted lowering is decided later by the contract compiler (see quirks). |
 | `<repo>` | path | required | Exactly one positional. |
 
 Checks run in the order `--policy`, `--promote` shape, `--mode`, path count, `--budget` shape. Because the command has no pre-profile usage check, these errors exit 64 after the profile is prepared. A usage error prints `avarice onboard: <message>` and the usage line on stderr.
 
-Registration refusals mirror `repo add`: an active record or another in-flight onboarding of the same repository is refused with exit 3 (stderr `avarice onboard: refused: ...`). A non-repository path or a refused promotion is exit 64; other failures are 70.
+Registration refusals mirror `repo add`: an active record or another in-flight onboarding of the same repository is refused with exit 3 (stderr `avarice onboard: refused: ...`). A non-repository path or an unknown promotion value is exit 64; other failures are 70.
 
 Output (stdout, no `--json` form): `onboarding <id>: <state>` with ` (<reason>)` appended when the onboarding has a blocked reason. Then, when the stages left an explanation, one line with that message (for example why GSD was incompatible or why a contract was refused). Reasons are `enforcement_failure`, `budget_exhausted`, `existing_state_conflict`, `scope_unavailable`, `adapter_incompatible` and `decision`.
 
 Exit: 0 when the final state is `active`. Exit 3 when it ends in any other state (blocked, incompatible, or an in-progress state the loop cannot advance). Exit 64 is usage. Exit 70 is a failed run (stderr `avarice onboard: onboarding <id> did not finish: ...`), including a lease already held by another process running the same `discovered` onboarding and a lease lost mid-run.
 
-Side effects: registers the project and onboarding. Takes the lease on the onboarding (default lifetime 180 seconds, override `AVARICE_LEASE_TTL_MS`, see [config-reference.md](config-reference.md); renewed every third of the lifetime while stages run, released on exit). Creates a staging copy under the work root, runs the GSD mapping through the contained agent host, builds the code graph, intel and knowledge indexes in staging, and on success writes the active project record. The user's checkout is not modified. When GSD is missing or not admitted, the onboarding stops `incompatible` rather than failing; when the host cannot enforce containment, it ends `blocked` with reason `enforcement_failure`. Not read-only, not offline.
+### Promotion
+
+Promotion runs after activation, under the same lease, and only when `--promote` asked for it. It is a privileged action (`onboarding.promote.copy` or `onboarding.promote.commit`) that passes the approval gate with the onboarding contract as its source, so it needs no approval. A policy deny rule for the action refuses it: the onboarding stays active, and the output names the rule.
+
+- `copy` writes each accepted map file under `.planning/codebase/` of the checkout only where that file is absent. A file with the same bytes is skipped. A file that differs, or a path blocked by a symbolic link, is left untouched, and one permission decision lists those files. Nothing is committed or staged, and no file is replaced or deleted.
+- `commit` creates the branch `avarice/onboard-<onboarding id>` in the repository by a create-only fetch from the staging clone. It holds one commit, `docs(planning): adopt GSD codebase map from AVARICE onboarding <id>`, on top of the pinned revision. HEAD, the index, the working tree and every other ref stay as they were. A branch of that name that already exists is a failure, reported in the output.
+- A promotion whose start was recorded and whose end was not (the process was killed) is never run again. `avarice resume <onboarding id>` opens one permission decision that names it and writes nothing.
+
+The decisions of an onboarding are rows on its contract run. They do not appear in `avarice inbox`, and `avarice decide` does not answer them.
+
+Side effects: registers the project and onboarding. Takes the lease on the onboarding (default lifetime 180 seconds, override `AVARICE_LEASE_TTL_MS`, see [config-reference.md](config-reference.md); renewed every third of the lifetime while stages run, released on exit). Creates a staging copy under the work root, runs the GSD mapping through the contained agent host, builds the code graph, intel and knowledge indexes in staging, and on success writes the active project record. The user's checkout is not modified unless `--promote copy` or `--promote commit` was given. When GSD is missing or not admitted, the onboarding stops `incompatible` rather than failing; when the host cannot enforce containment, it ends `blocked` with reason `enforcement_failure`. Not read-only, not offline.
 
 ## start
 

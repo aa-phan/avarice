@@ -60,7 +60,7 @@ Preflight inspects the repository without opening any working-tree file. Committ
 
 Refusals, checked in this order:
 
-1. Promotion other than `none` is refused as invalid. `none` is the only promotion that exists.
+1. A promotion value other than `none`, `copy` or `commit` is refused as invalid, naming the three. Promotion itself runs after activation (see [cli-reference.md](cli-reference.md#promotion)).
 2. A project (same root commit and path) that already has an active record is refused as a conflict.
 3. A project with a live onboarding in any state other than `discovered` is refused as a conflict that names the onboarding and the resume command.
 
@@ -221,7 +221,7 @@ Every other stage is idempotent and simply runs again from the committed state. 
 
 - `repo add` stores mode `full` and no budget overrides. A later `onboard --mode fast` or `--budget ...` continues that same onboarding and its stored request wins, so the flags are ignored. Likewise the pin is HEAD at the first registration: commits made between `repo add` and `onboard` are not mapped.
 - The existing-map class never changes behavior. Even a user-edited map is regenerated in staging; the user's files are never touched.
-- A refused contract compile blocks with reason `decision`. A raised or unknown `--budget` is the normal way to reach it, because the CLI checks only the shape of budget values. A promotion other than `none` is refused earlier, by preflight.
+- A refused contract compile blocks with reason `decision`. A raised or unknown `--budget` is the normal way to reach it, because the CLI checks only the shape of budget values. An unknown promotion value is refused earlier, by preflight.
 - The mapping modes `paths` and `adopt` are accepted by the contract compiler and by the mode type, then block with `scope_unavailable` at the workspace stage.
 - A README-only repository takes mode `skip` regardless of the requested mode, and ends active with an empty codebase list and completeness none.
 - An inconclusive map ending is not a failure; a denied one is never retried.

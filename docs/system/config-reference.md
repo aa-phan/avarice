@@ -202,7 +202,7 @@ The full flag contract is in [cli-reference.md](cli-reference.md).
 |---|---|---|
 | `onboard --policy onboarding` | required | The only onboarding policy. |
 | `onboard --mode full\|fast` | `full` | Mapping mode. |
-| `onboard --promote none` | `none` | Only `none` is accepted. |
+| `onboard --promote none\|copy\|commit` | `none` | What happens to the accepted map after activation; any other value is refused. |
 | `onboard --budget name=value` (repeatable) | none | Lowers an onboarding budget; see the onboarding preset. |
 | `start --brief <file>` | required | The brief file; see the run limits for its caps. |
 | `start --policy routine` | required | The only run policy. |
