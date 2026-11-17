@@ -9,7 +9,11 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type {
+  CommitPromotionInput,
+  CommitPromotionOutcome,
+  CopyOutcome,
   PrepareInput,
+  PromotionFile,
   RepoFacts,
   StagingChanges,
   StagingInfo,
@@ -17,6 +21,7 @@ import type {
   WorkspaceDescription,
 } from '../../ports/staging-workspace.ts';
 import { collectRepoFacts, parseStatus } from './repo-facts.ts';
+import { commitPromotion, copyIntoCheckout } from './promotion.ts';
 import { runGit } from './safe-git.ts';
 
 // SHA-1 repositories only: the evidence, the gates and the onboarding records all name 40-digit commits, so an adapter that
@@ -354,5 +359,13 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
 
   inspectRepo(repoPath: string): Result<RepoFacts> {
     return collectRepoFacts(repoPath);
+  }
+
+  copyIntoCheckout(repoPath: string, files: readonly PromotionFile[]): Result<CopyOutcome> {
+    return copyIntoCheckout(repoPath, files);
+  }
+
+  commitPromotion(input: CommitPromotionInput): Result<CommitPromotionOutcome> {
+    return commitPromotion(input);
   }
 }

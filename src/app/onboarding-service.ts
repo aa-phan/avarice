@@ -17,6 +17,7 @@ import { mapStage } from './stages/map.ts';
 import { retryOrBlockStage, validateStage } from './stages/validate.ts';
 import { indexStage } from './stages/index-stage.ts';
 import { activateStage } from './stages/activate.ts';
+import { promoteStage } from './stages/promote.ts';
 import type { Stage, StageContext, TransitionOptions } from './stages/stage.ts';
 
 export const DEFAULT_LEASE_TTL_MS = 180_000;
@@ -122,14 +123,21 @@ function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: 
     note(message) {
       notes.push(message);
     },
+    fault: faultPoint,
   };
 }
 
 // `planning_ready`: the index steps, then activation.
+// Promotion (ONB-6) follows activation in the same lease: `active` is a stop state, so it has no stage of its own, and a promotion that was started and
+// not finished is reconciled by resume, never run again.
 const planningReadyStage: Stage = async (ctx, row) => {
   const indexed = await indexStage(ctx, row);
   if (!indexed.ok) return indexed;
-  return activateStage(ctx, row);
+  const activated = await activateStage(ctx, row);
+  if (!activated.ok) return activated;
+  const now = ctx.deps.ledger.getOnboarding(ctx.onboardingId);
+  if (!now.ok) return now;
+  return now.value.state === 'active' ? promoteStage(ctx, now.value) : ok(undefined);
 };
 
 const STAGES: Readonly<Partial<Record<OnboardingState, Stage>>> = {

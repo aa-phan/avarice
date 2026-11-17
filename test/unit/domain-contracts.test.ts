@@ -451,14 +451,28 @@ describe('compileOnboardingContract', () => {
     }
   });
 
-  it('refuses any requested promotion other than none (RC-5)', () => {
-    for (const promote of ['copy', 'commit', '', 'NONE', 'none ']) {
+  it('refuses a promotion value other than none, copy or commit, naming the three (RC-5)', () => {
+    for (const promote of ['push', 'branch', '', 'NONE', 'none ', 'Copy', 0, null]) {
       const r = compileOnboardingContract(contractInput({ promote }));
       assert.equal(r.ok, false, JSON.stringify(promote));
-      if (!r.ok) assert.equal(r.error.kind, 'invalid');
+      if (!r.ok) {
+        assert.equal(r.error.kind, 'invalid');
+        if (r.error.kind === 'invalid') for (const allowed of ['none', 'copy', 'commit']) assert.ok(r.error.reason.includes(allowed), r.error.reason);
+      }
     }
-    assert.equal(compileOnboardingContract(contractInput({ promote: 'none' })).ok, true);
-    assert.equal(compileOnboardingContract(contractInput({})).ok, true);
+  });
+
+  it('accepts promotion none, copy and commit as an explicit opt-in, and none when the request names none (D-15, ONB-5)', () => {
+    for (const promote of ['none', 'copy', 'commit'] as const) {
+      assert.equal(unwrap(compileOnboardingContract(contractInput({ promote }))).delivery.promote, promote);
+    }
+    assert.equal(unwrap(compileOnboardingContract(contractInput({}))).delivery.promote, 'none');
+  });
+
+  it('does not change the policy revision with the promotion asked for: the preset is what the revision digests', () => {
+    const none = unwrap(compileOnboardingContract(contractInput({ promote: 'none' })));
+    const copy = unwrap(compileOnboardingContract(contractInput({ promote: 'copy' })));
+    assert.equal(copy.policyRevision, none.policyRevision);
   });
 
   it('accepts a budget override at or below the preset and uses it', () => {

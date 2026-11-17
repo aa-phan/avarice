@@ -1,6 +1,6 @@
 // Stage for `discovered`: compile the onboarding contract from the stored request and preflight, store it,
-// and commit `contract_proposed`. A request the compiler refuses (for example promotion other than
-// `none`, RC-5) blocks the onboarding with reason `decision` before any staging exists.
+// and commit `contract_proposed`. A request the compiler refuses (for example a budget above the preset,
+// RC-5) blocks the onboarding with reason `decision` before any staging exists.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { compileOnboardingContract, contractDigest } from '../../domain/onboarding-contract.ts';

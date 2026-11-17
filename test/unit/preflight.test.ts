@@ -188,21 +188,22 @@ describe('classifyPreflight refusals (ONB-6)', () => {
     }
   });
 
-  for (const promote of ['copy', 'commit', '', 'NONE']) {
-    it(`refuses promotion ${JSON.stringify(promote)}`, () => {
+  for (const promote of ['push', 'branch', '', 'NONE']) {
+    it(`refuses promotion ${JSON.stringify(promote)}, naming none, copy and commit`, () => {
       const r = refusal(classifyPreflight(facts(), NO_STATE, { promote }));
       assert.equal(r.kind, 'invalid');
       assert.match(r.text, /request\.promote/);
+      for (const allowed of ['none', 'copy', 'commit']) assert.ok(r.text.includes(allowed), r.text);
     });
   }
 
-  it('accepts promotion none, and no promotion', () => {
-    assert.ok(classifyPreflight(facts(), NO_STATE, { promote: 'none' }).ok);
+  it('accepts promotion none, copy and commit, and no promotion', () => {
+    for (const promote of ['none', 'copy', 'commit']) assert.ok(classifyPreflight(facts(), NO_STATE, { promote }).ok, promote);
     assert.ok(classifyPreflight(facts(), NO_STATE, {}).ok);
   });
 
-  it('reports a promotion request before a state conflict', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [] }, { promote: 'copy' }));
+  it('reports a refused promotion value before a state conflict', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [] }, { promote: 'push' }));
     assert.equal(r.kind, 'invalid');
   });
 });

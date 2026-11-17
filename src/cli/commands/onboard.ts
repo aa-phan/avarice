@@ -1,8 +1,8 @@
-// avarice onboard --policy onboarding [--mode full|fast] [--promote none] [--budget name=value]... <repo>
+// avarice onboard --policy onboarding [--mode full|fast] [--promote none|copy|commit] [--budget name=value]... <repo>
 // Registers the repository, runs the onboarding stages under a lease and prints where it ended.
 // Exit 0 when the project is active, 3 when onboarding stopped without activating (blocked,
 // incompatible, paused) or was refused (existing_state_conflict), 64 for a usage error (including a
-// promotion other than none), 70 for an internal failure.
+// promotion value other than none, copy or commit), 70 for an internal failure.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { ONBOARDING_POLICY, runOnboarding, startOnboarding } from '../../app/onboarding-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
@@ -15,7 +15,7 @@ const EXIT_USAGE = 64;
 const EXIT_INTERNAL = 70;
 
 function usage(io: Io, message: string): number {
-  io.err(`${errorLine('onboard', message)}\nusage: avarice onboard --policy ${ONBOARDING_POLICY} [--mode full|fast] [--promote none] [--budget name=value]... <repo>\n`);
+  io.err(`${errorLine('onboard', message)}\nusage: avarice onboard --policy ${ONBOARDING_POLICY} [--mode full|fast] [--promote none|copy|commit] [--budget name=value]... <repo>\n`);
   return EXIT_USAGE;
 }
 

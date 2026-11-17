@@ -906,6 +906,9 @@ export interface Ledger {
   // Decisions open in state `open`. answerDecision, reopenStaleDecision and withdrawDecision each move an open decision in one
   // transaction under the run lock and refuse with `conflict` when it is no longer open.
   openDecision(input: DecisionInput): Result<DecisionRow>;
+  // A decision of an onboarding (plan 04-21): the row is keyed by the run the onboarding's contract is stored under, on that contract's latest version.
+  // That run is a carrier no run method can see, so the decision is listed by `listDecisions({ runId: <the carrier> })` and does not reach the inbox.
+  openOnboardingDecision(onboardingId: string, input: Omit<DecisionInput, 'runId' | 'contractVersion'>): Result<DecisionRow>;
   // open -> answered, and every affected item that no other open decision blocks goes blocked_on_decision -> ready. Refused with
   // `conflict` when the run's latest contract version is not expectContractVersion.
   answerDecision(input: AnswerDecisionInput): Result<DecisionRow>;

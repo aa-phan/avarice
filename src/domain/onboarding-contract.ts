@@ -1,7 +1,7 @@
 // Onboarding contract compiler (docs/repository-onboarding.md "Onboarding contract";
 // docs/contracts-and-state.md "Run contract"). Pure: the clock, ids and preflight facts are arguments.
 //
-// The compiler is where RC-5 is enforced for onboarding: promotion other than `none` and any budget
+// The compiler is where RC-5 is enforced for onboarding: a promotion value outside none, copy and commit and any budget
 // above the preset are refused here, so no later stage has to remember to check.
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
@@ -39,6 +39,20 @@ export interface InvocationDerivation {
   // The derived ceiling; `budgets.invocations` is this value or a lower override.
   total: number;
   formula: string;
+}
+
+// What the owner can ask AVARICE to do with the accepted map after activation (ONB-6, D-15). `none` is the default; `copy` and `commit` are explicit
+// opt-ins, and each is a privileged action that the approval gate lets through because this contract names it.
+export const PROMOTE_MODES = ['none', 'copy', 'commit'] as const;
+export type PromoteMode = (typeof PROMOTE_MODES)[number];
+
+export function isPromoteMode(value: unknown): value is PromoteMode {
+  return typeof value === 'string' && (PROMOTE_MODES as readonly string[]).includes(value);
+}
+
+// The refusal text of an unknown promotion value, shared by the preflight and the compiler so both name the same set.
+export function promoteRefusal(value: unknown): string {
+  return `promotion ${JSON.stringify(value)} is not accepted: the allowed values are ${PROMOTE_MODES.join(', ')}`;
 }
 
 export interface OnboardingBudgets {
@@ -91,7 +105,7 @@ export interface OnboardingContract {
     prohibited: string[];
   };
   budgets: OnboardingBudgets;
-  delivery: { promote: 'none' };
+  delivery: { promote: PromoteMode };
   indexes: { codeGraph: boolean; intel: boolean; knowledge: boolean };
 }
 
@@ -154,7 +168,7 @@ export const ONBOARDING_PRESET = {
     'scope expansion',
   ],
   prohibitedDecisions: ['policy changes', 'budget changes', 'credential changes', 'merge'],
-  promote: 'none',
+  promote: 'none' as PromoteMode,
   budgets: {
     wallClockMinutes: 45,
     wallClockShares: { map: 20, intel: 10, knowledge: 15 },
@@ -385,12 +399,11 @@ function existingMapOf(preflight: ContractPreflight): string {
 export function compileOnboardingContract(input: CompileInput): Result<OnboardingContract> {
   const { request, preflight } = input;
 
-  // Promotion: only `none` is authorized by the onboarding preset (RC-5). Copy and commit arrive in Phase 4.
-  if (request.promote !== undefined && request.promote !== 'none') {
-    return invalid(
-      'request.promote',
-      `promotion ${JSON.stringify(request.promote)} is not authorized: the onboarding preset allows only "none"`,
-    );
+  // Promotion: none (the default), copy or commit; anything else is refused (RC-5).
+  let promote: PromoteMode = ONBOARDING_PRESET.promote;
+  if (request.promote !== undefined) {
+    if (!isPromoteMode(request.promote)) return invalid('request.promote', promoteRefusal(request.promote));
+    promote = request.promote;
   }
 
   let mode: MappingMode = ONBOARDING_PRESET.defaultMode;
@@ -458,7 +471,7 @@ export function compileOnboardingContract(input: CompileInput): Result<Onboardin
       prohibited: [...ONBOARDING_PRESET.prohibitedDecisions],
     },
     budgets: budgets.value,
-    delivery: { promote: 'none' },
+    delivery: { promote },
     indexes: { ...indexes },
   });
 }

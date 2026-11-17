@@ -222,6 +222,8 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
         return real.staging.ensureDir(p, rel);
       },
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
+      commitPromotion: (input) => real.staging.commitPromotion(input),
     };
     const spyArtifacts: ArtifactStore = {
       put: (bytes, meta) => {
@@ -392,16 +394,16 @@ describe('a malformed map is retried once, then blocks with a decision', () => {
   });
 });
 
-describe('promotion other than none is refused', () => {
+describe('a promotion value outside none, copy and commit is refused', () => {
   // Plan 01-08 moved this refusal from the contract stage (blocked, exit 3, after an onboarding row exists) to
   // preflight: a usage error, exit 64, before a project, an onboarding, a contract or any staging exists. The
   // contract compiler still refuses it too (test/unit/domain-contracts.test.ts), as defence in depth.
-  it('--promote copy exits 64 with the compiler message before any onboarding or staging exists', () => {
+  it('--promote push exits 64 with the allowed values before any onboarding or staging exists', () => {
     const { roots, repo } = fixture();
     const before = checkoutSnapshot(repo.path);
-    const r = onboardWithFake(roots, repo, {}, ['--promote', 'copy']);
+    const r = onboardWithFake(roots, repo, {}, ['--promote', 'push']);
     assert.equal(r.code, 64, r.stderr + r.stdout);
-    assert.match(r.stderr, /request\.promote: promotion "copy" is not authorized: the onboarding preset allows only "none"/);
+    assert.match(r.stderr, /request\.promote: promotion "push" is not accepted: the allowed values are none, copy, commit/);
 
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM onboardings')[0]?.n, 0, 'no onboarding row');
@@ -493,6 +495,8 @@ describe('activation re-checks the whole staging diff against every write set (p
       read: (p, rel, max) => real.staging.read(p, rel, max),
       ensureDir: (p, rel) => real.staging.ensureDir(p, rel),
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
+      commitPromotion: (input) => real.staging.commitPromotion(input),
     };
     try {
       const started = startOnboarding({ ...real, staging }, { repoPath: repo.path, policy: 'onboarding' });

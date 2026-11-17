@@ -1571,6 +1571,20 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  openOnboardingDecision(onboardingId: string, input: Omit<DecisionInput, 'runId' | 'contractVersion'>): Result<DecisionRow> {
+    return tx(this.db, () => {
+      const runId = strOrNull(this.lockRow(onboardingId)['contract_run_id']);
+      if (runId === null) abort({ kind: 'invalid', field: 'contract', reason: 'a decision of an onboarding hangs off its carrier run, so store the contract first' });
+      if (!DECISION_CLASSES.includes(input.class)) abort({ kind: 'invalid', field: 'class', reason: `${input.class} is not a decision class (${DECISION_CLASSES.join(', ')})` });
+      if (input.urgency !== 'blocking' && input.urgency !== 'digest') abort({ kind: 'invalid', field: 'urgency', reason: 'urgency is blocking or digest' });
+      if (input.issue === '') abort({ kind: 'invalid', field: 'issue', reason: 'a decision states its issue' });
+      if (input.stateDigest === '') abort({ kind: 'invalid', field: 'stateDigest', reason: 'a decision carries the digest of the state it was opened on' });
+      const contractVersion = this.latestContractVersion(runId);
+      if (contractVersion < 1) abort({ kind: 'invalid', field: 'contract', reason: `onboarding ${onboardingId} has no stored contract version` });
+      return this.insertDecisionRow({ ...input, runId, contractVersion }, null, input.attemptId);
+    });
+  }
+
   // The caller's transaction must be open and the run vetted. A re-open names the decision it replaces in `supersedes`.
   private insertDecisionRow(input: DecisionInput, supersedes: string | null, attemptId: string | undefined): DecisionRow {
     const decisionId = this.newId('dec_');

@@ -3,6 +3,7 @@
 // ledger's view is an argument, and the result is either findings for `preflight_json` or a refusal.
 import { FULL_MAP_FILES } from './mapping.ts';
 import { isStopState } from './onboarding-lifecycle.ts';
+import { isPromoteMode, promoteRefusal } from './onboarding-contract.ts';
 import type { OnboardingState } from './onboarding-lifecycle.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
@@ -138,13 +139,9 @@ export interface PreflightClassification {
 }
 
 export function classifyPreflight(facts: RepoFacts, view: LedgerView, request: PreflightRequest): Result<PreflightClassification> {
-  // ONB-6: only promotion `none` exists until Phase 4.
-  if (request.promote !== undefined && request.promote !== 'none') {
-    return err({
-      kind: 'invalid',
-      field: 'request.promote',
-      reason: `promotion ${JSON.stringify(request.promote)} is not authorized: the onboarding preset allows only "none"`,
-    });
+  // ONB-6: promotion is none, copy or commit; the other values are refused before anything is registered.
+  if (request.promote !== undefined && !isPromoteMode(request.promote)) {
+    return err({ kind: 'invalid', field: 'request.promote', reason: promoteRefusal(request.promote) });
   }
   if (view.activeRecord !== null && request.refresh !== true) {
     return err({

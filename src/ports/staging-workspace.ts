@@ -39,6 +39,38 @@ export interface StagingChanges {
   deleted: string[];
 }
 
+// A file of the accepted map, promoted by its repository-relative path (under `.planning/`) and its bytes.
+export interface PromotionFile {
+  path: string;
+  content: Uint8Array;
+}
+
+// What `copyIntoCheckout` did with each file: written (the target was absent), present (the target held the same bytes) or conflicts (anything else is
+// the owner's and was not touched). Sorted.
+export interface CopyOutcome {
+  written: string[];
+  present: string[];
+  conflicts: string[];
+}
+
+export interface CommitPromotionInput {
+  // The user's repository and the staging clone the commit is built in.
+  repoPath: string;
+  stagingPath: string;
+  onboardingId: string;
+  // The revision the onboarding was pinned to; the commit's only parent.
+  pin: string;
+  files: readonly PromotionFile[];
+  message: string;
+}
+
+export interface CommitPromotionOutcome {
+  // `avarice/onboard-<onboarding id>`, created in the user's repository as `refs/heads/<branch>` at `commit`.
+  branch: string;
+  commit: string;
+  created: true;
+}
+
 export interface StagingWorkspace {
   prepare(input: PrepareInput): Result<StagingInfo>;
   head(path: string): Result<string>;
@@ -60,4 +92,10 @@ export interface StagingWorkspace {
   read(path: string, relPath: string, maxBytes: number): Result<string | null>;
   ensureDir(path: string, relPath: string): Result<void>;
   inspectRepo(repoPath: string): Result<RepoFacts>;
+  // Promotion (plan 04-21; ONB-6, D-15), the only writes to the user's repository. `copyIntoCheckout` writes a file under `.planning/` of the checkout
+  // only where the target is absent; a byte-identical target is counted as present and any other is a conflict, left untouched. It never replaces or
+  // deletes. `commitPromotion` commits the files on top of the pin in the staging clone and creates `refs/heads/avarice/onboard-<id>` in the user's
+  // repository with a create-only fetch: no checkout, index, working-tree file or other ref changes. It refuses (conflict) a branch that exists.
+  copyIntoCheckout(repoPath: string, files: readonly PromotionFile[]): Result<CopyOutcome>;
+  commitPromotion(input: CommitPromotionInput): Result<CommitPromotionOutcome>;
 }

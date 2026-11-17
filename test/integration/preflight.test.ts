@@ -348,12 +348,12 @@ describe('ONB-6 refusals through the CLI', () => {
     assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 1);
   });
 
-  it('refuses promotion other than none before any onboarding, contract or staging exists', () => {
+  it('refuses a promotion value outside none, copy and commit before any onboarding, contract or staging exists', () => {
     const repo = makeScratchRepo();
     cleanups.push(repo.dispose);
     const roots = fixtureProfile();
     const before = checkoutSnapshot(repo.path);
-    for (const mode of ['copy', 'commit']) {
+    for (const mode of ['push', 'branch']) {
       const refused = cli(roots, ['onboard', '--policy', 'onboarding', '--promote', mode, repo.path]);
       assert.equal(refused.code, 64, refused.stderr + refused.stdout);
       assert.match(refused.stderr, /request\.promote/);
