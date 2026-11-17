@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 0
 fixed_count: 2
-total_count: 3
-last_updated: 2026-11-05T23:37:38.835Z
+total_count: 4
+last_updated: 2026-11-17T14:13:13.140Z
 ---
 
 # Broken Windows Ledger
@@ -18,6 +18,7 @@ last_updated: 2026-11-05T23:37:38.835Z
 | 1 | 01 | stub | src/app/stages/index-intel.ts | 12 | index-intel step reports the index absent (not-built-in-this-build) until plan 01-17 | fixed |  | 2026-11-03T01:01:33.235Z | 2026-11-03T03:15:08.594Z |
 | 2 | 01 | stub | src/app/stages/index-knowledge.ts | 12 | index-knowledge step reports the index absent (not-built-in-this-build) until plan 01-18 | open |  | 2026-11-03T01:01:33.322Z |  |
 | 3 | 02 | stub | src/app/run-stages/item.ts |  | G2 test inventory is passed as empty and the baseline is taken as passed until plan 02-14 measures both | fixed |  | 2026-11-05T22:11:52.151Z | 2026-11-05T23:37:38.835Z |
+| 4 | 04 | unrun-verify | scripts/eval-retrieval.ts |  | live driver (runOne, spendStep, the onboarding and start CLI steps, the sandboxed judge on a real repository) is not exercised by plan 04-31: it spends; plan 04-36's pilot is its first run | open |  | 2026-11-17T14:13:13.140Z |  |
 
 ````json
 [
@@ -59,6 +60,19 @@ last_updated: 2026-11-05T23:37:38.835Z
     "recorded_at": "2026-11-05T22:11:52.151Z",
     "resolved_at": "2026-11-05T23:37:38.835Z",
     "milestone": "v1.0"
+  },
+  {
+    "id": 4,
+    "kind": "unrun-verify",
+    "phase": "04",
+    "file": "scripts/eval-retrieval.ts",
+    "line": null,
+    "description": "live driver (runOne, spendStep, the onboarding and start CLI steps, the sandboxed judge on a real repository) is not exercised by plan 04-31: it spends; plan 04-36's pilot is its first run",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-17T14:13:13.140Z",
+    "resolved_at": null,
+    "milestone": "v1.1"
   }
 ]
 ````
