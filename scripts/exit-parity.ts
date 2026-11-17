@@ -485,7 +485,7 @@ export async function parityReport(options: ParityOptions): Promise<ParityOutcom
       const supervisor = new Map<string, RunResult>();
       if (supervisorClone !== null) {
         cwdsInsideSource ||= insideSource(supervisorClone);
-        const deps = { profile: { workRoot, dataRoot }, home: homedir() } as unknown as AppDeps;
+        const deps = { profile: { workRoot, dataRoot, otherRoots: [] }, home: homedir() } as unknown as AppDeps;
         const setup = sandboxSetup(deps, { runId: supervisorRun } as unknown as RunRow, supervisorClone);
         if (!setup.ok) throw new Error(`the supervisor sandbox could not be set up: ${describeError(setup.error as unknown as { kind: string } & Record<string, unknown>)}`);
         const envNames = new Set<string>(Object.keys(setup.value.env));
