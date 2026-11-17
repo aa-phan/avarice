@@ -10,6 +10,7 @@ import { parseBrief } from '../domain/brief.ts';
 import { redactSecrets } from '../domain/secret-patterns.ts';
 import { parseConventions } from '../domain/conventions.ts';
 import { canonicalJson } from '../domain/digest.ts';
+import { isRunTerminal } from '../domain/run-lifecycle.ts';
 import { judgeRunPreflight } from '../domain/run-preflight.ts';
 import { compileRunContract, ROUTINE_POLICY } from '../domain/run-contract.ts';
 import type { IndexFacts, RunContract } from '../domain/run-contract.ts';
@@ -20,6 +21,7 @@ import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
 import { recordCompatibility } from './doctor.ts';
+import { profileLimits } from './resource-limits.ts';
 import { profileRetrievalCaps } from './retrieval-guard.ts';
 
 export const BRIEF_MAX_BYTES = 64 * 1024;
@@ -92,6 +94,8 @@ export function describeError(error: PortError): string {
 }
 
 const DAY_MS = 86_400_000;
+// The most runs a refusal for the active-run limit names.
+const ACTIVE_RUNS_NAMED = 10;
 const GIT_PREFIX = /^git:/;
 
 // The refusal of a start on a record the installed GSD cannot be used with (S-38): what was built under what, and the one thing to do.
@@ -281,6 +285,22 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   // The profile's retrieval caps are the ceilings of the contract's retrieval budgets (plan 04-28; D-09): a section that cannot be read is a refusal, not a silent default.
   const retrievalCaps = profileRetrievalCaps(deps);
   if (!retrievalCaps.ok) return usage(retrievalCaps.error.kind === 'invalid' ? retrievalCaps.error.field : 'retrieval', describeError(retrievalCaps.error));
+
+  // OPS-5: a profile may have `limits.maxActiveRuns` runs that have not ended (not failed, cancelled or closed). At the limit the start is refused, before anything is created,
+  // and the refusal names the runs the owner can close. A section that cannot be read is the start's usage error, as the retrieval section is.
+  const limits = profileLimits(deps);
+  if (!limits.ok) return usage(limits.error.kind === 'invalid' ? limits.error.field : 'limits', describeError(limits.error));
+  const all = deps.ledger.listRuns();
+  if (!all.ok) return internal(describeError(all.error));
+  const notEnded = all.value.filter((row) => !isRunTerminal(row.state));
+  if (notEnded.length >= limits.value.maxActiveRuns) {
+    const named = notEnded.slice(0, ACTIVE_RUNS_NAMED).map((row) => `${row.runId} (${row.state})`);
+    const more = notEnded.length > named.length ? ` and ${notEnded.length - named.length} more` : '';
+    return refused(
+      'active-runs',
+      `${notEnded.length} runs have not ended and limits.maxActiveRuns is ${limits.value.maxActiveRuns}: ${named.join(', ')}${more}; close one with avarice cancel <run> or see avarice status, then start again`,
+    );
+  }
 
   const runId = deps.ids.next('run_');
   const compiled = compileRunContract({

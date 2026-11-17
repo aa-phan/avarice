@@ -280,8 +280,12 @@ describe('limits.maxConcurrentChecks: checks start in declared order, at most th
     const { all, evidence } = await runWith({ maxConcurrentChecks: 2 });
     assert.equal(peak(all), 2, 'two overlapped, and never more');
     assert.deepEqual(startOrder(all).slice(0, 3), ['c1', 'c2', 'c3']);
-    const end = (name: string): number => (all.find((m) => m.kind === 'end' && m.name === name) as Mark).ms;
-    assert.ok(end('c2') < end('c1'), 'c2 finished before c1');
+    // Some pass (the checks run more than once: the validation clone, the baseline, the gates) ran c1 and c2 together, and in it c2 ended first.
+    const passes = all.filter((m) => m.name === 'c1' && m.kind === 'start').map((first) => {
+      const after = (kind: Mark['kind'], name: string): number => (all.find((m) => m.kind === kind && m.name === name && m.ms >= first.ms) as Mark).ms;
+      return { c2Start: after('start', 'c2'), c1End: after('end', 'c1'), c2End: after('end', 'c2') };
+    });
+    assert.ok(passes.some((p) => p.c2Start < p.c1End && p.c2End < p.c1End), `c2 started while c1 ran and ended before it: ${JSON.stringify(passes)}`);
     assert.deepEqual(evidence.map((e) => e.name).slice(0, 4), declared, 'recorded in declared order');
   });
 

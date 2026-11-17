@@ -31,6 +31,7 @@ import { scanMarkers } from '../domain/test-inventory.ts';
 import type { InventorySnapshot } from '../domain/test-inventory.ts';
 import type { RunRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { limitsOrDefaults } from './resource-limits.ts';
 
 export type ChecksPhase = 'base' | 'item' | 'final';
 
@@ -205,42 +206,58 @@ export async function runRequiredChecks(deps: AppDeps, run: RunRow, contract: Ru
   const baseStatus = new Map((options.base ?? []).map((outcome) => [outcome.name, outcome.status]));
   const label = PHASE_LABEL[options.phase];
 
-  const results: CheckRunResult[] = [];
-  for (const { spec, required, target } of checksToRun(contract)) {
-    if (verdicts.value.get(spec.name)?.verdict !== 'active') continue;
-    const writePaths = [sandbox.value.scratch, ...spec.writes.flatMap((glob) => {
-      const writable = writePathOf(cwd, glob);
-      return writable === null ? [] : [writable];
-    })];
+  // The checks that run, in declaration order. They start in that order, at most `limits.maxConcurrentChecks` at a time (a queue in this process), and their evidence is
+  // recorded in that order too, so a slow early check never lets a later one's row come first (OPS-5). With the default of one the loop is the plain one it always was:
+  // run, record, run the next.
+  const limits = limitsOrDefaults(deps);
+  const queue = checksToRun(contract).filter(({ spec }) => verdicts.value.get(spec.name)?.verdict === 'active');
+  type Queued = (typeof queue)[number];
+
+  // What running one check's command left: everything after it (the artifact, the evidence row, the event) is `recordCheck`, in declared order.
+  interface Executed {
+    commandStatus: CommandResultStatus;
+    exitCode: number | null;
+    durationMs: number;
+    output: string;
+    detail: Record<string, unknown>;
+  }
+  const execute = async ({ spec }: Queued): Promise<Result<Executed>> => {
+    const writePaths = [
+      sandbox.value.scratch,
+      ...spec.writes.flatMap((glob) => {
+        const writable = writePathOf(cwd, glob);
+        return writable === null ? [] : [writable];
+      }),
+    ];
     const ran = await deps.executor.run({
       argv: spec.argv,
       cwd,
       env: { ...spec.env, ...sandbox.value.env },
       timeoutMs: spec.timeoutSec * 1000,
+      outputLimitBytes: limits.checkOutputBytes,
       invocationId: deps.ids.next('inv_'),
       writePaths,
       denyReadPaths: sandbox.value.denyReadPaths,
       allowReadPaths: sandbox.value.allowReadPaths,
     });
-
-    let commandStatus: CommandResultStatus;
-    let exitCode: number | null = null;
-    let durationMs = 0;
-    let output = '';
-    let detail: Record<string, unknown> = {};
     if (ran.ok) {
-      commandStatus = ran.value.status;
-      exitCode = ran.value.exitCode;
-      durationMs = ran.value.durationMs;
-      output = `$ ${spec.argv.join(' ')}\n--- stdout ---\n${ran.value.stdout}\n--- stderr ---\n${ran.value.stderr}\n`;
-      detail = { truncated: ran.value.truncated, ...(ran.value.signal !== null ? { signal: ran.value.signal } : {}) };
-    } else if (ran.error.kind === 'unavailable') {
-      commandStatus = 'sandbox_unavailable';
-      output = `$ ${spec.argv.join(' ')}\nnot run: ${ran.error.cause}\n`;
-    } else {
-      return ran;
+      return ok({
+        commandStatus: ran.value.status,
+        exitCode: ran.value.exitCode,
+        durationMs: ran.value.durationMs,
+        output: `$ ${spec.argv.join(' ')}\n--- stdout ---\n${ran.value.stdout}\n--- stderr ---\n${ran.value.stderr}\n`,
+        detail: { truncated: ran.value.truncated, ...(ran.value.signal !== null ? { signal: ran.value.signal } : {}) },
+      });
     }
+    if (ran.error.kind === 'unavailable') {
+      return ok({ commandStatus: 'sandbox_unavailable', exitCode: null, durationMs: 0, output: `$ ${spec.argv.join(' ')}\nnot run: ${ran.error.cause}\n`, detail: {} });
+    }
+    return ran;
+  };
 
+  const results: CheckRunResult[] = [];
+  const recordCheck = ({ spec, required, target }: Queued, executed: Executed): Result<void> => {
+    const { commandStatus, exitCode, durationMs, output, detail } = executed;
     // A check's output is repository-controlled text that the owner reads: secret-shaped strings are redacted before it is stored, as transcripts are.
     const stored = deps.artifacts.put(new TextEncoder().encode(redactSecrets(output)), { kind: OUTPUT_KIND, runId: run.runId });
     if (!stored.ok) return stored;
@@ -282,6 +299,41 @@ export async function runRequiredChecks(deps: AppDeps, run: RunRow, contract: Ru
 
     results.push({ name: spec.name, status: evidenceStatus, evidenceId: evidence.value.evidenceId, exitCode, required, target });
     options.afterEach?.(results.length - 1);
+    return ok(undefined);
+  };
+
+  const outcomes = new Map<number, Result<Executed>>();
+  const inFlight = new Map<number, Promise<void>>();
+  let nextToStart = 0;
+  let nextToRecord = 0;
+  while (nextToRecord < queue.length) {
+    // Start the next checks while fewer than the limit are running (a check that has finished and waits for its turn to be recorded is not running).
+    while (nextToStart < queue.length && inFlight.size < limits.maxConcurrentChecks) {
+      const index = nextToStart;
+      nextToStart += 1;
+      inFlight.set(
+        index,
+        execute(queue[index] as Queued).then((outcome) => {
+          outcomes.set(index, outcome);
+          inFlight.delete(index);
+        }),
+      );
+    }
+    // The head of the line is the next one to record: wait for a check to finish until it has.
+    while (!outcomes.has(nextToRecord)) await Promise.race(inFlight.values());
+    const outcome = outcomes.get(nextToRecord) as Result<Executed>;
+    outcomes.delete(nextToRecord);
+    // A failure stops the pass; the checks already started are let finish, so nothing is left running behind the caller.
+    if (!outcome.ok) {
+      await Promise.allSettled(inFlight.values());
+      return outcome;
+    }
+    const recorded = recordCheck(queue[nextToRecord] as Queued, outcome.value);
+    nextToRecord += 1;
+    if (!recorded.ok) {
+      await Promise.allSettled(inFlight.values());
+      return recorded;
+    }
   }
   return ok(results);
 }
