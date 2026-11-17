@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-15-PLAN.md
-last_updated: "2026-11-17T01:12:16.095Z"
+stopped_at: Completed 04-16-PLAN.md
+last_updated: "2026-11-17T01:40:11.360Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 58fab6ca170ad6a460ca6186059dc68c19b8db93
+state_head: b58029c1c1d70bd5293a460991f1975efe8f8988
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 16 of 39
+Plan: 17 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -178,6 +178,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P13 | 40 min | 2 tasks | 6 files |
 | Phase 04 P14 | 65min | 3 tasks | 23 files |
 | Phase 04 P15 | 9 min | 3 tasks | 13 files |
+| Phase 04 P16 | 85 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -431,6 +432,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-14: onboard refreshes an active project; repo add still refuses it (PreflightRequest.refresh)
 - [Phase 04]: [04-15] Credential provider allow-list per profile: personal-local keychain and cmd, personal-extended adds delegated, enterprise keychain and cmd; env in none (PROVIDERS_BY_CLASS, owner review) — Plan 04-15 flagged assumption reading D-17; ADR-009 decision 2 refuses env in every profile
 - [Phase 04]: [04-15] A credential.resolve event that cannot be recorded withholds the credential; a credentials section that does not parse (env: reference) fails every non-read-only command with exit 70 (owner review) — S-48 audit of every attempt; S-49 no run starts with an env reference
+- [Phase 04]: 04-16: authorizeAction order is policy deny, class allow, contract naming the same action and canonical digest, single-use approval consumed in the action.started transaction, else approval-required:<apr id>; a contract never overrides a policy deny — FR-12, D-15, T-04-41, T-04-42
+- [Phase 04]: 04-16: resume blocks a run with an unfinished privileged action on a withdraw-only permission decision using reason enforcement_failure, so no item continues beside it; the owner's exit is avarice cancel (needs owner review) — FR-15, T-04-44
 
 ### Roadmap Evolution
 
@@ -498,8 +501,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T01:12:16.069Z
-Stopped at: Completed 04-15-PLAN.md
+Last session: 2026-11-17T01:40:11.331Z
+Stopped at: Completed 04-16-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
