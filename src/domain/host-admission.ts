@@ -5,7 +5,7 @@
 
 // Versions a live T3 run was recorded on with 0 containment failures (test/containment/LIVE-CASES.md). A version is added
 // only after such a run.
-export const VERIFIED_HOST_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319'];
+export const VERIFIED_HOST_VERSIONS: readonly string[] = ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319', '2.1.326'];
 
 // The lowest verified patch of each verified minor. A patch below it is refused: it predates every live run of that minor.
 export const VERIFIED_MINORS: Readonly<Record<string, number>> = { '2.1': 312 };

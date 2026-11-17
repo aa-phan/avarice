@@ -67,7 +67,7 @@ const ready = (bin: string) => checkHostReady({ claudeBin: bin, hookEntry: hookS
 
 describe('admitHostVersion', () => {
   it('verifies every version in the verified list', () => {
-    assert.deepEqual([...VERIFIED_HOST_VERSIONS], ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319']);
+    assert.deepEqual([...VERIFIED_HOST_VERSIONS], ['2.1.312', '2.1.316', '2.1.317', '2.1.318', '2.1.319', '2.1.326']);
     for (const version of VERIFIED_HOST_VERSIONS) assert.deepEqual(admitHostVersion(version), { admission: 'verified' });
   });
 
