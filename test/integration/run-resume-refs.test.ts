@@ -9,13 +9,16 @@ import { appendFileSync, readFileSync, realpathSync, rmSync, writeFileSync } fro
 import { join } from 'node:path';
 import { GsdGraphContext } from '../../src/adapters/context/gsd-graph.ts';
 import { GsdIntelContext } from '../../src/adapters/context/gsd-intel.ts';
-import type { ContextRefreshQuery, ExternalRef } from '../../src/ports/context-source.ts';
+import { blockedReasonFor, refreshRunRefs } from '../../src/app/resume-refs.ts';
+import { createDeps } from '../../src/cli/composition.ts';
+import type { PortError } from '../../src/domain/result.ts';
+import type { ContextRefreshQuery, ContextSource, ExternalRef, Freshness } from '../../src/ports/context-source.ts';
 import type { GsdOnboarding } from '../../src/ports/gsd-onboarding.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
-import { RUN_EXPIRY_WAIT_MS, resumeRunCli, rows, runRunWithFault, runStatusJson, sleepSync, statusCli } from '../helpers/fault-run.ts';
-import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, commitFiles, makeRunRepo, onboardRunRepo, onboardRunRepoWithIndexes, writeBrief } from '../helpers/run-fixtures.ts';
+import { RUN_EXPIRY_WAIT_MS, openRaw, resumeRunCli, rows, runRunWithFault, runStatusJson, sleepSync, statusCli } from '../helpers/fault-run.ts';
+import { FIXED_SLUG, RUN_CONVENTIONS, commitConventions, commitFiles, makeRunRepo, onboardRunRepo, onboardRunRepoWithIndexes, profileEnv, writeBrief } from '../helpers/run-fixtures.ts';
 import { makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
@@ -323,5 +326,156 @@ describe('a run records one task reference per context pack item, with the provi
       indexRefs.map((r) => [r.provider, r.ext_id, 'stale']),
     );
     assert.match(statusCli(f.roots).stdout, /stale references: .*gsd-graph/);
+  });
+});
+
+// ---- precedence, adjacency, ordering and the empty case (Task 3; FR-8) ------------------------------------------------------------------------
+
+describe('blockedReasonFor: the fixed precedence access_revoked, ref_deleted, ref_changed (ordering edge, FR-8)', () => {
+  const table: ReadonlyArray<readonly [readonly Freshness[], string | null]> = [
+    [['changed'], 'ref_changed'],
+    [['changed', 'deleted'], 'ref_deleted'],
+    [['deleted', 'changed'], 'ref_deleted'],
+    [['changed', 'access_revoked'], 'access_revoked'],
+    [['access_revoked', 'deleted', 'changed'], 'access_revoked'],
+    [['deleted', 'access_revoked'], 'access_revoked'],
+    [['stale', 'fresh'], null],
+    [['unavailable'], null],
+    [['unavailable', 'stale', 'changed'], 'ref_changed'],
+    [[], null],
+  ];
+  for (const [list, expected] of table) {
+    it(`[${list.join(', ')}] is ${expected ?? 'no block'}`, () => {
+      assert.equal(blockedReasonFor(list), expected);
+    });
+  }
+});
+
+// A source that answers a refresh from a table keyed `<provider>|<id>` and records every call it gets.
+function spySource(provider: string, answers: Readonly<Record<string, Freshness | PortError>>, calls: string[]): ContextSource {
+  const unused = async (): Promise<never> => {
+    throw new Error('the refresh path never finds or reads');
+  };
+  return {
+    descriptor: { port: 'context-source', adapter: provider, version: '1', capabilities: { find: true, read: true, refresh: true }, offline: true },
+    find: unused,
+    read: unused,
+    refresh: async (ref, query) => {
+      calls.push(`${ref.provider}|${ref.id}`);
+      assert.ok(query.indexRevision !== '', 'the project record names the index revision');
+      const answer = answers[`${ref.provider}|${ref.id}`] ?? 'fresh';
+      return typeof answer === 'string' ? { ok: true, value: { ...ref, freshness: answer, retrievedAt: '2026-11-17T10:00:00.000Z' } } : { ok: false, error: answer };
+    },
+  };
+}
+
+describe('refreshRunRefs: every reference is its own row, refreshed once, in primary-key order, with a fixed block reason (FR-8)', () => {
+  let f: Fixture;
+  let runId = '';
+  before(async () => {
+    const roots = makeRoots();
+    const repo = makeRunRepo({ 'src/index.ts': 'export function answer(): number {\n  return 42;\n}\n', 'src/util/strings.ts': 'export const upper = (s: string): string => s.toUpperCase();\n' });
+    cleanup.push(roots.base, repo.base);
+    await onboardRunRepoWithIndexes(roots, repo, TERM);
+    commitConventions(repo, { ...RUN_CONVENTIONS, agentCommands: ['npm test'] });
+    f = { roots, repo, brief: writeBrief(join(roots.base, 'briefs'), INDEX_BRIEF) };
+    runId = runRunWithFault(f.roots, f.repo, f.brief, 'after-checkpoint:context-pack#2', FIX).runId;
+  });
+
+  const extra = (provider: string, kind: string, id: string): ExternalRef => ({ provider, kind, id, revision: 'git:abc', retrievedAt: '2026-11-16T10:00:00.000Z', scope: 'src/index.ts', freshness: 'fresh' });
+
+  // Runs refreshRunRefs in process against the run's own ledger with spy sources; the refs of the run are replaced by `refs` plus the brief file's.
+  async function refreshWith(refs: readonly ExternalRef[], intel: Record<string, Freshness | PortError>, graph: Record<string, Freshness | PortError>) {
+    const composed = createDeps(profileEnv(f.roots), {});
+    assert.ok(composed.ok, 'composition');
+    try {
+      const { deps } = composed.value;
+      const db = openRaw(f.roots, false);
+      try {
+        db.prepare("DELETE FROM task_refs WHERE run_id = ? AND provider <> 'manual-brief'").run(runId);
+      } finally {
+        db.close();
+      }
+      const written = deps.ledger.recordTaskRefs(runId, refs);
+      assert.ok(written.ok, JSON.stringify(written));
+      const calls: string[] = [];
+      const spied = { ...deps, context: { intel: spySource('gsd-intel', intel, calls), graph: spySource('gsd-graph', graph, calls) } };
+      const outcome = await refreshRunRefs(spied, runId);
+      assert.ok(outcome.ok, JSON.stringify(outcome));
+      const stored = deps.ledger.listTaskRefs(runId);
+      assert.ok(stored.ok);
+      return { outcome: outcome.value, calls, stored: stored.value };
+    } finally {
+      composed.value.close();
+    }
+  }
+
+  it('two references with the same ID from different providers are two rows, each refreshed once, graph before intel (primary-key order)', async () => {
+    const { outcome, calls, stored } = await refreshWith([extra('gsd-intel', 'intel-entry', 'x'), extra('gsd-graph', 'graph-node', 'x')], {}, {});
+    assert.deepEqual(calls, ['gsd-graph|x', 'gsd-intel|x']);
+    assert.deepEqual(stored.map((r) => `${r.provider}|${r.id}`), ['gsd-graph|x', 'gsd-intel|x', `manual-brief|${realpathSync(f.brief)}`]);
+    assert.equal(outcome.block, undefined);
+    assert.deepEqual(outcome.refreshed.map((r) => r.freshness), ['fresh', 'fresh', 'fresh']);
+  });
+
+  it('a changed and a deleted reference give ref_deleted, listing both, whichever provider the deleted one came from', async () => {
+    const one = await refreshWith([extra('gsd-intel', 'intel-entry', 'x'), extra('gsd-graph', 'graph-node', 'x')], { 'gsd-intel|x': 'changed' }, { 'gsd-graph|x': 'deleted' });
+    assert.equal(one.outcome.block?.reason, 'ref_deleted');
+    assert.deepEqual(one.outcome.block?.refs.map((r) => `${r.provider}:${r.freshness}`), ['gsd-graph:deleted', 'gsd-intel:changed']);
+    const other = await refreshWith([extra('gsd-intel', 'intel-entry', 'x'), extra('gsd-graph', 'graph-node', 'x')], { 'gsd-intel|x': 'deleted' }, { 'gsd-graph|x': 'changed' });
+    assert.equal(other.outcome.block?.reason, 'ref_deleted');
+    assert.deepEqual(other.outcome.block?.refs.map((r) => `${r.provider}:${r.freshness}`), ['gsd-graph:changed', 'gsd-intel:deleted']);
+  });
+
+  it('a source that answers denied or unauthenticated makes the reference access_revoked, the most severe reason; not_found makes it deleted', async () => {
+    const denied: PortError = { kind: 'denied', rule: 'revoked', enforcer: 'external-platform' };
+    const revoked = await refreshWith([extra('gsd-intel', 'intel-entry', 'x'), extra('gsd-graph', 'graph-node', 'y')], { 'gsd-intel|x': 'deleted' }, { 'gsd-graph|y': denied });
+    assert.equal(revoked.outcome.block?.reason, 'access_revoked');
+    assert.deepEqual(revoked.stored.map((r) => r.freshness), ['access_revoked', 'deleted', 'fresh']);
+    const unauthenticated: PortError = { kind: 'unauthenticated', credentialRef: 'cred:a', recovery: 'log in' };
+    const lost = await refreshWith([extra('gsd-graph', 'graph-node', 'y')], {}, { 'gsd-graph|y': unauthenticated });
+    assert.equal(lost.outcome.block?.reason, 'access_revoked');
+    const missing = await refreshWith([extra('gsd-graph', 'graph-node', 'y')], {}, { 'gsd-graph|y': { kind: 'not_found', ref: 'y' } });
+    assert.equal(missing.outcome.block?.reason, 'ref_deleted');
+  });
+
+  it('unavailable and stale references never block: the run continues, an unavailable one with a warning that names it', async () => {
+    const { outcome, stored } = await refreshWith([extra('gsd-intel', 'intel-entry', 'x'), extra('gsd-graph', 'graph-node', 'y')], { 'gsd-intel|x': { kind: 'unavailable', cause: 'offline' } }, { 'gsd-graph|y': 'stale' });
+    assert.equal(outcome.block, undefined);
+    assert.deepEqual(stored.map((r) => r.freshness), ['stale', 'unavailable', 'fresh']);
+    assert.equal(outcome.warnings.length, 1);
+    assert.ok(outcome.warnings[0]?.includes('gsd-intel') && outcome.warnings[0].includes('unavailable'), outcome.warnings[0]);
+  });
+
+  it('a changed reference keeps the revision the run was built from, so a second refresh finds the change again', async () => {
+    const first = await refreshWith([extra('gsd-graph', 'graph-node', 'y')], {}, { 'gsd-graph|y': 'changed' });
+    assert.equal(first.stored.find((r) => r.provider === 'gsd-graph')?.revision, 'git:abc');
+    assert.equal(first.stored.find((r) => r.provider === 'gsd-graph')?.freshness, 'changed');
+  });
+
+  it('a run with no recorded reference makes no refresh call on resume and is not blocked (empty edge)', async () => {
+    const composed = createDeps(profileEnv(f.roots), {});
+    assert.ok(composed.ok, 'composition');
+    try {
+      const db = openRaw(f.roots, false);
+      try {
+        db.prepare('DELETE FROM task_refs WHERE run_id = ?').run(runId);
+      } finally {
+        db.close();
+      }
+      const calls: string[] = [];
+      const spied = { ...composed.value.deps, context: { intel: spySource('gsd-intel', {}, calls), graph: spySource('gsd-graph', {}, calls) } };
+      const outcome = await refreshRunRefs(spied, runId);
+      assert.ok(outcome.ok);
+      assert.deepEqual(calls, []);
+      assert.deepEqual(outcome.value, { refreshed: [], warnings: [] });
+    } finally {
+      composed.value.close();
+    }
+    sleepSync(RUN_EXPIRY_WAIT_MS);
+    const resumed = resumeRunCli(f.roots, runId, FIX);
+    assert.equal(resumed.code, 0, `${resumed.stdout}${resumed.stderr}`);
+    assert.equal(runOf(f.roots, runId).state, 'ready_for_review');
+    assert.equal(decisionsOf(f.roots, runId).length, 0);
   });
 });
