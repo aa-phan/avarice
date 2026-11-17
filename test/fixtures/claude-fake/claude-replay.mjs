@@ -8,6 +8,8 @@
 // The script is JSON in the file named by FAKE_CLAUDE_SCRIPT (tests make a wrapper that sets it, because the host
 // strips the environment it launches with), next to a directory FAKE_CLAUDE_DIR for the logs:
 //   version          string    answer to --version
+//   helpFlags        string[]  the flags `--help` lists, one line each (default: the flags host admission requires, plus --restricted); the
+//                    help is answered before anything is logged, so a probe never counts as a launch
 //   transcript       string    one of success, apiError, maxBudget, hookBlock (test/fixtures/stream-json.ts); null prints nothing
 //   mapFiles         "all" | "fast" | string[]   map documents to write under .planning/codebase (names such as STACK.md); not on a
 //                    launch that names an agent (`--agent`), which is the intel purpose
@@ -33,6 +35,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { transcript } from '../stream-json.ts';
 import { fakeMapDocument } from '../../helpers/fake-agent-host.ts';
+import { REQUIRED_HELP_FLAGS } from '../../../src/domain/host-admission.ts';
 import { INTEL_FILE_NAMES, intelDocuments, refreshSnapshot, serializeIntel } from '../index-fixtures.ts';
 
 const argv = process.argv.slice(2);
@@ -42,6 +45,13 @@ const script = scriptPath === undefined ? {} : JSON.parse(readFileSync(scriptPat
 
 if (argv.includes('--version')) {
   process.stdout.write(`${script.version ?? '2.1.316 (Claude Code)'}\n`);
+  process.exit(0);
+}
+
+// `claude --help`: a probe, never a launch. It prints one line per flag, so a flag a script leaves out is a flag the host does not list.
+if (argv[0] === '--help') {
+  const flags = script.helpFlags ?? [...REQUIRED_HELP_FLAGS, '--restricted'];
+  process.stdout.write(`Usage: claude [options]\n${flags.map((flag) => `  ${flag} <value>  What ${flag} does`).join('\n')}\n`);
   process.exit(0);
 }
 

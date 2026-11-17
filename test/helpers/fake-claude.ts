@@ -11,6 +11,8 @@ export const REPLAY = join(REPO_ROOT, 'test', 'fixtures', 'claude-fake', 'claude
 
 export interface FakeClaudeScript {
   version?: string;
+  // The flags `claude --help` lists (default: the ones host admission requires and --restricted).
+  helpFlags?: readonly string[];
   transcript?: TranscriptName | null;
   mapFiles?: 'all' | 'fast' | readonly string[];
   // Write the intel documents on a launch of `--agent gsd-intel-updater`.
