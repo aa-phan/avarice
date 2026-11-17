@@ -5,12 +5,14 @@
 // fails never blocks activation. The build is stamped with `git:` and the staging HEAD, the onboarded revision.
 import { join } from 'node:path';
 import { sha256Hex } from '../../domain/digest.ts';
+import { mergeChangedPaths } from '../../domain/graph-merge.ts';
 import { summarizeGraph, validateCodeGraph } from '../../domain/graph-validation.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
 import { ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { GsdGraphStatus } from '../../ports/gsd-onboarding.ts';
 import type { AppDeps } from '../deps.ts';
+import { incrementalRefreshOf, previousIndexesOf } from '../refresh.ts';
 import type { IndexStepContext } from './index-steps.ts';
 
 const GRAPH_PATH = '.planning/graphs/graph.json';
@@ -57,6 +59,58 @@ function gsdSeesFreshGraph(status: GsdGraphStatus): string | undefined {
   return undefined;
 }
 
+// An incremental refresh (ONB-11, D-11, spike S4-B): the previous code graph, read from the staging tree of the active record and validated as any code graph
+// is, and the whole-tree extraction just made are applied by mergeChangedPaths, which reports the node-level diff and whether it stays within the changed
+// paths. A path-subset extraction is not used (it loses the edges that leave the subset) and `graphify update` never is. Whatever is missing, the build goes
+// on whole and says why: the previous graph can add information, never decide what the new graph is.
+interface RefreshOutcome {
+  graph: Record<string, unknown>;
+  report: Record<string, unknown>;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function filesOf(graph: Record<string, unknown>): number {
+  const files = new Set<string>();
+  for (const node of Array.isArray(graph['nodes']) ? (graph['nodes'] as unknown[]) : []) {
+    if (isObject(node) && typeof node['source_file'] === 'string' && node['source_file'] !== '') files.add(node['source_file']);
+  }
+  return files.size;
+}
+
+function refreshOutcome(deps: AppDeps, ctx: IndexStepContext, extracted: Record<string, unknown>): Result<RefreshOutcome | null> {
+  const plan = incrementalRefreshOf(deps, ctx.row.onboardingId);
+  if (!plan.ok) return plan;
+  if (plan.value === null) return ok(null);
+  const whole = (reason: string): Result<RefreshOutcome> => ok({ graph: extracted, report: { mode: 'whole', reason: clip(reason) } });
+
+  const previous = previousIndexesOf(deps, ctx.row.projectId);
+  if (!previous.ok) return previous;
+  if (previous.value === null || previous.value.graph === null) return whole('the active record names no previous graph');
+  const before = deps.graph.readGraph(join(previous.value.stagingPath, previous.value.graph.codeGraphPath));
+  if (!before.ok) return whole(`the previous code graph cannot be read: ${describeError(before.error)}`);
+  const valid = validateCodeGraph(before.value.raw, previous.value.revision);
+  if (!valid.valid) return whole(`the previous code graph is not usable: ${valid.problems.join('; ')}`);
+  // A changed path with no regular file in staging was deleted (or is no longer a file): its nodes go.
+  const sizes = deps.graph.fileSizes(ctx.staging, plan.value.changedPaths);
+  if (!sizes.ok) return whole(`the changed paths cannot be stat'ed: ${describeError(sizes.error)}`);
+  const deleted = plan.value.changedPaths.filter((path) => sizes.value[path] === undefined);
+
+  const merged = mergeChangedPaths({ previous: before.value.raw, extracted, changedPaths: plan.value.changedPaths, deletedPaths: deleted });
+  return ok({
+    graph: merged.graph,
+    report: {
+      mode: 'incremental',
+      strategy: 'full-extraction-node-diff',
+      fromRevision: `git:${previous.value.revision}`,
+      changedPathCount: plan.value.changedPaths.length,
+      deletedPathCount: deleted.length,
+      extractedFileCount: filesOf(merged.graph),
+      delta: merged.delta,
+    },
+  });
+}
+
 export async function runCodeGraphStep(deps: AppDeps, ctx: IndexStepContext): Promise<Result<IndexStepResult>> {
   if (!ctx.contract.body.indexes.codeGraph) return ok({ index: 'code-graph', status: 'disabled' });
   const { staging, head } = ctx;
@@ -93,7 +147,9 @@ export async function runCodeGraphStep(deps: AppDeps, ctx: IndexStepContext): Pr
   const problem = gsdSeesFreshGraph(status.value);
   if (problem !== undefined) return absent('stale-after-install', problem);
 
-  const summary = summarizeGraph(read.value.raw);
+  const refreshed = refreshOutcome(deps, ctx, read.value.raw);
+  if (!refreshed.ok) return refreshed;
+  const summary = summarizeGraph(refreshed.value?.graph ?? read.value.raw);
   return ok({
     index: 'code-graph',
     status: 'present',
@@ -107,6 +163,7 @@ export async function runCodeGraphStep(deps: AppDeps, ctx: IndexStepContext): Pr
       // `document` is always listed: a code-only graph has none, and the record says so.
       nodes: { document: 0, ...summary.nodesByFileType },
       edges: summary.edgesByConfidence,
+      ...(refreshed.value !== null ? { refresh: refreshed.value.report } : {}),
     },
   });
 }

@@ -78,6 +78,151 @@ function endpoint(value: unknown): string | undefined {
   return isObject(value) && typeof value['id'] === 'string' ? value['id'] : undefined;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// The code graph of an incremental refresh (plan 04-17, ONB-11, D-11, spike S4-B)
+// ---------------------------------------------------------------------------------------------------------
+//
+// The spike measured that a path-subset extraction cannot give a changed file's edges to files outside the subset (4 of 1261 edges were missing after
+// one changed file), and that a whole-tree code-only extraction is deterministic and costs 1.5 s on 157 files. So the refresh extracts the whole tree
+// with the same invocation as a full build and this function applies it against the previous graph: the nodes and edges of the changed and deleted
+// files come from the extraction, the ones of every other file are the previous graph's, and the node-level diff says what moved. The merged graph is
+// therefore the extraction; what this adds is the proof that the change is confined to the changed paths (`outside`) and the delta the step records.
+// `graphify update` is never involved.
+
+// Keys graphify's clustering derives from the whole graph: a node whose only difference is one of these has not changed.
+const DERIVED_KEYS: ReadonlySet<string> = new Set(['community', 'community_name']);
+
+export interface ChangedPathsInput {
+  // The previous code graph (parsed `code-graph.json`).
+  previous: Json;
+  // The whole-tree code-only extraction of the new tree.
+  extracted: Json;
+  // Every path that differs between the two revisions (a deleted path included), repository-relative.
+  changedPaths: readonly string[];
+  // The changed paths that no longer exist.
+  deletedPaths: readonly string[];
+}
+
+export interface ChangedPathsDelta {
+  nodesAdded: number;
+  nodesRemoved: number;
+  // Same ID, different content.
+  nodesChanged: number;
+  edgesAdded: number;
+  edgesRemoved: number;
+  // Added or removed edges that touch a changed file and have one end outside the changed files: the edges a path-subset extraction cannot see.
+  boundaryEdgesAdded: number;
+  boundaryEdgesRemoved: number;
+  // Nodes of files outside the changed paths that the new graph has exactly as the previous one did, external nodes included.
+  nodesKept: number;
+  // Differences that lie outside the changed paths: nodes of other files added, removed or changed, and edges that touch no changed file. Zero when the
+  // previous graph is the graph of the revision the changed paths were measured from.
+  outside: number;
+}
+
+const normalizePath = (path: string): string => {
+  let out = path.replace(/\\/g, '/');
+  while (out.startsWith('./')) out = out.slice(2);
+  return out;
+};
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (isObject(value)) {
+    return `{${Object.keys(value)
+      .filter((key) => !DERIVED_KEYS.has(key))
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stable(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+const fileOf = (node: Json | undefined): string | undefined => (node !== undefined && typeof node['source_file'] === 'string' && node['source_file'] !== '' ? normalizePath(node['source_file']) : undefined);
+const edgeKeyOf = (s: string, t: string, relation: unknown): string => `${s}\u0000${t}\u0000${typeof relation === 'string' ? relation : ''}`;
+
+interface Indexed {
+  nodes: Map<string, Json>;
+  edges: Map<string, { edge: Json; source: string; target: string }>;
+}
+
+// Nodes by ID and edges by `source, target, relation`; the first of a duplicate is kept, a malformed entry is left out.
+function indexOf(doc: Json): Indexed {
+  const nodes = new Map<string, Json>();
+  for (const node of Array.isArray(doc['nodes']) ? (doc['nodes'] as unknown[]) : []) {
+    if (isObject(node) && typeof node['id'] === 'string' && !nodes.has(node['id'])) nodes.set(node['id'], node);
+  }
+  const edges = new Map<string, { edge: Json; source: string; target: string }>();
+  for (const edge of listOf(doc)) {
+    if (!isObject(edge)) continue;
+    const source = endpoint(edge['source']);
+    const target = endpoint(edge['target']);
+    if (source === undefined || target === undefined) continue;
+    const key = edgeKeyOf(source, target, edge['relation']);
+    if (!edges.has(key)) edges.set(key, { edge, source, target });
+  }
+  return { nodes, edges };
+}
+
+export function mergeChangedPaths(input: ChangedPathsInput): { graph: Json; delta: ChangedPathsDelta } {
+  const changed = new Set([...input.changedPaths, ...input.deletedPaths].map(normalizePath));
+  const before = indexOf(input.previous);
+  const after = indexOf(input.extracted);
+  const inChanged = (file: string | undefined): boolean => file !== undefined && changed.has(file);
+
+  const delta: ChangedPathsDelta = { nodesAdded: 0, nodesRemoved: 0, nodesChanged: 0, edgesAdded: 0, edgesRemoved: 0, boundaryEdgesAdded: 0, boundaryEdgesRemoved: 0, nodesKept: 0, outside: 0 };
+
+  // A difference of a node counts as outside when the file it belongs to is not a changed one; a node with no file (an external package) is never outside.
+  const outsideNode = (node: Json): boolean => {
+    const file = fileOf(node);
+    return file !== undefined && !changed.has(file);
+  };
+  for (const [id, node] of after.nodes) {
+    const was = before.nodes.get(id);
+    if (was === undefined) {
+      delta.nodesAdded += 1;
+      if (outsideNode(node)) delta.outside += 1;
+    } else if (stable(was) !== stable(node)) {
+      delta.nodesChanged += 1;
+      if (outsideNode(node) || outsideNode(was)) delta.outside += 1;
+    } else if (!inChanged(fileOf(node))) {
+      delta.nodesKept += 1;
+    }
+  }
+  for (const [id, node] of before.nodes) {
+    if (after.nodes.has(id)) continue;
+    delta.nodesRemoved += 1;
+    if (outsideNode(node)) delta.outside += 1;
+  }
+
+  // An edge touches a changed file through either end or through the file it was found in. It is a boundary edge when an end is not in a changed file.
+  const touches = (entry: { edge: Json; source: string; target: string }, nodes: Map<string, Json>): { touches: boolean; boundary: boolean } => {
+    const ends = [entry.source, entry.target].map((id) => fileOf(nodes.get(id)));
+    const own = typeof entry.edge['source_file'] === 'string' ? normalizePath(entry.edge['source_file']) : undefined;
+    const touchesChanged = ends.some(inChanged) || inChanged(own);
+    return { touches: touchesChanged, boundary: touchesChanged && ends.some((file) => !inChanged(file)) };
+  };
+  for (const [key, entry] of after.edges) {
+    const was = before.edges.get(key);
+    if (was !== undefined) continue;
+    delta.edgesAdded += 1;
+    const at = touches(entry, after.nodes);
+    if (at.boundary) delta.boundaryEdgesAdded += 1;
+    if (!at.touches) delta.outside += 1;
+  }
+  for (const [key, entry] of before.edges) {
+    if (after.edges.has(key)) continue;
+    delta.edgesRemoved += 1;
+    const at = touches(entry, before.nodes);
+    if (at.boundary) delta.boundaryEdgesRemoved += 1;
+    if (!at.touches) delta.outside += 1;
+  }
+
+  const edgeKey = input.extracted['links'] === undefined && input.extracted['edges'] !== undefined ? 'edges' : 'links';
+  const graph: Json = { ...input.extracted, nodes: [...after.nodes.values()], [edgeKey]: [...after.edges.values()].map((entry) => entry.edge) };
+  return { graph, delta };
+}
+
 export function mergeKnowledgeGraph(input: MergeInput): { graph: Json; stats: MergeStats } {
   const { code, docs, manifest } = input;
   const pin = bare(input.onboardedRevision);

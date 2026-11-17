@@ -72,3 +72,59 @@ export function refreshFacts(deps: AppDeps, stagingPath: string, input: RefreshI
     manifestChanged: touchesManifest(changedPaths),
   });
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// The index steps of an incremental refresh (plan 04-17, ONB-11, ONB-15)
+// ---------------------------------------------------------------------------------------------------------
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+// What `mapping:plan` recorded for an onboarding whose refresh plan is incremental: the paths that changed since the active record's revision.
+export interface IncrementalRefresh {
+  changedPaths: string[];
+  fromRevision: string | null;
+}
+
+// The incremental refresh of an onboarding, or null: not a refresh, a path-scoped or full refresh, or a list of changed paths that was cut short when it was
+// recorded (the plan keeps at most 200; a list that is not the whole list cannot say what is unchanged).
+export function incrementalRefreshOf(deps: AppDeps, onboardingId: string): Result<IncrementalRefresh | null> {
+  const steps = deps.ledger.getStepResults(onboardingId);
+  if (!steps.ok) return steps;
+  const found = [...steps.value].reverse().find((s) => s.step === 'mapping:plan');
+  const refresh = isObject(found?.result) ? found.result['refresh'] : undefined;
+  if (!isObject(refresh) || refresh['mode'] !== 'incremental') return ok(null);
+  const paths = refresh['changedPaths'];
+  if (!Array.isArray(paths) || !paths.every((p): p is string => typeof p === 'string')) return ok(null);
+  if (refresh['changedPathCount'] !== paths.length) return ok(null);
+  return ok({ changedPaths: [...paths], fromRevision: typeof refresh['fromRevision'] === 'string' ? refresh['fromRevision'] : null });
+}
+
+// What the active record of the project says about its indexes: the staging tree they were built in and where in it they are.
+export interface PreviousIndexes {
+  // The revision the record was onboarded at, as a bare commit.
+  revision: string;
+  stagingPath: string;
+  graph: { path: string; codeGraphPath: string; digest: string; knowledge: Record<string, unknown> | null } | null;
+}
+
+// A path the record names inside its staging tree: relative, without a `..` segment.
+const insideTree = (path: unknown): path is string => typeof path === 'string' && path !== '' && !path.startsWith('/') && !path.split('/').includes('..');
+
+export function previousIndexesOf(deps: AppDeps, projectId: string): Result<PreviousIndexes | null> {
+  const active = deps.ledger.getActiveRecord(projectId);
+  if (!active.ok) return active;
+  if (active.value === null) return ok(null);
+  const body = active.value.body;
+  const artifacts = isObject(body['artifacts']) ? body['artifacts'] : {};
+  const stagingPath = artifacts['stagingPath'];
+  if (typeof stagingPath !== 'string' || !stagingPath.startsWith('/')) return ok(null);
+  const indexes = isObject(body['indexes']) ? body['indexes'] : {};
+  const graph = indexes['graph'];
+  const revision = active.value.onboardedRevision.startsWith('git:') ? active.value.onboardedRevision.slice('git:'.length) : active.value.onboardedRevision;
+  if (!isObject(graph) || !insideTree(graph['path']) || !insideTree(graph['codeGraphPath']) || typeof graph['digest'] !== 'string') return ok({ revision, stagingPath, graph: null });
+  return ok({
+    revision,
+    stagingPath,
+    graph: { path: graph['path'], codeGraphPath: graph['codeGraphPath'], digest: graph['digest'], knowledge: isObject(graph['knowledge']) ? graph['knowledge'] : null },
+  });
+}
