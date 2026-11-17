@@ -24,7 +24,9 @@
       "excerpt": "{\"exports\":[\"answer\",\"helper\"],\"imports\":[\"./util/strings\"],\"type\":\"entry-point\"}",
       "estTokens": 24,
       "reason": "matched \"answer\" in file-roles.json",
-      "freshness": "fresh"
+      "freshness": "fresh",
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>"
     },
     {
       "source": "gsd-intel",
@@ -41,7 +43,9 @@
       "excerpt": "{\"pattern\":\"flat module layout\",\"description\":\"answer in src/index.ts calls helper; strings utilities live under src/util\"}",
       "estTokens": 33,
       "reason": "matched \"answer\" in arch-decisions.json",
-      "freshness": "fresh"
+      "freshness": "fresh",
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>"
     },
     {
       "source": "git-files",
@@ -59,7 +63,9 @@
       "estTokens": 375,
       "reason": "matched \"answer\" in src/index.ts",
       "freshness": "fresh",
-      "untrusted": true
+      "untrusted": true,
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>"
     }
   ],
   "omitted": [],

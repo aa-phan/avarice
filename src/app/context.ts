@@ -8,6 +8,8 @@
 // content, and the fence cannot be closed from inside because every fenced line is prefixed (S-46).
 import { defaultContextReadScope } from '../domain/context-adapters.ts';
 import type { ContextReadScope } from '../domain/context-adapters.ts';
+import { isRevoked } from '../domain/cache-scope.ts';
+import { digestOf } from '../domain/digest.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RetrievalCaps } from '../domain/retrieval-rules.ts';
@@ -157,7 +159,8 @@ interface Candidate {
   index: number;
 }
 
-const refKey = (handle: ContextHandle): string => [handle.ref.provider, handle.ref.kind, handle.ref.id].join('\u0000');
+const keyOfRef = (ref: ExternalRef): string => [ref.provider, ref.kind, ref.id].join('\u0000');
+const refKey = (handle: ContextHandle): string => keyOfRef(handle.ref);
 
 // Ranks every handle, drops later copies of a ref already seen, and takes handles first-fit: a handle that does not
 // fit the budget (or its source's cap) is left out, not cut, and a smaller one after it may still fit.
@@ -211,7 +214,8 @@ export function confirmCitedPaths(items: readonly ContextItem[], gitFiles: GitFi
   return { items: confirmedItems, notes };
 }
 
-function packItem(source: PackItem['source'], item: ContextItem): PackItem {
+// Where an item may be reused: the profile the pack was built in and the digest of the read scope it was built under (CON-12), appended after every other key.
+function packItem(source: PackItem['source'], item: ContextItem, stamp: { profile: string; accessScope: string }): PackItem {
   return {
     source,
     ref: item.ref,
@@ -223,6 +227,8 @@ function packItem(source: PackItem['source'], item: ContextItem): PackItem {
     ...(item.confidence !== undefined ? { confidence: item.confidence } : {}),
     ...(item.untrusted === true ? { untrusted: true } : {}),
     ...(item.confirmed !== undefined ? { confirmed: item.confirmed } : {}),
+    profile: stamp.profile,
+    accessScope: stamp.accessScope,
   };
 }
 
@@ -323,6 +329,15 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
   const worktreePath = request.worktreePath ?? scope.worktreePath;
   const workspace: ContextQuery['workspace'] = { stagingPath: staging, repoPath: project.repoPath, ...(worktreePath !== undefined ? { worktreePath } : {}) };
   const readScope = request.readScope ?? scope.readScope ?? defaultContextReadScope();
+  // Each item is stamped with where it may be reused (CON-12): this profile, and a digest of the read scope the pack is built under.
+  const stamp = { profile: deps.profile.profile, accessScope: digestOf(readScope) };
+  // The references this run recorded as access_revoked: a new pack never carries an excerpt of one (CON-12).
+  const revoked = new Set<string>();
+  if (request.runId !== undefined) {
+    const recorded = deps.ledger.listTaskRefs(request.runId);
+    if (!recorded.ok) return recorded;
+    for (const ref of recorded.value) if (isRevoked(ref)) revoked.add(keyOfRef(ref));
+  }
 
   // Phase 1: find. Every source is asked before anything is read; a handle carries no content (FR-22).
   const candidates: Candidate[] = [];
@@ -390,6 +405,13 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
       handles = handles.slice(0, guard.caps.indexEntries);
     }
     if (stats.truncated) notes.push(`the ${name} ${what} cut its answer at its cap of ${guard.caps.searchHits} hits; more matched`);
+    // A handle whose access was revoked is left out before anything is read, and says why (CON-12).
+    const revokedHere = handles.filter((handle) => isRevoked(handle.ref) || revoked.has(refKey(handle)));
+    if (revokedHere.length > 0) {
+      for (const handle of revokedHere) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens, reason: 'access_revoked' });
+      notes.push(`${revokedHere.length} handle${revokedHere.length === 1 ? '' : 's'} from the ${name} ${what} were left out: access to ${revokedHere.length === 1 ? 'it was' : 'them was'} revoked`);
+      handles = handles.filter((handle) => !revokedHere.includes(handle));
+    }
     asked.push({ sourceIndex, name, source, label, share });
     handles.forEach((handle, index) => candidates.push({ handle, sourceIndex, tier: handle.confidence === undefined ? NO_TIER_RANK : TIER_RANK[handle.confidence], index }));
   }
@@ -422,6 +444,10 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     );
     if (!read.ok) {
       notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot be read: ${read.error.kind}`);
+      // A source that refuses the read has revoked what it was asked for: none of it is in the pack, and it says so (CON-12).
+      if (read.error.kind === 'unauthenticated' || read.error.kind === 'denied') {
+        for (const { handle } of mine) omitted.push({ source: label, id: handle.ref.id, title: handle.title, estTokens: handle.estTokens, reason: 'access_revoked' });
+      }
       continue;
     }
     const confirmed = confirmCitedPaths(read.value, sources.gitFiles, workspace);
@@ -429,7 +455,7 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     // One source's answer carries at most `returnedBytes` bytes of text, whatever it sent.
     const capped = capBytes(confirmed.items, guard.caps.returnedBytes);
     if (capped.cut) notes.push(`the ${name} source's answer was cut at the ${guard.caps.returnedBytes}-byte limit`);
-    for (const item of capped.items) items.push(packItem(label, item));
+    for (const item of capped.items) items.push(packItem(label, item, stamp));
     used += mine.reduce((sum, c) => sum + c.handle.estTokens, 0);
   }
 
