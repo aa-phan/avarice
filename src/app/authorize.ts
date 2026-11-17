@@ -13,11 +13,15 @@
 // finds it on resume and opens a permission decision that names it (FR-15). The scope is the run ID, the onboarding ID or `attended:<session id>`.
 import { paramsDigest, paramsSummary, scopeRunId } from '../domain/approval.ts';
 import { classifyAction } from '../domain/action-class.ts';
+import { ISSUE_MAX_CHARS, OPTION_LABEL_MAX_CHARS, classifyDecision } from '../domain/decision-policy.ts';
 import { evaluatePolicy } from '../domain/policy.ts';
+import { storedText } from '../domain/quick-record.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import type { RunContract } from '../domain/run-contract.ts';
 import type { ActionEventRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { stateDigestOf } from './run-stages/blocked.ts';
 
 export interface AuthorizeInput {
   // The run ID, the onboarding ID, or `attended:<session id>`.
@@ -185,6 +189,93 @@ export function finishPrivilegedAction(deps: AppDeps, scope: string, action: str
   return finished.ok ? ok(undefined) : finished;
 }
 
-export function reconcilePrivilegedSteps(_deps: AppDeps, _scope: string): Result<ReconcileOutcome> {
-  return ok({ steps: [], decisionIds: [] });
+// The evidence reference a permission decision carries to name the start it is about: `event:<seq of the action.started event>`.
+export const INTERRUPTED_REF_PREFIX = 'event:';
+
+const asText = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+// The permission decision of an interrupted privileged action of a run (FR-15): what started, with which parameters (the summary), and that it was not
+// repeated. The only option is `withdraw`, as for every permission decision: nothing here can be answered into an approval (FR-13).
+function openInterruptedDecision(deps: AppDeps, runId: string, step: InterruptedStep): Result<string> {
+  const stored = deps.ledger.getRunContract(runId);
+  if (!stored.ok) return stored;
+  if (stored.value === null) return err({ kind: 'internal', cause: `run ${runId} has no stored contract` });
+  const contract = stored.value.body as RunContract;
+  const classification = classifyDecision({ kind: 'permission' }, contract.decisions);
+  const options = classification.options.map((o) => ({ key: o.key, label: storedText(o.label, OPTION_LABEL_MAX_CHARS), kind: o.kind }));
+  const consequences: Record<string, string> = {};
+  for (const option of options) {
+    consequences[option.key] = 'the decision closes with nothing applied; the action is not repeated, and a new one needs its own approval';
+  }
+  const opened = deps.ledger.openDecision({
+    runId,
+    contractVersion: stored.value.version,
+    class: classification.class,
+    issue: storedText(`the privileged action ${step.action} (${step.paramsSummary}) started and its end was never recorded; it was not repeated`, ISSUE_MAX_CHARS),
+    options,
+    consequences,
+    evidenceRefs: [`${INTERRUPTED_REF_PREFIX}${step.startSeq}`],
+    affectedItems: step.itemId !== undefined ? [step.itemId] : [],
+    stateDigest: stateDigestOf(stored.value.version, contract),
+    urgency: classification.urgency,
+    nowMs: deps.clock.nowMs(),
+  });
+  return opened.ok ? ok(opened.value.decisionId) : opened;
+}
+
+// The no-replay rule (FR-15, T-04-44). A privileged action whose start was recorded and whose end was not may have taken effect, so it is never run again
+// on its own: it is found here, on resume, and (for a run) one permission decision names it, in the order the starts were recorded. Nothing in this
+// module calls the action, and no approval is consumed or written. Each interrupted start is marked with an `action.interrupted` event after its
+// decision is opened, so a resume that is itself interrupted repeats nothing: the decision is found by its evidence reference and the mark is written.
+// A scope that is not a run (an onboarding, an attended session) gets the marks and the steps back and opens no decision: its owner decides what to ask.
+export function reconcilePrivilegedSteps(deps: AppDeps, scope: string): Result<ReconcileOutcome> {
+  const events = deps.ledger.listActionEvents(scope);
+  if (!events.ok) return events;
+  const open = openSteps(events.value);
+  if (open.length === 0) return ok({ steps: [], decisionIds: [] });
+
+  const run = deps.ledger.getRun(scope);
+  if (!run.ok && run.error.kind !== 'not_found') return run;
+  const isRun = run.ok;
+  const known = new Map<string, string>();
+  if (isRun) {
+    const decisions = deps.ledger.listDecisions({ runId: scope });
+    if (!decisions.ok) return decisions;
+    for (const decision of decisions.value) {
+      for (const ref of decision.evidenceRefs) if (ref.startsWith(INTERRUPTED_REF_PREFIX)) known.set(ref, decision.decisionId);
+    }
+  }
+
+  const runId = scopeRunId(scope);
+  const steps: InterruptedStep[] = [];
+  const decisionIds: string[] = [];
+  for (const start of open) {
+    const step: InterruptedStep = {
+      startSeq: start.seq,
+      action: asText(start.data['action']),
+      paramsDigest: asText(start.data['paramsDigest']),
+      paramsSummary: asText(start.data['paramsSummary']),
+      ...(asText(start.data['itemId']) !== '' ? { itemId: asText(start.data['itemId']) } : {}),
+    };
+    let decisionId: string | undefined;
+    if (isRun) {
+      decisionId = known.get(`${INTERRUPTED_REF_PREFIX}${start.seq}`);
+      if (decisionId === undefined) {
+        const opened = openInterruptedDecision(deps, scope, step);
+        if (!opened.ok) return opened;
+        decisionId = opened.value;
+      }
+      decisionIds.push(decisionId);
+    }
+    const marked = deps.ledger.appendEvent({
+      type: 'action.interrupted',
+      level: 'warn',
+      ...(runId !== undefined ? { runId } : {}),
+      data: { scope, action: step.action, startSeq: start.seq, ...(decisionId !== undefined ? { decisionId } : {}) },
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!marked.ok) return marked;
+    steps.push(step);
+  }
+  return ok({ steps, decisionIds });
 }
