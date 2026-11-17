@@ -170,6 +170,7 @@ export class GsdGraphContext implements ContextSource {
         // Anything that is not code (a document, or a concept or rationale a model read out of one) is data, not
         // instruction: its text is printed fenced and never acted on.
         ...(node.fileType !== 'code' ? { untrusted: true } : {}),
+        ...(cited !== undefined ? { citedPath: cited } : {}),
       };
       if (freshness !== 'fresh' && cited !== undefined) {
         const confirmed = pathExistsAtHead(query.workspace.repoPath, cited);
@@ -196,6 +197,7 @@ export class GsdGraphContext implements ContextSource {
         ...(handle.confidence !== undefined ? { confidence: handle.confidence } : {}),
         ...(handle.untrusted === true ? { untrusted: true } : {}),
         ...(handle.confirmed !== undefined ? { confirmed: handle.confirmed } : {}),
+        ...(handle.citedPath !== undefined ? { citedPath: handle.citedPath } : {}),
       });
     }
     return ok(items);

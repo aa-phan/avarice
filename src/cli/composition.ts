@@ -45,6 +45,7 @@ import { fingerprintGsdPreamble } from '../adapters/gsd/preamble.ts';
 import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
+import { parseContextAdapters } from '../domain/context-adapters.ts';
 import { parseCredentialSection, providersFor } from '../domain/credential-ref.ts';
 import type { CredentialSection, ProviderName } from '../domain/credential-ref.ts';
 import { DEFAULT_TRANSCRIPT_RETENTION, parseRetentionSection } from '../domain/redactor.ts';
@@ -327,6 +328,13 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
     transcripts = parsedRetention.value.transcripts;
   }
+  // FR-3: the context sources this profile selects. A name outside the closed list stops the command here, naming `adapters.context`. `context` is a read-only
+  // command, so the list is read whether or not the command writes.
+  const contextAdapters = parseContextAdapters(profile.config.sections.adapters);
+  if (!contextAdapters.ok) {
+    const e = contextAdapters.error;
+    return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config adapters: ${describeError(e)}` };
+  }
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
   const ids = overrides.ids ?? systemIds(clock);
@@ -491,7 +499,34 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
   }
   // The context sources read the indexes through GSD's own readers, so they exist exactly when the GSD adapter does.
-  const context = gsd !== undefined ? { intel: new GsdIntelContext(gsd, { nowMs: () => clock.nowMs() }), graph: new GsdGraphContext(gsd, { nowMs: () => clock.nowMs() }), planning: new GsdPlanningContext({ nowMs: () => clock.nowMs() }), gitFiles: new GitFilesContext({ nowMs: () => clock.nowMs() }) } : undefined;
+  // Only the sources the profile's `adapters.context` lists are built, and each one's descriptor is recorded (a read-only command records nothing).
+  let context: NonNullable<AppDeps['context']> | undefined;
+  if (gsd !== undefined) {
+    const contextOptions = { nowMs: () => clock.nowMs() };
+    context = {};
+    for (const name of contextAdapters.value) {
+      if (name === 'gsd-intel') context.intel = new GsdIntelContext(gsd, contextOptions);
+      else if (name === 'gsd-graph') context.graph = new GsdGraphContext(gsd, contextOptions);
+      else if (name === 'gsd-planning') context.planning = new GsdPlanningContext(contextOptions);
+      else context.gitFiles = new GitFilesContext(contextOptions);
+    }
+    if (options.readOnly !== true) {
+      for (const source of [context.intel, context.graph, context.planning, context.gitFiles]) {
+        if (source === undefined) continue;
+        const recorded = ledger.upsertAdapterConfig({
+          name: `context-${source.descriptor.adapter}`,
+          port: source.descriptor.port,
+          adapter: source.descriptor.adapter,
+          configDigest: digestOf(source.descriptor),
+          descriptor: source.descriptor,
+        });
+        if (!recorded.ok) {
+          store.close();
+          return failure(`cannot record the ${source.descriptor.adapter} context adapter`, describeError(recorded.error));
+        }
+      }
+    }
+  }
   // Local notification (plan 03-16). The settings are read from the profile config each time they are asked for, so an edited file is
   // honored by the next banner; the osascript path is read once. A read-only command raises no banner.
   const readNotifySettings = () => readProfileNotify(profile.configHome, profile.profile);

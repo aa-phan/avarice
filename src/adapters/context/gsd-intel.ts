@@ -94,10 +94,12 @@ export class GsdIntelContext implements ContextSource {
           reason: `matched "${query.term}" in ${match.source}`,
           readRule: 'id-only',
         };
-        if (freshness !== 'fresh') {
-          // A stale or changed index still answers; each cited path is confirmed against the repository as it is now.
-          const path = citedPath(match.source, entry.key, entry.value);
-          if (path !== undefined && isCitablePath(path)) {
+        const path = citedPath(match.source, entry.key, entry.value);
+        if (path !== undefined && isCitablePath(path)) {
+          // The assembler confirms this path with `git-files` when the index is not fresh.
+          handle.citedPath = path;
+          if (freshness !== 'fresh') {
+            // A stale or changed index still answers; each cited path is confirmed against the repository as it is now.
             const confirmed = pathExistsAtHead(query.workspace.repoPath, path);
             if (confirmed !== undefined) handle.confirmed = confirmed;
           }
@@ -121,6 +123,7 @@ export class GsdIntelContext implements ContextSource {
         estTokens: handle.estTokens,
         reason: handle.reason,
         ...(handle.confirmed !== undefined ? { confirmed: handle.confirmed } : {}),
+        ...(handle.citedPath !== undefined ? { citedPath: handle.citedPath } : {}),
       });
     }
     return ok(items);

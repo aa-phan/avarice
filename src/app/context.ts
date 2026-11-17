@@ -173,9 +173,29 @@ function pick(candidates: readonly Candidate[], budget: number, caps: ReadonlyMa
   return { picked, left, used };
 }
 
-// Skeleton (plan 04-26 task 3 RED): returns the items as they are.
-export function confirmCitedPaths(items: readonly ContextItem[], _gitFiles: GitFilesSource | undefined, _workspace: ContextQuery['workspace']): { items: ContextItem[]; notes: string[] } {
-  return { items: [...items], notes: [] };
+// A stale index still answers, but each path one of its items cites is asked of `git-files` at the current revision before the item's content is used
+// (docs/contracts-and-state.md "ContextSource"). A path that is there marks the item `confirmed`; a path that is gone marks it not confirmed, replaces its content with
+// a one-line marker and adds a note naming the item and the path, so a pack never carries text of a file that no longer exists. Without a `git-files` source the index
+// adapter's own answer stands; an item that cites no path, or whose path cannot be judged, is left as it is.
+export function confirmCitedPaths(items: readonly ContextItem[], gitFiles: GitFilesSource | undefined, workspace: ContextQuery['workspace']): { items: ContextItem[]; notes: string[] } {
+  const confirmedItems: ContextItem[] = [];
+  const notes: string[] = [];
+  for (const item of items) {
+    if (item.ref.freshness !== 'stale' || item.citedPath === undefined) {
+      confirmedItems.push(item);
+      continue;
+    }
+    const confirmed = gitFiles?.pathExists(workspace, item.citedPath) ?? item.confirmed;
+    if (confirmed === undefined) {
+      confirmedItems.push(item);
+    } else if (confirmed) {
+      confirmedItems.push({ ...item, confirmed: true });
+    } else {
+      notes.push(`${item.ref.provider} ${item.ref.id} cites ${item.citedPath}, which is not at the current revision; its content is not used`);
+      confirmedItems.push({ ...item, confirmed: false, excerpt: `[content withheld: ${item.citedPath} is not at the current revision]` });
+    }
+  }
+  return { items: confirmedItems, notes };
 }
 
 function packItem(source: PackItem['source'], item: ContextItem): PackItem {
@@ -273,7 +293,9 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
       notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot be read: ${read.error.kind}`);
       continue;
     }
-    for (const item of read.value) items.push(packItem(label, item));
+    const confirmed = confirmCitedPaths(read.value, sources.gitFiles, workspace);
+    notes.push(...confirmed.notes);
+    for (const item of confirmed.items) items.push(packItem(label, item));
     used += mine.reduce((sum, c) => sum + c.handle.estTokens, 0);
   }
 
