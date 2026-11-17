@@ -12,10 +12,13 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
 import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
-import { makeRoots, runCli } from '../helpers/run-cli.ts';
+import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
+import { commitConventions, makeRunRepo, writeBrief } from '../helpers/run-fixtures.ts';
 import { checkoutSnapshot, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
+
+const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
 
 const REPO_FILES = {
   'README.md': '# scratch\n',
@@ -77,7 +80,7 @@ interface RecordBody {
   restricted?: boolean;
 }
 const activeRecord = (roots: CliRoots): { version: number; body: RecordBody } => {
-  const [row] = rows<{ version: number; body_json: string }>(roots, "SELECT version, body_json FROM project_records WHERE state = 'active'");
+  const [row] = rows<{ version: number; body_json: string }>(roots, "SELECT version, body_json FROM project_records WHERE state = 'active' AND superseded_at IS NULL ORDER BY version DESC");
   assert.ok(row !== undefined, 'an active record');
   return { version: row.version, body: JSON.parse(row.body_json) as RecordBody };
 };
@@ -153,5 +156,87 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
     assert.match(r.stdout + r.stderr, /--restricted/, 'the message names the flag');
     assert.equal(f.fake.started(), false, 'no mapper was launched');
     assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM onboardings')[0]?.state, 'blocked');
+  });
+});
+
+// ---- Task 2: a restricted record is never full coverage, and a contained run on it is refused (ONB-7, CON-4, T-04-65) ------------------------------------------
+
+interface RunFixture extends Fixture {
+  brief: string;
+}
+
+// A scratch GSD project (a committed slug bug and the conventions a routine run needs), onboarded with `--restricted` on the fake `claude`.
+function runFixture(): RunFixture {
+  const roots = makeRoots();
+  const repo = makeRunRepo();
+  const fake = makeFakeClaude({ version: '2.2.0 (Claude Code)', transcript: 'success', mapFiles: 'fast' });
+  const configDir = join(roots.base, 'claude-config');
+  for (const skill of ['gsd-map-codebase', 'graphify']) {
+    mkdirSync(join(configDir, 'skills', skill), { recursive: true });
+    writeFileSync(join(configDir, 'skills', skill, 'SKILL.md'), `---\nname: ${skill}\ndescription: stand-in\n---\n`);
+  }
+  cleanup.push(roots.base, repo.base, fake.dir);
+  const f: RunFixture = { roots, repo, fake, configDir, brief: '' };
+  const onboarded = onboard(f, '--restricted');
+  assert.equal(onboarded.code, 0, onboarded.stdout + onboarded.stderr);
+  commitConventions(repo);
+  f.brief = writeBrief(join(roots.base, 'briefs'));
+  return f;
+}
+
+function start(f: RunFixture, env: Record<string, string>, ...extra: string[]): CliResult {
+  return runCli(['start', '--brief', f.brief, '--policy', 'routine', ...extra], { roots: f.roots, cwd: f.repo.path, env, timeoutMs: 180_000 });
+}
+
+describe('a restricted record is never presented as whole-repository coverage (ONB-7, CON-4)', () => {
+  it('labels the pack of `context <term>` `partial (restricted)`, in the project line and as a `restricted` key of the JSON project', () => {
+    const f = runFixture();
+    const text = runCli(['context', 'slugify'], { roots: f.roots, env: envOf(f) });
+    assert.equal(text.code, 0, text.stdout + text.stderr);
+    assert.match(text.stdout.split('\n')[0] ?? '', /\(record v1 at git:[0-9a-f]{40}; map: partial \(restricted\)\)$/, text.stdout);
+
+    const json = runCli(['context', 'slugify', '--json'], { roots: f.roots, env: envOf(f) });
+    assert.equal(json.code, 0, json.stdout + json.stderr);
+    const report = JSON.parse(json.stdout) as { project: Record<string, unknown> };
+    assert.equal(report.project['restricted'], true);
+    assert.equal(Object.keys(report.project).at(-1), 'restricted', 'appended last');
+  });
+
+  it('refuses a contained start on a project whose active record is restricted: exit 3, the message names a contained re-onboarding, and no run is stored', () => {
+    const f = runFixture();
+    const r = start(f, envOf(f));
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    assert.match(r.stderr, /refused: .*restricted onboarding \(partial \(restricted\)\)/, r.stderr);
+    assert.match(r.stderr, /avarice onboard --policy onboarding /, 'it names the onboarding that replaces the record');
+    assert.match(r.stderr, /enforced host/);
+    assert.deepEqual(rows(f.roots, 'SELECT run_id FROM runs'), [], 'nothing was stored');
+  });
+
+  it('lets `start --restricted` run on it: the restricted line launches in the run clone and the run ends blocked as any restricted run does', () => {
+    const f = runFixture();
+    const runFake = makeFakeClaude({ version: '2.2.0 (Claude Code)', transcript: 'success', writes: { '.avarice-restricted/PLAN.md': '# Plan\n\n1. Collapse runs of separators.\n' } });
+    cleanup.push(runFake.dir);
+    const r = start(f, { AVARICE_CLAUDE_BIN: runFake.bin }, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    assert.match(r.stdout, /run run_[0-9A-Z]{26}: blocked_on_decision \(enforcement_failure\)/);
+    const launches = runFake.argvs();
+    assert.equal(launches.length, 1, 'one invocation');
+    assert.ok((launches[0] as { argv: string[] }).argv.includes('--restricted'));
+  });
+
+  it('is replaced by a later contained onboarding: the new record version has no restricted key, and the contained start is no longer refused for it', () => {
+    const f = runFixture();
+    assert.equal(activeRecord(f.roots).body.restricted, true);
+    // The fake host of the test entry is an enforced one, as the production host is on a host that can be contained.
+    const contained = runCli(['onboard', '--policy', 'onboarding', f.repo.path], { roots: f.roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: '{}' }, timeoutMs: 180_000 });
+    assert.equal(contained.code, 0, contained.stdout + contained.stderr);
+    const record = activeRecord(f.roots);
+    assert.equal(record.version, 2, 'a new version replaced the restricted one');
+    assert.equal(record.body.restricted, undefined, 'the new record is not restricted');
+    assert.equal(record.body.mapping.completeness, 'complete');
+    const json = JSON.parse(runCli(['status', '--json'], { roots: f.roots, env: envOf(f) }).stdout) as Array<Record<string, unknown>>;
+    assert.ok(!('restricted' in (json[0] as Record<string, unknown>)), 'status no longer says restricted');
+    const r = start(f, envOf(f));
+    assert.ok(!/restricted onboarding/.test(r.stderr), `the contained start is not refused for a restricted record: ${r.stderr}`);
   });
 });
