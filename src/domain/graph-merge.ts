@@ -223,6 +223,69 @@ export function mergeChangedPaths(input: ChangedPathsInput): { graph: Json; delt
   return { graph, delta };
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// The document nodes a knowledge refresh keeps (plan 04-17, ONB-15, S-47)
+// ---------------------------------------------------------------------------------------------------------
+//
+// A refresh extracts only the documents whose content changed. The nodes the earlier pass made for every other document are kept: the nodes and edges of the
+// previous merged graph that carry the pass's origin and cite one of `keep` (repository paths of the unchanged documents). They are returned as a skill graph's
+// parts, so that mergeKnowledgeGraph treats them like the pass's own (it rewrites their source revision through the new manifest, lowers nothing that is
+// already INFERRED, and drops a node whose ID the code graph has). An edge is kept when both ends are kept nodes or nodes of the new code graph (`codeIds`), so a
+// document's edge to a code node the new tree no longer has goes quietly with it instead of counting as a dangling edge of the pass, and when the file it was
+// found in, if it names one, is a kept document. The clustering keys are dropped: they are derived from the whole graph and recomputed.
+export interface RetainedKnowledge {
+  nodes: Json[];
+  edges: Json[];
+  // Edges of kept documents that went because an end is gone.
+  droppedEdges: number;
+}
+
+// The repository path a skill `source_file` names: relative to the corpus root, with a leading `./`, as the staging-relative copy path or as an absolute path
+// through the corpus directory.
+function documentPathOf(sourceFile: unknown): string | undefined {
+  if (typeof sourceFile !== 'string' || sourceFile === '') return undefined;
+  let path = sourceFile;
+  while (path.startsWith('./')) path = path.slice(2);
+  if (path.startsWith('/')) {
+    const at = path.indexOf(`/${CORPUS_DIR}/`);
+    if (at === -1) return path;
+    path = path.slice(at + 1);
+  }
+  return path.startsWith(`${CORPUS_DIR}/`) ? path.slice(CORPUS_DIR.length + 1) : path;
+}
+
+const withoutDerived = (value: Json): Json => Object.fromEntries(Object.entries(value).filter(([key]) => !DERIVED_KEYS.has(key)));
+
+export function retainedKnowledge(previous: Json, keep: ReadonlySet<string>, codeIds: ReadonlySet<string>): RetainedKnowledge {
+  const nodes: Json[] = [];
+  const kept = new Set<string>();
+  for (const node of Array.isArray(previous['nodes']) ? (previous['nodes'] as unknown[]) : []) {
+    if (!isObject(node) || node['_avarice_origin'] !== KNOWLEDGE_ORIGIN || typeof node['id'] !== 'string') continue;
+    const path = documentPathOf(node['source_file']);
+    if (path === undefined || !keep.has(path) || kept.has(node['id'])) continue;
+    kept.add(node['id']);
+    nodes.push(withoutDerived(node));
+  }
+  const edges: Json[] = [];
+  let droppedEdges = 0;
+  for (const edge of listOf(previous)) {
+    if (!isObject(edge) || edge['_avarice_origin'] !== KNOWLEDGE_ORIGIN) continue;
+    const own = documentPathOf(edge['source_file']);
+    if (own !== undefined && !keep.has(own)) continue;
+    const s = endpoint(edge['source']);
+    const t = endpoint(edge['target']);
+    if (s === undefined || t === undefined) continue;
+    const known = (id: string): boolean => kept.has(id) || codeIds.has(id);
+    if (!(kept.has(s) || kept.has(t))) continue;
+    if (!known(s) || !known(t)) {
+      droppedEdges += 1;
+      continue;
+    }
+    edges.push(withoutDerived(edge));
+  }
+  return { nodes, edges, droppedEdges };
+}
+
 export function mergeKnowledgeGraph(input: MergeInput): { graph: Json; stats: MergeStats } {
   const { code, docs, manifest } = input;
   const pin = bare(input.onboardedRevision);

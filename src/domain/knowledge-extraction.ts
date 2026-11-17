@@ -107,6 +107,20 @@ export function planExtractionChunks(manifest: KnowledgeManifest, sizes: Readonl
   };
 }
 
+// The plan of the chunks of `plan` that are numbered in `numbers`, with the same files in the same groups, renumbered from 1 (the output files follow the new
+// numbers). A resumed refresh asks the model for the chunks the interrupted attempt had not written and nothing else (plan 04-17, ONB-15); keeping the groups
+// is what lets a later resume recognize a chunk by its files.
+export function subsetPlan(plan: ExtractionPlan, numbers: ReadonlySet<number>, corpusRoot: string): ExtractionPlan {
+  const root = normalizedAbsoluteRoot(corpusRoot, 'subsetPlan: corpusRoot');
+  const chunks = plan.chunks
+    .filter((chunk) => numbers.has(chunk.n))
+    .map((chunk, index) => {
+      const output = `${EXTRACTION_DIR_NAME}/${chunkOutputName(index + 1)}`;
+      return { n: index + 1, output, writePath: `${root}/${output}`, files: chunk.files.map((file) => ({ ...file })) };
+    });
+  return { schema: 1, revision: plan.revision, chunks };
+}
+
 // The staging-relative path of a chunk's output file (what the host judges `progressed` by).
 export const outputPathOf = (chunk: ExtractionChunk): string => `${KNOWLEDGE_DIR}/${chunk.output}`;
 

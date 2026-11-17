@@ -13,6 +13,7 @@ import {
   outputPathOf,
   planExtractionChunks,
   stemOf,
+  subsetPlan,
 } from '../../src/domain/knowledge-extraction.ts';
 import type { ChunkText, ExtractionPlan } from '../../src/domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
@@ -31,6 +32,30 @@ function manifestOf(paths: readonly string[]): KnowledgeManifest {
 }
 
 const sizesOf = (paths: readonly string[], size: number): Record<string, number> => Object.fromEntries(paths.map((p) => [p, size]));
+
+describe('subsetPlan: the chunks a resumed refresh still asks for (plan 04-17, ONB-15)', () => {
+  const paths = ['docs/a.md', 'docs/b.md', 'docs/c.md'];
+  const plan = planExtractionChunks(manifestOf(paths), sizesOf(paths, CHUNK_LIMITS.maxBytes), ROOT);
+
+  it('keeps the chosen chunks with their files in the same groups, renumbered from 1 with the output names that follow', () => {
+    assert.equal(plan.chunks.length, 3);
+    const subset = subsetPlan(plan, new Set([2, 3]), ROOT);
+    assert.deepEqual(subset.chunks.map((c) => [c.n, c.output, c.writePath]), [
+      [1, `.extraction/${chunkOutputName(1)}`, `${ROOT}/.extraction/${chunkOutputName(1)}`],
+      [2, `.extraction/${chunkOutputName(2)}`, `${ROOT}/.extraction/${chunkOutputName(2)}`],
+    ]);
+    assert.deepEqual(subset.chunks.map((c) => c.files.map((f) => f.path)), [['docs/b.md'], ['docs/c.md']]);
+    assert.equal(subset.revision, plan.revision);
+    assert.deepEqual(subsetPlan(plan, new Set(), ROOT).chunks, []);
+  });
+
+  it('refuses a corpus root that is not a normalized absolute path, and does not change the plan it was given', () => {
+    const before = JSON.stringify(plan);
+    assert.throws(() => subsetPlan(plan, new Set([1]), 'relative/root'));
+    subsetPlan(plan, new Set([1]), ROOT);
+    assert.equal(JSON.stringify(plan), before);
+  });
+});
 
 describe('stemOf: the node id prefix of a document (the graphify extraction spec format)', () => {
   it('drops the extension, lowercases and joins every path segment with _', () => {

@@ -2,7 +2,7 @@
 // (mergeKnowledgeGraph) and the validation of the merged graph (validateKnowledgeGraph). Pure; no files, no tools.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeChangedPaths, mergeKnowledgeGraph } from '../../src/domain/graph-merge.ts';
+import { mergeChangedPaths, mergeKnowledgeGraph, retainedKnowledge } from '../../src/domain/graph-merge.ts';
 import { KNOWLEDGE_LIMITS, documentCoverage, validateKnowledgeGraph } from '../../src/domain/knowledge-validation.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 
@@ -247,17 +247,21 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     assert.deepEqual(problemsOf(validate(graph, stats)), []);
   });
 
-  it('refuses a node that comes from .planning/phases/ or STATE.md, whatever the manifest says', () => {
+  it('accepts a node of the pass that comes from .planning/phases/ or STATE.md when the manifest holds it, and refuses one the manifest does not (plan 04-17, ONB-15)', () => {
     const { graph, stats } = mergedFixture();
     const g = clone(graph);
     nodesOf(g).push({ id: 'phase_plan', label: 'plan', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
-    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
-    assert.match(problemsOf(validateKnowledgeGraph(g, manifest, stats)).join('\n'), /phase_plan.*\.planning\/phases/);
+    nodesOf(g).push({ id: 'state', label: 'state', file_type: 'document', source_file: '.planning/STATE.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
+    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md'), entry('.planning/STATE.md')] };
+    assert.deepEqual(problemsOf(validateKnowledgeGraph(g, manifest, stats)), []);
+    const problems = problemsOf(validateKnowledgeGraph(g, MANIFEST, stats)).join('\n');
+    assert.match(problems, /phase_plan: source ".planning\/phases\/01-x\/01-01-PLAN.md" is not in the manifest/);
+    assert.match(problems, /state: source ".planning\/STATE.md" is not in the manifest/);
   });
 
   // Found by the live exit rehearsal (plan 01-19): the real target tracks code under .planning/phases/ (contrast-check.mjs), so its
   // code graph holds 27 code nodes sourced from there. The rule is about what the knowledge pass may cite, not about the code graph.
-  it('accepts a code-graph node sourced from .planning/phases/ (a tracked script), and still refuses a knowledge-pass node from there', () => {
+  it('accepts a code-graph node sourced from .planning/phases/ (a tracked script), refuses a planning document there, and takes a knowledge-pass node only for a manifest document', () => {
     const { graph, stats } = mergedFixture();
     const g = clone(graph);
     nodesOf(g).push({ id: 'planning_phases_01_x_contrast_check_checkdoc', label: 'checkDoc', file_type: 'code', source_file: '.planning/phases/01-x/contrast-check.mjs' });
@@ -271,11 +275,10 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     const fromPass = clone(graph);
     nodesOf(fromPass).push({ id: 'phase_note', label: 'note', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
     const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
-    assert.match(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)).join('\n'), /phase_note.*\.planning\/phases/);
+    assert.deepEqual(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)), [], 'a phase document of the manifest is a corpus document since plan 04-17');
     const passData = clone(graph);
     nodesOf(passData).push({ id: 'phase_data', label: 'data', file_type: 'document', source_file: '.planning/phases/01-x/fixtures.json', _avarice_origin: 'knowledge-pass', source_revision: REV });
-    const dataManifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/fixtures.json')] };
-    assert.match(problemsOf(validateKnowledgeGraph(passData, dataManifest, stats)).join('\n'), /phase_data.*\.planning\/phases/, 'anything under .planning/phases/ stays refused for a node the pass added');
+    assert.match(problemsOf(validateKnowledgeGraph(passData, MANIFEST, stats)).join('\n'), /phase_data: source ".*fixtures.json" is not in the manifest/, 'a file the manifest does not hold is refused for a node the pass added');
   });
 
   it('refuses a dangling share above 10 percent, accepts exactly 10, and counts against the edges the pass produced', () => {
@@ -301,13 +304,13 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
   });
 });
 
-describe('validateKnowledgeGraph: the corpus never holds .planning/STATE.md or phase files (S-45)', () => {
-  it('refuses a node sourced from STATE.md or from .planning/phases, whatever its origin', () => {
+describe('validateKnowledgeGraph: the code graph does not hold .planning/STATE.md or phase documents (S-45, plan 04-17)', () => {
+  it('refuses a node of the code graph sourced from STATE.md or from a document under .planning/phases', () => {
     const { graph, stats } = mergedFixture();
     for (const source of ['.planning/STATE.md', '.planning/phases/01-x/01-01-PLAN.md']) {
       const sourced = clone(graph);
       (byId(sourced, 'src_store_db') as Json)['source_file'] = source;
-      assert.match(problemsOf(validate(sourced, stats)).join('\n'), /src_store_db: sourced from .*which the corpus never holds/, source);
+      assert.match(problemsOf(validate(sourced, stats)).join('\n'), /src_store_db: sourced from .*a planning document the code graph does not hold/, source);
     }
   });
 });
@@ -500,5 +503,75 @@ describe('mergeChangedPaths: the previous graph, a whole-tree extraction and the
     const { graph } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
     assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'lib']);
     assert.equal(linksOf(graph).length, 1);
+  });
+});
+
+// Plan 04-17 (ONB-15, S-47): the nodes of the documents a refresh does not extract again.
+describe('retainedKnowledge: the document nodes of the unchanged documents (ONB-15)', () => {
+  const pass = { _avarice_origin: 'knowledge-pass' };
+  const document = (id: string, path: string, extra: Json = {}): Json => ({ id, label: id, file_type: 'document', source_file: path, source_revision: `git:${'a'.repeat(40)}`, ...pass, ...extra });
+  const link = (source: string, target: string, extra: Json = {}): Json => ({ source, target, relation: 'documents', confidence: 'INFERRED', confidence_score: 0.7, ...pass, ...extra });
+  const previous = (): Json => ({
+    nodes: [
+      { id: 'a', label: 'a', file_type: 'code', source_file: 'src/index.ts' },
+      document('docs_guide', 'docs/guide.md', { community: 3, community_name: 'Community 3' }),
+      document('docs_adr', 'docs/adr.md'),
+      document('concept_state', 'docs/guide.md', { file_type: 'concept' }),
+    ],
+    links: [
+      link('docs_guide', 'a', { source_file: 'docs/guide.md' }),
+      link('docs_adr', 'a', { source_file: 'docs/adr.md' }),
+      link('docs_guide', 'docs_adr'),
+      link('docs_guide', 'gone_code'),
+      link('concept_state', 'docs_guide'),
+      { source: 'a', target: 'a', relation: 'calls', confidence: 'EXTRACTED' },
+    ],
+  });
+  const keep = new Set(['docs/guide.md']);
+  const code = new Set(['a']);
+
+  it('keeps the pass\'s nodes that cite a kept document and the edges between them and the code graph, without the clustering keys', () => {
+    const { nodes, edges } = retainedKnowledge(previous(), keep, code);
+    assert.deepEqual(nodes.map((n) => n['id']), ['docs_guide', 'concept_state']);
+    assert.equal(nodes[0]?.['community'], undefined);
+    assert.equal(nodes[0]?.['community_name'], undefined);
+    assert.equal(nodes[0]?.['source_file'], 'docs/guide.md');
+    assert.deepEqual(edges.map((e) => `${e['source']}>${e['target']}`), ['docs_guide>a', 'concept_state>docs_guide']);
+  });
+
+  it('drops the edges of a changed document and an edge whose other end is a re-extracted document or a code node the new tree lacks, and counts the last two', () => {
+    const { edges, droppedEdges } = retainedKnowledge(previous(), keep, code);
+    assert.equal(edges.some((e) => e['source'] === 'docs_adr'), false, 'an edge found in a changed document goes');
+    assert.equal(edges.some((e) => e['target'] === 'gone_code'), false, 'a code node the new tree lacks goes with its edge');
+    assert.equal(droppedEdges, 2, 'docs_guide>docs_adr and docs_guide>gone_code');
+  });
+
+  it('keeps nothing when no document is kept, ignores a node or edge the pass did not add, and accepts the spellings a skill uses for a path', () => {
+    assert.deepEqual(retainedKnowledge(previous(), new Set(), code), { nodes: [], edges: [], droppedEdges: 0 });
+    const spelled: Json = {
+      nodes: [document('x', './docs/guide.md'), document('y', '/work/staging/.avarice-knowledge/docs/guide.md'), { id: 'z', file_type: 'document', source_file: 'docs/guide.md' }],
+      links: [link('x', 'y', { source_file: '.avarice-knowledge/docs/guide.md' }), { source: 'x', target: 'y', relation: 'documents' }],
+    };
+    const out = retainedKnowledge(spelled, keep, code);
+    assert.deepEqual(out.nodes.map((n) => n['id']), ['x', 'y'], 'z carries no origin of the pass');
+    assert.equal(out.edges.length, 1);
+  });
+
+  it('does not mutate the previous graph', () => {
+    const prev = previous();
+    const before = JSON.stringify(prev);
+    retainedKnowledge(prev, keep, code);
+    assert.equal(JSON.stringify(prev), before);
+  });
+
+  it('feeds mergeKnowledgeGraph: the kept document is re-stamped with the new manifest\'s revision and its edge reaches the new code graph', () => {
+    const kept = retainedKnowledge(previous(), keep, new Set(['src_store_db']));
+    const reached = retainedKnowledge({ ...previous(), links: [link('docs_guide', 'src_store_db', { source_file: 'docs/guide.md' })] }, keep, new Set(['src_store_db']));
+    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [entry('docs/guide.md')] };
+    const { graph, stats } = mergeKnowledgeGraph({ code: codeGraph(), docs: { nodes: reached.nodes, links: reached.edges }, manifest, onboardedRevision: PIN });
+    assert.equal(byId(graph, 'docs_guide')?.['source_revision'], REV);
+    assert.equal(stats.dropped.dangling, 0);
+    assert.ok(linksOf(graph).some((l) => l['source'] === 'docs_guide' && l['target'] === 'src_store_db'));
+    assert.equal(kept.nodes.length, 2);
   });
 });

@@ -29,10 +29,12 @@ export const KNOWLEDGE_REPO_FILES: Readonly<Record<string, string>> = {
 
 export const MAP_DOCUMENT_PATHS = ['STACK', 'ARCHITECTURE', 'STRUCTURE', 'CONVENTIONS', 'TESTING', 'INTEGRATIONS', 'CONCERNS'].map((name) => `.planning/codebase/${name}.md`);
 
-// The documents the pass is expected to read in the integration repository (full map).
+// The documents the pass is expected to read in the integration repository (full map). Since plan 04-17 they include GSD's own `.planning/STATE.md` and phase files.
 export const EXPECTED_CORPUS_PATHS: readonly string[] = [
   ...MAP_DOCUMENT_PATHS,
   '.planning/PROJECT.md',
+  '.planning/STATE.md',
+  '.planning/phases/01-x/01-01-PLAN.md',
   'docs/decisions/ADR-001-storage.md',
   'docs/decisions/ADR-002-hosting.md',
   'docs/guide.md',
@@ -80,6 +82,8 @@ export function skillGraph(options: SkillGraphOptions = {}): Json {
       doc('docs/decisions/ADR-002-hosting.md', `ADR-002: Hosting (${INJECTION})`),
       doc('docs/guide.md', 'Guide'),
       doc('.planning/PROJECT.md', 'Project'),
+      doc('.planning/STATE.md', 'State'),
+      doc('.planning/phases/01-x/01-01-PLAN.md', 'Plan 01-01'),
       ...MAP_DOCUMENT_PATHS.map((path) => doc(path, path.replace(/^.*\//, '').replace(/\.md$/, ''))),
       { id: 'concept_sqlite_storage', label: 'SQLite storage', file_type: 'concept', source_file: 'docs/decisions/ADR-001-storage.md', source_location: 'L5' },
       { id: 'concept_ledger_port', label: 'Ledger port', file_type: 'concept', source_file: 'docs/decisions/ADR-001-storage.md', source_location: 'L5' },

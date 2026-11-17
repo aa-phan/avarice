@@ -3,9 +3,10 @@
 //
 // The corpus holds the staging codebase map, `.planning/PROJECT.md`, `REQUIREMENTS.md` and `ROADMAP.md` when the
 // repository tracks them, every Markdown file under the ADR directories preflight found, and the files the
-// contract's `knowledge.documents` globs name (default `docs/**/*.md`). It never holds GSD phase files or
-// `.planning/STATE.md` (they churn; slice 3 adds phases), a file above the size cap, or a secret-bearing path.
-import { matchesAny, matchesGlob } from './glob.ts';
+// contract's `knowledge.documents` globs name (default `docs/**/*.md`). Since plan 04-17 it also holds the GSD phase files and
+// `.planning/STATE.md` (KNOWLEDGE_PLANNING_GLOBS): they churn, which is why the knowledge refresh re-extracts only the documents whose content
+// changed. It never holds a file above the size cap, a secret-bearing path, or a planning file the contract's read set does not allow.
+import { matchesAny } from './glob.ts';
 
 export const KNOWLEDGE_DIR = '.avarice-knowledge';
 
@@ -18,7 +19,7 @@ export const CORPUS_LIMITS = {
 // Tracked planning documents added when the repository has them. Order is priority order for the cap.
 export const PLANNING_DOCUMENTS: readonly string[] = ['.planning/PROJECT.md', '.planning/REQUIREMENTS.md', '.planning/ROADMAP.md'];
 
-export type CorpusDropReason = 'phase-file' | 'state-file' | 'too-large' | 'secret-path' | 'cap' | 'missing' | 'secret-content';
+export type CorpusDropReason = 'outside-read' | 'too-large' | 'secret-path' | 'cap' | 'missing' | 'secret-content';
 
 export interface CorpusDrop {
   path: string;
@@ -39,6 +40,8 @@ export interface KnowledgeCorpusInput {
   documentGlobs: readonly string[];
   // Secret-bearing path globs of the contract.
   secretGlobs?: readonly string[];
+  // The contract's `files.read`: a planning document (KNOWLEDGE_PLANNING_GLOBS) is in the corpus only when it matches one of these. Absent: no restriction.
+  readGlobs?: readonly string[];
   limits?: { maxFileBytes?: number; maxFiles?: number };
 }
 
@@ -48,8 +51,9 @@ export interface KnowledgeCorpusSelection {
   dropped: CorpusDrop[];
 }
 
-const PHASES = '.planning/phases/**';
-const STATE_FILE = '.planning/STATE.md';
+// GSD's own planning files: the phase plans, summaries and context documents, and the project state. Documents of the corpus like any other (plan 04-17,
+// ONB-15, S-47); the graph holds them as untrusted data, never as policy (T-04-46).
+export const KNOWLEDGE_PLANNING_GLOBS: readonly string[] = ['.planning/phases/**/*.md', '.planning/STATE.md'];
 
 // Every path the rules would admit before sizes are known, in priority order (map, planning documents, ADRs, other
 // documents; each group sorted), without duplicates. The stage stats exactly these.
@@ -61,6 +65,7 @@ export function knowledgeCandidates(input: Pick<KnowledgeCorpusInput, 'trackedPa
     PLANNING_DOCUMENTS.filter((path) => tracked.has(path)),
     [...tracked].filter(adr).sort(),
     [...tracked].filter((path) => matchesAny(path, input.documentGlobs)).sort(),
+    [...tracked].filter((path) => matchesAny(path, KNOWLEDGE_PLANNING_GLOBS)).sort(),
   ];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -82,8 +87,7 @@ export function selectKnowledgeCorpus(input: KnowledgeCorpusInput): KnowledgeCor
   const kept: string[] = [];
   const dropped: CorpusDrop[] = [];
   for (const path of knowledgeCandidates(input)) {
-    if (matchesGlob(path, PHASES)) dropped.push({ path, reason: 'phase-file' });
-    else if (path === STATE_FILE) dropped.push({ path, reason: 'state-file' });
+    if (input.readGlobs !== undefined && matchesAny(path, KNOWLEDGE_PLANNING_GLOBS) && !matchesAny(path, input.readGlobs)) dropped.push({ path, reason: 'outside-read' });
     else if (matchesAny(path, secretGlobs)) dropped.push({ path, reason: 'secret-path' });
     else if (input.sizes[path] === undefined) dropped.push({ path, reason: 'missing' });
     else if ((input.sizes[path] as number) > maxFileBytes) dropped.push({ path, reason: 'too-large' });
@@ -129,3 +133,11 @@ export interface KnowledgeManifest {
 }
 
 export const copyPathOf = (sourcePath: string): string => `${KNOWLEDGE_DIR}/${sourcePath}`;
+
+// The documents of `current` a refresh has to extract: those `previous` does not have (new) and those whose content digest differs (changed). A document of
+// `previous` that `current` no longer has is gone and is not reported here. Order is that of `current`. Identity is the repository path and the content digest
+// decides, never the revision (every entry of a manifest carries the revision it was built at).
+export function changedDocuments(previous: KnowledgeManifest, current: KnowledgeManifest): KnowledgeManifestEntry[] {
+  const before = new Map(previous.entries.map((entry) => [entry.sourcePath, entry.sha256] as const));
+  return current.entries.filter((entry) => before.get(entry.sourcePath) !== entry.sha256);
+}
