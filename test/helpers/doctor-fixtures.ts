@@ -78,3 +78,9 @@ export function initStore(f: DoctorFixture): void {
 }
 
 export const statePath = (f: DoctorFixture): string => join(f.roots.AVARICE_DATA_ROOT, 'state.db');
+
+// Registers a directory a test made so that disposeDoctorFixtures removes it.
+export function track(dir: string): string {
+  cleanup.push(dir);
+  return dir;
+}
