@@ -21,7 +21,9 @@ import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation
 export type NormalizedToolCall =
   | { kind: 'file-write'; tool: string; paths: string[] }
   | { kind: 'file-read'; tool: string; paths: string[] }
-  | { kind: 'search'; tool: string; path: string; patternRoot?: string }
+  // `unfiltered` is set when the call names no glob or type filter (a Grep) and no pattern narrower than every file (a Glob); with the path at the clone root it is a
+  // whole-repository search (plan 04-29; CON-10).
+  | { kind: 'search'; tool: string; path: string; patternRoot?: string; unfiltered?: true }
   | { kind: 'shell'; command: string; background: boolean; cwd: string }
   | { kind: 'subagent'; subagentType: string | null }
   | { kind: 'web'; tool: string }
@@ -74,6 +76,16 @@ export interface HookPolicy {
   // file must not have changed since (CON-7); `loopLimits` stop the invocation on repeated denials or ineffective searches (CON-14).
   readBeforeEdit?: boolean;
   loopLimits?: LoopLimits;
+  // The run purpose (plan 04-29; CON-10, CON-11): the contract's retrieval limits for the agent's own Grep and Glob calls. With the block present every search also
+  // charges the `retrieval.searches` budget row in the transaction that charges `toolCalls`, and an unfiltered whole-repository search is refused unless
+  // `broadDiscovery` is true, then allowed once (it charges `retrieval.broadDiscovery`). `searches` is the contract's limit, for the record: the ledger row decides.
+  // Absent for the onboarding purposes and for a contract compiled before the retrieval caps existed: the search rules above then apply alone.
+  retrieval?: RetrievalPolicy;
+}
+
+export interface RetrievalPolicy {
+  searches: number;
+  broadDiscovery: boolean;
 }
 
 export interface LoopLimits {
@@ -84,8 +96,11 @@ export interface LoopLimits {
 export interface HookDecision {
   decision: 'allow' | 'deny';
   rule: string;
-  // The budget one allowed call charges.
-  budget?: 'toolCalls' | 'subagentsTotal';
+  // The budget one allowed call charges; on a deny of a spent row, the row that was spent.
+  budget?: BudgetName;
+  // Further rows the same allowed call charges in the same transaction (plan 04-29): `retrieval.searches` for a search of a run with retrieval limits, and
+  // `retrieval.broadDiscovery` too for an unfiltered whole-repository one. The call is allowed only when every row has room; the first without room is named.
+  alsoCharges?: RetrievalRow[];
   // The hook prints an allow (hook-allow strategy); otherwise an allow is silent.
   explicit?: boolean;
   // What the model is told besides the rule (a deny only): the corrective step.
@@ -95,12 +110,21 @@ export interface HookDecision {
   privileged?: PrivilegedCommand;
 }
 
+export type RetrievalRow = 'retrieval.searches' | 'retrieval.broadDiscovery';
+export type BudgetName = 'toolCalls' | 'subagentsTotal' | RetrievalRow;
+
 export type Canon = (path: string) => string | null;
 export type NormalizeResult = { ok: true; call: NormalizedToolCall } | { ok: false; reason: string };
 export type PolicyResult = { ok: true; policy: HookPolicy } | { ok: false; reason: string };
 
 // The rule of an Agent call refused because the invocation already has `subagentsConcurrent` subagents in flight (O-1).
 export const SUBAGENT_CONCURRENT_RULE = 'budget:subagentsConcurrent';
+
+// The rules of a search refused for want of retrieval budget or authorization (plan 04-29): the search row is spent, an unfiltered whole-repository search the
+// contract does not authorize, and one it authorized that was already made.
+export const SEARCHES_SPENT_RULE = 'budget:retrieval.searches';
+export const BROAD_DISCOVERY_NOT_AUTHORIZED_RULE = 'retrieval:broad-discovery-not-authorized';
+export const BROAD_DISCOVERY_SPENT_RULE = 'retrieval:broad-discovery-spent';
 
 // The rule of a privileged shell form refused for want of an approval: `privileged:<action>`.
 export const PRIVILEGED_RULE_PREFIX = 'privileged:';
@@ -120,6 +144,9 @@ const deny = (rule: string, reason?: string): HookDecision => ({ decision: 'deny
 // Normalization
 // ---------------------------------------------------------------------------------------------------------
 
+const named = (value: unknown): boolean => typeof value === 'string' && value !== '';
+// A Glob pattern that names every file below its root (`*`, `**`, `**/*`, `*.*`, `./**/*`): no narrower than no pattern at all.
+const MATCHES_EVERY_FILE = /^(\.\/)?(\*\*?\/)*\*\*?(\.\*)?$/;
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const absolutize = (cwd: string, path: string): string => (path.startsWith('/') ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
 
@@ -150,6 +177,9 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
         const literal = pattern.split(/[*?[{]/, 1)[0] ?? '/';
         call.patternRoot = literal.endsWith('/') ? literal : literal.slice(0, literal.lastIndexOf('/') + 1);
       }
+      // A Grep is filtered by a glob or a type; a Glob by what its pattern names below its root (an absolute pattern's root is not a filter).
+      const below = typeof pattern === 'string' ? pattern.slice(call.patternRoot?.length ?? 0) : '';
+      if (tool === 'Grep' ? !named(input['glob']) && !named(input['type']) : below === '' || MATCHES_EVERY_FILE.test(below)) call.unfiltered = true;
       return { ok: true, call };
     }
     case 'Bash': {
@@ -215,6 +245,11 @@ export function parseHookPolicy(raw: unknown): PolicyResult {
   if (loopLimits !== undefined) {
     const count = (value: unknown): boolean => typeof value === 'number' && Number.isInteger(value) && value >= 0;
     if (!isObject(loopLimits) || !count(loopLimits['consecutiveDenials']) || !count(loopLimits['consecutiveSearches'])) return bad('has malformed loopLimits');
+  }
+  const retrieval = raw['retrieval'];
+  if (retrieval !== undefined) {
+    const searches = isObject(retrieval) ? retrieval['searches'] : undefined;
+    if (!isObject(retrieval) || !(typeof searches === 'number' && Number.isInteger(searches) && searches >= 0) || typeof retrieval['broadDiscovery'] !== 'boolean') return bad('has a malformed retrieval');
   }
   const agentCommands = raw['agentCommands'];
   if (agentCommands !== undefined) {
@@ -788,6 +823,12 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
 // The decision
 // ---------------------------------------------------------------------------------------------------------
 
+// Whether a search is rooted at the clone: its path (or, for an absolute Glob pattern, the root the pattern names) is the staging path itself.
+function searchesWholeRepository(call: Extract<NormalizedToolCall, { kind: 'search' }>, policy: HookPolicy, canon: Canon): boolean {
+  const root = canon(call.patternRoot ?? call.path);
+  return root !== null && trimSlashes(root) === trimSlashes(policy.stagingPath);
+}
+
 const toolNameOf = (call: NormalizedToolCall): string | undefined => ('tool' in call ? call.tool : undefined);
 
 export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, canon: Canon): HookDecision {
@@ -805,7 +846,15 @@ export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, can
     }
     case 'search': {
       const rule = checkRead(call.patternRoot === undefined ? [call.path] : [call.path, call.patternRoot], policy, canon);
-      return rule !== null ? deny(rule) : { decision: 'allow', rule: 'read-set', budget: 'toolCalls' };
+      if (rule !== null) return deny(rule);
+      const retrieval = policy.retrieval;
+      if (retrieval === undefined) return { decision: 'allow', rule: 'read-set', budget: 'toolCalls' };
+      // CON-10: an unfiltered search rooted at the clone is a whole-repository discovery. The contract authorizes one; the broadDiscovery row (limit 1) makes it once.
+      const broad = call.unfiltered === true && searchesWholeRepository(call, policy, canon);
+      if (broad && !retrieval.broadDiscovery) {
+        return deny(BROAD_DISCOVERY_NOT_AUTHORIZED_RULE, 'a search of the whole repository with no glob or type filter is not authorized for this run; search a directory or add a filter');
+      }
+      return { decision: 'allow', rule: 'read-set', budget: 'toolCalls', alsoCharges: broad ? ['retrieval.searches', 'retrieval.broadDiscovery'] : ['retrieval.searches'] };
     }
     case 'shell':
       // A background shell runs unseen past the end of the call; the run purpose refuses it (CS-6).

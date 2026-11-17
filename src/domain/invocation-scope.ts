@@ -203,6 +203,9 @@ export interface InvocationScope {
   readBeforeEdit?: boolean;
   // Run purpose only (plan 02-11): the contract's loop limits (CON-14), which the hook turns into a stop for escalation.
   escalation?: { consecutiveDenials: number; consecutiveSearches: number };
+  // Run purpose only (plan 04-29; CON-10, CON-11): the contract's retrieval limits for the agent's own searches, which the hook charges to the run's
+  // `retrieval.searches` row. Absent when the contract holds no `budgets.retrieval` (one compiled before plan 04-28) and for the onboarding purposes.
+  retrieval?: { searches: number; broadDiscovery: boolean };
   denyWrite: string[];
   denyRead: string[];
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
@@ -364,7 +367,7 @@ export interface RunScopeInput {
   contract: {
     files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts' | 'protected' | 'secretGlobs'>;
     execution: Pick<RunContract['execution'], 'commands'>;
-    budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent'>;
+    budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent' | 'retrieval'>;
     // The loop limits of the contract (CON-14); a contract stored before consecutiveSearches existed leaves the search limit at its preset value.
     escalation?: Partial<Pick<RunContract['escalation'], 'consecutiveDenials' | 'consecutiveSearches'>>;
   };
@@ -560,6 +563,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
       consecutiveDenials: contract.escalation?.consecutiveDenials ?? ROUTINE_PRESET.escalation.consecutiveDenials,
       consecutiveSearches: contract.escalation?.consecutiveSearches ?? ROUTINE_PRESET.escalation.consecutiveSearches,
     },
+    ...(contract.budgets.retrieval !== undefined ? { retrieval: { searches: contract.budgets.retrieval.searches, broadDiscovery: contract.budgets.retrieval.broadDiscovery } } : {}),
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.

@@ -563,7 +563,7 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     assert.deepEqual(normalizeToolCall('Edit', { file_path: 'x/y.md' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'Edit', paths: [`${STAGING}/x/y.md`] } });
     assert.deepEqual(normalizeToolCall('NotebookEdit', { notebook_path: '/n.ipynb' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'NotebookEdit', paths: ['/n.ipynb'] } });
     assert.deepEqual(normalizeToolCall('Read', { file_path: '/r' }, STAGING), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } });
-    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } });
     assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.ts', path: 'src' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: `${STAGING}/src` } });
     assert.deepEqual(normalizeToolCall('Bash', { command: 'ls', run_in_background: true }, STAGING), { ok: true, call: { kind: 'shell', command: 'ls', background: true, cwd: STAGING } });
     assert.deepEqual(normalizeToolCall('Agent', { subagent_type: 'a' }, STAGING), { ok: true, call: { kind: 'subagent', subagentType: 'a' } });

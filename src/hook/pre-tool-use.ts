@@ -19,8 +19,8 @@ import { isAbsolute, join, relative } from 'node:path';
 import { paramsDigest, paramsSummary } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
-import { INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
-import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
+import { BROAD_DISCOVERY_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { classifyCommandLine, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
 import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
@@ -303,6 +303,31 @@ function recordPrivilegedDenial(db: DatabaseSync, o: PrivilegedDenial): string {
   return requestId;
 }
 
+// Charges one unit to each named budget row of the run, all or none (plan 04-29; CON-11). The caller's BEGIN IMMEDIATE transaction is open and holds the ledger's
+// write lock, so checking every row and then writing every row cannot interleave with another hook process: a search is never charged `toolCalls` and refused for
+// want of a `retrieval.searches` unit, and a unit is never charged without the event row that records it. Returns the first row with no room (the rows are checked in
+// the order given), or null when all were charged. No row at all is a broken ledger (fail closed); a row at its limit is the budget doing its job.
+function chargeRows(db: DatabaseSync, runId: string, names: readonly BudgetName[]): BudgetName | null {
+  const room = db.prepare('SELECT used + reserved + 1 <= limit_value AS room FROM budgets WHERE run_id = ? AND name = ?');
+  for (const name of names) {
+    const row = room.get(runId, name) as { room: number } | undefined;
+    if (row === undefined) throw new Error(`the ledger has no ${name} budget for run ${runId}`);
+    if (Number(row.room) !== 1) return name;
+  }
+  const charge = db.prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value');
+  for (const name of names) {
+    if (Number(charge.run(runId, name).changes) === 0) throw new Error(`the ${name} budget of run ${runId} changed while it was locked`);
+  }
+  return null;
+}
+
+// The denial for a budget row that had no room: the original `budget_exhausted` for the tool-call and subagent rows, the retrieval rules for the retrieval rows.
+function spentDecision(name: BudgetName): HookDecision {
+  if (name === 'retrieval.searches') return { decision: 'deny', rule: SEARCHES_SPENT_RULE, budget: name, reason: 'the run has made all the searches its contract allows; read what was found or report what is missing' };
+  if (name === 'retrieval.broadDiscovery') return { decision: 'deny', rule: BROAD_DISCOVERY_SPENT_RULE, budget: name, reason: 'the one whole-repository search the contract allows was made; search a directory or add a filter' };
+  return { decision: 'deny', rule: 'budget_exhausted', budget: name };
+}
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -360,16 +385,8 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       if (result.decision === 'allow' && result.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
         result = { decision: 'deny', rule: SUBAGENT_CONCURRENT_RULE };
       } else if (result.decision === 'allow' && result.budget !== undefined) {
-        const charged = db
-          .prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value')
-          .run(policy.runId, result.budget);
-        if (Number(charged.changes) === 0) {
-          // No row at all is a broken ledger (fail closed); a row at its limit is the budget doing its job.
-          if (db.prepare('SELECT 1 AS found FROM budgets WHERE run_id = ? AND name = ?').get(policy.runId, result.budget) === undefined) {
-            throw new Error(`the ledger has no ${result.budget} budget for run ${policy.runId}`);
-          }
-          result = { decision: 'deny', rule: 'budget_exhausted', budget: result.budget };
-        }
+        const refused = chargeRows(db, policy.runId, [result.budget, ...(result.alsoCharges ?? [])]);
+        if (refused !== null) result = spentDecision(refused);
       }
       // CON-14: this denial is the Nth in a row when N-1 denials directly precede it in the invocation's decision events (by seq). The count
       // is an integer read from ledger rows in this transaction, so two hook processes cannot both miss the limit.
@@ -381,7 +398,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         level: result.decision === 'deny' ? 'warn' : 'info',
         runId: policy.runId,
         invocationId: policy.invocationId,
-        data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}) },
+        data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}), ...(result.decision === 'allow' && result.alsoCharges !== undefined ? { alsoCharged: result.alsoCharges } : {}) },
         nowMs: Date.now(),
       });
       if (limits !== undefined && loop.stop !== null) {

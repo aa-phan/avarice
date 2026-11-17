@@ -166,7 +166,7 @@ describe('the retrieval limits reach the policy file only for a run scope', () =
     workRoot: join(fx.dir, 'work'),
     profileRoots: [],
     scratchDir: join(fx.dir, 'work', 'scratch'),
-    workspace: { topLevelEntries: ['src'], entriesByDir: {}, gitPaths: [], repoReadAllow: [] },
+    workspace: { topLevelEntries: ['src'], entriesByDir: { src: ['a.ts'] }, gitPaths: [], repoReadAllow: [] },
     readRoots: [],
   });
   const ids = { onboardingId: 'run_1', runId: 'run_1', invocationId: 'inv_1', subagentTypes: [] };
