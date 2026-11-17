@@ -80,6 +80,33 @@ describe('computeInvocationScope: the roots of the other profiles (SEC-1, D-19)'
   });
 });
 
+describe('computeInvocationScope: a path-scoped map reads its scope only (T-04-35, ONB-11)', () => {
+  function scopedContract(read: string[]): OnboardingContract {
+    const base = contract();
+    return { ...base, files: { ...base.files, read } };
+  }
+
+  it('confines the reads to the scope directories, .planning and the GSD read roots', () => {
+    const scope = scopeFor('map', { contract: scopedContract(['apps/api/**', '.planning/**']) });
+    assert.deepEqual(scope.readConfine, [`${STAGING}/apps/api`, `${STAGING}/.planning`, '/gsd/core', '/gsd/agents']);
+  });
+
+  it('adds .planning when the contract read scope does not name it', () => {
+    const scope = scopeFor('map', { contract: scopedContract(['apps/api/**', 'libs/ui/**']) });
+    assert.deepEqual(scope.readConfine, [`${STAGING}/apps/api`, `${STAGING}/libs/ui`, `${STAGING}/.planning`, '/gsd/core', '/gsd/agents']);
+  });
+
+  it('confines nothing for the whole-repository read scope, with or without .planning/**', () => {
+    for (const read of [['**'], ['**', '.planning/**'], ['.planning/**']]) {
+      assert.equal(scopeFor('map', { contract: scopedContract(read) }).readConfine, undefined, JSON.stringify(read));
+    }
+  });
+
+  it('applies to the map purpose only', () => {
+    assert.equal(scopeFor('intel', { contract: scopedContract(['apps/api/**', '.planning/**']) }).readConfine, undefined);
+  });
+});
+
 describe('computeInvocationScope: map', () => {
   it('allows writes only to .planning/codebase and runs in the staging directory', () => {
     const scope = scopeFor('map');

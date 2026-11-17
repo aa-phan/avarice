@@ -168,6 +168,25 @@ describe('describe, listTracked and changes', () => {
     });
   });
 
+  // Plan 04-14 (ONB-11): the paths a refresh is planned from come from git, between two commits, as names.
+  it('names the paths that differ between two commits, added, modified and deleted, and refuses a revision that is not a commit SHA', () => {
+    const repo = scratch({ files: BASE_FILES });
+    const workRoot = tempDir('avarice-work-');
+    const info = prepared(repo, workRoot);
+    const ws = new WorktreeStagingWorkspace();
+    git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'rm', '-q', 'src/b.ts']);
+    writeFileSync(join(repo.path, 'src/a.ts'), 'export const a = 2;\n');
+    writeFileSync(join(repo.path, 'apps-new.ts'), 'export const n = 1;\n');
+    git(repo.path, ['add', '-A']);
+    git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'change']);
+    const next = git(repo.path, ['rev-parse', 'HEAD']).trim();
+
+    assert.deepEqual(must(ws.changedBetween(info.path, repo.head, next)), ['apps-new.ts', 'src/a.ts', 'src/b.ts']);
+    assert.deepEqual(must(ws.changedBetween(info.path, next, next)), []);
+    assert.equal(mustFail(ws.changedBetween(info.path, 'HEAD', next)).kind, 'invalid');
+    assert.equal(mustFail(ws.changedBetween(info.path, repo.head, '--output=/tmp/x')).kind, 'invalid');
+  });
+
   // Plan 01-22 (gap P-2): the repository controls its own `.gitignore`; a committed `*` must not hide a write.
   it('lists every untracked file of staging, one record per file, when the committed .gitignore ignores everything', () => {
     const repo = scratch({ files: BASE_FILES });
