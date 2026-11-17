@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-19-PLAN.md
-last_updated: "2026-11-17T06:19:04.407Z"
+stopped_at: Completed 04-20-PLAN.md
+last_updated: "2026-11-17T06:56:01.251Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 358937c00b3251239d609f4983e9a59f6f46de53
+state_head: 8e42740c398195c2ad2dea04c5528d11bdc8e079
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 20 of 39
+Plan: 21 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -182,6 +182,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P17 | 70min | 3 tasks | 17 files |
 | Phase 04 P18 | 30 min | 3 tasks | 14 files |
 | Phase 04 P19 | 60 min | 3 tasks | 15 files |
+| Phase 04 P20 | 35 min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -440,6 +441,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-18: the transcript cap counts redacted bytes and cuts at a line boundary; a default invocation keeps a transcript-summary and the redacted transcript digest, the whole transcript only for retention.transcripts full or AVARICE_DEBUG_TRANSCRIPTS=1; RedactingArtifactStore redacts only listed text kinds (unlisted kinds stored as given, a source scan guards new kinds)
 - [Phase 04]: 04-19: the hook path (run and attended) does not enforce a policy rule's approvalSource and does not evaluate policy rules; an attended approval is any usable local-user row of the scope, action and digest — The hook stays lean (no application layer), so it asks no evaluatePolicy; in a run every privileged form is denied and nothing is consumed. Owner review: pass the evaluated policy to the hook or move the decision into a command it calls.
 - [Phase 04]: 04-19: gh api with a non-GET method (or fields with no method) is the privileged action scm.api.write, added to the action table; an approval binds option names, not values, and not the directory — No existing action fits an arbitrary SCM API write; binding names keeps a title or body out of the approval while --force stays in.
+- [Phase 04]: 04-20: a reference block (ref_changed, ref_deleted, access_revoked) opens one withdraw-only decision and leaves work items and attempts untouched; the owner's only way out is avarice cancel until an accept-or-rebuild command exists
+- [Phase 04]: 04-20: a task reference keeps the revision the run was built from; a refresh changes freshness only, so a changed reference is found changed again on every resume
+- [Phase 04]: 04-20: ContextSource.refresh takes the project's index query as a second argument; block precedence is access_revoked, ref_deleted, ref_changed
 
 ### Roadmap Evolution
 
@@ -507,8 +511,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T06:18:57.749Z
-Stopped at: Completed 04-19-PLAN.md
+Last session: 2026-11-17T06:56:01.195Z
+Stopped at: Completed 04-20-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
