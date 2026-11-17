@@ -38,6 +38,8 @@ export interface RunStartRequest {
   budgetOverrides: Readonly<Record<string, number>>;
   // What the start command read from the indexes before this call (D-07 stage 1); the compiler derives item specs from it.
   indexFacts?: IndexFacts;
+  // `avarice start --restricted` (plan 04-23; CON-4, D-12): the run is analysis and planning only, and its contract says so.
+  restricted?: boolean;
 }
 
 export interface RunStartOutcome {
@@ -258,6 +260,7 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     policy: request.policy,
     ...(Object.keys(request.budgetOverrides).length > 0 ? { budgetOverrides: request.budgetOverrides } : {}),
     ...(request.indexFacts !== undefined ? { indexFacts: request.indexFacts } : {}),
+    ...(request.restricted === true ? { mode: 'restricted' as const } : {}),
   });
   if (!compiled.ok) return usage(compiled.error.kind === 'invalid' ? compiled.error.field : 'contract', describeError(compiled.error));
   const { contract, digest } = compiled.value;

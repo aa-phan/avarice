@@ -22,6 +22,17 @@ export const REQUIRED_HELP_FLAGS: readonly string[] = [
   '--agents',
 ];
 
+// Flags the restricted launch line uses (plan 04-23; spike S4-C). `--restricted` comes first, so a host that dropped it is refused as
+// `host-flag-missing:--restricted`. The restricted line carries no plugin directory and no agents file, so those two are not required.
+export const RESTRICTED_HELP_FLAGS: readonly string[] = [
+  '--restricted',
+  '--settings',
+  '--setting-sources',
+  '--permission-mode',
+  '--permission-prompts',
+  '--max-budget-usd',
+];
+
 export type HostAdmission = 'verified' | 'unverified-patch';
 export type HostRefusal = 'host-minor-unverified' | 'host-patch-below-range' | 'host-version-unknown';
 

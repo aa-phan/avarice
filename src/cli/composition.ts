@@ -75,6 +75,8 @@ export interface DepsOverrides {
   // Replaces the production host. Only test entry points pass this; bin/avarice.ts never does, so the production
   // path always runs the contained ClaudeHostAdapter (when it is admitted) or the fail-closed UnavailableAgentHost.
   host?: AgentHost;
+  // Replaces the restricted host (plan 04-23). Only test entry points pass this; bin/avarice.ts never does.
+  restrictedHost?: AgentHost;
   // Replaces the sandboxed executor. Only test entries pass this (a test that already runs inside a sandbox,
   // where `sandbox-exec` cannot nest); bin/avarice.ts never does, so production always runs SandboxedExecutor.
   executor?: CommandExecutor;
@@ -242,7 +244,42 @@ function productionHost(inputs: HostInputs): AgentHost {
     transcripts: inputs.transcripts,
   });
   const attributes = adapter.descriptor.attributes ?? {};
-  return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(attributes['reason'] ?? 'the host adapter is not enforced');
+  return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(restrictedHint(attributes['reason'] ?? 'the host adapter is not enforced'));
+}
+
+// What the refusal of a host that cannot be contained says (plan 04-23; D-12, S-22): the cause, and the one way to still get analysis and planning out of the run.
+// Only a `claude` that is there and failed its containment probes (an unadmitted version, no sandbox, no hook) gets it: with no claude, no gsd-core or no preamble
+// restricted mode has nothing to run on either. The wording is a stored contract of the CLI (`enforcement: restricted`, `--restricted`).
+export function restrictedHint(cause: string): string {
+  return `enforcement: restricted (${cause}); rerun with --restricted for analysis and planning only`;
+}
+
+// The host of a restricted run (plan 04-23; CON-4, D-12): the Claude Code adapter in restricted mode. It needs a `claude` and the located gsd-core (the run's hook policy
+// and settings are generated the same way), and no admitted version, sandbox or hook: restricted mode is what a host that cannot be contained is for. Building it executes
+// nothing: the adapter probes `claude --help` when its descriptor is first read, so a command that never reads it never spawns `claude` for it. A missing piece gives the
+// host that refuses, with the reason.
+function productionRestrictedHost(inputs: HostInputs): AgentHost {
+  const { env, home, dataRoot, located } = inputs;
+  if (located === undefined) return new UnavailableAgentHost('no admitted gsd-core');
+  const claudeBin = env['AVARICE_CLAUDE_BIN'] !== undefined && env['AVARICE_CLAUDE_BIN'] !== '' ? env['AVARICE_CLAUDE_BIN'] : locateOnPath('claude', env['PATH']);
+  if (claudeBin === undefined) return new UnavailableAgentHost('claude was not found (set AVARICE_CLAUDE_BIN or put it on PATH)');
+  const hookEntry = env['AVARICE_HOOK_ENTRY'] !== undefined && env['AVARICE_HOOK_ENTRY'] !== '' ? env['AVARICE_HOOK_ENTRY'] : fileURLToPath(new URL('../hook/pre-tool-use.ts', import.meta.url));
+  const preamble = fingerprintGsdPreamble(located.gsdCoreDir);
+  if (!preamble.ok) return new UnavailableAgentHost('the GSD shim preamble was not found in the located gsd-core');
+  const configDir = env['CLAUDE_CONFIG_DIR'] !== undefined && env['CLAUDE_CONFIG_DIR'] !== '' ? env['CLAUDE_CONFIG_DIR'] : join(home, '.claude');
+  return new ClaudeHostAdapter({
+    mode: 'restricted',
+    claudeBin,
+    hookEntry,
+    ledgerPath: join(dataRoot, 'state.db'),
+    dataRoot,
+    gsd: { gsdCoreDir: located.gsdCoreDir, agentsDir: join(located.gsdCoreDir, '..', 'agents'), skillsRoot: join(configDir, 'skills'), configDir, preamble: preamble.value },
+    artifacts: inputs.artifacts,
+    staging: inputs.staging,
+    countHookDenies: (invocationId) => inputs.ledger.countHookDenials(invocationId),
+    env,
+    transcripts: inputs.transcripts,
+  });
 }
 
 // The providers of the credential broker (SEC-2, D-17): exactly those the profile's class allows, each built once. The cmd provider runs its
@@ -469,10 +506,14 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       },
     };
   }
+  // The restricted host (plan 04-23): built beside the host, never recorded and never probed here (its descriptor is read when a restricted run, or `start --restricted`, asks).
+  const restrictedHost =
+    overrides.restrictedHost ??
+    (options.readOnly === true ? undefined : productionRestrictedHost({ env, home, dataRoot: profile.dataRoot, located: locatedGsd, ledger, artifacts, staging, transcripts }));
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), ...(credentials !== undefined ? { credentials } : {}), clock, ids, profile, home, redact: (text: string) => processRedactor.redact(text), policy: policyLoader(profile) },
+      deps: { ledger, host, ...(restrictedHost !== undefined ? { restrictedHost } : {}), staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), ...(credentials !== undefined ? { credentials } : {}), clock, ids, profile, home, redact: (text: string) => processRedactor.redact(text), policy: policyLoader(profile) },
       close: () => {
         try {
           store.close();

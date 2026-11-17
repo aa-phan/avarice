@@ -20,6 +20,10 @@ export const REDACTED_TEXT_KINDS: readonly string[] = [
   'context-pack',
   'manual-context',
   'manual-evidence',
+  // The outputs of a restricted run (plan 04-23): the plan, the patch and the question list a host without required enforcement wrote.
+  'restricted-plan',
+  'restricted-patch',
+  'restricted-decisions',
 ];
 
 const REDACTED = new Set(REDACTED_TEXT_KINDS);

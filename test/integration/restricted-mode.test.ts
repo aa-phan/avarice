@@ -108,7 +108,7 @@ describe('tracer: an unenforced host refuses naming --restricted, and start --re
     assert.match(text, /rerun with --restricted for analysis and planning only/, text);
     assert.equal(f.fake.started(), false, 'the host was never started');
     assert.deepEqual(f.fake.argvs(), []);
-    const run = rows<{ state: string; reason: string }>(f.roots, 'SELECT state, reason FROM runs')[0];
+    const run = rows<{ state: string; reason: string }>(f.roots, "SELECT state, reason FROM runs WHERE state != 'onboarding'")[0];
     assert.deepEqual([run?.state, run?.reason], ['blocked_on_decision', 'enforcement_failure']);
   });
 

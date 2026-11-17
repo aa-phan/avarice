@@ -158,6 +158,9 @@ export interface RunWorkspace {
   // Deletes untracked files (a file or a link, never a directory, never through a symlink) and then the directories they leave empty,
   // up to but not including the clone root. A path that exists at HEAD is refused (`conflict`) and nothing is changed. Returns the files removed.
   removeUntracked(path: string, relPaths: readonly string[]): Result<string[]>;
+  // Plan 04-23 (restricted mode): the clone's working content (tracked and untracked, not ignored) compared with HEAD as one patch (the binary patch form), leaving
+  // out the listed clone-relative directories. The clone's index is not touched and nothing is written to the clone.
+  patch(path: string, options: { exclude: readonly string[] }): Result<string>;
   // What changed between two commits, by path (the diff gate of G4 reads `<pin> HEAD`).
   diffCommits(path: string, from: string, to: string): Result<PathChange[]>;
   // UTF-8 text of a clone file; null when absent; refuses traversal, absolute paths and symlinks that leave the clone.

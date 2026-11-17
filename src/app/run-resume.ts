@@ -31,6 +31,7 @@ import type { RunContract } from '../domain/run-contract.ts';
 import { isRunResumable, isRunStopState } from '../domain/run-lifecycle.ts';
 import type { RunRow, RunStepRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { hostOfRun } from './run-host.ts';
 import { getRunStatuses } from './run-status.ts';
 import { reconcileItem } from './run-stages/item.ts';
 import { isBlockedRunContinuable } from './run-stages/schedule.ts';
@@ -97,14 +98,18 @@ export async function reapRunLaunches(ctx: RunStageContext): Promise<Result<void
   if (!steps.ok) return steps;
   const started = steps.value.filter((s) => s.step.startsWith(LAUNCH_PREFIX) && s.status === 'started');
   if (started.length === 0) return ok(undefined);
+  // The host that launched it: a restricted run's host is the restricted one (plan 04-23), whichever process continues the run.
+  const hostOf = hostOfRun(deps, runId);
+  if (!hostOf.ok) return hostOf;
+  const host = hostOf.value;
 
   for (const launch of started) {
     const body = isObject(launch.result) ? launch.result : {};
     const sessionId = body['sessionId'];
     // A launch that cannot be reaped stops the resume like a reap that fails: its host may still be running, and nothing may read the clone beside it.
-    if (deps.host.reap === undefined) return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: the host has no reap` });
+    if (host?.reap === undefined) return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: the host has no reap` });
     if (typeof sessionId !== 'string' || sessionId === '') return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: it recorded no session ID` });
-    const reaped = await deps.host.reap({ sessionId });
+    const reaped = await host.reap({ sessionId });
     if (!reaped.ok) return reaped;
     if (reaped.value.terminated === 0) continue;
     const invocationId = body['invocationId'];

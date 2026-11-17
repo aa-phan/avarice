@@ -693,7 +693,8 @@ describe('every containment layer is checked at launch, after the files are writ
     assert.equal(host?.adapter, 'unavailable');
     const attributes = (JSON.parse(host?.descriptor_json ?? '{}') as { attributes: Record<string, string> }).attributes;
     assert.equal(attributes['enforcement'], 'none');
-    assert.equal(attributes['reason'], 'enforcement_failure:host-minor-unverified');
+    // The cause, then how to ask for restricted mode (plan 04-23; D-12, S-22).
+    assert.equal(attributes['reason'], 'enforcement: restricted (enforcement_failure:host-minor-unverified); rerun with --restricted for analysis and planning only');
   });
 });
 

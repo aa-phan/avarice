@@ -4,6 +4,10 @@
 // reads no input (RC-3). Exit 0 when the run is stored in contract_ready, 3 when a start rule refused it (nothing is created),
 // 64 for a usage error, an invalid brief, an invalid budget override or a G0 static failure, 70 for an internal failure.
 //
+// `--restricted` (plan 04-23; CON-4, D-12, S-22) starts the run in restricted mode: analysis and planning only, for a host that cannot be contained. The contract records the
+// mode, the unit is one `claude --restricted` invocation in the run's clone, and the run ends blocked with a plan, a patch and a question list stored as artifacts. Without the
+// flag a host that lacks required enforcement still refuses the run, and the refusal says how to ask for this.
+//
 // Then (D-18) it spawns a detached `avarice supervise <runId>` and returns: the run is recorded and the supervisor owns it, so closing
 // the shell leaves it running. With `--wait` it polls the ledger and exits 0 at `ready_for_review` and 3 at any other stop state or when
 // the supervisor died with the run unfinished, printing the final result line and, when interrupted, how to continue.
@@ -25,9 +29,9 @@ export const EXIT_REFUSED = 3;
 const EXIT_USAGE = 64;
 const EXIT_INTERNAL = 70;
 
-export const booleanFlags: readonly string[] = ['wait'];
+export const booleanFlags: readonly string[] = ['wait', 'restricted'];
 
-const USAGE = `usage: avarice start --brief <file> --policy ${ROUTINE_POLICY} [--project <id>] [--budget name=value]... [--wait]`;
+const USAGE = `usage: avarice start --brief <file> --policy ${ROUTINE_POLICY} [--project <id>] [--budget name=value]... [--wait] [--restricted]`;
 
 // Checked before the profile is resolved, so a usage error leaves nothing on disk.
 export function usage(args: ParsedArgs): string | undefined {
@@ -120,12 +124,26 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
     return EXIT_USAGE;
   }
 
+  // A restricted run needs the restricted host. A host that cannot start one (no `claude`, or one that does not list `--restricted`) refuses before anything is stored,
+  // and the refusal names the probe that failed; nothing falls back to an unrestricted run.
+  const restricted = args.flags['restricted'] === true;
+  if (restricted) {
+    const host = deps.restrictedHost;
+    const attributes = host?.descriptor.attributes ?? {};
+    if (host === undefined || attributes['enforcement'] !== 'restricted') {
+      const why = host === undefined ? 'no restricted host is composed' : (attributes['reason'] ?? 'the restricted host is not ready');
+      io.err(`${errorLine('start', `refused: restricted mode is not available: ${why}`)}\n`);
+      return EXIT_REFUSED;
+    }
+  }
+
   const request = {
     cwd: process.cwd(),
     ...(typeof projectId === 'string' ? { projectId } : {}),
     briefPath,
     policy,
     budgetOverrides: overrides,
+    ...(restricted ? { restricted: true } : {}),
   };
   // Before the start transaction (D-07 stage 1, RC-7): read what the indexes know about the files and symbols the items name. This only
   // reads; a start killed here leaves no run, and an index that is absent or stale never blocks the start.
@@ -134,7 +152,7 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   const started = startRun(deps, { ...request, ...(index?.facts !== undefined ? { indexFacts: index.facts } : {}) });
   if (started.ok) {
     io.out(renderStart(started.value, index?.note ?? 'index: not used (absent)'));
-    return supervise(deps, io, started.value, args.flags['wait'] === true);
+    return supervise(deps, io, started.value, args.flags['wait'] === true, restricted);
   }
   const failure = started.failure;
   switch (failure.kind) {
@@ -151,7 +169,7 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
 }
 
 // Spawns the detached supervisor, records its PID as step `supervisor:spawn`, and with --wait follows the run to where it stops.
-async function supervise(deps: AppDeps, io: Io, started: RunStartOutcome, wait: boolean): Promise<number> {
+async function supervise(deps: AppDeps, io: Io, started: RunStartOutcome, wait: boolean, restricted: boolean): Promise<number> {
   const { runId } = started;
   // The directory this process runs the host under, recorded before any supervisor exists: every later launch of the run uses it, whichever terminal
   // answers or resumes the run (plan 03-43).
@@ -176,6 +194,11 @@ async function supervise(deps: AppDeps, io: Io, started: RunStartOutcome, wait: 
   const maxMs = (started.contract.budgets.wallClockMinutes + WAIT_MARGIN_MIN) * 60_000;
   const result = await waitForRun(deps, runId, spawned.pid, { pollMs: 250, maxMs });
   io.out(`${renderWait(runId, result).join('\n')}\n`);
+  // A run that stopped because its host cannot be contained says how to ask for restricted mode (plan 04-23; D-12, S-22): the host's own reason, which carries the cause and the flag.
+  if (!restricted && result.kind === 'final' && result.run.state === 'blocked_on_decision' && result.run.reason === 'enforcement_failure') {
+    const attributes = deps.host.descriptor.attributes ?? {};
+    if (attributes['enforcement'] !== 'enforced' && typeof attributes['reason'] === 'string' && attributes['reason'] !== '') io.err(`${errorLine('start', attributes['reason'])}\n`);
+  }
   if (result.kind === 'error') return EXIT_INTERNAL;
   return result.kind === 'final' && result.run.state === 'ready_for_review' ? 0 : EXIT_REFUSED;
 }

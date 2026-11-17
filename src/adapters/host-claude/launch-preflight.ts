@@ -129,7 +129,7 @@ function checkSandbox(sandboxProbe: readonly string[] | undefined, timeout: numb
 
 // `claude --help` lists every flag the launch line relies on. It proves presence, never behaviour: a host that renamed a flag is
 // caught before the launch, a host that ignores one is not (only a live T3 run shows that).
-function checkHelpFlags(claudeBin: string, timeout: number): Result<void> {
+function checkHelpFlags(claudeBin: string, timeout: number, flags: readonly string[] = REQUIRED_HELP_FLAGS): Result<void> {
   const help = spawnSync(claudeBin, ['--help'], {
     timeout,
     killSignal: 'SIGKILL',
@@ -138,7 +138,7 @@ function checkHelpFlags(claudeBin: string, timeout: number): Result<void> {
     env: probeEnv(),
   });
   if (help.error !== undefined || help.status !== 0) return refuse('host-unavailable');
-  for (const flag of REQUIRED_HELP_FLAGS) {
+  for (const flag of flags) {
     // The flag as a whole word: `--settings` is not met by `--settings-profile` or `--setting-sources`.
     const listed = new RegExp(`(^|[\\s,|\\[(])${flag}(?![\\w-])`, 'm');
     if (!listed.test(help.stdout)) return refuse(`host-flag-missing:${flag}`);
@@ -320,4 +320,30 @@ export function checkLaunchReady(input: LaunchReadyInput): Result<HostVersionOk>
 
   // 4. The host is a verified version, or an unverified patch that lists every flag the launch line uses.
   return checkHostVersion(input.claudeBin, timeout);
+}
+
+// ---- restricted mode (plan 04-23; CON-4, D-12) --------------------------------------------------------------------------------------------
+
+export interface RestrictedReadyInput {
+  claudeBin: string;
+  timeoutMs?: number;
+}
+
+// The startup check behind the restricted host's descriptor: `claude --help` lists `--restricted`. Restricted mode is the answer for a host that cannot be
+// contained (docs/containment.md "Fail-closed behavior"), so it asks for no admitted version, no sandbox and no hook: the host's own `--restricted` removes the tools
+// that run code. It proves the flag is listed, never that the host honours it (spike S4-C; plan 04-34's live run).
+export function checkRestrictedHostReady(input: RestrictedReadyInput): Result<void> {
+  return checkHelpFlags(input.claudeBin, input.timeoutMs ?? DEFAULT_TIMEOUT_MS, ['--restricted']);
+}
+
+export interface RestrictedLaunchReadyInput {
+  claudeBin: string;
+  // The generated run settings the restricted line names with `--settings`.
+  settingsFile: string;
+  timeoutMs?: number;
+}
+
+// Fail-closed readiness before every restricted launch.
+export function checkRestrictedLaunchReady(input: RestrictedLaunchReadyInput): Result<void> {
+  return checkRestrictedHostReady(input);
 }

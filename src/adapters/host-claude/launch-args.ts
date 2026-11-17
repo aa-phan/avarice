@@ -163,3 +163,112 @@ export function assertLaunchArgsSafe(argv: readonly string[]): Result<void> {
   }
   return ok(undefined);
 }
+
+// ---- restricted mode (plan 04-23; CON-4, D-12) --------------------------------------------------------------------------------------------
+
+export interface RestrictedLaunchArgsInput {
+  prompt: string;
+  settingsFile: string;
+  mcpFile: string;
+  model: string;
+  costCapUsd: number;
+  sessionId: string;
+  // An earlier session to resume: the line ends `--resume <id>` and carries no `--session-id`.
+  resumeSessionId?: string;
+}
+
+// The restricted launch line (docs/containment.md "Restricted mode"; spike S4-C):
+//   claude -p <prompt> --restricted --setting-sources "" --settings <file> --permission-mode dontAsk --permission-prompts none
+//     --strict-mcp-config --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>
+// `--restricted` removes the tools that run commands or code and WebFetch, ignores user, project and local settings and confines the file tools to the working
+// directory. The line names no `--tools`, `--allowedTools`, `--plugin-dir`, `--agents` or `--add-dir`, so nothing is granted back. `--setting-sources ""` and
+// `--strict-mcp-config` are kept beside `--restricted` on purpose: the help text says `--restricted` already ignores those sources, but whether the host accepts
+// the two flags together is not known offline (S4-C item 5), and a host that refuses the combination fails closed (nothing launches) where leaving the flags off
+// would rest on an unproven claim. Plan 04-34's live run settles it.
+export function restrictedLaunchArgs(input: RestrictedLaunchArgsInput): string[] {
+  return [
+    '-p',
+    input.prompt,
+    '--restricted',
+    '--setting-sources',
+    '',
+    '--settings',
+    input.settingsFile,
+    '--permission-mode',
+    'dontAsk',
+    '--permission-prompts',
+    'none',
+    '--strict-mcp-config',
+    '--mcp-config',
+    input.mcpFile,
+    '--model',
+    input.model,
+    '--max-budget-usd',
+    String(input.costCapUsd),
+    '--output-format',
+    'stream-json',
+    '--verbose',
+    ...(input.resumeSessionId !== undefined ? ['--resume', input.resumeSessionId] : ['--session-id', input.sessionId]),
+  ];
+}
+
+// Flags that would give back what `--restricted` removed, or widen what the generated settings allow: refused whatever their value.
+const RESTRICTED_REFUSED_FLAGS: ReadonlySet<string> = new Set([
+  '--bare',
+  '--safe-mode',
+  '--tools',
+  '--allowedTools',
+  '--allowed-tools',
+  '--add-dir',
+  '--permission-prompt-tool',
+  '--plugin-dir',
+  '--agents',
+  '--agent',
+  '--dangerously-skip-permissions',
+  '--allow-dangerously-skip-permissions',
+]);
+
+// Judges the finished restricted argv before any process starts, as assertLaunchArgsSafe does for the contained line: `--restricted` is required, so a line that
+// lost it is never started; dontAsk, no prompts, an empty setting-sources, the generated settings, a strict MCP set and a positive budget are required too;
+// and no flag may grant a tool or bypass permissions.
+export function assertRestrictedLaunchArgsSafe(argv: readonly string[]): Result<void> {
+  const refuseRestricted = (reason: string): Result<never> => refuse(`restricted:${reason}`);
+  const values = new Map<string, string>();
+  const bare = new Set<string>();
+  let prompt: string | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i] as string;
+    if (i === 0 && token === '-p') {
+      prompt = argv[i + 1];
+      i++;
+      continue;
+    }
+    const equals = token.startsWith('--') ? token.indexOf('=') : -1;
+    const flag = equals === -1 ? token : token.slice(0, equals);
+    if (!flag.startsWith('-')) continue;
+    if (RESTRICTED_REFUSED_FLAGS.has(flag) || flag.startsWith('--dangerously') || flag.startsWith('--allow-dangerously')) {
+      return refuseRestricted(`${flag} would give back what the restricted line removes or bypass permissions`);
+    }
+    if (equals !== -1) values.set(flag, token.slice(equals + 1));
+    else if (VALUE_FLAGS.has(flag)) {
+      values.set(flag, argv[i + 1] ?? '');
+      i++;
+    } else bare.add(flag);
+  }
+
+  if (prompt === undefined || prompt === '') return refuseRestricted('prompt: -p needs a non-empty prompt');
+  if (prompt.startsWith('-')) return refuseRestricted('prompt: a prompt that starts with a dash would be parsed as a flag');
+  if (!bare.has('--restricted')) return refuseRestricted('--restricted is required');
+  const mode = values.get('--permission-mode');
+  if (mode !== 'dontAsk') return refuseRestricted(`permission-mode: ${mode === undefined ? 'missing' : JSON.stringify(mode)}, only dontAsk is allowed`);
+  if (values.get('--permission-prompts') !== 'none') return refuseRestricted('permission-prompts: must be none');
+  if (values.get('--setting-sources') !== '') return refuseRestricted('setting-sources: must be the empty string');
+  const settings = values.get('--settings');
+  if (settings === undefined || settings === '') return refuseRestricted('settings: the generated settings file is required');
+  if (!bare.has('--strict-mcp-config')) return refuseRestricted('strict-mcp-config: required, only the generated MCP set may load');
+  const budget = values.get('--max-budget-usd');
+  const cap = budget === undefined || budget.trim() === '' ? NaN : Number(budget);
+  if (!Number.isFinite(cap) || cap <= 0) return refuseRestricted(`max-budget-usd: ${budget === undefined ? 'missing' : JSON.stringify(budget)} is not a positive finite number`);
+  return ok(undefined);
+}

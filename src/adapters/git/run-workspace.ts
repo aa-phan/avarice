@@ -629,6 +629,20 @@ export class CloneRunWorkspace implements RunWorkspace {
     return ok(found);
   }
 
+  patch(path: string, options: { exclude: readonly string[] }): Result<string> {
+    // An excluded directory is a plain relative path: no glob, no magic, no `..`, so it can name only a place inside the clone.
+    for (const dir of options.exclude) {
+      if (!/^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(dir) || dir.split('/').includes('..')) return invalid('exclude', `${JSON.stringify(dir)} is not a plain relative directory`);
+    }
+    const tree = this.treeOfWorkingContent(path);
+    if (!tree.ok) return tree;
+    const diff = runGit(
+      ['diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', tree.value, '--', '.', ...options.exclude.map((dir) => `:(exclude)${dir}`)],
+      { cwd: path, neutralizeFilters: true, timeoutMs: TREE_TIMEOUT_MS },
+    );
+    return diff.ok ? ok(diff.value.stdout) : failure(diff.error);
+  }
+
   diffCommits(path: string, from: string, to: string): Result<PathChange[]> {
     if (!COMMIT_SHA.test(from) || !COMMIT_SHA.test(to)) return invalid('revision', 'full lowercase commit SHAs are required');
     return this.diffTrees(path, from, to);

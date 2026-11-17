@@ -63,6 +63,11 @@ export interface AppDeps {
   // sandbox and the hook entry are present, and the fail-closed UnavailableAgentHost otherwise (plan 01-15); tests
   // inject a fake through main() overrides.
   host: AgentHost;
+  // The host of a restricted run (plan 04-23; CON-4, D-12): the Claude Code adapter in restricted mode, or a host that refuses. It is a separate member, never a
+  // setting of `host`, so a run whose stored contract says restricted can only ever reach this one (and never the contained host), whichever command continues it:
+  // `supervise` and `resume` are separate processes with no flag, and the mode they act on is the contract's. Composed when the command is not read-only, and probed
+  // only when something asks for its descriptor. Absent in a hand-built AppDeps; a restricted run then stops enforcement_failure.
+  restrictedHost?: AgentHost;
   staging: StagingWorkspace;
   artifacts: ArtifactStore;
   // Runs every command AVARICE itself starts against staging (gsd-tools verbs, graphify) inside an OS sandbox

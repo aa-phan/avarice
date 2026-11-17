@@ -28,8 +28,8 @@ import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
 import { processRedactor } from '../redaction/process-redactor.ts';
 import { buildInvocationEnv } from './env.ts';
 import { canonicalPath } from './settings.ts';
-import { assertLaunchArgsSafe, buildLaunchArgs } from './launch-args.ts';
-import { checkHostReady, checkLaunchReady } from './launch-preflight.ts';
+import { assertLaunchArgsSafe, assertRestrictedLaunchArgsSafe, buildLaunchArgs, restrictedLaunchArgs } from './launch-args.ts';
+import { checkHostReady, checkLaunchReady, checkRestrictedHostReady, checkRestrictedLaunchReady } from './launch-preflight.ts';
 import type { HostVersionOk } from './launch-preflight.ts';
 import { writeInvocationFiles } from './invocation-files.ts';
 import type { GsdLocations, InvocationFiles } from './invocation-files.ts';
@@ -56,6 +56,9 @@ export interface BeforeSpawn {
 }
 
 export interface ClaudeHostOptions {
+  // `contained` (default): the contained launch line, behind every containment probe. `restricted` (plan 04-23, CON-4, D-12): only the `--restricted` line, for a host that
+  // cannot be contained; its descriptor says enforcement `restricted`, never `enforced`, and an adapter in this mode can launch nothing else.
+  mode?: 'contained' | 'restricted';
   claudeBin: string;
   // `src/hook/pre-tool-use.ts`, the script the generated settings run.
   hookEntry: string;
@@ -102,6 +105,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 export class ClaudeHostAdapter implements AgentHost {
   readonly #o: ClaudeHostOptions;
   #ready: Result<HostVersionOk> | undefined;
+  #restrictedReady: Result<void> | undefined;
 
   constructor(options: ClaudeHostOptions) {
     this.#o = options;
@@ -119,7 +123,25 @@ export class ClaudeHostAdapter implements AgentHost {
     return this.#ready;
   }
 
+  // The restricted mode's startup check, once per adapter: `claude --help` lists `--restricted`.
+  #restrictedReadiness(): Result<void> {
+    this.#restrictedReady ??= checkRestrictedHostReady({ claudeBin: this.#o.claudeBin });
+    return this.#restrictedReady;
+  }
+
   get descriptor(): CapabilityDescriptor {
+    if (this.#o.mode === 'restricted') {
+      const ready = this.#restrictedReadiness();
+      return {
+        port: 'agent-host',
+        adapter: 'claude-code',
+        version: ADAPTER_VERSION,
+        // No shell execution and no contained invocation: the restricted host runs analysis and planning only.
+        capabilities: { 'restricted-invocation': ready.ok, headless: true, resume: false },
+        attributes: ready.ok ? { enforcement: 'restricted', mode: 'restricted' } : { enforcement: 'none', mode: 'restricted', reason: ready.error.kind === 'denied' ? ready.error.rule : ready.error.kind },
+        offline: false,
+      };
+    }
     const ready = this.#readiness();
     return {
       port: 'agent-host',
@@ -181,29 +203,43 @@ export class ClaudeHostAdapter implements AgentHost {
     if (!files.ok) return refuse(`invocation-files:${files.error.kind}`);
     o.onBeforeSpawn?.({ invDir, files: files.value, request: req });
 
-    // 2. Every containment layer, including the hook denying a write in a self-test, or nothing starts.
-    const ready = checkLaunchReady({
-      settingsFile: files.value.settingsFile,
-      claudeBin: o.claudeBin,
-      policyFile: files.value.policyFile,
-      ...(o.sandboxProbe !== undefined ? { sandboxProbe: o.sandboxProbe } : {}),
-    });
+    // 2. Every containment layer, including the hook denying a write in a self-test, or nothing starts. A restricted adapter asks for the one thing
+    // its line stands on instead: a host that lists `--restricted`, and run settings that deny by default.
+    const restricted = o.mode === 'restricted';
+    const ready = restricted
+      ? checkRestrictedLaunchReady({ claudeBin: o.claudeBin, settingsFile: files.value.settingsFile })
+      : checkLaunchReady({
+          settingsFile: files.value.settingsFile,
+          claudeBin: o.claudeBin,
+          policyFile: files.value.policyFile,
+          ...(o.sandboxProbe !== undefined ? { sandboxProbe: o.sandboxProbe } : {}),
+        });
     if (!ready.ok) return ready;
 
     // 3. The generated argv, judged before it is used.
-    const args = buildLaunchArgs({
-      prompt: req.prompt,
-      settingsFile: files.value.settingsFile,
-      pluginDir: files.value.pluginDir,
-      agentsFile: files.value.agentsFile,
-      mcpFile: files.value.mcpFile,
-      model: req.model,
-      costCapUsd: req.costCapUsd,
-      sessionId,
-      ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
-      ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
-    });
-    const safe = assertLaunchArgsSafe(args);
+    const args = restricted
+      ? restrictedLaunchArgs({
+          prompt: req.prompt,
+          settingsFile: files.value.settingsFile,
+          mcpFile: files.value.mcpFile,
+          model: req.model,
+          costCapUsd: req.costCapUsd,
+          sessionId,
+          ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+        })
+      : buildLaunchArgs({
+          prompt: req.prompt,
+          settingsFile: files.value.settingsFile,
+          pluginDir: files.value.pluginDir,
+          agentsFile: files.value.agentsFile,
+          mcpFile: files.value.mcpFile,
+          model: req.model,
+          costCapUsd: req.costCapUsd,
+          sessionId,
+          ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+          ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
+        });
+    const safe = restricted ? assertRestrictedLaunchArgsSafe(args) : assertLaunchArgsSafe(args);
     if (!safe.ok) return refuse(safe.error.kind === 'denied' ? safe.error.rule.replace(/^launch_args:/, 'launch-args:') : 'launch-args');
     const env = buildInvocationEnv(o.env ?? process.env, {
       gsdCoreBin: join(o.gsd.gsdCoreDir, 'bin'),

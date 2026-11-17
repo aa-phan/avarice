@@ -131,8 +131,19 @@ export interface RunWorkItem {
   spec: { files: string[]; symbols: string[]; configKeys: string[]; references: string[]; derived: string[] };
 }
 
+// How the run is carried out (plan 04-23; CON-4, D-12). `contained` is every run before restricted mode and the default: the contract carries no `mode` key, so a
+// contained contract keeps the digest it always had. `restricted` is stored only when the owner started the run with `--restricted`: the run is analysis and planning in
+// a disposable clone, on a host that cannot be contained. The mode is part of the stored contract, so every process that continues the run reads the same one.
+export type RunMode = 'contained' | 'restricted';
+
+export function runModeOf(contract: { mode?: RunMode }): RunMode {
+  return contract.mode === 'restricted' ? 'restricted' : 'contained';
+}
+
 export interface RunContract {
   schema: 1;
+  // Absent for a contained run (see RunMode).
+  mode?: 'restricted';
   // A number, so an amendment can write version n+1; a compiled contract starts at 1.
   contractVersion: number;
   runId: string;
@@ -250,6 +261,8 @@ export interface RunCompileInput {
   budgetOverrides?: unknown;
   // Index facts the compiler derives item specs from; without them a spec derives from the write set alone.
   indexFacts?: IndexFacts;
+  // `restricted` stores the mode in the contract (plan 04-23); absent or `contained` stores nothing.
+  mode?: RunMode;
 }
 
 export interface G0Failure {
@@ -683,6 +696,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
   const workItems = compiledItems.value;
   const contract: RunContract = {
     schema: 1,
+    ...(input.mode === 'restricted' ? { mode: 'restricted' as const } : {}),
     contractVersion: 1,
     runId: input.runId,
     policyPreset: ROUTINE_POLICY,
