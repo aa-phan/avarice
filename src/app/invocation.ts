@@ -231,6 +231,9 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
       headBefore: o.headBefore,
       headAfter: o.headAfter,
       permissionDenials: o.permissionDenials.length,
+      // The digest of the redacted transcript is always recorded; the transcript itself only when it was stored (D-14).
+      ...(o.transcriptDigest !== undefined ? { transcriptDigest: o.transcriptDigest } : {}),
+      ...(o.transcriptSummaryArtifact !== undefined ? { transcriptSummary: o.transcriptSummaryArtifact } : {}),
       ...(o.transcriptArtifact !== undefined ? { transcript: o.transcriptArtifact } : {}),
     },
     nowMs: startedMs,
@@ -249,6 +252,18 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
       nowMs: deps.clock.nowMs(),
     });
     if (!artifact.ok) return artifact;
+  }
+  if (o.transcriptSummaryArtifact !== undefined) {
+    const summary = deps.ledger.recordArtifact({
+      digest: o.transcriptSummaryArtifact,
+      size: o.details?.transcriptSummaryBytes ?? 0,
+      kind: 'transcript-summary',
+      runId: request.runId,
+      retention: target.retention,
+      store: STORE,
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!summary.ok) return summary;
   }
 
   const d = o.details;
@@ -278,6 +293,7 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
             hookBudgetDenies: d.hookBudgetDenies,
             numTurns: d.numTurns,
             transcriptBytes: d.transcriptBytes,
+            ...(o.transcriptDigest !== undefined ? { transcriptDigest: o.transcriptDigest } : {}),
             ...(d.subtype !== undefined ? { subtype: d.subtype } : {}),
             ...(d.terminalReason !== undefined ? { terminalReason: d.terminalReason } : {}),
             ...(d.subagentsSpawned !== undefined ? { subagents: d.subagentsSpawned } : {}),

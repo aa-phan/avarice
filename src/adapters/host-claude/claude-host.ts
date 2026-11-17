@@ -4,7 +4,8 @@
 // line and judge it, start the host in its own process group in the staging copy with an allowlisted environment,
 // read its stream-json while it runs, enforce the wall clock ourselves (SIGTERM, then SIGKILL after a grace), and
 // classify what happened from the host's final result, the exit, the staging HEAD and our own hook events, never
-// from model text. The transcript is stored as an artifact only after secrets are redacted.
+// from model text. The transcript is redacted line by line before the cap counts it. By default a run keeps a redacted
+// summary and the digest of the redacted transcript; the whole redacted transcript is stored only on an opt-in (D-14).
 //
 // Fail closed: any refusal before the spawn is `denied` with rule `enforcement_failure:{reason}` and nothing is
 // started. The descriptor says `enforced` only when the startup check (hook entry, sandbox, admitted version) passed.
@@ -17,12 +18,14 @@ import { join } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { classifyOutcome } from '../../domain/outcome.ts';
-import { redactSecrets } from '../../domain/secret-patterns.ts';
+import { sha256Hex } from '../../domain/digest.ts';
+import type { Redactor, TranscriptRetention } from '../../domain/redactor.ts';
 import type { InvocationScope } from '../../domain/invocation-scope.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest, PermissionDenial, ReapRequest } from '../../ports/agent-host.ts';
 import type { ArtifactStore } from '../../ports/artifact-store.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
+import { processRedactor } from '../redaction/process-redactor.ts';
 import { buildInvocationEnv } from './env.ts';
 import { canonicalPath } from './settings.ts';
 import { assertLaunchArgsSafe, buildLaunchArgs } from './launch-args.ts';
@@ -32,9 +35,12 @@ import { writeInvocationFiles } from './invocation-files.ts';
 import type { GsdLocations, InvocationFiles } from './invocation-files.ts';
 import type { PreambleFingerprint } from './hook-policy.ts';
 import { StreamJsonParser } from './stream-json.ts';
+import { TranscriptCollector } from './transcript-collector.ts';
 
 export const DEFAULT_KILL_GRACE_MS = 10_000;
 export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
+// The environment variable that stores the whole redacted transcript of every invocation, beside the profile's `retention.transcripts: "full"`.
+export const DEBUG_TRANSCRIPTS_ENV = 'AVARICE_DEBUG_TRANSCRIPTS';
 // How long to wait for the output pipe to close after the process has exited, before it is cut.
 const STDOUT_CLOSE_WAIT_MS = 2_000;
 const MAX_EXPECTED_FILE_BYTES = 1024 * 1024;
@@ -70,6 +76,12 @@ export interface ClaudeHostOptions {
   // SIGTERM to SIGKILL grace (default 10 s).
   killGraceMs?: number;
   maxTranscriptBytes?: number;
+  // What is kept of the transcript: `summary` (default) or `full` (the profile's `retention.transcripts`).
+  transcripts?: TranscriptRetention;
+  // Store the whole redacted transcript whatever the profile says. Default: AVARICE_DEBUG_TRANSCRIPTS=1 in `env`.
+  debugTranscripts?: boolean;
+  // The redactor the transcript lines and the summary text pass through (default: the process redactor).
+  redactor?: Redactor;
 }
 
 function refuse(reason: string): Result<never> {
@@ -242,11 +254,30 @@ export class ClaudeHostAdapter implements AgentHost {
       expectedFilesPresent,
     });
 
-    // 6. The transcript, redacted, as an artifact. A transcript that cannot be stored is an error, not a silent gap.
-    const text = redactSecrets(ran.transcript);
-    const bytes = new TextEncoder().encode(text);
-    const stored = o.artifacts.put(bytes, { kind: 'transcript', runId: req.runId });
-    if (!stored.ok) return stored;
+    // 6. The transcript, redacted line by line before the cap (see #run). By default a summary and the transcript's digest are kept;
+    // the whole redacted transcript is stored only on an opt-in (D-14). A summary or transcript that cannot be stored is an error, not a silent gap.
+    const redactor = o.redactor ?? processRedactor;
+    const bytes = new TextEncoder().encode(ran.transcript);
+    const transcriptDigest = `sha256:${sha256Hex(bytes)}`;
+    const summaryText = result?.finalTextTail !== undefined ? redactor.redact(result.finalTextTail) : undefined;
+    const summary = new TextEncoder().encode(
+      JSON.stringify({
+        sessionId,
+        turns: result?.numTurns ?? 0,
+        costUsd: result?.totalCostUsd ?? 0,
+        toolUses: parsed.toolUses,
+        ...(summaryText !== undefined ? { resultText: summaryText } : {}),
+      }),
+    );
+    const summaryStored = o.artifacts.put(summary, { kind: 'transcript-summary', runId: req.runId });
+    if (!summaryStored.ok) return summaryStored;
+    const whole = o.transcripts === 'full' || (o.debugTranscripts ?? (o.env ?? process.env)[DEBUG_TRANSCRIPTS_ENV] === '1');
+    let stored: { digest: string; size: number } | undefined;
+    if (whole) {
+      const put = o.artifacts.put(bytes, { kind: 'transcript', runId: req.runId });
+      if (!put.ok) return put;
+      stored = put.value;
+    }
 
     return ok({
       sessionId,
@@ -256,7 +287,9 @@ export class ClaudeHostAdapter implements AgentHost {
       durationMs,
       headBefore: headBefore.value,
       headAfter: headAfter.value,
-      transcriptArtifact: stored.value.digest,
+      ...(stored !== undefined ? { transcriptArtifact: stored.digest } : {}),
+      transcriptDigest,
+      transcriptSummaryArtifact: summaryStored.value.digest,
       // The tail of the final result text, as data for the one caller that reads it (a pause question). It goes nowhere else:
       // not into `details`, an event, a step result or a log line.
       ...(result?.finalTextTail !== undefined ? { question: result.finalTextTail } : {}),
@@ -265,7 +298,8 @@ export class ClaudeHostAdapter implements AgentHost {
         signal: ran.signal,
         timedOut: ran.timedOut,
         headMoved: classified.headMoved,
-        transcriptBytes: stored.value.size,
+        transcriptBytes: bytes.length,
+        transcriptSummaryBytes: summaryStored.value.size,
         hookDenies: denies.value.total,
         hookBudgetDenies: denies.value.budget,
         numTurns: result?.numTurns ?? 0,
@@ -299,9 +333,8 @@ export class ClaudeHostAdapter implements AgentHost {
     }
 
     const parser = new StreamJsonParser();
-    const chunks: Buffer[] = [];
-    let kept = 0;
-    let truncated = false;
+    // The parser reads the raw stream (the outcome never depends on what is stored); the collector redacts each line before the cap counts it.
+    const collector = new TranscriptCollector(o.redactor ?? processRedactor, cap);
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
 
@@ -330,14 +363,7 @@ export class ClaudeHostAdapter implements AgentHost {
 
     child.stdout?.on('data', (chunk: Buffer) => {
       parser.push(chunk);
-      if (kept < cap) {
-        const room = cap - kept;
-        chunks.push(chunk.length <= room ? chunk : chunk.subarray(0, room));
-        kept += Math.min(chunk.length, room);
-        if (chunk.length > room) truncated = true;
-      } else {
-        truncated = true;
-      }
+      collector.push(chunk);
     });
     // stderr is drained and dropped: it is host diagnostics, not evidence, and may carry paths.
     child.stderr?.resume();
@@ -368,8 +394,7 @@ export class ClaudeHostAdapter implements AgentHost {
       child.stdout.destroy();
     }
 
-    const transcript = Buffer.concat(chunks).toString('utf8') + (truncated ? `\n[avarice: transcript truncated at ${cap} bytes]\n` : '');
-    return ok({ parsed: parser.finish(), transcript, exitCode: exit.code, signal: exit.signal, timedOut });
+    return ok({ parsed: parser.finish(), transcript: collector.finish(), exitCode: exit.code, signal: exit.signal, timedOut });
   }
 
   // Ends any process that carries the invocation's `--session-id` or `--resume` (a resumed host carries the latter): a

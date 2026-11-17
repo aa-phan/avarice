@@ -424,7 +424,8 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
   it('stores the transcript as an artifact only after redaction, and the invocation event carries counts, not text', () => {
     const secret = 'sk_live_4eC39HqLyjWDarjtT1zdp7dcREDACTME';
     const s = setup({ transcript: 'success', mapFiles: 'all', extraLines: [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: `the key is ${secret}` }] } })] });
-    assert.equal(onboard(s).code, 0);
+    // The whole redacted transcript is stored only on an opt-in (D-14): here the debug variable.
+    assert.equal(onboard(s, { AVARICE_DEBUG_TRANSCRIPTS: '1' }).code, 0);
     const [artifact] = rows<{ digest: string; size: number }>(s.roots, "SELECT digest, size FROM artifacts WHERE kind = 'transcript'");
     assert.ok(artifact, 'a transcript artifact is recorded');
     const hex = artifact.digest.replace('sha256:', '');
@@ -748,7 +749,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
 
   it('reads stdout that arrives in small pieces, and keeps at most the transcript cap of it', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', chunkBytes: 37 });
-    const run = await inProcess(s, { maxTranscriptBytes: 1500 });
+    const run = await inProcess(s, { maxTranscriptBytes: 1500, debugTranscripts: true });
     assert.equal(run.state, 'active', 'the result was parsed from all of the output, not only the kept part');
     const [artifact] = rows<{ digest: string; size: number }>(s.roots, "SELECT digest, size FROM artifacts WHERE kind = 'transcript'");
     assert.ok(artifact);

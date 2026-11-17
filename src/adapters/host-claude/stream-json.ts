@@ -4,10 +4,11 @@
 // (is_error, subtype, terminal_reason, permission_denials, total_cost_usd, num_turns, duration_ms, session_id,
 // subagent_stats).
 //
-// Model text stays in this file with one exception: assistant messages and tool inputs are not kept, and of the
-// `result` text only a bounded tail is (`finalTextTail`: the last 2000 characters, control characters stripped). That
-// tail is how a paused unit's question reaches the supervisor (plan 03-08, AUT-1); it is model text, so the one caller
-// treats it as data and never as an instruction, an event field or a log line.
+// Model text stays in this file with two exceptions. Assistant messages and tool inputs are not kept; the calls are
+// only counted by tool name, for the transcript summary (D-14). Of the `result` text only a bounded tail is kept
+// (`finalTextTail`: the last 2000 characters, control characters stripped). That tail is how a paused unit's question
+// reaches the supervisor (plan 03-08, AUT-1); it is model text, so the one caller treats it as data and never as an
+// instruction, an event field or a log line.
 // A denied tool is recorded by name only; its input (a command, a path) is dropped. Nothing here throws on
 // malformed input: a line that is not a JSON object is counted and skipped.
 import { StringDecoder } from 'node:string_decoder';
@@ -56,6 +57,8 @@ export interface ParsedStream {
   init?: StreamInit;
   permissionDenied: StreamPermissionDenial[];
   result?: StreamResult;
+  // Tool calls the assistant made, counted by tool name (at most MAX_LIST names; the rest are counted under OTHER_TOOLS).
+  toolUses: Record<string, number>;
   // How many result events were printed (the last one is kept).
   resultCount: number;
   // Non-empty lines that were not a JSON object, or were above the line limit.
@@ -72,6 +75,8 @@ export interface StreamJsonOptions {
 const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024;
 const MAX_NAME_CHARS = 128;
 const MAX_LIST = 64;
+// The name the tool uses beyond MAX_LIST distinct names are counted under.
+export const OTHER_TOOLS = '(other)';
 // How much of the final result text is kept: enough for a question and its numbered choices, not a transcript.
 export const FINAL_TEXT_TAIL_CHARS = 2000;
 
@@ -123,6 +128,7 @@ export class StreamJsonParser {
   #init: StreamInit | undefined;
   #permissionDenied: StreamPermissionDenial[] = [];
   #result: StreamResult | undefined;
+  #toolUses = new Map<string, number>();
   #resultCount = 0;
   #malformed = 0;
   #events = 0;
@@ -145,6 +151,7 @@ export class StreamJsonParser {
       ...(this.#init !== undefined ? { init: this.#init } : {}),
       permissionDenied: [...this.#permissionDenied],
       ...(this.#result !== undefined ? { result: this.#result } : {}),
+      toolUses: Object.fromEntries([...this.#toolUses].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
       resultCount: this.#resultCount,
       malformedLines: this.#malformed,
       eventCount: this.#events,
@@ -203,6 +210,21 @@ export class StreamJsonParser {
     if (type === 'system' && subtype === 'init') this.#onInit(value);
     else if (type === 'system' && subtype === 'permission_denied') this.#onDenied(value);
     else if (type === 'result') this.#onResult(value);
+    else if (type === 'assistant') this.#onAssistant(value);
+  }
+
+  // Counts the `tool_use` blocks of an assistant message by tool name; the input and the text of the message are not read.
+  #onAssistant(event: Json): void {
+    const message = event['message'];
+    const content = isObject(message) ? message['content'] : undefined;
+    if (!Array.isArray(content)) return;
+    for (const block of content) {
+      if (!isObject(block) || block['type'] !== 'tool_use') continue;
+      const name = text(block['name']);
+      if (name === undefined) continue;
+      const key = this.#toolUses.has(name) || this.#toolUses.size < MAX_LIST ? name : OTHER_TOOLS;
+      this.#toolUses.set(key, (this.#toolUses.get(key) ?? 0) + 1);
+    }
   }
 
   #onInit(event: Json): void {

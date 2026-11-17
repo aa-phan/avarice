@@ -66,8 +66,13 @@ export interface InvocationOutcome {
   durationMs: number;
   headBefore: string;
   headAfter: string;
-  // Digest of the stored transcript artifact.
+  // Digest of the stored transcript artifact. Present only when the whole redacted transcript was stored: the profile's
+  // `retention.transcripts` is `full`, or AVARICE_DEBUG_TRANSCRIPTS=1 is set (D-14).
   transcriptArtifact?: string;
+  // SHA-256 digest of the redacted transcript (the one `transcriptArtifact` stores in full mode), always present once the host ran.
+  transcriptDigest?: string;
+  // Digest of the stored `transcript-summary` artifact: turns, cost, tool-use counts by tool name, the capped result text and the session ID.
+  transcriptSummaryArtifact?: string;
   // Captured GSD pause text, to be treated as data.
   question?: string;
   // Counts and codes only (no text): what an `invocation.finished` event may carry.
@@ -79,8 +84,10 @@ export interface InvocationDetails {
   signal: string | null;
   timedOut: boolean;
   headMoved: boolean;
-  // Size of the stored (redacted) transcript, in bytes.
+  // Size of the redacted transcript, in bytes (stored only in full retention).
   transcriptBytes: number;
+  // Size of the stored transcript-summary artifact, in bytes.
+  transcriptSummaryBytes?: number;
   // Hook deny events recorded for the invocation, and how many were budget_exhausted.
   hookDenies: number;
   hookBudgetDenies: number;

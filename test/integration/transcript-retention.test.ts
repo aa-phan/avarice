@@ -132,7 +132,8 @@ function launchResult(roots: CliRoots): Record<string, unknown> {
   return JSON.parse(row.result_json) as Record<string, unknown>;
 }
 
-const kindsOf = (roots: CliRoots): string[] => rows<{ kind: string }>(roots, "SELECT kind FROM artifacts WHERE kind IN ('transcript', 'transcript-summary') ORDER BY rowid").map((r) => r.kind);
+// The distinct transcript kinds the onboarding stored (it runs more than one invocation, each with its own summary).
+const kindsOf = (roots: CliRoots): string[] => [...new Set(rows<{ kind: string }>(roots, "SELECT kind FROM artifacts WHERE kind IN ('transcript', 'transcript-summary')").map((r) => r.kind))].sort();
 
 // The bytes the host prints before the extra line, so a cap can be placed inside the token that line carries.
 function streamPrefixBytes(): number {
@@ -149,7 +150,8 @@ const tokenAt = tokenLine.indexOf(GITHUB_TOKEN);
 function assertWholeLines(stored: string): void {
   const kept = stored.slice(0, stored.indexOf('\n[avarice: transcript truncated'));
   assert.ok(kept.length > 0, 'some lines are kept');
-  for (const line of kept.split('\n')) assert.doesNotThrow(() => JSON.parse(line), `a kept line is whole: ${line.slice(0, 60)}`);
+  assert.ok(kept.endsWith('\n'), 'the kept text ends at a line boundary');
+  for (const line of kept.split('\n').filter((l) => l !== '')) assert.doesNotThrow(() => JSON.parse(line), `a kept line is whole: ${line.slice(0, 60)}`);
 }
 
 function longestTokenFragment(text: string): number {
@@ -190,7 +192,7 @@ describe('tracer: a secret straddling the cap is redacted, and a default run sto
     assertWholeLines(stored);
   });
 
-  it('by default keeps one transcript-summary and the digest of the redacted transcript, and no transcript; the invocation still finishes with its counts', async () => {
+  it('by default keeps a transcript-summary and the digest of the redacted transcript, and no transcript; the invocation still finishes with its counts', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all' });
     const run = await inProcess(s, {});
     assert.equal(run.state, 'active');
@@ -221,7 +223,7 @@ describe('tracer: a secret straddling the cap is redacted, and a default run sto
     const s = setup({ transcript: 'success', mapFiles: 'all', extraLines: [tokenLine] });
     const run = await inProcess(s, { [DEBUG]: '1' });
     assert.equal(run.state, 'active');
-    assert.deepEqual([...kindsOf(s.roots)].sort(), ['transcript', 'transcript-summary']);
+    assert.deepEqual(kindsOf(s.roots), ['transcript', 'transcript-summary']);
     const step = launchResult(s.roots);
     assert.equal(step['transcript'], step['transcriptDigest'], 'the stored transcript is the one the digest covers');
     const stored = blob(s.roots, step['transcript'] as string);

@@ -72,3 +72,24 @@ export function redactLeaves(value: unknown, redactor: Redactor): unknown {
   }
   return value;
 }
+
+// What a run keeps of the host transcript (D-14, SEC-3). `summary` (the default) keeps a redacted summary and the digest of the
+// redacted transcript; `full` also stores the whole redacted transcript. The profile's `retention.transcripts` key chooses it.
+export type TranscriptRetention = 'summary' | 'full';
+
+export interface RetentionSection {
+  transcripts: TranscriptRetention;
+}
+
+export const DEFAULT_TRANSCRIPT_RETENTION: TranscriptRetention = 'summary';
+
+// The `retention` section of the profile config, raw. Only `transcripts` is read here; the other retention keys belong to the
+// consumers that own them. An absent section is the default; any value other than `summary` or `full` is refused.
+export function parseRetentionSection(raw: unknown): Result<RetentionSection> {
+  if (raw === undefined) return ok({ transcripts: DEFAULT_TRANSCRIPT_RETENTION });
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return err({ kind: 'invalid', field: 'retention', reason: 'expected an object in the profile config' });
+  const value = (raw as Record<string, unknown>)['transcripts'];
+  if (value === undefined) return ok({ transcripts: DEFAULT_TRANSCRIPT_RETENTION });
+  if (value === 'summary' || value === 'full') return ok({ transcripts: value });
+  return err({ kind: 'invalid', field: 'retention.transcripts', reason: 'expected "summary" (the default) or "full"' });
+}
