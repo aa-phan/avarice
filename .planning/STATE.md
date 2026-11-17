@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-28-PLAN.md
-last_updated: "2026-11-17T12:13:07.318Z"
+stopped_at: Completed 04-29-PLAN.md
+last_updated: "2026-11-17T12:50:35.013Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 592e7197f6a36adaeb4e1f5c072f7d222ffa2f5e
+state_head: 5c11d1838e248260f74e1d4d3a71e4fe11737acf
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 29 of 39
+Plan: 30 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -191,6 +191,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P26 | 45min | 3 tasks | 17 files |
 | Phase 04 P27 | 55 min | 3 tasks | 17 files |
 | Phase 04 P28 | 40 min | 3 tasks | 26 files |
+| Phase 04 P29 | 25min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -470,6 +471,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-27: context add is the recording form only when --file, --source or --run is given; otherwise context add <words> is still a search
 - [Phase 04]: 04-27: status gains an appended optional manualEvidence key; a resume leaves manual-context and github pull-request references as recorded
 - [Phase 04]: 04-28: retrieval counters are budget rows spent with the all-or-nothing Ledger.spendBudgets; broad discovery is authorized by brief frontmatter broadDiscovery true and happens once; every source find and page is one search; the 64 KiB returned-byte cap applies per source answer; a refused read leaves the ref out of the pack with reason access_revoked and is not recorded in task_refs; status keeps its five budgets
+- [Phase 04]: 04-29: hook retrieval rules are policy-gated; a multi-row charge is check-all-then-write-all in one transaction; a Glob whose pattern names every file counts as unfiltered for broad discovery
 
 ### Roadmap Evolution
 
@@ -537,8 +539,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T12:13:07.245Z
-Stopped at: Completed 04-28-PLAN.md
+Last session: 2026-11-17T12:50:34.983Z
+Stopped at: Completed 04-29-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
