@@ -48,6 +48,9 @@ export interface PackItem {
   confidence?: ContextConfidence;
   untrusted?: boolean;
   confirmed?: boolean;
+  // Where the item may be reused (plan 04-28; CON-12): the profile the pack was built in and a digest of the read scope it was built under. Appended last.
+  profile?: string;
+  accessScope?: string;
 }
 
 // The four local sources, by the short name the assembler and a resume use for them.
@@ -59,6 +62,8 @@ export interface OmittedItem {
   id: string;
   title: string;
   estTokens: number;
+  // Present when the handle was left out because access to it was revoked, denied or unauthenticated, not for the budget (plan 04-28; CON-12).
+  reason?: 'access_revoked';
 }
 
 export interface ContextReport {
