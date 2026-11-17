@@ -3,6 +3,7 @@
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import type { ExistingMapClass, ExistingMapOutcome } from './preflight.ts';
+import type { RefreshPlan } from './refresh-plan.ts';
 
 export const MAPPING_MODES = ['skip', 'adopt', 'fast', 'full', 'paths'] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
@@ -70,11 +71,9 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
   }
 }
 
-// GSD's default `workflow.drift_threshold`. The drift threshold rule itself is plan 04-14's; here it arrives as a parameter.
+// GSD's default `workflow.drift_threshold`; the refresh planner (refresh-plan.ts) reuses it as the number of new top-level directories that sends a
+// refresh to a full map.
 export const DEFAULT_DRIFT_THRESHOLD = 3;
-
-// More affected paths than this are not a scoped refresh.
-const MAX_SCOPE_PATHS = 50;
 
 // A path a scoped map may be asked for: relative, plain characters, no `..` segment, not option-shaped. The list is passed to the mapper as the
 // one comma-separated value of `--paths`, so a comma, a space or a leading dash would change what it means (T-04-27).
@@ -84,8 +83,9 @@ export function isScopePath(path: string): boolean {
   return SCOPE_PATH.test(path) && !path.split('/').some((segment) => segment === '' || segment === '..' || segment === '.');
 }
 
-// Dependency and workspace manifests: a drift that touches one changes what the whole map says, so it is mapped in full.
-const MANIFEST_NAMES: ReadonlySet<string> = new Set([
+// Dependency and workspace manifests: a drift that touches one changes what the whole map says, so it is mapped in full (refresh-plan.ts exports the
+// list as REFRESH_MANIFEST_NAMES).
+export const MANIFEST_NAMES: ReadonlySet<string> = new Set([
   'package.json',
   'package-lock.json',
   'npm-shrinkwrap.json',
@@ -117,24 +117,6 @@ const MANIFEST_NAMES: ReadonlySet<string> = new Set([
   'mix.exs',
 ]);
 
-const basenameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
-const topOf = (path: string): string => (path.includes('/') ? (path.slice(0, path.indexOf('/')) as string) : path);
-
-// The paths of a path-scoped refresh after a drift `block` (docs "Mapping-mode decision table"). GSD names the affected paths as top-level
-// directories (a new directory) or file paths (a changed documented file), and itself suggests `--paths` over them. They are scoped when each is a
-// plain path, none is a manifest, and they span no more top-level entries than the drift threshold; otherwise null: a full remap. No affected
-// path at all is a full remap too: there is nothing to scope to.
-export function refreshScope(affectedPaths: readonly string[], threshold: number = DEFAULT_DRIFT_THRESHOLD): string[] | null {
-  const unique = [...new Set(affectedPaths)].sort();
-  if (unique.length === 0 || unique.length > MAX_SCOPE_PATHS) return null;
-  const tops = new Set<string>();
-  for (const path of unique) {
-    if (!isScopePath(path) || MANIFEST_NAMES.has(basenameOf(path))) return null;
-    tops.add(topOf(path));
-  }
-  return tops.size > threshold ? null : unique;
-}
-
 const GLOB_CHARS = /[*?[\]{}!\\]/;
 
 // The directories a contract read scope confines the mapper to, or null when the scope is the whole repository (or cannot be written as
@@ -165,9 +147,9 @@ export interface MappingModeInput {
   existingMap?: ExistingMapClass;
   // What happens to the map the repository has (`existingMapOutcome`, from the class and GSD's drift verdict in staging). Absent: no existing map to adopt or refresh.
   outcome?: ExistingMapOutcome;
-  // The affected paths of a drift `block`.
-  driftAffectedPaths?: readonly string[];
-  driftThreshold?: number;
+  // The refresh plan (`planRefresh`) for a map the repository already has: a stamped-complete map with GSD's drift verdict in staging, or any map of
+  // an active project. It decides adopt (incremental), a path-scoped map or a full map; an explicit request still wins.
+  refresh?: RefreshPlan;
   // The contract's `files.read` globs; narrower than the repository means a path-scoped map.
   readScope?: readonly string[];
 }
@@ -187,9 +169,9 @@ export interface MappingModeDecision {
 //   - requested `skip`: skip; requested `fast`: fast (`partial`);
 //   - requested `adopt`: adopt when the map is adoptable (drift pass), else unsupported with reduced mode `full`;
 //   - requested `paths`: the directories of the contract read scope, or invalid when that scope is the whole repository;
-//   - otherwise by the outcome: `adopt` takes the map (no mapper; `complete`, because a stamped-complete map holds all seven files);
-//     `refresh` (drift block) maps the affected paths when `refreshScope` allows, else full; every other outcome maps in full in
-//     staging, or the directories of a narrower contract read scope.
+//   - otherwise by the refresh plan when there is one (`planRefresh`: incremental takes the map with no mapper, paths maps its scope, full maps
+//     everything), else by the outcome: `adopt` takes the map (no mapper; `complete`, because a stamped-complete map holds all seven files);
+//     every other outcome maps in full in staging, or the directories of a narrower contract read scope.
 // The existing map is never written in the user's checkout; every regeneration is in the staging workspace.
 export function chooseMappingMode(input: MappingModeInput): Result<MappingModeDecision> {
   const existingMap: ExistingMapClass = input.existingMap ?? 'none';
@@ -220,13 +202,15 @@ export function chooseMappingMode(input: MappingModeInput): Result<MappingModeDe
     default:
       break;
   }
-  if (outcome === 'adopt') return decide('adopt', 'complete stamped map, drift pass: adopted, no remap', undefined, FULL_MAP_FILES);
-  if (outcome === 'refresh') {
-    const paths = refreshScope(input.driftAffectedPaths ?? [], input.driftThreshold ?? DEFAULT_DRIFT_THRESHOLD);
-    return paths === null
-      ? decide('full', 'drift block over a manifest, more areas than the drift threshold or paths that cannot be scoped: full remap in staging')
-      : scoped('drift block inside mapped territory: path-scoped refresh in staging', paths);
+  const refresh = input.refresh;
+  if (refresh !== undefined) {
+    if (refresh.mode === 'incremental') return decide('adopt', `refresh ${refresh.reason}: the map is kept, no remap`, undefined, FULL_MAP_FILES);
+    if (refresh.mode === 'paths' && refresh.scope !== undefined) return scoped(`refresh ${refresh.reason}: path-scoped refresh in staging`, refresh.scope);
+    if (narrower !== null) return scoped(`refresh ${refresh.reason}: contract read scope narrower than the repository`, narrower);
+    return decide('full', `refresh ${refresh.reason}: full remap in staging`);
   }
+  if (outcome === 'adopt') return decide('adopt', 'complete stamped map, drift pass: adopted, no remap', undefined, FULL_MAP_FILES);
+  if (outcome === 'refresh') return decide('full', 'drift block with no refresh plan: full remap in staging');
   if (narrower !== null) return scoped('contract read scope narrower than the repository: path-scoped map', narrower);
   return decide('full', existingMap === 'none' ? 'brownfield repository, full map' : `existing map (${existingMap}) regenerated in staging, full map`);
 }

@@ -8,6 +8,7 @@
 // later at unlisted locations are caught by the staging diff gate, not prevented.
 import { isRefusedAgentCommand, programWords } from './conventions.ts';
 import { matchesAny } from './glob.ts';
+import { readScopePaths } from './mapping.ts';
 import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 import { ROUTINE_PRESET } from './run-contract.ts';
@@ -250,6 +251,9 @@ export interface ScopeInput {
   subagentsTotal?: number;
 }
 
+// The read glob that names the map directory in a path-scoped contract read scope (`apps/api/**` plus this).
+export const PLANNING_READ_GLOB = '.planning/**';
+
 const writeDirOf = (purpose: InvocationPurpose): string => INVOCATION_PURPOSES[purpose].writeDir;
 const join = (base: string, rel: string): string => `${base}/${rel}`;
 const uniqueSorted = (items: Iterable<string>): string[] => [...new Set(items)].sort();
@@ -299,6 +303,12 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
   const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
 
+  // Only the map purpose reads the repository's code; the others read what the map and the indexes hold. `.planning/**` is the map's own directory, always
+  // readable to the mapper, so it is no part of the question whether the contract read scope is narrower than the repository.
+  const repoReadGlobs = contract.files.read.filter((glob) => glob !== PLANNING_READ_GLOB);
+  const narrowedDirs = purpose === 'map' && repoReadGlobs.length > 0 ? readScopePaths(repoReadGlobs) : null;
+  const narrowedRead = narrowedDirs === null ? null : [...narrowedDirs, '.planning'];
+
   const subagents =
     purpose === 'intel' || purpose === 'knowledge'
       ? { total: 0, concurrent: 0 }
@@ -320,6 +330,9 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
     allowRead,
     // The knowledge pass reads its corpus and nothing else: no GSD directory, no skill directory, no other staging path.
     ...(readDir !== undefined ? { readConfine: [join(staging, readDir)] } : {}),
+    // A path-scoped map (a refresh of one area, ONB-11) reads the directories of its contract read scope and the GSD directories it needs, nothing else
+    // of the staging tree (T-04-35). A contract that reads the whole repository confines nothing.
+    ...(readDir === undefined && narrowedRead !== null ? { readConfine: [...narrowedRead.map((dir) => join(staging, dir)), ...input.readRoots.map(trimTrailingSlashes)] } : {}),
     readRoots: purpose === 'knowledge' ? [] : input.readRoots.map(trimTrailingSlashes),
     commands: {
       // No shell for the knowledge pass, whatever strategy is asked for.

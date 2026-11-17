@@ -12,7 +12,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
-import { INVOCATION_PURPOSES, PURPOSE_EXTENSIONS, computeInvocationScope, computeRunScope, runScopeDirs } from '../domain/invocation-scope.ts';
+import { INVOCATION_PURPOSES, PLANNING_READ_GLOB, PURPOSE_EXTENSIONS, computeInvocationScope, computeRunScope, runScopeDirs } from '../domain/invocation-scope.ts';
+import { isScopePath } from '../domain/mapping.ts';
 import type { InvocationScope } from '../domain/invocation-scope.ts';
 import { RootRefusedError } from '../domain/normalized-root.ts';
 import type { RunContract } from '../domain/run-contract.ts';
@@ -21,7 +22,7 @@ import type { OnboardingRow, RunRow, StepResultInput } from '../ports/ledger.ts'
 import type { AppDeps } from './deps.ts';
 import { reserveInvocation, reserveRunInvocation, settleInvocation } from './budget.ts';
 import type { InvocationReservation, SettlementCharge } from './budget.ts';
-import { loadContract, stagingPathOf } from './stages/shared.ts';
+import { loadContract, loadMappingPlan, stagingPathOf } from './stages/shared.ts';
 
 const STORE = 'local';
 const RETENTION = 'onboarding';
@@ -81,6 +82,16 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   const workspace = deps.staging.describe(staging.value, contract.value.body.workspace.baseRevision);
   if (!workspace.ok) return workspace;
 
+  // A path-scoped map (a refresh of one area, ONB-11) reads its scope and the map directory only (T-04-35): the contract read scope the invocation is
+  // held to is narrowed to the planned paths, and the hook enforces it through the scope's read confinement. The stored contract is not changed.
+  const mappingPlan = purpose === 'map' ? loadMappingPlan(deps, onboarding.onboardingId) : ok(null);
+  if (!mappingPlan.ok) return mappingPlan;
+  const scopePaths = mappingPlan.value?.mode === 'paths' ? mappingPlan.value.paths : undefined;
+  const effectiveContract =
+    scopePaths !== undefined && scopePaths.length > 0 && scopePaths.every(isScopePath)
+      ? { ...contract.value.body, files: { ...contract.value.body.files, read: [...scopePaths.map((path) => `${path}/**`), PLANNING_READ_GLOB] } }
+      : contract.value.body;
+
   // The scope is computed before the budget is reserved: computeInvocationScope refuses a work root that is not a normalized absolute
   // path (WR-01) by throwing a RootRefusedError, and a throw after the reservation would leave it unsettled. That refusal is a typed
   // `invalid` error here, so nothing was reserved, started or recorded. Any other throw is a defect, not a work-root problem: it
@@ -89,7 +100,7 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   try {
     scope = computeInvocationScope({
       purpose,
-      contract: contract.value.body,
+      contract: effectiveContract,
       stagingPath: staging.value,
       repoPath: project.value.repoPath,
       dataRoot: deps.profile.dataRoot,

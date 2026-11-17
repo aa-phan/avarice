@@ -109,9 +109,15 @@ export function userOwnedPaths(facts: Pick<RepoFacts, 'codebaseMapFiles' | 'modi
   return sortedUnique([...facts.codebaseMapFiles.filter(editedAfterStamp).map((file) => file.path), ...dirty]);
 }
 
+// The project's active record, as far as a refresh needs it: which version it is and the revision it describes (the commit SHA, no `git:` prefix).
+export interface ActiveRecordView {
+  recordVersion: number;
+  onboardedRevision: string;
+}
+
 export interface LedgerView {
-  // The project (same root commit and path) already has an `active` record.
-  activeRecord: boolean;
+  // The project (same root commit and path) has an `active` record: the onboarding is a refresh of it (ONB-11), not a first onboarding. Null: it has none.
+  activeRecord: ActiveRecordView | null;
   // Every onboarding of the project, oldest first.
   onboardings: ReadonlyArray<{ onboardingId: string; state: OnboardingState }>;
 }
@@ -135,13 +141,6 @@ export function classifyPreflight(facts: RepoFacts, view: LedgerView, request: P
       kind: 'invalid',
       field: 'request.promote',
       reason: `promotion ${JSON.stringify(request.promote)} is not authorized: the onboarding preset allows only "none"`,
-    });
-  }
-  if (view.activeRecord) {
-    return err({
-      kind: 'conflict',
-      expected: 'existing_state_conflict: no active project record for this repository',
-      actual: 'an active project record (refresh and re-onboarding of an active project arrive in a later phase)',
     });
   }
   const live = view.onboardings.filter((onboarding) => !isStopState(onboarding.state));
@@ -181,6 +180,8 @@ export function classifyPreflight(facts: RepoFacts, view: LedgerView, request: P
       drift: null,
       userOwned: bounded('userOwned', userOwnedPaths(facts, codebaseMap)),
     },
+    // An active record makes this onboarding a refresh of it (ONB-11): the workspace stage plans how much of the map to rebuild from this revision.
+    ...(view.activeRecord !== null ? { refreshOf: { recordVersion: view.activeRecord.recordVersion, onboardedRevision: view.activeRecord.onboardedRevision } } : {}),
     submodules: bounded('submodules', facts.submodules),
     nestedRepos: bounded('nestedRepos', facts.nestedRepos),
     workspaceManifests: bounded('workspaceManifests', facts.workspaceManifests),

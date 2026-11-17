@@ -1,7 +1,7 @@
 // chooseMappingMode: the decision table of docs/repository-onboarding.md "Mapping-mode decision table".
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_DRIFT_THRESHOLD, chooseMappingMode, isScopePath, readScopePaths, refreshScope } from '../../src/domain/mapping.ts';
+import { chooseMappingMode, isScopePath, readScopePaths } from '../../src/domain/mapping.ts';
 import type { ExistingMapClass } from '../../src/domain/preflight.ts';
 
 const EXISTING: readonly ExistingMapClass[] = ['none', 'stamped-complete', 'stamped-partial', 'unstamped', 'unknown-format', 'user-edited'];
@@ -116,39 +116,29 @@ describe('chooseMappingMode: adopt and path-scoped maps (ONB-6, D-10)', () => {
     assert.equal(decision.value.paths, undefined);
   });
 
-  it('refreshes a drift block over paths inside mapped directories as a path-scoped map, over a manifest as a full map', () => {
-    const inside = chooseMappingMode({ isBrownfield: true, existingMap: 'stamped-complete', outcome: 'refresh', driftAffectedPaths: ['src/util', 'src/core/a.ts'] });
-    assert.ok(inside.ok);
-    assert.equal(inside.value.mode, 'paths');
-    assert.deepEqual(inside.value.paths, ['src/core/a.ts', 'src/util']);
-    const manifest = chooseMappingMode({ isBrownfield: true, existingMap: 'stamped-complete', outcome: 'refresh', driftAffectedPaths: ['src/util', 'package.json'] });
-    assert.ok(manifest.ok);
-    assert.equal(manifest.value.mode, 'full');
-    assert.equal(manifest.value.completeness, 'complete');
-  });
-});
-
-describe('refreshScope', () => {
-  it('scopes plain affected paths, sorted and without duplicates', () => {
-    assert.deepEqual(refreshScope(['gamma', 'alpha', 'alpha', 'beta']), ['alpha', 'beta', 'gamma']);
-  });
-
-  it('is a full remap (null) with no affected path, a manifest at any depth, or more top-level entries than the threshold', () => {
-    assert.equal(refreshScope([]), null);
-    for (const manifest of ['package.json', 'apps/web/package.json', 'pnpm-workspace.yaml', 'Cargo.toml', 'services/api/go.mod']) {
-      assert.equal(refreshScope(['src/a.ts', manifest]), null, manifest);
-    }
-    assert.equal(refreshScope(['a', 'b', 'c', 'd']), null, `four top-level entries exceed the default threshold of ${DEFAULT_DRIFT_THRESHOLD}`);
-    assert.deepEqual(refreshScope(['a', 'b', 'c']), ['a', 'b', 'c'], 'exactly the threshold still scopes');
-    assert.deepEqual(refreshScope(['a', 'b', 'c', 'd'], 4), ['a', 'b', 'c', 'd'], 'the threshold is a parameter');
-    assert.equal(refreshScope(['a/1', 'a/2', 'a/3', 'a/4', 'a/5']) !== null, true, 'many paths under one top-level entry are one area');
+  it('takes the refresh plan (plan 04-14): incremental adopts the map, paths maps its scope, full maps everything; an explicit request still wins', () => {
+    const base = { isBrownfield: true, existingMap: 'stamped-complete' as const, outcome: 'refresh' as const };
+    const incremental = chooseMappingMode({ ...base, outcome: 'adopt', refresh: { mode: 'incremental', reason: 'no-change' } });
+    assert.ok(incremental.ok);
+    assert.equal(incremental.value.mode, 'adopt');
+    assert.equal(incremental.value.completeness, 'complete');
+    const scoped = chooseMappingMode({ ...base, refresh: { mode: 'paths', scope: ['src/core/a.ts', 'src/util'], reason: 'drift-block' } });
+    assert.ok(scoped.ok);
+    assert.equal(scoped.value.mode, 'paths');
+    assert.deepEqual(scoped.value.paths, ['src/core/a.ts', 'src/util']);
+    const full = chooseMappingMode({ ...base, refresh: { mode: 'full', reason: 'manifest-change' } });
+    assert.ok(full.ok);
+    assert.equal(full.value.mode, 'full');
+    assert.equal(full.value.completeness, 'complete');
+    const fast = chooseMappingMode({ ...base, requested: 'fast', refresh: { mode: 'paths', scope: ['src'], reason: 'drift-block' } });
+    assert.ok(fast.ok);
+    assert.equal(fast.value.mode, 'fast', '--mode still overrides the plan');
   });
 
-  it('is a full remap when any path could change the meaning of the --paths value (T-04-27)', () => {
-    for (const bad of ['a,b', '--paths', '-x', '../outside', '/abs', 'a b', 'a/../b', 'a//b', 'a\nb', '', 'a;rm', '$(x)']) {
-      assert.equal(refreshScope(['ok/dir', bad]), null, JSON.stringify(bad));
-    }
-    assert.equal(refreshScope(Array.from({ length: 51 }, (_, i) => `d${i}/x`), 99), null, 'more than 50 paths is no scoped refresh');
+  it('maps in full for a drift block that carries no refresh plan', () => {
+    const decision = chooseMappingMode({ isBrownfield: true, existingMap: 'stamped-complete', outcome: 'refresh' });
+    assert.ok(decision.ok);
+    assert.equal(decision.value.mode, 'full');
   });
 });
 

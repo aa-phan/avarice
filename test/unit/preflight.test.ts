@@ -41,7 +41,8 @@ function facts(over: Partial<RepoFacts> = {}): RepoFacts {
   };
 }
 
-const NO_STATE: LedgerView = { activeRecord: false, onboardings: [] };
+const NO_STATE: LedgerView = { activeRecord: null, onboardings: [] };
+const ACTIVE = { recordVersion: 3, onboardedRevision: 'a'.repeat(40) };
 
 describe('classifyExistingMap', () => {
   const cases: Array<[string, Partial<RepoFacts>, string]> = [
@@ -126,16 +127,30 @@ describe('classifyPreflight refusals (ONB-6)', () => {
     return { kind: error.kind, text: JSON.stringify(error) };
   }
 
-  it('refuses with existing_state_conflict when an active record exists for the project', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: true, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {}));
+  it('plans a refresh, not a refusal, when an active record exists for the project (ONB-11)', () => {
+    const result = classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {});
+    assert.ok(result.ok, 'an active project is refreshed');
+    assert.deepEqual(result.value.findings['refreshOf'], { recordVersion: 3, onboardedRevision: 'a'.repeat(40) });
+    assert.equal(result.value.continueOnboardingId, null, 'the stopped onboarding of the earlier record is not continued');
+  });
+
+  it('states no refresh for a project without an active record', () => {
+    const result = classifyPreflight(facts(), NO_STATE, {});
+    assert.ok(result.ok);
+    assert.equal('refreshOf' in result.value.findings, false);
+  });
+
+  it('still refuses a refresh while another onboarding of the project is running', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_run', state: 'mapping' }] }, {}));
     assert.equal(r.kind, 'conflict');
     assert.match(r.text, /existing_state_conflict/);
+    assert.match(r.text, /onb_run/);
   });
 
   const NON_STOP: OnboardingState[] = ['contract_proposed', 'mapping', 'paused', 'validating', 'validation_failed', 'planning', 'planning_ready', 'stale'];
   for (const state of NON_STOP) {
     it(`refuses with existing_state_conflict while another onboarding is ${state}`, () => {
-      const r = refusal(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_other', state }] }, {}));
+      const r = refusal(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_other', state }] }, {}));
       assert.equal(r.kind, 'conflict');
       assert.match(r.text, /existing_state_conflict/);
       assert.match(r.text, /onb_other/);
@@ -144,24 +159,24 @@ describe('classifyPreflight refusals (ONB-6)', () => {
 
   for (const state of ['blocked', 'incompatible', 'deactivated'] as const) {
     it(`does not refuse because of an onboarding that stopped as ${state}`, () => {
-      assert.ok(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_old', state }] }, {}).ok);
+      assert.ok(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_old', state }] }, {}).ok);
     });
   }
 
   it('continues an onboarding that is still in discovered instead of creating a second one', () => {
-    const r = classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_first', state: 'discovered' }] }, {});
+    const r = classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_first', state: 'discovered' }] }, {});
     assert.ok(r.ok);
     assert.equal(r.value.continueOnboardingId, 'onb_first');
   });
 
   it('refuses when a discovered onboarding exists next to one that is already running', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_a', state: 'discovered' }, { onboardingId: 'onb_b', state: 'mapping' }] }, {}));
+    const r = refusal(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_a', state: 'discovered' }, { onboardingId: 'onb_b', state: 'mapping' }] }, {}));
     assert.equal(r.kind, 'conflict');
   });
 
   it('knows every lifecycle state: each is either refused, continued, or ignored', () => {
     for (const state of ONBOARDING_STATES) {
-      const result = classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_s', state }] }, {});
+      const result = classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_s', state }] }, {});
       assert.ok(typeof result.ok === 'boolean', state);
     }
   });
@@ -180,7 +195,7 @@ describe('classifyPreflight refusals (ONB-6)', () => {
   });
 
   it('reports a promotion request before a state conflict', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: true, onboardings: [] }, { promote: 'copy' }));
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [] }, { promote: 'copy' }));
     assert.equal(r.kind, 'invalid');
   });
 });

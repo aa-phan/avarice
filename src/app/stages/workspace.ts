@@ -12,8 +12,11 @@ import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboar
 import type { GsdSetting } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import { existingMapOutcome } from '../../domain/preflight.ts';
-import type { DriftVerdict, ExistingMapClass } from '../../domain/preflight.ts';
-import type { GsdOnboarding } from '../../ports/gsd-onboarding.ts';
+import type { ExistingMapClass, ExistingMapOutcome } from '../../domain/preflight.ts';
+import { FULL_REMAP_DRIFT_THRESHOLD, planRefresh } from '../../domain/refresh-plan.ts';
+import type { RefreshPlan } from '../../domain/refresh-plan.ts';
+import { driftOf, refreshFacts, refreshOfPreflight } from '../refresh.ts';
+import type { DriftFinding, RefreshOf } from '../refresh.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { loadContract, stopIncompatible } from './shared.ts';
 
@@ -33,24 +36,56 @@ function existingMapOf(preflight: unknown): ExistingMapClass {
   return typeof value === 'string' && EXISTING_MAP_CLASSES.includes(value) ? (value as ExistingMapClass) : 'none';
 }
 
-// What GSD's own `verify codebase-drift` said in staging, reduced to the verdict the outcome rule reads. Only a clean answer is a `pass`: a verdict
-// GSD skipped (no STRUCTURE.md, no stamp, not a repository), could not give (an unresolvable stamp, exit 69) or that failed to run is `unreadable`,
-// so a stamp alone, forged or stale, never makes a map adoptable (T-04-26).
-interface DriftFinding {
-  verdict: DriftVerdict;
-  affectedPaths: string[];
-  threshold: number | null;
-  reason: string | null;
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const MAX_RECORDED_CHANGED = 200;
+
+// The refresh plan of a map the repository already has (ONB-11) and the facts it rests on, as `mapping:plan` records them. The planner is
+// `planRefresh`; a git read that fails (a revision git cannot resolve, a diff past the bound) plans a full map and says why.
+interface RefreshDecision {
+  plan: RefreshPlan;
+  record: Record<string, unknown>;
 }
 
-const MAX_RECORDED_PATHS = 50;
+function decideRefresh(ctx: StageContext, stagingPath: string, toRevision: string, refreshOf: RefreshOf | null, drift: DriftFinding | null): RefreshDecision | null {
+  // A first onboarding of a repository whose map has no drift question (not a complete stamped map) has nothing to refresh.
+  if (refreshOf === null && drift === null) return null;
+  // The active record's revision, else the stamp of the map the repository already has.
+  const fromRevision = refreshOf?.onboardedRevision ?? drift?.lastMappedCommit ?? null;
+  const basis = {
+    ...(refreshOf !== null ? { fromRecordVersion: refreshOf.recordVersion } : {}),
+    fromRevision,
+    toRevision,
+    threshold: FULL_REMAP_DRIFT_THRESHOLD,
+    drift: drift?.verdict ?? null,
+  };
+  const full = (reason: string): RefreshDecision => ({ plan: { mode: 'full', reason }, record: { ...basis, mode: 'full', reason } });
+  if (fromRevision === null || !COMMIT_SHA.test(fromRevision)) return full('no-stamp: no revision to measure the changes from');
+  const facts = refreshFacts(ctx.deps, stagingPath, { fromRevision, toRevision, drift });
+  if (!facts.ok) return full(`changed-paths-unavailable: ${facts.error.kind}`);
+  const plan = planRefresh(facts.value, { threshold: FULL_REMAP_DRIFT_THRESHOLD });
+  return {
+    plan,
+    record: {
+      ...basis,
+      mode: plan.mode,
+      ...(plan.scope !== undefined ? { scope: plan.scope } : {}),
+      reason: plan.reason,
+      newTopLevelDirs: [...facts.value.newTopLevelDirs],
+      changedPathCount: facts.value.changedPaths.length,
+      changedPaths: facts.value.changedPaths.slice(0, MAX_RECORDED_CHANGED),
+      manifestChanged: facts.value.manifestChanged,
+    },
+  };
+}
 
-async function driftOf(gsd: GsdOnboarding, staging: string): Promise<DriftFinding> {
-  const drift = await gsd.checkDrift(staging);
-  if (!drift.ok) return { verdict: 'unreadable', affectedPaths: [], threshold: null, reason: drift.error.kind };
-  const d = drift.value;
-  const verdict: DriftVerdict = d.block ? 'block' : d.skipped ? 'unreadable' : 'pass';
-  return { verdict, affectedPaths: d.affectedPaths.slice(0, MAX_RECORDED_PATHS), threshold: d.threshold, reason: d.reason };
+// What the workspace stage records as the outcome for the map the repository has. The class and GSD's drift verdict give it (`existingMapOutcome`);
+// the refresh plan overrides it for a complete stamped map, whose drift verdict alone cannot say that a manifest change or new directories make a
+// `pass` or a `block` a full remap: incremental is `adopt`, an unreadable drift stays `full-in-staging`, and every other plan is `refresh`.
+function outcomeOf(existingMap: ExistingMapClass, drift: DriftFinding | null, refresh: RefreshDecision | null): ExistingMapOutcome {
+  const byClass = existingMapOutcome(existingMap, drift?.verdict ?? null);
+  if (refresh === null || existingMap !== 'stamped-complete') return byClass;
+  if (refresh.plan.mode === 'incremental') return 'adopt';
+  return drift?.verdict === 'unreadable' || drift === null ? byClass : 'refresh';
 }
 
 export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRow): Promise<Result<void>> => {
@@ -99,15 +134,17 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
   // has a drift question: the others are regenerated in staging whatever the drift is (docs "Repositories already using GSD").
   const existingMap = existingMapOf(row.preflight);
   const drift = existingMap === 'stamped-complete' ? await driftOf(gsd, stagingPath) : null;
-  const outcome = existingMapOutcome(existingMap, drift?.verdict ?? null);
+  // ONB-11: a map with a drift question, or any map of an active project (the onboarding is then a refresh of its record), is planned by how much
+  // changed since the revision it describes: incremental, path-scoped or full.
+  const refresh = decideRefresh(ctx, stagingPath, contract.value.body.workspace.baseRevision, refreshOfPreflight(row.preflight), drift);
+  const outcome = outcomeOf(existingMap, drift, refresh);
   const decision = chooseMappingMode({
     isBrownfield: probe.value.isBrownfield,
     requested: contract.value.body.mapping.mode,
     existingMap,
     outcome,
     readScope: contract.value.body.files.read,
-    ...(drift !== null ? { driftAffectedPaths: drift.affectedPaths } : {}),
-    ...(drift?.threshold != null ? { driftThreshold: drift.threshold } : {}),
+    ...(refresh !== null ? { refresh: refresh.plan } : {}),
   });
   if (!decision.ok) {
     if (decision.error.kind !== 'unsupported') return decision;
@@ -144,6 +181,7 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     requested: contract.value.body.mapping.mode,
     ...(decision.value.paths !== undefined ? { paths: decision.value.paths } : {}),
     drift: drift === null ? null : { verdict: drift.verdict, affectedPaths: drift.affectedPaths, threshold: drift.threshold, reason: drift.reason },
+    ...(refresh !== null ? { refresh: refresh.record } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
   };
   const planned = deps.ledger.recordStepResult(row.onboardingId, {

@@ -45,6 +45,9 @@ export interface StagingWorkspace {
   changes(path: string, pin: string): Result<StagingChanges>;
   describe(path: string, pin: string): Result<WorkspaceDescription>;
   listTracked(path: string, pin: string): Result<string[]>;
+  // The repository-relative paths that differ between two commits of the staging repository (`git diff --name-only`), sorted and unique; names only,
+  // from git objects. Refuses a revision that is not a full lowercase commit SHA, and a diff of more than 20000 paths (a refresh then plans a full map).
+  changedBetween(path: string, from: string, to: string): Result<string[]>;
   // The subset of `candidates` (repository-relative paths) that the repository's own committed `.gitignore` files ignore at
   // `pin` (deferred item 10): the files are read from git objects at the pin, never from the staging or the user's working
   // tree, and matched by git itself. Nothing else counts as a rule (no `.git/info/exclude`, no user or system excludes).

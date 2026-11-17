@@ -37,14 +37,14 @@ export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Re
   // What the ledger already knows about this project (same root commit and path).
   const known = deps.ledger.findProject({ rootCommit: facts.rootCommit, repoPath: facts.gitRoot });
   if (!known.ok) return known;
-  let view: LedgerView = { activeRecord: false, onboardings: [] };
+  let view: LedgerView = { activeRecord: null, onboardings: [] };
   if (known.value !== null) {
     const active = deps.ledger.getActiveRecord(known.value.projectId);
     if (!active.ok) return active;
     const onboardings = deps.ledger.listOnboardings(known.value.projectId);
     if (!onboardings.ok) return onboardings;
     view = {
-      activeRecord: active.value !== null,
+      activeRecord: active.value === null ? null : { recordVersion: active.value.version, onboardedRevision: active.value.onboardedRevision.replace(/^git:/, '') },
       onboardings: onboardings.value.map((row) => ({ onboardingId: row.onboardingId, state: row.state })),
     };
   }

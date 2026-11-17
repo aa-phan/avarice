@@ -29,6 +29,7 @@ const MAX_IGNORE_FILES = 200;
 const MAX_IGNORE_FILE_BYTES = 1024 * 1024;
 const MAX_IGNORE_CANDIDATES = 5000;
 const MAX_READ_FILES = 200;
+const MAX_CHANGED_PATHS = 20000;
 const IGNORE_CHUNK = 500;
 
 // A candidate git can be asked about on its command line without quoting or option confusion: plain path characters only.
@@ -244,6 +245,16 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');
     const listed = runGit(['ls-tree', '-r', '--name-only', '-z', pin], { cwd: path });
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
+  }
+
+  changedBetween(path: string, from: string, to: string): Result<string[]> {
+    if (!COMMIT_SHA.test(from)) return invalid('from', 'a full lowercase commit SHA is required');
+    if (!COMMIT_SHA.test(to)) return invalid('to', 'a full lowercase commit SHA is required');
+    const diff = runGit(['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', from, to, '--'], { cwd: path, neutralizeFilters: true });
+    if (!diff.ok) return failure(diff.error);
+    const names = nulSplit(diff.value.stdout);
+    if (names.length > MAX_CHANGED_PATHS) return invalid('changedBetween', `more than ${MAX_CHANGED_PATHS} paths changed`);
+    return ok(sortedUnique(names));
   }
 
   // Blobs of the pinned tree, by `git cat-file blob <pin>:<path>`: an edit in staging or in the user's checkout is never seen. A path
