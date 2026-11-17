@@ -47,6 +47,7 @@ import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts
 import { checksNotRun, measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
 import type { CheckRunResult, InventoryMeasure } from '../checks.ts';
 import { queryContext } from '../context.ts';
+import { manualPackItems } from '../manual-inputs.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { flushDueNotifications } from '../notify.ts';
 import { faultPoint } from '../onboarding-service.ts';
@@ -277,6 +278,17 @@ async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Pro
       });
     }
   }
+  // The excerpts the owner recorded by hand (`avarice context add`) follow the index items, within what is left of the budget. Each is cited by its source and the digest of its
+  // file and is data like any other pack text: the prompt fences the whole pack, and no excerpt is a source of policy.
+  const manual = manualPackItems(deps, ctx.runId, PACK_BUDGET - usedTokens);
+  if (!manual.ok) return manual;
+  for (const item of manual.value.items) {
+    refs.push({ source: 'manual-context', id: item.ref.id, scope: item.ref.scope, revision: item.ref.revision ?? null, freshness: item.ref.freshness, estTokens: item.estTokens, untrusted: true });
+    lines.push(`${refs.length}. [manual-context] ${item.title} (${item.ref.scope} at ${item.ref.revision ?? 'an unknown revision'}, ${item.ref.freshness})`);
+    lines.push(...item.excerpt.split('\n').map((line) => `   ${line}`));
+    usedTokens += item.estTokens;
+  }
+  notes.push(...manual.value.notes.map((n) => storedText(n, 200)));
   const text = lines.join('\n');
   const recorded = recordStep(ctx, 'context:pack', attemptOrdinal, { attemptId: null, items: refs, notes, usedTokens, digest: digestOf({ refs, text }) }, startedMs);
   return recorded.ok ? ok(text) : recorded;

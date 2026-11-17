@@ -11,6 +11,7 @@ import type { ContextSource, ExternalRef, Freshness } from '../ports/context-sou
 import type { AppDeps } from './deps.ts';
 import { refreshQueryFor } from './context.ts';
 import type { SourceName } from './context.ts';
+import { LEDGER_ONLY_REFS } from './manual-inputs.ts';
 import { BRIEF_REF_KIND, BRIEF_REF_PROVIDER, readBriefFile } from './run-start.ts';
 
 // The blocked reasons a reference can stop a run with, most severe first (a flagged assumption of plan 04-20): a source that is no longer readable says more than
@@ -102,6 +103,11 @@ export async function refreshRunRefs(deps: AppDeps, runId: string): Promise<Resu
   for (const ref of recorded.value) {
     const nowMs = deps.clock.nowMs();
     let after: ExternalRef;
+    // A reference the owner recorded by hand (a pasted excerpt, a pull request URL) names no live source: it stays as it was recorded, and nothing is asked or written.
+    if (LEDGER_ONLY_REFS.some((r) => r.provider === ref.provider && r.kind === ref.kind)) {
+      refreshed.push(ref);
+      continue;
+    }
     if (ref.provider === BRIEF_REF_PROVIDER && ref.kind === BRIEF_REF_KIND) {
       after = refreshBrief(ref, nowMs);
     } else {

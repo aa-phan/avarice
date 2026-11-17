@@ -3,7 +3,7 @@
 // its file; this file does not change.
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './args.ts';
-import type { CommandExtras, CommandModule, Io } from './args.ts';
+import type { CommandExtras, CommandModule, Io, ParsedArgs } from './args.ts';
 import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
 import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
@@ -49,6 +49,11 @@ commands:
 
 function isCommand(name: string): name is (typeof COMMANDS)[number] {
   return (COMMANDS as readonly string[]).includes(name);
+}
+
+// A composition flag a module gives as a boolean, or as a function of the arguments when one command has a reading form and a writing one.
+function flagOf(flag: boolean | ((args: ParsedArgs) => boolean) | undefined, args: ParsedArgs): boolean {
+  return typeof flag === 'function' ? flag(args) : flag === true;
 }
 
 function defaultIo(): Io {
@@ -158,7 +163,7 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
   const composed =
     typeof own === 'function'
       ? (own(env, selected.value) as { ok: true; value: { deps: AppDeps; close(): void } })
-      : createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true, profile: selected.value });
+      : createDeps(env, overrides, { readOnly: flagOf(mod.readOnly, args), gsd: flagOf(mod.needsGsd, args), profile: selected.value });
   if (!composed.ok) {
     io.err(`${errorLine(name, composed.message)}\n`);
     return composed.code;

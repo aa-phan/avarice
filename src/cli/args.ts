@@ -91,9 +91,10 @@ export interface CommandExtras {
 // What a file under src/cli/commands/ exports. `readOnly` makes composition open the store read-only.
 export interface CommandModule<Deps> {
   run(args: ParsedArgs, deps: Deps, io: Io, extras?: CommandExtras): Promise<number> | number;
-  readOnly?: boolean;
+  // A command with one form that reads and another that writes (`context <term>` and `context add`) gives a function of its arguments instead.
+  readOnly?: boolean | ((args: ParsedArgs) => boolean);
   // Composition also locates GSD and builds its adapter (a read-only command that reads the indexes through GSD).
-  needsGsd?: boolean;
+  needsGsd?: boolean | ((args: ParsedArgs) => boolean);
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
   // `env` is the environment the command runs in: the process environment, or the one a test passes to main().

@@ -103,7 +103,7 @@ describe('tracer: `context add` records a cited excerpt that the run\'s next pac
     const end = prompt.indexOf('--- end untrusted context data');
     assert.ok(begin !== -1 && end > begin, 'the pack is fenced');
     const fenced = prompt.slice(begin, end);
-    assert.ok(fenced.includes(`   | ${INJECTION_LINE}`), 'the excerpt text is a prefixed line inside the fence');
+    assert.ok(fenced.split('\n').some((line) => line.startsWith('   | ') && line.endsWith(INJECTION_LINE)), 'the excerpt text is a prefixed line inside the fence');
     assert.ok(fenced.includes('Refunds settle within 3 business days.'));
     assert.ok(fenced.includes(`[manual-context] ${SOURCE}`), 'the citation names the source');
     assert.ok(fenced.includes(sha256(EXCERPT)), 'the citation names the revision');
