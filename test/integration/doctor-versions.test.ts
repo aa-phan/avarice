@@ -3,11 +3,11 @@
 // through the real CLI under the owner's installed gsd-core (1.17.x), and then doctor and `start` run under a gsd-core 1.18.0.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { recordCompatibility } from '../../src/app/doctor.ts';
-import { disposeDoctorFixtures, doctor, doctorFixture, fakeGsd, reportOf, temp, track } from '../helpers/doctor-fixtures.ts';
+import { disposeDoctorFixtures, doctor, doctorFixture, fakeGsd, reportOf, temp, track, writeProfileConfig } from '../helpers/doctor-fixtures.ts';
 import type { DoctorFixture } from '../helpers/doctor-fixtures.ts';
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
 import type { FakeClaudeScript } from '../helpers/fake-claude.ts';
@@ -23,12 +23,6 @@ function withClaude(script: FakeClaudeScript): { f: DoctorFixture; extra: Record
   const fake = makeFakeClaude(script);
   track(fake.dir);
   return { f, extra: { AVARICE_CLAUDE_BIN: fake.bin } };
-}
-
-function writeProfileConfig(f: DoctorFixture, profile: string, config: Record<string, unknown>): void {
-  const dir = join(f.roots.AVARICE_CONFIG_HOME, 'profiles', profile);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'config.json'), JSON.stringify({ schema: 1, profile, ...config }));
 }
 
 describe('a credential reference that is an environment variable is an error finding that names it (S-49)', () => {

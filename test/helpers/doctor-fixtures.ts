@@ -1,7 +1,7 @@
 // Fixtures of the `avarice doctor` tests (plan 04-25): a profile under a temp directory, a temp HOME, a gsd-core of a chosen version that is not the owner's, and the
 // shape of the report. The test files register `after(disposeDoctorFixtures)`. A file under test/ that no test spawns must do nothing at import time, so nothing here runs.
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFakeGsdCore } from './fake-gsd-core.ts';
@@ -83,4 +83,11 @@ export const statePath = (f: DoctorFixture): string => join(f.roots.AVARICE_DATA
 export function track(dir: string): string {
   cleanup.push(dir);
   return dir;
+}
+
+// Writes the profile's config file (hand-edited JSON under the config home) before the first command creates its default.
+export function writeProfileConfig(f: DoctorFixture, profile: string, config: Record<string, unknown>): void {
+  const dir = join(f.roots.AVARICE_CONFIG_HOME, 'profiles', profile);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'config.json'), JSON.stringify({ schema: 1, profile, ...config }));
 }
