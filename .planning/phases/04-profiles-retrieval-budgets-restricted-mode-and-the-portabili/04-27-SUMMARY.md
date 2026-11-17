@@ -168,7 +168,7 @@ coverage:
 
 - **RED (task 1):** `test/integration/manual-equivalents.test.ts` against the production CLI in a child process and a real killed-then-resumed run. The target (`exits 0, records one reference ...`) failed on `0 !== 1` (no manual-context row): `context add ...` was read as the index search for the term `add` (exit 0, writes nothing). `gsd check tdd-red-evidence` returned `RED_EVIDENCE_OK` (`04-27-red-task1.json`). Semantic assessment: the run started and was killed at the planned point, the resume completed, and the nine other new cases failed on their own planned assertions; no import, syntax or fixture fault.
 - **RED (task 2):** the target (`exits 0, stores the log redacted as artifact kind manual-evidence ...`) failed because the CLI answered `unknown command 'evidence'` (and `pr`, `comment`); `RED_EVIDENCE_OK` (`04-27-red-task2.json`). The 12 task-1 cases still passed in the same file.
-- **GREEN:** `25103dd` and `87fee09`; the file is 26 of 26 green with the status cases, 30 of 30 with them.
+- **GREEN:** `25103dd` and `87fee09`; the file was 26 of 26 green after task 2 and 30 of 30 after task 3.
 - **REFACTOR:** none. Task 3 is `type="auto"` (no `tdd`): its test and the status change are one commit.
 
 ## Verification

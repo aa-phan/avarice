@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-26-PLAN.md
-last_updated: "2026-11-17T10:41:36.588Z"
+stopped_at: Completed 04-27-PLAN.md
+last_updated: "2026-11-17T11:30:44.353Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 047bff41c1e40b566814a7e0d1bb221101c0d3c7
+state_head: 1899ed1da3a6ed000177e466b014d84bc401bfbd
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 27 of 39
+Plan: 28 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -189,6 +189,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P24 | 24 min | 2 tasks | 21 files |
 | Phase 04 P25 | 21 min | 3 tasks | 20 files |
 | Phase 04 P26 | 45min | 3 tasks | 17 files |
+| Phase 04 P27 | 55 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -463,6 +464,10 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-25: S-38 record incompatibility is derived by recordCompatibility (no admitted gsd-core, outside 1.17.x, or another minor), shared by doctor and start; start refuses with record-incompatible and never writes the record
 - [Phase 04]: 04-26: git-files searches committed objects at HEAD inside the read scope (default: all tracked paths minus .git and the secret globs); snippets are 40 lines and 1500 characters around the hit — T-04-71 and T-04-72: the term is data and a hit outside the scope is never returned; uncommitted or untracked text cannot answer
 - [Phase 04]: 04-26: a stale index item whose cited path is gone at HEAD keeps its place in the pack as confirmed false, its content withheld and a note naming it; gsd-planning sections are untrusted, skipped when the graph returned a document node, and fresh/stale by the state.json digest — Packs never carry text of a file that no longer exists; planning text is data, never a policy source (T-04-73)
+- [Phase 04]: 04-27: manual evidence is recorded inconclusive, external, on a manual:sha256 revision no gate judges, attached to the run's latest attempt (no attempt: exit 3)
+- [Phase 04]: 04-27: a manual excerpt is at most 16000 bytes and evidence at most 2 MiB, both strict UTF-8, because the redacting store cannot redact bytes it cannot decode
+- [Phase 04]: 04-27: context add is the recording form only when --file, --source or --run is given; otherwise context add <words> is still a search
+- [Phase 04]: 04-27: status gains an appended optional manualEvidence key; a resume leaves manual-context and github pull-request references as recorded
 
 ### Roadmap Evolution
 
@@ -530,8 +535,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T10:41:29.356Z
-Stopped at: Completed 04-26-PLAN.md
+Last session: 2026-11-17T11:30:44.324Z
+Stopped at: Completed 04-27-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
