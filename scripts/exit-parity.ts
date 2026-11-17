@@ -25,6 +25,8 @@ import { checksToRun, sandboxSetup, writePathOf } from '../src/app/checks.ts';
 import type { AppDeps } from '../src/app/deps.ts';
 import { canonicalAbsolute } from '../src/adapters/fs/canonical-path.ts';
 import { SandboxedExecutor } from '../src/adapters/exec/sandboxed-executor.ts';
+import { knownProfileRoots } from '../src/adapters/fs/profile-registry.ts';
+import { resolveConfigHome } from '../src/adapters/fs/profile-paths.ts';
 import { CloneRunWorkspace } from '../src/adapters/git/run-workspace.ts';
 import { GitRunSource } from '../src/adapters/git/run-source.ts';
 import { buildHookPolicy } from '../src/adapters/host-claude/hook-policy.ts';
@@ -308,6 +310,8 @@ interface PassContext {
   nodeModulesFrom: string;
   copyMode: { value: 'clone' | 'copy' | 'none' };
   contract: RunContract;
+  // The data roots, work roots and config homes of the profiles on this machine other than the one of this run (SEC-1, D-19), denied to every command like a run's own.
+  otherRoots: string[];
 }
 
 // A fresh validation clone of the pin with the node_modules tree copied in (symlinks stay symlinks, so nothing links back into the owner's tree) and every directory a declared check
@@ -361,7 +365,7 @@ function unitSetup(ctx: PassContext, clone: string, runId: string, gsdCoreBin: s
     dataRoot: realpathSync(ctx.dataRoot),
     home: realpathSync(homedir()),
     workRoot: realpathSync(ctx.workRoot),
-    profileRoots: [],
+    profileRoots: ctx.otherRoots,
     scratchDir,
     workspace: described.value,
     readRoots: [],
@@ -475,7 +479,10 @@ export async function parityReport(options: ParityOptions): Promise<ParityOutcom
       writeFileSync(join(dataRoot, 'state.db'), '');
       const executor = new SandboxedExecutor();
       const mode = { value: 'none' as 'clone' | 'copy' | 'none' };
-      const ctx: PassContext = { executor, base, workRoot, dataRoot, source, pin: compiled.pin, nodeModulesFrom, copyMode: mode, contract: firstContract.contract };
+      // The profiles of this machine come from the config homes this run could see; a list that cannot be computed stops the run (a deny list is never read as empty).
+      const others = knownProfileRoots(resolveConfigHome(process.env), 'exit-parity', { home: homedir(), ownDataRoot: dataRoot, ownWorkRoot: workRoot });
+      if (!others.ok) throw new Refused(`the other profiles of this machine cannot be listed: ${describeError(others.error as unknown as { kind: string } & Record<string, unknown>)}`);
+      const ctx: PassContext = { executor, base, workRoot, dataRoot, source, pin: compiled.pin, nodeModulesFrom, copyMode: mode, contract: firstContract.contract, otherRoots: others.value };
       const newRun = (): string => newId('run_', Date.now(), randomBytes(10));
       const insideSource = (path: string): boolean => path === realpathSync(source) || path.startsWith(`${realpathSync(source)}${sep}`);
 
@@ -485,7 +492,7 @@ export async function parityReport(options: ParityOptions): Promise<ParityOutcom
       const supervisor = new Map<string, RunResult>();
       if (supervisorClone !== null) {
         cwdsInsideSource ||= insideSource(supervisorClone);
-        const deps = { profile: { workRoot, dataRoot, otherRoots: [] }, home: homedir() } as unknown as AppDeps;
+        const deps = { profile: { workRoot, dataRoot, otherRoots: ctx.otherRoots }, home: homedir() } as unknown as AppDeps;
         const setup = sandboxSetup(deps, { runId: supervisorRun } as unknown as RunRow, supervisorClone);
         if (!setup.ok) throw new Error(`the supervisor sandbox could not be set up: ${describeError(setup.error as unknown as { kind: string } & Record<string, unknown>)}`);
         const envNames = new Set<string>(Object.keys(setup.value.env));

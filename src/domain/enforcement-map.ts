@@ -109,7 +109,7 @@ export const ENFORCEMENT_MAP: readonly EnforcementRow[] = [
     enforcer: 'avarice',
     avariceRole: 'Owns the per-profile data, config and work roots and the sandbox denial of other profiles',
     bypassLimitation: 'A user can copy files between directories; a profile placed outside the default parents by an environment variable is not covered by the sandbox denial',
-    test: tracked('test/integration/run-sandbox-other-profiles.test.ts'),
+    test: tracked('test/integration/profile-isolation.test.ts'),
   },
   {
     id: 'redaction',
@@ -117,7 +117,7 @@ export const ENFORCEMENT_MAP: readonly EnforcementRow[] = [
     enforcer: 'avarice',
     avariceRole: 'Owns the redactor applied at the event and log boundaries',
     bypassLimitation: 'Pattern-based; unknown secret formats can pass',
-    test: proved('04-07'),
+    test: tracked('test/integration/redaction-suite.test.ts'),
   },
   {
     id: 'prompt-injection',

@@ -1448,7 +1448,7 @@ export async function runLiveRunUnit(spec: RunUnitSpec): Promise<LiveRunUnit> {
     dataRoot: fixture.dataRoot,
     home: realOrSelf(deps.home ?? homedir()),
     workRoot: fixture.workRoot,
-    profileRoots: [],
+    profileRoots: deps.profile.otherRoots,
     scratchDir: scratch,
     workspace: described.value,
     readRoots: [fixture.gsdCoreDir, agentsDir].map(realOrSelf),
