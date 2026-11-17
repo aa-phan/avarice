@@ -2,7 +2,7 @@
 // (mergeKnowledgeGraph) and the validation of the merged graph (validateKnowledgeGraph). Pure; no files, no tools.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeKnowledgeGraph } from '../../src/domain/graph-merge.ts';
+import { mergeChangedPaths, mergeKnowledgeGraph } from '../../src/domain/graph-merge.ts';
 import { KNOWLEDGE_LIMITS, documentCoverage, validateKnowledgeGraph } from '../../src/domain/knowledge-validation.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 
@@ -403,5 +403,102 @@ describe('documentCoverage and the coverage rule (G-01-154, plan 01-25)', () => 
     assert.ok(result.valid, problemsOf(result).join('; '));
     assert.deepEqual(result.coverage, { expected: 3, covered: ['.planning/PROJECT.md', 'docs/guide.md'], unread: ['docs/decisions/ADR-001-storage.md'] });
     assert.equal(KNOWLEDGE_LIMITS.documentShare, 0.5);
+  });
+});
+
+// Plan 04-17 (ONB-11, D-11, spike S4-B): the code graph of an incremental refresh. The extraction is the whole tree's (a path-subset extraction loses the
+// edges that leave the extracted set); mergeChangedPaths applies it against the previous graph and reports the node-level diff.
+describe('mergeChangedPaths: the previous graph, a whole-tree extraction and the changed paths (ONB-11)', () => {
+  const code = (id: string, file: string, extra: Json = {}): Json => ({ id, label: id, file_type: 'code', source_file: file, _origin: 'ast', ...extra });
+  const rel = (source: string, target: string, relation = 'imports'): Json => ({ source, target, relation, confidence: 'EXTRACTED', confidence_score: 1, _origin: 'ast' });
+  const graphOf = (nodes: Json[], links: Json[], extra: Json = {}): Json => ({ directed: false, multigraph: false, graph: {}, built_at_commit: PIN, nodes, links, ...extra });
+  const react = (): Json => ({ id: 'ref_react', label: 'react', file_type: 'code' });
+
+  // Three files: app.ts imports lib.ts and the external package `ref_react`; util.ts calls into lib.ts.
+  const previous = (): Json =>
+    graphOf(
+      [code('app', 'src/app.ts', { community: 0 }), code('lib', 'src/lib.ts', { community: 0 }), code('util', 'src/util.ts', { community: 1 }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')],
+    );
+  const keysOf = (g: Json): string[] => linksOf(g).map((l) => `${l['source']}>${l['target']}:${l['relation']}`).sort();
+
+  it('replaces the changed file\'s nodes and edges and keeps every edge that crosses the boundary, new ones included', () => {
+    // app.ts now also imports util.ts and a new function calls into lib.ts: two new edges whose other end is outside the changed set.
+    const extracted = graphOf(
+      [code('app', 'src/app.ts', { community: 0 }), code('app_run', 'src/app.ts', { community: 0 }), code('lib', 'src/lib.ts', { community: 0 }), code('util', 'src/util.ts', { community: 1 }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('app', 'util'), rel('app_run', 'lib', 'calls'), rel('util', 'lib', 'calls')],
+    );
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'app_run', 'lib', 'util', 'ref_react']);
+    assert.deepEqual(keysOf(graph), ['app>lib:imports', 'app>ref_react:imports', 'app>util:imports', 'app_run>lib:calls', 'util>lib:calls']);
+    assert.equal(delta.nodesAdded, 1);
+    assert.equal(delta.nodesRemoved, 0);
+    assert.equal(delta.edgesAdded, 2);
+    assert.equal(delta.boundaryEdgesAdded, 2, 'both new edges leave the changed file');
+    assert.equal(delta.boundaryEdgesRemoved, 0);
+    assert.equal(delta.outside, 0);
+    assert.equal(delta.nodesKept, 3, 'lib, util and ref_react are the previous graph\'s');
+  });
+
+  it('drops the edges that ended at a node of a changed file that is gone, from unchanged files too', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('lib2', 'src/lib.ts'), code('util', 'src/util.ts'), react()], [rel('app', 'lib2'), rel('app', 'ref_react')]);
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/lib.ts'], deletedPaths: [] });
+    assert.deepEqual(keysOf(graph), ['app>lib2:imports', 'app>ref_react:imports'], 'the edges that ended at the old lib node are gone');
+    assert.equal(delta.nodesRemoved, 1);
+    assert.equal(delta.nodesAdded, 1);
+    assert.equal(delta.edgesRemoved, 2, 'app>lib and util>lib ended at a node that no longer exists');
+    assert.equal(delta.boundaryEdgesRemoved, 2);
+  });
+
+  it('removes the nodes of a deleted file and the edges that ended at them, and an external node nothing refers to any more', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('util', 'src/util.ts')], [rel('app', 'util')]);
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/lib.ts', 'src/app.ts'], deletedPaths: ['src/lib.ts'] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'util']);
+    assert.deepEqual(keysOf(graph), ['app>util:imports']);
+    assert.equal(delta.nodesRemoved, 2, 'lib and ref_react');
+    assert.equal(delta.outside, 0, 'ref_react has no file, so it is not a change outside the paths');
+  });
+
+  it('is the extraction: a file outside the changed paths whose nodes differ from the previous graph is reported, and the graph still follows the extraction', () => {
+    const extracted = graphOf(
+      [code('app', 'src/app.ts'), code('lib', 'src/lib.ts'), code('util', 'src/util.ts', { label: 'changed behind our back' }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')],
+    );
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(byId(graph, 'util')?.['label'], 'changed behind our back');
+    assert.equal(delta.outside, 1);
+  });
+
+  it('treats the clustering keys as derived: a node whose only difference is its community is unchanged', () => {
+    const extracted = previous();
+    for (const node of nodesOf(extracted)) if (node['community'] !== undefined) node['community'] = 7;
+    const { delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(delta.outside, 0);
+    assert.equal(delta.nodesAdded + delta.nodesRemoved + delta.edgesAdded + delta.edgesRemoved, 0);
+  });
+
+  it('spells a path the way the graph does: a leading ./ and backslashes make no difference', () => {
+    const extracted = graphOf([code('app', './src\\app.ts', { label: 'new' }), code('lib', 'src/lib.ts'), code('util', 'src/util.ts'), react()], [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')]);
+    const { delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(delta.outside, 0);
+  });
+
+  it('does not mutate its inputs, repeats exactly and keeps the other keys of the extraction', () => {
+    const prev = previous();
+    const extracted = graphOf([code('app', 'src/app.ts')], [], { hyperedges: [{ id: 'h' }] });
+    const before = JSON.stringify([prev, extracted]);
+    const one = mergeChangedPaths({ previous: prev, extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    const two = mergeChangedPaths({ previous: prev, extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(JSON.stringify([prev, extracted]), before);
+    assert.deepEqual(one, two);
+    assert.deepEqual(one.graph['hyperedges'], [{ id: 'h' }]);
+    assert.equal(one.graph['built_at_commit'], PIN);
+  });
+
+  it('emits no duplicate node and no duplicate edge', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('app', 'src/app.ts'), code('lib', 'src/lib.ts')], [rel('app', 'lib'), rel('app', 'lib')]);
+    const { graph } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'lib']);
+    assert.equal(linksOf(graph).length, 1);
   });
 });
