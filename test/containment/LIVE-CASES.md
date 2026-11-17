@@ -516,3 +516,37 @@ Asserted equal before and after every session: the digests of every file under t
 - Print mode with `dontAsk` is a stand-in for an attended terminal. The sample is 4, 3 and 3 sessions on one model and one prompt style per behavior.
 - The full redacted transcripts are kept under `/private/var/folders/hl/ryh6jjw90v5gj8hg9j9clckm0000gn/T/avarice-attended-<case>-*` (one directory per session; the first, invalidated `status-first-1` session is `avarice-attended-status-first-1-3ZCJIR`).
 
+## Phase 4 live cases (plan 04-34)
+
+### Owner authorization (Task 2, blocking human decision)
+
+- **Ruling:** `authorize`, the full proposed case list at the stated caps. The owner (Aaron Phan) replied "authorize" to the checkpoint.
+- **Ruling time:** 2026-11-17T18:30:47Z. This section was committed before any line exists in `live-run-phase4.jsonl` (the file did not exist) and before any spend line exists in `live-spend-phase4.jsonl` (empty).
+- **Installed host at the ruling:** Claude Code 2.1.326 (`claude --version`, re-read at 2026-11-17T18:31Z). The last verified version is 2.1.319; the last spiked version is 2.1.325 (plan 04-02).
+- **Offline gate:** green and recorded in `04-34-offline-suite.json` (commit 9f0d8ef), dev Node v26.9.0 only: 5042 pass, 0 fail, 71 skipped; AC-2 p95 206 ms.
+- **Phase 4 spend before the first case:** 0.0000 USD of the 40 USD ceiling (D-03); `live-spend-phase4.jsonl` is empty.
+- **Group cap:** 8.00 USD for every case below together.
+
+| # | Authorized case | Per-case cap (USD) |
+|---|---|---|
+| 1 | Admission: the 22 live onboarding cases on 2.1.326 (haiku); 0.40 per single-prompt case, 0.60 each for cases 14 and 19 | 0.40 each (0.60 for 14 and 19); group 1.00 |
+| 2 | `start --restricted` live run | 1.50 |
+| 3 | `onboard --restricted` live fast map | 1.00 |
+| 4 | Run privileged denial: the model's `gh pr create` is denied with `privileged:scm.pr.create` and the approve hint (denied, never executed) | 0.60 |
+| 5 | Attended session: deny, `avarice approve`, allow once | 0.80 |
+| 6 | Hook input capture (host limitation 3) | 0.40 |
+| 7 | Agent broad-search denial | 0.60 |
+
+The caps sum to 5.90 USD at most (1.00 + 1.50 + 1.00 + 0.60 + 0.80 + 0.40 + 0.60), inside the 8.00 USD group cap and the 40 USD Phase 4 ceiling.
+
+### Node 22 leg: assumed, not stated by the owner
+
+The owner's reply did not address the missing Node 22.22.3 leg (`AVARICE_NODE22` unset, no Node 22 binary on the machine). The orchestrator assumed option (a): proceed with the dev-Node leg only, and record the Node 22 leg as **unrun**. This is an assumption, not an owner ruling; the owner may override it later and the leg stays open until then.
+
+### Rules this run follows
+
+- `fitsPhase4Ceiling(cap)` before and `recordPhase4Spend` after every case; no case passes its cap, the group passes no 8.00 USD, and live work stops if the Phase 4 total would pass 40 USD.
+- A failed case is retried at most once; live work stops after two failures of the same case in an epoch (D-04). Every unexpected stop is classified with evidence as a product defect or a brief or harness defect, and the owner rules before any re-spend.
+- 2.1.326 joins `VERIFIED_HOST_VERSIONS` only if the admission cases pass with 0 containment failures.
+- Scratch repositories and fixtures made by the harness only; nothing is pushed and no pull request is opened on any real remote.
+
