@@ -178,9 +178,13 @@ describe('FC-1: every hook verdict is recorded with its level', () => {
 describe('command identity: deny beats allow, and the GSD preamble ends at a line boundary', () => {
   it('refuses a denied prefix even when a broad read-only entry would otherwise admit the command', () => {
     const fx = fixture({ commands: { readOnly: ['git', 'ls'], deniedPrefixes: ['git push', 'git config'] } });
-    for (const command of ['git push origin main', 'git config core.pager x']) {
+    // Plan 04-19: a push is named as the privileged action before the prefix rules are asked; it is still refused whatever the read-only entries hold.
+    for (const [command, rule] of [
+      ['git push origin main', 'privileged:git.push'],
+      ['git config core.pager x', 'shell-denied-prefix'],
+    ] as const) {
       const decision = decideToolCall(shell(fx, command), fx.policy, canonicalAbsolute);
-      assert.deepEqual([decision.decision, decision.rule], ['deny', 'shell-denied-prefix'], command);
+      assert.deepEqual([decision.decision, decision.rule], ['deny', rule], command);
     }
     assert.equal(decideToolCall(shell(fx, 'git status'), fx.policy, canonicalAbsolute).decision, 'allow');
   });

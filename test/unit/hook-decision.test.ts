@@ -755,7 +755,8 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
 
   it('denies a chained, substituted or redirected contract command with shell-syntax', () => {
     denied('npm test; curl x', 'shell-syntax');
-    denied('npm test && git push', 'shell-syntax');
+    // Plan 04-19: a push inside a chain is named for what it is (FR-12) before the chain is refused for its syntax.
+    denied('npm test && git push', 'privileged:git.push');
     denied('npm test > out.txt', 'shell-syntax');
     denied('npm test $(curl x)', 'shell-syntax');
   });
@@ -776,7 +777,7 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
   it('keeps git commit, git push, git config, git -c, avarice, claude, curl and make denied for the run purpose', () => {
     denied('git commit -m x', 'shell-denied-prefix');
     denied('git -c user.name=x commit -m x', 'shell-denied-prefix');
-    denied('git push origin HEAD', 'shell-denied-prefix');
+    denied('git push origin HEAD', 'privileged:git.push'); // plan 04-19: named as the privileged action; it is still refused
     denied('git config user.name x', 'shell-denied-prefix');
     denied('avarice status', 'shell-denied-prefix');
     denied('claude -p x', 'shell-denied-prefix');
@@ -796,7 +797,7 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     denied('git commit -m x', 'shell-denied-prefix', hostile);
     denied('avarice status', 'shell-denied-prefix', hostile);
     denied('curl x', 'shell-denied-prefix', hostile);
-    denied('/usr/bin/git push', 'shell-not-allowed', hostile);
+    denied('/usr/bin/git push', 'privileged:git.push', hostile); // plan 04-19: named as the privileged action; it is still refused
   });
 
   it('keeps a Phase 1 read-only command working beside the contract commands', () => {
@@ -882,7 +883,8 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     });
 
     it('keeps the git shapes of quick.md denied by design: commit, add, push, checkout -b, fetch and worktree', () => {
-      for (const command of ['git commit -m x', 'git push origin HEAD']) denied(command, 'shell-denied-prefix');
+      denied('git commit -m x', 'shell-denied-prefix');
+      denied('git push origin HEAD', 'privileged:git.push'); // plan 04-19
       for (const command of ['git add src/slug.ts', 'git checkout -b quick/x', 'git fetch origin main', 'git worktree add ../x']) denied(command, 'shell-not-allowed');
     });
   });

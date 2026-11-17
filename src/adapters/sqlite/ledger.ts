@@ -85,6 +85,7 @@ import type {
   WorkItemTransitionInput,
 } from '../../ports/ledger.ts';
 import { abort, LedgerAbort, toPortError, tx } from './db.ts';
+import { PENDING_REQUEST_SQL, consumeApprovalRow } from './approval-rows.ts';
 import { appendEventRow, EventDataError } from './events.ts';
 import type { Db } from './db.ts';
 
@@ -716,25 +717,12 @@ export class SqliteLedger implements Ledger {
   consumeApprovalAndStart(input: ConsumeApprovalInput): Result<ConsumedApproval | null> {
     return tx(this.db, () => {
       checkApprovalKey(input.scope, input.action, input.paramsDigest);
-      const found = this.db
-        .prepare(
-          `SELECT approval_id FROM approvals
-           WHERE run_id = ? AND action = ? AND params_digest = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?
-           ORDER BY granted_at, rowid LIMIT 1`,
-        )
-        .get(input.scope, input.action, input.paramsDigest, iso(input.nowMs)) as Row | undefined;
-      if (found === undefined) return null;
-      const approvalId = str(found['approval_id']);
-      const changed = this.db.prepare('UPDATE approvals SET consumed_at = ? WHERE approval_id = ? AND consumed_at IS NULL AND revoked_at IS NULL').run(iso(input.nowMs), approvalId).changes;
-      if (Number(changed) !== 1) return null;
-      const started = this.insertEvent({
-        type: input.startEvent.type,
-        ...(input.startEvent.level !== undefined ? { level: input.startEvent.level } : {}),
-        ...(input.startEvent.runId !== undefined ? { runId: input.startEvent.runId } : {}),
-        data: { ...input.startEvent.data, approvalId },
-        nowMs: input.nowMs,
-      });
-      return { approvalId, startSeq: started.seq };
+      try {
+        return consumeApprovalRow(this.db, input);
+      } catch (e) {
+        if (e instanceof EventDataError) abort({ kind: 'invalid', field: e.field, reason: e.reason });
+        throw e;
+      }
     });
   }
 
@@ -751,15 +739,7 @@ export class SqliteLedger implements Ledger {
 
   findPendingApprovalRequest(query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null> {
     return guarded(() => {
-      const row = this.db
-        .prepare(
-          `SELECT r.ts AS ts, r.data_json AS data_json FROM events r
-           WHERE r.type = 'approval.requested' AND r.run_id IS ?
-             AND json_extract(r.data_json, '$.scope') = ? AND json_extract(r.data_json, '$.action') = ? AND json_extract(r.data_json, '$.paramsDigest') = ?
-             AND NOT EXISTS (SELECT 1 FROM events g WHERE g.type = 'approval.granted' AND json_extract(g.data_json, '$.requestId') = json_extract(r.data_json, '$.requestId'))
-           ORDER BY r.seq DESC LIMIT 1`,
-        )
-        .get(scopeRunId(query.scope) ?? null, query.scope, query.action, query.paramsDigest) as Row | undefined;
+      const row = this.db.prepare(PENDING_REQUEST_SQL).get(scopeRunId(query.scope) ?? null, query.scope, query.action, query.paramsDigest) as Row | undefined;
       return row === undefined ? null : toApprovalRequest(row);
     });
   }

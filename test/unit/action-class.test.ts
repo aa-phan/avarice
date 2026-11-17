@@ -8,6 +8,7 @@ const PRIVILEGED = [
   'scm.pr.create',
   'scm.pr.update',
   'scm.pr.merge',
+  'scm.api.write',
   'scm.comment.create',
   'tracker.write',
   'release.publish',

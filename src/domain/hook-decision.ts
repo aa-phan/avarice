@@ -13,6 +13,8 @@ import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
 import { lexicalAbsolute } from './normalized-root.ts';
+import { classifyCommandLine } from './privileged-commands.ts';
+import type { PrivilegedCommand } from './privileged-commands.ts';
 import { shellRuleReason } from './run-shell-rules.ts';
 import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation-scope.ts';
 
@@ -88,6 +90,9 @@ export interface HookDecision {
   explicit?: boolean;
   // What the model is told besides the rule (a deny only): the corrective step.
   reason?: string;
+  // A deny of a privileged shell form (rule `privileged:<action>`, plan 04-19): the action and the parameters an approval would bind. The hook entry turns it
+  // into an approval request and the reason that names it; this module reads no ledger.
+  privileged?: PrivilegedCommand;
 }
 
 export type Canon = (path: string) => string | null;
@@ -96,6 +101,9 @@ export type PolicyResult = { ok: true; policy: HookPolicy } | { ok: false; reaso
 
 // The rule of an Agent call refused because the invocation already has `subagentsConcurrent` subagents in flight (O-1).
 export const SUBAGENT_CONCURRENT_RULE = 'budget:subagentsConcurrent';
+
+// The rule of a privileged shell form refused for want of an approval: `privileged:<action>`.
+export const PRIVILEGED_RULE_PREFIX = 'privileged:';
 
 const GENERAL_PURPOSE = 'general-purpose';
 const MAX_COMMAND_CHARS = 16_384;
@@ -751,6 +759,10 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
     );
   const command = call.command.trim();
   if (command === '' || command.length > MAX_COMMAND_CHARS) return refuse('shell-syntax');
+
+  // Plan 04-19 (FR-12): a privileged form is named before the prefix rules, so the refusal names the action and the approval route instead of the bare prefix.
+  const privileged = classifyCommandLine(command);
+  if (privileged !== null) return { decision: 'deny', rule: `${PRIVILEGED_RULE_PREFIX}${privileged.action}`, privileged };
 
   let lines: string[] = [command];
   let preamble = false;

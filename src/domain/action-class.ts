@@ -18,6 +18,8 @@ export const ACTION_CLASSES: Readonly<Record<string, ActionClass>> = Object.free
   'scm.pr.create': 'privileged',
   'scm.pr.update': 'privileged',
   'scm.pr.merge': 'privileged',
+  // A write through the SCM platform's API (`gh api` with a method other than GET): any change the platform allows, so it is its own action (plan 04-19).
+  'scm.api.write': 'privileged',
   'scm.comment.create': 'privileged',
   'tracker.write': 'privileged',
   'release.publish': 'privileged',

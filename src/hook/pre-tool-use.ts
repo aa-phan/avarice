@@ -9,12 +9,18 @@
 // the budget inside the same BEGIN IMMEDIATE transaction that appends the `hook.decision` event, so a call is
 // never charged without a row and never allowed without a charge. A deny is printed as the PreToolUse deny JSON
 // with exit 0. Events carry the tool name, rule, IDs and a staging-relative target, never a tool payload (T-01-35).
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { relative } from 'node:path';
+import { paramsDigest, paramsSummary } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
-import { INEFFECTIVE_SEARCH_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import { newId } from '../domain/ids.ts';
+import { INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
+import { privilegedReason } from '../domain/privileged-commands.ts';
+import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
+import { pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -236,6 +242,45 @@ function stopReasonOf(stop: LoopStop): string {
     : `AVARICE: ${stop.count} consecutive searches without a read; the run is stopped for escalation`;
 }
 
+// A privileged form refused for want of an approval (plan 04-19; FR-12, S-7): the request that is still waiting for this scope, action and parameters is named
+// again, else a new `apr_` request is recorded, and the denial itself is recorded as `policy.denied`. The caller's BEGIN IMMEDIATE transaction is open, so the
+// request, the denial and the decision they belong to commit together. The events carry the action, the digest and a bounded redacted summary of the parameters,
+// never the command line. `scope` is the run ID of a run, or `attended:<session id>`, which has no run ID (src/domain/approval.ts scopeRunId).
+interface PrivilegedDenial {
+  scope: string;
+  runId?: string;
+  invocationId?: string;
+  tool: string;
+  privileged: PrivilegedCommand;
+  nowMs: number;
+}
+
+function recordPrivilegedDenial(db: DatabaseSync, o: PrivilegedDenial): string {
+  const { action, params } = o.privileged;
+  const digest = paramsDigest(params);
+  const summary = paramsSummary(params);
+  const ruleId = `${PRIVILEGED_RULE_PREFIX}${action}`;
+  let requestId = pendingRequestId(db, { runId: o.runId, scope: o.scope, action, paramsDigest: digest });
+  if (requestId === undefined) {
+    requestId = newId('apr_', o.nowMs, randomBytes(10));
+    appendEventRow(db, {
+      type: 'approval.requested',
+      ...(o.runId !== undefined ? { runId: o.runId } : {}),
+      data: { requestId, scope: o.scope, action, paramsDigest: digest, paramsSummary: summary, ruleId },
+      nowMs: o.nowMs,
+    });
+  }
+  appendEventRow(db, {
+    type: 'policy.denied',
+    level: 'warn',
+    ...(o.runId !== undefined ? { runId: o.runId } : {}),
+    ...(o.invocationId !== undefined ? { invocationId: o.invocationId } : {}),
+    data: { ruleId, action, scope: o.scope, ...(o.runId !== undefined ? { runId: o.runId } : {}), requestId, tool: short(o.tool), paramsDigest: digest, target: summary, source: 'hook' },
+    nowMs: o.nowMs,
+  });
+  return requestId;
+}
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -268,6 +313,12 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   try {
     final = inTransaction(db, () => {
       let result = decided;
+      // FR-12: a privileged shell form is refused here whatever the run's command set holds. An approval is never consumed in a run (it never widens the
+      // run's commands), so the denial names the request the owner approves and the run goes on without the effect.
+      if (result.decision === 'deny' && result.privileged !== undefined) {
+        const requestId = recordPrivilegedDenial(db, { scope: policy.runId, runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, nowMs: Date.now() });
+        result = { decision: 'deny', rule: result.rule, reason: privilegedReason(result.privileged.action, requestId) };
+      }
       if (edit !== undefined) {
         const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), edit.canonical) as { digest: string } | undefined;
         const objection = decideReadBeforeEdit({ tool, exists: edit.state.exists, recorded: recorded?.digest, current: edit.state.digest, displayPath: edit.display });
