@@ -312,23 +312,24 @@ describe('avarice repo add (ONB-3, ONB-6)', () => {
 });
 
 describe('ONB-6 refusals through the CLI', () => {
-  it('refuses a second onboarding of a project that already has an active record', () => {
+  it('refuses `repo add` for a project that already has an active record, and refreshes it on `onboard` instead (ONB-11)', () => {
     const repo = makeScratchRepo();
     cleanups.push(repo.dispose);
     const roots = fixtureProfile();
     assert.equal(cli(roots, ['onboard', '--policy', 'onboarding', repo.path]).code, 0);
 
-    for (const argv of [['onboard', '--policy', 'onboarding', repo.path], ['repo', 'add', repo.path]]) {
-      const refused = cli(roots, argv);
-      assert.equal(refused.code, 3, refused.stderr + refused.stdout);
-      assert.match(refused.stderr, /existing_state_conflict/);
-    }
+    const refused = cli(roots, ['repo', 'add', repo.path]);
+    assert.equal(refused.code, 3, refused.stderr + refused.stdout);
+    assert.match(refused.stderr, /existing_state_conflict/);
     // OPS-7: a refusal by `repo add` is prefixed with the command and subcommand and followed by the command that shows the state.
-    const refusedAdd = cli(roots, ['repo', 'add', repo.path]);
-    assert.match(refusedAdd.stderr.split('\n')[0] ?? '', /^avarice repo add: refused: /);
-    assert.equal(refusedAdd.stderr.split('\n')[1], 'run: avarice status');
-    assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 1);
-    assert.equal(rows(roots, 'SELECT 1 FROM project_records').length, 1);
+    assert.match(refused.stderr.split('\n')[0] ?? '', /^avarice repo add: refused: /);
+    assert.equal(refused.stderr.split('\n')[1], 'run: avarice status');
+    assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 1, 'the refusal created nothing');
+
+    const refreshed = cli(roots, ['onboard', '--policy', 'onboarding', repo.path]);
+    assert.equal(refreshed.code, 0, refreshed.stderr + refreshed.stdout);
+    assert.equal(rows(roots, 'SELECT 1 FROM onboardings').length, 2, 'the refresh is a second onboarding of the same project');
+    assert.deepEqual(rows<{ version: number }>(roots, 'SELECT version FROM project_records ORDER BY version').map((r) => r.version), [1, 2]);
   });
 
   it('refuses a new onboarding while another onboarding of the project is mid-flight', () => {

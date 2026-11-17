@@ -124,6 +124,9 @@ export interface LedgerView {
 
 export interface PreflightRequest {
   promote?: string;
+  // The caller means to refresh the project's active record (`avarice onboard`, ONB-11). Without it a project that has an active record is refused:
+  // `repo add` only registers, and registering a project that is already onboarded is not a refresh.
+  refresh?: boolean;
 }
 
 export interface PreflightClassification {
@@ -141,6 +144,13 @@ export function classifyPreflight(facts: RepoFacts, view: LedgerView, request: P
       kind: 'invalid',
       field: 'request.promote',
       reason: `promotion ${JSON.stringify(request.promote)} is not authorized: the onboarding preset allows only "none"`,
+    });
+  }
+  if (view.activeRecord !== null && request.refresh !== true) {
+    return err({
+      kind: 'conflict',
+      expected: 'existing_state_conflict: no active project record for this repository',
+      actual: `an active project record (version ${view.activeRecord.recordVersion}); refresh it with: avarice onboard --policy onboarding <repo>`,
     });
   }
   const live = view.onboardings.filter((onboarding) => !isStopState(onboarding.state));

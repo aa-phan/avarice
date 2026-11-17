@@ -16,6 +16,8 @@ export interface OnboardRequest {
   mode?: string;
   promote?: string;
   budgetOverrides?: Readonly<Record<string, unknown>>;
+  // `onboard` of a project that has an active record refreshes it (ONB-11); `repo add` does not and is refused for such a project.
+  refresh?: boolean;
 }
 
 export interface Registered {
@@ -49,7 +51,7 @@ export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Re
     };
   }
 
-  const classified = classifyPreflight(facts, view, request.promote === undefined ? {} : { promote: request.promote });
+  const classified = classifyPreflight(facts, view, { ...(request.promote === undefined ? {} : { promote: request.promote }), ...(request.refresh === true ? { refresh: true } : {}) });
   if (!classified.ok) return classified;
   if (classified.value.continueOnboardingId !== null && known.value !== null) {
     return ok({ projectId: known.value.projectId, onboardingId: classified.value.continueOnboardingId });

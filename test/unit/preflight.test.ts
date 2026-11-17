@@ -127,8 +127,15 @@ describe('classifyPreflight refusals (ONB-6)', () => {
     return { kind: error.kind, text: JSON.stringify(error) };
   }
 
-  it('plans a refresh, not a refusal, when an active record exists for the project (ONB-11)', () => {
-    const result = classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {});
+  it('refuses a caller that does not mean to refresh when an active record exists for the project (`repo add`)', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {}));
+    assert.equal(r.kind, 'conflict');
+    assert.match(r.text, /existing_state_conflict/);
+    assert.match(r.text, /avarice onboard/);
+  });
+
+  it('plans a refresh, not a refusal, when an active record exists for the project and the caller refreshes (ONB-11)', () => {
+    const result = classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, { refresh: true });
     assert.ok(result.ok, 'an active project is refreshed');
     assert.deepEqual(result.value.findings['refreshOf'], { recordVersion: 3, onboardedRevision: 'a'.repeat(40) });
     assert.equal(result.value.continueOnboardingId, null, 'the stopped onboarding of the earlier record is not continued');
@@ -141,7 +148,7 @@ describe('classifyPreflight refusals (ONB-6)', () => {
   });
 
   it('still refuses a refresh while another onboarding of the project is running', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_run', state: 'mapping' }] }, {}));
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_run', state: 'mapping' }] }, { refresh: true }));
     assert.equal(r.kind, 'conflict');
     assert.match(r.text, /existing_state_conflict/);
     assert.match(r.text, /onb_run/);

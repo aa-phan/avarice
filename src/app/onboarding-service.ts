@@ -64,6 +64,8 @@ export function startOnboarding(deps: AppDeps, request: StartRequest): Result<Re
     mode: request.mode ?? 'full',
     promote: request.promote ?? 'none',
     budgetOverrides: request.budgetOverrides ?? {},
+    // An onboarding of a project that has an active record is a refresh of it (ONB-11); the workspace stage plans how much of the map to rebuild.
+    refresh: true,
   });
   if (!registered.ok) return registered;
   faultPoint('after-transition:discovered');

@@ -134,3 +134,117 @@ describe('tracer: onboarding an active project with commits only under apps/api 
     assert.deepEqual(checkoutSnapshot(repo.path), before, 'the checkout is byte-identical');
   });
 });
+
+const BLOCK = (affected: string[], stamp: string): Record<string, unknown> => ({
+  block: true,
+  skipped: false,
+  reason: 'drift',
+  last_mapped_commit: stamp,
+  threshold: 3,
+  action: 'warn',
+  affected_paths: affected,
+});
+
+function contractOf(roots: CliRoots, onboardingId: string): { files: { delete: string[]; read: string[] } } {
+  const [row] = rows<{ body_json: string }>(roots, 'SELECT c.body_json FROM contracts c JOIN onboardings o ON o.contract_run_id = c.run_id WHERE o.onboarding_id = ?', onboardingId);
+  return JSON.parse(row?.body_json as string) as { files: { delete: string[]; read: string[] } };
+}
+
+function latestRecord(roots: CliRoots): { version: number; mapping_mode: string; completeness: string } {
+  const [row] = rows<{ version: number; mapping_mode: string; completeness: string }>(roots, 'SELECT version, mapping_mode, completeness FROM project_records ORDER BY version DESC LIMIT 1');
+  return row as { version: number; mapping_mode: string; completeness: string };
+}
+
+describe('a full refresh (ONB-11)', () => {
+  it('a commit that changes package.json plans and runs a full map, which replaces the map in staging', async () => {
+    const { roots, repo } = fixture();
+    assert.equal((await onboard(roots, repo)).outcome.state, 'active');
+    commitFiles(repo, { 'package.json': '{"name":"stamped-fixture","version":"2"}\n' }, 'bump the manifest');
+    const before = checkoutSnapshot(repo.path);
+
+    const second = await onboard(roots, repo);
+    assert.equal(second.outcome.state, 'active', second.outcome.message ?? '');
+    assert.equal(second.mapCalls.length, 1, 'the mapper ran once');
+    assert.match(second.mapCalls[0]?.prompt ?? '', /^\/gsd-map-codebase\n/, 'no --paths');
+    const plan = stepOf<RefreshStep>(roots, second.onboardingId, 'mapping:plan');
+    assert.equal(plan?.mode, 'full');
+    assert.equal(plan?.completeness, 'complete');
+    assert.equal(plan?.refresh?.mode, 'full');
+    assert.match(plan?.refresh?.reason ?? '', /^manifest-change/);
+    assert.deepEqual(plan?.refresh?.changedPaths, ['package.json']);
+    assert.deepEqual(contractOf(roots, second.onboardingId).files.delete, ['.planning/codebase/**'], 'the old map may be deleted in staging');
+    const record = latestRecord(roots);
+    assert.deepEqual([record.version, record.mapping_mode, record.completeness], [2, 'full', 'complete']);
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'the checkout is byte-identical');
+  });
+
+  it('three new top-level directories plan a full map, two plan a paths map (the threshold of 3, ONB-11)', async () => {
+    for (const [dirs, mode] of [[['alpha', 'beta'], 'paths'], [['alpha', 'beta', 'gamma'], 'full']] as const) {
+      const { roots, repo } = fixture();
+      assert.equal((await onboard(roots, repo)).outcome.state, 'active');
+      commitFiles(repo, Object.fromEntries(dirs.map((dir) => [`${dir}/x.ts`, `export const ${dir} = 1;\n`])), 'new directories');
+      const second = await onboard(roots, repo, driftDouble(BLOCK([...dirs], repo.sourceCommit)));
+      assert.equal(second.outcome.state, 'active', second.outcome.message ?? '');
+      const plan = stepOf<RefreshStep>(roots, second.onboardingId, 'mapping:plan');
+      assert.equal(plan?.mode, mode, `${dirs.length} new directories`);
+      assert.deepEqual(plan?.refresh?.newTopLevelDirs, [...dirs]);
+      if (mode === 'paths') assert.deepEqual(plan?.paths, [...dirs]);
+      else assert.equal(plan?.paths, undefined);
+    }
+  });
+});
+
+describe('an incremental refresh (ONB-11)', () => {
+  it('a commit that touches one source file with no drift runs no mapper, keeps the map and rebuilds the indexes', async () => {
+    const { roots, repo } = fixture();
+    assert.equal((await onboard(roots, repo)).outcome.state, 'active');
+    commitFiles(repo, { 'src/index.ts': 'export const answer = 43;\n' }, 'touch one source file');
+    const before = checkoutSnapshot(repo.path);
+
+    const second = await onboard(roots, repo);
+    assert.equal(second.outcome.state, 'active', second.outcome.message ?? '');
+    assert.equal(second.mapCalls.length, 0, 'no mapper invocation');
+    assert.equal(stepOf(roots, second.onboardingId, 'launch:map'), null, 'no map invocation was reserved or recorded');
+    const plan = stepOf<RefreshStep>(roots, second.onboardingId, 'mapping:plan');
+    assert.equal(plan?.mode, 'adopt');
+    assert.equal(plan?.outcome, 'adopt');
+    assert.equal(plan?.refresh?.mode, 'incremental');
+    assert.deepEqual(plan?.refresh?.changedPaths, ['src/index.ts']);
+    const indexSteps = rows<{ step: string }>(roots, "SELECT step FROM onboarding_steps WHERE onboarding_id = ? AND step LIKE 'index:%'", second.onboardingId);
+    assert.ok(indexSteps.length > 0, 'the index steps ran (until plan 04-17 they rebuild the indexes whole)');
+    const record = latestRecord(roots);
+    assert.deepEqual([record.version, record.mapping_mode, record.completeness], [2, 'adopt', 'complete']);
+    assert.deepEqual(checkoutSnapshot(repo.path), before, 'the checkout is byte-identical');
+  });
+
+  it('a commit that changes nothing outside .planning plans an incremental refresh with reason no-change', async () => {
+    const { roots, repo } = fixture();
+    assert.equal((await onboard(roots, repo)).outcome.state, 'active');
+    commitFiles(repo, {}, 'empty commit');
+    const second = await onboard(roots, repo);
+    assert.equal(second.outcome.state, 'active', second.outcome.message ?? '');
+    assert.equal(second.mapCalls.length, 0);
+    const plan = stepOf<RefreshStep>(roots, second.onboardingId, 'mapping:plan');
+    assert.equal(plan?.refresh?.mode, 'incremental');
+    assert.match(plan?.refresh?.reason ?? '', /^no-change/);
+  });
+});
+
+describe('a refresh with nothing to measure from plans a full map (ONB-11)', () => {
+  it('maps in full when the active record\'s map is not committed in the repository, because GSD has no stamp to read in staging', async () => {
+    const { roots, repo } = fixture({ files: [] });
+    const first = await onboard(roots, repo);
+    assert.equal(first.outcome.state, 'active', first.outcome.message ?? '');
+    assert.equal(first.mapCalls.length, 1, 'the first onboarding mapped in full');
+    commitFiles(repo, { 'src/index.ts': 'export const answer = 43;\n' }, 'touch one source file');
+
+    const second = await onboard(roots, repo);
+    assert.equal(second.outcome.state, 'active', second.outcome.message ?? '');
+    assert.equal(second.mapCalls.length, 1);
+    const plan = stepOf<RefreshStep>(roots, second.onboardingId, 'mapping:plan');
+    assert.equal(plan?.mode, 'full');
+    assert.equal(plan?.refresh?.mode, 'full');
+    assert.match(plan?.refresh?.reason ?? '', /^no-stamp/);
+    assert.equal(latestRecord(roots).version, 2);
+  });
+});
