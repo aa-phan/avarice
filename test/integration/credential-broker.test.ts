@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
@@ -19,10 +19,14 @@ import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { resolveCredential } from '../../src/app/credentials.ts';
 import type { CredentialDeps } from '../../src/app/credentials.ts';
-import { MIGRATIONS } from '../../src/cli/composition.ts';
+import { MIGRATIONS, createDeps } from '../../src/cli/composition.ts';
 import { err, ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
 import type { CommandExecutor, CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
+import { TEST_CLI } from '../helpers/offline.ts';
+import { makeRoots, runCli } from '../helpers/run-cli.ts';
+import type { CliRoots } from '../helpers/run-cli.ts';
+import { RUN_CONVENTIONS_WITH_COMMANDS, commitConventions, ledgerRows, makeRunRepo, startWithFakeRunHost, writeBrief } from '../helpers/run-fixtures.ts';
 
 const cleanup: string[] = [];
 const closers: Array<() => void> = [];
@@ -422,5 +426,160 @@ describe('references that are never a source (SEC-2, S-49)', () => {
       assertValueFree(rows, HELPER_VALUE);
     }
     assert.equal(executor.specs.length, 0, 'a refused reference ran nothing');
+  });
+});
+
+// ---- the broker in composition ---------------------------------------------------------------------------------------------------------
+
+function composeEnv(roots: CliRoots, home: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: home,
+    CLAUDE_CONFIG_DIR: join(home, '.claude'),
+    AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME,
+    AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT,
+    AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT,
+    AVARICE_PROFILE: undefined,
+  };
+}
+
+function configFile(roots: CliRoots, profile: string): string {
+  return join(roots.AVARICE_CONFIG_HOME, 'profiles', profile, 'config.json');
+}
+
+// Writes the profile config (created once by the first command, or from scratch), with `credentials` set.
+function setCredentials(roots: CliRoots, profile: string, credentials: unknown): void {
+  const path = configFile(roots, profile);
+  let current: Record<string, unknown> = { schema: 1, profile };
+  try {
+    current = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  } catch {
+    mkdirSync(join(path, '..'), { recursive: true });
+  }
+  writeFileSync(path, JSON.stringify({ ...current, credentials }, null, 2));
+}
+
+function adapterRows(roots: CliRoots): Array<{ name: string; port: string; adapter: string; descriptor_json: string }> {
+  return ledgerRows(roots, "SELECT name, port, adapter, descriptor_json FROM adapter_configs WHERE port = 'credential' ORDER BY name");
+}
+
+describe('AppDeps.credentials in composition (SEC-2, D-17)', () => {
+  const helperDir = tempDir('avarice-helper-');
+  const helper = join(helperDir, 'echo-helper');
+  writeFileSync(helper, `#!/bin/sh\nprintf '%s\\n' '${HELPER_VALUE}'\n`);
+  chmodSync(helper, 0o755);
+
+  it('builds the broker from exactly the providers the profile class allows and records each descriptor without a secret', () => {
+    for (const [profile, expected] of [
+      ['personal-local', ['credential-cmd', 'credential-keychain']],
+      ['personal-extended', ['credential-cmd', 'credential-delegated', 'credential-keychain']],
+    ] as const) {
+      const roots = makeRoots();
+      cleanup.push(roots.base);
+      const home = tempDir('avarice-home-');
+      setCredentials(roots, profile, { github: 'delegated:gh', work: 'keychain:avarice-work', helpers: { 'echo-helper': helper } });
+      // delegated:gh is a valid reference for the grammar even where the profile may not resolve it; the allow-list decides at resolution.
+      const composed = createDeps(composeEnv(roots, home), {}, { profile });
+      assert.ok(composed.ok, composed.ok ? '' : composed.message);
+      try {
+        assert.ok(composed.value.deps.credentials !== undefined, profile);
+      } finally {
+        composed.value.close();
+      }
+      const rows = adapterRows(roots);
+      assert.deepEqual(rows.map((r) => r.name), expected, profile);
+      for (const row of rows) {
+        assert.equal(row.port, 'credential');
+        assert.ok(!row.descriptor_json.includes(helper), 'the descriptor holds no helper path');
+        assert.ok(!row.descriptor_json.includes('avarice-work'), 'the descriptor holds no reference');
+      }
+    }
+  });
+
+  it('resolves a listed helper through the composed broker and the real sandboxed executor, and refuses delegated under personal-local', { skip: new SandboxedExecutor().descriptor.attributes?.['enforcement'] === 'enforced' ? false : 'the sandbox is not usable here' }, async () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    const home = tempDir('avarice-home-');
+    setCredentials(roots, 'personal-local', { helpers: { 'echo-helper': helper } });
+    const composed = createDeps(composeEnv(roots, home), {}, { profile: 'personal-local' });
+    assert.ok(composed.ok, composed.ok ? '' : composed.message);
+    try {
+      const broker = composed.value.deps.credentials;
+      assert.ok(broker !== undefined);
+      const resolved = await broker.resolve('cmd:echo-helper', 'test', { module: 'composition-test', runId: 'run_1' });
+      assert.ok(resolved.ok, JSON.stringify(resolved));
+      assert.equal(resolved.value.use((v) => v), HELPER_VALUE);
+      const refused = await broker.resolve('delegated:gh', 'test', { module: 'composition-test' });
+      assert.ok(!refused.ok);
+      assert.equal(refused.error.kind, 'denied');
+      const unlisted = await broker.resolve('cmd:not-listed', 'test', { module: 'composition-test' });
+      assert.ok(!unlisted.ok);
+      assert.equal(unlisted.error.kind, 'denied');
+    } finally {
+      composed.value.close();
+    }
+    const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+    try {
+      const rows = db.prepare("SELECT run_id, data_json FROM events WHERE type = 'credential.resolve' ORDER BY seq").all() as Array<{ run_id: string | null; data_json: string }>;
+      assert.deepEqual(rows.map((r) => (JSON.parse(r.data_json) as Record<string, unknown>)['outcome']), ['resolved', 'denied', 'denied']);
+      assert.equal(rows[0]?.run_id, 'run_1');
+      assert.ok(rows.every((r) => !r.data_json.includes(HELPER_VALUE)));
+    } finally {
+      db.close();
+    }
+  });
+
+  it('composes no broker for a read-only command and does not read the credentials section there', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    const home = tempDir('avarice-home-');
+    const first = createDeps(composeEnv(roots, home), {}, { profile: 'personal-local' });
+    assert.ok(first.ok);
+    first.value.close();
+    setCredentials(roots, 'personal-local', { github: 'env:GITHUB_TOKEN' });
+    const readOnly = createDeps(composeEnv(roots, home), {}, { profile: 'personal-local', readOnly: true });
+    assert.ok(readOnly.ok, readOnly.ok ? '' : readOnly.message);
+    try {
+      assert.equal(readOnly.value.deps.credentials, undefined);
+    } finally {
+      readOnly.value.close();
+    }
+  });
+});
+
+describe('a profile with an env reference cannot start a run (S-49, T-04-39)', () => {
+  it('refuses `avarice start` with exit 70, naming env:GITHUB_TOKEN, and creates no run row', () => {
+    const roots = makeRoots();
+    const repo = makeRunRepo();
+    cleanup.push(roots.base, repo.base);
+    const onboarded = runCli(['onboard', '--policy', 'onboarding', repo.path], { roots, entry: TEST_CLI, env: { AVARICE_FAKE_HOST: '{}' } });
+    assert.equal(onboarded.code, 0, onboarded.stderr + onboarded.stdout);
+    commitConventions(repo, RUN_CONVENTIONS_WITH_COMMANDS);
+    const brief = writeBrief(join(roots.base, 'briefs'));
+    const runsBefore = ledgerRows<{ n: number }>(roots, 'SELECT count(*) AS n FROM runs')[0]?.n;
+    const eventsBefore = ledgerRows<{ n: number }>(roots, 'SELECT count(*) AS n FROM events')[0]?.n;
+
+    setCredentials(roots, 'personal-local', { github: 'env:GITHUB_TOKEN' });
+    const refused = startWithFakeRunHost(roots, repo, brief, { edits: {}, summary: true, verification: 'passed' });
+    assert.equal(refused.code, 70, refused.stderr + refused.stdout);
+    assert.ok(refused.stderr.includes('credential reference env:GITHUB_TOKEN is refused: environment variables are not a credential source'), refused.stderr);
+    assert.ok(refused.stderr.includes('credentials.github'), 'the message names the config key');
+    assert.equal(ledgerRows<{ n: number }>(roots, 'SELECT count(*) AS n FROM runs')[0]?.n, runsBefore, 'no run row was created');
+    assert.equal(ledgerRows<{ n: number }>(roots, 'SELECT count(*) AS n FROM events')[0]?.n, eventsBefore, 'nothing was recorded');
+
+    // With the reference corrected, the same command starts (so the refusal above was the reference, not the setup).
+    setCredentials(roots, 'personal-local', { github: 'keychain:avarice-no-such-service' });
+    const started = startWithFakeRunHost(roots, repo, brief, { edits: {}, summary: true, verification: 'passed' });
+    assert.notEqual(started.code, 70, started.stderr + started.stdout);
+    assert.doesNotMatch(started.stderr, /credential reference/);
+  });
+
+  it('refuses every non-read-only command, not only start', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    setCredentials(roots, 'personal-local', { github: 'env:GITHUB_TOKEN', helpers: {} });
+    const refused = runCli(['init'], { roots, entry: TEST_CLI });
+    assert.equal(refused.code, 70, refused.stderr + refused.stdout);
+    assert.ok(refused.stderr.includes('env:GITHUB_TOKEN'), refused.stderr);
   });
 });

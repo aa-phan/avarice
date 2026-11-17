@@ -22,6 +22,9 @@ import { knownProfileRoots } from '../adapters/fs/profile-registry.ts';
 import { readProfileNotify } from '../adapters/fs/profile-config.ts';
 import { backfillBindings } from '../adapters/fs/profile-bindings.ts';
 import { readOrganizationPolicy, readRepositoryPolicy } from '../adapters/fs/policy-sources.ts';
+import { CmdProvider } from '../adapters/credential/cmd.ts';
+import { DelegatedProvider } from '../adapters/credential/delegated.ts';
+import { KeychainProvider } from '../adapters/credential/keychain.ts';
 import { LocalNotifier } from '../adapters/notify/local-notifier.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
@@ -38,6 +41,8 @@ import { fingerprintGsdPreamble } from '../adapters/gsd/preamble.ts';
 import { GsdOnboardingAdapter } from '../adapters/gsd/gsd-onboarding.ts';
 import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
+import { parseCredentialSection, providersFor } from '../domain/credential-ref.ts';
+import type { CredentialSection, ProviderName } from '../domain/credential-ref.ts';
 import { digestOf } from '../domain/digest.ts';
 import { parsePolicyFile, policySources } from '../domain/policy.ts';
 import type { PolicyFile, PolicySources } from '../domain/policy.ts';
@@ -46,6 +51,7 @@ import type { Result } from '../domain/result.ts';
 import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
+import type { CredentialProvider } from '../ports/credential-provider.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { Notifier } from '../ports/notifier.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
@@ -54,6 +60,7 @@ import type { EgressProxy } from '../ports/egress-proxy.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
 import type { AppDeps, Clock, GsdProblem, IdSource, NotifyDeps, ProfilePaths } from '../app/deps.ts';
+import { resolveCredential } from '../app/credentials.ts';
 
 export const MIGRATIONS: readonly Migration[] = [MIGRATION_0001, MIGRATION_0002, MIGRATION_0003, MIGRATION_0004];
 export const EXIT_INTERNAL = 70;
@@ -231,6 +238,18 @@ function productionHost(inputs: HostInputs): AgentHost {
   return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(attributes['reason'] ?? 'the host adapter is not enforced');
 }
 
+// The providers of the credential broker (SEC-2, D-17): exactly those the profile's class allows, each built once. The cmd provider runs its
+// approved helpers through the same sandboxed executor as every other command AVARICE starts.
+function credentialProviders(profile: ProfilePaths, section: CredentialSection, executor: CommandExecutor, env: NodeJS.ProcessEnv, home: string): Partial<Record<ProviderName, CredentialProvider>> {
+  const providers: Partial<Record<ProviderName, CredentialProvider>> = {};
+  for (const name of providersFor(profile.profile)) {
+    if (name === 'keychain') providers.keychain = new KeychainProvider({ home });
+    else if (name === 'cmd') providers.cmd = new CmdProvider({ executor, helpers: section.helpers, cwd: profile.workRoot, home });
+    else providers.delegated = new DelegatedProvider(env['PATH'] !== undefined ? { pathEnv: env['PATH'] } : {});
+  }
+  return providers;
+}
+
 export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}, options: CreateDepsOptions = {}): CompositionResult {
   const resolved = resolveProfile(env, {}, options.profile);
   if (!resolved.ok) return failure('cannot prepare the profile directories', describeError(resolved.error));
@@ -240,6 +259,17 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const others = knownProfileRoots(resolved.value.configHome, resolved.value.profile, { home, ownDataRoot: resolved.value.dataRoot, ownWorkRoot: resolved.value.workRoot });
   if (!others.ok) return failure('cannot read the other profiles of this machine', describeError(others.error));
   const profile: ProfilePaths = { ...resolved.value, otherRoots: [...new Set([...others.value, realpathNearest(resolved.value.configHome)])] };
+  // SEC-2, S-49: a credentials section that holds an env: reference, or anything else that is not a credential reference, stops the command here,
+  // before a store is opened or a run could start. A read-only command resolves no credential, so it does not read the section.
+  let credentialSection: CredentialSection | undefined;
+  if (options.readOnly !== true) {
+    const parsedSection = parseCredentialSection(profile.config.sections.credentials);
+    if (!parsedSection.ok) {
+      const e = parsedSection.error;
+      return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config credentials: ${describeError(e)}` };
+    }
+    credentialSection = parsedSection.value;
+  }
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
   const ids = overrides.ids ?? systemIds(clock);
@@ -308,6 +338,26 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       store.close();
       return failure('cannot record the executor adapter', describeError(recorded.error));
     }
+  }
+  // The credential broker (SEC-2, ADR-009, D-17): the providers this profile's class allows, each recorded with its descriptor (which holds no secret).
+  let credentials: AppDeps['credentials'];
+  if (options.readOnly !== true && credentialSection !== undefined) {
+    const providers = credentialProviders(profile, credentialSection, executor, env, home);
+    for (const [provider, adapter] of Object.entries(providers) as Array<[ProviderName, CredentialProvider]>) {
+      const recorded = ledger.upsertAdapterConfig({
+        name: `credential-${provider}`,
+        port: adapter.descriptor.port,
+        adapter: adapter.descriptor.adapter,
+        configDigest: digestOf(adapter.descriptor),
+        descriptor: adapter.descriptor,
+      });
+      if (!recorded.ok) {
+        store.close();
+        return failure(`cannot record the ${provider} credential provider`, describeError(recorded.error));
+      }
+    }
+    const broker = { ledger, clock, profile, providers };
+    credentials = { resolve: (ref, purpose, ctx) => resolveCredential(broker, ref, purpose, ctx) };
   }
   // The graph tool. Building its descriptor executes nothing; the graphify version is read by locate() when the
   // index stage uses it. A missing graphify is not a composition failure.
@@ -403,7 +453,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), clock, ids, profile, home, policy: policyLoader(profile) },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), ...(credentials !== undefined ? { credentials } : {}), clock, ids, profile, home, policy: policyLoader(profile) },
       close: () => {
         try {
           store.close();

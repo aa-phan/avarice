@@ -8,6 +8,7 @@ import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
 import type { CommandExecutor } from '../ports/command-executor.ts';
 import type { ContextSource } from '../ports/context-source.ts';
+import type { SecretHandle } from '../ports/credential-provider.ts';
 import type { GraphTool } from '../ports/graph-tool.ts';
 import type { EgressProxy } from '../ports/egress-proxy.ts';
 import type { GsdOnboarding } from '../ports/gsd-onboarding.ts';
@@ -16,6 +17,8 @@ import type { Notifier } from '../ports/notifier.ts';
 import type { RunSource } from '../ports/run-source.ts';
 import type { RunWorkspace } from '../ports/run-workspace.ts';
 import type { StagingWorkspace } from '../ports/staging-workspace.ts';
+
+import type { CredentialContext } from './credentials.ts';
 
 export interface Clock {
   nowMs(): number;
@@ -83,6 +86,12 @@ export interface AppDeps {
   // Local notification (plan 03-16, D-21, D-22). Present on a composed AppDeps that is not read-only; a hand-built one need not supply it,
   // and a service that finds it absent notifies no one.
   notify?: NotifyDeps;
+  // The credential broker (SEC-2, ADR-009, D-17). Present on a composed AppDeps that is not read-only: it resolves a reference through the
+  // providers this profile's class allows, appends one value-free `credential.resolve` event per attempt and seeds the process redactor with
+  // each resolved value. A hand-built AppDeps need not supply it.
+  credentials?: {
+    resolve(ref: string, purpose: string, ctx: CredentialContext): Promise<Result<SecretHandle>>;
+  };
   clock: Clock;
   ids: IdSource;
   profile: ProfilePaths;
