@@ -232,6 +232,66 @@ export interface EventReceipt {
   rowHash: string;
 }
 
+// A granted approval (plan 04-16; FR-12, ADR-005). `scope` is the run ID, the onboarding ID, or `attended:<session id>`: it is stored in the
+// `run_id` column of the approvals table. A row is never deleted and only `consumedAt` and `revokedAt` ever change, each once.
+export interface ApprovalRow {
+  approvalId: string;
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  idempotencyKey: string;
+  source: string;
+  grantedBy: string;
+  grantedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface GrantApprovalInput {
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  // `owner:<os user>`.
+  grantedBy: string;
+  // The `apr_` request this approval answers. A request is granted once.
+  requestId?: string;
+  nowMs: number;
+}
+
+// The `approval.requested` event as a record: what the owner is shown by `avarice approve <apr id>`.
+export interface ApprovalRequestRow {
+  requestId: string;
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  // A bounded, redacted `key=value` summary of the parameters, never the parameters themselves.
+  paramsSummary: string;
+  requestedAt: string;
+}
+
+export interface ConsumeApprovalInput {
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  nowMs: number;
+  // The `action.started` event written in the same transaction as the consume; the ledger adds `approvalId` to its data.
+  startEvent: { type: string; level?: 'debug' | 'info' | 'warn' | 'error'; runId?: string; data: Readonly<Record<string, unknown>> };
+}
+
+export interface ConsumedApproval {
+  approvalId: string;
+  // The `seq` of the start event.
+  startSeq: number;
+}
+
+// One `action.started`, `action.finished` or `action.interrupted` event of a scope, oldest first.
+export interface ActionEventRow {
+  seq: number;
+  type: string;
+  data: Readonly<Record<string, unknown>>;
+}
+
 // One row of the event log as the interactive shell's watch view reads it (plan 02-19; ADR-013 decision 4): the type and the small
 // data object the event was recorded with (IDs, counts, digests, exit codes), never a payload.
 export interface RunEventRow {
@@ -739,6 +799,25 @@ export interface Ledger {
   findLoopLimit(invocationId: string): Result<{ reason: string; count: number; limit: number } | null>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
+
+  // Approvals (plan 04-16; FR-12, FR-15, ADR-005). The table holds granted approvals only: a request is the `approval.requested` event.
+  // grantApproval inserts one row expiring APPROVAL_TTL_MS after `nowMs` (source `local-user`) and appends `approval.granted`; its idempotency
+  // key counts the earlier rows of the same scope, action and digest, so a fresh approval after expiry inserts. A request already granted is a
+  // `conflict`. revokeApproval sets `revoked_at` once (a revoked or consumed row is a `conflict`, an unknown ID `not_found`) and appends
+  // `approval.revoked`. consumeApprovalAndStart, in one BEGIN IMMEDIATE transaction, takes the oldest usable approval of the scope, action and
+  // digest (unexpired, unrevoked, unconsumed), sets `consumed_at` and appends the start event; null when none is usable, with nothing written.
+  grantApproval(input: GrantApprovalInput): Result<ApprovalRow>;
+  revokeApproval(approvalId: string, nowMs: number): Result<ApprovalRow>;
+  consumeApprovalAndStart(input: ConsumeApprovalInput): Result<ConsumedApproval | null>;
+  // Oldest first.
+  listApprovals(scope: string): Result<ApprovalRow[]>;
+  // The `approval.requested` event with this request ID, or null.
+  findApprovalRequest(requestId: string): Result<ApprovalRequestRow | null>;
+  // The latest request for the scope, action and digest that no approval answered yet, or null: a denied retry reuses it instead of asking again.
+  findPendingApprovalRequest(query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null>;
+  // The `action.*` events of a scope, oldest first (the no-replay rule reads them).
+  listActionEvents(scope: string): Result<ActionEventRow[]>;
+
   // The latest `limit` events recorded with the run's ID, oldest first. Read-only: the interactive shell polls this about once a second.
   listRunEvents(runId: string, limit: number): Result<RunEventRow[]>;
   recordArtifact(input: ArtifactInput): Result<void>;

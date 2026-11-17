@@ -11,10 +11,13 @@ import type { OnboardingState } from '../../domain/onboarding-lifecycle.ts';
 import { assertItemTransition, assertRunTransition, isRunTerminal, RUN_BLOCKED_REASONS, RUN_STEP_STATUSES } from '../../domain/run-lifecycle.ts';
 import type { RunState, WorkItemState } from '../../domain/run-lifecycle.ts';
 import type {
+  ActionEventRow,
   ActivateInput,
   ActivationResult,
   ActiveRecord,
   AmendRunContractInput,
+  ApprovalRequestRow,
+  ApprovalRow,
   AmendRunContractResult,
   AnswerDecisionInput,
   AdapterConfigInput,
@@ -30,6 +33,8 @@ import type {
   CheckValidationRow,
   CheckpointInput,
   CheckpointRow,
+  ConsumeApprovalInput,
+  ConsumedApproval,
   ContractRow,
   CreatedRun,
   CreateRunWithContractInput,
@@ -44,6 +49,7 @@ import type {
   EvidenceStatus,
   GateResultInput,
   GateResultRow,
+  GrantApprovalInput,
   HookReadRow,
   RunEventRow,
   Ledger,
@@ -637,6 +643,36 @@ export class SqliteLedger implements Ledger {
 
   appendEvent(input: EventInput): Result<EventReceipt> {
     return tx(this.db, () => this.insertEvent(input));
+  }
+
+  // ---- approvals (plan 04-16) --------------------------------------------------------------------
+
+  grantApproval(_input: GrantApprovalInput): Result<ApprovalRow> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  revokeApproval(_approvalId: string, _nowMs: number): Result<ApprovalRow> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  consumeApprovalAndStart(_input: ConsumeApprovalInput): Result<ConsumedApproval | null> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  listApprovals(_scope: string): Result<ApprovalRow[]> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  findApprovalRequest(_requestId: string): Result<ApprovalRequestRow | null> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  findPendingApprovalRequest(_query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null> {
+    return err({ kind: 'internal', cause: 'not implemented' });
+  }
+
+  listActionEvents(_scope: string): Result<ActionEventRow[]> {
+    return err({ kind: 'internal', cause: 'not implemented' });
   }
 
   listRunEvents(runId: string, limit: number): Result<RunEventRow[]> {
