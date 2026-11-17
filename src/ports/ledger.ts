@@ -6,6 +6,7 @@
 import type { Result } from '../domain/result.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
 import type { RunBlockedReason, RunState, WorkItemState } from '../domain/run-lifecycle.ts';
+import type { ExternalRef, Freshness } from './context-source.ts';
 
 export interface ProjectRow {
   projectId: string;
@@ -358,6 +359,15 @@ export interface RunStatusInputs {
   contract: ContractRow | null;
   steps: RunStepRow[];
   attempts: AttemptRow[];
+  // The references the run recorded (plan 04-20), in primary-key order, as `listTaskRefs` returns them.
+  taskRefs: ExternalRef[];
+}
+
+// The primary key of a task reference within a run: the provider, the kind and the provider's own ID, verbatim.
+export interface TaskRefKey {
+  provider: string;
+  kind: string;
+  id: string;
 }
 
 export interface NewRun {
@@ -817,6 +827,14 @@ export interface Ledger {
   findPendingApprovalRequest(query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null>;
   // The `action.*` events of a scope, oldest first (the no-replay rule reads them).
   listActionEvents(scope: string): Result<ActionEventRow[]>;
+
+  // Task references (plan 04-20; FR-3, FR-8, FR-18): what a run was built from. recordTaskRefs writes each reference in one transaction, replacing the row with the
+  // same primary key (run, provider, kind, ID); two providers with the same ID are two rows. listTaskRefs returns them in primary-key order (provider, kind, ID),
+  // the order a resume refreshes them in. updateTaskRefFreshness sets the freshness and the retrieval time of one row and, when `revision` is given, its revision;
+  // an unknown row is `not_found`. The revision of a changed or deleted reference is never overwritten by the caller, so the next resume finds the change again.
+  recordTaskRefs(runId: string, refs: readonly ExternalRef[]): Result<void>;
+  listTaskRefs(runId: string): Result<ExternalRef[]>;
+  updateTaskRefFreshness(runId: string, key: TaskRefKey, freshness: Freshness, revision: string | undefined, nowMs: number): Result<void>;
 
   // The latest `limit` events recorded with the run's ID, oldest first. Read-only: the interactive shell polls this about once a second.
   listRunEvents(runId: string, limit: number): Result<RunEventRow[]>;

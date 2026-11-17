@@ -149,7 +149,7 @@ function countStatements<T>(h: Harness, work: () => T): { value: T; statements: 
   }
 }
 
-// The nine per-run reads status made before the batch, with the attempts it read for an interrupted run: the oracle for the batch.
+// The ten per-run reads status makes (nine before the batch, plus the task references of plan 04-20), with the attempts it read for an interrupted run: the oracle for the batch.
 function perRunInputs(h: Harness, runId: string): RunStatusInputs {
   return {
     checkpoints: must(h.ledger.listRunCheckpoints(runId)),
@@ -162,6 +162,7 @@ function perRunInputs(h: Harness, runId: string): RunStatusInputs {
     contract: must(h.ledger.getRunContract(runId)),
     steps: must(h.ledger.getRunSteps(runId)),
     attempts: must(h.ledger.listRunAttempts(runId)),
+    taskRefs: must(h.ledger.listTaskRefs(runId)),
   };
 }
 

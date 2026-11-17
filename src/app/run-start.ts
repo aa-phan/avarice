@@ -3,6 +3,7 @@
 // runs the static G0 checks and stores run, contract version 1, budget rows and work item `A` in one transaction. Nothing is
 // created before every check has passed, and running the command is the authorization: nothing here waits for input (RC-3).
 // The brief and the conventions are data; neither is read as an instruction to AVARICE.
+import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { parseBrief } from '../domain/brief.ts';
@@ -19,6 +20,11 @@ import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
 
 export const BRIEF_MAX_BYTES = 64 * 1024;
+
+// The reference a run keeps to the brief file it was started from (plan 04-20; FR-18): the provider and kind the ledger's task_refs row carries, the file's real
+// path as the provider's ID, and the digest of its bytes as the revision. A resume reads the file again and compares.
+export const BRIEF_REF_PROVIDER = 'manual-brief';
+export const BRIEF_REF_KIND = 'brief-file';
 
 export interface RunStartRequest {
   // The directory `start` was run from; the project is the registered one whose repository contains it.
@@ -83,18 +89,24 @@ export function describeError(error: PortError): string {
 const DAY_MS = 86_400_000;
 const GIT_PREFIX = /^git:/;
 
-// A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8.
-export function readBriefFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
+// The digest a reference to a brief file keeps: `sha256:` and the SHA-256 of the file's bytes as they were read (not of the decoded text, which drops a byte order mark).
+export const briefBytesDigest = (bytes: Uint8Array): string => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+
+// A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8. `bytesDigest` is the digest of the bytes that were decoded.
+// A failure carries a `code`: the operating system's error code (`ENOENT`, `EACCES`) when the file could not be opened, so a resume can tell a deleted brief from
+// a denied one, or `NOT_FILE`, `TOO_LARGE` or `NOT_UTF8` when it opened but is not a brief.
+export function readBriefFile(path: string): { ok: true; text: string; bytesDigest: string } | { ok: false; reason: string; code?: string } {
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY);
   } catch (e) {
-    return { ok: false, reason: `cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})` };
+    const code = (e as NodeJS.ErrnoException).code;
+    return { ok: false, reason: `cannot be read (${code ?? 'error'})`, ...(code !== undefined ? { code } : {}) };
   }
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile()) return { ok: false, reason: 'is not a regular file' };
-    if (stat.size > BRIEF_MAX_BYTES) return { ok: false, reason: `is larger than ${BRIEF_MAX_BYTES} bytes` };
+    if (!stat.isFile()) return { ok: false, reason: 'is not a regular file', code: 'NOT_FILE' };
+    if (stat.size > BRIEF_MAX_BYTES) return { ok: false, reason: `is larger than ${BRIEF_MAX_BYTES} bytes`, code: 'TOO_LARGE' };
     const buffer = Buffer.alloc(stat.size);
     let offset = 0;
     while (offset < buffer.length) {
@@ -103,16 +115,16 @@ export function readBriefFile(path: string): { ok: true; text: string } | { ok: 
       offset += n;
     }
     try {
-      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset)) };
+      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset)), bytesDigest: briefBytesDigest(buffer.subarray(0, offset)) };
     } catch {
-      return { ok: false, reason: 'is not valid UTF-8' };
+      return { ok: false, reason: 'is not valid UTF-8', code: 'NOT_UTF8' };
     }
   } finally {
     closeSync(fd);
   }
 }
 
-function canonicalOrSelf(path: string): string {
+export function canonicalOrSelf(path: string): string {
   try {
     return realpathSync(path);
   } catch {
@@ -256,6 +268,13 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     workItems: contract.intent.workItems.map((item) => ({ runId, itemId: item.id, type: 'implement' as const, dependsOn: item.dependsOn, size: item.size, model: item.model, spec: item, nowMs })),
   });
   if (!created.ok) return internal(describeError(created.error));
+  // What the run was built from is recorded with it: a resume refreshes the brief file against this digest (S-5). A run whose reference cannot be
+  // recorded would resume on text nobody compared, so the failure is the start's.
+  const briefPath = canonicalOrSelf(resolve(request.cwd, request.briefPath));
+  const briefRef = deps.ledger.recordTaskRefs(runId, [
+    { provider: BRIEF_REF_PROVIDER, kind: BRIEF_REF_KIND, id: briefPath, revision: read.bytesDigest, retrievedAt: new Date(nowMs).toISOString(), scope: briefPath, freshness: 'fresh' },
+  ]);
+  if (!briefRef.ok) return internal(`run ${runId} is stored but its brief reference could not be recorded: ${describeError(briefRef.error)}`);
 
   // The ledger holds the run now. A failure past this point leaves the run `contract_ready` without its file; the supervisor
   // (plan 02-12) rewrites the file from the ledger before it launches anything.

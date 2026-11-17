@@ -77,6 +77,7 @@ import type {
   StepResultRow,
   StoreContractInput,
   StoreRunContractInput,
+  TaskRefKey,
   TransitionGuard,
   TransitionInput,
   WithdrawDecisionInput,
@@ -84,6 +85,7 @@ import type {
   WorkItemRow,
   WorkItemTransitionInput,
 } from '../../ports/ledger.ts';
+import type { ExternalRef, Freshness } from '../../ports/context-source.ts';
 import { abort, LedgerAbort, toPortError, tx } from './db.ts';
 import { PENDING_REQUEST_SQL, consumeApprovalRow } from './approval-rows.ts';
 import { appendEventRow, EventDataError } from './events.ts';
@@ -137,6 +139,7 @@ const ERROR_CODE = /^[a-z0-9-]{1,64}$/;
 const AMENDABLE_DECISION_CLASSES: readonly string[] = ['repeated_failure', 'permission', 'budget', 'scope_expansion'];
 const DECISION_CLASSES: readonly string[] =['acceptance', 'architecture', 'scope_expansion', 'permission', 'repeated_failure', 'equivalent_mutant', 'contradiction', 'budget'];
 const DECISION_STATES: readonly DecisionState[] = ['open', 'answered', 'stale', 'withdrawn'];
+const FRESHNESS_SET: readonly Freshness[] = ['fresh', 'stale', 'changed', 'deleted', 'access_revoked', 'unavailable'];
 
 function iso(ms: number): string {
   return new Date(ms).toISOString();
@@ -744,6 +747,35 @@ export class SqliteLedger implements Ledger {
     });
   }
 
+  // ---- task references (plan 04-20; FR-3, FR-8, FR-18) --------------------------------------------
+  recordTaskRefs(runId: string, refs: readonly ExternalRef[]): Result<void> {
+    return tx(this.db, () => {
+      this.lockRun(runId);
+      const insert = this.db.prepare(
+        'INSERT OR REPLACE INTO task_refs (run_id, provider, kind, ext_id, revision, retrieved_at, scope, freshness) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      );
+      for (const ref of refs) {
+        if (ref.provider === '' || ref.kind === '' || ref.id === '') abort({ kind: 'invalid', field: 'ref', reason: 'a task reference names its provider, kind and ID' });
+        if (!FRESHNESS_SET.includes(ref.freshness)) abort({ kind: 'invalid', field: 'freshness', reason: `${String(ref.freshness)} is not a freshness state` });
+        insert.run(runId, ref.provider, ref.kind, ref.id, ref.revision ?? null, ref.retrievedAt, ref.scope, ref.freshness);
+      }
+    });
+  }
+
+  listTaskRefs(runId: string): Result<ExternalRef[]> {
+    return guarded(() => (this.db.prepare('SELECT * FROM task_refs WHERE run_id = ? ORDER BY provider, kind, ext_id').all(runId) as Row[]).map(toTaskRef));
+  }
+
+  updateTaskRefFreshness(runId: string, key: TaskRefKey, freshness: Freshness, revision: string | undefined, nowMs: number): Result<void> {
+    return tx(this.db, () => {
+      if (!FRESHNESS_SET.includes(freshness)) abort({ kind: 'invalid', field: 'freshness', reason: `${String(freshness)} is not a freshness state` });
+      const done = this.db
+        .prepare('UPDATE task_refs SET freshness = ?, retrieved_at = ?, revision = COALESCE(?, revision) WHERE run_id = ? AND provider = ? AND kind = ? AND ext_id = ?')
+        .run(freshness, iso(nowMs), revision ?? null, runId, key.provider, key.kind, key.id);
+      if (Number(done.changes) === 0) throw notFound(`task reference ${key.provider}/${key.kind}/${key.id} of ${runId}`);
+    });
+  }
+
   listActionEvents(scope: string): Result<ActionEventRow[]> {
     return guarded(() => {
       const rows = this.db
@@ -1247,7 +1279,7 @@ export class SqliteLedger implements Ledger {
 
     const inputs = new Map<string, RunStatusInputs>();
     for (const id of ids) {
-      inputs.set(id, { checkpoints: [], evidence: [], gateResults: [], decisions: [], workItems: [], notifications: [], budgets: [], contract: null, steps: [], attempts: [] });
+      inputs.set(id, { checkpoints: [], evidence: [], gateResults: [], decisions: [], workItems: [], notifications: [], budgets: [], contract: null, steps: [], attempts: [], taskRefs: [] });
     }
     const deal = <T>(rows: Row[], convert: (row: Row) => T, into: (run: RunStatusInputs) => T[]): void => {
       for (const row of rows) {
@@ -1264,6 +1296,7 @@ export class SqliteLedger implements Ledger {
     deal(select(`SELECT * FROM budgets WHERE run_id IN (${marks}) ORDER BY name`), toBudget, (r) => r.budgets);
     deal(select(`SELECT * FROM run_steps WHERE run_id IN (${marks}) ORDER BY rowid`), toRunStep, (r) => r.steps);
     deal(select(`SELECT * FROM attempts WHERE run_id IN (${marks}) ORDER BY ordinal`), toAttempt, (r) => r.attempts);
+    deal(select(`SELECT * FROM task_refs WHERE run_id IN (${marks}) ORDER BY provider, kind, ext_id`), toTaskRef, (r) => r.taskRefs);
     // The highest contract version of each run: the join keeps one row per run, so the older bodies are never read.
     for (const row of select(
       `SELECT c.* FROM contracts c JOIN (SELECT run_id, MAX(version) AS version FROM contracts WHERE run_id IN (${marks}) GROUP BY run_id) m ON m.run_id = c.run_id AND m.version = c.version`,
@@ -1910,6 +1943,19 @@ function checkApprovalKey(scope: string, action: string, digest: string): void {
   if (!APPROVAL_SCOPE.test(scope)) abort({ kind: 'invalid', field: 'scope', reason: 'an approval scope is a run ID, an onboarding ID or attended:<session id>' });
   if (!APPROVAL_ACTION.test(action)) abort({ kind: 'invalid', field: 'action', reason: 'an approval names an action' });
   if (!APPROVAL_DIGEST.test(digest)) abort({ kind: 'invalid', field: 'paramsDigest', reason: 'an approval binds the sha256 digest of the parameters' });
+}
+
+function toTaskRef(r: Row): ExternalRef {
+  const revision = strOrNull(r['revision']);
+  return {
+    provider: str(r['provider']),
+    kind: str(r['kind']),
+    id: str(r['ext_id']),
+    ...(revision !== null ? { revision } : {}),
+    retrievedAt: str(r['retrieved_at']),
+    scope: str(r['scope']),
+    freshness: str(r['freshness']) as Freshness,
+  };
 }
 
 function toApproval(r: Row): ApprovalRow {
