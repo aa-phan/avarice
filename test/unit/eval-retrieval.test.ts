@@ -377,6 +377,7 @@ describe('leakage (T-04-85): the arm workspace and the judging clone', () => {
     const dest = join(temp('eval-arm'), 'repo');
     prepareArmWorkspace({ source: leak.repo.path, task: leak.task, dest });
     assertNoLeak(dest, leak.task);
+    mkdirSync(dirname(join(dest, leak.task.heldOutTest)), { recursive: true });
     writeFileSync(join(dest, leak.task.heldOutTest), 'planted');
     assert.throws(() => assertNoLeak(dest, leak.task), (e: unknown) => e instanceof EvalRefusal && /held-out/.test(e.message));
     rmSync(join(dest, leak.task.heldOutTest));
