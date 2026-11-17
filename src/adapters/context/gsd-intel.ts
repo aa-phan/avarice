@@ -50,7 +50,7 @@ export class GsdIntelContext implements ContextSource {
       port: 'context-source',
       adapter: 'gsd-intel',
       version: '1',
-      capabilities: { find: true, read: true, refresh: false },
+      capabilities: { find: true, read: true, refresh: true },
       offline: true,
     };
   }
@@ -126,8 +126,18 @@ export class GsdIntelContext implements ContextSource {
     return ok(items);
   }
 
-  // Skeleton: the planned behavior is added next.
-  async refresh(_ref: ExternalRef, _query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  // An intel entry is judged like a graph node, from the commit the intel was refreshed at. An entry of the file-roles index is keyed by the repository path it
+  // describes (the part of its ID after the `#`): that file gone at HEAD makes it `deleted`. An entry of another index names no path of its own, so none is
+  // looked for. An index refreshed since the reference was recorded is `changed`; otherwise the commit against HEAD, and the file hashes since the refresh
+  // while they agree, give `fresh`, `stale` or `changed`.
+  async refresh(ref: ExternalRef, query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
+    const retrievedAt = new Date(this.#nowMs()).toISOString();
+    const settled = (freshness: Freshness): Result<ExternalRef> => ok({ ...ref, revision: query.indexRevision, retrievedAt, freshness });
+    const hash = ref.id.indexOf('#');
+    const source = hash < 0 ? ref.id : ref.id.slice(0, hash);
+    const key = hash < 0 ? '' : ref.id.slice(hash + 1);
+    if (source === 'file-roles.json' && key !== '' && isCitablePath(key) && pathExistsAtHead(query.workspace.repoPath, key) === false) return settled('deleted');
+    if (ref.revision !== undefined && ref.revision !== query.indexRevision) return settled('changed');
+    return settled(await this.#freshness({ ...query, term: '' }));
   }
 }

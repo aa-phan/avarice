@@ -48,6 +48,15 @@ export interface RunReferenceView {
   revision: string;
 }
 
+// A reference the run recorded whose last refresh did not find it fresh (plan 04-20): `stale` (the index was built before the repository's current HEAD),
+// or `changed`, `deleted`, `access_revoked` or `unavailable`. The ID is the provider's own, verbatim.
+export interface RunStaleReferenceView {
+  provider: string;
+  kind: string;
+  id: string;
+  freshness: string;
+}
+
 // One work item of the run as the ledger holds it (AUT-12): its state, the size and model it was planned with, what it waits for and how many
 // times it was delegated.
 export interface RunItemView {
@@ -125,6 +134,9 @@ export interface RunStatus {
   cancelRequestedAt?: string;
   // Appended under the frozen-shapes rule (D-35): the declared checks that are neither required nor a target, so the run never runs them. Present only when there is one.
   checksNotRun?: RunCheckNotRunView[];
+  // Appended under the frozen-shapes rule (plan 04-20): the references the run recorded that were last refreshed to anything but `fresh`, in the order a resume
+  // refreshes them. Present only when there is one.
+  staleReferences?: RunStaleReferenceView[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -253,6 +265,7 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
   const named = lastCheckpointOf(inputs.checkpoints);
   const evidence = finalEvidence(inputs.evidence);
   const notRun = checksNotRunOf(inputs.contract === null ? null : inputs.contract.body);
+  const stale = inputs.taskRefs.filter((r) => r.freshness !== 'fresh').map((r) => ({ provider: r.provider, kind: r.kind, id: r.id, freshness: r.freshness }));
 
   return {
     runId: run.runId,
@@ -274,6 +287,7 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
     notifications: notificationsOfRun(inputs.notifications),
     ...(run.cancelRequestedAt !== null ? { cancelRequestedAt: run.cancelRequestedAt } : {}),
     ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
+    ...(stale.length > 0 ? { staleReferences: stale } : {}),
   };
 }
 

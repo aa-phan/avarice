@@ -206,7 +206,7 @@ describe('gsd-graph refresh judges a node by the index revision and the reposito
     const repo = scratch();
     const ref = refOf({ provider: 'gsd-graph', kind: 'graph-node', id: 'g2', scope: '.planning/graphs/graph.json' }, repo.head);
     commitFiles(repo, { 'docs/more.md': 'more\n' }, 'a later commit');
-    const refreshed = await graph.refresh(ref, queryFor(repo, repo.head));
+    const refreshed = await graph.refresh(ref, queryFor(repo, ref.revision as string));
     assert.ok(refreshed.ok);
     assert.equal(refreshed.value.freshness, 'stale');
   });
@@ -264,7 +264,8 @@ describe('a run records one task reference per context pack item, with the provi
   let runId = '';
   before(async () => {
     const roots = makeRoots();
-    const repo = makeRunRepo();
+    // The files the intel fixture describes exist in the repository, so no entry of it cites a path that is not there.
+    const repo = makeRunRepo({ 'src/index.ts': 'export function answer(): number {\n  return 42;\n}\n', 'src/util/strings.ts': 'export const upper = (s: string): string => s.toUpperCase();\n' });
     cleanup.push(roots.base, repo.base);
     const { staging } = await onboardRunRepoWithIndexes(roots, repo, TERM);
     const graphPath = join(staging, '.planning', 'graphs', 'graph.json');

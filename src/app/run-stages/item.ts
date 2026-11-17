@@ -266,6 +266,9 @@ async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Pro
       notes.push(`the index cannot answer: ${report.error.kind}`);
     } else {
       usedTokens = report.value.usedTokens;
+      // Every item the pack used is a reference the run was built from: recorded with the provider's own ID, so a resume can refresh it (FR-8, FR-18).
+      const refsWritten = deps.ledger.recordTaskRefs(ctx.runId, report.value.items.map((item) => item.ref));
+      if (!refsWritten.ok) return refsWritten;
       notes.push(...report.value.notes.slice(0, 10).map((n) => storedText(n, 200)));
       report.value.items.forEach((item, index) => {
         refs.push({ source: item.source, id: item.ref.id, scope: item.ref.scope, revision: item.ref.revision ?? null, freshness: item.freshness, estTokens: item.estTokens, untrusted: item.untrusted === true });

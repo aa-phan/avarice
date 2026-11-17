@@ -5,10 +5,11 @@
 // with a warning. Nothing here writes the revision of a changed or deleted reference: the revision a run was built from stays, so a second resume finds the same
 // change again instead of accepting it silently.
 import { ok } from '../domain/result.ts';
-import type { Result } from '../domain/result.ts';
+import type { PortError, Result } from '../domain/result.ts';
 import type { RunBlockedReason } from '../domain/run-lifecycle.ts';
-import type { ExternalRef, Freshness } from '../ports/context-source.ts';
+import type { ContextSource, ExternalRef, Freshness } from '../ports/context-source.ts';
 import type { AppDeps } from './deps.ts';
+import { refreshQueryFor } from './context.ts';
 import { BRIEF_REF_KIND, BRIEF_REF_PROVIDER, readBriefFile } from './run-start.ts';
 
 // The blocked reasons a reference can stop a run with, most severe first (a flagged assumption of plan 04-20): a source that is no longer readable says more than
@@ -42,6 +43,12 @@ export interface RefreshOutcome {
   block?: RefBlock;
 }
 
+const sourceOf = (deps: AppDeps, provider: string): { source: ContextSource | undefined; index: 'intel' | 'graph' } | undefined => {
+  if (provider === 'gsd-intel') return { source: deps.context?.intel, index: 'intel' };
+  if (provider === 'gsd-graph') return { source: deps.context?.graph, index: 'graph' };
+  return undefined;
+};
+
 const label = (ref: ExternalRef): string => `${ref.provider} ${ref.kind} ${ref.id}`;
 
 // The brief file read again: gone is `deleted`, one the profile can no longer open is `access_revoked`, any other change of its bytes (or of what it is) is
@@ -66,6 +73,19 @@ function refreshBrief(ref: ExternalRef, nowMs: number): ExternalRef {
   }
 }
 
+// What a port error means for a reference: the source says it is not there, says no, or cannot be asked.
+function freshnessOfError(error: PortError): Freshness {
+  if (error.kind === 'not_found') return 'deleted';
+  if (error.kind === 'denied' || error.kind === 'unauthenticated') return 'access_revoked';
+  return 'unavailable';
+}
+
+// The source reports the revision it is at now; the reference keeps the one the run was built from.
+function keepRevision(recorded: ExternalRef, answered: ExternalRef): ExternalRef {
+  const { revision: _now, ...rest } = answered;
+  return recorded.revision === undefined ? rest : { ...rest, revision: recorded.revision };
+}
+
 // Refreshes every reference the run recorded, one at a time in primary-key order, and records each result. A run with no reference makes no call.
 export async function refreshRunRefs(deps: AppDeps, runId: string): Promise<Result<RefreshOutcome>> {
   const run = deps.ledger.getRun(runId);
@@ -82,8 +102,14 @@ export async function refreshRunRefs(deps: AppDeps, runId: string): Promise<Resu
     if (ref.provider === BRIEF_REF_PROVIDER && ref.kind === BRIEF_REF_KIND) {
       after = refreshBrief(ref, nowMs);
     } else {
-      // No source judges this provider yet: it cannot be refreshed, so the run goes on with a warning.
-      after = { ...ref, retrievedAt: new Date(nowMs).toISOString(), freshness: 'unavailable' };
+      const found = sourceOf(deps, ref.provider);
+      const query = found === undefined ? undefined : refreshQueryFor(deps, run.value.projectId, found.index);
+      if (found === undefined || found.source === undefined || query === undefined || !query.ok) {
+        after = { ...ref, retrievedAt: new Date(nowMs).toISOString(), freshness: 'unavailable' };
+      } else {
+        const answered = await found.source.refresh(ref, query.value);
+        after = answered.ok ? keepRevision(ref, answered.value) : { ...ref, retrievedAt: new Date(nowMs).toISOString(), freshness: freshnessOfError(answered.error) };
+      }
     }
     // The revision column is left alone: it is the revision the run was built from (see the header).
     const written = deps.ledger.updateTaskRefFreshness(runId, { provider: ref.provider, kind: ref.kind, id: ref.id }, after.freshness, undefined, nowMs);

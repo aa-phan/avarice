@@ -122,6 +122,9 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
   if (banners !== null) detail(banners);
   const budget = budgetLine(run);
   if (budget !== null) detail(budget);
+  if (run.staleReferences !== undefined && run.staleReferences.length > 0) {
+    detail(`stale references: ${run.staleReferences.map((r) => `${stripControl(r.provider)} ${stripControl(r.kind)} ${stripControl(r.id)} (${stripControl(r.freshness)})`).join('; ')}`);
+  }
   if (run.references.length > 0) detail(`references: ${run.references.map((r) => `${stripControl(r.kind)} ${stripControl(r.id)} at ${shortRevision(r.revision)}`).join('; ')}`);
   return `${lines.join('\n')}\n`;
 }

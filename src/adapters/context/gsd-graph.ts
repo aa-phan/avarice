@@ -9,7 +9,7 @@ import type { Result } from '../../domain/result.ts';
 import { ruleFor, widestRule } from '../../domain/retrieval-rules.ts';
 import type { ReadRule } from '../../domain/retrieval-rules.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
-import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, TokenBudget } from '../../ports/context-source.ts';
+import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, Freshness, TokenBudget } from '../../ports/context-source.ts';
 import type { GsdGraphEdge, GsdGraphNode, GsdOnboarding } from '../../ports/gsd-onboarding.ts';
 import type { ContextAdapterOptions } from './gsd-intel.ts';
 import { currentHead, estimateTokens, freshnessAt, isCitablePath, pathExistsAtHead } from './freshness.ts';
@@ -128,7 +128,7 @@ export class GsdGraphContext implements ContextSource {
       port: 'context-source',
       adapter: 'gsd-graph',
       version: '1',
-      capabilities: { find: true, read: true, refresh: false },
+      capabilities: { find: true, read: true, refresh: true },
       offline: true,
     };
   }
@@ -201,8 +201,14 @@ export class GsdGraphContext implements ContextSource {
     return ok(items);
   }
 
-  // Skeleton: the planned behavior is added next.
-  async refresh(_ref: ExternalRef, _query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
-    return err({ kind: 'internal', cause: 'not implemented' });
+  // A graph node is judged by the index it came from and the repository as it is now. The path it cites is looked at first: a node whose source file is gone at
+  // HEAD is `deleted`, whatever the index says. A node recorded at another build of the graph than the project record names now is `changed` (the graph was
+  // rebuilt since the pack was made). Otherwise the build commit against HEAD decides `fresh` or `stale`, and a HEAD that cannot be read is `unavailable`.
+  async refresh(ref: ExternalRef, query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
+    const retrievedAt = new Date(this.#nowMs()).toISOString();
+    const settled = (freshness: Freshness): Result<ExternalRef> => ok({ ...ref, revision: query.indexRevision, retrievedAt, freshness });
+    if (ref.scope !== GRAPH_PATH && pathExistsAtHead(query.workspace.repoPath, ref.scope) === false) return settled('deleted');
+    if (ref.revision !== undefined && ref.revision !== query.indexRevision) return settled('changed');
+    return settled(freshnessAt(query.indexRevision, currentHead(query.workspace.repoPath)));
   }
 }
