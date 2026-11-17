@@ -9,18 +9,21 @@
 // the budget inside the same BEGIN IMMEDIATE transaction that appends the `hook.decision` event, so a call is
 // never charged without a row and never allowed without a charge. A deny is printed as the PreToolUse deny JSON
 // with exit 0. Events carry the tool name, rule, IDs and a staging-relative target, never a tool payload (T-01-35).
+// A shell call that is a privileged form (a push, a pull request, a release, a package publish; src/domain/privileged-commands.ts) is refused in a run with the
+// rule `privileged:<action>` and an approval request, recorded as `policy.denied` and `approval.requested` in the same transaction (plan 04-19). With
+// `--attended --data-root <dir>` the same entry serves the owner's own host session: it enforces privileged-action approvals only (see "Attended mode").
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { paramsDigest, paramsSummary } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
 import { INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
-import { privilegedReason } from '../domain/privileged-commands.ts';
+import { classifyCommandLine, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
-import { pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
+import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -67,11 +70,22 @@ function readStdin(): string {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function parseArgs(argv: readonly string[]): { event?: string; policy?: string } {
-  const out: { event?: string; policy?: string } = {};
+interface HookArgs {
+  event?: string;
+  policy?: string;
+  // Plan 04-19: attended mode (the owner's own session) names the profile's data root instead of a run policy file.
+  attended: boolean;
+  dataRoot?: string;
+}
+
+// `--avarice-attended-hook` is the marker `avarice install-host` finds its own settings entry by; it carries no meaning here.
+function parseArgs(argv: readonly string[]): HookArgs {
+  const out: HookArgs = { attended: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--event' && argv[i + 1] !== undefined) out.event = argv[(i += 1)] as string;
     else if (argv[i] === '--policy' && argv[i + 1] !== undefined) out.policy = argv[(i += 1)] as string;
+    else if (argv[i] === '--data-root' && argv[i + 1] !== undefined) out.dataRoot = argv[(i += 1)] as string;
+    else if (argv[i] === '--attended') out.attended = true;
   }
   return out;
 }
@@ -486,8 +500,72 @@ function configChange(policyPath: string | undefined): never {
   return fail('configuration changes are not allowed during a contained invocation');
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Attended mode (plan 04-19; FR-12, S-4, T-04-50): the owner's own host session, the same entry installed by `avarice install-host` in the settings.json beside
+// the skill. It enforces privileged-action approvals only. A Bash call that is not a privileged form (and every other tool) is allowed without a decision,
+// without opening the store and without an event. A privileged form consumes one approval of the scope `attended:<session id>`, the action and the digest
+// of its parameters in the same transaction that records the action's start, or is denied with a request the owner approves with `avarice approve`. Any
+// error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
+// ---------------------------------------------------------------------------------------------------------
+
+// The host's session ID as a plain token: it becomes part of an approval scope.
+const SESSION_ID = /^[A-Za-z0-9_.-]{1,100}$/;
+
+function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): void {
+  const tool = input['tool_name'];
+  if (typeof tool !== 'string' || tool === '') fail('the hook input has no tool_name');
+  if (tool !== 'Bash') return;
+  const toolInput = input['tool_input'];
+  const command = typeof toolInput === 'object' && toolInput !== null && !Array.isArray(toolInput) ? (toolInput as Record<string, unknown>)['command'] : undefined;
+  if (typeof command !== 'string') fail('the Bash input has no command');
+  const privileged = classifyCommandLine(command);
+  if (privileged === null) return;
+  const session = input['session_id'];
+  if (typeof session !== 'string' || !SESSION_ID.test(session)) fail('a privileged call needs the host session_id as a plain token');
+  const scope = `attended:${session}`;
+  const { action, params } = privileged;
+
+  const db = openLedger(join(dataRoot, 'state.db'));
+  let requestId: string | null;
+  try {
+    requestId = inTransaction(db, () => {
+      const nowMs = Date.now();
+      const digest = paramsDigest(params);
+      const consumed = consumeApprovalRow(db, {
+        scope,
+        action,
+        paramsDigest: digest,
+        nowMs,
+        startEvent: { type: 'action.started', data: { scope, action, paramsDigest: digest, paramsSummary: paramsSummary(params), source: 'approval' } },
+      });
+      return consumed !== null ? null : recordPrivilegedDenial(db, { scope, tool, privileged, nowMs });
+    });
+  } finally {
+    db.close();
+  }
+  if (requestId !== null) {
+    emit({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: `avarice: ${PRIVILEGED_RULE_PREFIX}${action}: ${privilegedReason(action, requestId)}`,
+      },
+    });
+  }
+}
+
+function attendedMain(args: HookArgs): void {
+  if (args.policy !== undefined) fail('--attended takes no --policy');
+  if (args.dataRoot === undefined || !isAbsolute(args.dataRoot)) fail('--attended needs --data-root with an absolute path');
+  if (args.event !== 'pre' && args.event !== 'post' && args.event !== 'config-change') fail('--event must be pre, post or config-change');
+  // The owner's own session: a settings change and a finished call are not decided here.
+  if (args.event !== 'pre') return;
+  attendedPreToolUse(args.dataRoot, parseInput(readStdin()));
+}
+
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+  if (args.attended) return attendedMain(args);
   if (args.event === 'config-change') configChange(args.policy);
   if (args.event !== 'pre' && args.event !== 'post') fail('--event must be pre, post or config-change');
   if (args.policy === undefined) fail('--policy is required');
