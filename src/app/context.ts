@@ -8,7 +8,7 @@
 // content, and the fence cannot be closed from inside because every fenced line is prefixed (S-46).
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
-import type { ContextConfidence, ContextHandle, ContextItem, ContextSource, ExternalRef } from '../ports/context-source.ts';
+import type { ContextConfidence, ContextHandle, ContextItem, ContextRefreshQuery, ContextSource, ExternalRef } from '../ports/context-source.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 
@@ -104,6 +104,18 @@ function recordedRevision(indexes: Record<string, unknown>, index: 'intel' | 'gr
   const absent = Array.isArray(indexes['absent']) ? indexes['absent'].find((a) => isObject(a) && a['index'] === index) : undefined;
   const reason = isObject(absent) ? stringOf(absent['reason']) : undefined;
   return { missing: `the ${index} index is not in the project record${reason !== undefined ? ` (absent: ${reason})` : ''}` };
+}
+
+// What a source needs to judge a reference of this project's index against the repository as it is now: the staging copy and the repository, and the revision
+// the project record says that index was built at. `unavailable` when the project has no active record, no staging copy, or the record names no such index.
+export function refreshQueryFor(deps: AppDeps, projectId: string, index: 'intel' | 'graph'): Result<ContextRefreshQuery> {
+  const resolved = resolveProject(deps, projectId);
+  if (!resolved.ok) return resolved;
+  const { project, record, staging } = resolved.value;
+  const indexes = isObject(record.body['indexes']) ? record.body['indexes'] : {};
+  const recorded = recordedRevision(indexes, index);
+  if ('missing' in recorded) return err({ kind: 'unavailable', cause: recorded.missing });
+  return ok({ workspace: { stagingPath: staging, repoPath: project.repoPath }, indexRevision: recorded.revision });
 }
 
 // Lower is better; the same order GSD's reader and the graph adapter use. A handle with no edge tier ranks between

@@ -72,9 +72,18 @@ export interface ContextItem {
   confirmed?: boolean;
 }
 
+// What a refresh is told about the project it is judged against: the same two paths and the same index revision a `find` is given, without a term.
+export type ContextRefreshQuery = Omit<ContextQuery, 'term'>;
+
 export interface ContextSource {
   readonly descriptor: CapabilityDescriptor;
   find(query: ContextQuery, budget: TokenBudget): Promise<Result<ContextHandle[]>>;
   // Only handles this source returned from its latest `find`.
   read(handles: readonly ContextHandle[], budget: TokenBudget): Promise<Result<ContextItem[]>>;
+  // Judges a reference recorded earlier against the index and the repository as they are now (docs/contracts-and-state.md "Reference freshness"), and returns
+  // it with its new `freshness` and `retrievedAt`. `revision` is the revision the source is at now: the caller decides whether to keep the revision it recorded
+  // (a changed or deleted reference keeps the one the pack was built from). `changed`: the index was rebuilt since the reference was recorded. `deleted`: the
+  // path the reference cites is gone at the repository's HEAD. `stale`: HEAD moved past the index. `unavailable`: HEAD or the index diff cannot be read.
+  // Reads no file and writes nothing; an error is returned only when the question cannot be asked at all.
+  refresh(ref: ExternalRef, query: ContextRefreshQuery): Promise<Result<ExternalRef>>;
 }

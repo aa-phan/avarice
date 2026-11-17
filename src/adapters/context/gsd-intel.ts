@@ -4,7 +4,7 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
-import type { ContextHandle, ContextItem, ContextQuery, ContextSource, ExternalRef, Freshness, TokenBudget } from '../../ports/context-source.ts';
+import type { ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, Freshness, TokenBudget } from '../../ports/context-source.ts';
 import type { GsdOnboarding } from '../../ports/gsd-onboarding.ts';
 import { currentHead, estimateTokens, freshnessAt, isCitablePath, pathExistsAtHead } from './freshness.ts';
 
@@ -124,5 +124,10 @@ export class GsdIntelContext implements ContextSource {
       });
     }
     return ok(items);
+  }
+
+  // Skeleton: the planned behavior is added next.
+  async refresh(_ref: ExternalRef, _query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
+    return err({ kind: 'internal', cause: 'not implemented' });
   }
 }

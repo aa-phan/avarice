@@ -68,6 +68,7 @@ function fakeSource(name: 'intel' | 'graph', specs: readonly Spec[], recorded: R
       const items: ContextItem[] = handles.map((h) => ({ ref: h.ref, title: h.title, excerpt: `body of ${h.ref.id}`, estTokens: h.estTokens, reason: h.reason }));
       return { ok: true, value: items };
     },
+    refresh: async (ref) => ({ ok: true, value: ref }),
   };
 }
 

@@ -9,7 +9,7 @@ import type { Result } from '../../domain/result.ts';
 import { ruleFor, widestRule } from '../../domain/retrieval-rules.ts';
 import type { ReadRule } from '../../domain/retrieval-rules.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
-import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextSource, ExternalRef, TokenBudget } from '../../ports/context-source.ts';
+import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, TokenBudget } from '../../ports/context-source.ts';
 import type { GsdGraphEdge, GsdGraphNode, GsdOnboarding } from '../../ports/gsd-onboarding.ts';
 import type { ContextAdapterOptions } from './gsd-intel.ts';
 import { currentHead, estimateTokens, freshnessAt, isCitablePath, pathExistsAtHead } from './freshness.ts';
@@ -199,5 +199,10 @@ export class GsdGraphContext implements ContextSource {
       });
     }
     return ok(items);
+  }
+
+  // Skeleton: the planned behavior is added next.
+  async refresh(_ref: ExternalRef, _query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
+    return err({ kind: 'internal', cause: 'not implemented' });
   }
 }
