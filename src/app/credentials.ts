@@ -3,7 +3,7 @@
 // calling module, the profile, the outcome and the duration, and never the value, its length or a digest of it. The run and invocation
 // IDs ride on the event's own columns. The provider seeds the process redactor before it returns the handle, so everything written after
 // a resolution is redacted (SEC-3).
-import { parseCredentialRef, printable } from '../domain/credential-ref.ts';
+import { parseCredentialRef, printable, providersFor } from '../domain/credential-ref.ts';
 import type { ProviderName } from '../domain/credential-ref.ts';
 import { err } from '../domain/result.ts';
 import type { PortError, Result } from '../domain/result.ts';
@@ -67,6 +67,10 @@ export async function resolveCredential(deps: CredentialDeps, ref: string, purpo
 async function attempt(deps: CredentialDeps, ref: string, purpose: string, ctx: CredentialContext): Promise<Result<SecretHandle>> {
   const parsed = parseCredentialRef(ref);
   if (!parsed.ok) return parsed;
+  // The profile's class decides which providers it may resolve from (D-17), whatever providers happen to be wired.
+  if (!providersFor(deps.profile.profile).includes(parsed.value.provider)) {
+    return err({ kind: 'denied', rule: `credential-provider-not-allowed:${parsed.value.provider}`, enforcer: 'avarice' });
+  }
   const provider = deps.providers[parsed.value.provider];
   if (provider === undefined) return err({ kind: 'unavailable', cause: `no ${parsed.value.provider} credential provider is configured` });
   try {

@@ -46,28 +46,83 @@ export function parseCredentialRef(text: string): Result<CredentialRef> {
   return ok({ provider: scheme as ProviderName, name });
 }
 
-// SKELETON for the RED run of Task 2 of plan 04-15: the planned names exist and enforce nothing.
+// The provider allow-list of each profile (D-17; Claude's reading of the decision, recorded in plan 04-15): which providers a profile may
+// resolve from. The three keys are the classes the allow-list distinguishes: the two personal profiles differ (only personal-extended
+// reaches a vendor CLI that holds its own credential), and every enterprise profile is one class. `env` is in no list.
 export type CredentialProfileClass = 'personal-local' | 'personal-extended' | 'enterprise';
 
-export const PROVIDERS_BY_CLASS: Readonly<Record<CredentialProfileClass, readonly ProviderName[]>> = {
-  'personal-local': PROVIDER_NAMES,
-  'personal-extended': PROVIDER_NAMES,
-  enterprise: PROVIDER_NAMES,
-};
+export const PROVIDERS_BY_CLASS: Readonly<Record<CredentialProfileClass, readonly ProviderName[]>> = Object.freeze({
+  'personal-local': Object.freeze(['keychain', 'cmd'] as const),
+  'personal-extended': Object.freeze(['keychain', 'cmd', 'delegated'] as const),
+  enterprise: Object.freeze(['keychain', 'cmd'] as const),
+});
 
-export function credentialClassOf(_profile: string): CredentialProfileClass {
+// The credential class of a profile name. A name outside the profile grammar falls to the narrowest personal class.
+export function credentialClassOf(profile: string): CredentialProfileClass {
+  if (profile === 'personal-extended') return 'personal-extended';
+  if (profile.startsWith('enterprise-')) return 'enterprise';
   return 'personal-local';
 }
 
-export function providersFor(_profile: string): readonly ProviderName[] {
-  return PROVIDER_NAMES;
+export function providersFor(profile: string): readonly ProviderName[] {
+  return PROVIDERS_BY_CLASS[credentialClassOf(profile)];
 }
 
+// The `credentials` section of a profile config: `<name>: "<reference>"` entries, and `helpers`, the approved `cmd:` helpers
+// (`<helper name>: "<absolute path>"`). A helper that is not listed there cannot be run (T-04-38). The section is read raw from the config
+// by composition; this is the one place that parses it.
 export interface CredentialSection {
   refs: Record<string, CredentialRef>;
   helpers: Record<string, string>;
 }
 
-export function parseCredentialSection(_raw: unknown): Result<CredentialSection> {
-  return ok({ refs: {}, helpers: {} });
+const MAX_HELPER_PATH = 1024;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const invalid = (field: string, reason: string): Result<never> => err({ kind: 'invalid', field, reason });
+
+// A key becomes a field name that a terminal prints, so it is made printable and short first.
+const shown = (key: string): string => printable(key, 40);
+
+// `__proto__` from a parsed JSON file is an own key that would assign the prototype of the result; it is never a name.
+const isName = (key: string): boolean => NAME_PATTERN.test(key) && key !== '__proto__';
+
+function isAbsoluteHelperPath(value: string): boolean {
+  if (value.length > MAX_HELPER_PATH || !value.startsWith('/') || CONTROL.test(value)) return false;
+  return value.split('/').slice(1).every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+function parseHelpers(raw: unknown): Result<Record<string, string>> {
+  if (!isRecord(raw)) return invalid('credentials.helpers', 'expected an object of helper names and absolute paths');
+  const helpers: Record<string, string> = {};
+  for (const [name, path] of Object.entries(raw)) {
+    if (!isName(name)) return invalid(`credentials.helpers.${shown(name)}`, 'a helper name is 1 to 128 letters, digits, ".", "_" or "-"');
+    if (typeof path !== 'string' || !isAbsoluteHelperPath(path)) {
+      return invalid(`credentials.helpers.${shown(name)}`, `expected an absolute path of at most ${MAX_HELPER_PATH} characters with no control character, ".", ".." or empty segment`);
+    }
+    helpers[name] = path;
+  }
+  return ok(helpers);
+}
+
+export function parseCredentialSection(raw: unknown): Result<CredentialSection> {
+  const section: CredentialSection = { refs: {}, helpers: {} };
+  if (raw === undefined) return ok(section);
+  if (!isRecord(raw)) return invalid('credentials', 'expected an object in the profile config');
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'helpers') {
+      const helpers = parseHelpers(value);
+      if (!helpers.ok) return helpers;
+      section.helpers = helpers.value;
+      continue;
+    }
+    if (!isName(key)) return invalid(`credentials.${shown(key)}`, 'a credential name is 1 to 128 letters, digits, ".", "_" or "-"');
+    if (typeof value !== 'string') return invalid(`credentials.${shown(key)}`, 'expected a credential reference string such as keychain:<service>');
+    const ref = parseCredentialRef(value);
+    if (!ref.ok) return err({ kind: 'invalid', field: `credentials.${shown(key)}`, reason: ref.error.kind === 'invalid' ? ref.error.reason : 'the credential reference is refused' });
+    section.refs[key] = ref.value;
+  }
+  return ok(section);
 }
