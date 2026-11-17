@@ -472,7 +472,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   return {
     ok: true,
     value: {
-      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), ...(credentials !== undefined ? { credentials } : {}), clock, ids, profile, home, policy: policyLoader(profile) },
+      deps: { ledger, host, staging, artifacts, executor, graph, runSource, runWorkspace, egress, ...(gsd !== undefined ? { gsd } : {}), ...(gsdProblem !== undefined ? { gsdProblem } : {}), ...(context !== undefined ? { context } : {}), ...(notify !== undefined ? { notify } : {}), ...(credentials !== undefined ? { credentials } : {}), clock, ids, profile, home, redact: (text: string) => processRedactor.redact(text), policy: policyLoader(profile) },
       close: () => {
         try {
           store.close();

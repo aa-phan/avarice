@@ -24,6 +24,7 @@ import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../
 import { classifyCommandLine, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
 import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
+import { processRedactor } from '../adapters/redaction/process-redactor.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -35,6 +36,13 @@ const BUSY_TIMEOUT_MS = 4000;
 const MAX_DIGEST_BYTES = 8 * 1024 * 1024;
 // How many of an invocation's latest decisions the search count looks through (the tool-call budget keeps an invocation far below it).
 const MAX_SEARCH_SCAN = 2000;
+
+// The key a file is recorded under in `hook_reads`, for the read-before-edit rule (SEC-3). The path is a lookup key, written and read here with the same function, so a
+// path that holds a secret-shaped string is stored with the redaction marker and a short digest of the whole path (two such files stay two keys) and never as typed.
+function readKey(path: string): string {
+  const redacted = processRedactor.redact(path);
+  return redacted === path ? path : `${redacted}#${sha256Hex(path).slice(0, 16)}`;
+}
 
 function fail(reason: string): never {
   try {
@@ -334,7 +342,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         result = { decision: 'deny', rule: result.rule, reason: privilegedReason(result.privileged.action, requestId) };
       }
       if (edit !== undefined) {
-        const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), edit.canonical) as { digest: string } | undefined;
+        const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), readKey(edit.canonical)) as { digest: string } | undefined;
         const objection = decideReadBeforeEdit({ tool, exists: edit.state.exists, recorded: recorded?.digest, current: edit.state.digest, displayPath: edit.display });
         if (objection !== null) result = objection;
       }
@@ -458,7 +466,7 @@ function postToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       if (record !== undefined) {
         db.prepare(
           'INSERT INTO hook_reads (invocation_id, agent_id, path, digest, seq, recorded_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (invocation_id, agent_id, path) DO UPDATE SET digest = excluded.digest, seq = excluded.seq, recorded_at = excluded.recorded_at',
-        ).run(policy.invocationId, agentOf(input), record.path, record.digest, receipt.seq, new Date(now).toISOString());
+        ).run(policy.invocationId, agentOf(input), readKey(record.path), record.digest, receipt.seq, new Date(now).toISOString());
       }
     });
   } finally {

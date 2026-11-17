@@ -98,6 +98,9 @@ export interface AppDeps {
   // The policy sources of this profile (SEC-4, D-17): the organization file (enterprise profiles only), the profile's own policy section
   // and, when a repository and its pin are given, that repository's `.avarice/policy.json` at the pin. Read once per command.
   policy(repo?: { path: string; pin: string }): Result<PolicySources>;
+  // Replaces every secret-shaped string, and every credential value the process was seeded with, by `[REDACTED:<kind>]` (SEC-3). Text a person typed into a
+  // file (a brief) passes through it before it becomes stored data. Absent only in a hand-built AppDeps, where the secret patterns alone apply.
+  redact?: (text: string) => string;
   // The user's home directory as composition resolved it ($HOME, else the OS answer): the credential directories an
   // invocation may not read are named from it. Absent only in a hand-built AppDeps.
   home?: string;

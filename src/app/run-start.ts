@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { parseBrief } from '../domain/brief.ts';
+import { redactSecrets } from '../domain/secret-patterns.ts';
 import { parseConventions } from '../domain/conventions.ts';
 import { canonicalJson } from '../domain/digest.ts';
 import { judgeRunPreflight } from '../domain/run-preflight.ts';
@@ -189,11 +190,12 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     return refused('gsd-not-admitted', `GSD ${GSD_ADMITTED_RANGE} was not found${problem !== undefined ? ` (${problem.found}; admitted: ${problem.admitted})` : ''}`);
   }
 
-  // The brief is untrusted data: parsed and validated, never obeyed.
+  // The brief is untrusted data: parsed and validated, never obeyed. What a person typed into it becomes the title, the work items and the contract, so a secret
+  // pasted into it is replaced by its `[REDACTED:<kind>]` marker before any of that is stored (SEC-3, AC-5); the digest that tells a changed file stays the one of the bytes.
   const read = readBriefFile(resolve(request.cwd, request.briefPath));
   if (!read.ok) return usage('brief', `brief ${request.briefPath} ${read.reason}`);
   const briefName = request.briefPath.split(/[\\/]/).pop() ?? 'brief';
-  const brief = parseBrief(read.text, { kind: 'file', id: briefName });
+  const brief = parseBrief((deps.redact ?? redactSecrets)(read.text), { kind: 'file', id: briefName });
   if (!brief.ok) return usage(brief.error.kind === 'invalid' ? brief.error.field : 'brief', describeError(brief.error));
 
   const found = findProject(deps, request);
