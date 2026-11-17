@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-24-PLAN.md
-last_updated: "2026-11-17T09:33:35.676Z"
+stopped_at: Completed 04-25-PLAN.md
+last_updated: "2026-11-17T10:15:30.883Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 381c70be8a547305cab840fb7d613f445d57ec33
+state_head: 718a6ea51b115ad44c6a951437ae79f9a078170b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 25 of 39
+Plan: 26 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -187,6 +187,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P22 | 35min | 2 tasks | 10 files |
 | Phase 04 P23 | 28 min | 3 tasks | 27 files |
 | Phase 04 P24 | 24 min | 2 tasks | 21 files |
+| Phase 04 P25 | 21 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -457,6 +458,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-23: a restricted run ends with the existing enforcement block (permission decision, withdraw only); owner review wanted on cancel/keep-open options — decision policy gives a permission decision one withdraw option, which applies nothing
 - [Phase 04]: 04-24: a restricted onboarding builds the code graph only; intel and knowledge are recorded absent (reason restricted), and the restricted onboarding line adds the generated --plugin-dir and --agents pair
 - [Phase 04]: 04-24: onboard --restricted replaces an active contained record with a partial (restricted) version, and contained starts on a restricted record are refused (owner review: whether to forbid the downgrade)
+- [Phase 04]: 04-25: doctor composes its own read-only dependency set (composeDoctor, not createDeps); absent host or GSD and refused host are warnings, an incompatible GSD, a newer store, an env: credential reference and an incompatible active record are errors (exit 3)
+- [Phase 04]: 04-25: S-38 record incompatibility is derived by recordCompatibility (no admitted gsd-core, outside 1.17.x, or another minor), shared by doctor and start; start refuses with record-incompatible and never writes the record
 
 ### Roadmap Evolution
 
@@ -524,8 +527,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T09:33:35.647Z
-Stopped at: Completed 04-24-PLAN.md
+Last session: 2026-11-17T10:15:30.850Z
+Stopped at: Completed 04-25-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
