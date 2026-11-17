@@ -22,8 +22,10 @@ import type { Stage, StageContext } from './stage.ts';
 export const PROMOTE_STEP = 'promote';
 const MAX_PATHS_IN_ISSUE = 10;
 const MAX_DETAIL = 300;
-// The kill point between a privileged action's recorded start and its end (test-only fault injection).
+// The kill points between a privileged action's recorded start and its end (test-only fault injection): right after the start, and after the
+// write took effect but before its outcome and end were recorded. `AVARICE_FAULT=after-action-start:onboarding.promote.copy`, for one.
 export const PROMOTE_STARTED_FAULT = 'after-action-start:';
+export const PROMOTE_WORKED_FAULT = 'after-action-work:';
 
 const clip = (text: string): string => (text.length <= MAX_DETAIL ? text : `${text.slice(0, MAX_DETAIL - 1)}…`);
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -114,6 +116,7 @@ export const promoteStage: Stage = (ctx: StageContext, row: OnboardingRow): Resu
       if (!ended.ok) return ended;
       return notDone(ctx, mode, 'failed', `the copy stopped (${copied.error.kind})`);
     }
+    ctx.fault(`${PROMOTE_WORKED_FAULT}${action}`);
     const { written, present, conflicts } = copied.value;
     let decisionId: string | undefined;
     if (conflicts.length > 0) {
@@ -152,6 +155,7 @@ export const promoteStage: Stage = (ctx: StageContext, row: OnboardingRow): Resu
     if (!ended.ok) return ended;
     return notDone(ctx, mode, 'failed', `the branch was not created (${committed.error.kind})`);
   }
+  ctx.fault(`${PROMOTE_WORKED_FAULT}${action}`);
   const recorded = recordOutcome(ctx, 'completed', { mode, branch: committed.value.branch, commit: committed.value.commit, files: files4commit.map((f) => f.path) });
   if (!recorded.ok) return recorded;
   const ended = finish('succeeded');

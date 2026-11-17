@@ -4,13 +4,15 @@
 // knowledge) is reaped in any non-stop state before anything else runs: the host of a killed supervisor is
 // detached and may still be writing, so no stage and no relaunch may start beside it. A run killed while the
 // map invocation was in flight is then reconciled: the staging map files decide whether the invocation finished.
-// Every other stage is idempotent and simply runs again from the committed state.
+// Every other stage is idempotent and simply runs again from the committed state. A privileged action that started and did not finish (promotion) is the
+// exception: it is not run again, resume opens a decision instead (FR-15).
 import { ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { isStopState } from '../domain/onboarding-lifecycle.ts';
 import { requiredFilesFor } from '../domain/mapping.ts';
 import type { OnboardingRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { openPrivilegedSteps, reconcilePrivilegedSteps } from './authorize.ts';
 import { runOnboarding } from './onboarding-service.ts';
 import type { OnboardingOutcome } from './onboarding-service.ts';
 import type { StageContext } from './stages/stage.ts';
@@ -151,8 +153,23 @@ async function reconcileInvocation(ctx: StageContext): Promise<Result<void>> {
   return validating.ok ? ok(undefined) : validating;
 }
 
-// What resume runs under the lease before the stage loop: reap first, then reconcile the map invocation.
+// A privileged action (promotion, plan 04-21) whose start was recorded and whose end was not may have taken effect, so it is never run again (FR-15): each
+// such start gets one permission decision and a mark, and the owner is told. Nothing is written to the user's repository here.
+function reconcilePrivileged(ctx: StageContext): Result<void> {
+  const reconciled = reconcilePrivilegedSteps(ctx.deps, ctx.onboardingId);
+  if (!reconciled.ok) return reconciled;
+  for (const [index, step] of reconciled.value.steps.entries()) {
+    const decision = reconciled.value.decisionIds[index];
+    ctx.note(`${step.action} was started and never finished; it was not repeated${decision !== undefined ? ` (decision ${decision})` : ''}`);
+  }
+  return ok(undefined);
+}
+
+// What resume runs under the lease before the stage loop: interrupted privileged actions first (nothing else may run beside what they left), then reap,
+// then reconcile the map invocation.
 async function reconcileOnResume(ctx: StageContext): Promise<Result<void>> {
+  const privileged = reconcilePrivileged(ctx);
+  if (!privileged.ok) return privileged;
   const reaped = await reapStartedLaunches(ctx);
   if (!reaped.ok) return reaped;
   return reconcileInvocation(ctx);
@@ -163,7 +180,14 @@ export async function resumeOnboarding(deps: AppDeps, onboardingId: string): Pro
   if (!found.ok) return found;
   const row = found.value;
   if (isStopState(row.state)) {
-    // Nothing to continue: report where it ended without taking the lease.
+    // An active onboarding can still hold a promotion that started and did not finish: it takes the lease (a live process keeps it, so a promotion in
+    // progress is never mistaken for an interrupted one) and reconciles that and nothing else. Without one, there is nothing to continue.
+    if (row.state === 'active') {
+      const open = openPrivilegedSteps(deps, onboardingId);
+      if (!open.ok) return open;
+      if (open.value.length > 0) return runOnboarding(deps, onboardingId, { prelude: reconcilePrivileged });
+    }
+    // Report where it ended without taking the lease.
     return ok({ onboardingId, state: row.state, reason: row.reason, message: null });
   }
   return runOnboarding(deps, onboardingId, { prelude: reconcileOnResume });

@@ -12,7 +12,7 @@ import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { ALL_MAP_FILES, FakeAgentHost } from '../helpers/fake-agent-host.ts';
-import { REPO_FILES, TEST_CLI, rows } from '../helpers/fault-run.ts';
+import { EXPIRY_WAIT_MS, REPO_FILES, SHORT_TTL_MS, TEST_CLI, resumeCli, rows, sleepSync } from '../helpers/fault-run.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { checkoutSnapshot, git, makeScratchRepo, treeDigest } from '../helpers/scratch-repo.ts';
@@ -367,5 +367,78 @@ describe('a policy deny refuses the promotion (T-04-57, FR-12)', () => {
       composed.value.close();
     }
     assert.deepEqual(mapFilesIn(repo), [...ALL_MAP_FILES].sort());
+  });
+});
+
+// ---- Task 3: an interrupted promotion is not replayed (FR-15, T-04-44) ---------------------------------------------------------------------------------------
+
+describe('a promotion interrupted after its start was recorded is not replayed on resume (FR-15, T-04-44)', () => {
+  // The two gaps of a privileged action: right after its start was recorded, and after the write took effect but before its end was.
+  const GAPS = [
+    { point: 'after-action-start:onboarding.promote.copy', written: false },
+    { point: 'after-action-work:onboarding.promote.copy', written: true },
+  ] as const;
+
+  for (const gap of GAPS) {
+    it(`killed at ${gap.point}: resume opens one permission decision, writes nothing and does not run the stage again`, () => {
+      const { roots, repo } = fixture();
+      const killed = runCli(['onboard', '--policy', 'onboarding', '--promote', 'copy', repo.path], {
+        roots,
+        entry: TEST_CLI,
+        env: { AVARICE_FAKE_HOST: '{}', AVARICE_LEASE_TTL_MS: String(SHORT_TTL_MS), AVARICE_FAULT: gap.point },
+      });
+      assert.equal(killed.signal, 'SIGKILL', `${killed.stdout}${killed.stderr}`);
+      const id = onboardingId(roots);
+      assert.equal(rows<{ state: string }>(roots, 'SELECT state FROM onboardings')[0]?.state, 'active', 'activation had committed');
+      const [start] = eventsOf(roots, 'action.started');
+      assert.ok(start !== undefined, 'the start was recorded');
+      assert.equal(eventsOf(roots, 'action.finished').length, 0, 'the end was not');
+      assert.equal(mapFilesIn(repo).length > 0, gap.written, gap.written ? 'the files were written before the kill' : 'nothing was written before the kill');
+      const atKill = treeDigest(repo.path);
+
+      sleepSync(EXPIRY_WAIT_MS);
+      const resumed = resumeCli(roots, id);
+      assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+      assert.match(resumed.stdout, new RegExp(`onboarding ${id}: active`));
+      assert.match(resumed.stdout, /onboarding\.promote\.copy was started and never finished; it was not repeated \(decision dec_/);
+
+      const decisions = decisionsOf(roots);
+      assert.equal(decisions.length, 1, 'one permission decision');
+      assert.equal(decisions[0]?.class, 'permission');
+      assert.equal(decisions[0]?.state, 'open');
+      assert.deepEqual(JSON.parse(decisions[0]?.evidence_refs_json as string), [`event:${start.seq}`], 'it names the start it is about');
+      assert.ok(decisions[0]?.issue.includes('onboarding.promote.copy') && decisions[0]?.issue.includes('it was not repeated'), decisions[0]?.issue);
+      assert.equal(rows<{ contract_run_id: string }>(roots, 'SELECT contract_run_id FROM onboardings')[0]?.contract_run_id, decisions[0]?.run_id, 'it hangs off the onboarding contract run');
+      assert.deepEqual((JSON.parse(decisions[0]?.options_json as string) as Array<{ key: string }>).map((o) => o.key), ['withdraw']);
+
+      assert.equal(treeDigest(repo.path), atKill, 'the checkout after the resume is the checkout at the kill: the resume wrote nothing');
+      assert.equal(eventsOf(roots, 'action.started').length, 1, 'the stage did not run again: still one start');
+      assert.equal(eventsOf(roots, 'action.finished').length, 0);
+      const [interrupted] = eventsOf(roots, 'action.interrupted');
+      assert.equal(dataOf(interrupted as EventDb).startSeq, start.seq);
+      assert.equal(promoteStep(roots), null, 'no outcome was recorded for a promotion nobody saw finish');
+      assert.equal(approvalCount(roots), 0, 'nothing here writes an approval');
+
+      // A second resume finds nothing open and repeats nothing.
+      const again = resumeCli(roots, id);
+      assert.equal(again.code, 0, again.stdout + again.stderr);
+      assert.equal(decisionsOf(roots).length, 1);
+      assert.equal(eventsOf(roots, 'action.interrupted').length, 1);
+      assert.equal(treeDigest(repo.path), atKill);
+    });
+  }
+
+  it('a finished promotion leaves nothing for resume: no lease, no decision, no new event', () => {
+    const { roots, repo } = fixture();
+    assert.equal(onboard(roots, repo, '--promote', 'copy').code, 0);
+    const id = onboardingId(roots);
+    const eventsBefore = rows<{ n: number }>(roots, 'SELECT COUNT(*) AS n FROM events')[0]?.n;
+    const atEnd = treeDigest(repo.path);
+
+    const resumed = resumeCli(roots, id);
+    assert.equal(resumed.code, 0, resumed.stdout + resumed.stderr);
+    assert.equal(rows<{ n: number }>(roots, 'SELECT COUNT(*) AS n FROM events')[0]?.n, eventsBefore, 'resume wrote no event');
+    assert.equal(decisionsOf(roots).length, 0);
+    assert.equal(treeDigest(repo.path), atEnd);
   });
 });
