@@ -226,6 +226,7 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
       commitPromotion: (input) => real.staging.commitPromotion(input),
     };
     const spyArtifacts: ArtifactStore = {
+      descriptor: real.artifacts.descriptor,
       put: (bytes, meta) => {
         if (!observed.some((o) => o.startsWith('put '))) observed.push(`put after ${latest()}`);
         return real.artifacts.put(bytes, meta);

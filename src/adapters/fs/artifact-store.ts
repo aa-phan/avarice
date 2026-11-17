@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { ArtifactMeta, ArtifactStore } from '../../ports/artifact-store.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 
 // Seams for fault injection in tests; production uses the node:fs functions.
 export interface FsOps {
@@ -46,7 +47,11 @@ function mapFsError(action: string, error: unknown): PortError {
   return { kind: 'internal', cause: `${action}: ${code ?? (error instanceof Error ? error.message : String(error))}` };
 }
 
+// One key per ArtifactStore method, so a method added to the port cannot go undeclared; `contentAddressed` is the port's identity rule (the digest is the SHA-256 of the bytes).
+const LOCAL_CAPABILITIES: Record<Exclude<keyof ArtifactStore, 'descriptor'>, true> & { contentAddressed: true } = { put: true, get: true, has: true, contentAddressed: true };
+
 export class LocalArtifactStore implements ArtifactStore {
+  readonly descriptor: CapabilityDescriptor = { port: 'artifact-store', adapter: 'local-fs', version: '1.0.0', capabilities: { ...LOCAL_CAPABILITIES }, offline: true };
   private readonly root: string;
   private readonly ops: FsOps;
   private readonly quota: ArtifactQuota | undefined;

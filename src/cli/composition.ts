@@ -59,6 +59,7 @@ import { LIMIT_DEFAULTS, parseLimitsSection } from '../domain/resource-bounds.ts
 import { NOTIFY_DEFAULTS } from '../domain/notify-policy.ts';
 import type { AgentHost } from '../ports/agent-host.ts';
 import type { ArtifactStore } from '../ports/artifact-store.ts';
+import type { CapabilityDescriptor } from '../ports/capability.ts';
 import type { CredentialProvider } from '../ports/credential-provider.ts';
 import type { Ledger } from '../ports/ledger.ts';
 import type { Notifier } from '../ports/notifier.ts';
@@ -87,6 +88,10 @@ export interface DepsOverrides {
   // Replaces the allowlisting egress proxy. Only test entries pass this (a test whose registry is a local server on a port the conventions
   // cannot name); bin/avarice.ts never does, so production always runs the in-repo allowlist proxy.
   egress?: EgressProxy;
+  // Replaces the local content-addressed artifact store (plan 04-32, NFR-4): the configuration seam the portability proof uses to select another store.
+  // The store is still wrapped in the RedactingArtifactStore, so a replacement cannot bypass redaction (T-04-88); the profile's artifact quota belongs to the local
+  // store and is not applied to a replacement. Only test entries pass this; bin/avarice.ts never does, so production always runs LocalArtifactStore.
+  artifacts?: ArtifactStore;
   // Replaces the local osascript notifier. Only test entries pass this (so a test never posts a real banner); bin/avarice.ts never
   // does, so production always runs LocalNotifier with the path from the profile config.
   notifier?: Notifier;
@@ -490,7 +495,18 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const runWorkspace = new CloneRunWorkspace();
   const egress = overrides.egress ?? new AllowlistEgressProxy();
   // SEC-3, D-14: every text artifact is redacted before it is stored, whoever writes it.
-  const artifacts = new RedactingArtifactStore(new LocalArtifactStore(profile.dataRoot, {}, { mib: limits.artifactQuotaMiB, profile: profile.profile }), processRedactor);
+  const artifacts = new RedactingArtifactStore(overrides.artifacts ?? new LocalArtifactStore(profile.dataRoot, {}, { mib: limits.artifactQuotaMiB, profile: profile.profile }), processRedactor);
+  // Every composed adapter's descriptor is recorded (FR-16), so a later reader sees what this profile ran with. A read-only command records nothing.
+  if (options.readOnly !== true) {
+    const composed: ReadonlyArray<{ name: string; descriptor: CapabilityDescriptor }> = [{ name: 'artifacts', descriptor: artifacts.descriptor }];
+    for (const { name, descriptor } of composed) {
+      const recorded = ledger.upsertAdapterConfig({ name, port: descriptor.port, adapter: descriptor.adapter, configDigest: digestOf(descriptor), descriptor });
+      if (!recorded.ok) {
+        store.close();
+        return failure(`cannot record the ${name} adapter`, describeError(recorded.error));
+      }
+    }
+  }
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =
     overrides.host ??

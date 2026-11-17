@@ -7,6 +7,7 @@
 import type { Redactor } from '../../domain/redactor.ts';
 import type { Result } from '../../domain/result.ts';
 import type { ArtifactMeta, ArtifactStore } from '../../ports/artifact-store.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 
 // Every text kind the code stores, except `map-document` and `map-snapshot`. `context-pack`, `manual-context` and `manual-evidence` are
 // the kinds the context-pack and manual-input writers store.
@@ -32,12 +33,15 @@ const strictUtf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const encoder = new TextEncoder();
 
 export class RedactingArtifactStore implements ArtifactStore {
+  // The inner store's descriptor, marked redacted: what is recorded is the store a caller actually gets, text kinds redacted before they are stored.
+  readonly descriptor: CapabilityDescriptor;
   readonly #inner: ArtifactStore;
   readonly #redactor: Redactor;
 
   constructor(inner: ArtifactStore, redactor: Redactor) {
     this.#inner = inner;
     this.#redactor = redactor;
+    this.descriptor = { ...inner.descriptor, attributes: { ...inner.descriptor.attributes, redacted: 'true' } };
   }
 
   put(bytes: Uint8Array, meta: ArtifactMeta): Result<{ digest: string; size: number }> {
