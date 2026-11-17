@@ -54,12 +54,13 @@ export function fakeGsd(version: string): string {
   return writeFakeGsdCore(temp(`doctor-gsd-${version}`), { version });
 }
 
-// A profile under a temp directory, a temp HOME, a gsd-core 1.17.0 that is not the owner's, no claude and no graphify. Nothing under the real home is read or written.
+// A profile under a temp directory, a temp HOME and Claude configuration directory, a gsd-core 1.17.0 that is not the owner's, no claude and no graphify. Nothing under the real home is read or written.
 export function doctorFixture(extraEnv: Record<string, string> = {}): DoctorFixture {
   const roots = makeRoots();
   cleanup.push(roots.base);
   const home = realpathSync(roots.base);
-  return { roots, home, env: { HOME: home, GSD_HOME: fakeGsd('1.17.0'), AVARICE_GRAPHIFY_BIN: '/nonexistent', ...extraEnv } };
+  // CLAUDE_CONFIG_DIR is set too: the owner's own would otherwise leak in from the environment of the test run.
+  return { roots, home, env: { HOME: home, CLAUDE_CONFIG_DIR: join(home, '.claude'), GSD_HOME: fakeGsd('1.17.0'), AVARICE_GRAPHIFY_BIN: '/nonexistent', ...extraEnv } };
 }
 
 export function doctor(f: DoctorFixture, argv: readonly string[] = [], extraEnv: Record<string, string | undefined> = {}, cwd?: string): CliResult {

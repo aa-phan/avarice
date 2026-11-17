@@ -1,0 +1,75 @@
+{
+  "profile": {
+    "name": "personal-local",
+    "class": "personal",
+    "roots": {
+      "configHome": "<tmp>/config",
+      "dataRoot": "<tmp>/data",
+      "workRoot": "<tmp>/work"
+    },
+    "local": true,
+    "credentials": []
+  },
+  "runtime": {
+    "node": {
+      "version": "<node>",
+      "engines": ">=22.22.3",
+      "ok": true
+    },
+    "sqlite": {
+      "version": "<sqlite>",
+      "ok": true
+    }
+  },
+  "store": {
+    "path": "<tmp>/data/state.db",
+    "state": "ok",
+    "schema": 4,
+    "expectedSchema": 4,
+    "journalMode": "wal",
+    "integrity": "ok",
+    "sizeBytes": 0,
+    "lastBackup": null,
+    "profileId": "personal-local"
+  },
+  "host": {
+    "claudeBin": "/nonexistent/avarice-test-has-no-claude",
+    "claudeVersion": null,
+    "admission": "absent",
+    "refusal": null,
+    "restricted": false,
+    "enforcement": "none",
+    "sandbox": "not probed",
+    "hookEntry": "readable",
+    "attended": "none",
+    "configDir": "<tmp>/.claude"
+  },
+  "gsd": {
+    "state": "ok",
+    "version": "1.17.0",
+    "location": "<tmp>",
+    "admitted": "1.17.x",
+    "detail": null
+  },
+  "graphify": {
+    "state": "absent",
+    "version": null,
+    "path": null
+  },
+  "adapters": [],
+  "runs": {
+    "read": true,
+    "total": 0,
+    "byState": {},
+    "interrupted": []
+  },
+  "records": [],
+  "findings": [
+    {
+      "level": "warning",
+      "area": "host",
+      "message": "claude was not found; onboarding and runs need it",
+      "fix": "install Claude Code, or set AVARICE_CLAUDE_BIN to its executable"
+    }
+  ]
+}

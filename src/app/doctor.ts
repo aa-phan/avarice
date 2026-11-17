@@ -285,6 +285,22 @@ function referencesOf(profile: DoctorProfile, findings: DoctorFinding[]): Refere
   return rows;
 }
 
+// The host section with its keys in the order the report documents, whichever branch built it.
+function inOrder(h: DoctorHost): DoctorHost {
+  return {
+    claudeBin: h.claudeBin,
+    claudeVersion: h.claudeVersion,
+    admission: h.admission,
+    refusal: h.refusal,
+    restricted: h.restricted,
+    enforcement: h.enforcement,
+    sandbox: h.sandbox,
+    hookEntry: h.hookEntry,
+    attended: h.attended,
+    configDir: h.configDir,
+  };
+}
+
 function hostSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorHost {
   const d = deps.diagnostics;
   const attendedSettings = d.hookSettings(deps.claudeConfigDir);
@@ -301,7 +317,7 @@ function hostSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorHost {
       message: 'claude was not found; onboarding and runs need it',
       fix: 'install Claude Code, or set AVARICE_CLAUDE_BIN to its executable',
     });
-    return { ...base, claudeVersion: null, admission: 'absent', refusal: null, restricted: false, enforcement: 'none', sandbox: 'not probed', };
+    return inOrder({ ...base, claudeVersion: null, admission: 'absent', refusal: null, restricted: false, enforcement: 'none', sandbox: 'not probed' });
   }
   if (facts.state === 'failed') {
     findings.push({
@@ -310,7 +326,7 @@ function hostSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorHost {
       message: `claude --version did not answer (${facts.cause}); the host is refused`,
       fix: 'check that the claude executable runs, or set AVARICE_CLAUDE_BIN to one that does',
     });
-    return { ...base, claudeVersion: null, admission: 'refused', refusal: 'host-unavailable', restricted: false, enforcement: 'none', sandbox: 'not probed' };
+    return inOrder({ ...base, claudeVersion: null, admission: 'refused', refusal: 'host-unavailable', restricted: false, enforcement: 'none', sandbox: 'not probed' });
   }
 
   let help: string | undefined;
@@ -399,7 +415,7 @@ function hostSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorHost {
       fix: 'repair the file, then run avarice install-host',
     });
   }
-  return { ...base, claudeVersion: reported ?? 'unknown', admission, refusal, restricted, enforcement, sandbox };
+  return inOrder({ ...base, claudeVersion: reported ?? 'unknown', admission, refusal, restricted, enforcement, sandbox });
 }
 
 function gsdSection(facts: GsdFacts, findings: DoctorFinding[]): DoctorGsd {
@@ -675,5 +691,8 @@ export async function runDoctor(deps: DoctorDeps, options: DoctorOptions = {}): 
     records,
     findings,
   };
+  if (options.online === true) report.online = await onlineSection(deps, profile, references, findings);
+  if (options.repair === true && profile !== undefined) report.repair = d.removeOrphanTemps(profile.dataRoot, deps.clock.nowMs(), REPAIR_MIN_AGE_MS);
+  if (options.extensions === true) report.extensions = extensionsSection(deps, findings);
   return mapStrings(report, deps.redact);
 }
