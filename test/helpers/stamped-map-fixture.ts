@@ -24,6 +24,8 @@ export interface StampedMapOptions {
   stamp?: string;
   // Extra files under `.planning/codebase/` in the map commit (a different file set makes the map an unknown format).
   extraMapFiles?: Readonly<Record<string, string>>;
+  // Further tracked files of the source commit (documents, say), added to STAMPED_SOURCE_FILES.
+  sourceFiles?: Readonly<Record<string, string>>;
   // Map files (by name) the owner edits in a commit after the map commit: a line is appended, the stamp is kept, so the stamp commit stays
   // before the last commit of the file (an edit after the stamp).
   editedAfterStamp?: readonly string[];
@@ -58,9 +60,10 @@ function write(root: string, files: Readonly<Record<string, string>>): void {
 }
 
 export function makeStampedMapRepo(options: StampedMapOptions = {}): StampedMapRepo {
-  const repo = makeScratchRepo({ files: STAMPED_SOURCE_FILES });
+  const sourceFiles = { ...STAMPED_SOURCE_FILES, ...(options.sourceFiles ?? {}) };
+  const repo = makeScratchRepo({ files: sourceFiles });
   const sourceCommit = repo.head;
-  const tracked = Object.keys(STAMPED_SOURCE_FILES);
+  const tracked = Object.keys(sourceFiles);
   const names = options.files ?? ALL_MAP_FILES;
   const documents: Record<string, string> = {};
   for (const name of names) {
