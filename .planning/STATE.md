@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-31-PLAN.md
-last_updated: "2026-11-17T14:14:29.977Z"
+stopped_at: Completed 04-32-PLAN.md
+last_updated: "2026-11-17T14:26:11.674Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: da29a12c915df8432f36fbf969cdfeb7aedfeb63
+state_head: f085fac4054f315509a59bb56941d42cceff383d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 32 of 39
+Plan: 33 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -194,6 +194,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P29 | 25min | 2 tasks | 7 files |
 | Phase 04 P30 | 110 min | 3 tasks | 25 files |
 | Phase 04 P31 | 45 min | 3 tasks | 14 files |
+| Phase 04 P32 | 9 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -479,6 +480,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-30: artifact quota refuses new blobs (counted lazily, approximate across processes), debug events past maxEventRows are refused and counted rather than pruned, pack reuse on retry is per handle from the stage pass's in-memory pack — No eviction until OPS-4 retention classes (Phase 5); the events table is insert-only; the ledger never stores excerpt text (S-41).
 - [Phase 04]: 04-31: an empty adapters.context list selects no source (arm A of the AC-8 evaluation has no pack); plan 04-26 had refused it — The owner-approved arm A is no AVARICE pack and no other product configuration removes the pack. Flagged for owner review.
 - [Phase 04]: 04-31: the full AC-8 evaluation projects 72.60 USD (cap bound) against the 40 USD Phase 4 ceiling; the pilot of 3 tasks projects 11.70 USD — Onboarding at each arm's own parent is 42.00 of the total; the owner chooses a lever (fewer tasks, shared A and B onboarding, arms B and C only, ceiling) before plan 04-36 runs the full evaluation.
+- [Phase 04]: 04-32: Capability keys are each port's method names plus the rules contentAddressed, handoff and allowlist; an overriding artifact store is always wrapped in the RedactingArtifactStore and not subject to the profile quota
+- [Phase 04]: 04-32: run.handoff, run.install and onboarding.stage are defined in STEP_REQUIREMENTS but not yet enforced at a call site (owner review)
 
 ### Roadmap Evolution
 
@@ -546,8 +549,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T14:14:29.946Z
-Stopped at: Completed 04-31-PLAN.md
+Last session: 2026-11-17T14:26:11.644Z
+Stopped at: Completed 04-32-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
