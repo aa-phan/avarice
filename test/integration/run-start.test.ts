@@ -126,7 +126,8 @@ describe('start: a routine run is authorized by one command and stored with its 
     assert.equal(body.workspace.conventionsRevision, f.repo.head, 'conventions come from the commit after the pin');
 
     const budgets = Object.fromEntries(rows<{ name: string; limit_value: number; used: number; exactness: string }>(f.roots, 'SELECT name, limit_value, used, exactness FROM budgets WHERE run_id = ?', runId).map((b) => [b.name, b]));
-    assert.equal(Object.keys(budgets).length, 5);
+    // The five run budgets and, since plan 04-28, the four retrieval counters.
+    assert.deepEqual(Object.keys(budgets).sort(), ['costUsd', 'invocations', 'retrieval.broadDiscovery', 'retrieval.fullReadBytes', 'retrieval.fullReads', 'retrieval.searches', 'subagentsTotal', 'toolCalls', 'wallClockMs']);
     assert.equal(budgets['invocations']?.limit_value, 3);
     assert.equal(budgets['toolCalls']?.limit_value, 400);
     assert.equal(budgets['subagentsTotal']?.limit_value, 10);

@@ -10,9 +10,11 @@ import { defaultContextReadScope } from '../domain/context-adapters.ts';
 import type { ContextReadScope } from '../domain/context-adapters.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
+import type { RunContract } from '../domain/run-contract.ts';
 import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, GitFilesSource } from '../ports/context-source.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { RetrievalGuard, profileRetrievalCaps } from './retrieval-guard.ts';
 
 export const DEFAULT_CONTEXT_BUDGET = 4000;
 export const MAX_CONTEXT_BUDGET = 100_000;
@@ -27,6 +29,11 @@ export interface ContextRequest {
   worktreePath?: string;
   // For a run: the contract's read scope, which bounds what a search may return (plan 04-26; T-04-72). Absent: the default scope.
   readScope?: ContextReadScope;
+  // The run the question is asked for (plan 04-28; CON-10, CON-11). It makes the query count against the run's retrieval budget rows, and fills what the caller did not give:
+  // the read scope from the run's contract and the worktree from the run's clone. Absent: an attended query, counted in memory against the profile's caps.
+  runId?: string;
+  // The query is a whole-repository or whole-corpus discovery. A query with no term is one whether or not it says so. It needs the contract's authorization and is allowed once per run.
+  broad?: boolean;
 }
 
 export interface PackItem {
@@ -213,6 +220,17 @@ function packItem(source: PackItem['source'], item: ContextItem): PackItem {
   };
 }
 
+// What a run's own record fills in when the caller gave neither: the contract's read lists bound what a search may return, and the run's clone is what `git-files` searches.
+function runScopeOf(deps: AppDeps, runId: string): Result<{ readScope: ContextReadScope; worktreePath?: string }> {
+  const run = deps.ledger.getRun(runId);
+  if (!run.ok) return run;
+  const stored = deps.ledger.getRunContract(runId);
+  if (!stored.ok) return stored;
+  if (stored.value === null) return err({ kind: 'not_found', ref: `contract of run ${runId}` });
+  const { files } = stored.value.body as RunContract;
+  return ok({ readScope: { read: files.read, readExclude: files.readExclude, secretGlobs: files.secretGlobs }, ...(run.value.workspacePath !== null ? { worktreePath: run.value.workspacePath } : {}) });
+}
+
 export async function queryContext(deps: AppDeps, request: ContextRequest): Promise<Result<ContextReport>> {
   const resolved = resolveProject(deps, request.projectId);
   if (!resolved.ok) return resolved;
@@ -220,6 +238,27 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
   const sources = deps.context;
   if (sources === undefined) {
     return err({ kind: 'unavailable', cause: deps.gsdProblem !== undefined ? `no admitted gsd-core to read the indexes (${deps.gsdProblem.found})` : 'no context sources are configured' });
+  }
+
+  // Every search of this query is counted against the run's retrieval rows, or in memory for an attended query; a whole-repository one first needs the contract's say-so.
+  let guard: RetrievalGuard;
+  let scope: { readScope?: ContextReadScope; worktreePath?: string } = {};
+  if (request.runId !== undefined) {
+    const made = RetrievalGuard.forRun(deps, request.runId);
+    if (!made.ok) return made;
+    guard = made.value;
+    const fromRun = runScopeOf(deps, request.runId);
+    if (!fromRun.ok) return fromRun;
+    scope = fromRun.value;
+  } else {
+    const caps = profileRetrievalCaps(deps);
+    if (!caps.ok) return caps;
+    guard = RetrievalGuard.attended(caps.value);
+  }
+  if (request.broad === true || request.term.trim() === '') {
+    const verdict = guard.beginSearch('broad');
+    if (!verdict.ok) return verdict;
+    if (!verdict.value.granted) return err({ kind: 'denied', rule: verdict.value.rule, enforcer: 'avarice' });
   }
 
   const indexes = isObject(record.body['indexes']) ? record.body['indexes'] : {};
@@ -236,8 +275,9 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     { name: 'planning', source: sources.planning, label: 'gsd-planning', share: Math.ceil(request.budget / 2) },
     { name: 'git-files', source: sources.gitFiles, label: 'git-files', share: request.budget },
   ];
-  const workspace: ContextQuery['workspace'] = { stagingPath: staging, repoPath: project.repoPath, ...(request.worktreePath !== undefined ? { worktreePath: request.worktreePath } : {}) };
-  const readScope = request.readScope ?? defaultContextReadScope();
+  const worktreePath = request.worktreePath ?? scope.worktreePath;
+  const workspace: ContextQuery['workspace'] = { stagingPath: staging, repoPath: project.repoPath, ...(worktreePath !== undefined ? { worktreePath } : {}) };
+  const readScope = request.readScope ?? scope.readScope ?? defaultContextReadScope();
 
   // Phase 1: find. Every source is asked before anything is read; a handle carries no content (FR-22).
   const candidates: Candidate[] = [];
@@ -262,6 +302,12 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     // (docs/contracts-and-state.md "ContextSource").
     if (name === 'planning' && candidates.some((c) => order[c.sourceIndex]?.name === 'graph' && c.handle.untrusted === true)) {
       notes.push('the gsd-planning sections were not asked: the graph returned a document node for this term, so they would repeat it');
+      continue;
+    }
+    const spent = guard.beginSearch('scoped');
+    if (!spent.ok) return spent;
+    if (!spent.value.granted) {
+      notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} was not asked: ${spent.value.rule}`);
       continue;
     }
     const query: ContextQuery = { term: request.term, workspace, indexRevision, readScope };

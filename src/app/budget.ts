@@ -18,6 +18,7 @@
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
+import { BROAD_DISCOVERY_PER_RUN, RETRIEVAL_ROWS } from '../domain/retrieval-rules.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { BudgetRow, BudgetRowInput, OnboardingRow, RunRow } from '../ports/ledger.ts';
 import type { InvocationPurpose, OnboardingPurpose } from '../ports/agent-host.ts';
@@ -72,6 +73,20 @@ export function budgetRowsOfRun(contract: RunContract): BudgetRowInput[] {
     { name: 'subagentsTotal', limit: b.subagentsTotal, exactness: 'exact' },
     { name: 'wallClockMs', limit: b.wallClockMinutes * 60_000, exactness: 'exact' },
     { name: 'costUsd', limit: b.costUsd.perRun, exactness: b.costUsd.exactness },
+    ...retrievalRowsOfRun(contract),
+  ];
+}
+
+// The retrieval counters of a run (plan 04-28; CON-11): searches, whole-file reads and their bytes, and the one broad discovery a contract may authorize (limit 1 when it does,
+// 0 when it does not, so the row says which). A contract compiled before they existed has none, and a run on it counts retrievals in memory against the profile's caps.
+export function retrievalRowsOfRun(contract: RunContract): BudgetRowInput[] {
+  const r = contract.budgets.retrieval;
+  if (r === undefined) return [];
+  return [
+    { name: RETRIEVAL_ROWS.searches, limit: r.searches, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.fullReads, limit: r.fullReads, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.fullReadBytes, limit: r.fullReadBytes, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.broadDiscovery, limit: r.broadDiscovery ? BROAD_DISCOVERY_PER_RUN : 0, exactness: 'exact' },
   ];
 }
 

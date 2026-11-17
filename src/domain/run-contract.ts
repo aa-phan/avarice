@@ -13,6 +13,8 @@ import type { Brief, BriefItem } from './brief.ts';
 import { SUPERVISOR_CHECK_ENV_NAMES, assignmentRefusal, isRefusedAgentCommand } from './conventions.ts';
 import type { CheckSpec, Conventions } from './conventions.ts';
 import { matchesGlob } from './glob.ts';
+import { RETRIEVAL_CAPS } from './retrieval-rules.ts';
+import type { ContractRetrieval, RetrievalCaps } from './retrieval-rules.ts';
 import { redactSecrets } from './secret-patterns.ts';
 
 export const ROUTINE_POLICY = 'routine';
@@ -58,6 +60,8 @@ export interface RunBudgets {
   repairAttemptsPerCheck: number;
   repairAttemptsReason: string;
   retry: number;
+  // The retrieval caps counted per run (plan 04-28; CON-10, CON-11). Absent on a contract compiled before they existed, which is read back as it was.
+  retrieval?: ContractRetrieval;
   // Values the compiler moved so the budgets stay consistent (a per-invocation cap above the per-run cap).
   adjustments: BudgetAdjustment[];
 }
@@ -102,6 +106,9 @@ export const ROUTINE_PRESET = {
     repairAttemptsReason:
       'one repair invocation per newly failing required check, then a repeated_failure decision with the smallest reproducer (D-11)',
     retry: 1,
+    // Retrieval caps counted per run (plan 04-28; D-09). `searches` is the run's tool-call limit, because every search is also a tool call and so the default never
+    // binds tighter than toolCalls; a contract lowers it. Broad discovery is off until the brief authorizes it, and then happens once.
+    retrieval: { searches: 'toolCalls', fullReads: RETRIEVAL_CAPS.fullReads, fullReadBytes: RETRIEVAL_CAPS.fullReadBytes, broadDiscovery: false },
   },
   decisions: {
     delegated: ['internal naming', 'test structure', 'refactors inside write paths'],
@@ -263,6 +270,8 @@ export interface RunCompileInput {
   indexFacts?: IndexFacts;
   // `restricted` stores the mode in the contract (plan 04-23); absent or `contained` stores nothing.
   mode?: RunMode;
+  // The profile's retrieval caps (plan 04-28; D-09): the ceilings of the contract's retrieval budgets. Absent: the defaults.
+  retrievalCaps?: RetrievalCaps;
 }
 
 export interface G0Failure {
@@ -280,6 +289,11 @@ export const BUDGET_OVERRIDE_NAMES = [
   'costUsdPerRun',
 ] as const;
 type BudgetOverrideName = (typeof BUDGET_OVERRIDE_NAMES)[number];
+
+// The retrieval caps a start may lower (plan 04-28). Broad discovery is not among them: a start override cannot authorize it, and nothing here can raise a cap.
+export const RETRIEVAL_OVERRIDE_NAMES = ['retrieval.searches', 'retrieval.fullReads', 'retrieval.fullReadBytes'] as const;
+type RetrievalOverrideName = (typeof RETRIEVAL_OVERRIDE_NAMES)[number];
+const isRetrievalOverride = (key: string): key is RetrievalOverrideName => (RETRIEVAL_OVERRIDE_NAMES as readonly string[]).includes(key);
 
 // The ceiling of each override: the limits scaled for this run's item count. An override only lowers them (CON-15).
 function overrideLimits(limits: ScaledBudgetLimits): Readonly<Record<BudgetOverrideName, { limit: number; integer: boolean }>> {
@@ -322,10 +336,17 @@ export function globWithin(inner: string, outer: string): boolean {
 
 const withinAny = (inner: string, outers: readonly string[]): boolean => outers.some((outer) => globWithin(inner, outer));
 
-function applyBudgetOverrides(raw: unknown, itemCount: number): Result<RunBudgets> {
+function applyBudgetOverrides(raw: unknown, itemCount: number, caps: RetrievalCaps, broadDiscovery: boolean): Result<RunBudgets> {
   const preset = ROUTINE_PRESET.budgets;
   const scaled = scaledBudgetLimits(itemCount);
   const limits = overrideLimits(scaled);
+  // The ceilings of the retrieval overrides: the preset's search count (the run's tool-call limit) and the profile's caps (never above the preset's).
+  const retrievalLimits: Readonly<Record<RetrievalOverrideName, number>> = {
+    'retrieval.searches': scaled.toolCalls,
+    'retrieval.fullReads': caps.fullReads,
+    'retrieval.fullReadBytes': caps.fullReadBytes,
+  };
+  const retrieval: ContractRetrieval = { searches: retrievalLimits['retrieval.searches'], fullReads: caps.fullReads, fullReadBytes: caps.fullReadBytes, broadDiscovery };
   const budgets: RunBudgets = {
     wallClockMinutes: scaled.wallClockMinutes,
     invocations: scaled.invocations,
@@ -338,6 +359,7 @@ function applyBudgetOverrides(raw: unknown, itemCount: number): Result<RunBudget
     repairAttemptsPerCheck: preset.repairAttemptsPerCheck,
     repairAttemptsReason: preset.repairAttemptsReason,
     retry: preset.retry,
+    retrieval,
     adjustments: [],
   };
   if (raw === undefined) return ok(budgets);
@@ -345,8 +367,16 @@ function applyBudgetOverrides(raw: unknown, itemCount: number): Result<RunBudget
 
   for (const [key, value] of Object.entries(raw)) {
     const field = `budget.${key}`;
+    if (isRetrievalOverride(key)) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return invalid(field, 'must be a finite number above 0');
+      if (!Number.isInteger(value)) return invalid(field, 'must be an integer');
+      const ceiling = retrievalLimits[key];
+      if (value > ceiling) return invalid(field, `budgets can only be lowered: ${value} is above the ${ceiling} allowed for ${itemCount} work item${itemCount === 1 ? '' : 's'} and this profile`);
+      retrieval[key.slice('retrieval.'.length) as 'searches' | 'fullReads' | 'fullReadBytes'] = value;
+      continue;
+    }
     if (!(BUDGET_OVERRIDE_NAMES as readonly string[]).includes(key)) {
-      return invalid(field, `unknown budget; the overridable budgets are ${BUDGET_OVERRIDE_NAMES.join(', ')}`);
+      return invalid(field, `unknown budget; the overridable budgets are ${[...BUDGET_OVERRIDE_NAMES, ...RETRIEVAL_OVERRIDE_NAMES].join(', ')}`);
     }
     const spec = limits[key as BudgetOverrideName];
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return invalid(field, 'must be a finite number above 0');
@@ -632,7 +662,7 @@ export function compileRunContract(input: RunCompileInput): Result<{ contract: R
     return invalid('brief.acceptance', 'the brief has no acceptance criteria: add a "## Acceptance criteria" section');
   }
 
-  const budgets = applyBudgetOverrides(input.budgetOverrides, brief.items?.length ?? 1);
+  const budgets = applyBudgetOverrides(input.budgetOverrides, brief.items?.length ?? 1, input.retrievalCaps ?? RETRIEVAL_CAPS, brief.broadDiscovery === true);
   if (!budgets.ok) return budgets;
 
   // The protected list is the preset's and the repository's together; nothing the repository says removes a preset entry.

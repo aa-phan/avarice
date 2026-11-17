@@ -25,6 +25,8 @@ import type {
   ArtifactInput,
   BudgetCharge,
   BudgetReservation,
+  BudgetSpend,
+  BudgetSpendResult,
   BudgetRow,
   BudgetRowInput,
   AttemptInput,
@@ -852,6 +854,23 @@ export class SqliteLedger implements Ledger {
         .prepare('UPDATE budgets SET reserved = reserved + ? WHERE run_id = ? AND name = ? AND used + reserved + ? <= limit_value')
         .run(amount, runId, name, amount).changes;
       return { granted: Number(changed) > 0, budget: this.readBudget(runId, name) };
+    });
+  }
+
+  // Every spend under one BEGIN IMMEDIATE: the rows are checked in the order given and written only when all of them fit, so two processes spending the same row can
+  // never both take the last of it, and a refusal changes nothing.
+  spendBudgets(runId: string, spends: readonly BudgetSpend[]): Result<BudgetSpendResult> {
+    return tx(this.db, () => {
+      for (const spend of spends) {
+        checkAmount(spend.amount);
+        const row = this.readBudget(runId, spend.name);
+        if (row.used + row.reserved + spend.amount > row.limit) return { spent: false as const, budget: spend.name };
+      }
+      const update = this.db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ? AND used + reserved + ? <= limit_value');
+      for (const spend of spends) {
+        if (Number(update.run(spend.amount, runId, spend.name, spend.amount).changes) === 0) abort({ kind: 'conflict', expected: `room in budget ${spend.name}`, actual: 'none' });
+      }
+      return { spent: true as const, rows: this.readBudgets(runId) };
     });
   }
 

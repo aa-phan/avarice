@@ -118,6 +118,15 @@ export interface BudgetCharge {
   fromReserved: boolean;
 }
 
+// One amount of Ledger.spendBudgets.
+export interface BudgetSpend {
+  name: string;
+  amount: number;
+}
+
+// `spent` is false when a row had no room: `budget` names the first such row, and nothing was spent.
+export type BudgetSpendResult = { spent: true; rows: BudgetRow[] } | { spent: false; budget: string };
+
 export interface BudgetReservation {
   // False when `used + reserved + amount` would pass the limit; nothing was reserved then.
   granted: boolean;
@@ -799,6 +808,9 @@ export interface Ledger {
   // Every charge, and the event when one is given, in one transaction, so a kill or a failure leaves all of them written or none. Each charge
   // follows chargeBudget's rules. Returns the run's budget rows afterwards.
   settleBudgets(runId: string, charges: readonly BudgetCharge[], event?: EventInput): Result<BudgetRow[]>;
+  // Spends every amount in one transaction, or none of them (plan 04-28; CON-11): each is added to `used` only while `used + reserved + amount` stays within that row's limit,
+  // and when any one does not fit nothing is spent and the row that stopped it is named. It is how a shared counter stays exact when several processes spend at once.
+  spendBudgets(runId: string, spends: readonly BudgetSpend[]): Result<BudgetSpendResult>;
   getBudgets(runId: string): Result<BudgetRow[]>;
   // How many hook denials with rule `budget_exhausted` the invocation recorded.
   countBudgetDenials(runId: string, invocationId: string): Result<number>;

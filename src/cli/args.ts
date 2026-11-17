@@ -58,7 +58,8 @@ export function parseArgs(argv: readonly string[], options: ParseOptions = {}): 
   return { positionals, flags, repeated };
 }
 
-const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9]*)=(.+)$/;
+// A name may hold dots: the retrieval caps of a run are `retrieval.searches`, `retrieval.fullReads` and `retrieval.fullReadBytes`.
+const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9.]*)=(.+)$/;
 
 // Repeatable `--budget name=value`, shared by `onboard` and `start`. The names and the lower-only rule belong to the contract
 // compilers (RC-5); this only checks the shape, so a typo creates nothing. Returns the overrides or a message for the usage line.

@@ -262,7 +262,8 @@ async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Pro
   if (deps.context === undefined) {
     notes.push('no context sources are composed');
   } else {
-    const report = await queryContext(deps, { projectId: run.projectId, term: contract.intent.title, budget: PACK_BUDGET });
+    // The run's own id makes the pack count against the run's retrieval rows and bound its search by the contract's read lists and the run's clone (plan 04-28; CON-10, CON-11).
+    const report = await queryContext(deps, { projectId: run.projectId, term: contract.intent.title, budget: PACK_BUDGET, runId: run.runId });
     if (!report.ok) {
       notes.push(`the index cannot answer: ${report.error.kind}`);
     } else {

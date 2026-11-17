@@ -20,6 +20,7 @@ import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
 import { recordCompatibility } from './doctor.ts';
+import { profileRetrievalCaps } from './retrieval-guard.ts';
 
 export const BRIEF_MAX_BYTES = 64 * 1024;
 
@@ -277,6 +278,10 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   const conventions = parseConventions(conventionsAt.text);
   if (!conventions.ok) return refused('conventions-invalid', `.avarice/config.json at ${conventionsAt.revision.slice(0, 7)} is invalid: ${describeError(conventions.error)}`);
 
+  // The profile's retrieval caps are the ceilings of the contract's retrieval budgets (plan 04-28; D-09): a section that cannot be read is a refusal, not a silent default.
+  const retrievalCaps = profileRetrievalCaps(deps);
+  if (!retrievalCaps.ok) return usage(retrievalCaps.error.kind === 'invalid' ? retrievalCaps.error.field : 'retrieval', describeError(retrievalCaps.error));
+
   const runId = deps.ids.next('run_');
   const compiled = compileRunContract({
     runId,
@@ -287,6 +292,7 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     conventions: conventions.value,
     nowIso: new Date(nowMs).toISOString(),
     policy: request.policy,
+    retrievalCaps: retrievalCaps.value,
     ...(Object.keys(request.budgetOverrides).length > 0 ? { budgetOverrides: request.budgetOverrides } : {}),
     ...(request.indexFacts !== undefined ? { indexFacts: request.indexFacts } : {}),
     ...(request.restricted === true ? { mode: 'restricted' as const } : {}),

@@ -315,7 +315,8 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
     evidence: evidence.map((e) => ({ name: e.name, kind: e.kind, status: e.status, revision: e.revision, clean: e.clean, ...(e.environment['preExisting'] === true ? { preExisting: true as const } : {}) })),
     gates: latestGates(inputs.gateResults).map((g) => ({ gate: g.gate, passed: g.passed, revision: g.revision })),
     openDecisions: inputs.decisions.filter((d) => d.state === 'open').length,
-    budgets: inputs.budgets.map((b) => ({ name: b.name, used: b.used, limit: b.limit })),
+    // The retrieval counters (plan 04-28) are rows of the same table, but status keeps its five budgets: the frozen shape lists them, and the retrieval counters are read from the ledger.
+    budgets: inputs.budgets.filter((b) => !b.name.startsWith('retrieval.')).map((b) => ({ name: b.name, used: b.used, limit: b.limit })),
     references: referencesOf(inputs.contract === null ? null : inputs.contract.body),
     ...(interrupted !== undefined ? { interrupted } : {}),
     items: itemsOf(inputs.workItems),
