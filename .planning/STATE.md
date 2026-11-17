@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-25-PLAN.md
-last_updated: "2026-11-17T10:15:30.883Z"
+stopped_at: Completed 04-26-PLAN.md
+last_updated: "2026-11-17T10:41:36.588Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 718a6ea51b115ad44c6a951437ae79f9a078170b
+state_head: 047bff41c1e40b566814a7e0d1bb221101c0d3c7
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 26 of 39
+Plan: 27 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -188,6 +188,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P23 | 28 min | 3 tasks | 27 files |
 | Phase 04 P24 | 24 min | 2 tasks | 21 files |
 | Phase 04 P25 | 21 min | 3 tasks | 20 files |
+| Phase 04 P26 | 45min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -460,6 +461,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-24: onboard --restricted replaces an active contained record with a partial (restricted) version, and contained starts on a restricted record are refused (owner review: whether to forbid the downgrade)
 - [Phase 04]: 04-25: doctor composes its own read-only dependency set (composeDoctor, not createDeps); absent host or GSD and refused host are warnings, an incompatible GSD, a newer store, an env: credential reference and an incompatible active record are errors (exit 3)
 - [Phase 04]: 04-25: S-38 record incompatibility is derived by recordCompatibility (no admitted gsd-core, outside 1.17.x, or another minor), shared by doctor and start; start refuses with record-incompatible and never writes the record
+- [Phase 04]: 04-26: git-files searches committed objects at HEAD inside the read scope (default: all tracked paths minus .git and the secret globs); snippets are 40 lines and 1500 characters around the hit — T-04-71 and T-04-72: the term is data and a hit outside the scope is never returned; uncommitted or untracked text cannot answer
+- [Phase 04]: 04-26: a stale index item whose cited path is gone at HEAD keeps its place in the pack as confirmed false, its content withheld and a note naming it; gsd-planning sections are untrusted, skipped when the graph returned a document node, and fresh/stale by the state.json digest — Packs never carry text of a file that no longer exists; planning text is data, never a policy source (T-04-73)
 
 ### Roadmap Evolution
 
@@ -527,8 +530,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T10:15:30.850Z
-Stopped at: Completed 04-25-PLAN.md
+Last session: 2026-11-17T10:41:29.356Z
+Stopped at: Completed 04-26-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
