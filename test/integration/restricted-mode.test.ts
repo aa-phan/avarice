@@ -6,10 +6,16 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { ClaudeHostAdapter } from '../../src/adapters/host-claude/claude-host.ts';
+import { assertRestrictedLaunchArgsSafe, restrictedLaunchArgs } from '../../src/adapters/host-claude/launch-args.ts';
+import { checkRestrictedLaunchReady } from '../../src/adapters/host-claude/launch-preflight.ts';
+import { RESTRICTED_HELP_FLAGS } from '../../src/domain/host-admission.ts';
+import type { Result } from '../../src/domain/result.ts';
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
 import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -258,5 +264,101 @@ describe('the decision list, the status label, and resume stays restricted (CON-
     assert.deepEqual(artifactsOf(f.roots, runId).map((a) => a.kind), ['restricted-patch', 'restricted-plan']);
     const contract = rows<{ body_json: string }>(f.roots, 'SELECT body_json FROM contracts WHERE run_id = ?', runId)[0];
     assert.equal((JSON.parse(contract?.body_json ?? '{}') as { mode?: string }).mode, 'restricted', "the mode is still the contract's");
+  });
+});
+
+// ---- the restricted launch preflight and descriptor (task 3) ---------------------------------------------------------------------------------
+
+const SETTINGS_DONTASK = JSON.stringify({ permissions: { defaultMode: 'dontAsk' } });
+
+// A settings file in a scratch directory.
+function settingsFile(text: string | null): string {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-restricted-settings-')));
+  cleanup.push(dir);
+  const file = join(dir, 'host-settings.json');
+  if (text !== null) writeFileSync(file, text);
+  return file;
+}
+
+// A fake `claude` whose `--help` lists the given flags (default: every flag the restricted line uses); an unknown version, since restricted mode asks for none.
+function helpHost(helpFlags: readonly string[] = [...RESTRICTED_HELP_FLAGS]): string {
+  const fake = makeFakeClaude({ version: '9.9.9 (Claude Code)', helpFlags });
+  cleanup.push(fake.dir);
+  return fake.bin;
+}
+
+function refusedRule(result: Result<unknown>): string {
+  assert.ok(!result.ok, 'expected a refusal');
+  assert.ok(result.error.kind === 'denied', JSON.stringify(result));
+  return result.error.kind === 'denied' ? result.error.rule : '';
+}
+
+describe('the restricted launch preflight and descriptor (CON-4, D-12)', () => {
+  it('is ready with a claude that lists the flags and settings that deny by default; it asks for no admitted version, no sandbox probe and no hook', () => {
+    assert.ok(checkRestrictedLaunchReady({ claudeBin: helpHost(), settingsFile: settingsFile(SETTINGS_DONTASK) }).ok);
+  });
+
+  it('refuses when claude is missing', () => {
+    const rule = refusedRule(checkRestrictedLaunchReady({ claudeBin: '/nonexistent/claude', settingsFile: settingsFile(SETTINGS_DONTASK) }));
+    assert.equal(rule, 'enforcement_failure:host-unavailable');
+  });
+
+  it('refuses when --restricted is absent from --help, with this exact rule text', () => {
+    const rule = refusedRule(checkRestrictedLaunchReady({ claudeBin: helpHost(RESTRICTED_HELP_FLAGS.filter((flag) => flag !== '--restricted')), settingsFile: settingsFile(SETTINGS_DONTASK) }));
+    assert.equal(rule, 'enforcement_failure:host-flag-missing:--restricted');
+  });
+
+  it('refuses when --help no longer lists another flag the restricted line uses, naming it', () => {
+    for (const flag of RESTRICTED_HELP_FLAGS.filter((f) => f !== '--restricted')) {
+      const rule = refusedRule(checkRestrictedLaunchReady({ claudeBin: helpHost(RESTRICTED_HELP_FLAGS.filter((f) => f !== flag)), settingsFile: settingsFile(SETTINGS_DONTASK) }));
+      assert.equal(rule, `enforcement_failure:host-flag-missing:${flag}`);
+    }
+  });
+
+  it('refuses when the settings file is missing, invalid, or lacks permissions.defaultMode dontAsk', () => {
+    const claudeBin = helpHost();
+    assert.equal(refusedRule(checkRestrictedLaunchReady({ claudeBin, settingsFile: settingsFile(null) })), 'enforcement_failure:settings-missing');
+    assert.equal(refusedRule(checkRestrictedLaunchReady({ claudeBin, settingsFile: settingsFile('{not json') })), 'enforcement_failure:settings-invalid');
+    assert.equal(refusedRule(checkRestrictedLaunchReady({ claudeBin, settingsFile: settingsFile('{}') })), 'enforcement_failure:settings-key:permissions.defaultMode');
+    assert.equal(refusedRule(checkRestrictedLaunchReady({ claudeBin, settingsFile: settingsFile(JSON.stringify({ permissions: { defaultMode: 'acceptEdits' } })) })), 'enforcement_failure:settings-key:permissions.defaultMode');
+  });
+
+  it('describes the restricted adapter as enforcement restricted, with capabilities that exclude shell execution and contained invocation', () => {
+    const fake = helpHost();
+    const adapter = new ClaudeHostAdapter({ mode: 'restricted', claudeBin: fake, hookEntry: '/nonexistent/hook.ts', ledgerPath: '/nonexistent/state.db', dataRoot: '/nonexistent', gsd: { gsdCoreDir: '/x', agentsDir: '/x', skillsRoot: '/x' }, artifacts: {} as never, staging: {} as never, countHookDenies: () => ({ ok: true, value: { total: 0, budget: 0 } }) });
+    const descriptor = adapter.descriptor;
+    assert.equal(descriptor.attributes?.['enforcement'], 'restricted');
+    assert.equal(descriptor.capabilities['restricted-invocation'], true);
+    assert.ok(!('contained-invocation' in descriptor.capabilities) || descriptor.capabilities['contained-invocation'] === false, 'not a contained invocation');
+    assert.ok(!Object.keys(descriptor.capabilities).some((name) => /shell|bash|exec|command/i.test(name) && descriptor.capabilities[name] === true), 'no shell execution capability');
+    // Not ready: the descriptor says none, with the probe that failed.
+    const stale = new ClaudeHostAdapter({ mode: 'restricted', claudeBin: helpHost(['--settings']), hookEntry: '/nonexistent/hook.ts', ledgerPath: '/nonexistent/state.db', dataRoot: '/nonexistent', gsd: { gsdCoreDir: '/x', agentsDir: '/x', skillsRoot: '/x' }, artifacts: {} as never, staging: {} as never, countHookDenies: () => ({ ok: true, value: { total: 0, budget: 0 } }) });
+    assert.equal(stale.descriptor.attributes?.['enforcement'], 'none');
+    assert.equal(stale.descriptor.attributes?.['reason'], 'enforcement_failure:host-flag-missing:--restricted');
+  });
+
+  it('judges the restricted argv: the generated line passes, and a line without --restricted or with a tool grant is refused', () => {
+    const line = restrictedLaunchArgs({ prompt: 'plan it', settingsFile: '/s/host-settings.json', mcpFile: '/s/mcp.json', model: 'sonnet', costCapUsd: 1.5, sessionId: '00000000-0000-4000-8000-000000000000' });
+    assert.ok(assertRestrictedLaunchArgsSafe(line).ok);
+    const refused = (argv: readonly string[]): string => {
+      const result = assertRestrictedLaunchArgsSafe(argv);
+      assert.ok(!result.ok);
+      return result.error.kind === 'denied' ? result.error.rule : '';
+    };
+    assert.match(refused(line.filter((token) => token !== '--restricted')), /^launch_args:restricted:--restricted is required/);
+    assert.match(refused([...line, '--allowedTools', 'Bash']), /^launch_args:restricted:--allowedTools/);
+    assert.match(refused([...line, '--tools', 'Bash']), /^launch_args:restricted:--tools/);
+    assert.match(refused([...line, '--dangerously-skip-permissions']), /^launch_args:restricted:--dangerously-skip-permissions/);
+    assert.match(refused(line.map((token) => (token === 'dontAsk' ? 'acceptEdits' : token))), /^launch_args:restricted:permission-mode/);
+    assert.match(refused(line.filter((token) => token !== '--strict-mcp-config')), /^launch_args:restricted:strict-mcp-config/);
+  });
+
+  it('start --restricted with a claude that does not list --restricted exits 3 with enforcement_failure:host-flag-missing:--restricted, and stores no run', () => {
+    const f = fixture({ helpFlags: RESTRICTED_HELP_FLAGS.filter((flag) => flag !== '--restricted') });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    assert.match(r.stdout + r.stderr, /enforcement_failure:host-flag-missing:--restricted/);
+    assert.equal(f.fake.started(), false, 'no invocation started');
+    assert.deepEqual(rows(f.roots, "SELECT run_id FROM runs WHERE state != 'onboarding'"), [], 'no run was stored');
   });
 });
