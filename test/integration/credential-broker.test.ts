@@ -5,18 +5,24 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
+import { CmdProvider, HELPER_ENV_NAMES } from '../../src/adapters/credential/cmd.ts';
+import { DelegatedProvider } from '../../src/adapters/credential/delegated.ts';
 import { KeychainProvider } from '../../src/adapters/credential/keychain.ts';
+import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { openDb } from '../../src/adapters/sqlite/db.ts';
 import { migrate } from '../../src/adapters/sqlite/migrate.ts';
 import { SqliteLedger } from '../../src/adapters/sqlite/ledger.ts';
 import { resolveCredential } from '../../src/app/credentials.ts';
 import type { CredentialDeps } from '../../src/app/credentials.ts';
 import { MIGRATIONS } from '../../src/cli/composition.ts';
+import { err, ok } from '../../src/domain/result.ts';
+import type { Result } from '../../src/domain/result.ts';
+import type { CommandExecutor, CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
 
 const cleanup: string[] = [];
 const closers: Array<() => void> = [];
@@ -217,5 +223,204 @@ describe('tracer: a keychain reference resolves through the broker, records a va
     } finally {
       kc.dispose();
     }
+  });
+});
+
+// ---- cmd and delegated providers, the profile allow-list and the env refusal ---------------------------------------------------------------
+
+// 22 characters; no secret pattern matches it.
+const HELPER_VALUE = ['hv-Q7mZ', 'x3Rk9T', 'p2LwB5nD'].join('');
+
+function finished(stdout: string, extra: Partial<CommandResult> = {}): Result<CommandResult> {
+  return ok({ exitCode: 0, signal: null, status: 'passed', durationMs: 1, stdout, stderr: '', truncated: false, ...extra });
+}
+
+// A CommandExecutor that records each spec it is given and answers from `reply`; nothing is spawned.
+class FakeExecutor implements CommandExecutor {
+  readonly specs: CommandSpec[] = [];
+  readonly descriptor = { port: 'executor', adapter: 'fake', version: '1', capabilities: {}, offline: true };
+  readonly #reply: (spec: CommandSpec) => Result<CommandResult>;
+  constructor(reply: (spec: CommandSpec) => Result<CommandResult>) {
+    this.#reply = reply;
+  }
+  run(spec: CommandSpec): Promise<Result<CommandResult>> {
+    this.specs.push(spec);
+    return Promise.resolve(this.#reply(spec));
+  }
+}
+
+function outcomes(fx: Fixture): string[] {
+  return credentialEvents(fx).map((row) => String((JSON.parse(row.data_json) as Record<string, unknown>)['outcome']));
+}
+
+const HELPER_PATH = '/usr/local/bin/vault-helper';
+
+describe('the cmd provider (SEC-2, T-04-38)', () => {
+  it('runs a listed helper through the executor by argv with a scrubbed environment and a 5 s timeout, and resolves its trimmed stdout', async () => {
+    const previous = process.env['GITHUB_TOKEN'];
+    process.env['GITHUB_TOKEN'] = 'inherited-token-that-must-not-reach-the-helper';
+    try {
+      const executor = new FakeExecutor(() => finished(`  ${HELPER_VALUE}\n`));
+      const cwd = tempDir('avarice-cwd-');
+      const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd }) });
+      const result = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test', invocationId: 'inv_9' });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.equal(result.value.use((v) => v), HELPER_VALUE);
+      assert.equal(executor.specs.length, 1);
+      const spec = executor.specs[0] as CommandSpec;
+      assert.deepEqual(spec.argv, [HELPER_PATH]);
+      assert.equal(spec.timeoutMs, 5000);
+      assert.equal(spec.cwd, cwd);
+      assert.deepEqual(spec.writePaths, []);
+      assert.equal(spec.allowLoopbackPorts, undefined, 'the network stays denied');
+      assert.equal(spec.invocationId, 'inv_9');
+      // The environment of the helper holds no variable outside the scrub list, and none of this process's.
+      for (const key of Object.keys(spec.env)) assert.ok(HELPER_ENV_NAMES.includes(key), `unexpected variable ${key}`);
+      assert.ok(!('GITHUB_TOKEN' in spec.env));
+      assert.ok(!Object.values(spec.env).some((v) => v.includes('inherited-token')));
+      const rows = credentialEvents(fx);
+      assert.deepEqual(outcomes(fx), ['resolved']);
+      assertValueFree(rows, HELPER_VALUE);
+    } finally {
+      if (previous === undefined) delete process.env['GITHUB_TOKEN'];
+      else process.env['GITHUB_TOKEN'] = previous;
+    }
+  });
+
+  it('denies a helper that is not listed in credentials.helpers without running anything (outcome denied)', async () => {
+    const executor = new FakeExecutor(() => finished(HELPER_VALUE));
+    const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+    const result = await resolveCredential(fx.deps, 'cmd:other-helper', 'test', { module: 'test' });
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind, 'denied');
+    assert.equal(executor.specs.length, 0, 'nothing was run');
+    assert.deepEqual(outcomes(fx), ['denied']);
+    assertValueFree(credentialEvents(fx), HELPER_VALUE);
+  });
+
+  it('refuses a helper that prints fewer than 8 characters (outcome invalid)', async () => {
+    const executor = new FakeExecutor(() => finished('abcde\n'));
+    const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+    const result = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind, 'invalid');
+    assert.deepEqual(outcomes(fx), ['invalid']);
+    assert.ok(!JSON.stringify(result).includes('abcde'), 'the error does not hold the value');
+    assertValueFree(credentialEvents(fx), 'abcde');
+  });
+
+  it('discards the stderr of a failing helper: the error and the event hold none of it (outcome unavailable)', async () => {
+    const executor = new FakeExecutor(() => finished('', { exitCode: 3, status: 'failed', stderr: `vault said ${HELPER_VALUE} is wrong` }));
+    const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+    const result = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind, 'unavailable');
+    assert.ok(!JSON.stringify(result).includes('vault said'));
+    assert.deepEqual(outcomes(fx), ['unavailable']);
+    assert.ok(!credentialEvents(fx).some((row) => row.data_json.includes('vault said')));
+  });
+
+  it('reports a helper that outruns its timeout as unavailable, and an executor that cannot run as unavailable', async () => {
+    const slow = new FakeExecutor(() => finished('', { exitCode: null, status: 'timed_out' }));
+    const fx = fixture({ cmd: new CmdProvider({ executor: slow, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+    const timedOut = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+    assert.ok(!timedOut.ok);
+    assert.equal(timedOut.error.kind, 'timeout');
+    const none = new FakeExecutor(() => err({ kind: 'unavailable', cause: 'the sandbox cannot be used here' }));
+    const fy = fixture({ cmd: new CmdProvider({ executor: none, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+    const refused = await resolveCredential(fy.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+    assert.ok(!refused.ok);
+    assert.equal(refused.error.kind, 'unavailable');
+    assert.deepEqual(outcomes(fx), ['unavailable']);
+    assert.deepEqual(outcomes(fy), ['unavailable']);
+  });
+
+  const realExecutor = new SandboxedExecutor();
+  const enforced = realExecutor.descriptor.attributes?.['enforcement'] === 'enforced';
+  it('runs a real helper script through the real sandboxed executor and resolves what it prints', { skip: enforced ? false : 'the sandbox is not usable here' }, async () => {
+    const dir = tempDir('avarice-helper-');
+    const script = join(dir, 'echo-helper');
+    writeFileSync(script, `#!/bin/sh\nprintf '%s\\n' '${HELPER_VALUE}'\nprintf 'diagnostic on stderr\\n' >&2\n`);
+    chmodSync(script, 0o755);
+    const fx = fixture({ cmd: new CmdProvider({ executor: realExecutor, helpers: { 'echo-helper': script }, cwd: dir }) });
+    const result = await resolveCredential(fx.deps, 'cmd:echo-helper', 'test', { module: 'test' });
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(result.value.use((v) => v), HELPER_VALUE);
+    assert.deepEqual(outcomes(fx), ['resolved']);
+    assert.ok(!credentialEvents(fx).some((row) => row.data_json.includes('diagnostic')));
+  });
+});
+
+// A directory on PATH holding an executable `gh`.
+function pathWithGh(): string {
+  const dir = tempDir('avarice-bin-');
+  const gh = join(dir, 'gh');
+  writeFileSync(gh, '#!/bin/sh\nexit 0\n');
+  chmodSync(gh, 0o755);
+  return dir;
+}
+
+describe('the delegated provider and the allow-list of each profile (D-17)', () => {
+  it('returns a handle that names the CLI and holds no value under personal-extended', async () => {
+    const fx = fixture({ delegated: new DelegatedProvider({ pathEnv: pathWithGh() }) }, 'personal-extended');
+    const result = await resolveCredential(fx.deps, 'delegated:gh', 'test', { module: 'test' });
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(result.value.delegatedTo, 'gh');
+    assert.equal(result.value.use((v) => v), '');
+    assert.deepEqual(outcomes(fx), ['resolved']);
+    assert.equal(new DelegatedProvider().descriptor.capabilities['delegated'], true);
+    assert.ok(!JSON.stringify(result.value).includes('/'), 'the handle does not even carry a path');
+  });
+
+  it('denies delegated under personal-local and under an enterprise profile although a provider is wired (class allow-list)', async () => {
+    for (const profile of ['personal-local', 'enterprise-acme']) {
+      const fx = fixture({ delegated: new DelegatedProvider({ pathEnv: pathWithGh() }) }, profile);
+      const result = await resolveCredential(fx.deps, 'delegated:gh', 'test', { module: 'test' });
+      assert.ok(!result.ok, profile);
+      assert.equal(result.error.kind, 'denied', profile);
+      assert.deepEqual(outcomes(fx), ['denied'], profile);
+    }
+  });
+
+  it('reports a CLI that is not on PATH as unavailable', async () => {
+    const fx = fixture({ delegated: new DelegatedProvider({ pathEnv: tempDir('avarice-empty-') }) }, 'personal-extended');
+    const result = await resolveCredential(fx.deps, 'delegated:gh', 'test', { module: 'test' });
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind, 'unavailable');
+    assert.deepEqual(outcomes(fx), ['unavailable']);
+  });
+
+  it('allows keychain and cmd in every profile class and refuses a provider the profile does not wire as unavailable', async () => {
+    const executor = new FakeExecutor(() => finished(HELPER_VALUE));
+    for (const profile of ['personal-local', 'personal-extended', 'enterprise-acme']) {
+      const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) }, profile);
+      const viaCmd = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+      assert.ok(viaCmd.ok, profile);
+      const viaKeychain = await resolveCredential(fx.deps, 'keychain:avarice-test-svc', 'test', { module: 'test' });
+      assert.ok(!viaKeychain.ok, profile);
+      assert.equal(viaKeychain.error.kind, 'unavailable', profile);
+      assert.deepEqual(outcomes(fx), ['resolved', 'unavailable'], profile);
+    }
+  });
+});
+
+describe('references that are never a source (SEC-2, S-49)', () => {
+  it('refuses env: and every other scheme in every profile with outcome invalid, an error naming the reference, and no value in the event', async () => {
+    const executor = new FakeExecutor(() => finished(HELPER_VALUE));
+    for (const profile of ['personal-local', 'personal-extended', 'enterprise-acme']) {
+      const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }), delegated: new DelegatedProvider({ pathEnv: pathWithGh() }), keychain: new KeychainProvider() }, profile);
+      for (const ref of ['env:GITHUB_TOKEN', 'ENV:GITHUB_TOKEN', 'vault:secret/x', 'keychain:', 'keychain:../x', 'GITHUB_TOKEN']) {
+        const result = await resolveCredential(fx.deps, ref, 'test', { module: 'test' });
+        assert.ok(!result.ok, `${profile} ${ref}`);
+        assert.equal(result.error.kind, 'invalid', `${profile} ${ref}`);
+        if (result.error.kind === 'invalid') assert.ok(result.error.reason.includes(ref), result.error.reason);
+      }
+      const rows = credentialEvents(fx);
+      assert.deepEqual(outcomes(fx), Array(6).fill('invalid'), profile);
+      assert.equal(rows.length, 6);
+      assert.ok(String((JSON.parse((rows[0] as EventRow).data_json) as Record<string, unknown>)['reference']) === 'env:GITHUB_TOKEN');
+      assertValueFree(rows, HELPER_VALUE);
+    }
+    assert.equal(executor.specs.length, 0, 'a refused reference ran nothing');
   });
 });

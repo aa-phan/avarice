@@ -45,3 +45,29 @@ export function parseCredentialRef(text: string): Result<CredentialRef> {
   }
   return ok({ provider: scheme as ProviderName, name });
 }
+
+// SKELETON for the RED run of Task 2 of plan 04-15: the planned names exist and enforce nothing.
+export type CredentialProfileClass = 'personal-local' | 'personal-extended' | 'enterprise';
+
+export const PROVIDERS_BY_CLASS: Readonly<Record<CredentialProfileClass, readonly ProviderName[]>> = {
+  'personal-local': PROVIDER_NAMES,
+  'personal-extended': PROVIDER_NAMES,
+  enterprise: PROVIDER_NAMES,
+};
+
+export function credentialClassOf(_profile: string): CredentialProfileClass {
+  return 'personal-local';
+}
+
+export function providersFor(_profile: string): readonly ProviderName[] {
+  return PROVIDER_NAMES;
+}
+
+export interface CredentialSection {
+  refs: Record<string, CredentialRef>;
+  helpers: Record<string, string>;
+}
+
+export function parseCredentialSection(_raw: unknown): Result<CredentialSection> {
+  return ok({ refs: {}, helpers: {} });
+}
