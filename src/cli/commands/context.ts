@@ -18,6 +18,7 @@ import { MANUAL_CONTEXT_MAX_BYTES, SOURCE_MAX_CHARS, readInputFile, recordManual
 import type { Io, ParsedArgs } from '../args.ts';
 import { refuseInsideRun, responderName } from '../identity.ts';
 import type { IdentityContext } from '../identity.ts';
+import { failure, runIdProblem } from '../manual-command.ts';
 import { errorLine, stripControl } from '../render/style.ts';
 
 const EXIT_NO_ANSWER = 3;
@@ -26,7 +27,6 @@ const EXIT_INTERNAL = 70;
 const USAGE = 'usage: avarice context <term> [--project <id>] [--budget <tokens>] [--json]';
 
 const ADD_USAGE = 'usage: avarice context add --file <path> --source "<title> rev <n>" --run <runId>';
-const RUN_ID = /^run_[0-9A-Za-z]{4,64}$/;
 
 // `add` is the recording form only when one of its flags is given, so every search that starts with the word add (`context add user`) keeps its meaning.
 const isAdd = (args: ParsedArgs): boolean => args.positionals[0] === 'add' && (args.flags['file'] !== undefined || args.flags['source'] !== undefined || args.flags['run'] !== undefined);
@@ -54,8 +54,8 @@ function addUsage(args: ParsedArgs, env: NodeJS.ProcessEnv, context: IdentityCon
   const source = args.flags['source'];
   if (typeof source !== 'string' || source.trim() === '') return message('--source needs where the text came from, as "<title> rev <n>"');
   if (source.length > SOURCE_MAX_CHARS) return message(`--source is at most ${SOURCE_MAX_CHARS} characters`);
-  const run = args.flags['run'];
-  if (typeof run !== 'string' || !RUN_ID.test(run)) return message('--run needs a run ID (run_...)');
+  const run = runIdProblem(args.flags['run']);
+  if (run !== undefined) return message(run);
   return undefined;
 }
 
@@ -84,19 +84,7 @@ function runAdd(args: ParsedArgs, deps: AppDeps, io: Io): number {
     by: responderName(),
     nowMs: deps.clock.nowMs(),
   });
-  if (!recorded.ok) {
-    const e = recorded.error;
-    if (e.kind === 'not_found') {
-      io.err(`${errorLine('context', `no such run (${describeError(e)})`)}\n`);
-      return EXIT_NO_ANSWER;
-    }
-    if (e.kind === 'invalid') {
-      io.err(`${errorLine('context', describeError(e))}\n`);
-      return EXIT_USAGE;
-    }
-    io.err(`${errorLine('context', `failed: ${describeError(e)}`)}\n`);
-    return EXIT_INTERNAL;
-  }
+  if (!recorded.ok) return failure(io, 'context', recorded.error);
   const { ref, fileDigest, duplicate } = recorded.value;
   io.out(`${duplicate ? 'already recorded' : 'recorded'} excerpt "${stripControl(ref.id)}" (${stripControl(ref.scope)}, ${fileDigest}) for run ${args.flags['run'] as string}\n`);
   return 0;

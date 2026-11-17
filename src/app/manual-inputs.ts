@@ -8,12 +8,14 @@
 // is recorded as `inconclusive`, on a revision no gate judges, and never satisfies a gate (Phase 5 decides how review and CI feedback enter a new attempt, FR-10).
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { sha256Hex } from '../domain/digest.ts';
+import type { EvidenceStatus } from '../domain/evidence.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { redactSecrets } from '../domain/secret-patterns.ts';
 import type { ExternalRef } from '../ports/context-source.ts';
 import { printable } from './context.ts';
 import type { AppDeps } from './deps.ts';
+import { getRunStatuses } from './run-status.ts';
 
 // The reference a pasted excerpt leaves in task_refs: the provider names where it came from, the ID is the source text the owner gave (verbatim), the revision is the
 // digest of the file's bytes and the scope is the file's name.
@@ -240,4 +242,165 @@ export function manualPackItems(deps: AppDeps, runId: string, budget: number): R
     items.push({ ref, title: ref.id, excerpt, estTokens });
   }
   return ok({ items, notes });
+}
+
+// ---- evidence add --------------------------------------------------------------------------------------------------------------------------------------------
+
+export interface ManualEvidenceInput {
+  runId: string;
+  kind: string;
+  fileName: string;
+  bytes: Uint8Array;
+  // Where the evidence lives (a CI run's URL, a review's link, a ticket key); optional.
+  ref?: string;
+  by: string;
+  nowMs: number;
+}
+
+export interface ManualEvidenceRecorded {
+  evidenceId: string;
+  kind: ManualEvidenceKind;
+  artifactDigest: string;
+  fileDigest: string;
+}
+
+export const isEvidenceKind = (kind: string): kind is ManualEvidenceKind => (EVIDENCE_KINDS as readonly string[]).includes(kind);
+
+// Records a CI log, a review or a manual note as one evidence row of the run's latest attempt. AVARICE did not measure it, so it is `inconclusive`, independent of the run
+// (`external`), and sits on a revision (`manual:` plus the digest of the file) that no gate judges: it satisfies no gate and replaces no earlier row. A second add is a
+// second row. A run with no attempt has nothing to attach it to (not_found).
+export function recordManualEvidence(deps: AppDeps, input: ManualEvidenceInput): Result<ManualEvidenceRecorded> {
+  const run = deps.ledger.getRun(input.runId);
+  if (!run.ok) return run;
+  if (!isEvidenceKind(input.kind)) return invalid('kind', `an evidence kind is one of ${EVIDENCE_KINDS.join(', ')}`);
+  const name = lineOf('file', input.fileName, SOURCE_MAX_CHARS);
+  if (!name.ok) return name;
+  const ref = input.ref === undefined ? ok(undefined) : lineOf('ref', input.ref, REF_MAX_CHARS);
+  if (!ref.ok) return ref;
+  const text = textOf('the evidence file', input.bytes, MANUAL_EVIDENCE_MAX_BYTES);
+  if (!text.ok) return text;
+
+  const attempts = deps.ledger.listRunAttempts(input.runId);
+  if (!attempts.ok) return attempts;
+  const attempt = attempts.value.at(-1);
+  if (attempt === undefined) return err({ kind: 'not_found', ref: `an attempt of run ${input.runId} to attach the evidence to` });
+  const contract = deps.ledger.getRunContract(input.runId);
+  if (!contract.ok) return contract;
+  if (contract.value === null) return err({ kind: 'not_found', ref: `the contract of run ${input.runId}` });
+
+  const fileDigest = fileDigestOf(input.bytes);
+  const stored = storeText(deps, input.runId, MANUAL_EVIDENCE_ARTIFACT, input.bytes, input.nowMs);
+  if (!stored.ok) return stored;
+  const status: EvidenceStatus = 'inconclusive';
+  const row = deps.ledger.recordEvidence({
+    attemptId: attempt.attemptId,
+    kind: input.kind,
+    name: `${input.kind}:${name.value}`,
+    status,
+    revision: `manual:${fileDigest}`,
+    clean: false,
+    treeDigest: fileDigest.slice('sha256:'.length),
+    environment: { source: 'manual', ...(ref.value !== undefined ? { ref: ref.value } : {}), recordedBy: input.by, file: name.value, fileDigest, size: input.bytes.length },
+    contractVersion: contract.value.version,
+    policyRevision: contract.value.policyRevision,
+    independence: 'external',
+    acceptance: [],
+    artifactDigest: stored.value.digest,
+    nowMs: input.nowMs,
+  });
+  if (!row.ok) return row;
+  return ok({ evidenceId: row.value.evidenceId, kind: input.kind, artifactDigest: stored.value.digest, fileDigest });
+}
+
+// ---- pr record -----------------------------------------------------------------------------------------------------------------------------------------------
+
+const OWNER_OR_REPO = /^[A-Za-z0-9._-]+$/;
+const PULL_PATH = /^\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]{0,8})\/?$/;
+const ONLY_DOTS = /^\.+$/;
+
+export interface PullRequestParts {
+  host: string;
+  owner: string;
+  repository: string;
+  number: number;
+}
+
+// The parts of a pull request URL, kept as written: `https://<host>/<owner>/<repository>/pull/<number>` and nothing else. A URL that carries credentials, another scheme,
+// another path or a segment that is not a name is refused; a query and a fragment are dropped (they are not part of what identifies the pull request).
+export function parsePullRequestUrl(text: string): Result<PullRequestParts & { scope: string }> {
+  const line = lineOf('url', text, REF_MAX_CHARS);
+  if (!line.ok) return line;
+  let url: URL;
+  try {
+    url = new URL(line.value);
+  } catch {
+    return invalid('url', 'a pull request is given as its URL: https://<host>/<owner>/<repository>/pull/<number>');
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return invalid('url', 'a pull request URL is http or https');
+  if (url.username !== '' || url.password !== '') return invalid('url', 'a pull request URL carries no credentials');
+  const match = PULL_PATH.exec(url.pathname);
+  if (match === null) return invalid('url', 'the path of a pull request URL is /<owner>/<repository>/pull/<number>');
+  const [, owner, repository, number] = match as unknown as [string, string, string, string];
+  for (const segment of [owner, repository]) {
+    if (!OWNER_OR_REPO.test(segment) || ONLY_DOTS.test(segment)) return invalid('url', `${segment} is not an owner or repository name`);
+  }
+  return ok({ host: url.host, owner, repository, number: Number(number), scope: `${url.protocol}//${url.host}/${owner}/${repository}/pull/${number}` });
+}
+
+export interface PullRequestRecorded {
+  ref: ExternalRef;
+  parts: PullRequestParts;
+  duplicate: boolean;
+}
+
+// Records a pull request the owner opened in the web UI as a reference of the run: the provider `github` (an enterprise host serves the same shape), the kind
+// `pull-request`, the ID `<owner>/<repository>#<number>` as the host wrote them and the URL as the scope. Ledger only: nothing is fetched, so nothing says whether the
+// pull request exists or what state it is in.
+export function recordPullRequest(deps: AppDeps, input: { runId: string; url: string; by: string; nowMs: number }): Result<PullRequestRecorded> {
+  const run = deps.ledger.getRun(input.runId);
+  if (!run.ok) return run;
+  const parsed = parsePullRequestUrl(input.url);
+  if (!parsed.ok) return parsed;
+  const { scope, ...parts } = parsed.value;
+  const id = `${parts.owner}/${parts.repository}#${parts.number}`;
+  const existing = deps.ledger.listTaskRefs(input.runId);
+  if (!existing.ok) return existing;
+  const held = existing.value.find((r) => r.provider === PULL_REQUEST_PROVIDER && r.kind === PULL_REQUEST_KIND && r.id === id && r.scope === scope);
+  if (held !== undefined) return ok({ ref: held, parts, duplicate: true });
+  const ref: ExternalRef = { provider: PULL_REQUEST_PROVIDER, kind: PULL_REQUEST_KIND, id, retrievedAt: new Date(input.nowMs).toISOString(), scope, freshness: 'fresh' };
+  const written = deps.ledger.recordTaskRefs(input.runId, [ref]);
+  if (!written.ok) return written;
+  const event = deps.ledger.appendEvent({
+    type: 'manual.pr_recorded',
+    runId: input.runId,
+    data: { runId: input.runId, host: parts.host, owner: parts.owner, repository: parts.repository, number: parts.number, recordedBy: input.by },
+    nowMs: input.nowMs,
+  });
+  if (!event.ok) return event;
+  return ok({ ref, parts, duplicate: false });
+}
+
+// ---- comment --print -----------------------------------------------------------------------------------------------------------------------------------------
+
+// The body of a tracker comment for the owner to paste, built only from ledger rows: the run, its state, its items' states, the checks that passed with the revision each
+// passed at, and the decisions still open. It writes nothing and posts nothing.
+export function renderComment(deps: AppDeps, runId: string): Result<string> {
+  const run = deps.ledger.getRun(runId);
+  if (!run.ok) return run;
+  const statuses = getRunStatuses(deps.ledger, run.value.projectId, deps.clock.nowMs());
+  if (!statuses.ok) return statuses;
+  const status = statuses.value.find((s) => s.runId === runId);
+  if (status === undefined) return err({ kind: 'not_found', ref: `status of run ${runId}` });
+  const lines: string[] = [`AVARICE run ${printable(status.runId)}: ${printable(status.title)}`];
+  lines.push(`state: ${printable(status.state)}${status.reason !== null ? ` (${printable(status.reason)})` : ''}`);
+  const items = status.items ?? [];
+  if (items.length === 0) lines.push('items: none');
+  else lines.push('items:', ...items.map((i) => `- ${printable(i.itemId)}: ${printable(i.state)}`));
+  const passed = status.evidence.filter((e) => e.status === 'passed');
+  if (passed.length === 0) lines.push('checks passed: none');
+  else lines.push('checks passed:', ...passed.map((e) => `- ${printable(e.name)} passed at ${printable(e.revision)}`));
+  const open = (status.decisions ?? []).filter((d) => d.state === 'open');
+  if (open.length === 0) lines.push('open decisions: none');
+  else lines.push('open decisions:', ...open.map((d) => `- ${printable(d.decisionId)} (${printable(d.class)})${d.affectedItems.length > 0 ? ` affects ${d.affectedItems.map(printable).join(', ')}` : ''}`));
+  return ok(`${(deps.redact ?? redactSecrets)(lines.join('\n'))}\n`);
 }

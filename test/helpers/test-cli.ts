@@ -62,5 +62,8 @@ if (process.env['NODE_TEST_CONTEXT'] === undefined) {
   // Under the offline wrapper the whole process is already inside a sandbox, which cannot nest.
   const outer = process.env['AVARICE_TEST_OUTER_SANDBOX'] === '1';
   const host = options.run !== undefined ? new FakeRunHost(options.run) : new FakeAgentHost(options);
-  process.exitCode = await main(process.argv.slice(2), { host, ...(process.env['AVARICE_TEST_NOTIFIER'] === 'local' ? {} : { notifier: SILENT_NOTIFIER }), ...(outer ? { executor: new InheritedSandboxExecutor() } : {}) });
+  // AVARICE_TEST_ANCESTRY=none: the process table is not read (the offline wrapper denies `ps`, and a chain that cannot be read counts as inside a run), so a command that
+  // refuses a run's own process tree sees an empty chain. Only a test that runs such a command under the wrapper sets it.
+  const ancestry = process.env['AVARICE_TEST_ANCESTRY'] === 'none' ? { ancestry: () => ({ ok: true as const, value: [] }) } : {};
+  process.exitCode = await main(process.argv.slice(2), { host, ...ancestry, ...(process.env['AVARICE_TEST_NOTIFIER'] === 'local' ? {} : { notifier: SILENT_NOTIFIER }), ...(outer ? { executor: new InheritedSandboxExecutor() } : {}) });
 }

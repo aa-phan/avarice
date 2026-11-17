@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
-import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
+import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import { RUN_EXPIRY_WAIT_MS, resumeRunCli, rows, runIdFromOutput, runRunWithFault, runStatusJson, sleepSync } from '../helpers/fault-run.ts';
 import { offlineAvailable, runOffline } from '../helpers/offline.ts';
 import type { FakeRunOptions } from '../helpers/fake-run-host.ts';
@@ -333,8 +333,10 @@ describe('`evidence add` records a CI log or a review as manual evidence that ne
 
 describe('`evidence add` for a run that has no attempt yet exits 3 and records nothing (FR-19)', () => {
   const f = fixture();
-  const { runId } = runRunWithFault(f.roots, f.repo, f.brief, 'after-checkpoint:context-pack', FIX);
+  // Killed before the run's first attempt starts: the workspace is prepared, no unit has been launched.
+  const { runId } = runRunWithFault(f.roots, f.repo, f.brief, 'after-checkpoint:prepare-workspace', FIX);
   it('has nothing to attach the evidence to', () => {
+    assert.equal(rows<{ n: number }>(f.roots, 'SELECT count(*) AS n FROM attempts WHERE run_id = ?', runId)[0]?.n, 0, 'the run has no attempt');
     const note = writeInput(f, 'review.md', 'Approved.\n');
     const refused = cli(f, ['evidence', 'add', '--kind', 'review', '--file', note, '--run', runId]);
     assert.equal(refused.code, 3, `${refused.stdout}${refused.stderr}`);
@@ -348,7 +350,8 @@ describe('`pr record` records a pull request opened in the web UI, offline (FR-1
   const record = (argv: readonly string[], env: Record<string, string | undefined> = {}): CliResult => cli(f, ['pr', 'record', ...argv], env);
 
   it('records a github pull-request reference with the owner, repository and number verbatim and the URL as the scope, under a wrapper that denies the network', { skip: !offlineAvailable() }, () => {
-    const ran = runOffline(['pr', 'record', URL_OK, '--run', f.runId], { roots: f.roots, entry: PRODUCTION_ENTRY });
+    // The wrapper denies `ps`, which the refusal of a run's process tree reads, so the test entry is told to see an empty chain (test/helpers/test-cli.ts).
+    const ran = runOffline(['pr', 'record', URL_OK, '--run', f.runId], { roots: f.roots, env: { AVARICE_TEST_ANCESTRY: 'none' } });
     assert.equal(ran.code, 0, `${ran.stdout}${ran.stderr}`);
     const refs = taskRefsOf(f.roots, f.runId).filter((r) => r.provider === 'github');
     assert.equal(refs.length, 1);
