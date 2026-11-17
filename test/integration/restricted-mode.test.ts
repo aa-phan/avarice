@@ -17,6 +17,7 @@ import { checkRestrictedLaunchReady } from '../../src/adapters/host-claude/launc
 import { RESTRICTED_HELP_FLAGS } from '../../src/domain/host-admission.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { makeFakeClaude } from '../helpers/fake-claude.ts';
+import { runOnTerminal } from '../helpers/fault-run.ts';
 import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
@@ -360,5 +361,21 @@ describe('the restricted launch preflight and descriptor (CON-4, D-12)', () => {
     assert.match(r.stdout + r.stderr, /enforcement_failure:host-flag-missing:--restricted/);
     assert.equal(f.fake.started(), false, 'no invocation started');
     assert.deepEqual(rows(f.roots, "SELECT run_id FROM runs WHERE state != 'onboarding'"), [], 'no run was stored');
+  });
+});
+
+describe('the owner ends a restricted run by hand (CON-4, D-12)', () => {
+  it('`avarice cancel` ends the blocked restricted run and leaves the user repository exactly as it was', () => {
+    const f = fixture({ writes: { ...WRITES, '.avarice-restricted/QUESTIONS.md': QUESTIONS } });
+    const before = { checkout: checkoutSnapshot(f.repo.path), refs: refsOf(f.repo.path) };
+    const runId = runIdOf(start(f, '--restricted', '--wait').stdout);
+    // `cancel` is a person's command: it needs a terminal, so it runs on a pseudo-terminal.
+    const cancelled = runOnTerminal(f.roots, ['cancel', runId], { AVARICE_CLAUDE_BIN: f.fake.bin });
+    assert.ok(cancelled !== null, 'python3 is available for the pseudo-terminal');
+    assert.equal(cancelled.code, 0, cancelled.output);
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state, 'cancelled');
+    assert.deepEqual(checkoutSnapshot(f.repo.path), before.checkout, 'the user checkout is unchanged');
+    assert.equal(refsOf(f.repo.path), before.refs, 'the user repository has no new ref');
+    assert.equal(f.fake.argvs().length, 1, 'the cancel launched nothing');
   });
 });

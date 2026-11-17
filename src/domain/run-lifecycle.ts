@@ -125,7 +125,9 @@ export function isRunResumable(state: RunState): boolean {
 
 // Written to checkpoints.next_action; order is execution order within the state.
 export const RUN_NEXT_ACTIONS: Readonly<Partial<Record<RunState, readonly string[]>>> = {
-  contract_ready: ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement'],
+  // `restricted-run` (plan 04-23) is the one action a restricted run commits after `prepare-workspace`: the other five never run for it, and it has no handler of its own
+  // (restricted.ts commits it itself), so the contained loop in prepare.ts passes over it.
+  contract_ready: ['prepare-workspace', 'configure-gsd', 'install-deps', 'validate-checks', 'baseline', 'verify-enforcement', 'restricted-run'],
   // `park` follows `classify`: an item that stops to ask has its delta taken out of the tree before the run goes on (plan 03-18). A unit that progressed is
   // judged by `gate:g1` (its plan) and `gate:g2`; a newly failing check of the item is repaired (`repair`) and the repair is judged by `gate:g3` before G2 judges
   // the whole item again (plan 03-19). `unpark` sits between `context-pack` and `launch:run`: an answered item that resumes its own session has its parked delta
