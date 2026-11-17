@@ -27,6 +27,8 @@ import { DelegatedProvider } from '../adapters/credential/delegated.ts';
 import { KeychainProvider } from '../adapters/credential/keychain.ts';
 import { LocalNotifier } from '../adapters/notify/local-notifier.ts';
 import { LocalArtifactStore } from '../adapters/fs/artifact-store.ts';
+import { RedactingArtifactStore } from '../adapters/fs/redacting-artifact-store.ts';
+import { processRedactor } from '../adapters/redaction/process-redactor.ts';
 import { createStagingWorkspace, STAGING_STRATEGY } from '../adapters/git/staging-strategy.ts';
 import { GitRunSource } from '../adapters/git/run-source.ts';
 import { CloneRunWorkspace } from '../adapters/git/run-workspace.ts';
@@ -43,6 +45,8 @@ import { locateGsdCore } from '../adapters/gsd/locate.ts';
 import type { LocatedGsd } from '../adapters/gsd/locate.ts';
 import { parseCredentialSection, providersFor } from '../domain/credential-ref.ts';
 import type { CredentialSection, ProviderName } from '../domain/credential-ref.ts';
+import { DEFAULT_TRANSCRIPT_RETENTION, parseRetentionSection } from '../domain/redactor.ts';
+import type { TranscriptRetention } from '../domain/redactor.ts';
 import { digestOf } from '../domain/digest.ts';
 import { parsePolicyFile, policySources } from '../domain/policy.ts';
 import type { PolicyFile, PolicySources } from '../domain/policy.ts';
@@ -207,6 +211,8 @@ interface HostInputs {
   ledger: Ledger;
   artifacts: ArtifactStore;
   staging: StagingWorkspace;
+  // What a run keeps of the host transcript: the profile's `retention.transcripts` (D-14).
+  transcripts: TranscriptRetention;
 }
 
 // The production host: the contained Claude Code adapter when everything it needs is present and admitted (a
@@ -233,6 +239,7 @@ function productionHost(inputs: HostInputs): AgentHost {
     staging: inputs.staging,
     countHookDenies: (invocationId) => inputs.ledger.countHookDenials(invocationId),
     env,
+    transcripts: inputs.transcripts,
   });
   const attributes = adapter.descriptor.attributes ?? {};
   return attributes['enforcement'] === 'enforced' ? adapter : new UnavailableAgentHost(attributes['reason'] ?? 'the host adapter is not enforced');
@@ -269,6 +276,17 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
       return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config credentials: ${describeError(e)}` };
     }
     credentialSection = parsedSection.value;
+  }
+  // D-14: what a run keeps of the host transcript. A value other than summary or full stops the command here, naming the key. A read-only
+  // command launches no host, so it does not read the section.
+  let transcripts: TranscriptRetention = DEFAULT_TRANSCRIPT_RETENTION;
+  if (options.readOnly !== true) {
+    const parsedRetention = parseRetentionSection(profile.config.sections.retention);
+    if (!parsedRetention.ok) {
+      const e = parsedRetention.error;
+      return { ok: false, code: EXIT_INTERNAL, message: e.kind === 'invalid' ? `profile config ${e.field}: ${e.reason}` : `profile config retention: ${describeError(e)}` };
+    }
+    transcripts = parsedRetention.value.transcripts;
   }
   const dbPath = join(profile.dataRoot, 'state.db');
   const clock = overrides.clock ?? systemClock();
@@ -413,11 +431,12 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
   const runSource = new GitRunSource();
   const runWorkspace = new CloneRunWorkspace();
   const egress = overrides.egress ?? new AllowlistEgressProxy();
-  const artifacts = new LocalArtifactStore(profile.dataRoot);
+  // SEC-3, D-14: every text artifact is redacted before it is stored, whoever writes it.
+  const artifacts = new RedactingArtifactStore(new LocalArtifactStore(profile.dataRoot), processRedactor);
   // The agent host. A read-only command never launches one, so it neither probes the host nor records it.
   const host =
     overrides.host ??
-    (options.readOnly === true ? new UnavailableAgentHost() : productionHost({ env, home, dataRoot: profile.dataRoot, located: locatedGsd, ledger, artifacts, staging }));
+    (options.readOnly === true ? new UnavailableAgentHost() : productionHost({ env, home, dataRoot: profile.dataRoot, located: locatedGsd, ledger, artifacts, staging, transcripts }));
   if (options.readOnly !== true) {
     // Record which host this profile ran with, so a later reader sees the enforcement level it had.
     const recorded = ledger.upsertAdapterConfig({
