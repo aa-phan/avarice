@@ -137,6 +137,9 @@ export interface RunStatus {
   // Appended under the frozen-shapes rule (plan 04-20): the references the run recorded that were last refreshed to anything but `fresh`, in the order a resume
   // refreshes them. Present only when there is one.
   staleReferences?: RunStaleReferenceView[];
+  // Appended under the frozen-shapes rule (plan 04-23; D-12): present, and `true`, only for a run started with `--restricted` (its stored contract says so). A contained run has no
+  // such key, so every output a contained run produced before stays byte-identical.
+  restricted?: true;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -200,6 +203,11 @@ function referencesOf(body: unknown): RunReferenceView[] {
     out.push({ kind: 'conventions', id: '.avarice/config.json', revision: workspace['conventionsRevision'] });
   }
   return out;
+}
+
+// Whether a stored contract body says the run is restricted. Read defensively, as the other readers of the body are: anything that is not a compiled contract is not.
+function isRestricted(body: unknown): boolean {
+  return isObject(body) && body['mode'] === 'restricted';
 }
 
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === 'string');
@@ -288,6 +296,7 @@ function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatu
     ...(run.cancelRequestedAt !== null ? { cancelRequestedAt: run.cancelRequestedAt } : {}),
     ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
     ...(stale.length > 0 ? { staleReferences: stale } : {}),
+    ...(isRestricted(inputs.contract === null ? null : inputs.contract.body) ? { restricted: true as const } : {}),
   };
 }
 

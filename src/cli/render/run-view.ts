@@ -15,8 +15,10 @@ function shortRevision(revision: string): string {
 const sha7 = (sha: string): string => stripControl(sha).slice(0, 7);
 
 // The ledger's word and reason; an interrupted run is shown as paused, with what interrupted it as the reason.
+// A restricted run (plan 04-23; D-12) is labelled `restricted` in front of its state, so it is never read as a contained run that stopped.
 export function runStateWord(run: RunStatus): string {
-  return run.interrupted !== undefined ? stateWord(run.interrupted.presentedAs, run.interrupted.reason) : stateWord(run.state, run.reason);
+  const word = run.interrupted !== undefined ? stateWord(run.interrupted.presentedAs, run.interrupted.reason) : stateWord(run.state, run.reason);
+  return run.restricted === true ? `restricted ${word}` : word;
 }
 
 const BUDGET_ORDER = ['costUsd', 'invocations', 'toolCalls', 'subagentsTotal', 'wallClockMs'] as const;
@@ -104,6 +106,7 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
     detail(i.attemptId === null ? `interrupted at ${stripControl(i.step)}` : `interrupted attempt ${stripControl(i.attemptId)} at ${stripControl(i.step)}`);
     detail(`continue with: ${stripControl(i.resumeCommand)}`);
   }
+  if (run.restricted === true) detail('mode: restricted (analysis and planning only: no check and no gate ran, nothing is committed or handed off)');
   if (run.cancelRequestedAt !== undefined) detail(`cancel requested (${localTime(Date.parse(run.cancelRequestedAt), nowMs)})`);
   if (run.lastCheckpoint !== null) detail(`last checkpoint: ${stripControl(run.lastCheckpoint.nextAction)} (${localTime(Date.parse(run.lastCheckpoint.at), nowMs)})`);
   const branch = branchLine(run);
