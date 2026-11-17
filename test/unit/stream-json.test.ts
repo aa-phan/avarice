@@ -220,3 +220,31 @@ describe('the final result text tail (plan 03-08, AUT-1: the pause question, kep
     assert.equal(/^[\udc00-\udfff]/.test(tail), false, 'no lone low surrogate leads the tail');
   });
 });
+
+// AC-8 token metric (A2, plan 04-31): the sum, over distinct assistant messages, of input, cache-creation, cache-read and output tokens. The host prints
+// one assistant event per content block, so a message with two blocks appears twice under one `message.id` and its usage must count once (the later
+// event carries the final output count).
+describe('usage per distinct assistant message', () => {
+  const assistant = (id: string | undefined, usage: Record<string, unknown> | undefined): string =>
+    `${JSON.stringify({ type: 'assistant', message: { ...(id !== undefined ? { id } : {}), role: 'assistant', content: [{ type: 'text', text: 'x' }], ...(usage !== undefined ? { usage } : {}) } })}\n`;
+
+  it('sums the last usage of each distinct message id, so two events that share an id count once', () => {
+    const parsed = parseStreamJson(
+      assistant('msg_1', { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 1000, output_tokens: 5 }) +
+        assistant('msg_1', { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 1000, output_tokens: 20 }) +
+        assistant('msg_2', { input_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 2000, output_tokens: 40 }),
+    );
+    assert.deepEqual(parsed.usage, { inputTokens: 13, cacheCreationTokens: 100, cacheReadTokens: 3000, outputTokens: 60 });
+  });
+
+  it('gives zeros, not undefined, for a stream with no usage', () => {
+    const zeros = { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+    assert.deepEqual(parseStreamJson(transcript('success', SESSION)).usage, zeros);
+    assert.deepEqual(parseStreamJson('').usage, zeros);
+  });
+
+  it('counts a message with no id on its own and ignores a usage field that is not a non-negative number', () => {
+    const parsed = parseStreamJson(assistant(undefined, { input_tokens: 1, output_tokens: 2 }) + assistant(undefined, { input_tokens: 4, output_tokens: -3 }) + assistant('msg_3', { input_tokens: '9', cache_read_input_tokens: null }));
+    assert.deepEqual(parsed.usage, { inputTokens: 5, cacheCreationTokens: 0, cacheReadTokens: 0, outputTokens: 2 });
+  });
+});
