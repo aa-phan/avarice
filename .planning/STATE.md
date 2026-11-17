@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-21-PLAN.md
-last_updated: "2026-11-17T07:21:44.638Z"
+stopped_at: Completed 04-22-PLAN.md
+last_updated: "2026-11-17T08:14:18.773Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: c3df973bc57977eabbba8dad3eeba8dc9601e8d5
+state_head: 005a19093a883d5c02f6dbaea7812f2ea6a0b71b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 22 of 39
+Plan: 23 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -184,6 +184,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P19 | 60 min | 3 tasks | 15 files |
 | Phase 04 P20 | 35 min | 3 tasks | 18 files |
 | Phase 04 P21 | 20 min | 3 tasks | 22 files |
+| Phase 04 P22 | 35min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -447,6 +448,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-20: ContextSource.refresh takes the project's index query as a second argument; block precedence is access_revoked, ref_deleted, ref_changed
 - [Phase 04]: 04-21: an onboarding's permission decisions are decisions rows on its carrier run (openOnboardingDecision), not shown by inbox and not answerable by decide — no run method can see the carrier; owner review item
 - [Phase 04]: 04-21: a refused, denied or failed promotion leaves the onboarding active (exit 0) and is recorded as step promote; a promotion that never started is not retried on resume — promotion runs after activation in the same lease; owner review items 2 and 3
+- [Phase 04]: 04-22: a brief that holds a secret is redacted (AppDeps.redact before parseBrief), not refused; owner may prefer refusing
+- [Phase 04]: 04-22: hook_reads keyed by redacted path plus 16 hex of SHA-256 of the path; the hook process cannot redact a seeded credential value (owner review)
+- [Phase 04]: 04-22: AC-6 denies personal-local's profile config by contents (file-read-data); the registry reads other profiles' config.json on every command (D-19), a read the count cannot see (owner review)
 
 ### Roadmap Evolution
 
@@ -514,8 +518,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T07:21:38.160Z
-Stopped at: Completed 04-21-PLAN.md
+Last session: 2026-11-17T08:14:18.743Z
+Stopped at: Completed 04-22-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

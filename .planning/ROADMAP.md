@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 21/39 plans executed in 18 waves (one branch, one PR, D-01)
+**Plans**: 22/39 plans executed in 18 waves (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -98,7 +98,7 @@ Plans:
 - [x] 04-21-PLAN.md — Promotion copy and commit through the approval gate (D-15)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 04-22-PLAN.md — AC-6 isolation and AC-5 redaction exit suites
+- [x] 04-22-PLAN.md — AC-6 isolation and AC-5 redaction exit suites
 - [ ] 04-23-PLAN.md — Restricted mode for runs (CON-4, D-12)
 
 **Wave 7** *(blocked on Wave 6 completion)*
@@ -243,7 +243,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
-| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 21/39 | In Progress | - |
+| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 22/39 | In Progress | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |
