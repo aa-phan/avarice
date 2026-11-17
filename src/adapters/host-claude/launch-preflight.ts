@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { REQUIRED_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
+import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
 import type { HostAdmission } from '../../domain/host-admission.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -329,11 +329,11 @@ export interface RestrictedReadyInput {
   timeoutMs?: number;
 }
 
-// The startup check behind the restricted host's descriptor: `claude --help` lists `--restricted`. Restricted mode is the answer for a host that cannot be
-// contained (docs/containment.md "Fail-closed behavior"), so it asks for no admitted version, no sandbox and no hook: the host's own `--restricted` removes the tools
-// that run code. It proves the flag is listed, never that the host honours it (spike S4-C; plan 04-34's live run).
+// The startup check behind the restricted host's descriptor: `claude --help` lists `--restricted` and every other flag the restricted line uses. Restricted mode is the
+// answer for a host that cannot be contained (docs/containment.md "Fail-closed behavior"), so it asks for no admitted version, no sandbox and no hook: the host's own
+// `--restricted` removes the tools that run code. It proves the flags are listed, never that the host honours them (spike S4-C; plan 04-34's live run).
 export function checkRestrictedHostReady(input: RestrictedReadyInput): Result<void> {
-  return checkHelpFlags(input.claudeBin, input.timeoutMs ?? DEFAULT_TIMEOUT_MS, ['--restricted']);
+  return checkHelpFlags(input.claudeBin, input.timeoutMs ?? DEFAULT_TIMEOUT_MS, RESTRICTED_HELP_FLAGS);
 }
 
 export interface RestrictedLaunchReadyInput {
@@ -343,7 +343,23 @@ export interface RestrictedLaunchReadyInput {
   timeoutMs?: number;
 }
 
-// Fail-closed readiness before every restricted launch.
+// Fail-closed readiness before every restricted launch. The run settings must be there, valid, and deny by default (`permissions.defaultMode` `dontAsk`: anything the settings
+// do not allow is refused, since there is nobody to ask); then the host must list `--restricted` and the rest of the line's flags. No sandbox probe, no hook self-test and no
+// admitted version: those are the contained line's, and a host that cannot pass them is who this line is for.
 export function checkRestrictedLaunchReady(input: RestrictedLaunchReadyInput): Result<void> {
+  let text: string;
+  try {
+    text = readFileSync(input.settingsFile, 'utf8');
+  } catch (e) {
+    return refuse((e as NodeJS.ErrnoException).code === 'ENOENT' ? 'settings-missing' : 'settings-invalid');
+  }
+  let settings: unknown;
+  try {
+    settings = JSON.parse(text);
+  } catch {
+    return refuse('settings-invalid');
+  }
+  if (!isObject(settings)) return refuse('settings-invalid');
+  if (at(settings, ['permissions', 'defaultMode']) !== 'dontAsk') return refuse('settings-key:permissions.defaultMode');
   return checkRestrictedHostReady(input);
 }
