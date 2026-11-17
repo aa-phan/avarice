@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 17 of 39
+Plan: 16 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
