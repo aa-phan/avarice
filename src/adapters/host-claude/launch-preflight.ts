@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
+import { REQUIRED_HELP_FLAGS, RESTRICTED_HELP_FLAGS, RESTRICTED_ONBOARDING_HELP_FLAGS, VERIFIED_HOST_VERSIONS, admitHostVersion } from '../../domain/host-admission.ts';
 import type { HostAdmission } from '../../domain/host-admission.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -340,6 +340,8 @@ export interface RestrictedLaunchReadyInput {
   claudeBin: string;
   // The generated run settings the restricted line names with `--settings`.
   settingsFile: string;
+  // The line is an onboarding's (plan 04-24): `--plugin-dir` and `--agents` must be listed too.
+  extensions?: boolean;
   timeoutMs?: number;
 }
 
@@ -361,5 +363,5 @@ export function checkRestrictedLaunchReady(input: RestrictedLaunchReadyInput): R
   }
   if (!isObject(settings)) return refuse('settings-invalid');
   if (at(settings, ['permissions', 'defaultMode']) !== 'dontAsk') return refuse('settings-key:permissions.defaultMode');
-  return checkRestrictedHostReady(input);
+  return checkHelpFlags(input.claudeBin, input.timeoutMs ?? DEFAULT_TIMEOUT_MS, input.extensions === true ? RESTRICTED_ONBOARDING_HELP_FLAGS : RESTRICTED_HELP_FLAGS);
 }

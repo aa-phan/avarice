@@ -19,6 +19,9 @@ import { driftOf, refreshFacts, refreshOfPreflight } from '../refresh.ts';
 import type { DriftFinding, RefreshOf } from '../refresh.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { loadContract, stopIncompatible } from './shared.ts';
+import { restrictedOfPreflight } from './register.ts';
+
+const MAX_REASON = 200;
 
 // ONB-5: commits stay off (GSD's own `query commit` then skips), and the settings the mapping workflows read.
 export const STAGING_GSD_SETTINGS: readonly GsdSetting[] = [
@@ -138,9 +141,12 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
   // changed since the revision it describes: incremental, path-scoped or full.
   const refresh = decideRefresh(ctx, stagingPath, contract.value.body.workspace.baseRevision, refreshOfPreflight(row.preflight), drift);
   const outcome = outcomeOf(existingMap, drift, refresh);
+  // `onboard --restricted` (plan 04-24; CON-4, D-12) is one fast map under the restricted launch: the request is read from the stored preflight, so a resume under another
+  // process maps the same way. The mode is fast whatever the refresh plan or an existing map would choose; a restricted map never claims more than four files (ONB-7).
+  const restricted = restrictedOfPreflight(row.preflight);
   const decision = chooseMappingMode({
     isBrownfield: probe.value.isBrownfield,
-    requested: contract.value.body.mapping.mode,
+    requested: restricted ? 'fast' : contract.value.body.mapping.mode,
     existingMap,
     outcome,
     readScope: contract.value.body.files.read,
@@ -183,6 +189,7 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     drift: drift === null ? null : { verdict: drift.verdict, affectedPaths: drift.affectedPaths, threshold: drift.threshold, reason: drift.reason },
     ...(refresh !== null ? { refresh: refresh.record } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
+    ...(restricted ? { restricted: true } : {}),
   };
   const planned = deps.ledger.recordStepResult(row.onboardingId, {
     step: 'mapping:plan',
@@ -207,14 +214,26 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
 
   const verify = ctx.checkpoint('verify-enforcement');
   if (!verify.ok) return verify;
-  const enforcement = deps.host.descriptor.attributes?.['enforcement'];
-  if (enforcement !== 'enforced') {
-    ctx.note(`host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`);
-    const blocked = ctx.transition(row, 'blocked', 'none', {
-      reason: 'enforcement_failure',
-      data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown' },
-    });
-    return blocked.ok ? ok(undefined) : blocked;
+  if (restricted) {
+    // The restricted host is its own dependency and is judged on its own descriptor: it needs a `claude` that lists `--restricted`, and no admitted version, sandbox or hook.
+    // Without it nothing falls back to the contained host (T-04-66).
+    const attributes = deps.restrictedHost?.descriptor.attributes ?? {};
+    if (attributes['enforcement'] !== 'restricted') {
+      const cause = deps.restrictedHost === undefined ? 'no restricted host is composed' : String(attributes['reason'] ?? 'the restricted host is not ready').slice(0, MAX_REASON);
+      ctx.note(`restricted mode is not available: ${cause}; no map was started`);
+      const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'enforcement_failure', data: { host: 'restricted', enforcement: 'none', reason: cause } });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
+  } else {
+    const enforcement = deps.host.descriptor.attributes?.['enforcement'];
+    if (enforcement !== 'enforced') {
+      ctx.note(`host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed. Rerun with --restricted to map in restricted mode (a fast map the record labels partial (restricted))`);
+      const blocked = ctx.transition(row, 'blocked', 'none', {
+        reason: 'enforcement_failure',
+        data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown' },
+      });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
   }
 
   const moved = ctx.transition(row, 'mapping', 'launch:map');

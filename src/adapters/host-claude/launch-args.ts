@@ -175,13 +175,18 @@ export interface RestrictedLaunchArgsInput {
   sessionId: string;
   // An earlier session to resume: the line ends `--resume <id>` and carries no `--session-id`.
   resumeSessionId?: string;
+  // The plugin directory and the agents file of an onboarding's map (plan 04-24; CON-4, D-12): the generated ones that deliver GSD's mapper, named together or not at all. A restricted
+  // run (plan 04-23) names neither.
+  pluginDir?: string;
+  agentsFile?: string;
 }
 
 // The restricted launch line (docs/containment.md "Restricted mode"; spike S4-C):
 //   claude -p <prompt> --restricted --setting-sources "" --settings <file> --permission-mode dontAsk --permission-prompts none
 //     --strict-mcp-config --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>
 // `--restricted` removes the tools that run commands or code and WebFetch, ignores user, project and local settings and confines the file tools to the working
-// directory. The line names no `--tools`, `--allowedTools`, `--plugin-dir`, `--agents` or `--add-dir`, so nothing is granted back. `--setting-sources ""` and
+// directory. The line names no `--tools`, `--allowedTools` or `--add-dir`, so nothing is granted back. A restricted run names no `--plugin-dir` or `--agents` either; a restricted
+// onboarding (plan 04-24) names exactly the generated pair that delivers GSD's mapper (`--plugin-dir <dir> --agents <file>`, as the contained map does), and no other extension. `--setting-sources ""` and
 // `--strict-mcp-config` are kept beside `--restricted` on purpose: the help text says `--restricted` already ignores those sources, but whether the host accepts
 // the two flags together is not known offline (S4-C item 5), and a host that refuses the combination fails closed (nothing launches) where leaving the flags off
 // would rest on an unproven claim. Plan 04-34's live run settles it.
@@ -194,6 +199,7 @@ export function restrictedLaunchArgs(input: RestrictedLaunchArgsInput): string[]
     '',
     '--settings',
     input.settingsFile,
+    ...(input.pluginDir !== undefined && input.agentsFile !== undefined ? ['--plugin-dir', input.pluginDir, '--agents', input.agentsFile] : []),
     '--permission-mode',
     'dontAsk',
     '--permission-prompts',
@@ -221,17 +227,23 @@ const RESTRICTED_REFUSED_FLAGS: ReadonlySet<string> = new Set([
   '--allowed-tools',
   '--add-dir',
   '--permission-prompt-tool',
-  '--plugin-dir',
-  '--agents',
   '--agent',
   '--dangerously-skip-permissions',
   '--allow-dangerously-skip-permissions',
 ]);
 
+// The two flags that deliver GSD's mapper to a restricted onboarding. A restricted run's line refuses them; an onboarding's line (`extensions`) must carry both or neither.
+const RESTRICTED_EXTENSION_FLAGS: ReadonlySet<string> = new Set(['--plugin-dir', '--agents']);
+
+export interface RestrictedJudgeOptions {
+  // The line is an onboarding's: the generated plugin directory and agents file are admitted, as a pair.
+  extensions?: boolean;
+}
+
 // Judges the finished restricted argv before any process starts, as assertLaunchArgsSafe does for the contained line: `--restricted` is required, so a line that
 // lost it is never started; dontAsk, no prompts, an empty setting-sources, the generated settings, a strict MCP set and a positive budget are required too;
 // and no flag may grant a tool or bypass permissions.
-export function assertRestrictedLaunchArgsSafe(argv: readonly string[]): Result<void> {
+export function assertRestrictedLaunchArgsSafe(argv: readonly string[], options: RestrictedJudgeOptions = {}): Result<void> {
   const refuseRestricted = (reason: string): Result<never> => refuse(`restricted:${reason}`);
   const values = new Map<string, string>();
   const bare = new Set<string>();
@@ -247,6 +259,9 @@ export function assertRestrictedLaunchArgsSafe(argv: readonly string[]): Result<
     const equals = token.startsWith('--') ? token.indexOf('=') : -1;
     const flag = equals === -1 ? token : token.slice(0, equals);
     if (!flag.startsWith('-')) continue;
+    if (RESTRICTED_EXTENSION_FLAGS.has(flag) && options.extensions !== true) {
+      return refuseRestricted(`${flag} would load an extension, and a restricted run loads none`);
+    }
     if (RESTRICTED_REFUSED_FLAGS.has(flag) || flag.startsWith('--dangerously') || flag.startsWith('--allow-dangerously')) {
       return refuseRestricted(`${flag} would give back what the restricted line removes or bypass permissions`);
     }
@@ -260,6 +275,12 @@ export function assertRestrictedLaunchArgsSafe(argv: readonly string[]): Result<
   if (prompt === undefined || prompt === '') return refuseRestricted('prompt: -p needs a non-empty prompt');
   if (prompt.startsWith('-')) return refuseRestricted('prompt: a prompt that starts with a dash would be parsed as a flag');
   if (!bare.has('--restricted')) return refuseRestricted('--restricted is required');
+  if (options.extensions === true) {
+    const plugin = values.get('--plugin-dir');
+    const agents = values.get('--agents');
+    if ((plugin === undefined) !== (agents === undefined)) return refuseRestricted('extensions: --plugin-dir and --agents are given together or not at all');
+    if ((plugin !== undefined && plugin === '') || (agents !== undefined && agents === '')) return refuseRestricted('extensions: the generated plugin directory and agents file need a value');
+  }
   const mode = values.get('--permission-mode');
   if (mode !== 'dontAsk') return refuseRestricted(`permission-mode: ${mode === undefined ? 'missing' : JSON.stringify(mode)}, only dontAsk is allowed`);
   if (values.get('--permission-prompts') !== 'none') return refuseRestricted('permission-prompts: must be none');

@@ -41,6 +41,8 @@ export interface ProjectRecordInput {
   execution?: Partial<RecordExecution>;
   // The indexes the index stage built, already folded from its step results (foldIndexResults).
   indexes?: RecordIndexes;
+  // The map was made by `onboard --restricted` (plan 04-24; CON-4, D-12): a fast map under the restricted launch, never whole-repository coverage.
+  restricted?: boolean;
 }
 
 // Something validation or narrowing noted about this record: a name and a reason, never document text.
@@ -152,6 +154,8 @@ export interface ProjectRecord {
   paths: RecordPaths;
   execution: RecordExecution;
   commands: ProposedCommand[];
+  // Present only for a restricted onboarding, and then always `true` and the last key; a contained record has no such key, so its digest is what it was.
+  restricted?: true;
 }
 
 // Defaults grant nothing: no write paths, no endpoints, no credentials. Repository proposals and later
@@ -220,6 +224,7 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
       credentials: [...(execution.credentials ?? [])],
     },
     commands: (input.commands ?? []).map((c) => ({ name: c.name, argv: [...c.argv], provenance: c.provenance, status: c.status })),
+    ...(input.restricted === true ? { restricted: true as const } : {}),
   };
 }
 

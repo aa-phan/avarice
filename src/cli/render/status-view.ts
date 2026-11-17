@@ -61,7 +61,9 @@ function rowOf(e: ProjectStatus): Record<string, string> {
 function recordLine(e: ProjectStatus): string | null {
   if (e.recordVersion === null) return null;
   const m = e.mapping;
-  const mapping = m ? `; mapping ${stripControl(String(m['mode']))} (${stripControl(String(m['completeness']))}, ${stripControl(String(m['freshness']))})` : '';
+  // A map made under the restricted launch says so in the completeness it states: `partial (restricted)`, never plain `partial` (plan 04-24; CON-4, ONB-7).
+  const completeness = m ? `${stripControl(String(m['completeness']))}${e.restricted === true ? ' (restricted)' : ''}` : '';
+  const mapping = m ? `; mapping ${stripControl(String(m['mode']))} (${completeness}, ${stripControl(String(m['freshness']))})` : '';
   return `record v${e.recordVersion} at ${stripControl(String(e.onboardedRevision))}${mapping}; indexes: ${describeIndexes(e.indexes)}`;
 }
 

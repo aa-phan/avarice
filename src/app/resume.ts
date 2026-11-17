@@ -16,7 +16,7 @@ import { openPrivilegedSteps, reconcilePrivilegedSteps } from './authorize.ts';
 import { runOnboarding } from './onboarding-service.ts';
 import type { OnboardingOutcome } from './onboarding-service.ts';
 import type { StageContext } from './stages/stage.ts';
-import { effectiveMappingMode, isStampedMode, loadContract, readMapDocuments, stagingPathOf, stampMap } from './stages/shared.ts';
+import { effectiveMappingMode, hostOfOnboarding, isStampedMode, loadContract, loadMappingPlan, readMapDocuments, stagingPathOf, stampMap } from './stages/shared.ts';
 
 const LAUNCH = 'launch:map';
 const LAUNCH_PREFIX = 'launch:';
@@ -28,8 +28,12 @@ async function reapInterrupted(ctx: StageContext, started: unknown, runId: strin
   const { deps, onboardingId } = ctx;
   const body = typeof started === 'object' && started !== null ? (started as Record<string, unknown>) : {};
   const sessionId = body['sessionId'];
-  if (deps.host.reap === undefined || typeof sessionId !== 'string' || sessionId === '') return ok(undefined);
-  const reaped = await deps.host.reap({ sessionId });
+  // The host that started the invocation ends it: a restricted onboarding's map was launched by the restricted host (plan 04-24; CON-4).
+  const plan = loadMappingPlan(deps, onboardingId);
+  if (!plan.ok) return plan;
+  const host = hostOfOnboarding(deps, plan.value);
+  if (host?.reap === undefined || typeof sessionId !== 'string' || sessionId === '') return ok(undefined);
+  const reaped = await host.reap({ sessionId });
   if (!reaped.ok) return reaped;
   if (reaped.value.terminated === 0) return ok(undefined);
   const invocationId = body['invocationId'];

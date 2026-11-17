@@ -1,8 +1,10 @@
-// avarice onboard --policy onboarding [--mode full|fast] [--promote none|copy|commit] [--budget name=value]... <repo>
+// avarice onboard --policy onboarding [--mode full|fast] [--restricted] [--promote none|copy|commit] [--budget name=value]... <repo>
 // Registers the repository, runs the onboarding stages under a lease and prints where it ended.
+// `--restricted` (plan 04-24; CON-4, D-12) maps fast under the restricted launch, for a host that cannot be contained: the record it activates says
+// `partial (restricted)` and never stands in for a whole-repository map. It forces mapping mode fast, so `--mode full` with it is a usage error.
 // Exit 0 when the project is active, 3 when onboarding stopped without activating (blocked,
 // incompatible, paused) or was refused (existing_state_conflict), 64 for a usage error (including a
-// promotion value other than none, copy or commit), 70 for an internal failure.
+// promotion value other than none, copy or commit, and `--restricted` with `--mode full`), 70 for an internal failure.
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { ONBOARDING_POLICY, runOnboarding, startOnboarding } from '../../app/onboarding-service.ts';
 import type { AppDeps } from '../../app/deps.ts';
@@ -10,12 +12,14 @@ import { parseBudgetFlags } from '../args.ts';
 import type { Io, ParsedArgs } from '../args.ts';
 import { errorLine, outcomeLines } from '../render/style.ts';
 
+export const booleanFlags: readonly string[] = ['restricted'];
+
 export const EXIT_NOT_ACTIVE = 3;
 const EXIT_USAGE = 64;
 const EXIT_INTERNAL = 70;
 
 function usage(io: Io, message: string): number {
-  io.err(`${errorLine('onboard', message)}\nusage: avarice onboard --policy ${ONBOARDING_POLICY} [--mode full|fast] [--promote none|copy|commit] [--budget name=value]... <repo>\n`);
+  io.err(`${errorLine('onboard', message)}\nusage: avarice onboard --policy ${ONBOARDING_POLICY} [--mode full|fast] [--restricted] [--promote none|copy|commit] [--budget name=value]... <repo>\n`);
   return EXIT_USAGE;
 }
 
@@ -32,6 +36,9 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   // Phase 1 maps full (default) or fast; path-scoped mapping and adoption arrive in Phase 4.
   const mode = args.flags['mode'];
   if (mode !== undefined && mode !== 'full' && mode !== 'fast') return usage(io, '--mode must be full or fast');
+  // A restricted onboarding is one fast map (D-12): it never asks for the full set of files, so a full map conflicts with it.
+  const restricted = args.flags['restricted'] === true;
+  if (restricted && mode === 'full') return usage(io, '--restricted maps fast only and conflicts with --mode full; drop one of them');
   const repoPath = args.positionals[0];
   if (repoPath === undefined || args.positionals.length !== 1) return usage(io, 'exactly one repository path is required');
 
@@ -41,7 +48,8 @@ export async function run(args: ParsedArgs, deps: AppDeps, io: Io): Promise<numb
   const started = startOnboarding(deps, {
     repoPath,
     policy,
-    mode: mode ?? 'full',
+    mode: restricted ? 'fast' : (mode ?? 'full'),
+    ...(restricted ? { restricted: true } : {}),
     ...(promote !== undefined ? { promote } : {}),
     ...(Object.keys(overrides).length > 0 ? { budgetOverrides: overrides } : {}),
   });

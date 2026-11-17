@@ -18,11 +18,15 @@ export interface OnboardRequest {
   budgetOverrides?: Readonly<Record<string, unknown>>;
   // `onboard` of a project that has an active record refreshes it (ONB-11); `repo add` does not and is refused for such a project.
   refresh?: boolean;
+  // `onboard --restricted` (plan 04-24): stored in the request, so every stage and every resume reads the same answer.
+  restricted?: boolean;
 }
 
 export interface Registered {
   projectId: string;
   onboardingId: string;
+  // Whether the onboarding was registered restricted: of a continued onboarding, what it was registered with.
+  restricted: boolean;
 }
 
 export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Result<Registered> {
@@ -54,7 +58,9 @@ export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Re
   const classified = classifyPreflight(facts, view, { ...(request.promote === undefined ? {} : { promote: request.promote }), ...(request.refresh === true ? { refresh: true } : {}) });
   if (!classified.ok) return classified;
   if (classified.value.continueOnboardingId !== null && known.value !== null) {
-    return ok({ projectId: known.value.projectId, onboardingId: classified.value.continueOnboardingId });
+    const continued = deps.ledger.getOnboarding(classified.value.continueOnboardingId);
+    if (!continued.ok) return continued;
+    return ok({ projectId: known.value.projectId, onboardingId: classified.value.continueOnboardingId, restricted: restrictedOfPreflight(continued.value.preflight) });
   }
 
   const nowMs = deps.clock.nowMs();
@@ -75,6 +81,7 @@ export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Re
   };
   if (request.mode !== undefined) stored['mode'] = request.mode;
   if (request.budgetOverrides !== undefined) stored['budgetOverrides'] = request.budgetOverrides;
+  if (request.restricted === true) stored['restricted'] = true;
 
   const onboarding = deps.ledger.createOnboarding({
     onboardingId: deps.ids.next('onb_'),
@@ -91,5 +98,11 @@ export function registerAndPreflight(deps: AppDeps, request: OnboardRequest): Re
     nowMs,
   });
   if (!onboarding.ok) return onboarding;
-  return ok({ projectId: project.value.projectId, onboardingId: onboarding.value.onboardingId });
+  return ok({ projectId: project.value.projectId, onboardingId: onboarding.value.onboardingId, restricted: request.restricted === true });
+}
+
+// Whether an onboarding's stored preflight says it was asked for restricted (`request.restricted`).
+export function restrictedOfPreflight(preflight: unknown): boolean {
+  const request = typeof preflight === 'object' && preflight !== null ? (preflight as Record<string, unknown>)['request'] : undefined;
+  return typeof request === 'object' && request !== null && (request as Record<string, unknown>)['restricted'] === true;
 }

@@ -4,6 +4,7 @@ import type { Result } from '../../domain/result.ts';
 import { FAST_MAP_FILES, FULL_MAP_FILES, MAPPING_MODES, requiredFilesFor } from '../../domain/mapping.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import type { OnboardingContract } from '../../domain/onboarding-contract.ts';
+import type { AgentHost } from '../../ports/agent-host.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
 import type { AppDeps } from '../deps.ts';
@@ -77,6 +78,14 @@ export interface StoredMappingPlan {
   existingMapAnswer?: 'refresh' | 'update' | 'skip';
   // Mode `paths` only: the scope the mapper is asked for.
   paths?: string[];
+  // Present only for `onboard --restricted` (plan 04-24; CON-4, D-12): the map is made by the restricted host, and the record states it.
+  restricted?: true;
+}
+
+// The host that carries out an onboarding's invocations. A restricted onboarding is only ever handed to the restricted host, a contained one only to the contained host;
+// nothing here falls back from one to the other, so a deployment with no restricted host leaves a restricted onboarding with no host at all (T-04-66).
+export function hostOfOnboarding(deps: AppDeps, plan: StoredMappingPlan | null): AgentHost | undefined {
+  return plan?.restricted === true ? deps.restrictedHost : deps.host;
 }
 
 export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<StoredMappingPlan | null> {
@@ -100,6 +109,7 @@ export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<Sto
     ...(typeof drift === 'string' ? { drift } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
     ...(Array.isArray(paths) ? { paths: paths.filter((p): p is string => typeof p === 'string') } : {}),
+    ...(body['restricted'] === true ? { restricted: true as const } : {}),
   });
 }
 

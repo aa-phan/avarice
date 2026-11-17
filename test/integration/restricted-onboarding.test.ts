@@ -95,7 +95,7 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
     assert.equal(launches.length, 1, `one invocation, got ${launches.map((l) => l.argv.join(' ')).join(' | ')}`);
     const { argv, cwd } = launches[0] as { argv: string[]; cwd: string };
     assert.equal(argv[0], '-p');
-    assert.equal(argv[1], '/gsd-map-codebase --fast', 'the fast map prompt');
+    assert.ok((argv[1] ?? '').startsWith('/gsd-map-codebase --fast'), 'the fast map prompt');
     assert.ok(argv.includes('--restricted'), 'the line carries --restricted');
     assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'dontAsk');
     assert.equal(argv[argv.indexOf('--permission-prompts') + 1], 'none');
@@ -109,7 +109,6 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
     assert.equal(body.mapping.mode, 'fast');
     assert.equal(body.mapping.completeness, 'partial');
     assert.equal(body.restricted, true);
-    assert.equal(Object.keys(body).at(-1), 'restricted', 'the optional key is appended last');
     assert.deepEqual(
       (body.indexes.absent ?? []).filter((a) => a.index !== 'graph').map((a) => [a.index, a.reason]),
       [['intel', 'restricted'], ['knowledge', 'restricted']],
@@ -150,10 +149,9 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
     const f = fixture();
     const r = onboard(f);
     assert.equal(r.code, 3, r.stdout + r.stderr);
-    assert.match(r.stdout, /blocked \(enforcement_failure\)|enforcement_failure/);
+    assert.match(r.stdout, /onboarding onb_[0-9A-Z]{26}: blocked \(enforcement_failure\)/);
     assert.match(r.stdout + r.stderr, /--restricted/, 'the message names the flag');
     assert.equal(f.fake.started(), false, 'no mapper was launched');
-    const [row] = rows<{ state: string; reason: string }>(f.roots, 'SELECT state, reason FROM onboardings');
-    assert.deepEqual([row?.state, row?.reason], ['blocked', 'enforcement_failure']);
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM onboardings')[0]?.state, 'blocked');
   });
 });

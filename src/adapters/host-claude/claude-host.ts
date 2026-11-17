@@ -207,7 +207,7 @@ export class ClaudeHostAdapter implements AgentHost {
     // its line stands on instead: a host that lists `--restricted`, and run settings that deny by default.
     const restricted = o.mode === 'restricted';
     const ready = restricted
-      ? checkRestrictedLaunchReady({ claudeBin: o.claudeBin, settingsFile: files.value.settingsFile })
+      ? checkRestrictedLaunchReady({ claudeBin: o.claudeBin, settingsFile: files.value.settingsFile, ...(run ? {} : { extensions: true }) })
       : checkLaunchReady({
           settingsFile: files.value.settingsFile,
           claudeBin: o.claudeBin,
@@ -226,6 +226,8 @@ export class ClaudeHostAdapter implements AgentHost {
           costCapUsd: req.costCapUsd,
           sessionId,
           ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+          // An onboarding's restricted map is delivered GSD's mapper the way the contained map is; a restricted run loads no extension (plan 04-24; CON-4, D-12).
+          ...(run ? {} : { pluginDir: files.value.pluginDir, agentsFile: files.value.agentsFile }),
         })
       : buildLaunchArgs({
           prompt: req.prompt,
@@ -239,7 +241,7 @@ export class ClaudeHostAdapter implements AgentHost {
           ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
           ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
         });
-    const safe = restricted ? assertRestrictedLaunchArgsSafe(args) : assertLaunchArgsSafe(args);
+    const safe = restricted ? assertRestrictedLaunchArgsSafe(args, run ? {} : { extensions: true }) : assertLaunchArgsSafe(args);
     if (!safe.ok) return refuse(safe.error.kind === 'denied' ? safe.error.rule.replace(/^launch_args:/, 'launch-args:') : 'launch-args');
     const env = buildInvocationEnv(o.env ?? process.env, {
       gsdCoreBin: join(o.gsd.gsdCoreDir, 'bin'),

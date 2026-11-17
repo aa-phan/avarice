@@ -239,6 +239,8 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
     paths: proposal.value.narrowed.accepted.paths,
     commands: proposal.value.narrowed.accepted.commands,
     indexes: foldIndexResults(indexResults.value),
+    // The map was made under the restricted launch: the record says so, and completeness stays what a fast map is, partial (plan 04-24; CON-4, T-04-65).
+    ...(plan.value?.restricted === true ? { restricted: true } : {}),
   });
 
   const activated = ctx.activate(row, record as unknown as Readonly<Record<string, unknown>>);

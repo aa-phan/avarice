@@ -23,7 +23,8 @@ export const REQUIRED_HELP_FLAGS: readonly string[] = [
 ];
 
 // Flags the restricted launch line uses (plan 04-23; spike S4-C). `--restricted` comes first, so a host that dropped it is refused as
-// `host-flag-missing:--restricted`. The restricted line carries no plugin directory and no agents file, so those two are not required.
+// `host-flag-missing:--restricted`. The restricted line of a run carries no plugin directory and no agents file, so those two are not required of it; a restricted onboarding's
+// line carries both (RESTRICTED_ONBOARDING_HELP_FLAGS).
 export const RESTRICTED_HELP_FLAGS: readonly string[] = [
   '--restricted',
   '--settings',
@@ -32,6 +33,9 @@ export const RESTRICTED_HELP_FLAGS: readonly string[] = [
   '--permission-prompts',
   '--max-budget-usd',
 ];
+
+// What a restricted onboarding's line needs listed beyond the restricted run's (plan 04-24): the flags that deliver GSD's mapper.
+export const RESTRICTED_ONBOARDING_HELP_FLAGS: readonly string[] = [...RESTRICTED_HELP_FLAGS, '--plugin-dir', '--agents'];
 
 export type HostAdmission = 'verified' | 'unverified-patch';
 export type HostRefusal = 'host-minor-unverified' | 'host-patch-below-range' | 'host-version-unknown';

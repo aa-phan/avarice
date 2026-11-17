@@ -52,6 +52,8 @@ export interface StartRequest {
   mode?: string;
   promote?: string;
   budgetOverrides?: Readonly<Record<string, unknown>>;
+  // `onboard --restricted` (plan 04-24; CON-4, D-12): the map is made under the restricted launch and the record says so.
+  restricted?: boolean;
 }
 
 // Registers the project and creates the onboarding in `discovered`. Takes no lease.
@@ -65,10 +67,20 @@ export function startOnboarding(deps: AppDeps, request: StartRequest): Result<Re
     mode: request.mode ?? 'full',
     promote: request.promote ?? 'none',
     budgetOverrides: request.budgetOverrides ?? {},
+    ...(request.restricted === true ? { restricted: true } : {}),
     // An onboarding of a project that has an active record is a refresh of it (ONB-11); the workspace stage plans how much of the map to rebuild.
     refresh: true,
   });
   if (!registered.ok) return registered;
+  // An onboarding left in `discovered` (by `repo add`, or a kill right after registration) is continued, and it keeps the request it was registered with. A restricted
+  // request that met a contained onboarding, or the reverse, is refused: the host that maps it is the one thing neither may be given by surprise (T-04-65).
+  if (registered.value.restricted !== (request.restricted === true)) {
+    return err({
+      kind: 'invalid',
+      field: 'restricted',
+      reason: `onboarding ${registered.value.onboardingId} of this project was registered ${registered.value.restricted ? 'with' : 'without'} --restricted and is not yet mapped; ${registered.value.restricted ? 'run it with --restricted' : 'run it without --restricted, or wait for it to end'}`,
+    });
+  }
   faultPoint('after-transition:discovered');
   faultPoint('after-checkpoint:compile-contract');
   return registered;

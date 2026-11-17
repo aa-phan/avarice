@@ -9,7 +9,7 @@ import type { Result } from '../../domain/result.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
-import { isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
+import { hostOfOnboarding, isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import { isScopePath, requiredFilesFor } from '../../domain/mapping.ts';
 import { completeInvocation, prepareInvocation } from '../invocation.ts';
@@ -63,6 +63,20 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
     scope = checked.value;
   }
 
+  // A restricted onboarding (plan 04-24; CON-4, D-12) reaches only the restricted host, and only while that host can start: it is judged again here, before a unit of budget is
+  // reserved, because the environment may have changed since the workspace stage. Nothing falls back to the contained host.
+  const host = hostOfOnboarding(deps, plan.value);
+  if (plan.value?.restricted === true) {
+    const attributes = host?.descriptor.attributes ?? {};
+    if (host === undefined || attributes['enforcement'] !== 'restricted') {
+      const cause = host === undefined ? 'no restricted host is composed' : String(attributes['reason'] ?? 'the restricted host is not ready').slice(0, 200);
+      ctx.note(`restricted mode is not available: ${cause}; no map invocation was started`);
+      const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'enforcement_failure', data: { host: 'restricted', enforcement: 'none', reason: cause } });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
+  }
+  if (host === undefined) return err({ kind: 'internal', cause: 'no host is composed' });
+
   // Reserve the invocation and prepare its request (scope, session ID, step `launch:map` recorded as started).
   const prepared = prepareInvocation(deps, row, 'map', promptFor(mode, plan.value?.existingMapAnswer, scope), { expectedFiles: [...requiredFilesFor(mode)] });
   if (!prepared.ok) return prepared;
@@ -73,7 +87,7 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   }
   const { request } = prepared.value.prepared;
 
-  const invoked = await deps.host.invoke(request, AbortSignal.timeout(Math.max(request.wallClockMs, 1)));
+  const invoked = await host.invoke(request, AbortSignal.timeout(Math.max(request.wallClockMs, 1)));
   // Settle first, whatever happened: the invocation ran, so its unit, its time and its cost are spent.
   const outcome = completeInvocation(deps, prepared.value.prepared, invoked);
   if (!outcome.ok) {
