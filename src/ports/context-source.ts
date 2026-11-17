@@ -1,8 +1,10 @@
 // ContextSource port (docs/contracts-and-state.md "ContextSource"). A source answers a question about a repository
 // from an index, in two steps: `find` returns handles (what exists, how large, why it matched) and no content
 // (FR-22), and `read` returns the content of the handles the assembler picked within a token budget. A source never
-// reads a whole file. Phase 1 has two local adapters, `gsd-intel` and `gsd-graph`, both reading the indexes onboarding
-// built and both through GSD's own readers.
+// reads a whole file. The four local adapters are `gsd-intel` and `gsd-graph` (the indexes onboarding built, through GSD's
+// own readers), `gsd-planning` (sections of the planning files, read-only from the staging copy) and `git-files` (a scoped
+// search of tracked files, then bounded snippets).
+import type { ContextReadScope } from '../domain/context-adapters.ts';
 import type { ReadRule } from '../domain/retrieval-rules.ts';
 import type { Result } from '../domain/result.ts';
 import type { CapabilityDescriptor } from './capability.ts';
@@ -13,9 +15,9 @@ export type Freshness = 'fresh' | 'stale' | 'changed' | 'deleted' | 'access_revo
 // A reference to something an adapter read: which provider, what it is, what revision it was read at, and how fresh
 // that revision is (docs/contracts-and-state.md "ExternalRef").
 export interface ExternalRef {
-  // `gsd-intel` or `gsd-graph`.
+  // `gsd-intel`, `gsd-graph`, `gsd-planning` or `git-files`.
   provider: string;
-  // `intel-entry` or `graph-node`.
+  // `intel-entry`, `graph-node`, `section` or `snippet`.
   kind: string;
   // The provider's own ID, verbatim.
   id: string;
@@ -38,7 +40,11 @@ export interface ContextQuery {
     stagingPath: string;
     // The user's repository: its current HEAD decides whether an index is stale.
     repoPath: string;
+    // The run's clone, when the question is asked for a run: `git-files` searches there instead of the repository.
+    worktreePath?: string;
   };
+  // Where a search may return hits from; absent means the default scope (everything tracked except secrets and `.git`). Only `git-files` reads it.
+  readScope?: ContextReadScope;
   // The revision the project record says the index was built at (`git:` plus the commit).
   indexRevision: string;
 }
@@ -59,6 +65,8 @@ export interface ContextHandle {
   untrusted?: boolean;
   // For a stale item: whether the cited path exists at the repository's current HEAD (`git cat-file -e`).
   confirmed?: boolean;
+  // The repository path the item cites, when it cites one: what the assembler confirms with `git-files` when the item is stale.
+  citedPath?: string;
 }
 
 export interface ContextItem {
@@ -70,6 +78,7 @@ export interface ContextItem {
   confidence?: ContextConfidence;
   untrusted?: boolean;
   confirmed?: boolean;
+  citedPath?: string;
 }
 
 // What a refresh is told about the project it is judged against: the same two paths and the same index revision a `find` is given, without a term.
@@ -86,4 +95,10 @@ export interface ContextSource {
   // path the reference cites is gone at the repository's HEAD. `stale`: HEAD moved past the index. `unavailable`: HEAD or the index diff cannot be read.
   // Reads no file and writes nothing; an error is returned only when the question cannot be asked at all.
   refresh(ref: ExternalRef, query: ContextRefreshQuery): Promise<Result<ExternalRef>>;
+}
+
+// `git-files` also answers whether a path exists at the current revision of the tree it searches: the assembler asks it to confirm each path a stale index
+// item cites (docs/contracts-and-state.md "ContextSource"). `undefined` when it cannot be told.
+export interface GitFilesSource extends ContextSource {
+  pathExists(workspace: ContextQuery['workspace'], path: string): boolean | undefined;
 }

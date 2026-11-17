@@ -6,9 +6,11 @@
 // Everything printed is index text. Text that came from a document, or from a model reading one, is printed inside an
 // untrusted-data fence and is never read as an instruction: this module takes no policy, setting or contract value from
 // content, and the fence cannot be closed from inside because every fenced line is prefixed (S-46).
+import { defaultContextReadScope } from '../domain/context-adapters.ts';
+import type { ContextReadScope } from '../domain/context-adapters.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
-import type { ContextConfidence, ContextHandle, ContextItem, ContextRefreshQuery, ContextSource, ExternalRef } from '../ports/context-source.ts';
+import type { ContextConfidence, ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, GitFilesSource } from '../ports/context-source.ts';
 import type { ActiveRecord, ProjectRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 
@@ -21,10 +23,14 @@ export interface ContextRequest {
   term: string;
   // Tokens (characters / 4).
   budget: number;
+  // For a run: the run's clone, which `git-files` searches instead of the repository (plan 04-26).
+  worktreePath?: string;
+  // For a run: the contract's read scope, which bounds what a search may return (plan 04-26; T-04-72). Absent: the default scope.
+  readScope?: ContextReadScope;
 }
 
 export interface PackItem {
-  source: 'gsd-intel' | 'gsd-graph';
+  source: 'gsd-intel' | 'gsd-graph' | 'gsd-planning' | 'git-files';
   ref: ExternalRef;
   title: string;
   excerpt: string;
@@ -162,6 +168,8 @@ function pick(candidates: readonly Candidate[], budget: number, caps: ReadonlyMa
   return { picked, left, used };
 }
 
+type SourceName = 'intel' | 'graph' | 'planning' | 'git-files';
+
 function packItem(source: PackItem['source'], item: ContextItem): PackItem {
   return {
     source,
@@ -192,29 +200,40 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
   const notes: string[] = [];
 
   // Intel first, then the graph: the structured indexes are asked in this order, before any file would be read. Intel
-  // may use at most half of the budget, so the graph is always asked.
-  const order: Array<{ name: 'intel' | 'graph'; source: ContextSource | undefined; label: PackItem['source']; share: number }> = [
+  // may use at most half of the budget, so the graph is always asked. The planning sections and the scoped file search have no
+  // index in the project record; they are asked after the indexes, and only when the profile selected them.
+  const order: Array<{ name: SourceName; source: ContextSource | undefined; label: PackItem['source']; share: number }> = [
     { name: 'intel', source: sources.intel, label: 'gsd-intel', share: Math.ceil(request.budget / 2) },
     { name: 'graph', source: sources.graph, label: 'gsd-graph', share: request.budget },
+    { name: 'planning', source: sources.planning, label: 'gsd-planning', share: Math.ceil(request.budget / 2) },
+    { name: 'git-files', source: sources.gitFiles, label: 'git-files', share: request.budget },
   ];
+  const workspace: ContextQuery['workspace'] = { stagingPath: staging, repoPath: project.repoPath, ...(request.worktreePath !== undefined ? { worktreePath: request.worktreePath } : {}) };
+  const readScope = request.readScope ?? defaultContextReadScope();
 
   // Phase 1: find. Every source is asked before anything is read; a handle carries no content (FR-22).
   const candidates: Candidate[] = [];
-  const asked: Array<{ sourceIndex: number; name: 'intel' | 'graph'; source: ContextSource; label: PackItem['source']; share: number }> = [];
+  const asked: Array<{ sourceIndex: number; name: SourceName; source: ContextSource; label: PackItem['source']; share: number }> = [];
   for (const [sourceIndex, { name, source, label, share }] of order.entries()) {
-    const recorded = recordedRevision(indexes, name);
-    if ('missing' in recorded) {
-      notes.push(recorded.missing);
+    let indexRevision = record.onboardedRevision;
+    if (name === 'intel' || name === 'graph') {
+      const recorded = recordedRevision(indexes, name);
+      if ('missing' in recorded) {
+        notes.push(recorded.missing);
+        continue;
+      }
+      if (source === undefined) {
+        notes.push(`no ${name} source is configured`);
+        continue;
+      }
+      indexRevision = recorded.revision;
+    } else if (source === undefined) {
       continue;
     }
-    if (source === undefined) {
-      notes.push(`no ${name} source is configured`);
-      continue;
-    }
-    const query = { term: request.term, workspace: { stagingPath: staging, repoPath: project.repoPath }, indexRevision: recorded.revision };
+    const query: ContextQuery = { term: request.term, workspace, indexRevision, readScope };
     const found = await source.find(query, share);
     if (!found.ok) {
-      notes.push(`the ${name} index cannot answer: ${found.error.kind === 'unavailable' ? found.error.cause : found.error.kind}`);
+      notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot answer: ${found.error.kind === 'unavailable' ? found.error.cause : found.error.kind}`);
       continue;
     }
     asked.push({ sourceIndex, name, source, label, share });
@@ -237,7 +256,7 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
       share,
     );
     if (!read.ok) {
-      notes.push(`the ${name} index cannot be read: ${read.error.kind}`);
+      notes.push(`the ${name} ${name === 'intel' || name === 'graph' ? 'index' : 'source'} cannot be read: ${read.error.kind}`);
       continue;
     }
     for (const item of read.value) items.push(packItem(label, item));

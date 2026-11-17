@@ -34,6 +34,7 @@ import { GitRunSource } from '../adapters/git/run-source.ts';
 import { CloneRunWorkspace } from '../adapters/git/run-workspace.ts';
 import { AllowlistEgressProxy } from '../adapters/exec/allowlist-proxy.ts';
 import { SandboxedExecutor } from '../adapters/exec/sandboxed-executor.ts';
+import { GitFilesContext } from '../adapters/context/git-files.ts';
 import { GsdGraphContext } from '../adapters/context/gsd-graph.ts';
 import { GsdIntelContext } from '../adapters/context/gsd-intel.ts';
 import { GraphifyTool, findGraphifyBinary } from '../adapters/graph/graphify.ts';
@@ -489,7 +490,7 @@ export function createDeps(env: NodeJS.ProcessEnv, overrides: DepsOverrides = {}
     }
   }
   // The context sources read the indexes through GSD's own readers, so they exist exactly when the GSD adapter does.
-  const context = gsd !== undefined ? { intel: new GsdIntelContext(gsd, { nowMs: () => clock.nowMs() }), graph: new GsdGraphContext(gsd, { nowMs: () => clock.nowMs() }) } : undefined;
+  const context = gsd !== undefined ? { intel: new GsdIntelContext(gsd, { nowMs: () => clock.nowMs() }), graph: new GsdGraphContext(gsd, { nowMs: () => clock.nowMs() }), gitFiles: new GitFilesContext({ nowMs: () => clock.nowMs() }) } : undefined;
   // Local notification (plan 03-16). The settings are read from the profile config each time they are asked for, so an edited file is
   // honored by the next banner; the osascript path is read once. A read-only command raises no banner.
   const readNotifySettings = () => readProfileNotify(profile.configHome, profile.profile);
