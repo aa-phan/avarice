@@ -509,11 +509,24 @@ describe('the profile config selects the context sources, and each is recorded w
     }
   });
 
-  it('fails composition naming adapters.context for an unknown name, a repeated name, an empty list and a value that is not a list', async () => {
+  // Plan 04-31 (D-06): the evaluation's baseline arm runs with no AVARICE pack, so an empty list is a selection: no source is composed and a query answers with nothing.
+  it('composes no source for an empty adapters.context list, records no context adapter, and answers a query with no items', async () => {
+    const o = await onboardedDeps(REPO_FILES, []);
+    try {
+      assert.deepEqual(Object.keys(o.deps.context ?? { absent: true }), []);
+      assert.deepEqual(adapterRows(o).map((r) => r.name), []);
+      const report = await ask(o, 'handleCheckout');
+      assert.equal(report.items.length, 0);
+    } finally {
+      o.close();
+    }
+  });
+
+  it('fails composition naming adapters.context for an unknown name, a repeated name and a value that is not a list', async () => {
     const o = await onboardedDeps();
     try {
       const path = configPathFor(o.roots.AVARICE_CONFIG_HOME, 'personal-local');
-      for (const [value, reason] of [[['bogus'], /unknown source "bogus"/], [['git-files', 'git-files'], /listed twice/], [[], /at least one/], ['git-files', /expected a list/]] as const) {
+      for (const [value, reason] of [[['bogus'], /unknown source "bogus"/], [['git-files', 'git-files'], /listed twice/], ['git-files', /expected a list/]] as const) {
         writeFileSync(path, JSON.stringify({ schema: 1, adapters: { context: value } }));
         for (const options of [{ readOnly: true, gsd: true }, {}]) {
           const composed = createDeps(o.env, {}, options);

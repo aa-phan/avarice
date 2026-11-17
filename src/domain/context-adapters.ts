@@ -14,14 +14,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const shown = (value: unknown): string => (typeof value === 'string' ? JSON.stringify(value.slice(0, 40)) : typeof value);
 
 // The `adapters` section of the profile config as far as this module reads it: its `context` list. Other keys of the section belong to other readers and are
-// left alone. An unknown name, a name twice, an empty list and a value that is not a list of strings are refused, naming `adapters.context`.
+// left alone. An unknown name, a name twice and a value that is not a list of strings are refused, naming `adapters.context`. An empty list selects no source.
 export function parseContextAdapters(section: unknown): Result<ContextAdapterName[]> {
   if (section === undefined) return ok([...DEFAULT_CONTEXT_ADAPTERS]);
   if (!isRecord(section)) return err({ kind: 'invalid', field: 'adapters', reason: 'expected an object' });
   const raw = section['context'];
   if (raw === undefined) return ok([...DEFAULT_CONTEXT_ADAPTERS]);
   if (!Array.isArray(raw)) return err({ kind: 'invalid', field: 'adapters.context', reason: `expected a list of source names (${CONTEXT_ADAPTER_NAMES.join(', ')})` });
-  if (raw.length === 0) return err({ kind: 'invalid', field: 'adapters.context', reason: `expected at least one source name (${CONTEXT_ADAPTER_NAMES.join(', ')}); leave the key out for all of them` });
+  // An empty list selects no source: the profile asks for no AVARICE pack at all (plan 04-31; the baseline arm of the AC-8 evaluation, D-06). Leaving the key out selects all four.
+  if (raw.length === 0) return ok([]);
   const names: ContextAdapterName[] = [];
   for (const entry of raw) {
     const name = CONTEXT_ADAPTER_NAMES.find((candidate) => candidate === entry);
