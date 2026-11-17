@@ -188,6 +188,10 @@ export function commitPromotion(input: CommitPromotionInput): Result<CommitPromo
   const common = runGit(['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: stagingRoot });
   if (!common.ok) return failure(common.error);
   if (realpathSync(common.value.stdout.trim()) !== realpathSync(own)) return invalid('stagingPath', 'promotion by commit needs a staging clone with its own repository');
+  // Not the user's repository itself: the park ref and the objects would be written there.
+  const sourceCommon = runGit(['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: source.value });
+  if (!sourceCommon.ok) return failure(sourceCommon.error);
+  if (realpathSync(sourceCommon.value.stdout.trim()) === realpathSync(own)) return invalid('stagingPath', 'promotion by commit needs a staging clone that is not the repository it promotes into');
 
   const hasPin = runGit(['cat-file', '-e', `${input.pin}^{commit}`], { cwd: source.value });
   if (!hasPin.ok) return err({ kind: 'not_found', ref: input.pin });
