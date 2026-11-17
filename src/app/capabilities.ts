@@ -8,7 +8,7 @@ import type { AppDeps } from './deps.ts';
 
 // Every descriptor present in the dependencies; an adapter composition did not supply publishes none.
 export function descriptorsOf(deps: AppDeps): CapabilityDescriptor[] {
-  const candidates: Array<{ descriptor: CapabilityDescriptor } | undefined> = [deps.host, deps.executor, deps.graph, deps.gsd, deps.context?.intel, deps.context?.graph, deps.notify?.notifier];
+  const candidates: Array<{ descriptor: CapabilityDescriptor } | undefined> = [deps.host, deps.executor, deps.graph, deps.gsd, deps.context?.intel, deps.context?.graph, deps.context?.planning, deps.context?.gitFiles, deps.notify?.notifier];
   return candidates.flatMap((adapter) => (adapter === undefined ? [] : [adapter.descriptor]));
 }
 

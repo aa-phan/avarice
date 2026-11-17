@@ -15,7 +15,7 @@ import type { AppDeps } from '../../src/app/deps.ts';
 import type { ContextQuery } from '../../src/ports/context-source.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
-import { makeScratchRepo } from '../helpers/scratch-repo.ts';
+import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
 import { FakeIntelHost } from '../helpers/fake-intel-host.ts';
@@ -144,5 +144,95 @@ describe('tracer: a pack built with git-files finds a term by scoped search and 
     } finally {
       o.close();
     }
+  });
+});
+
+describe('git-files: the term is data, the snippet is bounded, a foreign handle is refused (T-04-71, T-04-72)', () => {
+  const nowMs = () => Date.parse('2026-11-17T00:00:00Z');
+
+  it('treats a term that looks like an option, a pathspec or a regular expression as a literal string', async () => {
+    const repo = makeScratchRepo({ files: { 'a.txt': 'plain\n--exec-path=/tmp\nfoo.*bar\n', 'b.txt': 'foo and bar\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    for (const [term, expected] of [['--exec-path=/tmp', ['a.txt:2']], ['foo.*bar', ['a.txt:3']], [':(top)a.txt', []], ['--help', []]] as const) {
+      const found = await source.find(queryOf(repo, term), 4000);
+      assert.ok(found.ok, `${term}: ${JSON.stringify(found)}`);
+      assert.deepEqual(found.value.map((h) => h.ref.id), expected, term);
+    }
+  });
+
+  it('finds nothing for a term that is empty, longer than one line or has a control character, without running a search', async () => {
+    const repo = makeScratchRepo({ files: { 'a.txt': 'one\ntwo\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    for (const term of ['', '   ', 'one\ntwo', 'one\u0000two', 'x'.repeat(201)]) {
+      const found = await source.find(queryOf(repo, term), 4000);
+      assert.ok(found.ok);
+      assert.deepEqual(found.value, []);
+    }
+  });
+
+  it('searches the committed revision only: an uncommitted edit and an untracked file do not answer', async () => {
+    const repo = makeScratchRepo({ files: { 'a.txt': 'committed\n' }, untracked: { 'u.txt': 'needle\n' }, modified: { 'a.txt': 'needle\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    const found = await source.find(queryOf(repo, 'needle'), 4000);
+    assert.ok(found.ok);
+    assert.deepEqual(found.value, []);
+  });
+
+  it('cuts a snippet to 40 lines and 1500 characters around the hit, keeping the hit line', async () => {
+    const wide = `${'w'.repeat(120)} needle ${'w'.repeat(120)}`;
+    const lines = Array.from({ length: 100 }, (_, i) => (i === 49 ? wide : `line ${i + 1} ${'x'.repeat(100)}`));
+    const repo = makeScratchRepo({ files: { 'big.txt': `${lines.join('\n')}\n`, 'short.txt': 'needle\nsecond\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    const found = await source.find(queryOf(repo, 'needle'), 4000);
+    assert.ok(found.ok);
+    const read = await source.read(found.value, 4000);
+    assert.ok(read.ok, JSON.stringify(read));
+    const big = read.value.find((i) => i.ref.id === 'big.txt:50');
+    assert.ok(big);
+    assert.ok(big.excerpt.split('\n').length <= 40);
+    assert.ok(big.excerpt.length <= 1500 + '…[cut]'.length);
+    assert.ok(big.excerpt.includes('50: '), 'the hit line is inside the window');
+    const short = read.value.find((i) => i.ref.id === 'short.txt:1');
+    assert.equal(short?.excerpt, '1: needle\n2: second');
+    assert.equal(short?.untrusted, true);
+  });
+
+  it('refuses to read a handle its latest find did not return', async () => {
+    const repo = makeScratchRepo({ files: { 'a.txt': 'needle\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    const found = await source.find(queryOf(repo, 'needle'), 4000);
+    assert.ok(found.ok && found.value[0] !== undefined);
+    const forged = { ...found.value[0], ref: { ...found.value[0].ref, id: 'etc/passwd:1' } };
+    const read = await source.read([forged], 4000);
+    assert.equal(read.ok, false);
+  });
+
+  it('refresh: fresh at the same revision, stale after a new commit, deleted when the path is gone', async () => {
+    const repo = makeScratchRepo({ files: { 'a.txt': 'needle\n', 'b.txt': 'needle\n' } });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    const found = await source.find(queryOf(repo, 'needle'), 4000);
+    assert.ok(found.ok);
+    const [a, b] = found.value;
+    assert.ok(a && b);
+    const now = await source.refresh(a.ref, { workspace: workspaceOf(repo), indexRevision: a.ref.revision ?? '' });
+    assert.ok(now.ok);
+    assert.equal(now.value.freshness, 'fresh');
+    git(repo.path, ['rm', '-q', 'b.txt']);
+    git(repo.path, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-q', '-m', 'drop b']);
+    const after = await source.refresh(a.ref, { workspace: workspaceOf(repo), indexRevision: a.ref.revision ?? '' });
+    assert.ok(after.ok);
+    assert.equal(after.value.freshness, 'stale');
+    const gone = await source.refresh(b.ref, { workspace: workspaceOf(repo), indexRevision: b.ref.revision ?? '' });
+    assert.ok(gone.ok);
+    assert.equal(gone.value.freshness, 'deleted');
+    assert.equal(source.pathExists(workspaceOf(repo), 'a.txt'), true);
+    assert.equal(source.pathExists(workspaceOf(repo), 'b.txt'), false);
+    assert.equal(source.pathExists(workspaceOf(repo), '../etc/passwd'), undefined);
   });
 });

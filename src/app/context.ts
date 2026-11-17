@@ -42,6 +42,9 @@ export interface PackItem {
   confirmed?: boolean;
 }
 
+// The four local sources, by the short name the assembler and a resume use for them.
+export type SourceName = 'intel' | 'graph' | 'planning' | 'git-files';
+
 // What the pack left out, with the handle's estimate (docs/contracts-and-state.md "ContextSource").
 export interface OmittedItem {
   source: string;
@@ -115,10 +118,12 @@ function recordedRevision(indexes: Record<string, unknown>, index: 'intel' | 'gr
 
 // What a source needs to judge a reference of this project's index against the repository as it is now: the staging copy and the repository, and the revision
 // the project record says that index was built at. `unavailable` when the project has no active record, no staging copy, or the record names no such index.
-export function refreshQueryFor(deps: AppDeps, projectId: string, index: 'intel' | 'graph'): Result<ContextRefreshQuery> {
+export function refreshQueryFor(deps: AppDeps, projectId: string, index: SourceName): Result<ContextRefreshQuery> {
   const resolved = resolveProject(deps, projectId);
   if (!resolved.ok) return resolved;
   const { project, record, staging } = resolved.value;
+  // The planning sections and the file search have no index in the record: they get the revision the record was onboarded at, which neither reads.
+  if (index === 'planning' || index === 'git-files') return ok({ workspace: { stagingPath: staging, repoPath: project.repoPath }, indexRevision: record.onboardedRevision });
   const indexes = isObject(record.body['indexes']) ? record.body['indexes'] : {};
   const recorded = recordedRevision(indexes, index);
   if ('missing' in recorded) return err({ kind: 'unavailable', cause: recorded.missing });
@@ -167,8 +172,6 @@ function pick(candidates: readonly Candidate[], budget: number, caps: ReadonlyMa
   }
   return { picked, left, used };
 }
-
-type SourceName = 'intel' | 'graph' | 'planning' | 'git-files';
 
 function packItem(source: PackItem['source'], item: ContextItem): PackItem {
   return {

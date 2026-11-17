@@ -297,7 +297,7 @@ describe('a run records one task reference per context pack item, with the provi
       assert.ok(row !== undefined, `${item.source} ${item.id} is recorded`);
       assert.equal(row.scope, item.scope);
       assert.equal(row.revision, item.revision);
-      assert.equal(row.kind, item.source === 'gsd-intel' ? 'intel-entry' : 'graph-node');
+      assert.equal(row.kind, ({ 'gsd-intel': 'intel-entry', 'gsd-graph': 'graph-node', 'gsd-planning': 'section', 'git-files': 'snippet' } as Record<string, string>)[item.source]);
     }
   });
 

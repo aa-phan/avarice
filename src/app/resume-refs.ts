@@ -10,6 +10,7 @@ import type { RunBlockedReason } from '../domain/run-lifecycle.ts';
 import type { ContextSource, ExternalRef, Freshness } from '../ports/context-source.ts';
 import type { AppDeps } from './deps.ts';
 import { refreshQueryFor } from './context.ts';
+import type { SourceName } from './context.ts';
 import { BRIEF_REF_KIND, BRIEF_REF_PROVIDER, readBriefFile } from './run-start.ts';
 
 // The blocked reasons a reference can stop a run with, most severe first (a flagged assumption of plan 04-20): a source that is no longer readable says more than
@@ -43,9 +44,11 @@ export interface RefreshOutcome {
   block?: RefBlock;
 }
 
-const sourceOf = (deps: AppDeps, provider: string): { source: ContextSource | undefined; index: 'intel' | 'graph' } | undefined => {
+const sourceOf = (deps: AppDeps, provider: string): { source: ContextSource | undefined; index: SourceName } | undefined => {
   if (provider === 'gsd-intel') return { source: deps.context?.intel, index: 'intel' };
   if (provider === 'gsd-graph') return { source: deps.context?.graph, index: 'graph' };
+  if (provider === 'gsd-planning') return { source: deps.context?.planning, index: 'planning' };
+  if (provider === 'git-files') return { source: deps.context?.gitFiles, index: 'git-files' };
   return undefined;
 };
 
