@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-23-PLAN.md
-last_updated: "2026-11-17T08:44:42.211Z"
+stopped_at: Completed 04-24-PLAN.md
+last_updated: "2026-11-17T09:33:35.676Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: d97b5ae93042b0b1e15961ad43790d5e446c4a4f
+state_head: 381c70be8a547305cab840fb7d613f445d57ec33
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 24 of 39
+Plan: 25 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -186,6 +186,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P21 | 20 min | 3 tasks | 22 files |
 | Phase 04 P22 | 35min | 2 tasks | 10 files |
 | Phase 04 P23 | 28 min | 3 tasks | 27 files |
+| Phase 04 P24 | 24 min | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -454,6 +455,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-22: AC-6 denies personal-local's profile config by contents (file-read-data); the registry reads other profiles' config.json on every command (D-19), a read the count cannot see (owner review)
 - [Phase 04]: 04-23: the restricted host is its own AppDeps member and a run's mode is read from its stored contract, so supervise and resume continue a restricted run restricted — supervise and resume are separate processes with no flag; a createDeps flag could not reach them
 - [Phase 04]: 04-23: a restricted run ends with the existing enforcement block (permission decision, withdraw only); owner review wanted on cancel/keep-open options — decision policy gives a permission decision one withdraw option, which applies nothing
+- [Phase 04]: 04-24: a restricted onboarding builds the code graph only; intel and knowledge are recorded absent (reason restricted), and the restricted onboarding line adds the generated --plugin-dir and --agents pair
+- [Phase 04]: 04-24: onboard --restricted replaces an active contained record with a partial (restricted) version, and contained starts on a restricted record are refused (owner review: whether to forbid the downgrade)
 
 ### Roadmap Evolution
 
@@ -521,8 +524,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T08:44:42.183Z
-Stopped at: Completed 04-23-PLAN.md
+Last session: 2026-11-17T09:33:35.647Z
+Stopped at: Completed 04-24-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
