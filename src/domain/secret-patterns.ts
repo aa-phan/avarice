@@ -59,8 +59,16 @@ export function redactSecrets(text: string): string {
 }
 
 // What each kind of the pattern lists above means in words, for the mapper's prompt (the mapper is told what the secrets check rejects, in terms a model
-// can follow). Skeleton: filled in with the rule.
-export const SECRET_KIND_DESCRIPTIONS: Readonly<Record<string, string>> = {};
+// can follow). A kind added to a pattern list needs a description here: the mapper-rule test fails for a kind without one.
+export const SECRET_KIND_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  [GSD_KIND]: 'a provider API key or access token (for example one starting sk-, sk_live_, sk_test_, ghp_, gho_, glpat-, xox or AKIA), a private key header, or a signed web token',
+  'github-token': 'a GitHub token',
+  jwt: 'a JSON web token',
+  'aws-key': 'an AWS access key ID',
+  'private-key': 'a private key block',
+  authorization: 'an Authorization header that carries a real credential after Bearer, Basic or Token',
+  'url-userinfo': 'a URL that carries a user name and password before the host',
+};
 
 // Every kind the secrets check can report, read from its own lists so the mapper's rule cannot name a different set than the check enforces.
 export function secretKinds(): string[] {

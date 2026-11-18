@@ -11,7 +11,7 @@ import type { Stage, StageContext } from './stage.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import { hostOfOnboarding, isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
-import { isScopePath, requiredFilesFor, restrictedMapPrompt } from '../../domain/mapping.ts';
+import { isScopePath, requiredFilesFor, restrictedMapPrompt, withMapperSecretsRule } from '../../domain/mapping.ts';
 import { RESTRICTED_SPEC_SEEDS } from '../../domain/restricted-specs.ts';
 import type { AgentHost } from '../../ports/agent-host.ts';
 import { completeInvocation, onboardingGsdDirs, prepareInvocation } from '../invocation.ts';
@@ -33,9 +33,9 @@ function scopeOf(paths: readonly string[] | undefined): Result<string[]> {
 // value of `--paths`; every path was validated to plain characters, so no path can end the value or start another option.
 export function promptFor(mode: MappingMode, existingMapAnswer: string | undefined, paths: readonly string[] = []): string {
   const base = mode === 'fast' ? FAST_MAP_PROMPT : mode === 'paths' ? `${MAP_PROMPT} --paths ${paths.join(',')}` : MAP_PROMPT;
-  if (existingMapAnswer === undefined) return base;
+  if (existingMapAnswer === undefined) return withMapperSecretsRule(base);
   const label = existingMapAnswer.charAt(0).toUpperCase() + existingMapAnswer.slice(1);
-  return `${base}\nIf .planning/codebase already exists, answer the question about it with: ${label}.`;
+  return withMapperSecretsRule(`${base}\nIf .planning/codebase already exists, answer the question about it with: ${label}.`);
 }
 
 export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Promise<Result<void>> => {

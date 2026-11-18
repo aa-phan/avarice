@@ -5,6 +5,7 @@ import type { Result } from './result.ts';
 import type { ExistingMapClass, ExistingMapOutcome } from './preflight.ts';
 import type { RefreshPlan } from './refresh-plan.ts';
 import { RESTRICTED_SPEC_DIR } from './restricted-specs.ts';
+import { SECRET_KIND_DESCRIPTIONS, secretKinds } from './secret-patterns.ts';
 
 export const MAPPING_MODES = ['skip', 'adopt', 'fast', 'full', 'paths'] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
@@ -72,27 +73,36 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
   }
 }
 
+// The rule every map prompt carries about credentials (plan 04-35, owner ruling 4). The map is validated with the secrets check (secret-patterns.ts), and a document
+// it reports is rejected; the mapper contract did not say so, and a mapper that quoted a repository's own development database URL blocked an onboarding. The kinds
+// named here are read from the check's own pattern list, so the rule cannot drift from what is enforced. The rule gives no example URL: a literal one would match the
+// check and could be copied into a document. The text is the same for every map mode, restricted included.
+export function mapperSecretsRule(): string {
+  const kinds = secretKinds().map((kind) => `- ${SECRET_KIND_DESCRIPTIONS[kind] ?? kind}`);
+  return [
+    'Secrets rule: every map document is scanned for credentials, and a document that holds one is rejected. Never write any of these into a map document, whether it is a real secret, a placeholder, a development default or an example:',
+    ...kinds,
+    'A connection string that carries a user name and password before the host is the common case: never write one. Describe the setting instead: its name, where its value comes from and where a local default lives, for example "Postgres URL from DATABASE_URL; local default in src/platform/config.ts". When you start the mapper subagent, tell it the same.',
+  ].join('\n');
+}
+
+// A map prompt with the secrets rule appended once (a prompt that already carries it is returned as it is).
+export function withMapperSecretsRule(prompt: string): string {
+  const rule = mapperSecretsRule();
+  return prompt.includes(rule) ? prompt : `${prompt}\n${rule}`;
+}
+
 // The prompt of a restricted onboarding's map (plan 04-34). The restricted host has no shell, so the model cannot resolve a home directory and, left to guess, reads a
 // path that does not exist (the first live restricted onboarding); and it confines the file tools to the working directory, so GSD's own directory cannot be read
 // whatever the hook admits (the second). AVARICE stages the specs the fast map reads into the working directory (restricted-specs.ts), and the prompt names them
 // there, relative to the working directory. A directory that is absolute, climbs out of the working directory or names a home directory throws, so a guess never
-// reaches the model. The text names no home-directory form.
-// The rule every map prompt carries about credentials. Skeleton: empty until the rule is written.
-export function mapperSecretsRule(): string {
-  return '';
-}
-
-// A map prompt with the secrets rule appended once. Skeleton: returns the prompt unchanged.
-export function withMapperSecretsRule(prompt: string): string {
-  return prompt;
-}
-
+// reaches the model. The text names no home-directory form. The secrets rule (below) is part of it, so a restricted map prompt carries it however it was built.
 export function restrictedMapPrompt(prompt: string, stagedDir: string = RESTRICTED_SPEC_DIR): string {
   if (stagedDir.length === 0 || stagedDir.startsWith('/') || /[~$]/.test(stagedDir) || stagedDir.split('/').includes('..')) {
     throw new TypeError(`the staged spec directory must be relative to the working directory, got ${JSON.stringify(stagedDir)}`);
   }
   return [
-    prompt,
+    withMapperSecretsRule(prompt),
     `This session has no shell and may read only inside the working directory, so no path can be looked up or expanded and nothing outside the working directory can be read. GSD's workflow specs are staged there, read-only, under ${stagedDir}:`,
     `- map workflow: ${stagedDir}/workflows/map-codebase.md`,
     `- fast scan workflow: ${stagedDir}/workflows/scan.md`,
