@@ -22,6 +22,7 @@ import {
   projectionOf,
   readJson,
   sameState,
+  stopLossRefusal,
   updateEvidence,
   verifyEvidence,
   writeEntry,
@@ -202,6 +203,24 @@ describe('the evidence', () => {
     assert.equal(verifyEvidence({ entries: all.entries.slice(0, 4) }, list).ok, false);
     assert.equal(verifyEvidence({ entries: [...all.entries.slice(0, 4), { ...entryFor('e'), state: 'blocked' }] }, list).ok, false);
     assert.match(verifyEvidence({ entries: [...all.entries, entryFor('rekordbox-mcp')] }, list).problems.join(' '), /not on the approved list/);
+  });
+
+  it('judges an active entry whose knowledge index is absent as a failure: the pass bar is an active record with the knowledge pass (owner ruling 3)', () => {
+    const absent = { ...complete, indexesAbsent: [{ index: 'knowledge', reason: 'budget_exhausted' }] };
+    assert.match(judgeEntry(absent).join(' '), /knowledge/);
+    assert.match(judgeEntry({ ...absent, indexesAbsent: [{ index: 'intel', reason: 'x' }, { index: 'knowledge', reason: 'x' }] }).join(' '), /knowledge/);
+    assert.deepEqual(judgeEntry({ ...complete, indexesAbsent: [] }), [], 'no index absent');
+    assert.deepEqual(judgeEntry({ ...complete, indexesAbsent: [{ index: 'intel', reason: 'x' }] }), [], 'another index absent is not this gate');
+  });
+
+  it('--verify fails when the latest attempt of a repository is active with equal digests and no containment finding but its knowledge index absent', () => {
+    const all = list.repositories.map((r) => entryFor(r.id));
+    const absent = { ...entryFor('b'), indexesAbsent: [{ index: 'knowledge', reason: 'budget_exhausted' }] };
+    const result = verifyEvidence({ entries: [all[0], absent, ...all.slice(2)] }, list);
+    assert.equal(result.ok, false);
+    assert.match(result.problems.join(' '), /b: .*knowledge/);
+    const rerun = verifyEvidence({ entries: [all[0], { ...absent, attempt: 1 }, ...all.slice(2), { ...entryFor('b'), attempt: 2, indexesAbsent: [] }] }, list);
+    assert.equal(rerun.ok, true, rerun.problems.join('; '));
   });
 
   it('judges the latest attempt of a repository, so a later pass stands after an earlier stop', () => {
@@ -401,5 +420,25 @@ describe('running an active repository again (owner ruling 1: re-run the portfol
 
   it('refuses a blank ruling reference', () => {
     assert.match(activeRerunRefusal(activeWithoutKnowledge, '   ') ?? '', /already has an active record/);
+  });
+});
+
+describe('the stop-loss counts stopped attempts (owner ruling 3 authorizes a third portfolio attempt)', () => {
+  const stopped = (attempt: number): Record<string, unknown> => ({ id: 'x', attempt, state: 'blocked' });
+  const active = (attempt: number): Record<string, unknown> => ({ id: 'x', attempt, state: 'active', indexesAbsent: [{ index: 'knowledge', reason: 'budget_exhausted' }] });
+
+  it('allows an attempt after fewer than two stopped ones', () => {
+    assert.equal(stopLossRefusal([]), undefined);
+    assert.equal(stopLossRefusal([stopped(1)]), undefined);
+  });
+
+  it('refuses a third attempt after two stopped ones', () => {
+    assert.match(stopLossRefusal([stopped(1), stopped(2)]) ?? '', /stopped 2 times/);
+  });
+
+  it('does not count an active attempt as a stop: a repository active twice with its knowledge absent may be run a third time under a ruling', () => {
+    assert.equal(stopLossRefusal([active(1), active(2)]), undefined);
+    assert.equal(stopLossRefusal([stopped(1), active(2)]), undefined);
+    assert.match(stopLossRefusal([stopped(1), stopped(2), active(3)]) ?? '', /stopped 2 times/);
   });
 });

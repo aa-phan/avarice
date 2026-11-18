@@ -793,6 +793,11 @@ export function activeRerunRefusal(last: Record<string, unknown>, rulingRef: str
   return absent ? undefined : `${active} and its knowledge pass is present: there is nothing to measure again`;
 }
 
+// SKELETON (plan 04-35, ruling 3): every earlier attempt counts as a stop.
+export function stopLossRefusal(prior: readonly Record<string, unknown>[]): string | undefined {
+  return prior.length >= STOP_LOSS_ATTEMPTS ? `has stopped ${prior.length} times; stop and ask the owner (D-04)` : undefined;
+}
+
 export async function runOne(argv: readonly string[]): Promise<number> {
   const { named, positionals } = flags(argv);
   const id = positionals[0];
