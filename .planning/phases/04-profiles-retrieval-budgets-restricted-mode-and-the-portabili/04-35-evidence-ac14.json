@@ -361,6 +361,284 @@
           "ref": "owner reply \"fix all, retry(i)\" at 2026-11-18T03:44:06Z: product defects confirmed; fix all three before any retry; subagent option (i) raise the full-map subagent budget, any hook denial still blocks"
         }
       }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.974252,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7PRC3M2QWMKQ8VHGDEXX5HR",
+      "state": "active",
+      "record": {
+        "version": 1,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "isolated-regeneration",
+        "reason": "existing map (user-edited) regenerated in staging, full map",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": null,
+      "refreshOf": null,
+      "existingState": {
+        "codebaseMap": "user-edited",
+        "drift": null,
+        "outcome": "isolated-regeneration",
+        "planningExists": true,
+        "userOwned": [
+          ".planning/MILESTONE-CONTEXT.md",
+          ".planning/codebase/CONCERNS.md",
+          ".planning/config.json",
+          ".planning/research/.cache/665135d126e67629e85b7123e22cd67cd6ea24cd262f1ada921062756e68be83.json",
+          ".planning/research/.cache/d7bc2d7df3821bd8478c99b760dc9ccab0c89a1de3522c4fd49a9746a88d2167.json",
+          ".planning/research/.cache/e28ca7386f8e31e24f00dc5ffda50eeb1656a40554d87257f5fc3398b83372eb.json",
+          ".planning/research/.cache/e3111e5dcf85ea33a6889aa920e212e9e99e33d662d1c9c92295b852552c59d7.json",
+          ".planning/seeds/SEED-261028-4uw-v3-tailored-applications.md",
+          ".planning/state.json"
+        ]
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [],
+      "graphNodes": {
+        "code": 2393,
+        "concept": 130,
+        "document": 41,
+        "rationale": 599
+      },
+      "knowledge": {
+        "corpus": [
+          ".planning/PROJECT.md",
+          ".planning/REQUIREMENTS.md",
+          ".planning/ROADMAP.md",
+          ".planning/STATE.md",
+          ".planning/codebase/",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-01-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-01-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-02-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-02-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-03-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-03-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-04-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-04-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-05-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-05-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-06-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-06-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-07-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-07-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-08-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-08-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-09-PLAN.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-09-SUMMARY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-CONTEXT.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-DISCUSSION-LOG.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-PATTERNS.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-RESEARCH.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-REVIEW-DISPOSITION.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-REVIEW-FIX.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-REVIEW.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-SECURITY.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-UAT.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-VALIDATION.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/02-VERIFICATION.md",
+          ".planning/phases/02-measurement-governors-and-owner-decisions/COVERAGE.md"
+        ],
+        "corpusCap": {
+          "chunkLimit": 12,
+          "chunks": 12,
+          "documentsKept": 41,
+          "documentsOmitted": 34,
+          "omitted": [
+            ".planning/phases/02-measurement-governors-and-owner-decisions/deferred-items.md",
+            ".planning/phases/03-compact-storage/03-01-PLAN.md",
+            ".planning/phases/03-compact-storage/03-01-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-02-PLAN.md",
+            ".planning/phases/03-compact-storage/03-02-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-03-PLAN.md",
+            ".planning/phases/03-compact-storage/03-03-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-04-PLAN.md",
+            ".planning/phases/03-compact-storage/03-04-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-05-PLAN.md",
+            ".planning/phases/03-compact-storage/03-05-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-06-PLAN.md",
+            ".planning/phases/03-compact-storage/03-06-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-07-PLAN.md",
+            ".planning/phases/03-compact-storage/03-07-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-08-PLAN.md",
+            ".planning/phases/03-compact-storage/03-08-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-09-PLAN.md",
+            ".planning/phases/03-compact-storage/03-09-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-10-PLAN.md",
+            ".planning/phases/03-compact-storage/03-10-SUMMARY.md",
+            ".planning/phases/03-compact-storage/03-CONTEXT.md",
+            ".planning/phases/03-compact-storage/03-DISCUSSION-LOG.md",
+            ".planning/phases/03-compact-storage/03-PATTERNS.md",
+            ".planning/phases/03-compact-storage/03-RESEARCH.md",
+            ".planning/phases/03-compact-storage/03-REVIEW-DISPOSITION.md",
+            ".planning/phases/03-compact-storage/03-REVIEW-FIX.md",
+            ".planning/phases/03-compact-storage/03-REVIEW.md",
+            ".planning/phases/03-compact-storage/03-SECURITY.md",
+            ".planning/phases/03-compact-storage/03-UAT.md",
+            ".planning/phases/03-compact-storage/03-VALIDATION.md",
+            ".planning/phases/03-compact-storage/03-VERIFICATION.md",
+            ".planning/phases/03-compact-storage/COVERAGE.md",
+            ".planning/phases/03-compact-storage/deferred-items.md"
+          ],
+          "perInvocationCapUsd": 0.8
+        },
+        "documentNodes": 41,
+        "documentsCommit": "git:6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "documentsExpected": 41,
+        "dropped": {
+          "astDocument": 0,
+          "dangling": 0,
+          "unread": 0
+        },
+        "manifestDigest": "sha256:bf3de9c1cbf06e806d5b0073590d590770eb08f7aebb949c209c77f953f0e93b"
+      },
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"3 of 107 named path(s) dangling (2.8%, limit 5%); counted as known: 10 named path(s) ignored by the repository's own .gitignore rules (.env, state/inventory, state/lock.json (+7 more)); 1 workflow action(s) named by a committed workflow; not counted: 6 token(s) that do not name a repository path (openai/gpt-oss-120b, openai/gpt-oss-20b, try/finally (+3 more))\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"6a82d3536c06db0f25db1fb1c02bf776c3905937\"}"
+      },
+      "id": "auto_search_workflow",
+      "attempt": 2,
+      "rulingRef": "owner \"fix all, retry(i)\" 2026-11-18T03:44:06Z; owner \"A\" 2026-11-18T07:05:38Z",
+      "startedAt": "2026-11-18T07:19:07.084Z",
+      "finishedAt": "2026-11-18T07:29:58.133Z",
+      "profile": "personal-extended",
+      "expectedPath": "onboard",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "branch": "gsd/phase-03-compact-storage",
+        "headRef": "refs/heads/gsd/phase-03-compact-storage",
+        "statusDigest": "151edd192038ee61efc6669b4ce4a1848c2e38fb3cc11a9e485f08a9591816f8",
+        "filesDigest": "0beb598c4f54dbcdb2400809e909ced3992303ff3ee82e359f91dfcd2787c2f1",
+        "refsDigest": "cd09e4e35d73d08a7dcc6ef30d41fd2c34ed0884744a7baca77ef1665ee1624a",
+        "worktreesDigest": "9a91854b32f10e2256b77a44bdb33f6ecd504a8cdcf87fa8be9952a2e420f9f4",
+        "indexDigest": "f396fbcef3ef34cfd2e5a32fa0da83ecca40f11976d42607c941ea4ea957e090",
+        "gitMetaDigest": "f733ea1c3d55aa3cb4c5ae856f3cc352a56654ce3bca1360e8a8f5aafc1b6c95",
+        "ignoredDigest": "7ebb8a4c984363cce254a163a4ae5285e0eb9e2acb2d0c21946f9e7355292724",
+        "counts": {
+          "tracked": 152,
+          "untracked": 8,
+          "statusEntries": 8,
+          "refs": 3
+        }
+      },
+      "after": {
+        "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "branch": "gsd/phase-03-compact-storage",
+        "headRef": "refs/heads/gsd/phase-03-compact-storage",
+        "statusDigest": "151edd192038ee61efc6669b4ce4a1848c2e38fb3cc11a9e485f08a9591816f8",
+        "filesDigest": "0beb598c4f54dbcdb2400809e909ced3992303ff3ee82e359f91dfcd2787c2f1",
+        "refsDigest": "cd09e4e35d73d08a7dcc6ef30d41fd2c34ed0884744a7baca77ef1665ee1624a",
+        "worktreesDigest": "9a91854b32f10e2256b77a44bdb33f6ecd504a8cdcf87fa8be9952a2e420f9f4",
+        "indexDigest": "f396fbcef3ef34cfd2e5a32fa0da83ecca40f11976d42607c941ea4ea957e090",
+        "gitMetaDigest": "f733ea1c3d55aa3cb4c5ae856f3cc352a56654ce3bca1360e8a8f5aafc1b6c95",
+        "ignoredDigest": "7ebb8a4c984363cce254a163a4ae5285e0eb9e2acb2d0c21946f9e7355292724",
+        "counts": {
+          "tracked": 152,
+          "untracked": 8,
+          "statusEntries": 8,
+          "refs": 3
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "user-edited",
+        "outcome": "isolated-regeneration"
+      },
+      "stdoutTail": "onboarding onb_01M7PRC3M2QWMKQ8VHGDEXX5HR: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
     }
   ],
   "list": {
@@ -607,7 +885,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T07:06:35.628Z",
+  "updatedAt": "2026-11-18T07:29:58.134Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
