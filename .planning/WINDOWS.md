@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 0
 fixed_count: 2
-total_count: 4
-last_updated: 2026-11-17T14:13:13.140Z
+total_count: 5
+last_updated: 2026-11-18T02:18:08.730Z
 ---
 
 # Broken Windows Ledger
@@ -19,6 +19,7 @@ last_updated: 2026-11-17T14:13:13.140Z
 | 2 | 01 | stub | src/app/stages/index-knowledge.ts | 12 | index-knowledge step reports the index absent (not-built-in-this-build) until plan 01-18 | open |  | 2026-11-03T01:01:33.322Z |  |
 | 3 | 02 | stub | src/app/run-stages/item.ts |  | G2 test inventory is passed as empty and the baseline is taken as passed until plan 02-14 measures both | fixed |  | 2026-11-05T22:11:52.151Z | 2026-11-05T23:37:38.835Z |
 | 4 | 04 | unrun-verify | scripts/eval-retrieval.ts |  | live driver (runOne, spendStep, the onboarding and start CLI steps, the sandboxed judge on a real repository) is not exercised by plan 04-31: it spends; plan 04-36's pilot is its first run | open |  | 2026-11-17T14:13:13.140Z |  |
+| 5 | 04 | unrun-verify | scripts/test-matrix.sh |  | Node 22.22.3 leg of the two-Node matrix not run (no Node 22 binary, AVARICE_NODE22 unset); assumed by the orchestrator, not stated by the owner | open |  | 2026-11-18T02:18:08.730Z |  |
 
 ````json
 [
@@ -71,6 +72,19 @@ last_updated: 2026-11-17T14:13:13.140Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-17T14:13:13.140Z",
+    "resolved_at": null,
+    "milestone": "v1.1"
+  },
+  {
+    "id": 5,
+    "kind": "unrun-verify",
+    "phase": "04",
+    "file": "scripts/test-matrix.sh",
+    "line": null,
+    "description": "Node 22.22.3 leg of the two-Node matrix not run (no Node 22 binary, AVARICE_NODE22 unset); assumed by the orchestrator, not stated by the owner",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-18T02:18:08.730Z",
     "resolved_at": null,
     "milestone": "v1.1"
   }
