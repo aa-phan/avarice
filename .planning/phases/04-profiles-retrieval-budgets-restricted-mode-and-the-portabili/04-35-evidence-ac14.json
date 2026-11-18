@@ -1120,6 +1120,13 @@
       "ref": "owner reply \"A\"",
       "decision": "Option A only: cap the knowledge corpus by cost. Keep the priority order (map, planning docs, ADRs, docs, then phase files) and drop what falls past a documented limit tied to the per-invocation cap so one knowledge invocation fits. The partial-end add-on was NOT chosen: a clean partial end stays no_progress.",
       "basis": "The portfolio knowledge corpus is 181 documents / 53 chunks; one contained session wrote 6 chunks and ended near 0.30 USD of the 0.8 USD per-invocation cap; the classifier requires every chunk, so the pass was no_progress then invocation-failed. About 10-12 chunks fit at 0.8."
+    },
+    {
+      "id": "ruling-3",
+      "at": "2026-11-18T08:03:10Z",
+      "ref": "owner reply \"a\"",
+      "decision": "Option a only: classification product-defect (cap constant calibration). Recalibrate the knowledge chunk limit so a knowledge invocation fits its cap with margin (about 9 chunks at 0.8 USD); close the verify gap (an AC-14 entry whose knowledge index is absent must fail judgeEntry and --verify); the owner authorizes a third attempt for aa-phan-portfolio-v2 only; then run GroceriesGPT, spf13-cobra and BurntSushi-ripgrep. How a budget_exhausted or partial ending is classified is NOT changed (option b was not chosen). Caps unchanged: 0.8 USD per invocation, 1.6 USD per repository, 8.00 USD group.",
+      "basis": "aa-phan-portfolio-v2 attempt 2: 12 chunks written, ended 0.8058 USD against the 0.8 USD cap (budget_exhausted), knowledge absent; the same limit passed on auto_search_workflow at 0.7518 USD. Measured: 6 chunks 0.30 USD, 12 chunks 0.7518 and 0.8058 USD."
     }
   ],
   "stops": [
@@ -1134,6 +1141,12 @@
         "class": "product-defect",
         "summary": "The calibration of the corpus cap (the per-chunk cost constant and the cap share in src/domain/knowledge-corpus.ts, KNOWLEDGE_COST) is too optimistic for the portfolio corpus, so the invocation overran its own cap by 0.7 percent and lost 12 complete chunk files. Not a harness defect: the tool, digests and containment are fine. Candidate rulings for the owner: (a) recalibrate the constants to the measured curve (about 9 chunks at 0.8 USD) and re-run the portfolio once; (b) keep the limit and also accept a budget_exhausted ending when every planned chunk file is written and usable (this changes how an ending is classified, which ruling 2 did not choose); (c) both.",
         "by": "claude"
+      },
+      "ownerClassification": {
+        "class": "product-defect",
+        "by": "owner",
+        "ref": "owner reply \"a\"",
+        "at": "2026-11-18T08:03:10Z"
       }
     }
   ]
