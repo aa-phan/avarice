@@ -19,7 +19,7 @@ export const CORPUS_LIMITS = {
 // Tracked planning documents added when the repository has them. Order is priority order for the cap.
 export const PLANNING_DOCUMENTS: readonly string[] = ['.planning/PROJECT.md', '.planning/REQUIREMENTS.md', '.planning/ROADMAP.md'];
 
-export type CorpusDropReason = 'outside-read' | 'too-large' | 'secret-path' | 'cap' | 'missing' | 'secret-content';
+export type CorpusDropReason = 'outside-read' | 'too-large' | 'secret-path' | 'cap' | 'cost-cap' | 'missing' | 'secret-content';
 
 export interface CorpusDrop {
   path: string;
@@ -42,7 +42,7 @@ export interface KnowledgeCorpusInput {
   secretGlobs?: readonly string[];
   // The contract's `files.read`: a planning document (KNOWLEDGE_PLANNING_GLOBS) is in the corpus only when it matches one of these. Absent: no restriction.
   readGlobs?: readonly string[];
-  limits?: { maxFileBytes?: number; maxFiles?: number };
+  limits?: { maxFileBytes?: number; maxFiles?: number; maxChunks?: number };
 }
 
 export interface KnowledgeCorpusSelection {
@@ -141,3 +141,7 @@ export function changedDocuments(previous: KnowledgeManifest, current: Knowledge
   const before = new Map(previous.entries.map((entry) => [entry.sourcePath, entry.sha256] as const));
   return current.entries.filter((entry) => before.get(entry.sourcePath) !== entry.sha256);
 }
+
+// SKELETON (plan 04-35): the cost model of the knowledge corpus is not built yet.
+export const KNOWLEDGE_COST = { chunkUsd: 0.05, capShare: 0.75 } as const;
+export const knowledgeChunkLimit = (_costCapUsd: number): number => Number.POSITIVE_INFINITY;
