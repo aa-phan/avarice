@@ -9,13 +9,15 @@ import type { Result } from './result.ts';
 import { MAPPING_MODES } from './mapping.ts';
 import type { MappingMode } from './mapping.ts';
 
-// How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, times
-// the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
+// How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, plus the mapper re-runs the mode
+// allows in a round (plan 04-35), times the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
 // so the number is explained by the contract that carries it. The knowledge pass runs no subagent since plan 01-19 decision B (the
 // model reads the chunks itself, no graphify skill), so its allowance is 0.
 export interface SubagentDerivation {
   mode: MappingMode;
   mapAgents: number;
+  // Mappers the orchestrator may spawn again in one round on top of `mapAgents`.
+  mapRerunAllowance: number;
   mapRounds: number;
   knowledgeAllowance: number;
   intelAgents: number;
@@ -182,6 +184,11 @@ export const ONBOARDING_PRESET = {
     // What one map round spawns: GSD's full map spawns 4 mappers, its fast map (scan, tech+arch) one; `paths` needs the full
     // file set, `skip` and `adopt` run no mapper.
     mapAgents: { full: 4, fast: 1, paths: 4, skip: 0, adopt: 0 },
+    // Mapper re-runs one map round may spawn on top of `mapAgents` (plan 04-35, owner ruling 2026-11-18). GSD's map-codebase workflow spawns 4 mappers, and its orchestrator
+    // spawned a fifth in the retry round of the live full map of auto_search_workflow (a re-run of the concerns mapper, whose first answer had concluded that Python
+    // modules were absent), which the total of 8 refused. A full map allows two such re-runs per round: the measured need (one) with one more of headroom. The other
+    // modes are unchanged, and a hook denial still blocks the onboarding.
+    mapRerunAllowance: { full: 2, fast: 0, paths: 0, skip: 0, adopt: 0 },
     // The knowledge pass starts no subagent (decision B, 2026-11-03): one model session reads the chunked documents itself.
     knowledgeAllowance: 0,
     intelAgents: 0,
@@ -246,21 +253,24 @@ function readDirectories(field: string, raw: unknown): Result<string[]> {
 
 const unique = (items: readonly string[]): string[] => [...new Set(items)];
 
-// The subagent total for a mapping mode and a map retry limit: map agents for the mode x (1 + retries) + the knowledge pass
+// The subagent total for a mapping mode and a map retry limit: (map agents for the mode + its re-run allowance) x (1 + retries) + the knowledge pass
 // allowance + intel's none (docs/repository-onboarding.md "Onboarding contract").
 export function deriveSubagents(mode: MappingMode, retry: number): SubagentDerivation {
-  const { mapAgents, knowledgeAllowance, intelAgents } = ONBOARDING_PRESET.subagents;
+  const { mapAgents, mapRerunAllowance, knowledgeAllowance, intelAgents } = ONBOARDING_PRESET.subagents;
   const perRound = mapAgents[mode];
+  const rerun = mapRerunAllowance[mode];
   const mapRounds = 1 + retry;
-  const total = perRound * mapRounds + knowledgeAllowance + intelAgents;
+  const total = (perRound + rerun) * mapRounds + knowledgeAllowance + intelAgents;
+  const agents = rerun > 0 ? `${perRound} map agents + ${rerun} re-run allowance (${mode})` : `${perRound} map agents (${mode})`;
   return {
     mode,
     mapAgents: perRound,
+    mapRerunAllowance: rerun,
     mapRounds,
     knowledgeAllowance,
     intelAgents,
     total,
-    formula: `${perRound} map agents (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (no subagent: the model reads the chunks itself) + ${intelAgents} intel = ${total}`,
+    formula: `${agents} x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (no subagent: the model reads the chunks itself) + ${intelAgents} intel = ${total}`,
   };
 }
 
