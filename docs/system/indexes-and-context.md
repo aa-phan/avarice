@@ -94,21 +94,35 @@ AVARICE selects documents from the pinned tree and the generated map, in priorit
 | planning documents | `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md` under `.planning/`, when tracked |
 | decision records | Markdown files under the ADR directories preflight found |
 | documents | files matching the contract's document globs (default `docs/**/*.md`, plus one glob per ADR directory) |
+| GSD planning files | the Markdown files under `.planning/phases/` and `.planning/STATE.md`, when tracked and inside the contract's read set |
 
 A candidate is left out, and listed with its reason in the manifest, when it is:
 
-- under `.planning/phases/` or is `.planning/STATE.md`
+- a GSD planning file the contract's read set does not allow
 - matched by a secret-path glob of the contract
 - missing, a symlink or not a regular file
 - larger than 256 KiB
 - past the 200-file cap, counted in priority order
+- past the cost cap (see below)
 - carrying secret-pattern content (checked on the bytes at copy time)
+
+#### The cost cap
+
+One invocation has to fit its own cost cap. The classifier needs every chunk of the plan, so a session that stops early, with chunks unwritten, ends `no_progress` and the whole pass is lost. The corpus is therefore limited to the chunks one invocation can pay for. The limit is
+
+`floor(cost cap x 0.75 / 0.05)` chunks, never fewer than one.
+
+The cost cap is the one the knowledge invocation would be granted: the contract's per-invocation cost cap, or what is left of the run's cost budget when that is smaller. It is read from the contract, not from any one run's authorization. The two constants come from the one measured run: a session read and wrote 6 chunks for 0.30 USD, its setup included, so a chunk is estimated at 0.05 USD, and the share of 0.75 keeps a quarter of the cap free because each chunk read makes the following turns dearer. At a cap of 0.8 USD the limit is 12 chunks, at 1.6 USD it is 24, and at the 3.0 USD default of the onboarding contract it is 45.
+
+Candidates are taken in the priority order of the table, and a document is kept while the documents kept so far, packed into chunks as described below, plan to no more chunks than the limit. The first document that does not fit, and every later document the other rules would have kept, is left out as `cost-cap`. The kept documents are therefore always a prefix of the priority order: the map, the planning documents, the decision records and the documents are kept before any GSD phase file. A corpus that fits the limit is selected exactly as without it.
+
+The omission is stated, not silent. Each left-out document is in the manifest's excluded list with the reason `cost-cap`, and the manifest, and its digest, list only the documents that were sent. The `knowledge` object of the record gains a `corpusCap` object when the cap left something out (see "What the record states"). A refresh works over the kept set: the documents whose content changed among those kept go to the model, the others are cache hits, and a document that was left out stays left out until the limit admits it.
 
 The manifest ties each copy to its source path, the onboarded revision and a SHA-256. It is kept in the data root under the onboarding's `knowledge` directory and stored as an artifact of kind `knowledge-manifest`, never inside the corpus. An empty corpus is `no-output`. The corpus directory is a working copy: it is not a repository file and is not promoted.
 
 ### Chunk plan
 
-AVARICE splits the documents, sorted by path, into chunks of at most 8 files and 64 KiB of text. A document over 64 KiB is a chunk of its own. The plan is deterministic for a given manifest and sizes.
+AVARICE splits the documents, sorted by path, into chunks of at most 8 files and 64 KiB of text. A document over 64 KiB is a chunk of its own. The plan is deterministic for a given manifest and sizes. The cost cap above counts chunks with this same packing, so the plan never has more chunks than the limit.
 
 The plan is written to `.avarice-knowledge/.chunks.json`. Each chunk carries its number, an output file name (`chunk-01.json`, `chunk-02.json`, and so on, under `.avarice-knowledge/.extraction/`) and its files. Each file entry carries its repository path, a node-ID stem derived from the path, and an absolute `readPath`. Each chunk carries an absolute `writePath`. Both absolute paths are built by AVARICE from the corpus directory, which is the invocation's working directory, so every path lies inside the read confinement. The model passes them verbatim and never builds a path. A corpus root that is not a normalized absolute path is refused as `invocation-failed`; any other failure of the planner is not caught and surfaces as `step-error`.
 
@@ -181,12 +195,13 @@ The graph entry's digest is replaced by the digest of the merged `graph.json`, a
 | `documentsExpected` | the number of documents in the manifest |
 | `documentNodes` | the number of pass nodes of type `document` |
 | `dropped` | counts: `dangling` edges, `astDocument` edges, and `unread` documents that got no node |
+| `corpusCap` | present only when the cost cap left documents out: `perInvocationCapUsd` (the cap the limit came from), `chunkLimit`, `chunks` (the chunks the kept documents plan to), `documentsKept`, `documentsOmitted`, and `omitted` (the areas of the omitted documents, named as `corpus` names them, at most 50, with `omittedMoreAreas` for the rest) |
 
-The corpus field names only what the documents with nodes cover. A directory whose documents were never read is not claimed. Documents left out of the manifest at selection (too large, secret, over the cap) are not in `documentsExpected` or in `unread`; they appear only in the manifest's excluded list.
+The corpus field names only what the documents with nodes cover. A directory whose documents were never read is not claimed. Documents left out of the manifest at selection (too large, secret, over the file cap, over the cost cap) are not in `documentsExpected` or in `unread`; they appear in the manifest's excluded list, and the ones the cost cap left out are also counted in `corpusCap`.
 
 ### Forbidden sources
 
-No node may come from the GSD phase files, the state file, a secret-bearing path, a file over the size cap, or a document that contains a secret pattern. Selection excludes them, and validation refuses a node that cites them anyway. Text inside a document that reads as an instruction is data: it may become a concept node, and nothing in the contract, settings or write sets changes because of it.
+No node may come from a secret-bearing path, a file over the size cap, or a document that contains a secret pattern. Selection excludes them, and validation refuses a node that cites them anyway. Selection also excludes a GSD planning file the contract's read set does not allow. The GSD phase files and the state file are documents of the corpus and may have document nodes; a node the pass did not add to the graph may not cite them. Text inside a document that reads as an instruction is data: it may become a concept node, and nothing in the contract, settings or write sets changes because of it.
 
 ## The `avarice context` command
 
