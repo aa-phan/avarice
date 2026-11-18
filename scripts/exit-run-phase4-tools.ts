@@ -16,6 +16,7 @@
 //       One live onboarding of one approved repository under the recorded authorization. Records the before and after digests, the record's state, the mapping
 //       outcome, the indexes, the knowledge counts and cache hits, the refresh mode, the cost and any containment finding. Exit 0 only for an active record with
 //       equal digests; exit 75 for the stop-loss (two attempts in an epoch, or a failure the owner has not ruled on per D-04) or a spend that would pass a cap.
+//       An active repository is run again only with `--ruling-ref` and only when its knowledge index was absent (the owner's ruling to measure the knowledge pass).
 //   classify --id ID --class product-defect|harness-defect --summary TEXT --by claude|owner [--ref TEXT] [--evidence F]
 //       Records Claude's proposed D-04 classification of a stopped attempt, and the owner's ruling on it.
 //   verify [--list F] [--evidence F]       Exit 0 only for 5 of 5 active, equal digests, 0 containment failures, on the approved list.
@@ -783,9 +784,13 @@ function ledgerFacts(dataRoot: string, repoPath: string, startedAt: string, seqB
   };
 }
 
-// SKELETON (plan 04-35): the rule for running an active repository again is not built yet.
-export function activeRerunRefusal(_last: Record<string, unknown>, _rulingRef: string | undefined): string | undefined {
-  return 'already has an active record in this benchmark';
+// An active attempt is not run again, except as the owner ruled (ruling 1 of plan 04-35: "re-run the portfolio to measure the knowledge pass"): with a ruling
+// reference, and only when the active attempt left the knowledge index absent, since that is the pass the re-run measures. Undefined means the run may go on.
+export function activeRerunRefusal(last: Record<string, unknown>, rulingRef: string | undefined): string | undefined {
+  const active = 'already has an active record in this benchmark';
+  if (rulingRef === undefined || rulingRef.trim() === '') return active;
+  const absent = asObjects(last['indexesAbsent']).some((a) => a['index'] === 'knowledge');
+  return absent ? undefined : `${active} and its knowledge pass is present: there is nothing to measure again`;
 }
 
 export async function runOne(argv: readonly string[]): Promise<number> {
@@ -822,7 +827,8 @@ export async function runOne(argv: readonly string[]): Promise<number> {
   // The stop-loss and D-04: two attempts per epoch at most, and a retry only after the owner has ruled on the stop.
   const prior = asObjects(evidence['entries']).filter((e) => e['id'] === id);
   const last = prior[prior.length - 1];
-  if (last !== undefined && last['state'] === 'active') return refuse(`${id} already has an active record in this benchmark`);
+  const rerun = last !== undefined && last['state'] === 'active' ? activeRerunRefusal(last, named['ruling-ref']) : undefined;
+  if (rerun !== undefined) return refuse(`${id} ${rerun}`);
   if (prior.length >= STOP_LOSS_ATTEMPTS) return refuse(`${id} has stopped ${prior.length} times; stop and ask the owner (D-04)`, 75);
   if (last !== undefined && named['ruling-ref'] === undefined) return refuse(`${id} stopped on its last attempt; the owner rules on the classification first (D-04), then pass --ruling-ref TEXT naming the ruling`, 75);
 
