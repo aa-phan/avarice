@@ -35,3 +35,4 @@
 {"plan":"04-35","case":"ac14-GroceriesGPT","costUsd":0.117375,"claudeVersion":"2.1.326","at":"2026-11-18T08:21:18.989Z"}
 {"plan":"04-35","case":"ac14-GroceriesGPT","costUsd":0.154992,"claudeVersion":"2.1.326","at":"2026-11-18T18:57:18.010Z"}
 {"plan":"04-35","case":"ac14-spf13-cobra","costUsd":0.11158,"claudeVersion":"2.1.326","at":"2026-11-18T19:01:59.526Z"}
+{"plan":"04-35","case":"ac14-BurntSushi-ripgrep","costUsd":0.166796,"claudeVersion":"2.1.326","at":"2026-11-18T19:08:30.400Z"}

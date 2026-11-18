@@ -1651,6 +1651,197 @@
         "proposed": null,
         "confirmed": null
       }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.166796,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7R0KW2W7ANW1CXN76H0NX0J",
+      "state": "active",
+      "record": {
+        "version": 1,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "brownfield repository, full map",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": null,
+      "refreshOf": null,
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": false,
+        "userOwned": []
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [],
+      "graphNodes": {
+        "code": 3946,
+        "concept": 40,
+        "document": 7,
+        "rationale": 54
+      },
+      "knowledge": {
+        "corpus": [
+          ".planning/codebase/"
+        ],
+        "documentNodes": 7,
+        "documentsCommit": "git:e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "documentsExpected": 7,
+        "dropped": {
+          "astDocument": 0,
+          "dangling": 0,
+          "unread": 0
+        },
+        "manifestDigest": "sha256:f82886a857491c61abe95ae4ae2a490770f1f880df15fc915d5c7b34f6b9a587"
+      },
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"8 of 249 named path(s) dangling (3.2%, limit 5%); counted as known: 1 named path(s) ignored by the repository's own .gitignore rules (target); 49 unique path suffix(es) of a tracked file; not counted: 1 token(s) that do not name a repository path (github.com/cross-rs/cross/releases)\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"e89fff89ac9af12e8d4ce9d5fd07beb408ca730f\"}"
+      },
+      "id": "BurntSushi-ripgrep",
+      "attempt": 1,
+      "rulingRef": "owner \"a\" 2026-11-18T18:44:21Z",
+      "startedAt": "2026-11-18T19:02:24.993Z",
+      "finishedAt": "2026-11-18T19:08:30.400Z",
+      "profile": "personal-extended",
+      "expectedPath": "onboard",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "branch": "",
+        "headRef": "",
+        "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "filesDigest": "d02260d0eddc8b752c441dc18ed9fd79236c68c31889082e44429f7f1b09f282",
+        "refsDigest": "861abc8548ee705b2a1d5abeda61927980f67d2a77cf82239d7af3c5d5363ae9",
+        "worktreesDigest": "8fca32a8b8a5f0244e0932dd1cd1af9fcf54806960e07f7c2e323273d3bcfce8",
+        "indexDigest": "8baccee6d36344a9924c0c2b48516510d7aff663aa10da2076d64d20651a9553",
+        "gitMetaDigest": "24b7a3b0ec12277655817fa2546c9cd2af9d7a7f987d6ec457223dd1d92bae4d",
+        "ignoredDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "counts": {
+          "tracked": 222,
+          "untracked": 0,
+          "statusEntries": 0,
+          "refs": 292
+        }
+      },
+      "after": {
+        "head": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "branch": "",
+        "headRef": "",
+        "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "filesDigest": "d02260d0eddc8b752c441dc18ed9fd79236c68c31889082e44429f7f1b09f282",
+        "refsDigest": "861abc8548ee705b2a1d5abeda61927980f67d2a77cf82239d7af3c5d5363ae9",
+        "worktreesDigest": "8fca32a8b8a5f0244e0932dd1cd1af9fcf54806960e07f7c2e323273d3bcfce8",
+        "indexDigest": "8baccee6d36344a9924c0c2b48516510d7aff663aa10da2076d64d20651a9553",
+        "gitMetaDigest": "24b7a3b0ec12277655817fa2546c9cd2af9d7a7f987d6ec457223dd1d92bae4d",
+        "ignoredDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "counts": {
+          "tracked": 222,
+          "untracked": 0,
+          "statusEntries": 0,
+          "refs": 292
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7R0KW2W7ANW1CXN76H0NX0J: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
     }
   ],
   "list": {
@@ -1897,7 +2088,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T19:01:59.527Z",
+  "updatedAt": "2026-11-18T19:08:30.401Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
