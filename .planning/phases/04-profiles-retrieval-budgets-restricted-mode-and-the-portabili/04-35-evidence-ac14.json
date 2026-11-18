@@ -639,6 +639,203 @@
         "proposed": null,
         "confirmed": null
       }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.938701,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7PS2RDTA8FGPTDWFV1R9NDZ",
+      "state": "active",
+      "record": {
+        "version": 3,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "refresh no-stamp: the existing map carries no last_mapped_commit: full remap in staging",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": {
+        "changedPathCount": 0,
+        "changedPaths": [],
+        "drift": null,
+        "fromRecordVersion": 2,
+        "fromRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "manifestChanged": false,
+        "mode": "full",
+        "newTopLevelDirs": [],
+        "reason": "no-stamp: the existing map carries no last_mapped_commit",
+        "threshold": 3,
+        "toRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+      },
+      "refreshOf": {
+        "onboardedRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "recordVersion": 2
+      },
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": true,
+        "userOwned": []
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [
+        {
+          "index": "knowledge",
+          "reason": "budget_exhausted"
+        }
+      ],
+      "graphNodes": {
+        "code": 1011,
+        "concept": 99,
+        "document": 0
+      },
+      "knowledge": null,
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"5 of 294 named path(s) dangling (1.7%, limit 5%); counted as known: 4 named path(s) ignored by the repository's own .gitignore rules (dist, node_modules, .shots/settle (+1 more)); 2 import specifier(s) (a source extension appended); 5 unique path suffix(es) of a tracked file; 5 module specifier(s) of a committed dependency; 5 workflow action(s) named by a committed workflow; not counted: 3 token(s) that do not name a repository path (stiffness/damping, tension/friction, aa-phan.github.io/aa-phan-portfolio-v2)\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations..."
+      },
+      "id": "aa-phan-portfolio-v2",
+      "attempt": 2,
+      "rulingRef": "owner \"fix all, retry(i)\" 2026-11-18T03:44:06Z; owner \"A\" 2026-11-18T07:05:38Z",
+      "startedAt": "2026-11-18T07:31:29.764Z",
+      "finishedAt": "2026-11-18T07:41:31.378Z",
+      "profile": "personal-local",
+      "expectedPath": "refresh",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "after": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7PS2RDTA8FGPTDWFV1R9NDZ: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
     }
   ],
   "list": {
@@ -885,7 +1082,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T07:29:58.134Z",
+  "updatedAt": "2026-11-18T07:42:45.450Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
@@ -923,6 +1120,21 @@
       "ref": "owner reply \"A\"",
       "decision": "Option A only: cap the knowledge corpus by cost. Keep the priority order (map, planning docs, ADRs, docs, then phase files) and drop what falls past a documented limit tied to the per-invocation cap so one knowledge invocation fits. The partial-end add-on was NOT chosen: a clean partial end stays no_progress.",
       "basis": "The portfolio knowledge corpus is 181 documents / 53 chunks; one contained session wrote 6 chunks and ended near 0.30 USD of the 0.8 USD per-invocation cap; the classifier requires every chunk, so the pass was no_progress then invocation-failed. About 10-12 chunks fit at 0.8."
+    }
+  ],
+  "stops": [
+    {
+      "id": "aa-phan-portfolio-v2",
+      "attempt": 2,
+      "at": "2026-11-18T07:42:45.449Z",
+      "kind": "knowledge-pass-absent",
+      "summary": "The onboarding ended active with equal digests and 0 containment failures, but the knowledge index is absent (budget_exhausted), so the repository is not active with the knowledge pass. Under owner ruling 2 the corpus was capped to 12 chunks (50 of 181 documents kept, 131 left out as cost-cap; per-invocation cap 0.8 USD). The knowledge session read and wrote all 12 chunk files (each parses; 12 of 12), answered \"done\", and ended at 0.8058 USD, 0.0058 over its 0.8 USD cap (67 turns, 6.07M tokens): the host reported error_max_budget_usd, the invocation was classified budget_exhausted, and the stage discards the written chunks for that ending. The same 12-chunk limit passed on auto_search_workflow (knowledge 0.7518 USD, 41 documents). Measured per-session cost is superlinear in chunks: 6 chunks 0.302 USD (attempt 1), 12 chunks 0.752 to 0.806 USD, so the 0.05 USD a chunk and 0.75 share of the cap overstate how many chunks fit; a quadratic through those points (0.0328 n + 0.00286 n^2) gives about 9 chunks at 0.6 USD and 10 at 0.8 USD x 0.75 headroom.",
+      "costUsd": 0.938701,
+      "proposedClassification": {
+        "class": "product-defect",
+        "summary": "The calibration of the corpus cap (the per-chunk cost constant and the cap share in src/domain/knowledge-corpus.ts, KNOWLEDGE_COST) is too optimistic for the portfolio corpus, so the invocation overran its own cap by 0.7 percent and lost 12 complete chunk files. Not a harness defect: the tool, digests and containment are fine. Candidate rulings for the owner: (a) recalibrate the constants to the measured curve (about 9 chunks at 0.8 USD) and re-run the portfolio once; (b) keep the limit and also accept a budget_exhausted ending when every planned chunk file is written and usable (this changes how an ending is classified, which ruling 2 did not choose); (c) both.",
+        "by": "claude"
+      }
     }
   ]
 }
