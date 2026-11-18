@@ -11,6 +11,7 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { runGsd } from '../../src/adapters/gsd/gsd-tools.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
+import { withMapperSecretsRule } from '../../src/domain/mapping.ts';
 import type { InvocationOutcome, InvocationRequest } from '../../src/ports/agent-host.ts';
 import type { Result } from '../../src/domain/result.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -300,14 +301,15 @@ describe('mapping mode', () => {
     assert.equal(outcome.state, 'active', outcome.message ?? '');
     assert.equal(step<{ existingMap: string }>(roots, 'mapping:plan').existingMap, 'none', 'the repository has no map');
     assert.deepEqual(atInvoke[0]?.codebaseEntries, [], 'the directory exists and is empty when the mapper starts');
-    assert.equal(atInvoke[0]?.prompt, '/gsd-map-codebase\nIf .planning/codebase already exists, answer the question about it with: Refresh.');
+    // Plan 04-35: every map prompt also carries the mapper secrets rule.
+    assert.equal(atInvoke[0]?.prompt, withMapperSecretsRule('/gsd-map-codebase\nIf .planning/codebase already exists, answer the question about it with: Refresh.'));
   });
 
   it('answers the existing-map question up front in fast mode too', async () => {
     const { roots, repo } = fixture();
     const { outcome, atInvoke } = await onboardLogged(roots, repo, { files: FAST_FILES, stamp: false }, 'fast');
     assert.equal(outcome.state, 'active', outcome.message ?? '');
-    assert.equal(atInvoke[0]?.prompt, '/gsd-map-codebase --fast\nIf .planning/codebase already exists, answer the question about it with: Refresh.');
+    assert.equal(atInvoke[0]?.prompt, withMapperSecretsRule('/gsd-map-codebase --fast\nIf .planning/codebase already exists, answer the question about it with: Refresh.'));
   });
 
   it('skips mapping for a repository that is not brownfield: no invocation, completeness none', async () => {
