@@ -12,7 +12,8 @@ import type { MappingMode } from '../../domain/mapping.ts';
 import { hostOfOnboarding, isStampedMode, loadContract, loadMappingPlan, stagingPathOf, stampMap, stopIncompatible } from './shared.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import { isScopePath, requiredFilesFor, restrictedMapPrompt } from '../../domain/mapping.ts';
-import { RootRefusedError } from '../../domain/normalized-root.ts';
+import { RESTRICTED_SPEC_SEEDS } from '../../domain/restricted-specs.ts';
+import type { AgentHost } from '../../ports/agent-host.ts';
 import { completeInvocation, onboardingGsdDirs, prepareInvocation } from '../invocation.ts';
 
 const MAP_PROMPT = '/gsd-map-codebase';
@@ -78,20 +79,50 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   }
   if (host === undefined) return err({ kind: 'internal', cause: 'no host is composed' });
 
-  // The restricted host has no shell to resolve a home directory, so its prompt names the absolute gsd-core paths (plan 04-34), from the directories GSD's inspect
-  // recorded, the same source as the invocation's read roots. A root that cannot be named is refused here, before a unit of budget is reserved.
-  let prompt = promptFor(mode, plan.value?.existingMapAnswer, scope);
-  if (plan.value?.restricted === true) {
-    const dirs = onboardingGsdDirs(deps, row.onboardingId);
-    if (!dirs.ok) return dirs;
-    try {
-      prompt = restrictedMapPrompt(prompt, dirs.value.gsdCoreDir);
-    } catch (cause) {
-      if (!(cause instanceof RootRefusedError)) throw cause;
-      return err({ kind: 'invalid', field: 'gsdCoreDir', reason: cause.message });
-    }
-  }
+  // The restricted host has no shell and confines the file tools to the working directory (plan 04-34, owner ruling (a) after the second D-04 stop), so the GSD specs
+  // the fast map reads are staged read-only into the staging copy, from the gsd-core directory GSD's inspect recorded (the source of the invocation's read roots),
+  // and the prompt names them there. Staging happens before a unit of budget is reserved, and the staged files are taken out again whatever the invocation does, so
+  // validation, the activation scope check, the record and promotion never see them. A contained onboarding stages nothing.
+  const prompt = promptFor(mode, plan.value?.existingMapAnswer, scope);
+  if (plan.value?.restricted !== true) return launchMap(ctx, row, host, mode, prompt, staging.value);
 
+  const dirs = onboardingGsdDirs(deps, row.onboardingId);
+  if (!dirs.ok) return dirs;
+  const staged = deps.staging.stageGsdSpecs(staging.value, { gsdCoreDir: dirs.value.gsdCoreDir, seeds: RESTRICTED_SPEC_SEEDS });
+  if (!staged.ok) {
+    const e = staged.error;
+    if (e.kind !== 'conflict' && e.kind !== 'denied' && e.kind !== 'not_found' && e.kind !== 'invalid') return staged;
+    // The repository holds its own `.claude/gsd-core`, a link is in the way, or GSD lacks a spec: a person decides, and no host is started.
+    ctx.note(`restricted mode could not stage GSD's workflow specs into the staging copy (${e.kind}); no map invocation was started`);
+    const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'decision', data: { stage: 'restricted-specs', cause: e.kind } });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
+  ctx.note(`restricted map: ${String(staged.value.files.length)} GSD spec file(s) staged read-only in the staging copy`);
+  const unstage = (): void => {
+    const removed = deps.staging.unstageGsdSpecs(staging.value);
+    if (!removed.ok) {
+      // The scope checks would report a leftover as a write outside the write sets; the finding says why.
+      deps.ledger.appendEvent({
+        type: 'containment.finding',
+        level: 'warn',
+        runId: contract.value.runId,
+        data: { onboardingId: row.onboardingId, check: 'staged-specs-not-removed', cause: removed.error.kind },
+        nowMs: deps.clock.nowMs(),
+      });
+    }
+  };
+  try {
+    return await launchMap(ctx, row, host, mode, restrictedMapPrompt(prompt, staged.value.root), staging.value, unstage);
+  } finally {
+    unstage();
+  }
+};
+
+// One map invocation in the staging copy: reserve it, start the host, settle, and move the onboarding to what the outcome decides. `release` runs the moment the host
+// has returned, before the outcome moves the onboarding on, so no stage after the map can see what the map stage staged (it runs again, harmlessly, if the map stage ends
+// any other way).
+async function launchMap(ctx: StageContext, row: OnboardingRow, host: AgentHost, mode: MappingMode, prompt: string, staging: string, release: () => void = () => undefined): Promise<Result<void>> {
+  const { deps } = ctx;
   // Reserve the invocation and prepare its request (scope, session ID, step `launch:map` recorded as started).
   const prepared = prepareInvocation(deps, row, 'map', prompt, { expectedFiles: [...requiredFilesFor(mode)] });
   if (!prepared.ok) return prepared;
@@ -103,6 +134,7 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   const { request } = prepared.value.prepared;
 
   const invoked = await host.invoke(request, AbortSignal.timeout(Math.max(request.wallClockMs, 1)));
+  release();
   // Settle first, whatever happened: the invocation ran, so its unit, its time and its cost are spent.
   const outcome = completeInvocation(deps, prepared.value.prepared, invoked);
   if (!outcome.ok) {
@@ -132,7 +164,7 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
   // A fast or full map is stamped by AVARICE after the invocation, whether or not the mapper made progress (validation
   // judges the files; the stamp only has to be there for the files that exist).
   if (isStampedMode(mode) && (o.kind === 'progressed' || o.kind === 'no_progress' || o.kind === 'inconclusive')) {
-    const stamped = await stampMap(deps, row.onboardingId, staging.value, mode);
+    const stamped = await stampMap(deps, row.onboardingId, staging, mode);
     if (!stamped.ok) return stamped;
   }
 
@@ -175,4 +207,4 @@ export const mapStage: Stage = async (ctx: StageContext, row: OnboardingRow): Pr
     default:
       return err({ kind: 'internal', cause: `unknown invocation outcome ${String(kind)}` });
   }
-};
+}

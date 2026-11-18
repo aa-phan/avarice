@@ -223,6 +223,8 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
         return real.staging.ensureDir(p, rel);
       },
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      stageGsdSpecs: (p, input) => real.staging.stageGsdSpecs(p, input),
+      unstageGsdSpecs: (p) => real.staging.unstageGsdSpecs(p),
       copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
       commitPromotion: (input) => real.staging.commitPromotion(input),
     };
@@ -498,6 +500,8 @@ describe('activation re-checks the whole staging diff against every write set (p
       read: (p, rel, max) => real.staging.read(p, rel, max),
       ensureDir: (p, rel) => real.staging.ensureDir(p, rel),
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      stageGsdSpecs: (p, input) => real.staging.stageGsdSpecs(p, input),
+      unstageGsdSpecs: (p) => real.staging.unstageGsdSpecs(p),
       copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
       commitPromotion: (input) => real.staging.commitPromotion(input),
     };

@@ -13,9 +13,11 @@ import type {
   CommitPromotionInput,
   CommitPromotionOutcome,
   CopyOutcome,
+  GsdSpecsInput,
   PrepareInput,
   PromotionFile,
   RepoFacts,
+  StagedGsdSpecs,
   StagingChanges,
   StagingInfo,
   StagingWorkspace,
@@ -23,6 +25,7 @@ import type {
 } from '../../ports/staging-workspace.ts';
 import { collectRepoFacts, parseStatus } from './repo-facts.ts';
 import { commitPromotion, copyIntoCheckout } from './promotion.ts';
+import { stageGsdSpecs, unstageGsdSpecs } from './staged-specs.ts';
 import { runGit } from './safe-git.ts';
 
 // SHA-1 repositories only: the evidence, the gates and the onboarding records all name 40-digit commits, so an adapter that
@@ -206,6 +209,8 @@ const STAGING_CAPABILITIES: Record<Exclude<keyof StagingWorkspace, 'descriptor'>
   read: true,
   ensureDir: true,
   inspectRepo: true,
+  stageGsdSpecs: true,
+  unstageGsdSpecs: true,
   copyIntoCheckout: true,
   commitPromotion: true,
 };
@@ -384,6 +389,14 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
 
   inspectRepo(repoPath: string): Result<RepoFacts> {
     return collectRepoFacts(repoPath);
+  }
+
+  stageGsdSpecs(path: string, input: GsdSpecsInput): Result<StagedGsdSpecs> {
+    return stageGsdSpecs(path, input);
+  }
+
+  unstageGsdSpecs(path: string): Result<void> {
+    return unstageGsdSpecs(path);
   }
 
   copyIntoCheckout(repoPath: string, files: readonly PromotionFile[]): Result<CopyOutcome> {

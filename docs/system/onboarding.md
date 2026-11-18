@@ -151,6 +151,18 @@ The next state follows: progressed or inconclusive go to `validating`; budget ex
 
 AVARICE stamps the map itself after the invocation, for fast and full, through GSD's stamp command, because the mapper's own stamp call is a write the hook denies. The stamp runs after progressed, no-progress and inconclusive endings. A failed stamp is recorded and not raised; the unstamped files then fail validation. Inconclusive endings are not treated as failures: the staging map is validated and accepted if complete.
 
+### Restricted map
+
+`onboard --restricted` runs one fast map through the restricted host instead of the contained one. That host has no shell and confines its file tools to the working directory, whatever the hook admits, and AVARICE grants it no other directory. GSD's workflow specs sit outside the staging copy, so before the map stage reserves its invocation it copies the specs the fast map reads into the staging copy. A contained onboarding stages nothing.
+
+- **What is copied.** Three seed files (the map workflow, the fast scan workflow and the reference the mapper agent loads) and every Markdown file under GSD's workflows, references or templates directories that they name, followed transitively. The source is the gsd-core directory that GSD's inspect recorded, the same directory the hook policy holds as a read root. A closure of more than 32 files or 512 KiB is refused whole, and so is a missing seed; nothing is written in either case.
+- **Where.** Under `.claude/gsd-core/` in the staging copy, the place the map skill reads before its global install. Every file is mode 0444, and a marker file names the directory as AVARICE's.
+- **When it refuses.** A `.claude/gsd-core` that the repository itself holds is never replaced, and a symbolic link at `.claude` is never written through. The onboarding blocks with reason `decision` and no host starts.
+- **The prompt.** It names the staged paths relative to the working directory, with no home-directory or absolute form, tells the model to read a spec there wherever a spec names a home-directory path, and says the staged files are not part of the project and are not to be mapped or cited.
+- **Removal.** The staged files are removed as soon as the host returns, before the outcome moves the onboarding on, and again if the map stage ends any other way. Validation, the activation scope check, the record and its digests, and promotion therefore never see them; promotion reads the accepted map from the artifact store. A removal that fails is recorded as a containment finding (`staged-specs-not-removed`), and the scope checks then report the leftover files as writes outside the write sets.
+
+The restricted line itself is unchanged: it carries no directory grant, and the hook policy's read roots are the same as for a contained map.
+
 ## Enforcement check
 
 After GSD is configured and before mapping, the workspace stage reads the host's declared enforcement. Anything other than "enforced" blocks with `enforcement_failure`; this is where an unavailable host stops an onboarding. No host invocation has happened when this block comes from the workspace stage.

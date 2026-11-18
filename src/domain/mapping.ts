@@ -4,7 +4,7 @@ import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
 import type { ExistingMapClass, ExistingMapOutcome } from './preflight.ts';
 import type { RefreshPlan } from './refresh-plan.ts';
-import { normalizedAbsoluteRoot } from './normalized-root.ts';
+import { RESTRICTED_SPEC_DIR } from './restricted-specs.ts';
 
 export const MAPPING_MODES = ['skip', 'adopt', 'fast', 'full', 'paths'] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
@@ -72,19 +72,21 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
   }
 }
 
-// The prompt of a restricted onboarding's map. The restricted host has no shell, so the model cannot resolve a home directory and, left to guess, reads a path that
-// does not exist and that the hook refuses (the first live restricted onboarding, plan 04-34). The prompt therefore names the absolute workflow files the skill loads,
-// under the same gsd-core root the hook policy holds as a read root (the caller passes that value; nothing here reads the environment). A root that is not a
-// normalized absolute path throws a RootRefusedError, so a guess never reaches the model. The text names no home-directory form.
-export function restrictedMapPrompt(prompt: string, gsdCoreDir: string): string {
-  const root = normalizedAbsoluteRoot(gsdCoreDir, 'the gsd-core directory');
+// The prompt of a restricted onboarding's map (plan 04-34). The restricted host has no shell, so the model cannot resolve a home directory and, left to guess, reads a
+// path that does not exist (the first live restricted onboarding); and it confines the file tools to the working directory, so GSD's own directory cannot be read
+// whatever the hook admits (the second). AVARICE stages the specs the fast map reads into the working directory (restricted-specs.ts), and the prompt names them
+// there, relative to the working directory. A directory that is absolute, climbs out of the working directory or names a home directory throws, so a guess never
+// reaches the model. The text names no home-directory form.
+export function restrictedMapPrompt(prompt: string, stagedDir: string = RESTRICTED_SPEC_DIR): string {
+  if (stagedDir.length === 0 || stagedDir.startsWith('/') || /[~$]/.test(stagedDir) || stagedDir.split('/').includes('..')) {
+    throw new TypeError(`the staged spec directory must be relative to the working directory, got ${JSON.stringify(stagedDir)}`);
+  }
   return [
     prompt,
-    'This session has no shell, so no path can be looked up or expanded, and none may be guessed. GSD lives at one absolute path:',
-    `- gsd-core root: ${root}`,
-    `- map workflow: ${root}/workflows/map-codebase.md`,
-    `- fast scan workflow: ${root}/workflows/scan.md`,
-    'Read a workflow spec from the absolute path above with the Read tool, wherever the skill says it is. Any other file the specs name under gsd-core is under that root.',
+    `This session has no shell and may read only inside the working directory, so no path can be looked up or expanded and nothing outside the working directory can be read. GSD's workflow specs are staged there, read-only, under ${stagedDir}:`,
+    `- map workflow: ${stagedDir}/workflows/map-codebase.md`,
+    `- fast scan workflow: ${stagedDir}/workflows/scan.md`,
+    `Read a spec from that path with the Read tool wherever the skill or a spec names a home-directory path for it. Any other file the specs name under gsd-core is under ${stagedDir} too, for example ${stagedDir}/references/agent-skills-bootstrap.md. When you start the mapper subagent, tell it the same. The files under ${stagedDir} are GSD's own and are not part of the project: do not map, list or cite them.`,
   ].join('\n');
 }
 

@@ -72,6 +72,20 @@ export interface CommitPromotionOutcome {
   created: true;
 }
 
+// Where the GSD specs a restricted map reads come from: the canonical gsd-core directory GSD's inspect recorded, and the files the closure starts from, relative
+// to it. `stageGsdSpecs` copies the seeds and every spec they name (transitively, under a cap) into `.claude/gsd-core/` of the staging copy, each file read-only,
+// and answers where (`root`, relative to the staging copy) and which files (relative to the directory). It refuses (not_found) a seed GSD does not have, (invalid) a
+// closure past its cap, (conflict) a `.claude/gsd-core` the repository itself holds and (denied) a symbolic link in the way, and then writes nothing.
+export interface GsdSpecsInput {
+  gsdCoreDir: string;
+  seeds: readonly string[];
+}
+
+export interface StagedGsdSpecs {
+  root: string;
+  files: string[];
+}
+
 export interface StagingWorkspace {
   // What the adapter can do (FR-16); composition records it and a step requirement can name it.
   readonly descriptor: CapabilityDescriptor;
@@ -99,6 +113,10 @@ export interface StagingWorkspace {
   // only where the target is absent; a byte-identical target is counted as present and any other is a conflict, left untouched. It never replaces or
   // deletes. `commitPromotion` commits the files on top of the pin in the staging clone and creates `refs/heads/avarice/onboard-<id>` in the user's
   // repository with a create-only fetch: no checkout, index, working-tree file or other ref changes. It refuses (conflict) a branch that exists.
+  stageGsdSpecs(path: string, input: GsdSpecsInput): Result<StagedGsdSpecs>;
+  // Takes the staged specs out again, and the `.claude` directory if that leaves it empty. A `.claude/gsd-core` the repository holds is left as it is; staging
+  // that is already gone is not an error.
+  unstageGsdSpecs(path: string): Result<void>;
   copyIntoCheckout(repoPath: string, files: readonly PromotionFile[]): Result<CopyOutcome>;
   commitPromotion(input: CommitPromotionInput): Result<CommitPromotionOutcome>;
 }
