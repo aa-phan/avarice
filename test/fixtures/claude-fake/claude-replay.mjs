@@ -28,7 +28,7 @@
 //   ignoreSigterm    boolean   ignore SIGTERM, so only SIGKILL ends the process
 //   background       boolean   start a `sleep 300` in the same process group and log its pid (children.log)
 //   commit           boolean   make a commit in the working directory (moves HEAD)
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -72,6 +72,32 @@ if (dir !== undefined) {
   launch = readFileSync(join(dir, 'started.log'), 'utf8').split('\n').filter((l) => l !== '').length;
   appendFileSync(join(dir, 'argv.jsonl'), `${JSON.stringify({ argv, cwd: process.cwd(), pid: process.pid })}\n`);
   appendFileSync(join(dir, 'env.jsonl'), `${JSON.stringify(process.env)}\n`);
+  logStagedSpecs();
+}
+
+// What the working directory holds under `.claude/gsd-core` at launch (plan 04-34): each file's path under it, mode, text and whether a write to it fails, so a
+// test can state what the host would have been able to read and change. Nothing is logged when the directory is absent, as in a contained launch.
+function logStagedSpecs() {
+  const root = join(process.cwd(), '.claude', 'gsd-core');
+  if (!existsSync(root)) return;
+  const files = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(join(root, rel), { withFileTypes: true })) {
+      const next = join(rel, entry.name);
+      if (entry.isDirectory()) walk(next);
+      else {
+        let writeError = null;
+        try {
+          closeSync(openSync(join(root, next), 'r+'));
+        } catch (error) {
+          writeError = error.code;
+        }
+        files.push({ path: next, mode: statSync(join(root, next)).mode & 0o777, text: readFileSync(join(root, next), 'utf8'), writeError });
+      }
+    }
+  };
+  walk('');
+  appendFileSync(join(dir, 'specs.jsonl'), `${JSON.stringify({ pid: process.pid, cwd: process.cwd(), files })}\n`);
 }
 
 if (script.background === true) {

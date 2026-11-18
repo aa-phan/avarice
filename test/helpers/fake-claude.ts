@@ -44,6 +44,12 @@ export interface LoggedArgv {
   pid: number;
 }
 
+export interface LoggedSpecs {
+  pid: number;
+  cwd: string;
+  files: Array<{ path: string; mode: number; text: string; writeError: string | null }>;
+}
+
 export interface FakeClaude {
   // The executable to hand to the adapter (AVARICE_CLAUDE_BIN).
   bin: string;
@@ -55,6 +61,8 @@ export interface FakeClaude {
   // The launches by purpose: the intel purpose runs with `--agent`, the map purpose without.
   launchesOf(purpose: 'map' | 'intel' | 'knowledge'): Launch[];
   argvs(): LoggedArgv[];
+  // What each launch found under `.claude/gsd-core` of its working directory (plan 04-34); a launch that found none logs none.
+  specs(): LoggedSpecs[];
   // The environment of each launch.
   envs(): Array<Record<string, string>>;
   // Pids of the background processes the fake started in its group.
@@ -88,6 +96,7 @@ export function makeFakeClaude(script: FakeClaudeScript = {}, parent?: string): 
       return lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch).filter((l) => purposeOf(l) === purpose);
     },
     argvs: () => lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv),
+    specs: () => lines(join(logs, 'specs.jsonl')).map((l) => JSON.parse(l) as LoggedSpecs),
     envs: () => lines(join(logs, 'env.jsonl')).map((l) => JSON.parse(l) as Record<string, string>),
     children: () => lines(join(logs, 'children.log')).map(Number),
   };

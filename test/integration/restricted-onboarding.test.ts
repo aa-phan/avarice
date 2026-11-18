@@ -6,7 +6,7 @@
 // temp directory.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -15,7 +15,7 @@ import type { FakeClaude, FakeClaudeScript } from '../helpers/fake-claude.ts';
 import { REPO_ROOT, makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliResult, CliRoots } from '../helpers/run-cli.ts';
 import { commitConventions, makeRunRepo, writeBrief } from '../helpers/run-fixtures.ts';
-import { checkoutSnapshot, makeScratchRepo } from '../helpers/scratch-repo.ts';
+import { checkoutSnapshot, git, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
 
 const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
@@ -74,6 +74,15 @@ function rows<T>(roots: CliRoots, sql: string, ...params: Array<string | number>
   }
 }
 
+// The hook policy of the onboarding's map invocation (its invocation directory is kept).
+function policyOf(f: Fixture): { readRoots: string[] } {
+  const [onboarding] = rows<{ onboarding_id: string }>(f.roots, 'SELECT onboarding_id FROM onboardings');
+  const dir = join(f.roots.AVARICE_DATA_ROOT, 'onboard', onboarding?.onboarding_id as string);
+  const mapDir = readdirSync(dir).find((name) => name.startsWith('map-'));
+  assert.ok(mapDir !== undefined, 'the map invocation directory is kept');
+  return JSON.parse(readFileSync(join(dir, mapDir, 'hook-policy.json'), 'utf8')) as { readRoots: string[] };
+}
+
 interface RecordBody {
   mapping: { mode: string; completeness: string };
   indexes: { absent?: Array<{ index: string; reason: string }> };
@@ -122,24 +131,103 @@ describe('tracer: `onboard --restricted` maps fast under the restricted launch a
     assert.deepEqual(checkoutSnapshot(f.repo.path), before, 'the user checkout is unchanged (treeDigest, status, HEAD)');
   });
 
-  // Product defect of the first live restricted onboarding (plan 04-34): no shell exists to resolve a home directory, so the prompt names the absolute gsd-core
-  // paths the map skill reads, taken from the same source as the hook policy's readRoots, and never a `~` or `$HOME` form.
-  it('names, in the map prompt, the absolute gsd-core path that the hook policy holds as a read root, and no home-directory form', () => {
+  // Second product defect of the live restricted onboarding (plan 04-34, owner ruling (a)): the restricted host confines the file tools to the working directory, so
+  // the GSD specs sit inside it. The prompt names them there, relative to the working directory, and never a `~`, `$HOME` or absolute form.
+  it('names, in the map prompt, the staged GSD specs relative to the working directory, with no home-directory or absolute form', () => {
     const f = fixture();
     assert.equal(onboard(f, '--restricted').code, 0);
     const [launch] = f.fake.argvs() as Array<{ argv: string[] }>;
     const prompt = launch?.argv[1] ?? '';
-    const [onboarding] = rows<{ onboarding_id: string }>(f.roots, 'SELECT onboarding_id FROM onboardings');
-    const dir = join(f.roots.AVARICE_DATA_ROOT, 'onboard', onboarding?.onboarding_id as string);
-    const mapDir = readdirSync(dir).find((name) => name.startsWith('map-'));
-    assert.ok(mapDir !== undefined, 'the map invocation directory is kept');
-    const policy = JSON.parse(readFileSync(join(dir, mapDir, 'hook-policy.json'), 'utf8')) as { readRoots: string[] };
-    const gsdCore = policy.readRoots.find((root) => root.endsWith('/gsd-core'));
-    assert.ok(gsdCore !== undefined && isAbsolute(gsdCore), 'the hook policy holds an absolute gsd-core read root');
-    assert.ok(prompt.includes(`${gsdCore}/workflows/map-codebase.md`), `the prompt names the map workflow under the read root: ${prompt}`);
-    assert.ok(prompt.includes(`${gsdCore}/workflows/scan.md`), `and the fast scan workflow: ${prompt}`);
-    assert.ok(!prompt.includes('~') && !/\$\{?HOME/.test(prompt), `no tilde and no $HOME in: ${prompt}`);
     assert.ok(prompt.startsWith('/gsd-map-codebase --fast'), 'the map command still comes first');
+    assert.ok(prompt.includes('.claude/gsd-core/workflows/map-codebase.md'), `the map workflow at its staged path: ${prompt}`);
+    assert.ok(prompt.includes('.claude/gsd-core/workflows/scan.md'), `and the fast scan workflow: ${prompt}`);
+    assert.ok(!prompt.includes('~') && !/\$\{?HOME/.test(prompt), `no tilde and no $HOME in: ${prompt}`);
+    const gsdCore = policyOf(f).readRoots.find((root) => root.endsWith('/gsd-core'));
+    assert.ok(gsdCore !== undefined && isAbsolute(gsdCore), 'the hook policy still holds the absolute gsd-core read root (owner constraint: not loosened, not narrowed)');
+    assert.ok(!prompt.includes(gsdCore), 'and the prompt names no absolute path outside the working directory');
+  });
+
+  it('has the closure of the specs in the staging copy at launch: read-only, equal to the canonical gsd-core files, and not writable by the host', () => {
+    const f = fixture();
+    assert.equal(onboard(f, '--restricted').code, 0);
+    const [specs, ...more] = f.fake.specs();
+    assert.ok(specs !== undefined && more.length === 0, 'the one launch found the staged specs');
+    const [onboarding] = rows<{ staging_worktree: string }>(f.roots, 'SELECT staging_worktree FROM onboardings');
+    assert.equal(specs.cwd, realpathSync(onboarding?.staging_worktree as string));
+    const gsdCore = policyOf(f).readRoots.find((root) => root.endsWith('/gsd-core')) as string;
+    const staged = specs.files.map((file) => file.path).filter((p) => p !== '.avarice-staged');
+    for (const seed of ['workflows/map-codebase.md', 'workflows/scan.md', 'references/agent-skills-bootstrap.md']) assert.ok(staged.includes(seed), `${seed} is staged: ${staged.join(', ')}`);
+    assert.ok(staged.length <= 32, 'a closure, not the gsd-core tree');
+    for (const file of specs.files) {
+      assert.equal(file.mode, 0o444, `${file.path} is read-only`);
+      assert.ok(file.writeError === 'EACCES' || file.writeError === 'EPERM', `${file.path} cannot be opened for writing, got ${String(file.writeError)}`);
+      if (file.path !== '.avarice-staged') assert.equal(file.text, readFileSync(join(gsdCore, file.path), 'utf8'), `${file.path} is the canonical gsd-core file`);
+    }
+  });
+
+  it('gives the restricted line no read grant: no --add-dir, and the hook policy read roots are the ones the contained hook holds', () => {
+    const f = fixture();
+    assert.equal(onboard(f, '--restricted').code, 0);
+    const [launch] = f.fake.argvs() as Array<{ argv: string[] }>;
+    assert.ok(!(launch?.argv ?? []).includes('--add-dir'));
+    const roots = policyOf(f).readRoots;
+    assert.deepEqual(roots.map((root) => root.split('/').at(-1)).sort(), ['agents', 'gsd-core', 'gsd-map-codebase']);
+  });
+
+  it('takes the staged specs out when the invocation is settled: nothing is left in staging, in the record or among its artifacts, and validation saw no write outside the write set', () => {
+    const f = fixture();
+    const before = checkoutSnapshot(f.repo.path);
+    assert.equal(onboard(f, '--restricted').code, 0);
+    const [onboarding] = rows<{ staging_worktree: string }>(f.roots, 'SELECT staging_worktree FROM onboardings');
+    assert.ok(!existsSync(join(onboarding?.staging_worktree as string, '.claude')), 'the staging copy holds no .claude directory');
+    const { body } = activeRecord(f.roots);
+    assert.ok(!JSON.stringify(body).includes('.claude/gsd-core'), 'the record names no staged file');
+    const codebase = ((body as unknown as { artifacts: { codebase: Array<{ path: string }> } }).artifacts.codebase ?? []).map((a) => a.path);
+    assert.ok(codebase.length > 0 && codebase.every((p) => p.startsWith('.planning/codebase/')), `the record's map artifacts are the map files: ${codebase.join(', ')}`);
+    const validates = rows<{ result_json: string }>(f.roots, "SELECT result_json FROM onboarding_steps WHERE step = 'validate'");
+    assert.ok(validates.length > 0);
+    for (const v of validates) assert.deepEqual((JSON.parse(v.result_json) as { scopeViolations: string[] }).scopeViolations, [], 'no write outside the write set');
+    const findings = rows<{ data_json: string }>(f.roots, "SELECT data_json FROM events WHERE type = 'containment.finding'");
+    assert.deepEqual(findings, [], 'no containment finding');
+    assert.deepEqual(checkoutSnapshot(f.repo.path), before, 'the user checkout is unchanged');
+  });
+
+  it('carries none of the staged specs into a --promote copy or a --promote commit', () => {
+    const copied = fixture();
+    assert.equal(onboard(copied, '--restricted', '--promote', 'copy').code, 0);
+    assert.ok(!existsSync(join(copied.repo.path, '.claude')), 'the copy wrote no .claude into the checkout');
+    assert.ok(existsSync(join(copied.repo.path, '.planning', 'codebase', 'STACK.md')), 'the accepted map was copied');
+
+    const committed = fixture();
+    const before = checkoutSnapshot(committed.repo.path);
+    assert.equal(onboard(committed, '--restricted', '--promote', 'commit').code, 0);
+    const [onboarding] = rows<{ onboarding_id: string }>(committed.roots, 'SELECT onboarding_id FROM onboardings');
+    const branch = `avarice/onboard-${onboarding?.onboarding_id as string}`;
+    const files = git(committed.repo.path, ['ls-tree', '-r', '--name-only', branch]).split('\n').filter((p) => p !== '');
+    assert.ok(files.some((p) => p.startsWith('.planning/codebase/')), 'the branch holds the accepted map');
+    assert.deepEqual(files.filter((p) => p.startsWith('.claude/')), [], 'and no staged spec');
+    assert.deepEqual(checkoutSnapshot(committed.repo.path).status, before.status, 'the checkout working tree is untouched');
+  });
+
+  it('ends in a decision, with the repository file untouched and no host started, when the repository itself holds .claude/gsd-core', () => {
+    const roots = makeRoots();
+    const repo = makeScratchRepo({ files: { ...REPO_FILES, '.claude/gsd-core/workflows/scan.md': 'the repository own spec\n' } });
+    const fake = makeFakeClaude({ version: '2.2.0 (Claude Code)', transcript: 'success', mapFiles: 'fast' });
+    const configDir = join(roots.base, 'claude-config');
+    for (const skill of ['gsd-map-codebase', 'graphify']) {
+      mkdirSync(join(configDir, 'skills', skill), { recursive: true });
+      writeFileSync(join(configDir, 'skills', skill, 'SKILL.md'), `---\nname: ${skill}\ndescription: stand-in\n---\n`);
+    }
+    cleanup.push(roots.base, repo.base, fake.dir);
+    const f: Fixture = { roots, repo, fake, configDir };
+    const before = checkoutSnapshot(repo.path);
+    const r = onboard(f, '--restricted');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    assert.match(r.stdout, /onboarding onb_[0-9A-Z]{26}: blocked/);
+    assert.equal(fake.started(), false, 'no host was started');
+    const [onboarding] = rows<{ staging_worktree: string }>(roots, 'SELECT staging_worktree FROM onboardings');
+    assert.equal(readFileSync(join(onboarding?.staging_worktree as string, '.claude/gsd-core/workflows/scan.md'), 'utf8'), 'the repository own spec\n', "the repository's own file is not replaced");
+    assert.deepEqual(checkoutSnapshot(repo.path), before);
   });
 
   it('shows `partial (restricted)` in status, and appends the optional `restricted` key last to the project entry of status --json', () => {
