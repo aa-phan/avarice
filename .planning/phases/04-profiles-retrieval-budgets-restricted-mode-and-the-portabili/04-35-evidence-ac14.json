@@ -607,7 +607,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T03:44:52.633Z",
+  "updatedAt": "2026-11-18T07:06:35.628Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
@@ -631,5 +631,20 @@
       "claudeVersion": "2.1.326",
       "claudeBin": "~/.local/share/claude/versions/2.1.326"
     }
-  }
+  },
+  "ownerRulings": [
+    {
+      "id": "ruling-1",
+      "at": "2026-11-18T03:44:06Z",
+      "ref": "owner reply \"fix all, retry(i)\"",
+      "decision": "product defects; fix all; subagent option (i); retry auto_search_workflow (attempt 2 of 2), re-run the portfolio to measure the knowledge pass, then the other three; same authorization and caps"
+    },
+    {
+      "id": "ruling-2",
+      "at": "2026-11-18T07:05:38Z",
+      "ref": "owner reply \"A\"",
+      "decision": "Option A only: cap the knowledge corpus by cost. Keep the priority order (map, planning docs, ADRs, docs, then phase files) and drop what falls past a documented limit tied to the per-invocation cap so one knowledge invocation fits. The partial-end add-on was NOT chosen: a clean partial end stays no_progress.",
+      "basis": "The portfolio knowledge corpus is 181 documents / 53 chunks; one contained session wrote 6 chunks and ended near 0.30 USD of the 0.8 USD per-invocation cap; the classifier requires every chunk, so the pass was no_progress then invocation-failed. About 10-12 chunks fit at 0.8."
+    }
+  ]
 }
