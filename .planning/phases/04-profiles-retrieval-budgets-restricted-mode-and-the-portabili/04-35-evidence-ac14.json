@@ -2088,7 +2088,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T19:08:30.401Z",
+  "updatedAt": "2026-11-18T19:08:48.294Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
@@ -2162,5 +2162,14 @@
         "at": "2026-11-18T08:03:10Z"
       }
     }
-  ]
+  ],
+  "finish": {
+    "at": "2026-11-18T19:08:48.292Z",
+    "active": 5,
+    "repositories": 5,
+    "spendUnderPlanUsd": 3.740685,
+    "phase4SpentUsd": 3.926675,
+    "containmentFailures": 0,
+    "passed": true
+  }
 }
