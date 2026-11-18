@@ -540,6 +540,8 @@ export function judgeEntry(entry: Record<string, unknown>): string[] {
     if (!isObject(refresh) || typeof refresh['mode'] !== 'string') problems.push(`${id}: the refresh mode planRefresh chose is not recorded`);
     if (!('knowledgeCacheHits' in entry)) problems.push(`${id}: the knowledge cache hits are not recorded`);
   }
+  // The pass bar is an active record WITH the knowledge pass (plan truth; owner ruling 3): an active record whose knowledge index is absent fails.
+  if (asObjects(entry['indexesAbsent']).some((a) => a['index'] === 'knowledge')) problems.push(`${id}: the knowledge index is absent from the active record, so it is not active with the knowledge pass`);
   const existing = entry['existingMap'];
   if (isObject(existing) && existing['class'] !== 'none' && typeof existing['outcome'] !== 'string') problems.push(`${id}: the outcome for the existing GSD map is not recorded`);
   return problems;
@@ -793,9 +795,12 @@ export function activeRerunRefusal(last: Record<string, unknown>, rulingRef: str
   return absent ? undefined : `${active} and its knowledge pass is present: there is nothing to measure again`;
 }
 
-// SKELETON (plan 04-35, ruling 3): every earlier attempt counts as a stop.
+// The stop-loss counts the attempts that stopped. An active attempt is not a stop: a repository that ended active with its knowledge pass absent is run again only
+// through `activeRerunRefusal` (a ruling reference naming the owner's ruling), so the owner's authorization of a further attempt (ruling 3 of plan 04-35, the portfolio's
+// third) is not blocked by the two attempts it already has, and an active repository with its knowledge present is never run again.
 export function stopLossRefusal(prior: readonly Record<string, unknown>[]): string | undefined {
-  return prior.length >= STOP_LOSS_ATTEMPTS ? `has stopped ${prior.length} times; stop and ask the owner (D-04)` : undefined;
+  const stopped = prior.filter((entry) => entry['state'] !== 'active').length;
+  return stopped >= STOP_LOSS_ATTEMPTS ? `has stopped ${stopped} times; stop and ask the owner (D-04)` : undefined;
 }
 
 export async function runOne(argv: readonly string[]): Promise<number> {
@@ -834,7 +839,8 @@ export async function runOne(argv: readonly string[]): Promise<number> {
   const last = prior[prior.length - 1];
   const rerun = last !== undefined && last['state'] === 'active' ? activeRerunRefusal(last, named['ruling-ref']) : undefined;
   if (rerun !== undefined) return refuse(`${id} ${rerun}`);
-  if (prior.length >= STOP_LOSS_ATTEMPTS) return refuse(`${id} has stopped ${prior.length} times; stop and ask the owner (D-04)`, 75);
+  const stopLoss = stopLossRefusal(prior);
+  if (stopLoss !== undefined) return refuse(`${id} ${stopLoss}`, 75);
   if (last !== undefined && named['ruling-ref'] === undefined) return refuse(`${id} stopped on its last attempt; the owner rules on the classification first (D-04), then pass --ruling-ref TEXT naming the ruling`, 75);
 
   const home = ownerHome();
