@@ -262,13 +262,17 @@ function contractInput(request: Record<string, unknown> = {}) {
 const FULL_DERIVATION = {
   mode: 'full',
   mapAgents: 4,
+  mapRerunAllowance: 2,
   mapRounds: 2,
   knowledgeAllowance: 0,
   intelAgents: 0,
-  total: 8,
-  formula: '4 map agents (full) x 2 map rounds (1 + 1 retry) + 0 knowledge (no subagent: the model reads the chunks itself) + 0 intel = 8',
+  total: 12,
+  formula: '4 map agents + 2 re-run allowance (full) x 2 map rounds (1 + 1 retry) + 0 knowledge (no subagent: the model reads the chunks itself) + 0 intel = 12',
 };
 
+// Plan 04-35 (AC-14, owner ruling 2026-11-18 "fix all, retry (i)"): a full map's retry round spawned a fifth mapper (a re-run of the concerns mapper whose first
+// answer was wrong) against a total of 8 and the hook denied it. A full map now has a re-run allowance of 2 per round on top of GSD's 4 mappers; fast, paths, skip
+// and adopt are unchanged, and the rule that any hook denial blocks the onboarding is not touched.
 // Deferred item 11 (plan 01-19): the flat preset of 7 subagents could not hold a full map (4) and its one retry (4 more). The total
 // derives from the mapping mode: map agents for the mode x (1 + map retries) + the knowledge pass allowance + intel's 0. Decision B
 // (2026-11-03): the knowledge pass runs no subagent (the model reads the chunks itself), so its allowance is 0 and the total is the
@@ -277,10 +281,16 @@ describe('the subagent budget derives from the mapping mode', () => {
   const total = (request: Record<string, unknown>) => unwrap(compileOnboardingContract(contractInput(request))).budgets;
   const derivation = (request: Record<string, unknown>) => (total(request) as unknown as { subagentsDerivation: unknown }).subagentsDerivation;
 
-  it('full (and the default): 4 x 2 + 0 + 0 = 8, recorded with its formula', () => {
-    assert.equal(total({}).subagentsTotal, 8);
-    assert.equal(total({ mode: 'full' }).subagentsTotal, 8);
+  it('full (and the default): (4 + 2 re-runs) x 2 + 0 + 0 = 12, recorded with its formula', () => {
+    assert.equal(total({}).subagentsTotal, 12);
+    assert.equal(total({ mode: 'full' }).subagentsTotal, 12);
     assert.deepEqual(derivation({}), FULL_DERIVATION);
+  });
+
+  it('only a full map gets the re-run allowance: fast, paths, skip and adopt keep the totals they had (2, 8, 0, 0)', () => {
+    assert.equal(total({ mode: 'full' }).subagentsTotal, 12);
+    assert.deepEqual(['fast', 'paths', 'skip', 'adopt'].map((mode) => (derivation({ mode }) as { mapRerunAllowance: number }).mapRerunAllowance), [0, 0, 0, 0]);
+    assert.deepEqual(['fast', 'paths', 'skip', 'adopt'].map((mode) => total({ mode }).subagentsTotal), [2, 8, 0, 0]);
   });
 
   it('fast: one mapper, so 1 x 2 + 0 + 0 = 2', () => {
@@ -288,6 +298,7 @@ describe('the subagent budget derives from the mapping mode', () => {
     assert.deepEqual(derivation({ mode: 'fast' }), {
       mode: 'fast',
       mapAgents: 1,
+      mapRerunAllowance: 0,
       mapRounds: 2,
       knowledgeAllowance: 0,
       intelAgents: 0,
@@ -302,8 +313,8 @@ describe('the subagent budget derives from the mapping mode', () => {
     assert.equal(total({ mode: 'paths' }).subagentsTotal, 8);
   });
 
-  it('a retry override changes the rounds: no retry is one round, 4 x 1 = 4 (fast 1)', () => {
-    assert.equal(total({ budgetOverrides: { retry: 0 } }).subagentsTotal, 4);
+  it('a retry override changes the rounds: no retry is one round, (4 + 2) x 1 = 6 (fast 1)', () => {
+    assert.equal(total({ budgetOverrides: { retry: 0 } }).subagentsTotal, 6);
     assert.equal(total({ mode: 'fast', budgetOverrides: { retry: 0 } }).subagentsTotal, 1);
     assert.equal((derivation({ budgetOverrides: { retry: 0 } }) as { mapRounds: number }).mapRounds, 1);
   });
@@ -314,10 +325,10 @@ describe('the subagent budget derives from the mapping mode', () => {
 
   it('a budget override can only lower the derived total: below and at it is used, above it is refused, per mode', () => {
     assert.equal(total({ budgetOverrides: { subagentsTotal: 5 } }).subagentsTotal, 5);
-    assert.equal(total({ budgetOverrides: { subagentsTotal: 8 } }).subagentsTotal, 8);
+    assert.equal(total({ budgetOverrides: { subagentsTotal: 12 } }).subagentsTotal, 12);
     assert.equal(total({ mode: 'fast', budgetOverrides: { subagentsTotal: 2 } }).subagentsTotal, 2);
     assert.deepEqual(derivation({ budgetOverrides: { subagentsTotal: 5 } }), FULL_DERIVATION, 'the record keeps the derived total, not the override');
-    for (const [mode, above] of [['full', 9], ['fast', 3], ['skip', 1], ['adopt', 1]] as const) {
+    for (const [mode, above] of [['full', 13], ['fast', 3], ['skip', 1], ['adopt', 1]] as const) {
       const r = compileOnboardingContract(contractInput({ mode, budgetOverrides: { subagentsTotal: above } }));
       assert.equal(r.ok, false, `${mode} ${above}`);
       if (!r.ok && r.error.kind === 'invalid') {
@@ -328,7 +339,7 @@ describe('the subagent budget derives from the mapping mode', () => {
   });
 
   it('refuses a total above the derived one for a lowered retry too (the ceiling follows the contract\'s own rounds)', () => {
-    const r = compileOnboardingContract(contractInput({ budgetOverrides: { retry: 0, subagentsTotal: 5 } }));
+    const r = compileOnboardingContract(contractInput({ budgetOverrides: { retry: 0, subagentsTotal: 7 } }));
     assert.equal(r.ok, false);
   });
 });
@@ -424,7 +435,7 @@ describe('compileOnboardingContract', () => {
       invocationsDerivation: FULL_INVOCATIONS,
       toolCalls: 600,
       subagentsConcurrent: 4,
-      subagentsTotal: 8,
+      subagentsTotal: 12,
       subagentsDerivation: FULL_DERIVATION,
       costUsd: { perInvocation: 3.0, perRun: 12.0, exactness: 'estimated' },
       retry: 1,
@@ -489,7 +500,7 @@ describe('compileOnboardingContract', () => {
       { toolCalls: 601 },
       { invocations: 7 },
       { wallClockMinutes: 46 },
-      { subagentsTotal: 9 },
+      { subagentsTotal: 13 },
       { costUsdPerInvocation: 3.01 },
       { costUsdPerRun: 12.5 },
     ]) {
