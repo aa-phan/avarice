@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-33-PLAN.md
-last_updated: "2026-11-17T15:16:24.931Z"
+stopped_at: Completed 04-34-PLAN.md
+last_updated: "2026-11-18T02:17:57.007Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 7a6d392794fe1cb446f5e6a53ad5811cfb716df3
+state_head: 1b89ff72561a37eeba7f4380c9b6914ffba3a47c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 34 of 39
+Plan: 35 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -196,6 +196,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P31 | 45 min | 3 tasks | 14 files |
 | Phase 04 P32 | 9 min | 3 tasks | 21 files |
 | Phase 04 P33 | 40min | 3 tasks | 11 files |
+| Phase 04 P34 | 3 sessions | 3 tasks | 30 files |
 
 ## Accumulated Context
 
@@ -485,6 +486,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-32: run.handoff, run.install and onboarding.stage are defined in STEP_REQUIREMENTS but not yet enforced at a call site (owner review)
 - [Phase 04]: 04-33: portability proof seeds are 3 and 14 (tracer 3), not 42: seed 42 shows no duplicate over an onboarding or across the run scenarios, because each process draws from the start of its seed's sequence — The plan's acceptance needs at least one drop and one duplicate per seed; the contract suite still runs seed 42
 - [Phase 04]: 04-33: OWNER REVIEW: the domain reuses invocationId across separate calls (gsd-tools.ts:91 gsd:<verb>, graphify.ts:122 graphify:<id>); a remote adapter deduplicating by id alone would merge two legitimate calls. The fake keys by id plus a digest of the call and the proof asserts one run per call; src untouched (AC-7) — Settle a per-call nonce or an acknowledgement-bounded dedup window before the Phase 7 remote executor
+- [Phase 04]: 04-34: stage the GSD specs a restricted fast map reads into the staging copy (read-only, removed when the host returns); no read grant on the restricted line
 
 ### Roadmap Evolution
 
@@ -552,8 +554,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-17T15:16:24.898Z
-Stopped at: Completed 04-33-PLAN.md
+Last session: 2026-11-18T02:17:56.975Z
+Stopped at: Completed 04-34-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
