@@ -1,0 +1,251 @@
+{
+  "schema": 1,
+  "plan": "04-35",
+  "decision": "D-03, D-04, D-05",
+  "entries": [],
+  "list": {
+    "file": "test/benchmark/phase4/ac14-repositories.json",
+    "sha256": "34afa9855fddbee4aa715be1afa44e4815e005e08a3c07bf7ca05e3124d8b0ef",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z"
+  },
+  "dryRun": {
+    "schema": 1,
+    "plan": "04-35",
+    "at": "2026-11-18T02:56:18.103Z",
+    "problems": [],
+    "warnings": [
+      "aa-phan-portfolio-v2: HEAD 9f63d91 is not the listed pin 9f1cd8d; the onboarding maps HEAD",
+      "aa-phan-portfolio-v2: the checkout has 1 uncommitted entries; they are digested before and after, and the onboarding reads committed content",
+      "auto_search_workflow: HEAD 6a82d35 is not the listed pin c81c231; the onboarding maps HEAD",
+      "auto_search_workflow: the checkout has 8 uncommitted entries; they are digested before and after, and the onboarding reads committed content",
+      "GroceriesGPT: the checkout has 14 uncommitted entries; they are digested before and after, and the onboarding reads committed content"
+    ],
+    "repositories": [
+      {
+        "id": "aa-phan-portfolio-v2",
+        "stack": "typescript",
+        "source": "~/aa-phan-portfolio-v2",
+        "sourceKind": "owner-path",
+        "pin": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+        "path": "~/aa-phan-portfolio-v2",
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "headIsPin": false,
+        "expectedPath": "refresh",
+        "activeRecord": {
+          "profile": "personal-local",
+          "version": 1,
+          "mappingMode": "full",
+          "completeness": "complete",
+          "onboardedRevision": "git:9f1cd8d51f83252ad11a8c486c4245b1b9fc3066"
+        },
+        "profile": "personal-local",
+        "hasPlanningAtHead": true,
+        "planningFiles": 174,
+        "existingMap": {
+          "class": "none",
+          "outcome": "map",
+          "mapFiles": 0,
+          "userOwnedPaths": 0
+        },
+        "capUsd": 1.6,
+        "state": {
+          "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+          "branch": "gsd/phase-02-deployed-themed-skeleton",
+          "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+          "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+          "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+          "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+          "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+          "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+          "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+          "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+          "counts": {
+            "tracked": 364,
+            "untracked": 1,
+            "statusEntries": 1,
+            "refs": 10
+          }
+        }
+      },
+      {
+        "id": "auto_search_workflow",
+        "stack": "python",
+        "source": "~/auto_search_workflow",
+        "sourceKind": "owner-path",
+        "pin": "c81c2313c5c2611cfff7dc4628795a0c7137d451",
+        "path": "~/auto_search_workflow",
+        "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "headIsPin": false,
+        "expectedPath": "onboard",
+        "profile": "personal-extended",
+        "hasPlanningAtHead": true,
+        "planningFiles": 98,
+        "existingMap": {
+          "class": "user-edited",
+          "outcome": "isolated-regeneration",
+          "mapFiles": 7,
+          "userOwnedPaths": 9
+        },
+        "capUsd": 1.6,
+        "state": {
+          "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+          "branch": "gsd/phase-03-compact-storage",
+          "headRef": "refs/heads/gsd/phase-03-compact-storage",
+          "statusDigest": "151edd192038ee61efc6669b4ce4a1848c2e38fb3cc11a9e485f08a9591816f8",
+          "filesDigest": "0beb598c4f54dbcdb2400809e909ced3992303ff3ee82e359f91dfcd2787c2f1",
+          "refsDigest": "cd09e4e35d73d08a7dcc6ef30d41fd2c34ed0884744a7baca77ef1665ee1624a",
+          "worktreesDigest": "9a91854b32f10e2256b77a44bdb33f6ecd504a8cdcf87fa8be9952a2e420f9f4",
+          "indexDigest": "f396fbcef3ef34cfd2e5a32fa0da83ecca40f11976d42607c941ea4ea957e090",
+          "gitMetaDigest": "f733ea1c3d55aa3cb4c5ae856f3cc352a56654ce3bca1360e8a8f5aafc1b6c95",
+          "ignoredDigest": "7ebb8a4c984363cce254a163a4ae5285e0eb9e2acb2d0c21946f9e7355292724",
+          "counts": {
+            "tracked": 152,
+            "untracked": 8,
+            "statusEntries": 8,
+            "refs": 3
+          }
+        }
+      },
+      {
+        "id": "GroceriesGPT",
+        "stack": "typescript",
+        "source": "~/GroceriesGPT",
+        "sourceKind": "owner-path",
+        "pin": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "path": "~/GroceriesGPT",
+        "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "headIsPin": true,
+        "expectedPath": "onboard",
+        "profile": "personal-extended",
+        "hasPlanningAtHead": false,
+        "planningFiles": 0,
+        "existingMap": {
+          "class": "none",
+          "outcome": "map",
+          "mapFiles": 0,
+          "userOwnedPaths": 0
+        },
+        "capUsd": 1.6,
+        "state": {
+          "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+          "branch": "main",
+          "headRef": "refs/heads/main",
+          "statusDigest": "6df4ec8d880dcbf8381a590ba57bf68c54f3f6c389d3bab5e1b2d4736eb329a3",
+          "filesDigest": "54dcf445db817190a3e2cdedbf05b2aec63330a176c92a058baee2985f769d9b",
+          "refsDigest": "d201fc7841499579b434bbc78a854707d03939179364e5678d9ae0419cddf9e1",
+          "worktreesDigest": "ad6dcaa86820e3a60c0e5e17bc17e8f56a6255e46b6ca0c67bec9feef8d7ad1b",
+          "indexDigest": "9a60530664ee9d0691ef189a626f8932ffdfa76d287fbf30c9d50037189a82d6",
+          "gitMetaDigest": "3e83f66e16d39c6484a63c531a1ab6e9dc1c279dfb87471afff223ce5b252d15",
+          "ignoredDigest": "3c134f4fcf6ddb63c3f6f09d180f7235e1bbec1f21b19886716b5ded310e7a8e",
+          "counts": {
+            "tracked": 217,
+            "untracked": 4,
+            "statusEntries": 14,
+            "refs": 3
+          }
+        }
+      },
+      {
+        "id": "spf13-cobra",
+        "stack": "go",
+        "source": "https://github.com/spf13/cobra",
+        "sourceKind": "public-url",
+        "pin": "88b30ab89da2d0d0abb153818746c5a2d30eccec",
+        "path": "~/.local/share/avarice-work/ac14-benchmark/spf13-cobra",
+        "head": "88b30ab89da2d0d0abb153818746c5a2d30eccec",
+        "headIsPin": true,
+        "expectedPath": "onboard",
+        "profile": "personal-extended",
+        "hasPlanningAtHead": false,
+        "planningFiles": 0,
+        "existingMap": {
+          "class": "none",
+          "outcome": "map",
+          "mapFiles": 0,
+          "userOwnedPaths": 0
+        },
+        "capUsd": 1.6,
+        "state": {
+          "head": "88b30ab89da2d0d0abb153818746c5a2d30eccec",
+          "branch": "",
+          "headRef": "",
+          "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "filesDigest": "084351da151fd5cab554c714d7d937b848ab12f3c9732a0c755bfa315e364bfd",
+          "refsDigest": "b37788640e99516e95be09a76e3592966d1288de82d8c6100627fa372ad9769b",
+          "worktreesDigest": "23020196d69300635de8f44ab6c60d3f5245a04b17483a46df9eb8f0a7fbd4d2",
+          "indexDigest": "c1af846818e04da0d95e13367f96a14529ccf4fc484cfc58e6e163b75dbba629",
+          "gitMetaDigest": "38409a9380d5276d7f7fdaca5c83cdef958781a56dee49fbde4712302ef0751b",
+          "ignoredDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "counts": {
+            "tracked": 66,
+            "untracked": 0,
+            "statusEntries": 0,
+            "refs": 39
+          }
+        }
+      },
+      {
+        "id": "BurntSushi-ripgrep",
+        "stack": "rust",
+        "source": "https://github.com/BurntSushi/ripgrep",
+        "sourceKind": "public-url",
+        "pin": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "path": "~/.local/share/avarice-work/ac14-benchmark/BurntSushi-ripgrep",
+        "head": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+        "headIsPin": true,
+        "expectedPath": "onboard",
+        "profile": "personal-extended",
+        "hasPlanningAtHead": false,
+        "planningFiles": 0,
+        "existingMap": {
+          "class": "none",
+          "outcome": "map",
+          "mapFiles": 0,
+          "userOwnedPaths": 0
+        },
+        "capUsd": 1.6,
+        "state": {
+          "head": "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+          "branch": "",
+          "headRef": "",
+          "statusDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "filesDigest": "d02260d0eddc8b752c441dc18ed9fd79236c68c31889082e44429f7f1b09f282",
+          "refsDigest": "861abc8548ee705b2a1d5abeda61927980f67d2a77cf82239d7af3c5d5363ae9",
+          "worktreesDigest": "8fca32a8b8a5f0244e0932dd1cd1af9fcf54806960e07f7c2e323273d3bcfce8",
+          "indexDigest": "8baccee6d36344a9924c0c2b48516510d7aff663aa10da2076d64d20651a9553",
+          "gitMetaDigest": "24b7a3b0ec12277655817fa2546c9cd2af9d7a7f987d6ec457223dd1d92bae4d",
+          "ignoredDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "counts": {
+            "tracked": 222,
+            "untracked": 0,
+            "statusEntries": 0,
+            "refs": 292
+          }
+        }
+      }
+    ],
+    "spend": {
+      "ledger": "test/containment/live-spend-phase4.jsonl",
+      "spentUsd": 0.18599,
+      "ceilingUsd": 40,
+      "perRepoCapUsd": 1.6,
+      "projectedUsd": 8,
+      "afterProjectionUsd": 8.18599,
+      "fits": true
+    },
+    "host": {
+      "version": "2.1.326",
+      "claudeBin": "~/.local/share/claude/versions/2.1.326",
+      "present": true,
+      "verified": true
+    },
+    "list": {
+      "file": "test/benchmark/phase4/ac14-repositories.json",
+      "sha256": "34afa9855fddbee4aa715be1afa44e4815e005e08a3c07bf7ca05e3124d8b0ef",
+      "approvedBy": "Aaron Phan",
+      "approvedAt": "2026-11-16T18:47:56Z"
+    }
+  },
+  "updatedAt": "2026-11-18T02:56:20.103Z"
+}

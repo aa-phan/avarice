@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { FULL_MAP_FILES } from '../../src/domain/mapping.ts';
 import {
   authorizationProblems,
+  authorizeCommand,
   authorizeRefusal,
   buildDryRun,
   captureState,
@@ -18,11 +19,13 @@ import {
   loadList,
   profileOf,
   projectionOf,
+  readJson,
   sameState,
+  updateEvidence,
   verifyEvidence,
   writeEntry,
 } from '../../scripts/exit-run-phase4-tools.ts';
-import type { DryRunOptions } from '../../scripts/exit-run-phase4-tools.ts';
+import type { AuthorizeIo, DryRunOptions } from '../../scripts/exit-run-phase4-tools.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const REAL_LIST = join(ROOT, 'test', 'benchmark', 'phase4', 'ac14-repositories.json');
@@ -227,7 +230,7 @@ describe('the dry run', () => {
     process.env['AVARICE_PHASE4_LEDGER'] = ledger;
     delete process.env['AVARICE_PHASE4_CEILING_USD'];
     owner = [
-      { id: 'portfolio', ...makeRepo(join(home, 'portfolio'), { 'src/a.ts': 'export const a = 1;\n', '.planning/STATE.md': '# state\n' }) },
+      { id: 'aa-phan-portfolio-v2', ...makeRepo(join(home, 'aa-phan-portfolio-v2'), { 'src/a.ts': 'export const a = 1;\n', '.planning/STATE.md': '# state\n' }) },
       { id: 'gsd', ...makeRepo(join(home, 'gsd'), { 'main.py': 'print(1)\n', ...stampedMap() }) },
       { id: 'plain', ...makeRepo(join(home, 'plain'), { 'index.ts': 'export {};\n' }) },
     ];
@@ -248,7 +251,7 @@ describe('the dry run', () => {
       cloneRoot: join(dir, 'clones'),
       perRepoCapUsd: 1.6,
       expectedCount: 5,
-      activeRecordOf: (repoPath) => (repoPath.endsWith('/portfolio') ? { profile: 'personal-local', version: 3, mappingMode: 'full', completeness: 'complete', onboardedRevision: 'abc' } : undefined),
+      activeRecordOf: (repoPath) => (repoPath.endsWith('/aa-phan-portfolio-v2') ? { profile: 'personal-local', version: 3, mappingMode: 'full', completeness: 'complete', onboardedRevision: 'abc' } : undefined),
       clone: (url, dest, pin) => {
         clones.push(dest);
         const remote = remotes.find((r) => r.url === url);
@@ -275,8 +278,8 @@ describe('the dry run', () => {
     assert.deepEqual(report.problems, []);
     assert.equal(report.repositories.length, 5);
     const byId = new Map(report.repositories.map((r) => [r.id, r]));
-    assert.equal(byId.get('portfolio')?.expectedPath, 'refresh');
-    assert.equal(byId.get('portfolio')?.profile, 'personal-local');
+    assert.equal(byId.get('aa-phan-portfolio-v2')?.expectedPath, 'refresh');
+    assert.equal(byId.get('aa-phan-portfolio-v2')?.profile, 'personal-local');
     assert.equal(byId.get('gsd')?.expectedPath, 'onboard');
     assert.equal(byId.get('gsd')?.existingMap?.class, 'stamped-complete');
     assert.equal(byId.get('pub-go')?.sourceKind, 'public-url');
@@ -334,6 +337,36 @@ describe('the dry run', () => {
   it('reports a problem when fewer than the expected five repositories are listed', () => {
     const report = buildDryRun(optionsFor({ expectedCount: 6 }));
     assert.match(report.problems.join(' '), /expected 6/);
+  });
+
+  it('records an authorization only from a terminal, on the typed word, once, with the chosen profile for the four new repositories', async () => {
+    // Every path here is a temporary one: the case never reads or writes the real evidence file.
+    const evidence = join(dir, 'auth-evidence.json');
+    const report = buildDryRun(optionsFor());
+    updateEvidence(evidence, () => ({ schema: 1, dryRun: report }));
+    const argv = ['--cap', '8', '--profile', 'extended', '--list', join(dir, 'list.json'), '--evidence', evidence];
+    const io = (tty: boolean, answer: string): AuthorizeIo => ({ stdinTty: tty, stdoutTty: tty, ask: async () => answer, now: () => new Date('2026-11-18T10:00:00Z'), env: {} });
+    assert.equal(await authorizeCommand(argv, io(false, 'authorize')), 2);
+    assert.equal(readJson(evidence)?.['authorization'], undefined);
+    assert.equal(await authorizeCommand(argv, io(true, 'yes')), 1);
+    assert.equal(readJson(evidence)?.['authorization'], undefined);
+    assert.equal(await authorizeCommand(['--cap', '8', '--profile', 'extended', '--per-repo', '9', '--list', join(dir, 'list.json'), '--evidence', evidence], io(true, 'authorize')), 2, 'per-repository caps over the group cap');
+    assert.equal(await authorizeCommand(argv, io(true, 'authorize')), 0);
+    const auth = readJson(evidence)?.['authorization'] as Record<string, unknown>;
+    assert.equal(auth['ownerConfirmedAt'], '2026-11-18T10:00:00.000Z');
+    assert.equal(auth['terminal'], true);
+    assert.equal(auth['perRepoCapUsd'], 1.6);
+    assert.equal(auth['perInvocationCapUsd'], 0.8);
+    assert.deepEqual(auth['profiles'], { 'aa-phan-portfolio-v2': 'personal-local', gsd: 'personal-extended', plain: 'personal-extended', 'pub-go': 'personal-extended', 'pub-rs': 'personal-extended' });
+    assert.equal(await authorizeCommand(argv, io(true, 'authorize')), 2, 'a second authorization needs --replace');
+    assert.deepEqual(authorizationProblems(auth, { listSha256: report.list?.sha256 ?? '', spentUsd: 0.186, ceilingUsd: 40, spentByPlanUsd: 0 }), []);
+  });
+
+  it('refuses to authorize when no dry run of this list is recorded', async () => {
+    const evidence = join(dir, 'no-dry-run.json');
+    const io: AuthorizeIo = { stdinTty: true, stdoutTty: true, ask: async () => 'authorize', now: () => new Date(), env: {} };
+    assert.equal(await authorizeCommand(['--cap', '8', '--profile', 'local', '--list', join(dir, 'list.json'), '--evidence', evidence], io), 2);
+    assert.equal(existsSync(evidence), false);
   });
 
   it('reports a public clone that is not clean instead of changing it', () => {
