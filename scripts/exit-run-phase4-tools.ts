@@ -783,6 +783,11 @@ function ledgerFacts(dataRoot: string, repoPath: string, startedAt: string, seqB
   };
 }
 
+// SKELETON (plan 04-35): the rule for running an active repository again is not built yet.
+export function activeRerunRefusal(_last: Record<string, unknown>, _rulingRef: string | undefined): string | undefined {
+  return 'already has an active record in this benchmark';
+}
+
 export async function runOne(argv: readonly string[]): Promise<number> {
   const { named, positionals } = flags(argv);
   const id = positionals[0];

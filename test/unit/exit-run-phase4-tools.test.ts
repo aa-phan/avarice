@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { FULL_MAP_FILES } from '../../src/domain/mapping.ts';
 import {
+  activeRerunRefusal,
   authorizationProblems,
   authorizeCommand,
   authorizeRefusal,
@@ -378,5 +379,27 @@ describe('the dry run', () => {
     assert.match(again.problems.join(' '), /pub-rs.*not clean/);
     rmSync(join(clone, 'extra.txt'));
     assert.deepEqual(buildDryRun(optionsFor()).problems, []);
+  });
+});
+
+describe('running an active repository again (owner ruling 1: re-run the portfolio to measure the knowledge pass)', () => {
+  const activeWithoutKnowledge = { id: 'aa-phan-portfolio-v2', state: 'active', indexesAbsent: [{ index: 'knowledge', reason: 'invocation-failed' }] };
+  const activeWithKnowledge = { id: 'auto_search_workflow', state: 'active', indexesAbsent: [] };
+
+  it('refuses an active repository with no ruling reference', () => {
+    assert.match(activeRerunRefusal(activeWithoutKnowledge, undefined) ?? '', /already has an active record/);
+    assert.match(activeRerunRefusal(activeWithKnowledge, undefined) ?? '', /already has an active record/);
+  });
+
+  it('allows one whose knowledge index was absent when the owner ruled on the re-run and named the ruling', () => {
+    assert.equal(activeRerunRefusal(activeWithoutKnowledge, 'owner "fix all, retry(i)" 2026-11-18T03:44:06Z'), undefined);
+  });
+
+  it('still refuses an active repository whose knowledge pass is present, ruling or not: there is nothing to measure again', () => {
+    assert.match(activeRerunRefusal(activeWithKnowledge, 'owner "fix all, retry(i)" 2026-11-18T03:44:06Z') ?? '', /knowledge pass is present/);
+  });
+
+  it('refuses a blank ruling reference', () => {
+    assert.match(activeRerunRefusal(activeWithoutKnowledge, '   ') ?? '', /already has an active record/);
   });
 });
