@@ -31,7 +31,7 @@ function scopeOf(paths: readonly string[] | undefined): Result<string[]> {
 
 // The mapper is asked GSD's own question about an existing map up front, with the contract's answer. The path scope is one comma-separated
 // value of `--paths`; every path was validated to plain characters, so no path can end the value or start another option.
-function promptFor(mode: MappingMode, existingMapAnswer: string | undefined, paths: readonly string[] = []): string {
+export function promptFor(mode: MappingMode, existingMapAnswer: string | undefined, paths: readonly string[] = []): string {
   const base = mode === 'fast' ? FAST_MAP_PROMPT : mode === 'paths' ? `${MAP_PROMPT} --paths ${paths.join(',')}` : MAP_PROMPT;
   if (existingMapAnswer === undefined) return base;
   const label = existingMapAnswer.charAt(0).toUpperCase() + existingMapAnswer.slice(1);

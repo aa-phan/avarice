@@ -9,7 +9,7 @@
 // grep -E pattern of map-codebase.md `scan_for_secrets`, character for character.
 export const GSD_SECRET_REGEX: RegExp = /(sk-[a-zA-Z0-9]{20,}|sk_live_[a-zA-Z0-9]+|sk_test_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|glpat-[a-zA-Z0-9_-]+|AKIA[A-Z0-9]{16}|xox[baprs]-[a-zA-Z0-9-]+|-----BEGIN.*PRIVATE KEY|eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.)/;
 
-const GSD_KIND = 'gsd-scan';
+export const GSD_KIND = 'gsd-scan';
 
 export const AVARICE_SECRET_PATTERNS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
   { kind: 'github-token', pattern: /gh[pousr]_[A-Za-z0-9]{36,}/ },
@@ -56,4 +56,13 @@ export function redactSecrets(text: string): string {
     out = out.replace(globalOf(pattern), `[REDACTED:${kind}]`);
   }
   return out.replace(globalOf(GSD_SECRET_REGEX), `[REDACTED:${GSD_KIND}]`);
+}
+
+// What each kind of the pattern lists above means in words, for the mapper's prompt (the mapper is told what the secrets check rejects, in terms a model
+// can follow). Skeleton: filled in with the rule.
+export const SECRET_KIND_DESCRIPTIONS: Readonly<Record<string, string>> = {};
+
+// Every kind the secrets check can report, read from its own lists so the mapper's rule cannot name a different set than the check enforces.
+export function secretKinds(): string[] {
+  return [GSD_KIND, ...AVARICE_SECRET_PATTERNS.map((p) => p.kind)];
 }

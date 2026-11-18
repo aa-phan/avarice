@@ -77,6 +77,16 @@ export function completenessFor(mode: MappingMode, filesPresent?: readonly strin
 // whatever the hook admits (the second). AVARICE stages the specs the fast map reads into the working directory (restricted-specs.ts), and the prompt names them
 // there, relative to the working directory. A directory that is absolute, climbs out of the working directory or names a home directory throws, so a guess never
 // reaches the model. The text names no home-directory form.
+// The rule every map prompt carries about credentials. Skeleton: empty until the rule is written.
+export function mapperSecretsRule(): string {
+  return '';
+}
+
+// A map prompt with the secrets rule appended once. Skeleton: returns the prompt unchanged.
+export function withMapperSecretsRule(prompt: string): string {
+  return prompt;
+}
+
 export function restrictedMapPrompt(prompt: string, stagedDir: string = RESTRICTED_SPEC_DIR): string {
   if (stagedDir.length === 0 || stagedDir.startsWith('/') || /[~$]/.test(stagedDir) || stagedDir.split('/').includes('..')) {
     throw new TypeError(`the staged spec directory must be relative to the working directory, got ${JSON.stringify(stagedDir)}`);
