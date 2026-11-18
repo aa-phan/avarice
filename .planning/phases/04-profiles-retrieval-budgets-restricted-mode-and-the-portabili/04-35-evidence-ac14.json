@@ -1260,7 +1260,13 @@
           "by": "claude",
           "at": "2026-11-18T08:21:51.286Z"
         },
-        "confirmed": null
+        "confirmed": {
+          "class": "product-defect",
+          "summary": "Option a: product-defect. The mapper contract does not forbid writing credential-bearing values. Add a mapper rule (never write a URL with userinfo or any value the map secrets check detects; describe the setting instead). The validation secrets gate stays exactly as is. Re-run GroceriesGPT once (attempt 2), then spf13-cobra and BurntSushi-ripgrep. Caps unchanged.",
+          "by": "owner",
+          "at": "2026-11-18T18:45:20.980Z",
+          "ref": "owner reply \"a\" 2026-11-18T18:44:21Z"
+        }
       }
     }
   ],
@@ -1508,7 +1514,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T08:21:51.287Z",
+  "updatedAt": "2026-11-18T18:45:21.034Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
@@ -1553,6 +1559,13 @@
       "ref": "owner reply \"a\"",
       "decision": "Option a only: classification product-defect (cap constant calibration). Recalibrate the knowledge chunk limit so a knowledge invocation fits its cap with margin (about 9 chunks at 0.8 USD); close the verify gap (an AC-14 entry whose knowledge index is absent must fail judgeEntry and --verify); the owner authorizes a third attempt for aa-phan-portfolio-v2 only; then run GroceriesGPT, spf13-cobra and BurntSushi-ripgrep. How a budget_exhausted or partial ending is classified is NOT changed (option b was not chosen). Caps unchanged: 0.8 USD per invocation, 1.6 USD per repository, 8.00 USD group.",
       "basis": "aa-phan-portfolio-v2 attempt 2: 12 chunks written, ended 0.8058 USD against the 0.8 USD cap (budget_exhausted), knowledge absent; the same limit passed on auto_search_workflow at 0.7518 USD. Measured: 6 chunks 0.30 USD, 12 chunks 0.7518 and 0.8058 USD."
+    },
+    {
+      "id": "ruling-4",
+      "at": "2026-11-18T18:44:21Z",
+      "ref": "owner reply \"a\"",
+      "decision": "Option a only: classification product-defect (the mapper contract does not forbid writing credential-bearing values). Add a mapper rule: never write a URL with userinfo or any value the map secrets check detects; describe the setting instead (name, where it comes from). The secrets gate in validation stays exactly as is: not loosened, skipped or allowlisted. Then re-run GroceriesGPT once (attempt 2 under ruling 4), then spf13-cobra and BurntSushi-ripgrep. Caps unchanged: 0.8 USD per invocation, 1.6 USD per repository, 8.00 USD group.",
+      "basis": "GroceriesGPT attempt 1: blocked at validate, secrets check url-userinfo in INTEGRATIONS.md:56 and CONCERNS.md:118, quoting the repository dev default from src/platform/config.ts; digests equal, 0 containment findings, 0.1174 USD."
     }
   ],
   "stops": [
