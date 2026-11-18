@@ -172,3 +172,6 @@ export function knowledgeChunkLimit(costCapUsd: number): number {
   const fits = Math.floor((costCapUsd * KNOWLEDGE_COST.capShare) / KNOWLEDGE_COST.chunkUsd + 1e-9);
   return Math.max(1, fits);
 }
+
+// SKELETON (plan 04-35, ruling 3): the cost of a session of n chunks, still the linear model.
+export const knowledgeSessionCost = (chunks: number): number => chunks * KNOWLEDGE_COST.chunkUsd;
