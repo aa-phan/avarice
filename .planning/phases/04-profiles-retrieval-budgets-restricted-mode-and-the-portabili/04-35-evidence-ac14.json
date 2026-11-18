@@ -353,7 +353,13 @@
           "by": "claude",
           "at": "2026-11-18T03:19:02.325Z"
         },
-        "confirmed": null
+        "confirmed": {
+          "class": "product-defect",
+          "summary": "Owner confirmed the proposed classification: product defects (path-references false positives, full-map subagent budget, and the portfolio knowledge pass no_progress). Fix all before any retry; option (i): raise the subagent budget for a full map and keep the rule that any hook denial blocks the onboarding. Retry order: auto_search_workflow, portfolio re-run, GroceriesGPT, spf13-cobra, BurntSushi-ripgrep; same authorization and caps.",
+          "by": "owner",
+          "at": "2026-11-18T03:44:52.629Z",
+          "ref": "owner reply \"fix all, retry(i)\" at 2026-11-18T03:44:06Z: product defects confirmed; fix all three before any retry; subagent option (i) raise the full-map subagent budget, any hook denial still blocks"
+        }
       }
     }
   ],
@@ -601,7 +607,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T03:19:02.326Z",
+  "updatedAt": "2026-11-18T03:44:52.633Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
