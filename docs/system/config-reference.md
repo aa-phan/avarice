@@ -339,7 +339,7 @@ Overrides can only lower a value: a value above the preset is refused. Names mus
 | Cost per run | 12.0 USD (estimated) | `costUsdPerRun` | no |
 | Retry | 1 | `retry` | yes |
 
-Subagents per map round: full 4, fast 1, paths 4, skip 0, adopt 0; the knowledge pass and intel add none. The contract also fixes the model (`haiku`), the read-excluded directories (`.git`, `build`, `coverage`, `dist`, `node_modules`, `vendor`), the secret globs (`**/*.key`, `**/*.pem`, `**/.env`, `**/.env.*`, `**/id_ed25519*`, `**/id_rsa*`) and the read-only command list. The source states that changing any preset value changes the policy revision. How the derived totals are computed is in [onboarding.md](onboarding.md).
+Subagents per map round: full 4, fast 1, paths 4, skip 0, adopt 0, plus a mapper re-run allowance per round of 2 for full and none for the other modes (a full map therefore derives 12 with one retry); the knowledge pass and intel add none. The contract also fixes the model (`haiku`), the read-excluded directories (`.git`, `build`, `coverage`, `dist`, `node_modules`, `vendor`), the secret globs (`**/*.key`, `**/*.pem`, `**/.env`, `**/.env.*`, `**/id_ed25519*`, `**/id_rsa*`) and the read-only command list. The source states that changing any preset value changes the policy revision. How the derived totals are computed is in [onboarding.md](onboarding.md).
 
 The two presets differ in two override rules: a run override must be above 0 where an onboarding override may be 0, and a run has no `retry` override.
 
