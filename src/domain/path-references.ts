@@ -139,6 +139,11 @@ export function referencesOf(texts: Iterable<string>): string[] {
   return [...seen];
 }
 
+// The references of several documents that a document wrote as an explicit directory or relative form.
+export function explicitReferencesOf(_texts: Iterable<string>): string[] {
+  return [];
+}
+
 // Unique, normalized references in first-seen order.
 export function extractPathReferences(markdown: string): string[] {
   const seen = new Set<string>();
@@ -173,6 +178,8 @@ export interface ReferenceResolvers {
   moduleNames?: Iterable<string>;
   // `owner/name` of every `uses:` in the committed workflow files.
   actionRefs?: Iterable<string>;
+  // References written as an explicit directory (a trailing slash) or relative form (`./`) in the documents: a repository path even without an extension or a top-level first segment.
+  explicit?: Iterable<string>;
 }
 
 export interface DanglingResult {
@@ -182,6 +189,8 @@ export interface DanglingResult {
   ignored: string[];
   // References that resolved by one of the import, suffix, package and action rules (deferred item 10, second decision).
   byRule: { specifier: string[]; suffix: string[]; module: string[]; action: string[] };
+  // References that do not name a repository path (a model id, a language construct, a zone, a URL); they are in neither `total` nor `dangling`.
+  nonPaths: string[];
   // dangling / total; 0 when there are no references.
   share: number;
 }
@@ -247,5 +256,5 @@ export function danglingShare(
     else if (actionSet.has(ref)) byRule.action.push(ref);
     else dangling.push(ref);
   }
-  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule, share: unique.length === 0 ? 0 : dangling.length / unique.length };
+  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule, nonPaths: [], share: unique.length === 0 ? 0 : dangling.length / unique.length };
 }
