@@ -105,16 +105,16 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [x] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [x] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
-- [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
+- [x] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [x] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
 - [x] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
 - [x] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [x] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
-- [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
+- [x] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
 - [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
 - [x] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
 - [x] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
-- [ ] **ONB-15** [MVP]: Refresh re-extracts only changed documents for the knowledge pass and adds GSD phase files (`.planning/phases/**`, `STATE.md`) once incremental refresh exists.
+- [x] **ONB-15** [MVP]: Refresh re-extracts only changed documents for the knowledge pass and adds GSD phase files (`.planning/phases/**`, `STATE.md`) once incremental refresh exists.
 
 ### Portability and reliability (NFR-1 to NFR-9)
 
@@ -287,16 +287,16 @@ Each v1 requirement maps to exactly one phase.
 | ONB-3 | Phase 1 | Complete |
 | ONB-4 | Phase 1 | Complete |
 | ONB-5 | Phase 1 | Complete |
-| ONB-6 | Phase 4 | Pending |
+| ONB-6 | Phase 4 | Complete |
 | ONB-7 | Phase 1 | Complete |
 | ONB-8 | Phase 1 | Complete |
 | ONB-9 | Phase 1 | Complete |
 | ONB-10 | Phase 2 | Complete |
-| ONB-11 | Phase 4 | Pending |
+| ONB-11 | Phase 4 | Complete |
 | ONB-12 | Phase 1 | Complete |
 | ONB-13 | Phase 1 | Complete |
 | ONB-14 | Phase 1 | Complete |
-| ONB-15 | Phase 4 | Pending |
+| ONB-15 | Phase 4 | Complete |
 | NFR-1 | Phase 2 | Complete |
 | NFR-2 | Phase 1 | Complete |
 | NFR-3 | Phase 2 | Complete |
