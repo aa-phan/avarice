@@ -247,5 +247,29 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T02:56:20.103Z"
+  "updatedAt": "2026-11-18T03:06:08.791Z",
+  "authorization": {
+    "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
+    "confirmedBy": "aphan",
+    "terminal": true,
+    "decision": "D-03, D-05",
+    "listSha256": "34afa9855fddbee4aa715be1afa44e4815e005e08a3c07bf7ca05e3124d8b0ef",
+    "groupCapUsd": 8,
+    "perRepoCapUsd": 1.6,
+    "perInvocationCapUsd": 0.8,
+    "profileChoice": "extended",
+    "profiles": {
+      "aa-phan-portfolio-v2": "personal-local",
+      "auto_search_workflow": "personal-extended",
+      "GroceriesGPT": "personal-extended",
+      "spf13-cobra": "personal-extended",
+      "BurntSushi-ripgrep": "personal-extended"
+    },
+    "spentAtAuthorizationUsd": 0.18599,
+    "ceilingUsd": 40,
+    "host": {
+      "claudeVersion": "2.1.326",
+      "claudeBin": "~/.local/share/claude/versions/2.1.326"
+    }
+  }
 }
