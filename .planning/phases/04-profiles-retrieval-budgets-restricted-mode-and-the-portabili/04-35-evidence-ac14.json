@@ -836,6 +836,432 @@
         "proposed": null,
         "confirmed": null
       }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.654371,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7PVATAPP0AZ89M5Q24WQMA6",
+      "state": "active",
+      "record": {
+        "version": 4,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "refresh no-stamp: the existing map carries no last_mapped_commit: full remap in staging",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": {
+        "changedPathCount": 0,
+        "changedPaths": [],
+        "drift": null,
+        "fromRecordVersion": 3,
+        "fromRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "manifestChanged": false,
+        "mode": "full",
+        "newTopLevelDirs": [],
+        "reason": "no-stamp: the existing map carries no last_mapped_commit",
+        "threshold": 3,
+        "toRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+      },
+      "refreshOf": {
+        "onboardedRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "recordVersion": 3
+      },
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": true,
+        "userOwned": []
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [],
+      "graphNodes": {
+        "code": 1031,
+        "concept": 162,
+        "document": 41,
+        "rationale": 44
+      },
+      "knowledge": {
+        "corpus": [
+          ".planning/PROJECT.md",
+          ".planning/REQUIREMENTS.md",
+          ".planning/ROADMAP.md",
+          ".planning/STATE.md",
+          ".planning/codebase/",
+          ".planning/phases/01-decisions-and-documentation/01-01-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-01-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-02-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-02-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-03-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-03-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-04-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-04-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-05-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-05-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-06-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-06-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-07-PLAN.md",
+          ".planning/phases/01-decisions-and-documentation/01-07-SUMMARY.md",
+          ".planning/phases/01-decisions-and-documentation/01-CONTENT-INVENTORY.md",
+          ".planning/phases/01-decisions-and-documentation/01-CONTEXT.md",
+          "docs/",
+          "docs/adr/"
+        ],
+        "corpusCap": {
+          "chunkLimit": 9,
+          "chunks": 9,
+          "documentsKept": 41,
+          "documentsOmitted": 140,
+          "omitted": [
+            ".planning/phases/01-decisions-and-documentation/01-DESIGN-BRIEF.md",
+            ".planning/phases/01-decisions-and-documentation/01-DESIGN-TOKENS.md",
+            ".planning/phases/01-decisions-and-documentation/01-DISCUSSION-LOG.md",
+            ".planning/phases/01-decisions-and-documentation/01-IA-WIREFRAMES.md",
+            ".planning/phases/01-decisions-and-documentation/01-MOTION-SPEC.md",
+            ".planning/phases/01-decisions-and-documentation/01-UAT.md",
+            ".planning/phases/01-decisions-and-documentation/01-VERIFICATION.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-01-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-01-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-02-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-02-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-03-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-03-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-04-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-04-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-05-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-05-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-06-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-06-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-07-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-07-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-08-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-08-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-09-PLAN.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-09-SUMMARY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-CONTEXT.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-COVERAGE.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-DISCUSSION-LOG.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-RESEARCH.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-REVIEW-DISPOSITION.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-REVIEW-FIX.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-REVIEW-iter1.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-REVIEW.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-SECURITY.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-UAT.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-VALIDATION.md",
+            ".planning/phases/02-deployed-themed-skeleton/02-VERIFICATION.md",
+            ".planning/phases/03-content-complete-site/03-01-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-01-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-02-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-02-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-03-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-03-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-04-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-04-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-05-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-05-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-06-PLAN.md",
+            ".planning/phases/03-content-complete-site/03-06-SUMMARY.md",
+            ".planning/phases/03-content-complete-site/03-07-PLAN.md"
+          ],
+          "omittedMoreAreas": 90,
+          "perInvocationCapUsd": 0.8
+        },
+        "documentNodes": 41,
+        "documentsCommit": "git:9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "documentsExpected": 41,
+        "dropped": {
+          "astDocument": 0,
+          "dangling": 0,
+          "unread": 0
+        },
+        "manifestDigest": "sha256:eaace6da8fae3e6f1560f1e59a85aa196e249e1b9650f7ac6fa6c648363eea32"
+      },
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"10 of 304 named path(s) dangling (3.3%, limit 5%); counted as known: 4 named path(s) ignored by the repository's own .gitignore rules (dist, node_modules, node_modules/.bin/oxlint (+1 more)); 3 module specifier(s) of a committed dependency; 5 workflow action(s) named by a committed workflow; not counted: 4 token(s) that do not name a repository path (anim/physics, anim/declarative, try/catch (+1 more))\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"9f63d9114c5d3d720b8496b08cec85382cfaa357\"}"
+      },
+      "id": "aa-phan-portfolio-v2",
+      "attempt": 3,
+      "rulingRef": "owner \"fix all, retry(i)\" 2026-11-18T03:44:06Z; owner \"A\" 2026-11-18T07:05:38Z; owner \"a\" 2026-11-18T08:03:10Z",
+      "startedAt": "2026-11-18T08:10:50.969Z",
+      "finishedAt": "2026-11-18T08:18:54.476Z",
+      "profile": "personal-local",
+      "expectedPath": "refresh",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "after": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7PVATAPP0AZ89M5Q24WQMA6: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 1,
+      "costUsd": 0.117375,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7PVTDQR99A4CAQ233T59YBS",
+      "state": "blocked",
+      "record": null,
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "brownfield repository, full map",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": null,
+      "refreshOf": null,
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": false,
+        "userOwned": []
+      },
+      "indexesPresent": [],
+      "indexesAbsent": [],
+      "graphNodes": null,
+      "knowledge": null,
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "rejected"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "rejected",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"10 of 247 named path(s) dangling (4%, limit 5%); counted as known: 7 named path(s) ignored by the repository's own .gitignore rules (web/dist, dist, .env (+4 more)); 23 unique path suffix(es) of a tracked file; 2 module specifier(s) of a committed dependency; not counted: 1 token(s) that do not name a repository path (Xenova/whisper-base)\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"2 secret pattern hit(s): .planning/codebase/INTEGRATIONS.md:56 url-userinfo, .planning/codebase/CONCERNS.md:118 url-userinfo\",\"name\":\"secrets\",\"passed\":false},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[{\"line\":56,\"path\":\".planning/codebase/INTEGRATIONS.md..."
+      },
+      "id": "GroceriesGPT",
+      "attempt": 1,
+      "startedAt": "2026-11-18T08:19:22.449Z",
+      "finishedAt": "2026-11-18T08:21:18.989Z",
+      "profile": "personal-extended",
+      "expectedPath": "onboard",
+      "exitCode": 3,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "branch": "main",
+        "headRef": "refs/heads/main",
+        "statusDigest": "6df4ec8d880dcbf8381a590ba57bf68c54f3f6c389d3bab5e1b2d4736eb329a3",
+        "filesDigest": "54dcf445db817190a3e2cdedbf05b2aec63330a176c92a058baee2985f769d9b",
+        "refsDigest": "d201fc7841499579b434bbc78a854707d03939179364e5678d9ae0419cddf9e1",
+        "worktreesDigest": "ad6dcaa86820e3a60c0e5e17bc17e8f56a6255e46b6ca0c67bec9feef8d7ad1b",
+        "indexDigest": "9a60530664ee9d0691ef189a626f8932ffdfa76d287fbf30c9d50037189a82d6",
+        "gitMetaDigest": "3e83f66e16d39c6484a63c531a1ab6e9dc1c279dfb87471afff223ce5b252d15",
+        "ignoredDigest": "3c134f4fcf6ddb63c3f6f09d180f7235e1bbec1f21b19886716b5ded310e7a8e",
+        "counts": {
+          "tracked": 217,
+          "untracked": 4,
+          "statusEntries": 14,
+          "refs": 3
+        }
+      },
+      "after": {
+        "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "branch": "main",
+        "headRef": "refs/heads/main",
+        "statusDigest": "6df4ec8d880dcbf8381a590ba57bf68c54f3f6c389d3bab5e1b2d4736eb329a3",
+        "filesDigest": "54dcf445db817190a3e2cdedbf05b2aec63330a176c92a058baee2985f769d9b",
+        "refsDigest": "d201fc7841499579b434bbc78a854707d03939179364e5678d9ae0419cddf9e1",
+        "worktreesDigest": "ad6dcaa86820e3a60c0e5e17bc17e8f56a6255e46b6ca0c67bec9feef8d7ad1b",
+        "indexDigest": "9a60530664ee9d0691ef189a626f8932ffdfa76d287fbf30c9d50037189a82d6",
+        "gitMetaDigest": "3e83f66e16d39c6484a63c531a1ab6e9dc1c279dfb87471afff223ce5b252d15",
+        "ignoredDigest": "3c134f4fcf6ddb63c3f6f09d180f7235e1bbec1f21b19886716b5ded310e7a8e",
+        "counts": {
+          "tracked": 217,
+          "untracked": 4,
+          "statusEntries": 14,
+          "refs": 3
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7PVTDQR99A4CAQ233T59YBS: blocked (decision)\na secret pattern was found in 2 place(s) in the map documents; a decision is needed (.planning/codebase/INTEGRATIONS.md:56 url-userinfo; .planning/codebase/CONCERNS.md:118 url-userinfo)\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": {
+          "class": "product-defect",
+          "summary": "The onboarding ended blocked (decision) at validate: the secrets check rejected two map documents for url-userinfo, INTEGRATIONS.md:56 and CONCERNS.md:118. Both quote the repository own development default `postgresql://postgres:postgres@localhost:5432/recipecart` from src/platform/config.ts (a placeholder credential, not a secret, but a credential-bearing URL). The gate worked as designed, the harness is sound (digests equal, 0 containment findings, 0.1174 USD, 1 invocation, no knowledge pass reached), and the repository and the model are not at fault. The product defect is that the mapper contract does not tell the mapper to omit or redact connection strings with userinfo, so an ordinary repository with a documented dev DSN is blocked at map validation. Candidate rulings for the owner: (a) add a mapper rule (never write a URL with user:password userinfo; name the setting and the file instead) and re-run GroceriesGPT once (about 0.6 to 1.0 USD); (b) offer the existing decision (accept the documents) for a placeholder credential and re-run; (c) accept GroceriesGPT as a documented blocked outcome (the pass bar of AC-14 is 5 of 5, so this fails the bar).",
+          "by": "claude",
+          "at": "2026-11-18T08:21:51.286Z"
+        },
+        "confirmed": null
+      }
     }
   ],
   "list": {
@@ -1082,7 +1508,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T07:42:45.450Z",
+  "updatedAt": "2026-11-18T08:21:51.287Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
