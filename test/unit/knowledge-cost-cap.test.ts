@@ -84,7 +84,9 @@ describe('selectKnowledgeCorpus with a chunk limit: the corpus that fits one inv
     const picked = selectKnowledgeCorpus({ ...input, limits: { maxChunks: 6 } });
     assert.ok(picked.paths.includes('docs/guide.md'));
     assert.ok(picked.dropped.some((d) => d.path === '.planning/phases/52-x/52-01-PLAN.md' && d.reason === 'cost-cap'));
-    assert.equal(picked.paths.filter((p) => p.startsWith('.planning/phases/')).length <= 3, true);
+    const phases = picked.paths.filter((p) => p.startsWith('.planning/phases/'));
+    assert.ok(phases.length > 0 && phases.length <= 6, `${phases.length} phase files fit 6 chunks beside the documents`);
+    assert.deepEqual(phases, corpus(PORTFOLIO_PHASES).priority.filter((p) => p.startsWith('.planning/phases/')).slice(0, phases.length).sort(), 'the first phase files of the priority order');
   });
 
   it('a corpus under the limit is identical to the corpus with no limit', () => {

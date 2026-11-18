@@ -178,6 +178,18 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   });
 }
 
+// The cost cap the next invocation of an onboarding would be granted, read without reserving anything: the smaller of the contract's per-invocation cap and what is
+// left of the run's cost budget, the same figure reserveFrom hands the host. The knowledge pass sizes its corpus from it (plan 04-35, `knowledgeChunkLimit`).
+export function invocationCostCap(deps: AppDeps, onboarding: OnboardingRow): Result<number> {
+  const contract = loadContract(deps, onboarding.onboardingId);
+  if (!contract.ok) return contract;
+  const rows = deps.ledger.getBudgets(contract.value.runId);
+  if (!rows.ok) return rows;
+  const left = rows.value.find((row) => row.name === 'costUsd');
+  const perInvocation = contract.value.body.budgets.costUsd.perInvocation;
+  return ok(left === undefined ? perInvocation : Math.min(perInvocation, remaining(left)));
+}
+
 // A run's reservation (CON-13): the run's own rows, one invocation, the whole remaining wall clock up to the contract's, and the
 // per-invocation cost cap up to what is left. The orphan rule is the onboarding's: a reservation whose holder died is spent on the next reserve.
 export function reserveRunInvocation(deps: AppDeps, run: RunRow): Result<ReserveOutcome> {

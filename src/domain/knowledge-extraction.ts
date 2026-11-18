@@ -11,6 +11,7 @@
 // the merge's "a code node wins an ID collision" rule. The extraction JSON already has the shape the merge consumes (`nodes`, and
 // `edges` next to `links`), so no conversion beyond concatenating the chunks is needed; graphify's own deterministic step that
 // remains in use is `cluster-only` on the merged graph. See docs/repository-onboarding.md "Knowledge pass".
+import { CHUNK_LIMITS, packDocuments } from './chunk-packing.ts';
 import type { KnowledgeManifest } from './knowledge-corpus.ts';
 import { KNOWLEDGE_DIR } from './knowledge-corpus.ts';
 import { normalizedAbsoluteRoot } from './normalized-root.ts';
@@ -22,14 +23,8 @@ export const EXTRACTION_DIR = `${KNOWLEDGE_DIR}/${EXTRACTION_DIR_NAME}`;
 export const CHUNK_PLAN_NAME = '.chunks.json';
 export const CHUNK_PLAN_FILE = `${KNOWLEDGE_DIR}/${CHUNK_PLAN_NAME}`;
 
-export const CHUNK_LIMITS = {
-  // At most this many documents in one chunk, and at most this many bytes of document text: a chunk is one model answer, and one
-  // JSON file that answer writes, so both stay small enough for a small model to hold (graphify's skill uses 20 to 25 files).
-  maxFiles: 8,
-  maxBytes: 64 * 1024,
-  // The largest chunk file AVARICE reads back.
-  maxOutputBytes: 1024 * 1024,
-} as const;
+// The limits of a chunk live with the packing (src/domain/chunk-packing.ts), which the corpus rule shares.
+export { CHUNK_LIMITS };
 
 export interface ExtractionChunkFile {
   // Path relative to the corpus directory (the model's working directory): the repository path of the document.
@@ -80,28 +75,17 @@ export function stemOf(sourcePath: string): string {
 // concatenation only: the domain imports nothing but relative paths and node:crypto.
 export function planExtractionChunks(manifest: KnowledgeManifest, sizes: Readonly<Record<string, number>>, corpusRoot: string, limits: { maxFiles?: number; maxBytes?: number } = {}): ExtractionPlan {
   const root = normalizedAbsoluteRoot(corpusRoot, 'planExtractionChunks: corpusRoot');
-  const maxFiles = limits.maxFiles ?? CHUNK_LIMITS.maxFiles;
-  const maxBytes = limits.maxBytes ?? CHUNK_LIMITS.maxBytes;
-  const sorted = [...manifest.entries].sort((a, b) => (a.sourcePath < b.sourcePath ? -1 : a.sourcePath > b.sourcePath ? 1 : 0));
-  const groups: ExtractionChunkFile[][] = [];
-  let current: ExtractionChunkFile[] = [];
-  let bytes = 0;
-  for (const entry of sorted) {
-    const size = sizes[entry.sourcePath] ?? maxBytes;
-    if (current.length > 0 && (current.length >= maxFiles || bytes + size > maxBytes)) {
-      groups.push(current);
-      current = [];
-      bytes = 0;
-    }
-    current.push({ path: entry.sourcePath, stem: stemOf(entry.sourcePath), readPath: `${root}/${entry.sourcePath}` });
-    bytes += size;
-  }
-  if (current.length > 0) groups.push(current);
+  const groups = packDocuments(
+    manifest.entries.map((entry) => entry.sourcePath),
+    sizes,
+    limits,
+  );
   return {
     schema: 1,
     revision: manifest.revision,
-    chunks: groups.map((files, index) => {
+    chunks: groups.map((paths, index) => {
       const output = `${EXTRACTION_DIR_NAME}/${chunkOutputName(index + 1)}`;
+      const files = paths.map((path) => ({ path, stem: stemOf(path), readPath: `${root}/${path}` }));
       return { n: index + 1, output, writePath: `${root}/${output}`, files };
     }),
   };

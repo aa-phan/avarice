@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { sha256Hex } from '../../domain/digest.ts';
 import { mergeKnowledgeGraph, retainedKnowledge } from '../../domain/graph-merge.ts';
 import type { RetainedKnowledge } from '../../domain/graph-merge.ts';
-import { KNOWLEDGE_DIR, changedDocuments, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
+import { packDocuments } from '../../domain/chunk-packing.ts';
+import { KNOWLEDGE_DIR, changedDocuments, corpusSummary, knowledgeCandidates, knowledgeChunkLimit, selectKnowledgeCorpus } from '../../domain/knowledge-corpus.ts';
 import { CHUNK_PLAN_FILE, EXTRACTION_DIR_NAME, assembleExtraction, chunkOutputName, knowledgePrompt, outputPathOf, planExtractionChunks, subsetPlan } from '../../domain/knowledge-extraction.ts';
 import type { KnowledgeManifest } from '../../domain/knowledge-corpus.ts';
 import type { ExtractionPlan } from '../../domain/knowledge-extraction.ts';
@@ -23,6 +24,7 @@ import { ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { GsdGraphStatus } from '../../ports/gsd-onboarding.ts';
 import type { AppDeps } from '../deps.ts';
+import { invocationCostCap } from '../budget.ts';
 import { completeInvocation, prepareInvocation } from '../invocation.ts';
 import { previousIndexesOf } from '../refresh.ts';
 import type { IndexStepContext } from './index-steps.ts';
@@ -207,6 +209,27 @@ interface Reuse {
   keep: ReadonlySet<string>;
 }
 
+const MAX_OMITTED_AREAS = 50;
+const roundUsd = (usd: number): number => Math.round(usd * 1e6) / 1e6;
+
+// What the cost cap left out of the corpus, for the record: null when it left nothing out (then the record is what it was before the cap existed). The record names the
+// cap the limit came from, the limit, the chunks the kept documents plan to, how many documents were kept and left out, and the areas of the ones left out (the
+// directories, as the record states a corpus). Every left-out path is in the manifest's `excluded` list as `cost-cap`, and the manifest digest is of what was sent.
+function corpusCapOf(dropped: readonly { path: string; reason: string }[], manifest: KnowledgeManifest, sizes: Readonly<Record<string, number>>, costCapUsd: number, chunkLimit: number): Record<string, unknown> | null {
+  const omitted = dropped.filter((d) => d.reason === 'cost-cap').map((d) => d.path);
+  if (omitted.length === 0) return null;
+  const areas = corpusSummary(omitted);
+  return {
+    perInvocationCapUsd: roundUsd(costCapUsd),
+    chunkLimit,
+    chunks: packDocuments(manifest.entries.map((entry) => entry.sourcePath), sizes).length,
+    documentsKept: manifest.entries.length,
+    documentsOmitted: omitted.length,
+    omitted: areas.slice(0, MAX_OMITTED_AREAS),
+    ...(areas.length > MAX_OMITTED_AREAS ? { omittedMoreAreas: areas.length - MAX_OMITTED_AREAS } : {}),
+  };
+}
+
 export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Promise<Result<IndexStepResult>> {
   if (!ctx.contract.body.indexes.knowledge) return ok({ index: 'knowledge', status: 'disabled' });
   const { staging, head, row, contract } = ctx;
@@ -230,7 +253,12 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   const rules = { trackedPaths: tracked.value, mapFiles: mapFileNamesFor(mode.value), adrDirs, documentGlobs: contract.body.knowledge.documents };
   const sizes = deps.graph.fileSizes(staging, knowledgeCandidates(rules));
   if (!sizes.ok) return absent('invocation-failed', `cannot stat the corpus files: ${describeError(sizes.error)}`);
-  const selection = selectKnowledgeCorpus({ ...rules, sizes: sizes.value, secretGlobs: contract.body.files.secretGlobs, readGlobs: contract.body.files.read });
+  // The corpus is capped by what one knowledge invocation can pay for (plan 04-35, owner ruling 2): the chunk limit comes from the cost cap that invocation would be
+  // granted, and the documents that fall past it, in the priority order of the rules, are left out and recorded.
+  const costCap = invocationCostCap(deps, row);
+  if (!costCap.ok) return costCap;
+  const chunkLimit = knowledgeChunkLimit(costCap.value);
+  const selection = selectKnowledgeCorpus({ ...rules, sizes: sizes.value, secretGlobs: contract.body.files.secretGlobs, readGlobs: contract.body.files.read, limits: { maxChunks: chunkLimit } });
 
   // 2. Copy with a manifest, in the data root and as an artifact (never inside the corpus).
   const manifestFile = join(deps.profile.dataRoot, 'onboard', row.onboardingId, 'knowledge', 'manifest.json');
@@ -250,6 +278,7 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   });
   if (!recorded.ok) return recorded;
   if (manifest.entries.length === 0) return absent('no-output', 'the corpus holds no document');
+  const corpusCap = corpusCapOf(selection.dropped, manifest, sizes.value, costCap.value, chunkLimit);
 
   // 2b. A refresh extracts only what changed: the documents that are new, whose content digest differs from the earlier pass's, or that the earlier graph
   // has no document node for. Every other document is a cache hit and keeps the nodes the earlier pass made for it. The earlier manifest and graph are the
@@ -274,7 +303,7 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   }
   if (extract.entries.length === 0) {
     // Nothing changed: no invocation, no unit reserved. The document nodes are the earlier pass's, joined to the new code graph.
-    return mergeAndInstall(deps, ctx, manifest, { nodes: [], edges: [] }, reuse, refresh, stored.value.digest);
+    return mergeAndInstall(deps, ctx, manifest, { nodes: [], edges: [] }, reuse, refresh, stored.value.digest, corpusCap);
   }
 
   // 3. The chunk plan: deterministic, from the manifest and the sizes. It is written beside the corpus for the model to read as
@@ -337,7 +366,7 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   }
   const extraction = { nodes: [...kept.flatMap((chunk) => chunk.graph.nodes), ...(fresh?.graph.nodes ?? [])], edges: [...kept.flatMap((chunk) => chunk.graph.edges), ...(fresh?.graph.edges ?? [])] };
 
-  return mergeAndInstall(deps, ctx, manifest, extraction, reuse, refresh, stored.value.digest);
+  return mergeAndInstall(deps, ctx, manifest, extraction, reuse, refresh, stored.value.digest, corpusCap);
 }
 
 // 4. One contained invocation for the chunks of `plan`: no shell, no skill, no subagent. The host judges `progressed` by the chunk files. The answer is the
@@ -399,6 +428,7 @@ async function mergeAndInstall(
   reuse: Reuse | null,
   refresh: Record<string, unknown> | undefined,
   manifestDigest: string,
+  corpusCap: Record<string, unknown> | null,
 ): Promise<Result<IndexStepResult>> {
   const { staging, head, row } = ctx;
 
@@ -458,6 +488,7 @@ async function mergeAndInstall(
         documentNodes: stats.documentNodes,
         dropped: { dangling: stats.dropped.dangling, astDocument: stats.dropped.astDocument, unread: rechecked.coverage.unread.length },
         manifestDigest,
+        ...(corpusCap !== null ? { corpusCap } : {}),
       },
       ...(refresh !== undefined ? { refresh: { ...refresh, ...(retained !== null ? { retainedNodes: retained.nodes.length, retainedEdges: retained.edges.length, droppedEdges: retained.droppedEdges } : {}) } } : {}),
     },
