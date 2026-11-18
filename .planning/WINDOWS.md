@@ -87,6 +87,19 @@ last_updated: 2026-11-18T02:18:08.730Z
     "recorded_at": "2026-11-18T02:18:08.730Z",
     "resolved_at": null,
     "milestone": "v1.1"
+  },
+  {
+    "id": 6,
+    "kind": "flaky-test",
+    "phase": "04",
+    "file": "test/integration/resource-degradation.test.ts",
+    "line": 293,
+    "description": "maxConcurrentChecks overlap case asserts c2 starts while c1 runs; under full-suite load c1 can end before c2 starts. Failed once in the wave-13 full run (5079/5157 pass), passed 30/30 alone. Also recurring under load: 'database is locked' in the test rows() helpers of run-start.test.ts and run-baseline-workflow.test.ts (no busy timeout on the test's own reader).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-18T03:05:00.000Z",
+    "resolved_at": null,
+    "milestone": "v1.1"
   }
 ]
 ````
