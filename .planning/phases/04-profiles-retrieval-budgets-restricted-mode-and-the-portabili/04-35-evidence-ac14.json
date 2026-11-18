@@ -1268,6 +1268,198 @@
           "ref": "owner reply \"a\" 2026-11-18T18:44:21Z"
         }
       }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.154992,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7R0184J675AKCC6FVJWWQG4",
+      "state": "active",
+      "record": {
+        "version": 1,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:1913423d24ede5af790683a1117a3a83ba9e47db",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "brownfield repository, full map",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": null,
+      "refreshOf": null,
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": false,
+        "userOwned": []
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [],
+      "graphNodes": {
+        "code": 911,
+        "concept": 81,
+        "document": 8,
+        "rationale": 13
+      },
+      "knowledge": {
+        "corpus": [
+          ".planning/codebase/",
+          "docs/"
+        ],
+        "documentNodes": 8,
+        "documentsCommit": "git:1913423d24ede5af790683a1117a3a83ba9e47db",
+        "documentsExpected": 8,
+        "dropped": {
+          "astDocument": 0,
+          "dangling": 0,
+          "unread": 0
+        },
+        "manifestDigest": "sha256:f27873379359c0550157ffe83fcc22a7685b5747eb64a558cad9349189c77a10"
+      },
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"6 of 265 named path(s) dangling (2.3%, limit 5%); counted as known: 8 named path(s) ignored by the repository's own .gitignore rules (web/dist, .env, dist (+5 more)); 9 unique path suffix(es) of a tracked file; 2 module specifier(s) of a committed dependency; not counted: 2 token(s) that do not name a repository path (Xenova/whisper-base, DATA_DIR/tmp)\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"1913423d24ede5af790683a1117a3a83ba9e47db\"}"
+      },
+      "id": "GroceriesGPT",
+      "attempt": 2,
+      "rulingRef": "owner \"a\" 2026-11-18T18:44:21Z",
+      "startedAt": "2026-11-18T18:52:14.738Z",
+      "finishedAt": "2026-11-18T18:57:18.010Z",
+      "profile": "personal-extended",
+      "expectedPath": "onboard",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "branch": "main",
+        "headRef": "refs/heads/main",
+        "statusDigest": "6df4ec8d880dcbf8381a590ba57bf68c54f3f6c389d3bab5e1b2d4736eb329a3",
+        "filesDigest": "54dcf445db817190a3e2cdedbf05b2aec63330a176c92a058baee2985f769d9b",
+        "refsDigest": "d201fc7841499579b434bbc78a854707d03939179364e5678d9ae0419cddf9e1",
+        "worktreesDigest": "ad6dcaa86820e3a60c0e5e17bc17e8f56a6255e46b6ca0c67bec9feef8d7ad1b",
+        "indexDigest": "9a60530664ee9d0691ef189a626f8932ffdfa76d287fbf30c9d50037189a82d6",
+        "gitMetaDigest": "3e83f66e16d39c6484a63c531a1ab6e9dc1c279dfb87471afff223ce5b252d15",
+        "ignoredDigest": "3c134f4fcf6ddb63c3f6f09d180f7235e1bbec1f21b19886716b5ded310e7a8e",
+        "counts": {
+          "tracked": 217,
+          "untracked": 4,
+          "statusEntries": 14,
+          "refs": 3
+        }
+      },
+      "after": {
+        "head": "1913423d24ede5af790683a1117a3a83ba9e47db",
+        "branch": "main",
+        "headRef": "refs/heads/main",
+        "statusDigest": "6df4ec8d880dcbf8381a590ba57bf68c54f3f6c389d3bab5e1b2d4736eb329a3",
+        "filesDigest": "54dcf445db817190a3e2cdedbf05b2aec63330a176c92a058baee2985f769d9b",
+        "refsDigest": "d201fc7841499579b434bbc78a854707d03939179364e5678d9ae0419cddf9e1",
+        "worktreesDigest": "ad6dcaa86820e3a60c0e5e17bc17e8f56a6255e46b6ca0c67bec9feef8d7ad1b",
+        "indexDigest": "9a60530664ee9d0691ef189a626f8932ffdfa76d287fbf30c9d50037189a82d6",
+        "gitMetaDigest": "3e83f66e16d39c6484a63c531a1ab6e9dc1c279dfb87471afff223ce5b252d15",
+        "ignoredDigest": "3c134f4fcf6ddb63c3f6f09d180f7235e1bbec1f21b19886716b5ded310e7a8e",
+        "counts": {
+          "tracked": 217,
+          "untracked": 4,
+          "statusEntries": 14,
+          "refs": 3
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7R0184J675AKCC6FVJWWQG4: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
     }
   ],
   "list": {
@@ -1514,7 +1706,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T18:45:21.034Z",
+  "updatedAt": "2026-11-18T18:57:18.011Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
