@@ -41,7 +41,7 @@ const SOURCE_DOCS: Readonly<Record<string, string>> = {
   '.planning/STATE.md': '---\nstatus: executing\n---\n# State\n',
   ...Object.fromEntries(PHASES.map((path, i) => [path, BIG(`Plan ${i + 1}`)])),
 };
-// The per-invocation cost cap of the onboardings below: a limit of three chunks (0.2 x 0.75 / 0.05).
+// The per-invocation cost cap of the onboardings below: a limit of three chunks (knowledgeChunkLimit(0.2) = floor((0.2 x 2/3 / 0.0255)^(1/1.376)) = 3).
 const CAP_USD = 0.2;
 const LIMIT = knowledgeChunkLimit(CAP_USD);
 

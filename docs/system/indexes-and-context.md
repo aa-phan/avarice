@@ -108,11 +108,15 @@ A candidate is left out, and listed with its reason in the manifest, when it is:
 
 #### The cost cap
 
-One invocation has to fit its own cost cap. The classifier needs every chunk of the plan, so a session that stops early, with chunks unwritten, ends `no_progress` and the whole pass is lost. The corpus is therefore limited to the chunks one invocation can pay for. The limit is
+One invocation has to fit its own cost cap. The classifier needs every chunk of the plan, so a session that stops early, with chunks unwritten, ends `no_progress` and the whole pass is lost; a session that overruns its cap ends `budget_exhausted` and its written chunks are discarded. The corpus is therefore limited to the chunks one invocation can pay for. The cost of a session over n chunks is modelled as a power law,
 
-`floor(cost cap x 0.75 / 0.05)` chunks, never fewer than one.
+`session cost(n) = 0.0255 x n^1.376` USD,
 
-The cost cap is the one the knowledge invocation would be granted: the contract's per-invocation cost cap, or what is left of the run's cost budget when that is smaller. It is read from the contract, not from any one run's authorization. The two constants come from the one measured run: a session read and wrote 6 chunks for 0.30 USD, its setup included, so a chunk is estimated at 0.05 USD, and the share of 0.75 keeps a quarter of the cap free because each chunk read makes the following turns dearer. At a cap of 0.8 USD the limit is 12 chunks, at 1.6 USD it is 24, and at the 3.0 USD default of the onboarding contract it is 45.
+and the limit is the largest n whose modelled cost fits two thirds of the cost cap, never fewer than one:
+
+`floor((cost cap x 2/3 / 0.0255)^(1 / 1.376))` chunks.
+
+The cost cap is the one the knowledge invocation would be granted: the contract's per-invocation cost cap, or what is left of the run's cost budget when that is smaller. It is read from the contract, not from any one run's authorization. The model is fitted to measured sessions. A session over 6 chunks cost 0.30 USD, and two sessions over 12 chunks cost 0.75 and 0.81 USD, the second of them ending 0.006 USD over a 0.8 USD cap. Doubling the chunks multiplied the cost by about 2.6, not 2, because every chunk read makes the following turns dearer. The exponent is the logarithm to base 2 of the ratio of the 12-chunk mean (0.78 USD) to the 6-chunk cost, and the factor is set so the curve passes through the 6-chunk point. The planned share of two thirds leaves a third of the cap free for the spread between sessions (the two 12-chunk sessions differ by 7 percent). The limit is 9 chunks at a cap of 0.8 USD (modelled 0.52 USD, and the dearest measured session scaled to 9 chunks is 0.54 USD), 15 chunks at 1.6 USD, and 23 chunks at the 3.0 USD default of the onboarding contract. It never falls as the cap rises.
 
 Candidates are taken in the priority order of the table, and a document is kept while the documents kept so far, packed into chunks as described below, plan to no more chunks than the limit. The first document that does not fit, and every later document the other rules would have kept, is left out as `cost-cap`. The kept documents are therefore always a prefix of the priority order: the map, the planning documents, the decision records and the documents are kept before any GSD phase file. A corpus that fits the limit is selected exactly as without it.
 

@@ -339,7 +339,7 @@ Overrides can only lower a value: a value above the preset is refused. Names mus
 | Cost per run | 12.0 USD (estimated) | `costUsdPerRun` | no |
 | Retry | 1 | `retry` | yes |
 
-The cost per invocation also sets how large the knowledge corpus may be: the corpus is limited to `floor(cost cap x 0.75 / 0.05)` chunks, so 12 chunks at 0.8 USD, 24 at 1.6 USD and 45 at the 3.0 USD preset, and the documents past the limit are left out and recorded (see [indexes-and-context.md](indexes-and-context.md)). Lowering `costUsdPerInvocation` therefore shrinks the corpus; it is not only a ceiling on spend.
+The cost per invocation also sets how large the knowledge corpus may be: the corpus is limited to `floor((cost cap x 2/3 / 0.0255)^(1 / 1.376))` chunks, so 9 chunks at 0.8 USD, 15 at 1.6 USD and 23 at the 3.0 USD preset, and the documents past the limit are left out and recorded (see [indexes-and-context.md](indexes-and-context.md)). Lowering `costUsdPerInvocation` therefore shrinks the corpus; it is not only a ceiling on spend.
 
 Subagents per map round: full 4, fast 1, paths 4, skip 0, adopt 0, plus a mapper re-run allowance per round of 2 for full and none for the other modes (a full map therefore derives 12 with one retry); the knowledge pass and intel add none. The contract also fixes the model (`haiku`), the read-excluded directories (`.git`, `build`, `coverage`, `dist`, `node_modules`, `vendor`), the secret globs (`**/*.key`, `**/*.pem`, `**/.env`, `**/.env.*`, `**/id_ed25519*`, `**/id_rsa*`) and the read-only command list. The source states that changing any preset value changes the policy revision. How the derived totals are computed is in [onboarding.md](onboarding.md).
 

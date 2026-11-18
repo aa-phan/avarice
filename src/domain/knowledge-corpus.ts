@@ -158,20 +158,27 @@ export function changedDocuments(previous: KnowledgeManifest, current: Knowledge
 
 // The cost model of one knowledge invocation. The pass is one contained session that reads the chunks and writes one extraction file per chunk, so what it costs
 // grows with the chunk count and a corpus bigger than the session can pay for cannot finish: the classifier needs every chunk, and a session that stops early is
-// `no_progress`. The AC-14 run on the portfolio (a corpus of 181 documents and 53 chunks) measured it: one session read and wrote 6 chunks for 0.30 USD, its setup
-// included, and stopped saying it was short of budget with 0.52 USD of its 0.80 USD cap unspent. So:
-//   chunkUsd   0.05 USD a chunk = 0.30 USD / 6 chunks, the setup folded into the chunks (the measured figure is not split, so the estimate errs high);
-//   capShare   0.75 of the per-invocation cap is planned for; the rest is the room a session needs because every chunk it reads makes the next turns dearer
-//              (the context it carries grows with each document) and because the cap also ends the run.
-// The most chunks the corpus may plan to is `floor(costCapUsd x capShare / chunkUsd)`, and never fewer than one: at the 0.8 USD cap of the AC-14 authorization 12 chunks,
-// at 1.6 USD 24, at the 3.0 USD default of the onboarding contract 45. The cap is the knowledge invocation's own: the contract's per-invocation cost cap or what is
-// left of the run's cost budget, the smaller (src/app/budget.ts), never a constant of any one run.
-export const KNOWLEDGE_COST = { chunkUsd: 0.05, capShare: 0.75 } as const;
+// `no_progress`, one that overruns its cap is `budget_exhausted` and its written chunks are discarded. The AC-14 runs measured it (2026-11-18):
+//    6 chunks   0.302 USD   aa-phan-portfolio-v2, attempt 1 (stopped short of budget with 0.52 USD of the 0.80 USD cap unspent)
+//   12 chunks   0.7518 USD  auto_search_workflow (finished)
+//   12 chunks   0.8058 USD  aa-phan-portfolio-v2, attempt 2 (0.0058 over the 0.8 USD cap: budget_exhausted, all 12 chunk files lost)
+// Doubling the chunks multiplied the cost by about 2.6, not 2: every chunk a session reads makes each later turn dearer, because the context it carries grows. The first
+// calibration (plan 04-35, ruling 2) was linear (0.05 USD a chunk, 0.75 of the cap) and so put 12 chunks at 0.8 USD, which is the whole cap. The model is now a power law
+//   knowledgeSessionCost(n) = chunkUsd x n^exponent
+// fitted through (6 chunks, 0.30 USD) and (12 chunks, 0.7788 USD, the mean of the two 12-chunk sessions): exponent = log2(0.7788 / 0.30) = 1.376 and
+// chunkUsd = 0.30 / 6^1.376 = 0.0255. It reproduces the three measured points to within the spread of the two 12-chunk sessions (6 chunks 0.300, 12 chunks 0.779).
+// Only `capShare` of the per-invocation cap is planned for, 2/3, a margin of a third that covers the spread between sessions (the two 12-chunk sessions differ by 7 percent)
+// and the cap that also ends the run. The most chunks the corpus may plan to is the largest n with knowledgeSessionCost(n) <= costCapUsd x capShare, and never fewer than
+// one: n = floor((costCapUsd x capShare / chunkUsd)^(1 / exponent)). That is 9 chunks at the 0.8 USD cap of the AC-14 authorization (modelled 0.524 USD; the worst measured
+// session scaled to 9 chunks is 0.542 USD, 68 percent of the cap), 15 at 1.6 USD and 23 at the 3.0 USD default of the onboarding contract. It is monotone in the cap.
+// The cap is the knowledge invocation's own: the contract's per-invocation cost cap or what is left of the run's cost budget, the smaller (src/app/budget.ts), never a
+// constant of any one run.
+export const KNOWLEDGE_COST = { chunkUsd: 0.0255, exponent: 1.376, capShare: 2 / 3 } as const;
+
+// The modelled cost in USD of one knowledge session over `chunks` chunks.
+export const knowledgeSessionCost = (chunks: number): number => KNOWLEDGE_COST.chunkUsd * chunks ** KNOWLEDGE_COST.exponent;
 
 export function knowledgeChunkLimit(costCapUsd: number): number {
-  const fits = Math.floor((costCapUsd * KNOWLEDGE_COST.capShare) / KNOWLEDGE_COST.chunkUsd + 1e-9);
+  const fits = Math.floor((costCapUsd * KNOWLEDGE_COST.capShare / KNOWLEDGE_COST.chunkUsd) ** (1 / KNOWLEDGE_COST.exponent) + 1e-9);
   return Math.max(1, fits);
 }
-
-// SKELETON (plan 04-35, ruling 3): the cost of a session of n chunks, still the linear model.
-export const knowledgeSessionCost = (chunks: number): number => chunks * KNOWLEDGE_COST.chunkUsd;
