@@ -27,3 +27,5 @@
 {"plan":"04-34","case":"p4-hook-input-capture","costUsd":0.0025576600000000007,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:17.785Z"}
 {"plan":"04-34","case":"p4-agent-broad-search","costUsd":0.00414577,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:38.009Z"}
 {"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.016334115,"claudeVersion":"2.1.326","at":"2026-11-18T02:15:31.467Z"}
+{"plan":"04-35","case":"ac14-aa-phan-portfolio-v2","costUsd":0.425173,"claudeVersion":"2.1.326","at":"2026-11-18T03:13:54.438Z"}
+{"plan":"04-35","case":"ac14-auto_search_workflow","costUsd":0.197445,"claudeVersion":"2.1.326","at":"2026-11-18T03:18:07.494Z"}

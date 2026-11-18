@@ -2,7 +2,361 @@
   "schema": 1,
   "plan": "04-35",
   "decision": "D-03, D-04, D-05",
-  "entries": [],
+  "entries": [
+    {
+      "hostStarted": true,
+      "invocations": 3,
+      "costUsd": 0.425173,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7P9ZSB8D3KA015BQE4KSQZJ",
+      "state": "active",
+      "record": {
+        "version": 2,
+        "mappingMode": "full",
+        "completeness": "complete",
+        "onboardedRevision": "git:9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "restricted": false
+      },
+      "mapping": {
+        "mode": "full",
+        "outcome": "map",
+        "reason": "refresh no-stamp: the existing map carries no last_mapped_commit: full remap in staging",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": {
+        "changedPathCount": 1,
+        "changedPaths": [
+          ".avarice/config.json"
+        ],
+        "drift": null,
+        "fromRecordVersion": 1,
+        "fromRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+        "manifestChanged": false,
+        "mode": "full",
+        "newTopLevelDirs": [
+          ".avarice"
+        ],
+        "reason": "no-stamp: the existing map carries no last_mapped_commit",
+        "threshold": 3,
+        "toRevision": "9f63d9114c5d3d720b8496b08cec85382cfaa357"
+      },
+      "refreshOf": {
+        "onboardedRevision": "9f1cd8d51f83252ad11a8c486c4245b1b9fc3066",
+        "recordVersion": 1
+      },
+      "existingState": {
+        "codebaseMap": "none",
+        "drift": null,
+        "outcome": "map",
+        "planningExists": true,
+        "userOwned": []
+      },
+      "indexesPresent": [
+        "graph",
+        "intel"
+      ],
+      "indexesAbsent": [
+        {
+          "index": "knowledge",
+          "reason": "invocation-failed"
+        }
+      ],
+      "graphNodes": {
+        "code": 1011,
+        "concept": 99,
+        "document": 0
+      },
+      "knowledge": null,
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "accepted"
+        },
+        {
+          "step": "index:code-graph",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:intel",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:intel-snapshot",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "index:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:knowledge",
+          "attempt": 1,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "accepted",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"6 of 309 named path(s) dangling (1.9%, limit 5%); counted as known: 3 named path(s) ignored by the repository's own .gitignore rules (dist, node_modules, node_modules/.bin/oxlint); 1 unique path suffix(es) of a tracked file; 5 module specifier(s) of a committed dependency; 5 workflow action(s) named by a committed workflow\",\"name\":\"path-references\",\"passed\":true},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"9f63d9114c5d3d720b8496b08cec85382cfaa357\"}"
+      },
+      "id": "aa-phan-portfolio-v2",
+      "attempt": 1,
+      "startedAt": "2026-11-18T03:07:43.713Z",
+      "finishedAt": "2026-11-18T03:13:54.439Z",
+      "profile": "personal-local",
+      "expectedPath": "refresh",
+      "exitCode": 0,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "after": {
+        "head": "9f63d9114c5d3d720b8496b08cec85382cfaa357",
+        "branch": "gsd/phase-02-deployed-themed-skeleton",
+        "headRef": "refs/heads/gsd/phase-02-deployed-themed-skeleton",
+        "statusDigest": "63ae0454f29f70c4d47adad975a212addc8dc583e2ffc8c93a5283e1e4309600",
+        "filesDigest": "c4041f1c27f5023e8fd316dddab4c2301482acb64ed6747bae9732b944b258e8",
+        "refsDigest": "566b6dd37048f074ba14f5a1b2f6951571c97002ae05f3db0b7ff6944fd76e14",
+        "worktreesDigest": "2dec97deaf5ee4817d237e385f8c6d2424016f1ecfd81ace757669b7b6d7cf93",
+        "indexDigest": "3b091922de6563b9e9e534da071aa077f5a1df857930b19f5cf1cbd6dca61a8c",
+        "gitMetaDigest": "6d5099988d7feb6141555ccbc1b6a0e611b76f2d22d9ce7c0eaaa54fabd4fe35",
+        "ignoredDigest": "bdc70998f08ff017dc7dea54ee3aa3463c8953d90ae7dc28edadd601b7c321c3",
+        "counts": {
+          "tracked": 364,
+          "untracked": 1,
+          "statusEntries": 1,
+          "refs": 10
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "none",
+        "outcome": "map"
+      },
+      "stdoutTail": "onboarding onb_01M7P9ZSB8D3KA015BQE4KSQZJ: active\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": null,
+        "confirmed": null
+      }
+    },
+    {
+      "hostStarted": true,
+      "invocations": 2,
+      "costUsd": 0.197445,
+      "costAssumed": false,
+      "containmentFindings": [],
+      "onboardingId": "onb_01M7PAB41HNX1HVP8HTQPGWJ5F",
+      "state": "blocked",
+      "record": null,
+      "mapping": {
+        "mode": "full",
+        "outcome": "isolated-regeneration",
+        "reason": "existing map (user-edited) regenerated in staging, full map",
+        "requested": "full",
+        "drift": null,
+        "existingMapAnswer": "refresh"
+      },
+      "refresh": null,
+      "refreshOf": null,
+      "existingState": {
+        "codebaseMap": "user-edited",
+        "drift": null,
+        "outcome": "isolated-regeneration",
+        "planningExists": true,
+        "userOwned": [
+          ".planning/MILESTONE-CONTEXT.md",
+          ".planning/codebase/CONCERNS.md",
+          ".planning/config.json",
+          ".planning/research/.cache/665135d126e67629e85b7123e22cd67cd6ea24cd262f1ada921062756e68be83.json",
+          ".planning/research/.cache/d7bc2d7df3821bd8478c99b760dc9ccab0c89a1de3522c4fd49a9746a88d2167.json",
+          ".planning/research/.cache/e28ca7386f8e31e24f00dc5ffda50eeb1656a40554d87257f5fc3398b83372eb.json",
+          ".planning/research/.cache/e3111e5dcf85ea33a6889aa920e212e9e99e33d662d1c9c92295b852552c59d7.json",
+          ".planning/seeds/SEED-261028-4uw-v3-tailored-applications.md",
+          ".planning/state.json"
+        ]
+      },
+      "indexesPresent": [],
+      "indexesAbsent": [],
+      "graphNodes": null,
+      "knowledge": null,
+      "knowledgeRefresh": null,
+      "knowledgeCacheHits": null,
+      "steps": [
+        {
+          "step": "gsd:inspect",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:probe",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:configure",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "mapping:plan",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "gsd:stamp",
+          "attempt": 1,
+          "status": "completed"
+        },
+        {
+          "step": "validate",
+          "attempt": 1,
+          "status": "rejected"
+        },
+        {
+          "step": "launch:map",
+          "attempt": 2,
+          "status": "completed"
+        }
+      ],
+      "lastNotCompleted": {
+        "step": "validate",
+        "attempt": 1,
+        "status": "rejected",
+        "result": "{\"checks\":[{\"detail\":\"7 required file(s) present\",\"name\":\"presence\",\"passed\":true},{\"detail\":\"last_mapped_commit equals the staging HEAD in 7 file(s)\",\"name\":\"stamp\",\"passed\":true},{\"detail\":\"the staging diff is inside the write sets\",\"name\":\"scope-of-writes\",\"passed\":true},{\"detail\":\"9 of 115 named path(s) dangling (7.8%, limit 5%): openai/gpt-oss-120b, openai/gpt-oss-20b, try/finally, America/Chicago, lock.json (+4 more); counted as known: 13 named path(s) ignored by the repository's own .gitignore rules (.venv, .env, state/lock.json (+10 more)); 1 unique path suffix(es) of a tracked file; 1 workflow action(s) named by a committed workflow\",\"name\":\"path-references\",\"passed\":false},{\"detail\":\"no secret pattern found\",\"name\":\"secrets\",\"passed\":true},{\"detail\":\"7 document(s) non-empty, under 262144 bytes, with their headings\",\"name\":\"size-and-structure\",\"passed\":true},{\"detail\":\"mode full: completeness complete, scope .\",\"name\":\"coverage\",\"passed\":true}],\"completeness\":\"complete\",\"extraFiles\":[],\"files\":7,\"scope\":[\".\"],\"scopeViolations\":[],\"secretHits\":[],\"stagingHead\":\"6a82d3536c06db0f25db1fb1c02bf776c3905937\"}"
+      },
+      "id": "auto_search_workflow",
+      "attempt": 1,
+      "startedAt": "2026-11-18T03:13:54.793Z",
+      "finishedAt": "2026-11-18T03:18:07.494Z",
+      "profile": "personal-extended",
+      "expectedPath": "onboard",
+      "exitCode": 3,
+      "capUsd": 1.6,
+      "containmentFailures": 0,
+      "changedSinceDryRun": [],
+      "before": {
+        "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "branch": "gsd/phase-03-compact-storage",
+        "headRef": "refs/heads/gsd/phase-03-compact-storage",
+        "statusDigest": "151edd192038ee61efc6669b4ce4a1848c2e38fb3cc11a9e485f08a9591816f8",
+        "filesDigest": "0beb598c4f54dbcdb2400809e909ced3992303ff3ee82e359f91dfcd2787c2f1",
+        "refsDigest": "cd09e4e35d73d08a7dcc6ef30d41fd2c34ed0884744a7baca77ef1665ee1624a",
+        "worktreesDigest": "9a91854b32f10e2256b77a44bdb33f6ecd504a8cdcf87fa8be9952a2e420f9f4",
+        "indexDigest": "f396fbcef3ef34cfd2e5a32fa0da83ecca40f11976d42607c941ea4ea957e090",
+        "gitMetaDigest": "f733ea1c3d55aa3cb4c5ae856f3cc352a56654ce3bca1360e8a8f5aafc1b6c95",
+        "ignoredDigest": "7ebb8a4c984363cce254a163a4ae5285e0eb9e2acb2d0c21946f9e7355292724",
+        "counts": {
+          "tracked": 152,
+          "untracked": 8,
+          "statusEntries": 8,
+          "refs": 3
+        }
+      },
+      "after": {
+        "head": "6a82d3536c06db0f25db1fb1c02bf776c3905937",
+        "branch": "gsd/phase-03-compact-storage",
+        "headRef": "refs/heads/gsd/phase-03-compact-storage",
+        "statusDigest": "151edd192038ee61efc6669b4ce4a1848c2e38fb3cc11a9e485f08a9591816f8",
+        "filesDigest": "0beb598c4f54dbcdb2400809e909ced3992303ff3ee82e359f91dfcd2787c2f1",
+        "refsDigest": "cd09e4e35d73d08a7dcc6ef30d41fd2c34ed0884744a7baca77ef1665ee1624a",
+        "worktreesDigest": "9a91854b32f10e2256b77a44bdb33f6ecd504a8cdcf87fa8be9952a2e420f9f4",
+        "indexDigest": "f396fbcef3ef34cfd2e5a32fa0da83ecca40f11976d42607c941ea4ea957e090",
+        "gitMetaDigest": "f733ea1c3d55aa3cb4c5ae856f3cc352a56654ce3bca1360e8a8f5aafc1b6c95",
+        "ignoredDigest": "7ebb8a4c984363cce254a163a4ae5285e0eb9e2acb2d0c21946f9e7355292724",
+        "counts": {
+          "tracked": 152,
+          "untracked": 8,
+          "statusEntries": 8,
+          "refs": 3
+        }
+      },
+      "differences": [],
+      "existingMap": {
+        "class": "user-edited",
+        "outcome": "isolated-regeneration"
+      },
+      "stdoutTail": "onboarding onb_01M7PAB41HNX1HVP8HTQPGWJ5F: blocked (budget_exhausted)\nthe map invocation exhausted its budget\n",
+      "stderrTail": "",
+      "classification": {
+        "proposed": {
+          "class": "product-defect",
+          "summary": "Blocked (budget_exhausted) at 0.197 USD of the 1.60 USD cap, so the stop is not a cost cap. Attempt 1 of the map (7 files) was rejected by validate: path-references 9 of 115 named paths dangling (7.8%, limit 5%), the dangling names being non-paths such as openai/gpt-oss-120b, openai/gpt-oss-20b, try/finally, America/Chicago (validator false positives on model ids, Python syntax and a timezone). The in-run retry mapper (attempt 2) spent its 4-subagent total, then asked for a fifth Agent call; the hook denied it (rule budget_exhausted, budget subagentsTotal, seq 323) and countBudgetDenials > 0 turned the onboarding into blocked although the invocation had written its files. No containment finding; checkout and refs digests equal. Two product behaviours: the path-references check counting non-path tokens, and a single denied over-budget spawn blocking an otherwise complete retry. Candidate rulings: fix the validator heuristic and/or have a budget denial after the map has completed not block; then a ruling-ref retry of this repository (attempt 2 of 2).",
+          "by": "claude",
+          "at": "2026-11-18T03:19:02.325Z"
+        },
+        "confirmed": null
+      }
+    }
+  ],
   "list": {
     "file": "test/benchmark/phase4/ac14-repositories.json",
     "sha256": "34afa9855fddbee4aa715be1afa44e4815e005e08a3c07bf7ca05e3124d8b0ef",
@@ -247,7 +601,7 @@
       "approvedAt": "2026-11-16T18:47:56Z"
     }
   },
-  "updatedAt": "2026-11-18T03:06:08.791Z",
+  "updatedAt": "2026-11-18T03:19:02.326Z",
   "authorization": {
     "ownerConfirmedAt": "2026-11-18T03:06:08.782Z",
     "confirmedBy": "aphan",
