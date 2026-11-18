@@ -6,7 +6,7 @@
 import { FAST_MAP_FILES, completenessFor, requiredFilesFor } from './mapping.ts';
 import type { Completeness, MappingPlan } from './mapping.ts';
 import { matchesAny } from './glob.ts';
-import { danglingShare, referencesOf } from './path-references.ts';
+import { danglingShare, explicitReferencesOf, referencesOf } from './path-references.ts';
 import { findSecrets } from './secret-patterns.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 
@@ -247,6 +247,7 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs, facts.ignoredReferences ?? [], {
     moduleNames: facts.moduleNames ?? [],
     actionRefs: facts.actionRefs ?? [],
+    explicit: explicitReferencesOf(facts.files.map((f) => f.text)),
   });
   const withinLimit = resolved.share <= limits.danglingShare;
   const counts = `${resolved.dangling.length} of ${resolved.total} named path(s) dangling (${percent(resolved.share)}, limit ${percent(limits.danglingShare)})`;
@@ -257,10 +258,12 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   if (resolved.byRule.module.length > 0) forgiven.push(`${resolved.byRule.module.length} module specifier(s) of a committed dependency`);
   if (resolved.byRule.action.length > 0) forgiven.push(`${resolved.byRule.action.length} workflow action(s) named by a committed workflow`);
   const byRule = forgiven.length === 0 ? '' : `; counted as known: ${forgiven.join('; ')}`;
+  // A token that does not plausibly name a repository path (a model id, a language construct, a zone, a URL) is in neither count.
+  const notPaths = resolved.nonPaths.length === 0 ? '' : `; not counted: ${resolved.nonPaths.length} token(s) that do not name a repository path (${listed(resolved.nonPaths, 3)})`;
   const pathReferences: ValidationCheck = {
     name: 'path-references',
     passed: withinLimit,
-    detail: withinLimit ? `${counts}${byRule}` : `${counts}: ${listed(resolved.dangling)}${byRule}`,
+    detail: withinLimit ? `${counts}${byRule}${notPaths}` : `${counts}: ${listed(resolved.dangling)}${byRule}${notPaths}`,
   };
 
   // 5. Secrets: GSD's scan plus AVARICE's redactor patterns. Names and lines only.

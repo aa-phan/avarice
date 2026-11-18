@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { CloneStagingWorkspace } from '../../src/adapters/git/staging-clone.ts';
-import { danglingShare, extractPathReferences } from '../../src/domain/path-references.ts';
+import { danglingShare, explicitReferencesOf, extractPathReferences } from '../../src/domain/path-references.ts';
 import { actionRefsOf, dependencyNamesOf } from '../../src/domain/reference-sources.ts';
 import { AVARICE_TRACKED_WRITABLE, AVARICE_WRITE_SET, STAGING_SCAFFOLD } from '../../src/domain/validation.ts';
 import { FULL_MAP_FILES } from '../../src/domain/mapping.ts';
@@ -140,21 +140,26 @@ describe('the real full map of the exit rehearsal', () => {
   const refs = documents.flatMap((d) => extractPathReferences(d.text));
   const known = [...tracked, ...documents.map((d) => d.path), '.planning/config.json'];
   const own = [...AVARICE_WRITE_SET, ...AVARICE_TRACKED_WRITABLE, ...STAGING_SCAFFOLD];
+  // `anim/declarative/` is written as a directory in the map: an explicit form, so it names a repository path (plan 04-35).
+  const explicit = explicitReferencesOf(documents.map((d) => d.text));
   const resolvers = {
+    explicit,
     moduleNames: dependencyNamesOf([fixture('repo-package.json.txt')]),
     actionRefs: actionRefsOf(['ci.yml.txt', 'deploy.yml.txt'].map((name) => fixture(`repo-workflows/${name}`))),
   };
 
   it('is under the 5% limit after the ignore rule and the four reference rules, with exactly the six unexplained tokens left', () => {
-    const baseline = danglingShare(refs, known, own);
-    assert.equal(baseline.total, 308, 'the three placeholder tokens are no longer references');
-    assert.equal(baseline.dangling.length, 20, '29 before the import and suffix rules (which need no repository facts), 20 after');
+    const baseline = danglingShare(refs, known, own, [], { explicit });
+    // Without the repository's own facts the five dependency-rule names, the five workflow actions and `node_modules/.bin/oxlint` are not repository paths either: not counted (plan 04-35).
+    assert.equal(baseline.nonPaths.length, 11);
+    assert.equal(baseline.total, 297, 'the three placeholder tokens are no longer references, and 11 more are no repository path');
+    assert.equal(baseline.dangling.length, 9, '29 before the import and suffix rules (which need no repository facts); the non-path rule then takes the module and action names away');
 
     const repo = scratch({ files: { '.gitignore': fixture('repo-gitignore.txt'), 'README.md': '# the portfolio stand-in\n' } });
     const { ws, staging } = stagingOf(repo);
     const ignored = must(ws.ignoredByCommittedRules(staging, repo.head, [...new Set(refs)]));
-    const afterIgnore = danglingShare(refs, known, own, ignored);
-    assert.equal(afterIgnore.dangling.length, 16, 'dist, node_modules, node_modules/.bin/oxlint and lenis/dist/lenis.css are forgiven by the ignore rule');
+    const afterIgnore = danglingShare(refs, known, own, ignored, { explicit });
+    assert.equal(afterIgnore.dangling.length, 6, 'dist, node_modules, node_modules/.bin/oxlint and lenis/dist/lenis.css are forgiven by the ignore rule; the dependency and action names are no repository path');
 
     const after = danglingShare(refs, known, own, ignored, resolvers);
     assert.equal(after.total, 308);
@@ -271,8 +276,17 @@ describe('validation through the CLI: package and action references', () => {
     }
   });
 
-  it('rejects the same references when the package.json does not list the dependency', () => {
-    const { r } = run('{"name":"scratch","dependencies":{"vue":"^3"}}\n');
-    assert.equal(r.code, 3, r.stdout + r.stderr);
+  it('does not resolve them as modules when the package.json does not list the dependency, and does not count them as paths either (plan 04-35)', () => {
+    const { r, roots } = run('{"name":"scratch","dependencies":{"vue":"^3"}}\n');
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
+    try {
+      const row = db.prepare("SELECT result_json FROM onboarding_steps WHERE step = 'validate' ORDER BY attempt DESC").get() as { result_json: string };
+      const detail = (JSON.parse(row.result_json) as { checks: Array<{ name: string; detail: string }> }).checks.find((c) => c.name === 'path-references')?.detail ?? '';
+      assert.doesNotMatch(detail, /module specifier/);
+      assert.match(detail, /not counted: 4 token\(s\) that do not name a repository path/);
+    } finally {
+      db.close();
+    }
   });
 });
