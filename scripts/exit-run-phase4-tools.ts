@@ -810,8 +810,9 @@ export async function runOne(argv: readonly string[]): Promise<number> {
   const profile = String((authorization['profiles'] as Json | undefined)?.[id] ?? '');
   if (profile === '') return refuse(`the authorization names no profile for ${id}`);
   const host = (authorization['host'] ?? {}) as Json;
-  const claudeBin = String(host['claudeBin'] ?? '');
-  if (claudeBin === '' || !existsSync(claudeBin)) return refuse(`the authorized host ${claudeBin} is not installed`);
+  // The authorization records the host path home-redacted (~/...); the spawn needs the real path.
+  const claudeBin = expandHome(String(host['claudeBin'] ?? ''), ownerHome());
+  if (claudeBin === '' || !existsSync(claudeBin)) return refuse(`the authorized host ${redactHome(claudeBin)} is not installed`);
 
   // The stop-loss and D-04: two attempts per epoch at most, and a retry only after the owner has ruled on the stop.
   const prior = asObjects(evidence['entries']).filter((e) => e['id'] === id);
