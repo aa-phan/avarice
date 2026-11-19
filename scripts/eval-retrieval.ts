@@ -367,13 +367,20 @@ function gitStatus(cwd: string, args: readonly string[]): number | null {
 
 const SETUP_IDENTITY = ['-c', 'user.name=AVARICE evaluation', '-c', 'user.email=eval@localhost.invalid', '-c', 'commit.gpgsign=false'];
 
+// The tool cache directories below the installed dependency tree that a repository's checks write (found by running the portfolio's four checks in a clone, plan 04-36).
+export const NODE_MODULES_TOOL_CACHES: readonly string[] = ['node_modules/.tmp/**', 'node_modules/.cache/**', 'node_modules/.vite/**', 'node_modules/.vite-temp/**', 'node_modules/.vitest-cache/**'];
+
 // The conventions file a run needs (`.avarice/config.json`): the task's checks as required checks, a write set of every top-level directory and every top-level file that
 // is not protected, and the dependency install when the parent has an npm lockfile. Derived, not copied from the owner's repository.
 export function conventionsFor(task: EvalTask, topLevelDirs: readonly string[], topLevelFiles: readonly string[], hasNpmLock: boolean): Record<string, unknown> {
   const write = [...topLevelDirs.filter((d) => !d.startsWith('.') && d !== 'node_modules').map((d) => `${d}/**`), ...topLevelFiles.filter((f) => !f.startsWith('.') && !matchesAny(f, ROUTINE_PRESET.protected))];
+  // The run validates each required check once before any model call and blocks the run on a permission decision when a check writes a path it does not declare. The
+  // tools of an npm repository write their caches into the installed dependency tree (tsc -b: .tmp; vitest: .cache, .vite, .vite-temp, .vitest-cache), so every check of
+  // such a repository declares them (plan 04-36: without it every run on the portfolio repository was blocked before its first model call).
+  const writes = hasNpmLock ? { writes: [...NODE_MODULES_TOOL_CACHES] } : {};
   return {
     schema: 1,
-    checks: task.checks.map((c) => ({ name: c.name, argv: c.argv, timeoutSec: 900, required: true })),
+    checks: task.checks.map((c) => ({ name: c.name, argv: c.argv, timeoutSec: 900, required: true, ...writes })),
     paths: { write: write.length > 0 ? write : ['**'], protected: [], artifacts: [] },
     ...(hasNpmLock ? { dependencies: { install: ['npm', 'ci'], lockfile: 'package-lock.json', registryHosts: ['registry.npmjs.org'] } } : {}),
   };
