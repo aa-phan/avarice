@@ -632,6 +632,42 @@ describe('the conventions file and the repository formatter (plan 04-36)', () =>
   });
 });
 
+describe('the paths the checks write (plan 04-36)', () => {
+  // The run validates every required check once before any model call and blocks the run when a check writes outside the paths it declares. `tsc -b` writes
+  // node_modules/.tmp/*.tsbuildinfo and vitest writes node_modules/.cache/imagetools, node_modules/.vite and node_modules/.vitest-cache, so a check list that declares no
+  // `writes` blocked every T01 run on the portfolio repository with a permission decision before it started (diagnosed by a kept run, plan 04-36).
+  const TOOL_CACHES = ['node_modules/.tmp/tsconfig.app.tsbuildinfo', 'node_modules/.cache/imagetools/09b7c31399', 'node_modules/.vite/vitest/da39a3ee5e/results.json', 'node_modules/.vite-temp/vitest.config.ts.timestamp-1.mjs', 'node_modules/.vitest-cache/a.json'];
+
+  it('declares the dependency tree tool caches as writes of every check when the parent has an npm lockfile, and nothing outside them', async () => {
+    const { prepareArmWorkspace } = await harness();
+    const { parseConventions } = await import('../../src/domain/conventions.ts');
+    const { matchesAny } = await import('../../src/domain/glob.ts');
+    const leak = leakFixture();
+    const dest = join(temp('eval-writes'), 'repo');
+    prepareArmWorkspace({ source: leak.repo.path, task: leak.task, dest });
+    const parsed = parseConventions(git(dest, ['show', 'HEAD:.avarice/config.json']));
+    assert.ok(parsed.ok, JSON.stringify(parsed));
+    assert.ok(parsed.value.checks.length > 0);
+    for (const check of parsed.value.checks) {
+      for (const path of TOOL_CACHES) assert.ok(matchesAny(path, check.writes), `${check.name} declares ${path}`);
+      assert.ok(!matchesAny('src/a.ts', check.writes) && !matchesAny('node_modules/left-pad/index.js', check.writes), `${check.name} declares no source path and no installed package`);
+    }
+  });
+
+  it('keeps the declared writes off the protected paths the run contract enforces, and declares none for a repository without an npm lockfile', async () => {
+    const { conventionsFor } = await harness();
+    const { ROUTINE_PRESET } = await import('../../src/domain/run-contract.ts');
+    const { matchesAny } = await import('../../src/domain/glob.ts');
+    const task = { id: 'T98', checks: [{ name: 'test', argv: ['npm', 'run', 'test'] }] } as never;
+    const withLock = conventionsFor(task, ['src'], ['package.json'], true) as { checks: Array<{ writes?: string[] }> };
+    const writes = withLock.checks[0]?.writes ?? [];
+    assert.ok(writes.length > 0);
+    for (const glob of writes) assert.ok(!matchesAny(glob.replace(/\*\*$/, 'x'), ROUTINE_PRESET.protected), `${glob} is not protected`);
+    const without = conventionsFor(task, ['src'], ['setup.py'], false) as { checks: Array<Record<string, unknown>> };
+    assert.equal(without.checks[0]?.['writes'], undefined);
+  });
+});
+
 describe('the arm C onboarding cap (plan 04-36)', () => {
   it('is 1.10 USD, above the 0.974 USD the knowledge pass cost on the largest repository, and the plan charges it', async () => {
     const { ONBOARD_CAP_USD, loadApprovedTasks, planRuns } = await harness();
