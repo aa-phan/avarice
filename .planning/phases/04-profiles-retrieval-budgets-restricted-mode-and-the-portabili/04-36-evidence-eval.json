@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "plan": "04-36",
+  "decision": "D-03, D-07, D-08",
+  "status": "ruling-recorded",
+  "ruling": {
+    "ownerReply": "authorize balanced-9 pilot 11.70 total 33.00.",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-19T04:47:08Z",
+    "recordedBefore": "any evaluation run in the Phase 4 ledger (ledger at 38 lines, 3.926675 USD, all from plans 04-34 and 04-35, when this file was written)",
+    "choice": "authorize",
+    "meaning": "the recommendation in 04-36-pilot.json, accepted in full",
+    "taskSet": {
+      "name": "balanced-9",
+      "tasks": ["T01", "T04", "T06", "T07", "T10", "T13", "T16", "T17", "T20"],
+      "byRepository": {
+        "aa-phan-portfolio-v2": ["T01", "T04", "T06"],
+        "auto_search_workflow": ["T07", "T10", "T13"],
+        "GroceriesGPT": ["T16", "T17", "T20"]
+      },
+      "arms": ["A", "B", "C"],
+      "runs": 27
+    },
+    "pilot": { "tasks": ["T01", "T07", "T16"], "runs": 9, "capUsd": 11.7 },
+    "rest": { "tasks": ["T04", "T06", "T10", "T13", "T17", "T20"], "runs": 18, "capBoundUsd": 23.4, "condition": "runs only when its cap bound fits the conditional total cap minus the pilot's measured spend; otherwise stop and return to the owner" },
+    "conditionalTotalCapUsd": 33.0,
+    "mechanicalGuard": { "env": "AVARICE_PHASE4_CEILING_USD", "value": 36.93, "basis": "3.9267 USD Phase 4 spend before this plan's runs plus 33.00 USD; the variable can only lower the 40 USD ceiling (D-03)" },
+    "ac8RuleChange": {
+      "was": "AC-8 passes when the task success rate of arm B or arm C is at least the success rate of arm A and its total tokens are no more than 50% of arm A total tokens, over the 20 tasks.",
+      "now": "The same rule over the 9 balanced-9 tasks (3 per repository).",
+      "acceptedInWritingBy": "Aaron Phan, 2026-11-19T04:47:08Z",
+      "handling": "test/benchmark/phase4/eval-tasks.json and its sha256 (3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92) are not edited. The reduced set is selected by the --task-ids flag; this file and the plan summary record the reduction and the rule change.",
+      "weakerBecause": "9 tasks and 27 runs are a smaller sample than 20 tasks and 60 runs; a single task is 11% of a rate instead of 5%."
+    },
+    "harnessChangesAuthorized": [
+      "a --task-ids selector in scripts/eval-retrieval.ts: ids must be on the approved list, others refused, approved digest check kept",
+      "a merge so the rest's results join the pilot's in one results file without re-running a recorded (task, arm)",
+      "ONBOARD_CAP_USD.C from 0.90 to 1.10"
+    ],
+    "stopConditions": [
+      "6 or more of the 9 pilot runs end budget_exhausted, leave no branch to judge, or report a judging error",
+      "the rest does not fit the conditional total cap minus the pilot's measured spend",
+      "any single run or setup step that would pass the 11.70 pilot cap, the 33.00 total cap or the 40 USD ceiling"
+    ],
+    "hardLimits": "never exceed 11.70 for the pilot, 33.00 in total, or the 40 USD Phase 4 ceiling; fitsPhase4Ceiling before every model step; no other live claude use; the owner's private repositories are read-only (the harness clones at the parents into scratch)"
+  },
+  "pilot": null,
+  "rest": null,
+  "verdict": null,
+  "knowledgeRule": null,
+  "ownerSpotCheck": { "runs": [], "result": "pending: three successful runs are listed here once the evaluation ends" }
+}

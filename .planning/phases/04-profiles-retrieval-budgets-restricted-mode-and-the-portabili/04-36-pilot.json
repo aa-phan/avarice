@@ -3,7 +3,7 @@
   "plan": "04-36",
   "task": "Task 1 (tracer): pilot and full-evaluation dry runs with the spend projection",
   "generatedAt": "2026-11-18T19:51:03Z",
-  "status": "awaiting-owner-ruling",
+  "status": "ruling-recorded: authorize balanced-9, pilot 11.70, total 33.00 (measured pilot results are added below when the pilot ends)",
   "spent": "nothing: only `node scripts/eval-retrieval.ts --dry-run`; no model started, AVARICE_LIVE not set",
   "tasksFile": {
     "path": "test/benchmark/phase4/eval-tasks.json",
@@ -104,7 +104,7 @@
     { "id": "balanced-9-shared-AB", "what": "balanced-9 with arms A and B sharing one onboarding", "runs": 27, "capBoundUsd": 27.9, "measuredInformedUsd": 18.37, "support": "needs code (`--task-ids` and a shared onboarding)" },
     { "id": "ceiling-change", "what": "raise the Phase 4 ceiling (D-03); the environment variable can only lower it, so this is a constant plus a recorded decision", "support": "owner decision and code", "con": "the full design needs about 49.6 USD measured-informed and 76.5 USD for the harness to start; D-03 allocated about 24 USD" }
   ],
-  "ruling": null,
+  "ruling": { "reply": "authorize balanced-9 pilot 11.70 total 33.00.", "owner": "Aaron Phan", "repliedAt": "2026-11-19T04:47:08Z", "recordedIn": "04-36-evidence-eval.json" },
   "recommendation": {
     "note": "Claude's recommendation only; it is not a ruling and nothing here is authorized.",
     "choice": "authorize, reduced to the balanced-9 task set, with stop conditions",
