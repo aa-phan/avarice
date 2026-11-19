@@ -41,3 +41,10 @@
 {"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.07625149,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:20:34.392Z"}
 {"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.6574211199999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:30:12.046Z"}
 {"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.08386034,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T17:55:58.245Z"}
+{"plan":"04-36","case":"eval-T01-A-map","costUsd":0.05386458,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:06:12.282Z"}
+{"plan":"04-36","case":"eval-T01-A-onboard","costUsd":0.07607904000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:10:19.757Z"}
+{"plan":"04-36","case":"eval-T01-A-run","costUsd":0.22764552,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:23:32.351Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.06950935999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:27:31.982Z"}
+{"plan":"04-36","case":"eval-T01-B-run","costUsd":0.26532667499999985,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:40:29.924Z"}
+{"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.6362138900000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:50:15.380Z"}
+{"plan":"04-36","case":"eval-T01-C-run","costUsd":0.006754840000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:51:07.709Z"}

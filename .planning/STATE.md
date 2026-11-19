@@ -5,7 +5,7 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: "04-36 Task 3 stopped: pilot T01 blocked, owner ruling needed"
+stopped_at: "04-36 Task 3 stopped: portfolio-6 T01 blocked in all arms after the model started, owner ruling needed"
 last_updated: "2026-11-19T05:34:19.665Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
@@ -526,7 +526,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
-- 04-36 AC-8 evaluation stopped after the T01 pilot (3 runs blocked_on_decision before any model call, 0.8853 USD); T07/T10/T13 need Python deps and T16/T17/T20 need TEST_DATABASE_URL, so 6 of 9 tasks cannot succeed in the harness; owner ruling needed (see 04-36-evidence-eval.json)
+- 04-36 AC-8 evaluation stopped a second time (plan spend 2.3046 USD of 33.00): the first pre-model block (check validation rejected tsc/vitest cache writes) was a harness defect and is fixed (e76f7cc); portfolio-6 then ran T01 in arms A, B, C and all three ended blocked_on_decision after the model started (denied tool calls, no change, no branch); cause not classified (model behaviour, harness read set or brief, or a product defect), owner ruling needed (see 04-36-evidence-eval.json portfolio6)
 
 ### Quick Tasks Completed
 
@@ -558,7 +558,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-19T05:34:19.631Z
-Stopped at: 04-36 Task 3 stopped: pilot T01 blocked, owner ruling needed
+Stopped at: 04-36 Task 3 stopped: portfolio-6 T01 blocked in all arms after the model started, owner ruling needed
 Resume file: None
 
 ## Operator Next Steps
