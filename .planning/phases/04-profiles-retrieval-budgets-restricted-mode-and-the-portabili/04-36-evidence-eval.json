@@ -44,6 +44,27 @@
     ],
     "hardLimits": "never exceed 11.70 for the pilot, 33.00 in total, or the 40 USD Phase 4 ceiling; fitsPhase4Ceiling before every model step; no other live claude use; the owner's private repositories are read-only (the harness clones at the parents into scratch)"
   },
+  "ruling2": {
+    "ownerReply": "diagnose, then portfolio-6",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-19T17:48:42Z",
+    "recordedBefore": "any spend after the pilot (Phase 4 ledger at 42 lines, 4.812019 USD, plan 04-36 0.88534423 USD when this was written)",
+    "authorized": [
+      "one diagnostic run of T01 arm B with --keep (about 0.08 USD, capped at 0.40 USD) to read the decision record and classify the pre-model block; the kept scratch is removed once read",
+      "portfolio-6: tasks T01 to T06 (all aa-phan-portfolio-v2), arms A, B, C, 18 runs, with --node-modules aa-phan-portfolio-v2=<the owner's portfolio checkout>/node_modules (read-only use)"
+    ],
+    "taskSetChange": {
+      "was": "balanced-9 (T01, T04, T06, T07, T10, T13, T16, T17, T20), itself reduced from the 20 approved tasks by ruling 1",
+      "now": "portfolio-6 (T01, T02, T03, T04, T05, T06)",
+      "ac8RuleNow": "AC-8 (arm B or C succeeds at least as often as A at no more than 50% of A's tokens) is judged over these 6 portfolio tasks (18 runs)",
+      "acceptedInWritingBy": "Aaron Phan, 2026-11-19T17:48:42Z",
+      "handling": "test/benchmark/phase4/eval-tasks.json and its sha256 (3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92) are not edited; the set is selected by --task-ids.",
+      "weakerBecause": "6 tasks on one repository are a smaller and less varied sample than 20 tasks on five; one task is 17% of a rate. T02 and T03 share a held-out test file and T03 builds on T02's parent chain. The two other repositories cannot be judged in this harness (a Python environment, a Postgres database).",
+      "supersededRuns": "the three T01 runs of the pilot (arms A, B, C: blocked_on_decision, 0 tokens, no branch) are superseded by the T01 re-run in portfolio-6 and are not counted in the verdict; they are kept in 04-36-pilot-results.json"
+    },
+    "caps": { "planTotalUsd": 33.0, "spentByPlanUsd": 0.88534423, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40, "portfolio6CapBoundUsd": "about 23.40 (to be checked against the harness's dry run before the first run)" },
+    "diagnosisRule": "a cause in the harness, the arm repository, a brief or the judge wiring is fixed offline (RED then GREEN, with a unit test) and the plan proceeds; a cause in AVARICE product code (src/) or a design decision stops the plan with a classification and fix options"
+  },
   "harnessChanges": {
     "taskIdsSelector": "selectTasks: named approved tasks in the order given; an id off the approved list, a repeat or an empty list is refused (exit 3); not with --tasks (exit 64); approved digest unchanged and printed",
     "merge": "--merge (needs --out): readResultsFile/skipRecorded keep recorded runs, skip their (task, arm) pairs, refuse a file of another approved list, a malformed one or a duplicate pair; a live start over a file that holds runs is refused without --merge; nothing to run exits 0 without a model; header gains taskIds and invocations",
