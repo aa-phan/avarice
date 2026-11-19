@@ -5,11 +5,11 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-35-PLAN.md
-last_updated: "2026-11-18T19:11:34.977Z"
+stopped_at: "04-36 Task 3 stopped: pilot T01 blocked, owner ruling needed"
+last_updated: "2026-11-19T05:34:19.665Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 8cb7f999929bc10a4697b16b81268c5a742d823b
+state_head: 7c0add9078a8d780b3133fa1d5e8e13ce19a0582
 progress:
   total_phases: 6
   completed_phases: 3
@@ -526,6 +526,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
+- 04-36 AC-8 evaluation stopped after the T01 pilot (3 runs blocked_on_decision before any model call, 0.8853 USD); T07/T10/T13 need Python deps and T16/T17/T20 need TEST_DATABASE_URL, so 6 of 9 tasks cannot succeed in the harness; owner ruling needed (see 04-36-evidence-eval.json)
 
 ### Quick Tasks Completed
 
@@ -556,8 +557,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-18T19:11:34.922Z
-Stopped at: Completed 04-35-PLAN.md
+Last session: 2026-11-19T05:34:19.631Z
+Stopped at: 04-36 Task 3 stopped: pilot T01 blocked, owner ruling needed
 Resume file: None
 
 ## Operator Next Steps
