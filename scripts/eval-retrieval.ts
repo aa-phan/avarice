@@ -17,7 +17,9 @@
 //   --live      Runs the plan: refuses first when the whole plan would pass the ceiling, then checks the ceiling again before each model step and records each step's spend
 //               in the Phase 4 ledger under AVARICE_PHASE4_PLAN (default 04-36). Needs --out. Plan 04-36 runs this after the owner authorizes the spend.
 //
-// Flags: --tasks <n> (the first n approved tasks, default all), --arms A,B,C, --cap-usd <n> (the per-run cost cap, default 0.40), --out <file> (the results JSON),
+// Flags: --tasks <n> (the first n approved tasks, default all), --task-ids T01,T07 (exactly these approved tasks, in this order; an id off the approved list is refused; not with
+//        --tasks), --merge (needs --out: keep the runs the file already holds, skip their (task, arm) pairs and add the rest; refused when the file came from another approved list;
+//        a live start over a file that holds runs is refused without it), --arms A,B,C, --cap-usd <n> (the per-run cost cap, default 0.40), --out <file> (the results JSON),
 //        --tasks-file <file>, --repos-file <file>, --source <repository id>=<path> (repeatable; default the source in the repositories file), --node-modules <id>=<dir>
 //        (repeatable; the dependency tree the judge copies into its clone; default the source checkout's own when its lockfile equals the parent's), --scratch <dir>, --keep.
 //
@@ -162,8 +164,9 @@ export function loadApprovedTasks(file: string): ApprovedTasks {
 }
 
 // What a fast onboarding is allowed to cost (the cap of `--budget costUsdPerRun`), per arm, and what a map generation for arm A is. Assumptions from the Phase 3 fast onboarding
-// (0.6 USD, plans 03-xx); arm C's is larger by its knowledge invocation. The pilot (plan 04-36) measures the real figures.
-export const ONBOARD_CAP_USD: Readonly<Record<ArmId, number>> = { A: 0.6, B: 0.6, C: 0.9 };
+// (0.6 USD, plans 03-xx); arm C's is larger by its knowledge invocation: 1.10 USD since the owner's ruling of plan 04-36, because the knowledge pass on the largest repository
+// (auto_search_workflow) cost 0.974 USD in the AC-14 benchmark, above the 0.90 USD first assumed. The pilot (plan 04-36) measures the real figures.
+export const ONBOARD_CAP_USD: Readonly<Record<ArmId, number>> = { A: 0.6, B: 0.6, C: 1.1 };
 export const MAP_CAP_USD = 0.6;
 export const DEFAULT_RUN_CAP_USD = 0.4;
 
@@ -191,6 +194,29 @@ export function planRuns(tasks: readonly EvalTask[], arms: readonly ArmId[], opt
     }
   }
   return plan;
+}
+
+// The tasks of a run: the named approved tasks in the order given (`ids`, plan 04-36), else the first `first` approved tasks, else all of them. An id that is not on the approved
+// list is refused, so a run can never replay a task the owner did not approve; the approved file and its digest are untouched.
+export function selectTasks(approved: ApprovedTasks, selection: { first?: number; ids?: readonly string[] }): EvalTask[] {
+  if (selection.ids === undefined) return approved.tasks.slice(0, selection.first ?? approved.tasks.length);
+  if (selection.ids.length === 0) throw new EvalRefusal('--task-ids names no task');
+  const byId = new Map(approved.tasks.map((t) => [t.id, t] as const));
+  const chosen: EvalTask[] = [];
+  for (const id of selection.ids) {
+    const task = byId.get(id);
+    if (task === undefined) throw new EvalRefusal(`${id} is not on the approved task list ${approved.file}`);
+    if (chosen.includes(task)) throw new EvalRefusal(`${id} is named twice in --task-ids`);
+    chosen.push(task);
+  }
+  return chosen;
+}
+
+// What is left to run once the (task, arm) pairs of an earlier invocation are set aside, renumbered (plan 04-36): a recorded pair is never run again, so a merge cannot
+// duplicate it or pay for it twice.
+export function skipRecorded(plan: readonly PlannedRun[], recorded: ReadonlyArray<{ task: string; arm: string }>): PlannedRun[] {
+  const done = new Set(recorded.map((r) => `${r.task}\0${r.arm}`));
+  return plan.filter((r) => !done.has(`${r.task.id}\0${r.arm}`)).map((r, index) => ({ ...r, n: index + 1 }));
 }
 
 export interface Projection {
@@ -661,6 +687,8 @@ interface Options {
   dryRun: boolean;
   live: boolean;
   tasks: number | undefined;
+  taskIds: string[] | undefined;
+  merge: boolean;
   arms: ArmId[];
   capUsd: number;
   out: string | undefined;
@@ -672,7 +700,7 @@ interface Options {
   keep: boolean;
 }
 
-const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --live --out <file>) [--tasks <n>] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep]';
+const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --live --out <file>) [--tasks <n> | --task-ids T01,T07] [--merge] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep]';
 
 class UsageError extends Error {}
 
@@ -681,6 +709,8 @@ function parseArgs(argv: readonly string[]): Options {
     dryRun: false,
     live: false,
     tasks: undefined,
+    taskIds: undefined,
+    merge: false,
     arms: [...ARM_IDS],
     capUsd: DEFAULT_RUN_CAP_USD,
     out: undefined,
@@ -722,6 +752,15 @@ function parseArgs(argv: readonly string[]): Options {
         options.tasks = n;
         break;
       }
+      case '--task-ids': {
+        const ids = value().split(',');
+        if (ids.some((id) => id === '')) throw new UsageError('--task-ids needs a comma-separated list of task ids');
+        options.taskIds = ids;
+        break;
+      }
+      case '--merge':
+        options.merge = true;
+        break;
       case '--arms': {
         const names = value().split(',');
         const arms = names.map((n) => ARM_IDS.find((a) => a === n));
@@ -763,6 +802,8 @@ function parseArgs(argv: readonly string[]): Options {
   }
   if (options.dryRun === options.live) throw new UsageError('name exactly one of --dry-run and --live');
   if (options.live && options.out === undefined) throw new UsageError('--live needs --out <file>');
+  if (options.taskIds !== undefined && options.tasks !== undefined) throw new UsageError('name --tasks or --task-ids, not both');
+  if (options.merge && options.out === undefined) throw new UsageError('--merge needs --out <file>');
   return options;
 }
 
@@ -790,9 +831,10 @@ function mapPresentAt(source: string | undefined, parent: string): boolean {
 
 const usd = (n: number): string => n.toFixed(2);
 
-function printPlan(plan: readonly PlannedRun[], project: Projection, approved: ApprovedTasks, sources: Map<string, string>): string {
+function printPlan(plan: readonly PlannedRun[], project: Projection, approved: ApprovedTasks, sources: Map<string, string>, merge?: { recorded: number; skipped: number }): string {
   const lines: string[] = [];
   lines.push(`eval-retrieval: ${plan.length} planned runs (tasks file approved by ${approved.approvedBy} at ${approved.approvedAt}, sha256 ${approved.digest})`);
+  if (merge !== undefined) lines.push(`merge: ${merge.recorded} recorded run(s) in the results file are kept; ${merge.skipped} selected (task, arm) pair(s) already recorded are skipped`);
   lines.push('run  task  arm  size    repository               run-cap  onboard-cap  map-cap');
   for (const r of plan) {
     lines.push(`${String(r.n).padStart(3)}  ${r.task.id.padEnd(4)}  ${r.arm}    ${r.task.size.padEnd(6)}  ${r.task.repository.padEnd(23)}  ${usd(r.runCapUsd).padStart(7)}  ${usd(r.onboardCapUsd).padStart(11)}  ${usd(r.mapCapUsd).padStart(7)}`);
@@ -803,6 +845,47 @@ function printPlan(plan: readonly PlannedRun[], project: Projection, approved: A
   if (unknown.length > 0) lines.push(`note: no source for ${unknown.join(', ')}; their parents are counted as carrying no map`);
   lines.push(`Phase 4 spend ${usd(phase4Spent())} of ${usd(phase4Ceiling())} USD (D-03), headroom ${usd(phase4Ceiling() - phase4Spent())}`);
   return `${lines.join('\n')}\n`;
+}
+
+interface ResultsFile {
+  runs: RunResult[];
+  invocations: unknown[];
+}
+
+// The runs an earlier invocation recorded in `file`, for `--merge` (plan 04-36). No file is no runs. The file must be of the same approved task list (its digest equals
+// `digest`), well formed, and hold each (task, arm) once: a merge that cannot be sure of what it keeps refuses rather than guess.
+function readResultsFile(file: string, digest: string): ResultsFile {
+  if (!existsSync(file)) return { runs: [], invocations: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    throw new EvalRefusal(`cannot merge into ${file}: it is not valid JSON`);
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed['runs']) || !isRecord(parsed['tasksFile'])) throw new EvalRefusal(`cannot merge into ${file}: it is not an AC-8 results file`);
+  if (parsed['tasksFile']['sha256'] !== digest) throw new EvalRefusal(`cannot merge into ${file}: it was produced from another approved task list than the one in use`);
+  const seen = new Set<string>();
+  for (const run of parsed['runs'] as unknown[]) {
+    if (!isRecord(run) || typeof run['task'] !== 'string' || !ARM_IDS.some((a) => a === run['arm'])) throw new EvalRefusal(`cannot merge into ${file}: a recorded run has no task or arm`);
+    const key = `${run['task']}\0${run['arm']}`;
+    if (seen.has(key)) throw new EvalRefusal(`cannot merge into ${file}: (${run['task']}, ${run['arm']}) is recorded twice`);
+    seen.add(key);
+  }
+  return { runs: parsed['runs'] as RunResult[], invocations: Array.isArray(parsed['invocations']) ? (parsed['invocations'] as unknown[]) : [] };
+}
+
+export function readRecordedRuns(file: string, digest: string): RunResult[] {
+  return readResultsFile(file, digest).runs;
+}
+
+// Whether `file` already holds recorded runs, whatever else is in it: a live start that rewrites the file would destroy them.
+function holdsRuns(file: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    return isRecord(parsed) && Array.isArray(parsed['runs']) && parsed['runs'].length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function writeResults(file: string, header: Record<string, unknown>, results: readonly RunResult[], stopped: string | undefined): void {
@@ -827,11 +910,26 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write(`eval-retrieval: refused: ${e.message}\n`);
     return 3;
   }
-  const tasks = approved.tasks.slice(0, options.tasks ?? approved.tasks.length);
+  let tasks: EvalTask[];
+  let previous: ResultsFile = { runs: [], invocations: [] };
+  try {
+    tasks = selectTasks(approved, { ...(options.tasks !== undefined ? { first: options.tasks } : {}), ...(options.taskIds !== undefined ? { ids: options.taskIds } : {}) });
+    if (options.merge) previous = readResultsFile(options.out as string, approved.digest);
+    else if (options.live && holdsRuns(options.out as string)) throw new EvalRefusal(`${options.out} already holds recorded runs and a live start rewrites it: pass --merge to add to them, or name another --out`);
+  } catch (e) {
+    if (!(e instanceof EvalRefusal)) throw e;
+    process.stderr.write(`eval-retrieval: refused: ${e.message}\n`);
+    return 3;
+  }
   const sources = resolveSources(options);
-  const plan = planRuns(tasks, options.arms, { capUsd: options.capUsd, mapPresent: (task) => mapPresentAt(sources.get(task.repository), task.parent) });
+  const selected = planRuns(tasks, options.arms, { capUsd: options.capUsd, mapPresent: (task) => mapPresentAt(sources.get(task.repository), task.parent) });
+  const plan = options.merge ? skipRecorded(selected, previous.runs) : selected;
   const project = projection(plan);
-  process.stdout.write(printPlan(plan, project, approved, sources));
+  process.stdout.write(printPlan(plan, project, approved, sources, options.merge ? { recorded: previous.runs.length, skipped: selected.length - plan.length } : undefined));
+  if (plan.length === 0) {
+    process.stdout.write(`eval-retrieval: nothing to run: every selected (task, arm) pair is already recorded in ${options.out}\n`);
+    return 0;
+  }
   if (!fitsPhase4Ceiling(project.totalUsd)) {
     process.stderr.write(`eval-retrieval: ${ceilingRefusal('evaluation', project.totalUsd)}\n`);
     return 3;
@@ -861,8 +959,11 @@ export async function main(argv: readonly string[]): Promise<number> {
     claudeVersion: ctx.claudeVersion,
     caps: { runUsd: options.capUsd, onboardUsd: ONBOARD_CAP_USD, mapUsd: MAP_CAP_USD },
     projection: project,
+    taskIds: tasks.map((t) => t.id),
+    // Every invocation that wrote into this file, oldest first; `projection` and `caps` above describe the latest one only.
+    invocations: [...previous.invocations, { generatedAt: new Date().toISOString(), taskIds: plan.map((r) => r.task.id).filter((id, i, all) => all.indexOf(id) === i), arms: options.arms, runs: plan.length, runCapUsd: options.capUsd, onboardCapUsd: ONBOARD_CAP_USD, projection: project }],
   };
-  const results: RunResult[] = [];
+  const results: RunResult[] = [...previous.runs];
   let stopped: string | undefined;
   for (const run of plan) {
     try {
