@@ -578,6 +578,60 @@ describe('merging a results file (plan 04-36)', () => {
   });
 });
 
+describe('the conventions file and the repository formatter (plan 04-36)', () => {
+  // The harness's own `.avarice/config.json` is not formatted the way prettier prints it, so a repository whose `format:check` runs `prettier --check .` and does not ignore
+  // `.avarice/` would fail that required check at the setup commit, for every arm, before the agent changed anything (found by judging a parent offline, plan 04-36).
+  function setupFixture(files: Record<string, string>) {
+    const repo = makeScratchRepo({ files: { 'src/a.ts': 'export const a = 1;\n', ...files }, commits: [{ 'src/a.ts': 'export const a = 2;\n' }] });
+    cleanup.push(repo.base);
+    const task = {
+      id: 'T98',
+      repository: 'scratch',
+      commit: repo.shas[1] as string,
+      parent: repo.shas[0] as string,
+      brief: 'fix(x): a\n',
+      checks: [{ name: 'format:check', argv: ['npm', 'run', 'format:check'] }],
+      heldOutTest: 'tests/held.test.ts',
+      heldOutCommand: ['node', 'tests/held.test.ts'],
+      allowedReads: ['**'],
+      deniedReads: ['tests/held.test.ts'],
+      size: 'small' as const,
+    };
+    return { repo, task };
+  }
+  const PRETTIER_PACKAGE = '{ "name": "x", "scripts": { "format:check": "prettier --check ." }, "devDependencies": { "prettier": "3.0.0" } }\n';
+
+  it('adds .avarice/ to an existing .prettierignore of a repository that uses prettier, in the setup commit, once', async () => {
+    const { prepareArmWorkspace } = await harness();
+    const { repo, task } = setupFixture({ 'package.json': PRETTIER_PACKAGE, '.prettierignore': 'node_modules\ndocs/' });
+    const dest = join(temp('eval-fmt'), 'repo');
+    prepareArmWorkspace({ source: repo.path, task, dest });
+    assert.equal(readFileSync(join(dest, '.prettierignore'), 'utf8'), 'node_modules\ndocs/\n.avarice/\n');
+    assert.equal(git(dest, ['status', '--porcelain']).trim(), '', 'committed in the setup commit');
+    assert.match(git(dest, ['show', '--stat', '--format=', 'HEAD']), /\.prettierignore/);
+    const again = join(temp('eval-fmt2'), 'repo');
+    const { repo: ignoring, task: ignoringTask } = setupFixture({ 'package.json': PRETTIER_PACKAGE, '.prettierignore': 'node_modules\n.avarice/\n' });
+    prepareArmWorkspace({ source: ignoring.path, task: ignoringTask, dest: again });
+    assert.equal(readFileSync(join(again, '.prettierignore'), 'utf8'), 'node_modules\n.avarice/\n', 'a repository that already ignores it is left as it is');
+  });
+
+  it('creates .prettierignore for a repository that uses prettier without one, and leaves a repository without prettier alone', async () => {
+    const { prepareArmWorkspace } = await harness();
+    const withPrettier = setupFixture({ 'package.json': PRETTIER_PACKAGE });
+    const a = join(temp('eval-fmt3'), 'repo');
+    prepareArmWorkspace({ source: withPrettier.repo.path, task: withPrettier.task, dest: a });
+    assert.equal(readFileSync(join(a, '.prettierignore'), 'utf8'), '.avarice/\n');
+    const without = setupFixture({ 'package.json': '{ "name": "x" }\n' });
+    const b = join(temp('eval-fmt4'), 'repo');
+    prepareArmWorkspace({ source: without.repo.path, task: without.task, dest: b });
+    assert.equal(existsSync(join(b, '.prettierignore')), false);
+    const python = setupFixture({});
+    const c = join(temp('eval-fmt5'), 'repo');
+    prepareArmWorkspace({ source: python.repo.path, task: python.task, dest: c });
+    assert.equal(existsSync(join(c, '.prettierignore')), false);
+  });
+});
+
 describe('the arm C onboarding cap (plan 04-36)', () => {
   it('is 1.10 USD, above the 0.974 USD the knowledge pass cost on the largest repository, and the plan charges it', async () => {
     const { ONBOARD_CAP_USD, loadApprovedTasks, planRuns } = await harness();
