@@ -65,6 +65,23 @@
     "caps": { "planTotalUsd": 33.0, "spentByPlanUsd": 0.88534423, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40, "portfolio6CapBoundUsd": "about 23.40 (to be checked against the harness's dry run before the first run)" },
     "diagnosisRule": "a cause in the harness, the arm repository, a brief or the judge wiring is fixed offline (RED then GREEN, with a unit test) and the plan proceeds; a cause in AVARICE product code (src/) or a design decision stops the plan with a classification and fix options"
   },
+  "diagnostic": {
+    "run": "T01 arm B, --keep, --cap-usd 0.10, scratch /private/tmp/avarice-eval-diag (outside ~/.claude*: a first attempt with a scratch under ~/.claude-edu was refused by `avarice init` before any model call and cost nothing)",
+    "spendUsd": 0.08386034,
+    "result": "blocked_on_decision (decision), 0 tokens, 0.00 USD run cost, no branch; the arm's onboarding cost 0.0839 USD (earlier 0.0763)",
+    "decisionRecord": {
+      "class": "permission",
+      "urgency": "blocking",
+      "issue": "the required check typecheck wrote outside its declared paths (node_modules/.tmp/tsconfig.app.tsbuildinfo, node_modules/.tmp/tsconfig.node.tsbuildinfo, node_modules/.tmp/tsconfig.scripts.tsbuildinfo, node_modules/.tmp/tsconfig.test.tsbuildinfo) during validation, so it was not activated; the required check test wrote outside its declared paths (node_modules/.cache/imagetools/...) during validation, so it was not activated",
+      "gate": "checks:validate",
+      "events": "check.validated: typecheck rejected (unexpected-write), lint active, format:check active, test rejected (unexpected-write); decision.opened; run.transition contract_ready -> blocked_on_decision"
+    },
+    "mechanism": "Before any model call the run validates each required check once in a scratch clone at the pin, with the dependencies installed. It rejects a check that writes a path the check does not declare in its `writes`. The conventions file the harness derives for each arm repository declared no `writes`, but `tsc -b` writes node_modules/.tmp/*.tsbuildinfo and vitest writes node_modules/.cache/imagetools (and, found by running the four checks in a clone, node_modules/.vite, node_modules/.vite-temp and node_modules/.vitest-cache). Two required checks were therefore rejected and the run blocked on a permission decision. The same cause blocks every arm and every portfolio task.",
+    "classification": "harness defect (the arm repository setup, scripts/eval-retrieval.ts conventionsFor), not an AVARICE product defect and not a design decision: the product enforced its documented rule (a check declares what it writes) as designed, and `writes` is the conventions key meant for tool caches. Nothing under src/ changed.",
+    "fix": "conventionsFor declares node_modules/.tmp/**, .cache/**, .vite/**, .vite-temp/** and .vitest-cache/** as `writes` of every check of a repository whose parent has an npm lockfile, and nothing for another repository. RED commit a0c1989 (two failing tests), GREEN commit e76f7cc. test/unit/eval-retrieval.test.ts 37 of 37, unit suite 2866 of 2866, typecheck and check:boundaries clean.",
+    "offlineCheck": "the portfolio's four checks run in a clone of the kept repository with a copy of the owner's node_modules whose tool caches were removed: typecheck wrote node_modules/.tmp (4 files), test wrote node_modules/.cache/imagetools (14), node_modules/.vite/vitest and node_modules/.vitest-cache (76); lint and format:check wrote nothing. All are inside the declared globs. The clone and the kept scratch were removed afterwards; the owner's checkout and node_modules were only read.",
+    "notProvenOffline": "that no second pre-model gate follows the check validation: the first portfolio-6 run is the test, and a shared stop halts the plan"
+  },
   "harnessChanges": {
     "taskIdsSelector": "selectTasks: named approved tasks in the order given; an id off the approved list, a repeat or an empty list is refused (exit 3); not with --tasks (exit 64); approved digest unchanged and printed",
     "merge": "--merge (needs --out): readResultsFile/skipRecorded keep recorded runs, skip their (task, arm) pairs, refuse a file of another approved list, a malformed one or a duplicate pair; a live start over a file that holds runs is refused without --merge; nothing to run exits 0 without a model; header gains taskIds and invocations",
