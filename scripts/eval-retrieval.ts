@@ -385,6 +385,19 @@ const PLANNING_STUBS: Readonly<Record<string, string>> = {
   '.planning/STATE.md': '# State\n\nPhase 1 in progress.\n',
 };
 
+// The text of `.prettierignore` that keeps the conventions file out of the repository's formatter check, or undefined when nothing changes. The conventions file is the
+// harness's, not the repository's: `JSON.stringify` does not print it the way prettier would, so a repository whose check is `prettier --check .` and does not ignore
+// `.avarice/` would fail that required check at the setup commit for every arm (plan 04-36, found by judging task parents offline). Only a repository that names prettier in its
+// package.json gets the line, and an existing ignore of the directory is left as it is.
+function prettierIgnoreWithConventions(repo: string): string | undefined {
+  const pkg = join(repo, 'package.json');
+  if (!existsSync(pkg) || !readFileSync(pkg, 'utf8').includes('prettier')) return undefined;
+  const file = join(repo, '.prettierignore');
+  const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  if (current.split('\n').some((line) => ['.avarice', '.avarice/', '.avarice/**', '/.avarice', '/.avarice/'].includes(line.trim()))) return undefined;
+  return `${current}${current === '' || current.endsWith('\n') ? '' : '\n'}.avarice/\n`;
+}
+
 export interface ArmWorkspace {
   path: string;
   head: string;
@@ -406,6 +419,8 @@ export function prepareArmWorkspace(options: { source: string; task: EvalTask; d
   const conventions = conventionsFor(task, dirs, files, files.includes('package-lock.json'));
   const setup: Record<string, string> = { '.avarice/config.json': `${JSON.stringify(conventions, null, 2)}\n` };
   for (const [path, text] of Object.entries(PLANNING_STUBS)) if (!existsSync(join(dest, path))) setup[path] = text;
+  const ignore = prettierIgnoreWithConventions(dest);
+  if (ignore !== undefined) setup['.prettierignore'] = ignore;
   for (const [path, text] of Object.entries(setup)) {
     mkdirSync(dirname(join(dest, path)), { recursive: true });
     writeFileSync(join(dest, path), text);
