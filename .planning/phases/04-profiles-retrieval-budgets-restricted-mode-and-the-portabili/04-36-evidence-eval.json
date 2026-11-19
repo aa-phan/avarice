@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "04-36",
   "decision": "D-03, D-07, D-08",
-  "status": "ruling-recorded",
+  "status": "stopped-awaiting-owner-ruling: the pilot ran T01 only; every run was blocked before a model call, and the offline probe shows six of the nine tasks cannot succeed in this harness",
   "ruling": {
     "ownerReply": "authorize balanced-9 pilot 11.70 total 33.00.",
     "owner": "Aaron Phan",
@@ -44,9 +44,59 @@
     ],
     "hardLimits": "never exceed 11.70 for the pilot, 33.00 in total, or the 40 USD Phase 4 ceiling; fitsPhase4Ceiling before every model step; no other live claude use; the owner's private repositories are read-only (the harness clones at the parents into scratch)"
   },
-  "pilot": null,
-  "rest": null,
+  "harnessChanges": {
+    "taskIdsSelector": "selectTasks: named approved tasks in the order given; an id off the approved list, a repeat or an empty list is refused (exit 3); not with --tasks (exit 64); approved digest unchanged and printed",
+    "merge": "--merge (needs --out): readResultsFile/skipRecorded keep recorded runs, skip their (task, arm) pairs, refuse a file of another approved list, a malformed one or a duplicate pair; a live start over a file that holds runs is refused without --merge; nothing to run exits 0 without a model; header gains taskIds and invocations",
+    "arm C onboarding cap": "ONBOARD_CAP_USD.C 0.90 to 1.10 (the owner's authorized change)",
+    "prettierIgnore (not in the ruling, a harness defect found before any spend)": "prepareArmWorkspace adds .avarice/ to .prettierignore in the setup commit of a repository that names prettier in package.json (creating the file when absent, leaving an existing ignore alone). Without it the harness's own .avarice/config.json failed `prettier --check .` at the setup commit, so format:check failed for every arm on the portfolio repository before the agent changed anything.",
+    "commits": ["a RED/GREEN pair for the three authorized changes", "a RED/GREEN pair for the prettier ignore"],
+    "tests": "test/unit/eval-retrieval.test.ts 35 of 35; unit suite 2862 of 2862 before the prettier fix; typecheck and check:boundaries clean; --dry-run --task-ids T01,T07,T16 prints 9 runs at 11.70 USD cap bound and the other six tasks 18 runs at 23.40 USD, nothing spent"
+  },
+  "offlineJudgeProbe": {
+    "what": "No model, no spend. Each balanced-9 task's PARENT (an arm that changed nothing) was put through the harness's own judging path (prepareArmWorkspace, prepareJudgeClone, judgeClone, SandboxedExecutor), the held-out test copied in from the target commit. Source repositories were only read.",
+    "noOpResults": {
+      "T01": "typecheck passed, lint passed, format:check passed (after the prettier fix), test failed, held-out failed",
+      "T04": "typecheck failed, lint passed, format:check passed, test failed, held-out failed",
+      "T06": "typecheck passed, lint passed, format:check passed, test failed, held-out failed",
+      "T07": "test failed, held-out failed",
+      "T10": "test failed, held-out failed",
+      "T13": "test failed, held-out failed",
+      "T16": "build passed, lint passed, test failed, held-out failed",
+      "T17": "build failed, lint passed, test failed, held-out failed",
+      "T20": "build passed, lint passed, test failed, held-out failed"
+    },
+    "freeSuccesses": "none: the held-out test fails at the parent for all 9 tasks, so no task succeeds without the agent's work",
+    "portfolio": "with the held-out test removed, `npm run test` at the T01 parent passes (14 files, 315 tests): portfolio tasks are judgeable. The judge needs --node-modules aa-phan-portfolio-v2=<checkout>/node_modules because the checkout's lockfile differs from each parent's (one extra dependency, lenis, at T01 and T04; 50 more packages and a different font package at T06).",
+    "auto_search_workflow (T07, T10, T13)": "the required check and the held-out command run `python3 -m unittest` under the PATH python3, /Library/Developer/CommandLineTools/usr/bin/python3 3.9.6, which has no `requests` and no `gspread`. In the sandboxed judge T07's held-out dies with `ModuleNotFoundError: No module named 'requests'` (boards.py line 19) in 0.5 s, whatever the agent did. The repository's own .venv holds the dependencies, but the harness has no way to use it. With the held-out file removed, the parent's suite outside the sandbox shows 1 failure and 5 errors (gspread, requests and a cross-process lock test). T10 and T13 use the same interpreter and suite; their held-out imports were not probed one by one.",
+    "GroceriesGPT (T16, T17, T20)": "vitest's globalSetup requires TEST_DATABASE_URL (a dedicated Postgres) and throws without it; the judge environment holds PATH, HOME, TMPDIR, CI and LANG only. T16's held-out command dies in globalSetup in 1.4 s, whatever the agent did, so the required `test` check and the held-out test cannot pass. T17 also fails `npm run build` at the parent because the held-out test file is compiled by tsc (a natural failure the agent's work would clear).",
+    "consequence": "On 6 of the 9 approved-for-evaluation tasks (T07, T10, T13, T16, T17, T20) success is impossible for every arm in this harness, independent of retrieval. Only the three portfolio tasks (T01, T04, T06) can succeed."
+  },
+  "pilot": {
+    "status": "stopped after T01 (3 of the authorized 9 pilot runs); T07 and T16 not run",
+    "command": "AVARICE_LIVE=1 AVARICE_PHASE4_CEILING_USD=36.93 node scripts/eval-retrieval.ts --live --task-ids T01 --node-modules aa-phan-portfolio-v2=<checkout>/node_modules --out test/benchmark/phase4/eval-results.json (log ac8-pilot.log in the job's tmp directory)",
+    "whyT01Only": "the offline probe, run before any spend, showed T07 and T16 cannot succeed in this harness; T01 is inside the authorized set, fits the cap (4.10 USD cap bound) and measures real setup and run cost on the repository where success is possible",
+    "runs": [
+      { "task": "T01", "arm": "A", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.15167162, "mapUsd": 0.07777076, "branch": "none: the run left no branch to judge", "success": false },
+      { "task": "T01", "arm": "B", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.07625149, "mapUsd": 0, "branch": "none: the run left no branch to judge", "success": false },
+      { "task": "T01", "arm": "C", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.65742112, "mapUsd": 0, "branch": "none: the run left no branch to judge", "success": false }
+    ],
+    "measuredFastOnboardingUsd": { "armA map generation (parent without a map)": 0.07777, "armA onboarding": 0.0739, "armB onboarding": 0.07625, "armC onboarding with the knowledge pass (portfolio)": 0.65742 },
+    "measuredRunCostUsd": "not measured: no run reached a model invocation (0 tokens, 0.00 USD each)",
+    "spentByThisPlanUsd": 0.88534423,
+    "phase4SpentUsd": 4.812019,
+    "phase4RemainingUsd": 35.187981,
+    "stopConditionHit": "3 of 3 pilot runs left no branch to judge (the owner's condition is 6 of 9); the rest of the pilot cannot change the result because the cause is shared by every arm and the other two repositories cannot pass at all"
+  },
+  "rest": { "ran": false, "why": "the pilot stopped; nothing was spent on T04, T06, T10, T13, T17 or T20" },
+  "unexpectedStop": {
+    "what": "every T01 run (A, B, C) ended blocked_on_decision with reason decision, 0 tokens and 0.00 USD, and no branch",
+    "evidence": "blocked_on_decision with reason decision is an item-local block (src/app/run-stages/blocked.ts blockItem); the run id was issued, the run reached its item stage, and no invocation.finished event carried tokens or cost. The scratch directories of the three runs were removed by the harness (--keep not set), so the decision record itself was not read.",
+    "classification": "not established. Candidates: a product defect in how a run starts on the arm repositories; a harness defect in the arm repository or the brief (the brief is the commit message with one acceptance criterion naming the four required checks); an environment defect in the run's own required checks (the run's checks are the same npm scripts, with `npm ci` as the dependency install). The cause is shared by arms A, B and C, so it is not a retrieval effect.",
+    "diagnosticNotRun": "a single `--keep` run of T01 arm B would cost about 0.08 USD (the arm B onboarding, measured 0.076 USD; the blocked run itself cost nothing) and would show the decision record. It was not run: the permission system denied the command as a spend outside the owner's authorization, and no workaround was attempted. It needs the owner's say.",
+    "proposedD04Classification": "unclassified pending the diagnostic; the two environment defects above (Python dependencies, Postgres) are task/harness defects, classified from evidence"
+  },
   "verdict": null,
+  "verdictNote": "no AC-8 verdict and no D-08 outcome are recorded: eval-results.json holds only the three blocked T01 runs, and its summary block (ac8 pass false because arm A measured no tokens; knowledge on) is arithmetic over zero tokens, not a result. The knowledge-pass default is unchanged (true).",
   "knowledgeRule": null,
-  "ownerSpotCheck": { "runs": [], "result": "pending: three successful runs are listed here once the evaluation ends" }
+  "ownerSpotCheck": { "runs": [], "result": "none: no run succeeded" }
 }

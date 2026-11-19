@@ -1,0 +1,145 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-evaluation",
+  "generatedAt": "2026-11-19T05:05:36.302Z",
+  "tasksFile": {
+    "path": "test/benchmark/phase4/eval-tasks.json",
+    "sha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z"
+  },
+  "claudeVersion": "2.1.326 (Claude Code)",
+  "caps": {
+    "runUsd": 0.4,
+    "onboardUsd": {
+      "A": 0.6,
+      "B": 0.6,
+      "C": 1.1
+    },
+    "mapUsd": 0.6
+  },
+  "projection": {
+    "runs": 3,
+    "runUsd": 1.2000000000000002,
+    "onboardUsd": 2.3,
+    "mapUsd": 0.6,
+    "mapParents": 1,
+    "totalUsd": 4.1
+  },
+  "taskIds": [
+    "T01"
+  ],
+  "invocations": [
+    {
+      "generatedAt": "2026-11-19T05:05:36.304Z",
+      "taskIds": [
+        "T01"
+      ],
+      "arms": [
+        "A",
+        "B",
+        "C"
+      ],
+      "runs": 3,
+      "runCapUsd": 0.4,
+      "onboardCapUsd": {
+        "A": 0.6,
+        "B": 0.6,
+        "C": 1.1
+      },
+      "projection": {
+        "runs": 3,
+        "runUsd": 1.2000000000000002,
+        "onboardUsd": 2.3,
+        "mapUsd": 0.6,
+        "mapParents": 1,
+        "totalUsd": 4.1
+      }
+    }
+  ],
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "A",
+      "success": false,
+      "tokens": 0,
+      "costUsd": 0,
+      "runId": "run_01M7S3N05Z51V6TWZ6PVX499YF",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.15167162,
+        "tokens": 3419612,
+        "mapCostUsd": 0.07777076000000001
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T01",
+      "arm": "B",
+      "success": false,
+      "tokens": 0,
+      "costUsd": 0,
+      "runId": "run_01M7S3ZR5KSJQY5RNPJVC6R66Y",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.07625149,
+        "tokens": 1894468,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T01",
+      "arm": "C",
+      "success": false,
+      "tokens": 0,
+      "costUsd": 0,
+      "runId": "run_01M7S4HCAM8J5D8K10DA1TAQ7R",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.6574211199999999,
+        "tokens": 6102252,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    }
+  ],
+  "summary": {
+    "arms": {
+      "A": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 0,
+        "costUsd": 0,
+        "judgeErrors": 0
+      },
+      "B": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 0,
+        "costUsd": 0,
+        "judgeErrors": 0
+      },
+      "C": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 0,
+        "costUsd": 0,
+        "judgeErrors": 0
+      }
+    },
+    "ac8": {
+      "pass": false,
+      "via": null,
+      "reason": "arm A measured no tokens, so no token share can be computed",
+      "arms": {}
+    },
+    "knowledge": {
+      "outcome": "on",
+      "reason": "arm C does not cost more tokens than B"
+    }
+  }
+}

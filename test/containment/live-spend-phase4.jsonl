@@ -36,3 +36,7 @@
 {"plan":"04-35","case":"ac14-GroceriesGPT","costUsd":0.154992,"claudeVersion":"2.1.326","at":"2026-11-18T18:57:18.010Z"}
 {"plan":"04-35","case":"ac14-spf13-cobra","costUsd":0.11158,"claudeVersion":"2.1.326","at":"2026-11-18T19:01:59.526Z"}
 {"plan":"04-35","case":"ac14-BurntSushi-ripgrep","costUsd":0.166796,"claudeVersion":"2.1.326","at":"2026-11-18T19:08:30.400Z"}
+{"plan":"04-36","case":"eval-T01-A-map","costUsd":0.07777076000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:10:06.438Z"}
+{"plan":"04-36","case":"eval-T01-A-onboard","costUsd":0.07390085999999998,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:14:42.059Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.07625149,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:20:34.392Z"}
+{"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.6574211199999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:30:12.046Z"}
