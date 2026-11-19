@@ -453,3 +453,138 @@ describe('the brief of a run', () => {
     assert.doesNotMatch(text, /\u0007/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Plan 04-36: the task selector, the merge of a results file and the arm C onboarding cap (the owner's ruling of 2026-11-19 on the balanced-9 evaluation)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+describe('the --task-ids selector (plan 04-36)', () => {
+  it('selects the named approved tasks in the order given, and refuses an id that is not on the approved list, a repeat or an empty list', async () => {
+    const { loadApprovedTasks, selectTasks, EvalRefusal } = await harness();
+    const approved = loadApprovedTasks(TASKS_FILE);
+    assert.deepEqual(selectTasks(approved, { ids: ['T16', 'T01', 'T07'] }).map((t) => t.id), ['T16', 'T01', 'T07']);
+    assert.deepEqual(selectTasks(approved, { first: 2 }).map((t) => t.id), ['T01', 'T02']);
+    assert.equal(selectTasks(approved, {}).length, 20);
+    for (const ids of [['T21'], ['T01', 'T99'], ['T01', 'T01'], [], ['t01'], ['T01 ']]) {
+      assert.throws(() => selectTasks(approved, { ids }), (e: unknown) => e instanceof EvalRefusal, JSON.stringify(ids));
+    }
+  });
+
+  it('plans only the named tasks on --dry-run, prints the digest of the approved file and spends nothing', async () => {
+    const { loadApprovedTasks } = await harness();
+    const ledger = phase4Ledger(undefined);
+    const result = runScript(['--dry-run', '--task-ids', 'T01,T07,T16'], ledger.env);
+    assert.equal(result.code, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /\b9 planned runs\b/);
+    for (const id of ['T01', 'T07', 'T16']) for (const arm of ['A', 'B', 'C']) assert.match(result.stdout, new RegExp(`${id}\\s+${arm}\\s`));
+    assert.doesNotMatch(result.stdout, /T02\s+[ABC]\s/);
+    assert.ok(result.stdout.includes(`sha256 ${loadApprovedTasks(TASKS_FILE).digest}`), 'the approved digest is printed');
+    assert.equal(existsSync(ledger.path), false);
+  });
+
+  it('refuses an id that is not approved, a selector given together with --tasks, and a list that is not approved, before any plan is printed', () => {
+    const ledger = phase4Ledger(undefined);
+    const unknown = runScript(['--dry-run', '--task-ids', 'T01,T21'], ledger.env);
+    assert.equal(unknown.code, 3, unknown.stderr);
+    assert.match(unknown.stderr, /refused/);
+    assert.match(unknown.stderr, /T21/);
+    assert.doesNotMatch(unknown.stdout, /planned runs/);
+    const both = runScript(['--dry-run', '--task-ids', 'T01', '--tasks', '3'], ledger.env);
+    assert.equal(both.code, 64, both.stderr);
+    const approved = JSON.parse(readFileSync(TASKS_FILE, 'utf8')) as Record<string, unknown>;
+    const file = join(temp('eval-ids-unapproved'), 'eval-tasks.json');
+    writeFileSync(file, JSON.stringify({ ...approved, approvedBy: null }));
+    const unapproved = runScript(['--dry-run', '--task-ids', 'T01', '--tasks-file', file], ledger.env);
+    assert.equal(unapproved.code, 3);
+    assert.match(unapproved.stderr, /not approved/);
+  });
+});
+
+function resultsFileWith(runs: Array<{ task: string; arm: 'A' | 'B' | 'C' }>, sha256: string): string {
+  const file = join(temp('eval-merge'), 'eval-results.json');
+  const body = runs.map((r) => ({ task: r.task, arm: r.arm, success: r.arm !== 'A', tokens: 1000, costUsd: 0.25, runId: `run_${r.task}${r.arm}`, state: 'succeeded', tokensComplete: true, setup: { costUsd: 0.1, tokens: 10, mapCostUsd: 0 } }));
+  writeFileSync(file, `${JSON.stringify({ schema: 1, kind: 'avarice-ac8-evaluation', tasksFile: { sha256 }, runs: body })}\n`);
+  return file;
+}
+
+describe('merging a results file (plan 04-36)', () => {
+  it('skips a recorded (task, arm) and renumbers what is left, and never lists a pair twice', async () => {
+    const { loadApprovedTasks, planRuns, skipRecorded } = await harness();
+    const tasks = loadApprovedTasks(TASKS_FILE).tasks.slice(0, 3);
+    const plan = planRuns(tasks, ['A', 'B', 'C'], { capUsd: 0.4, mapPresent: () => true });
+    const left = skipRecorded(plan, [{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'B' }, { task: 'T01', arm: 'C' }, { task: 'T02', arm: 'B' }]);
+    assert.deepEqual(left.map((r) => `${r.task.id}${r.arm}`), ['T02A', 'T02C', 'T03A', 'T03B', 'T03C']);
+    assert.deepEqual(left.map((r) => r.n), [1, 2, 3, 4, 5]);
+    assert.equal(skipRecorded(plan, []).length, 9);
+    assert.equal(skipRecorded(plan, plan.map((r) => ({ task: r.task.id, arm: r.arm }))).length, 0);
+  });
+
+  it('reads the recorded runs of a results file of the same approved list and refuses one of another list, a malformed one or a duplicate pair', async () => {
+    const { loadApprovedTasks, readRecordedRuns, EvalRefusal } = await harness();
+    const digest = loadApprovedTasks(TASKS_FILE).digest;
+    const good = resultsFileWith([{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'B' }], digest);
+    const read = readRecordedRuns(good, digest);
+    assert.deepEqual(read.map((r) => `${r.task}${r.arm}`), ['T01A', 'T01B']);
+    assert.throws(() => readRecordedRuns(resultsFileWith([{ task: 'T01', arm: 'A' }], 'f'.repeat(64)), digest), (e: unknown) => e instanceof EvalRefusal && /list/.test(e.message));
+    assert.throws(() => readRecordedRuns(resultsFileWith([{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'A' }], digest), digest), (e: unknown) => e instanceof EvalRefusal);
+    const bad = join(temp('eval-merge-bad'), 'r.json');
+    writeFileSync(bad, '{ not json');
+    assert.throws(() => readRecordedRuns(bad, digest), (e: unknown) => e instanceof EvalRefusal);
+    assert.deepEqual(readRecordedRuns(join(temp('eval-merge-none'), 'absent.json'), digest), []);
+  });
+
+  it('lists only the runs not yet recorded on --dry-run --merge', async () => {
+    const { loadApprovedTasks } = await harness();
+    const file = resultsFileWith([{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'B' }, { task: 'T01', arm: 'C' }], loadApprovedTasks(TASKS_FILE).digest);
+    const result = runScript(['--dry-run', '--task-ids', 'T01,T04', '--merge', '--out', file], phase4Ledger(undefined).env);
+    assert.equal(result.code, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /\b3 planned runs\b/);
+    assert.doesNotMatch(result.stdout, /T01\s+[ABC]\s/);
+    assert.match(result.stdout, /T04\s+A\s/);
+    assert.match(result.stdout, /3 recorded run/);
+  });
+
+  it('refuses a live start over a results file that holds runs unless --merge is given, before it clones, onboards or spends anything', async () => {
+    const { loadApprovedTasks } = await harness();
+    const file = resultsFileWith([{ task: 'T01', arm: 'A' }], loadApprovedTasks(TASKS_FILE).digest);
+    const before = readFileSync(file, 'utf8');
+    const scratch = temp('eval-merge-scratch');
+    const result = runScript(['--live', '--task-ids', 'T01', '--arms', 'A', '--out', file, '--scratch', scratch], { ...phase4Ledger(undefined).env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+    assert.equal(result.code, 3, result.stderr + result.stdout);
+    assert.match(result.stderr, /--merge/);
+    assert.equal(readFileSync(file, 'utf8'), before, 'the recorded results are not rewritten');
+    assert.deepEqual(readdirSync(scratch), []);
+  });
+
+  it('ends a live --merge with nothing to run without starting a model, spending or rewriting the file', async () => {
+    const { loadApprovedTasks } = await harness();
+    const file = resultsFileWith([{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'B' }], loadApprovedTasks(TASKS_FILE).digest);
+    const before = readFileSync(file, 'utf8');
+    const ledger = phase4Ledger(undefined);
+    const scratch = temp('eval-merge-nothing');
+    const result = runScript(['--live', '--merge', '--task-ids', 'T01', '--arms', 'A,B', '--out', file, '--scratch', scratch], { ...ledger.env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+    assert.equal(result.code, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /nothing to run/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+    assert.equal(existsSync(ledger.path), false);
+    assert.deepEqual(readdirSync(scratch), []);
+  });
+
+  it('refuses --merge over a results file of another approved list', () => {
+    const file = resultsFileWith([{ task: 'T01', arm: 'A' }], 'e'.repeat(64));
+    const result = runScript(['--dry-run', '--merge', '--task-ids', 'T04', '--out', file], phase4Ledger(undefined).env);
+    assert.equal(result.code, 3, result.stderr);
+    assert.match(result.stderr, /refused/);
+  });
+});
+
+describe('the arm C onboarding cap (plan 04-36)', () => {
+  it('is 1.10 USD, above the 0.974 USD the knowledge pass cost on the largest repository, and the plan charges it', async () => {
+    const { ONBOARD_CAP_USD, loadApprovedTasks, planRuns } = await harness();
+    assert.equal(ONBOARD_CAP_USD.C, 1.1);
+    assert.equal(ONBOARD_CAP_USD.A, 0.6);
+    assert.equal(ONBOARD_CAP_USD.B, 0.6);
+    const plan = planRuns(loadApprovedTasks(TASKS_FILE).tasks.slice(0, 1), ['A', 'B', 'C'], { capUsd: 0.4, mapPresent: () => true });
+    assert.deepEqual(plan.map((r) => r.onboardCapUsd), [0.6, 0.6, 1.1]);
+  });
+});
