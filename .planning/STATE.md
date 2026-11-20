@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: "04-36 Task 3 stopped: portfolio-6 T01 blocked in all arms after the model started, owner ruling needed"
-last_updated: "2026-11-19T05:34:19.665Z"
+stopped_at: Completed 04-36-PLAN.md
+last_updated: "2026-11-20T07:48:29.599Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: 7c0add9078a8d780b3133fa1d5e8e13ce19a0582
+state_head: a04c841e8d165d84b596ec0815b38b741927448d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 36 of 39
+Plan: 37 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -198,6 +198,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P33 | 40min | 3 tasks | 11 files |
 | Phase 04 P34 | 3 sessions | 3 tasks | 30 files |
 | Phase 04 P35 | 16h 19m | 3 tasks | 28 files |
+| Phase 04 P36 | 5h 44m (continuation) | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -489,6 +490,9 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-33: OWNER REVIEW: the domain reuses invocationId across separate calls (gsd-tools.ts:91 gsd:<verb>, graphify.ts:122 graphify:<id>); a remote adapter deduplicating by id alone would merge two legitimate calls. The fake keys by id plus a digest of the call and the proof asserts one run per call; src untouched (AC-7) — Settle a per-call nonce or an acknowledgement-bounded dedup window before the Phase 7 remote executor
 - [Phase 04]: 04-34: stage the GSD specs a restricted fast map reads into the staging copy (read-only, removed when the host returns); no read grant on the restricted line
 - [Phase 04]: 04-35: the mapper is told never to write a value the validation secrets check reports and to describe the setting instead (owner ruling 4); the secrets gate is unchanged
+- [Phase 04]: 04-36: AC-8 over the 6 portfolio tasks fails on tokens (B 94.4 percent and C 88.5 percent of A tokens, bound 50 percent; success B and C 4 of 6, A 2 of 6) — Measured by portfolio-6, 18 of 18 runs, 0 judging errors; the owner ruled the 6-task set in writing (ruling 2)
+- [Phase 04]: 04-36: D-08 keeps the knowledge pass on; adapters.knowledgePass default unchanged (true) — Arm C shows no success gain over B (4 of 6 each) and costs fewer tokens than B (17557851 against 18715894), so the rule does not say off; recorded as ADR-015 by plan 04-37
+- [Phase 04]: 04-36: the portfolio-6 stop on T01 is classified as the brief (harness); briefFor states the required checks and rules end-to-end work out of scope — Kept evidence of a diagnostic run showed the unit finished the change and the verifier returned human_needed for the e2e bullet it could not verify; no change under src/
 
 ### Roadmap Evolution
 
@@ -526,7 +530,6 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Phase 2, backlog 999.5]: Open owner decisions: private-network registries unsupported; `test:<text>` substring acceptance (IN-07); home-path residue before any public release; SIGTERM does not abort the unit (T-02-108); Read deny rule misses file-shaped credentials; whether the host admits a redirect through a prefix rule such as `ls:*` (UAT test 5, deferred)
 - [Phase 2]: Success criteria 1 and 2 rest on the 02-22 live exit evidence, which predates the round's proxy, budget and lease changes; no live `npm ci` has gone through the post-02-34 proxy yet
 - Open item: the installed Claude Code 2.1.321 is not in ADMITTED_CLAUDE_VERSIONS; admission is needed before the portfolio exit plans 03-29 and 03-30 can use the default binary (plan 03-37 runs pinned to 2.1.319)
-- 04-36 AC-8 evaluation stopped a second time (plan spend 2.3046 USD of 33.00): the first pre-model block (check validation rejected tsc/vitest cache writes) was a harness defect and is fixed (e76f7cc); portfolio-6 then ran T01 in arms A, B, C and all three ended blocked_on_decision after the model started (denied tool calls, no change, no branch); cause not classified (model behaviour, harness read set or brief, or a product defect), owner ruling needed (see 04-36-evidence-eval.json portfolio6)
 
 ### Quick Tasks Completed
 
@@ -557,8 +560,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-19T05:34:19.631Z
-Stopped at: 04-36 Task 3 stopped: portfolio-6 T01 blocked in all arms after the model started, owner ruling needed
+Last session: 2026-11-20T07:48:29.565Z
+Stopped at: Completed 04-36-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
