@@ -707,6 +707,29 @@ describe('the arm C onboarding cap (plan 04-36)', () => {
   });
 });
 
+describe('the results document (plan 04-36)', () => {
+  // The plan's automated check reads `verdict` and `knowledgeRule` at the top level of the results file; the harness wrote the same two values under `summary` only.
+  it('carries the AC-8 verdict and the D-08 outcome at the top level, equal to the summary, with the header and the runs kept', async () => {
+    const { resultsDocument, summarize } = await harness();
+    const runs = [
+      { task: 'T01', arm: 'A' as const, success: false, tokens: 1000, costUsd: 0.1, runId: 'r1', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
+      { task: 'T01', arm: 'B' as const, success: true, tokens: 400, costUsd: 0.1, runId: 'r2', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
+      { task: 'T01', arm: 'C' as const, success: true, tokens: 450, costUsd: 0.1, runId: 'r3', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
+    ];
+    const doc = resultsDocument({ schema: 1, kind: 'avarice-ac8-evaluation' }, runs, undefined);
+    const summary = summarize(runs);
+    assert.deepEqual(doc['verdict'], summary.ac8);
+    assert.deepEqual(doc['knowledgeRule'], summary.knowledge);
+    assert.deepEqual(doc['summary'], summary);
+    assert.equal(doc['schema'], 1);
+    assert.equal((doc['runs'] as unknown[]).length, 3);
+    assert.equal('stopped' in doc, false);
+    assert.equal(resultsDocument({}, runs, 'ceiling: x')['stopped'], 'ceiling: x');
+    assert.equal((doc['verdict'] as { pass: boolean }).pass, true);
+    assert.equal((doc['knowledgeRule'] as { outcome: string }).outcome, 'on');
+  });
+});
+
 describe('the per-run evidence the harness keeps (plan 04-36, owner ruling 3)', () => {
   // A blocked run's scratch was removed before anyone read its decision record or its transcript, so a stop could not be classified. The harness now copies the run's
   // records into an evidence directory before it removes the scratch. Everything it copies is redacted with the AVARICE redactor, and the copy is bounded.
