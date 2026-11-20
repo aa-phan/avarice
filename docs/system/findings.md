@@ -1,6 +1,6 @@
 # Findings
 
-This note lists suspected defects and code-versus-specification contradictions found while grounding the `docs/system/` tree against the code. It is working material for the owner: each line names `file:line` and the observation, nothing is triaged, and nothing was fixed. Where the intent is undecidable from the code, the line says so and the owner classifies it.
+This note lists suspected defects and code-versus-specification contradictions found while grounding the `docs/system/` tree against the code. It is working material for the owner: each line names `file:line` and the observation, nothing is triaged, and nothing was fixed. A line's `file:line` is where the observation was made when the line was logged; a line that is known to have moved says `(now at ...)`, and the code at HEAD is the authority. Where the intent is undecidable from the code, the line says so and the owner classifies it.
 
 A line marked "spec contradiction" means a proposal-era document in `docs/` states something the code does not do. The proposal stands as written; the line records the difference.
 
@@ -8,7 +8,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 
 - `src/cli/main.ts:76`: `avarice` with no command exits 64 with usage; `docs/extensions.md:196` says no arguments opens an interactive shell on a terminal (spec not implemented). No longer holds at 72a86b1: a terminal with `AVARICE_RUN` unset opens the shell at `src/cli/main.ts:68`. The exit 64 remains for every other case (`src/cli/main.ts:76` to `:78`).
 - `src/cli/commands/onboard.ts:12` (now at `src/cli/commands/onboard.ts:13`): exit code 3 is used throughout (also `src/cli/commands/repo.ts:13`, `src/cli/commands/resume.ts:22` and `src/cli/commands/context.ts:11`); `docs/extensions.md:35` lists 0, 1, 2, 64, 69, 70 and no 3 (spec contradiction). Holds in part at 72a86b1: `docs/extensions.md:54` now explains exit 3 for the run commands, and the exit-code summary at `docs/extensions.md:35` still lacks it.
-- `src/cli/commands/init.ts:15`: user-facing error string carries delivery narrative ("only personal-local in Phase 1")
+- `src/cli/commands/init.ts:15`: user-facing error string carries delivery narrative ("only personal-local in Phase 1"). No longer holds at bb93b18: `init` accepts every valid profile name and the usage line at `src/cli/commands/init.ts:15` carries no such text.
 - `src/cli/commands/onboard.ts:30` (now at `src/cli/commands/onboard.ts:31`): onboard and resume (`src/cli/commands/resume.ts:37`) validate arguments after profile creation, unlike init/repo/context; a usage error can leave a created profile (intent unknown)
 - `src/cli/commands/onboard.ts:1`: onboard declares no boolean flags, so `--json` or any bare flag swallows the next word (intent unknown)
 - `src/cli/args.ts:36` (now at `src/cli/args.ts:48` to `:55`): unknown flags are accepted silently on every command; a typo in an optional flag is ignored (intent unknown)
@@ -206,7 +206,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/adapters/sqlite/ledger.ts:1106` (now at `src/adapters/sqlite/ledger.ts:1283`): upsertWorkItem has no production caller; the type 'harden' it accepts (line 1294) is written by nothing
 - `src/adapters/sqlite/ledger.ts:1258` (now at `src/adapters/sqlite/ledger.ts:1703`): listHookReads has no production caller (only a test)
 - `src/adapters/host-claude/claude-host.ts:153` (now at `src/adapters/host-claude/claude-host.ts:157`): a run's invocation directory is under `run/`, while its contract file is under `runs/` (`src/app/run-start.ts:145` (now at `src/app/run-start.ts:147`)); intent unknown
-- `src/hook/pre-tool-use.ts:134`: the hook counts events by invocation_id, which has no index (only events_run and evidence_attempt exist), so each decision scans the log
+- `src/hook/pre-tool-use.ts:134` (now at `src/hook/pre-tool-use.ts:162` and `:178`): the hook counts events by invocation_id, which has no index (only events_run and evidence_attempt exist), so each decision scans the log
 - `src/adapters/sqlite/migrations/0002-run.ts:30`: check_validations has no immutability trigger although evidence and gate_results have one; code never updates it (intent unknown)
 
 ## From integrations (run slice)

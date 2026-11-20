@@ -21,7 +21,7 @@ The dispatcher chooses the profile in this order, and the first source that appl
 3. The `AVARICE_PROFILE` environment variable.
 4. `personal-local`.
 
-A command that names a repository (`repo add <path>`, `onboard <path>`) is judged by that repository. Any other command is judged by the repository its working directory is inside, if any. A flag that names a profile other than the bound one is refused with exit 3 and a message naming the bound profile. The environment variable never overrides a binding, and an invalid value is refused with exit 64 only when it is the value that would be chosen. A flag with no value, or with a name outside the grammar, exits 64 before anything is created.
+A command that names a repository (`repo add <path>`, `onboard <path>`) is judged by that repository. Any other command is judged by the repository its working directory is inside, if any. A flag that names a profile other than the bound one is refused with exit 3 and a message naming the bound profile. A personal profile selected for a repository that an enterprise profile claims is refused with exit 3 as well. The environment variable never overrides a binding, and an invalid value is refused with exit 64 only when it is the value that would be chosen. A flag with no value, or with a name outside the grammar, exits 64 before anything is created.
 
 **The binding registry.** A binding records the profile a repository belongs to, keyed by the repository's real git root and its root commit. The registry is one file in the configuration home, written with mode 0600, schema 1, holding at most 1,000 bindings. It sits outside every store so the profile can be chosen before any store is opened. It is read without following a symbolic link, only as a regular file of at most 64 KiB, and a file with any invalid entry is refused whole. A skipped entry would let a bound repository open under another profile. A binding is create-only: a repository bound to one profile is never re-pointed, and an attempt to bind it to another is a conflict.
 
@@ -49,7 +49,7 @@ The key set is closed, and a key outside it is refused by name. `schema` and `pr
 | `credentials` | Named credential references and approved helpers | Every command that is not read-only | A reference that is not valid |
 | `adapters` | `context`, the context sources to build, and `knowledgePass`, a boolean | Composition | An unknown source, a source listed twice, a value that is not a list, or a non-boolean `knowledgePass` |
 | `retention` | `transcripts`, `summary` or `full` | Every command that is not read-only | Any other value |
-| `policy` | `organizationFile` and the user's `schema` and `rules` | The policy loader | Per the policy file rules |
+| `policy` | `organizationFile` and the user's `schema` and `rules` | The policy loader | Per the policy file rules; for an enterprise profile also an `organizationFile` that is not a string, is empty, is over 1,024 characters or holds a control character |
 | `remotePatterns` | The remote globs an enterprise profile claims | The profile gate | A list over 64 entries, or an entry that is empty or over 256 characters |
 | `workspaceRoots` | Not read by any code | None | Never |
 | `freshnessWindowHours` | Not read by any code | None | Never |
@@ -58,7 +58,7 @@ The key set is closed, and a key outside it is refused by name. `schema` and `pr
 
 ## Roots and isolation
 
-A profile has three directories: the configuration home, the data root and the work root. The configuration home comes from `AVARICE_CONFIG_HOME` or defaults under the user's home. The data root and the work root each come from an environment variable (`AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT`) for the selected profile, else from the absolute or `~/` path in the profile's configuration, else from a default under the user's home for that profile. A relative root in the configuration is refused.
+A profile has three directories: the configuration home, the data root and the work root. The configuration home comes from `AVARICE_CONFIG_HOME` or defaults under the user's home. Each of the data root and the work root comes from an environment variable (`AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT`) for the selected profile. Without the variable it comes from the absolute or `~/` path in the profile's configuration, and without that from a default under the user's home for that profile. A relative root in the configuration is refused.
 
 Before anything is created, each root is resolved through its nearest existing ancestor's real path and judged. Neither root may sit under a `.claude` directory of the home or under the Claude configuration directory, neither may contain the home or that directory, and the two may not be nested. The data root must be on a local mount, because SQLite's write-ahead log is unsafe on a network mount. Only then are the directories created with mode 0700 and the configuration written.
 
@@ -80,11 +80,11 @@ A credential is named by a reference, never copied. A reference is `keychain:` a
 | `cmd` | Runs an owner-approved helper through the sandboxed executor and takes its output | All |
 | `delegated` | Checks that the named CLI is an executable on `PATH` and returns a handle with no value | `personal-extended` only |
 
-The keychain provider runs by argument list, never a shell, with an environment of `PATH` and `HOME` alone and a 5-second timeout. The value arrives on standard output and is capped at 16 KiB. Exit 44 means no item, and any other failure is reported as unavailable with the exit status. The tool is macOS only, so the provider is unavailable elsewhere. The helper provider runs only helpers listed in the profile's `credentials.helpers`, a map from helper name to absolute path with no control characters and no `.`, `..` or empty segment. It runs with the network denied, `PATH` and `HOME` only, a 5-second timeout, and a 16 KiB output cap. Its output is trimmed on both sides, and its error stream is never read.
+The keychain provider runs by argument list, never a shell, with an environment of `PATH` and `HOME` alone and a 5-second timeout. The value arrives on standard output and is capped at 16 KiB. Exit 44 means no item. Any other exit is reported as unavailable with the exit status, a value over 16 KiB is invalid, and a timeout is its own error that the audit records as unavailable. The tool is macOS only, so the provider is unavailable elsewhere. The helper provider runs only helpers listed in the profile's `credentials.helpers`, a map from helper name to absolute path with no control characters and no `.`, `..` or empty segment. It runs with the network denied, `PATH` and `HOME` only, a 5-second timeout, and a 16 KiB output cap. Its output is trimmed on both sides, and its error stream is never read.
 
 The `credentials` section maps names to references: `credentials.<name>` is a reference string, and `credentials.helpers` is the allow-list. `helpers` cannot be a credential name. A provider the profile's class forbids is refused as denied whether or not one is wired, and a provider the class allows but composition did not build is unavailable.
 
-**The handle.** A resolved value lives in a private field of a handle. It is not a property, and the handle's string, JSON and inspect forms are all the placeholder `[SecretHandle]`. The value leaves only as the argument of the function passed to `use`. A delegated handle holds the empty string and names the CLI.
+**The handle.** A resolved value lives in a private field of a handle. It is not a property, and the handle's string, JSON and inspect forms are all the placeholder `[SecretHandle]`. The value leaves only as the argument of the one callback the handle accepts. A delegated handle holds the empty string and names the CLI.
 
 **The audit.** Every resolution attempt, whatever its outcome, appends one `credential.resolve` event. Its data is the reference, the stated purpose, the calling module, the profile, the outcome (`resolved`, `unavailable`, `denied` or `invalid`) and the duration in milliseconds, with strings cut at 160 characters and control characters replaced. The run and invocation IDs ride on the event's own columns. The event never carries the value, its length or a digest. It is written at level info for a resolution and warn otherwise. An attempt whose event cannot be written does not hand out a value.
 
@@ -102,7 +102,7 @@ Redaction happens at these boundaries.
 | Shell history | Each entry, after control characters are removed |
 | Host transcript | Each complete line as it arrives, before the size cap counts it, so a secret the cap would have split is never stored |
 | Artifacts | The text kinds `transcript`, `transcript-summary`, `check-output`, `test-inventory`, `knowledge-manifest`, `gsd-quick-record`, `context-pack`, `manual-context`, `manual-evidence`, `restricted-plan`, `restricted-patch` and `restricted-decisions`, decoded as UTF-8, redacted and re-encoded before the store hashes them |
-| Briefs, check output and pasted comments | Secret patterns only, without seeded values |
+| Briefs and the comment text the owner prints | The process redactor, seeded values included, before the brief is parsed and before the comment is printed |
 | Hook read records | A path that holds a secret-shaped string is stored redacted with a 16 character hash suffix |
 
 Map documents and map snapshots are stored as given, because validation already refuses a map that holds a secret, and rewriting accepted bytes would change their recorded digests. A payload that is not valid UTF-8 is stored as given, and so is any kind not on the list. A test scans the code for the kinds it stores, so a new kind cannot be added without deciding which side it is on.
@@ -122,7 +122,6 @@ The profile key `retention.transcripts` is `summary`, the default, or `full`. Wi
 - The first `config.json` records the roots in effect when it was written, including any environment override of that moment, and the file is never updated.
 - An invalid `config.json` exits 70, while an untrusted binding registry or enterprise configuration exits 3.
 - A personal profile that names an organization policy file does not read it.
-- Check output, a brief and a printed comment are redacted by pattern, so a value that only the seed list knows passes through them.
 - A cmd helper cannot reach the network, so a helper that must contact a server fails as unavailable.
-- A keychain failure other than "no item" is reported as unavailable. Nothing produces an unauthenticated outcome.
+- A keychain failure other than "no item" is reported as unavailable, unless the value is over 16 KiB. Nothing produces an unauthenticated outcome.
 - A helper's output is trimmed on both sides, and a keychain value loses one trailing newline, so a secret whose own edges are whitespace changes.
