@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-36-PLAN.md
-last_updated: "2026-11-20T07:48:29.599Z"
+stopped_at: Completed 04-37-PLAN.md
+last_updated: "2026-11-20T08:33:34.204Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: a04c841e8d165d84b596ec0815b38b741927448d
+state_head: caad6ceb13f5e950a3fb78c07747cf494c2a740d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 37 of 39
+Plan: 38 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -199,6 +199,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P34 | 3 sessions | 3 tasks | 30 files |
 | Phase 04 P35 | 16h 19m | 3 tasks | 28 files |
 | Phase 04 P36 | 5h 44m (continuation) | 3 tasks | 3 files |
+| Phase 04 P37 | 90 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -493,6 +494,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-36: AC-8 over the 6 portfolio tasks fails on tokens (B 94.4 percent and C 88.5 percent of A tokens, bound 50 percent; success B and C 4 of 6, A 2 of 6) — Measured by portfolio-6, 18 of 18 runs, 0 judging errors; the owner ruled the 6-task set in writing (ruling 2)
 - [Phase 04]: 04-36: D-08 keeps the knowledge pass on; adapters.knowledgePass default unchanged (true) — Arm C shows no success gain over B (4 of 6 each) and costs fewer tokens than B (17557851 against 18715894), so the rule does not say off; recorded as ADR-015 by plan 04-37
 - [Phase 04]: 04-36: the portfolio-6 stop on T01 is classified as the brief (harness); briefFor states the required checks and rules end-to-end work out of scope — Kept evidence of a diagnostic run showed the unit finished the change and the verifier returned human_needed for the e2e bullet it could not verify; no change under src/
+- [Phase 04]: ADR-015: AC-8 failed on its 50 percent token bound (B 94.4, C 88.5 percent of A); the D-08 rule keeps the knowledge pass on, adapters.knowledgePass stays true — C ties B on success (4 of 6) and costs fewer run tokens, so the rule's second condition does not hold; the rule ignores setup cost (C onboarding 0.83 USD against 0.12 for B), recorded as a negative consequence for the owner
+- [Phase 04]: The four new subsystem documents are listed in README.md and coverage.md as drafted and never marked reviewed; policy is evaluated only by the approval gate, so the hook ignores organization rules (findings.md) — CLAUDE.md requires a new document to be listed when written; the fresh prose reviews belong to plan 04-39
 
 ### Roadmap Evolution
 
@@ -560,8 +563,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-20T07:48:29.565Z
-Stopped at: Completed 04-36-PLAN.md
+Last session: 2026-11-20T08:33:34.172Z
+Stopped at: Completed 04-37-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
