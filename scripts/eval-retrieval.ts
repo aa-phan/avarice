@@ -21,7 +21,9 @@
 //        --tasks), --merge (needs --out: keep the runs the file already holds, skip their (task, arm) pairs and add the rest; refused when the file came from another approved list;
 //        a live start over a file that holds runs is refused without it), --arms A,B,C, --cap-usd <n> (the per-run cost cap, default 0.40), --out <file> (the results JSON),
 //        --tasks-file <file>, --repos-file <file>, --source <repository id>=<path> (repeatable; default the source in the repositories file), --node-modules <id>=<dir>
-//        (repeatable; the dependency tree the judge copies into its clone; default the source checkout's own when its lockfile equals the parent's), --scratch <dir>, --keep.
+//        (repeatable; the dependency tree the judge copies into its clone; default the source checkout's own when its lockfile equals the parent's), --scratch <dir>, --keep,
+//        --evidence-dir <dir> (before a run's scratch is removed, copy its decision records, rows, steps, events and host transcript into <dir>/<task>-<arm>; redacted, at most
+//        5 MB a run, truncations recorded in the run's manifest.json).
 //
 // The projection is a cap bound, not a forecast: each run is charged its cap, each onboarding its cap, and arm A the cap of a map generation for every parent that carries
 // no `.planning/codebase` map. The onboarding caps are assumptions the pilot replaces with measurements.
@@ -34,7 +36,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 import { SandboxedExecutor } from '../src/adapters/exec/sandboxed-executor.ts';
 import { configPathFor } from '../src/adapters/fs/profile-config.ts';
+import { processRedactor } from '../src/adapters/redaction/process-redactor.ts';
 import { matchesAny } from '../src/domain/glob.ts';
+import { redactLeaves } from '../src/domain/redactor.ts';
+import type { Redactor } from '../src/domain/redactor.ts';
 import { ROUTINE_PRESET } from '../src/domain/run-contract.ts';
 import type { CommandExecutor } from '../src/ports/command-executor.ts';
 import { ceilingRefusal, claudeVersion, fitsPhase4Ceiling, liveClaudeBin, phase4Ceiling, phase4Spent, recordPhase4Spend } from '../test/helpers/live-harness.ts';
@@ -558,7 +563,173 @@ export interface RunResult {
 
 class CeilingStop extends Error {}
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Per-run evidence (plan 04-36, owner ruling 3)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// A run that stops on a decision leaves its reason in the arm's ledger and its transcript in the artifact store, both inside the scratch the harness removes. Before it removes
+// the scratch the harness copies what is needed to classify a stop: the decision records, the run, work-item and attempt rows, the steps, the contract, the events (the hook's
+// allow and deny decisions among them) and the host transcript (the denied calls' inputs are in it). The copy reads the arm's data root only: the arm repository, the owner's
+// checkout and the dependency tree are never read. Every string goes through the AVARICE redactor, and a run's copy is capped.
+
+export const EVIDENCE_CAP_BYTES = 5 * 1024 * 1024;
+// The ledger tables copied, most useful first, so a cap cuts the largest and least specific (events, then transcripts) before the decision records.
+const EVIDENCE_TABLES: readonly string[] = ['decisions', 'runs', 'work_items', 'attempts', 'run_steps', 'contracts', 'events'];
+// The most a truncation note takes; each file's room for one is set aside before any content is placed, so a cap never leaves a cut file without its note.
+const EVIDENCE_NOTE_RESERVE_BYTES = 128;
+
+export interface EvidenceFile {
+  name: string;
+  bytes: number;
+  rows: number;
+  total: number;
+  truncated: boolean;
+}
+
+export interface EvidenceManifest {
+  capBytes: number;
+  // The bytes of the copied files (this manifest not counted).
+  bytes: number;
+  files: EvidenceFile[];
+  truncated: string[];
+  // What could not be read: a missing ledger or table, an artifact that is not in the store.
+  absent: string[];
+}
+
+export interface EvidenceOptions {
+  dataRoot: string;
+  dest: string;
+  capBytes?: number;
+  redactor?: Redactor;
+}
+
+// The lines that fit `budget` bytes (each counted with its newline), and whether any line was left out.
+function fitLines(lines: readonly string[], budget: number, capBytes: number): { text: string; contentBytes: number; kept: number; truncated: boolean } {
+  let used = 0;
+  let kept = 0;
+  const out: string[] = [];
+  for (const line of lines) {
+    const bytes = Buffer.byteLength(line) + 1;
+    if (used + bytes > budget) break;
+    used += bytes;
+    kept += 1;
+    out.push(line);
+  }
+  const truncated = kept < lines.length;
+  const body = out.length === 0 ? '' : `${out.join('\n')}\n`;
+  return { text: truncated ? `${body}[evidence truncated at ${capBytes} bytes: ${kept} of ${lines.length} lines kept]\n` : body, contentBytes: used, kept, truncated };
+}
+
+export function captureEvidence(options: EvidenceOptions): EvidenceManifest {
+  const capBytes = options.capBytes ?? EVIDENCE_CAP_BYTES;
+  const redactor = options.redactor ?? processRedactor;
+  mkdirSync(join(options.dest, 'transcripts'), { recursive: true });
+  const manifest: EvidenceManifest = { capBytes, bytes: 0, files: [], truncated: [], absent: [] };
+  const place = (name: string, lines: readonly string[], budgetLeft: number): number => {
+    const fit = fitLines(lines, Math.max(0, budgetLeft), capBytes);
+    mkdirSync(dirname(join(options.dest, name)), { recursive: true });
+    writeFileSync(join(options.dest, name), fit.text);
+    const bytes = Buffer.byteLength(fit.text);
+    manifest.files.push({ name, bytes, rows: fit.kept, total: lines.length, truncated: fit.truncated });
+    if (fit.truncated) manifest.truncated.push(name);
+    manifest.bytes += bytes;
+    return fit.contentBytes;
+  };
+  const ledger = join(options.dataRoot, 'state.db');
+  const tables = new Map<string, string[]>();
+  const blobs: Array<{ name: string; digest: string }> = [];
+  if (!existsSync(ledger)) {
+    manifest.absent.push('state.db');
+  } else {
+    const db = new DatabaseSync(ledger, { readOnly: true, timeout: 5000 });
+    try {
+      for (const table of EVIDENCE_TABLES) {
+        try {
+          const order = table === 'events' ? ' ORDER BY seq' : '';
+          const rows = db.prepare(`SELECT * FROM ${table}${order}`).all() as Array<Record<string, unknown>>;
+          tables.set(table, rows.map((row) => JSON.stringify(redactLeaves({ ...row }, redactor))));
+        } catch {
+          manifest.absent.push(`${table} (no such table)`);
+        }
+      }
+      try {
+        // The run's own artifacts first, the onboarding's last, a summary before the whole transcript it summarizes.
+        const artifacts = db.prepare("SELECT digest, kind, retention FROM artifacts WHERE kind IN ('transcript', 'transcript-summary') ORDER BY (retention = 'run') DESC, (kind = 'transcript-summary') DESC, created_at").all() as Array<{ digest: string; kind: string; retention: string }>;
+        for (const a of artifacts) {
+          const hex = /^sha256:([0-9a-f]{64})$/.exec(a.digest)?.[1];
+          if (hex !== undefined) blobs.push({ name: `transcripts/${a.retention}-${a.kind}-${hex.slice(0, 16)}.txt`, digest: hex });
+        }
+      } catch {
+        manifest.absent.push('artifacts (no such table)');
+      }
+    } finally {
+      db.close();
+    }
+  }
+  const files: Array<{ name: string; lines: string[]; digest?: string }> = [
+    ...EVIDENCE_TABLES.filter((t) => tables.has(t)).map((t) => ({ name: `${t}.jsonl`, lines: tables.get(t) as string[] })),
+    ...blobs.map((b) => ({ name: b.name, lines: [] as string[], digest: b.digest })),
+  ];
+  // Room for every file's truncation note is set aside first.
+  let budget = capBytes - files.length * EVIDENCE_NOTE_RESERVE_BYTES;
+  for (const file of files) {
+    let lines = file.lines;
+    if (file.digest !== undefined) {
+      const blob = join(options.dataRoot, 'artifacts', file.digest.slice(0, 2), file.digest);
+      if (!existsSync(blob)) {
+        manifest.absent.push(`${file.name} (artifact not in the store)`);
+        continue;
+      }
+      // The text is redacted whole, so a secret that spans lines (a key block) is found, then cut at a line boundary by the cap.
+      const text = redactor.redact(readFileSync(blob, 'utf8'));
+      lines = text === '' ? [] : text.replace(/\n$/, '').split('\n');
+    }
+    // A cut file's note comes out of its own reserve, so only the content it kept is taken from what the next file may use.
+    budget -= place(file.name, lines, budget);
+  }
+  writeFileSync(join(options.dest, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
+
+// A directory name under `root` that no earlier run of the same (task, arm) took: `T01-B`, then `T01-B-2`, `T01-B-3`.
+function freshEvidenceDir(root: string, name: string): string {
+  for (let n = 1; ; n += 1) {
+    const candidate = join(root, n === 1 ? name : `${name}-${n}`);
+    if (!existsSync(candidate)) return candidate;
+  }
+}
+
+export interface SettleOptions {
+  dir: string;
+  evidenceRoot: string | undefined;
+  task: string;
+  arm: ArmId;
+  keep: boolean;
+  log: (line: string) => void;
+  redactor?: Redactor;
+}
+
+// What a run does with its scratch when it ends, whatever the outcome (a success, a block, a refusal or an exception): copy the evidence when a directory was named, then remove
+// the scratch unless --keep. A copy that fails is reported and never hides the run's result or leaves the scratch behind. Returns the evidence directory, when one was written.
+export function settleScratch(options: SettleOptions): string | undefined {
+  let evidence: string | undefined;
+  if (options.evidenceRoot !== undefined) {
+    try {
+      mkdirSync(options.evidenceRoot, { recursive: true });
+      const dest = freshEvidenceDir(options.evidenceRoot, `${options.task}-${options.arm}`);
+      const manifest = captureEvidence({ dataRoot: join(options.dir, 'arm', 'data'), dest, ...(options.redactor !== undefined ? { redactor: options.redactor } : {}) });
+      evidence = dest;
+      options.log(`evidence ${dest}: ${manifest.files.length} file(s), ${manifest.bytes} bytes${manifest.truncated.length > 0 ? `, truncated: ${manifest.truncated.join(', ')}` : ''}${manifest.absent.length > 0 ? `, absent: ${manifest.absent.join(', ')}` : ''}`);
+    } catch (e) {
+      options.log(`evidence copy failed for ${options.task} ${options.arm}: ${(e as Error).message}`);
+    }
+  }
+  if (!options.keep) rmSync(options.dir, { recursive: true, force: true });
+  else options.log(`kept ${options.dir}`);
+  return evidence;
+}
+
 interface LiveContext {
+  evidenceRoot: string | undefined;
   scratch: string;
   claudeBin: string;
   claudeVersion: string;
@@ -604,7 +775,8 @@ function rootsIn(base: string): CliRoots {
 }
 
 function cli(ctx: LiveContext, roots: CliRoots, args: readonly string[], cwd: string, timeoutMs: number): ReturnType<typeof runCli> {
-  return runCli(args, { roots, cwd, env: { AVARICE_CLAUDE_BIN: ctx.claudeBin }, timeoutMs });
+  // With evidence kept, the host stores the whole redacted transcript (AVARICE_DEBUG_TRANSCRIPTS, D-14) so the denied calls' inputs survive the scratch.
+  return runCli(args, { roots, cwd, env: { AVARICE_CLAUDE_BIN: ctx.claudeBin, ...(ctx.evidenceRoot !== undefined ? { AVARICE_DEBUG_TRANSCRIPTS: '1' } : {}) }, timeoutMs });
 }
 
 // Writes the arm's profile configuration over the config `avarice init` created.
@@ -696,8 +868,7 @@ async function runOne(ctx: LiveContext, run: PlannedRun): Promise<RunResult> {
     const judge = await judgeClone({ cwd: judgeDir, task, executor: ctx.executor, nodeModules: resolveNodeModules(ctx, task, source) });
     return { ...result, success: judge.success, judge, ...(judge.error !== undefined ? { judgeError: judge.error } : {}) };
   } finally {
-    if (!ctx.keep) rmSync(dir, { recursive: true, force: true });
-    else ctx.log(`kept ${dir}`);
+    settleScratch({ dir, evidenceRoot: ctx.evidenceRoot, task: task.id, arm, keep: ctx.keep, log: ctx.log });
   }
 }
 
@@ -720,9 +891,10 @@ interface Options {
   nodeModules: Map<string, string>;
   scratch: string | undefined;
   keep: boolean;
+  evidenceDir: string | undefined;
 }
 
-const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --live --out <file>) [--tasks <n> | --task-ids T01,T07] [--merge] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep]';
+const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --live --out <file>) [--tasks <n> | --task-ids T01,T07] [--merge] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep] [--evidence-dir <dir>]';
 
 class UsageError extends Error {}
 
@@ -742,6 +914,7 @@ function parseArgs(argv: readonly string[]): Options {
     nodeModules: new Map(),
     scratch: undefined,
     keep: false,
+    evidenceDir: undefined,
   };
   const pair = (value: string, flag: string): [string, string] => {
     const at = value.indexOf('=');
@@ -807,6 +980,9 @@ function parseArgs(argv: readonly string[]): Options {
         break;
       case '--scratch':
         options.scratch = resolve(value());
+        break;
+      case '--evidence-dir':
+        options.evidenceDir = resolve(value());
         break;
       case '--source': {
         const [id, path] = pair(value(), '--source');
@@ -963,6 +1139,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   mkdirSync(scratch, { recursive: true });
   const bin = liveClaudeBin();
   const ctx: LiveContext = {
+    evidenceRoot: options.evidenceDir,
     scratch: realpathSync(scratch),
     claudeBin: bin,
     claudeVersion: claudeVersion(bin),
