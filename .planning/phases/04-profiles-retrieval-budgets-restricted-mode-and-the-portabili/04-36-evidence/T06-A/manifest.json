@@ -1,0 +1,99 @@
+{
+  "capBytes": 5242880,
+  "bytes": 1906827,
+  "files": [
+    {
+      "name": "decisions.jsonl",
+      "bytes": 0,
+      "rows": 0,
+      "total": 0,
+      "truncated": false
+    },
+    {
+      "name": "runs.jsonl",
+      "bytes": 1138,
+      "rows": 2,
+      "total": 2,
+      "truncated": false
+    },
+    {
+      "name": "work_items.jsonl",
+      "bytes": 887,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "attempts.jsonl",
+      "bytes": 236,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "run_steps.jsonl",
+      "bytes": 8414,
+      "rows": 17,
+      "total": 17,
+      "truncated": false
+    },
+    {
+      "name": "contracts.jsonl",
+      "bytes": 10326,
+      "rows": 2,
+      "total": 2,
+      "truncated": false
+    },
+    {
+      "name": "events.jsonl",
+      "bytes": 215527,
+      "rows": 391,
+      "total": 391,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/run-transcript-summary-a505103004fffbcb.txt",
+      "bytes": 2209,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/run-transcript-dae21bc17cbb5b5b.txt",
+      "bytes": 876306,
+      "rows": 307,
+      "total": 307,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-summary-f6adb73b341c535d.txt",
+      "bytes": 1553,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-summary-a48e49bb5007643a.txt",
+      "bytes": 1784,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-8ca476d8f106c34e.txt",
+      "bytes": 453448,
+      "rows": 223,
+      "total": 223,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-a527f487b62459f0.txt",
+      "bytes": 334999,
+      "rows": 124,
+      "total": 124,
+      "truncated": false
+    }
+  ],
+  "truncated": [],
+  "absent": []
+}

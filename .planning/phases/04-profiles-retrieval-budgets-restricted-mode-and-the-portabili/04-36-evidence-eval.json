@@ -2,7 +2,7 @@
   "schema": 1,
   "plan": "04-36",
   "decision": "D-03, D-07, D-08",
-  "status": "stopped-awaiting-owner-ruling (second stop): the first block (check validation) was a harness defect, fixed; portfolio-6 then ran T01 in arms A, B, C and all three ended blocked_on_decision after the model started, with no branch; the cause is not yet classified and the plan stopped before T02",
+  "status": "complete: after owner ruling 3 the harness keeps per-run evidence, the diagnostic classified the portfolio-6 stop as the brief (fixed offline), and portfolio-6 ran 18 of 18 (AC-8 fails on tokens, D-08 keeps the knowledge pass on)",
   "ruling": {
     "ownerReply": "authorize balanced-9 pilot 11.70 total 33.00.",
     "owner": "Aaron Phan",
@@ -198,10 +198,83 @@
     "evidence": "blocked_on_decision with reason decision is an item-local block (src/app/run-stages/blocked.ts blockItem); the run id was issued, the run reached its item stage, and no invocation.finished event carried tokens or cost. The scratch directories of the three runs were removed by the harness (--keep not set), so the decision record itself was not read.",
     "classification": "not established. Candidates: a product defect in how a run starts on the arm repositories; a harness defect in the arm repository or the brief (the brief is the commit message with one acceptance criterion naming the four required checks); an environment defect in the run's own required checks (the run's checks are the same npm scripts, with `npm ci` as the dependency install). The cause is shared by arms A, B and C, so it is not a retrieval effect.",
     "diagnosticNotRun": "a single `--keep` run of T01 arm B would cost about 0.08 USD (the arm B onboarding, measured 0.076 USD; the blocked run itself cost nothing) and would show the decision record. It was not run: the permission system denied the command as a spend outside the owner's authorization, and no workaround was attempted. It needs the owner's say.",
-    "proposedD04Classification": "unclassified pending the diagnostic; the two environment defects above (Python dependencies, Postgres) are task/harness defects, classified from evidence"
+    "proposedD04Classification": "unclassified pending the diagnostic; the two environment defects above (Python dependencies, Postgres) are task/harness defects, classified from evidence",
+    "supersededBy": "diagnostic2 (the cause of the arm B stop is the brief) and the resumed portfolio6Resumed run"
   },
-  "verdict": null,
-  "verdictNote": "no AC-8 verdict and no D-08 outcome are recorded: eval-results.json holds only the three blocked T01 re-run entries of portfolio-6 (no success in any arm), and its summary block (ac8 pass true via C at 5.4 percent of A tokens, knowledge on) is arithmetic over three blocked runs, not a result. The knowledge-pass default is unchanged (true).",
-  "knowledgeRule": null,
-  "ownerSpotCheck": { "runs": [], "result": "none: no run succeeded" }
+  "portfolio6Resumed": {
+    "command": "AVARICE_LIVE=1 AVARICE_PHASE4_CEILING_USD=36.93 node scripts/eval-retrieval.ts --live --merge --task-ids T01,T02,T03,T04,T05,T06 --node-modules aa-phan-portfolio-v2=<owner's checkout>/node_modules --evidence-dir 04-36-evidence --out test/benchmark/phase4/eval-results.json (log ac8-p6b.log in the job's tmp directory); a fresh eval-results.json, the three blocked T01 entries of the first portfolio-6 attempt kept apart in 04-36-portfolio6-t01-blocked-results.json",
+    "ran": "18 of 18 runs, no stop, no ceiling stop, no judging error",
+    "capBound": "24.60 USD; measured 9.5822 USD (run cost 2.7597, setup 6.8225 of which arm C onboarding 4.9755)",
+    "stopConditionsChecked": {
+      "nineOrMoreOf18WithoutABranchOrJudgingError": "6 of 18 left no branch (T01 C, T02 A, T02 B, T03 A, T04 A, T05 C); 0 budget_exhausted; 0 judging errors; below 9",
+      "unexpectedStopSharedByEveryArm": "none: no task ended without a branch in all three arms (T02 lost A and B, C succeeded)",
+      "capsNotFitting": "none"
+    },
+    "perTaskByArm": {
+      "T01": { "A": "success", "B": "success", "C": "no branch: acceptance decision, verifier human_needed (two behaviours reviewed in code but not covered by a test)" },
+      "T02": { "A": "no branch: acceptance decision, verifier human_needed (its only stated reason: .planning/config.json modified at session start)", "B": "no branch: repeated_failure, loop limit of 3 consecutive hook denials (the verifier subagent's `git -C <clone> diff|status|show` calls, rule shell-not-allowed, then ListAgents and SendMessage, rule unknown-tool)", "C": "success" },
+      "T03": { "A": "no branch: acceptance decision, gate G2 (VERIFICATION gaps_found: format:check failing on Sleeve.tsx, which the unit could not fix with only the four named commands)", "B": "success", "C": "success" },
+      "T04": { "A": "no branch: acceptance decision, verifier human_needed (could not run the other gates; .planning/config.json noted as modified)", "B": "success", "C": "success" },
+      "T05": { "A": "success", "B": "success", "C": "no branch: acceptance decision, verifier human_needed (.planning/config.json noted as modified)" },
+      "T06": { "A": "branch judged no success (test and held-out test failed in the judging clone)", "B": "branch judged no success (test and held-out test failed in the judging clone)", "C": "success" }
+    },
+    "runs": [
+      { "task": "T01", "arm": "A", "success": true, "state": "ready_for_review", "tokens": 2486811, "runCostUsd": 0.1143, "setupUsd": 0.1744 },
+      { "task": "T01", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3129909, "runCostUsd": 0.1185, "setupUsd": 0.0830 },
+      { "task": "T01", "arm": "C", "success": false, "state": "blocked_on_decision", "tokens": 3611629, "runCostUsd": 0.2084, "setupUsd": 0.6013 },
+      { "task": "T02", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 2561571, "runCostUsd": 0.1681, "setupUsd": 0.1950 },
+      { "task": "T02", "arm": "B", "success": false, "state": "blocked_on_decision", "tokens": 3040412, "runCostUsd": 0.2133, "setupUsd": 0.2619 },
+      { "task": "T02", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2372642, "runCostUsd": 0.1228, "setupUsd": 1.1000 },
+      { "task": "T03", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 4746460, "runCostUsd": 0.2814, "setupUsd": 0.2596 },
+      { "task": "T03", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 2877492, "runCostUsd": 0.1440, "setupUsd": 0.1309 },
+      { "task": "T03", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 3210746, "runCostUsd": 0.1131, "setupUsd": 0.7484 },
+      { "task": "T04", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 3324764, "runCostUsd": 0.1966, "setupUsd": 0.1529 },
+      { "task": "T04", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3399716, "runCostUsd": 0.1262, "setupUsd": 0.0797 },
+      { "task": "T04", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2382964, "runCostUsd": 0.1574, "setupUsd": 1.1000 },
+      { "task": "T05", "arm": "A", "success": true, "state": "ready_for_review", "tokens": 3993902, "runCostUsd": 0.1824, "setupUsd": 0.1603 },
+      { "task": "T05", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3669406, "runCostUsd": 0.1292, "setupUsd": 0.0915 },
+      { "task": "T05", "arm": "C", "success": false, "state": "blocked_on_decision", "tokens": 3434768, "runCostUsd": 0.1542, "setupUsd": 0.7066 },
+      { "task": "T06", "arm": "A", "success": false, "state": "ready_for_review", "tokens": 2720412, "runCostUsd": 0.1164, "setupUsd": 0.2003 },
+      { "task": "T06", "arm": "B", "success": false, "state": "ready_for_review", "tokens": 2598959, "runCostUsd": 0.1030, "setupUsd": 0.0573 },
+      { "task": "T06", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2545102, "runCostUsd": 0.1104, "setupUsd": 0.7192 }
+    ],
+    "perArm": {
+      "A": { "runs": 6, "success": 2, "tokens": 19833920, "runCostUsd": 1.0592, "meanRunCostUsd": 0.1765, "setupUsd": 1.1427, "meanSetupUsd": 0.1904, "noBranch": 3, "judgeErrors": 0 },
+      "B": { "runs": 6, "success": 4, "tokens": 18715894, "runCostUsd": 0.8342, "meanRunCostUsd": 0.1390, "setupUsd": 0.7042, "meanSetupUsd": 0.1174, "noBranch": 1, "judgeErrors": 0 },
+      "C": { "runs": 6, "success": 4, "tokens": 17557851, "runCostUsd": 0.8663, "meanRunCostUsd": 0.1444, "setupUsd": 4.9755, "meanSetupUsd": 0.8293, "noBranch": 2, "judgeErrors": 0 }
+    },
+    "measuredMeanRunCostUsd": { "A": 0.1765, "B": 0.1390, "C": 0.1444, "note": "run cost only; the mean cost of a run including its arm's onboarding (and arm A's map generation) is A 0.3669, B 0.2564, C 0.9737 USD" },
+    "evidence": "04-36-evidence/<task>-<arm> for the 18 runs and diagnostic2-T01-B; 19 directories, none truncated (largest run 4.1 MB of the 5 MB cap); AC-5: a findSecrets scan of every evidence file (278 files, 46.8 MB) found 0 hits and test/integration/redaction-suite.test.ts passes 5 of 5. The transcripts carry the repository text the runs read (the portfolio's own source), which the AC-5 secret rules do not address."
+  },
+  "verdict": {
+    "pass": false,
+    "via": null,
+    "reason": "no pack arm both matches the success of A and stays within half of its tokens",
+    "rule": "AC-8 over the 6 portfolio tasks (ruling 2, accepted in writing 2026-11-19T17:48:42Z): arm B or C succeeds at least as often as A at no more than 50% of A's tokens",
+    "arms": {
+      "A": { "success": "2 of 6", "tokens": 19833920 },
+      "B": { "success": "4 of 6", "successOk": true, "tokens": 18715894, "tokenShare": 0.9436306085735952, "tokensOk": false },
+      "C": { "success": "4 of 6", "successOk": true, "tokens": 17557851, "tokenShare": 0.8852436129620368, "tokensOk": false }
+    },
+    "reading": "B and C succeed twice as often as A on these 6 tasks but use 94% and 89% of A's tokens, far above the 50% bound, so AC-8 fails on the token half. A's success rate is depressed by 3 verifier or gate stops that left no branch.",
+    "weakerBecause": "6 tasks on one repository; one task is 17% of a rate; a no-branch stop (6 of 18 runs) is counted as a non-success whatever its cause; tokens are the totals the host reported for each run's own invocations (setup not included)"
+  },
+  "knowledgeRule": {
+    "outcome": "on",
+    "reason": "arm C does not cost more tokens than B",
+    "rule": "D-08: the knowledge pass stays on unless arm C shows no success gain over arm B and also costs more tokens than arm B",
+    "measured": "C 4 of 6, B 4 of 6 (no success gain); C 17557851 tokens against B 18715894 (C costs fewer tokens), so the rule does not say off",
+    "defaultChanged": false,
+    "note": "the default of adapters.knowledgePass is unchanged (true); arm C's onboarding costs 0.8293 USD a run on average against 0.1174 for B, which is not part of the D-08 rule as the owner worded it"
+  },
+  "ownerSpotCheck": {
+    "runs": [
+      { "task": "T01", "arm": "B", "runId": "run_01M7VE1FD4W0XB8JVCV66Z00GK", "evidence": "04-36-evidence/T01-B" },
+      { "task": "T04", "arm": "C", "runId": "run_01M7VR7YZ4QR908ENT6WPN0JG8", "evidence": "04-36-evidence/T04-C" },
+      { "task": "T05", "arm": "A", "runId": "run_01M7VS76KK7S2AGASBZ4W1JX5M", "evidence": "04-36-evidence/T05-A" }
+    ],
+    "pickedBy": "a random draw (node:crypto randomInt) of 3 of the 10 successful runs",
+    "result": "pending: the owner's human check (does the diff match the accepted change in intent); it does not change the verdict (D-07). The run branches live in the scratch repositories the harness removed, so the diff is read from the kept transcript (the unit's written changes) and the judge's pass of the held-out test."
+  },
+  "spend": { "planUsd": 12.089225, "phase4Usd": 16.015900, "ledgerLines": 94, "planCapUsd": 33.0, "guardUsd": 36.93, "ceilingUsd": 40, "diagnostic2Usd": 0.202457, "portfolio6ResumedUsd": 9.5822 }
 }
