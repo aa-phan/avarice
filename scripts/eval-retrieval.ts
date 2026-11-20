@@ -1092,10 +1092,16 @@ function holdsRuns(file: string): boolean {
   }
 }
 
-function writeResults(file: string, header: Record<string, unknown>, results: readonly RunResult[], stopped: string | undefined): void {
+// The results file's content: the header, every run, the summary and, at the top level, the AC-8 verdict and the D-08 outcome (the same two values as `summary.ac8` and
+// `summary.knowledge`; plan 04-36's automated check reads them there).
+export function resultsDocument(header: Record<string, unknown>, results: readonly RunResult[], stopped: string | undefined): Record<string, unknown> {
   const summary = summarize(results);
+  return { ...header, runs: results, summary, verdict: summary.ac8, knowledgeRule: summary.knowledge, ...(stopped !== undefined ? { stopped } : {}) };
+}
+
+function writeResults(file: string, header: Record<string, unknown>, results: readonly RunResult[], stopped: string | undefined): void {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify({ ...header, runs: results, summary, ...(stopped !== undefined ? { stopped } : {}) }, null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify(resultsDocument(header, results, stopped), null, 2)}\n`);
 }
 
 export async function main(argv: readonly string[]): Promise<number> {

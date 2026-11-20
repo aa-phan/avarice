@@ -714,7 +714,7 @@ describe('the results document (plan 04-36)', () => {
     const runs = [
       { task: 'T01', arm: 'A' as const, success: false, tokens: 1000, costUsd: 0.1, runId: 'r1', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
       { task: 'T01', arm: 'B' as const, success: true, tokens: 400, costUsd: 0.1, runId: 'r2', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
-      { task: 'T01', arm: 'C' as const, success: true, tokens: 450, costUsd: 0.1, runId: 'r3', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
+      { task: 'T01', arm: 'C' as const, success: true, tokens: 350, costUsd: 0.1, runId: 'r3', state: 'x', tokensComplete: true, setup: { costUsd: 0, tokens: 0, mapCostUsd: 0 } },
     ];
     const doc = resultsDocument({ schema: 1, kind: 'avarice-ac8-evaluation' }, runs, undefined);
     const summary = summarize(runs);
