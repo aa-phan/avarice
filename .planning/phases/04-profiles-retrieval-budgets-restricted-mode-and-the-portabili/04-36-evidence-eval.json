@@ -100,7 +100,7 @@
     "spendUsd": 0.20245659,
     "spendDetail": "onboarding 0.07765968, run 0.12479692; run reported 1891606 tokens over 3 turns and 384 s",
     "result": "blocked_on_decision (decision), no branch; item A of the run made the change and stopped on a question",
-    "evidenceDir": "04-36-evidence/T01-B (13 files, 1610006 bytes, nothing truncated; AC-5 pattern scan 0 hits)",
+    "evidenceDir": "04-36-evidence/diagnostic2-T01-B (renamed from T01-B after the run so the portfolio-6 runs take the plain <task>-<arm> names; 13 files, 1610006 bytes, nothing truncated; AC-5 pattern scan 0 hits)",
     "decisionRecord": {
       "decision": "dec_01M7VCCMHYW7B15HV0BWSZCX0Y",
       "class": "acceptance",
