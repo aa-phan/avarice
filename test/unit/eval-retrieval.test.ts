@@ -4,7 +4,8 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -676,5 +677,207 @@ describe('the arm C onboarding cap (plan 04-36)', () => {
     assert.equal(ONBOARD_CAP_USD.B, 0.6);
     const plan = planRuns(loadApprovedTasks(TASKS_FILE).tasks.slice(0, 1), ['A', 'B', 'C'], { capUsd: 0.4, mapPresent: () => true });
     assert.deepEqual(plan.map((r) => r.onboardCapUsd), [0.6, 0.6, 1.1]);
+  });
+});
+
+describe('the per-run evidence the harness keeps (plan 04-36, owner ruling 3)', () => {
+  // A blocked run's scratch was removed before anyone read its decision record or its transcript, so a stop could not be classified. The harness now copies the run's
+  // records into an evidence directory before it removes the scratch. Everything it copies is redacted with the AVARICE redactor, and the copy is bounded.
+  const TRANSCRIPT_BODY =
+    [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cd src && npm run test 2>&1 | tail"}}]}}',
+      '{"type":"user","message":{"content":[{"type":"tool_result","content":"Permission to use Bash has been denied."}]}}',
+      '{"type":"result","subtype":"success","num_turns":6}',
+    ].join('\n') + '\n';
+
+  interface Seed {
+    blocked: boolean;
+    secret?: string;
+    transcript?: string;
+    extraEvents?: number;
+  }
+
+  // A scratch the way a run leaves it: `<dir>/arm/data/state.db` (the ledger tables the evidence reads), a transcript blob in the artifact store and the arm's
+  // repository at `<dir>/repo` (which the copy must never read).
+  function scratchWith(seed: Seed): { dir: string; dataRoot: string } {
+    const dir = temp('eval-evidence-scratch');
+    const dataRoot = join(dir, 'arm', 'data');
+    mkdirSync(dataRoot, { recursive: true });
+    const db = new DatabaseSync(join(dataRoot, 'state.db'));
+    const secret = seed.secret ?? '';
+    try {
+      db.exec(`
+        CREATE TABLE runs (run_id TEXT PRIMARY KEY, project_id TEXT, state TEXT, version INTEGER, reason TEXT, title TEXT);
+        CREATE TABLE work_items (run_id TEXT, item_id TEXT, type TEXT, state TEXT, attempts INTEGER, spec_json TEXT);
+        CREATE TABLE attempts (attempt_id TEXT PRIMARY KEY, run_id TEXT, ordinal INTEGER, outcome TEXT);
+        CREATE TABLE run_steps (run_id TEXT, step TEXT, attempt INTEGER, status TEXT, result_json TEXT);
+        CREATE TABLE decisions (decision_id TEXT PRIMARY KEY, run_id TEXT, class TEXT, issue TEXT, options_json TEXT, state TEXT, urgency TEXT);
+        CREATE TABLE contracts (run_id TEXT, version INTEGER, body_json TEXT);
+        CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, level TEXT, type TEXT, run_id TEXT, attempt_id TEXT, invocation_id TEXT, data_json TEXT);
+        CREATE TABLE artifacts (digest TEXT PRIMARY KEY, size INTEGER, kind TEXT, run_id TEXT, retention TEXT, created_at TEXT, store TEXT);
+      `);
+      const state = seed.blocked ? 'blocked_on_decision' : 'closed';
+      db.prepare('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)').run('run_X1', 'proj_1', state, 4, seed.blocked ? 'decision' : null, `brief ${secret}`);
+      db.prepare('INSERT INTO work_items VALUES (?, ?, ?, ?, ?, ?)').run('run_X1', 'A', 'implement', seed.blocked ? 'blocked' : 'done', 1, '{"title":"unit A"}');
+      db.prepare('INSERT INTO attempts VALUES (?, ?, ?, ?)').run('att_1', 'run_X1', 1, seed.blocked ? 'denied' : 'ok');
+      db.prepare('INSERT INTO run_steps VALUES (?, ?, ?, ?, ?)').run('run_X1', 'launch', 1, 'completed', JSON.stringify({ outcome: 'denied', note: secret }));
+      db.prepare('INSERT INTO contracts VALUES (?, ?, ?)').run('run_X1', 1, '{"policy":"routine"}');
+      if (seed.blocked) {
+        db.prepare('INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?)').run('dec_1', 'run_X1', 'permission', `the unit made no in-scope change; the host or the hook denied 4 call(s) ${secret}`, '[{"id":"withdraw"}]', 'open', 'blocking');
+      }
+      const event = db.prepare('INSERT INTO events (ts, level, type, run_id, attempt_id, invocation_id, data_json) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      event.run('2026-11-20T00:00:00.000Z', 'warn', 'hook.decision', 'run_X1', null, 'inv_1', JSON.stringify({ tool: 'Glob', decision: 'deny', rule: 'outside-read-set', target: secret }));
+      for (let i = 0; i < (seed.extraEvents ?? 0); i += 1) event.run('2026-11-20T00:00:01.000Z', 'info', 'tool.completed', 'run_X1', null, 'inv_1', JSON.stringify({ tool: 'Read', i }));
+      const transcript = seed.transcript ?? TRANSCRIPT_BODY;
+      const hex = createHash('sha256').update(transcript).digest('hex');
+      mkdirSync(join(dataRoot, 'artifacts', hex.slice(0, 2)), { recursive: true });
+      writeFileSync(join(dataRoot, 'artifacts', hex.slice(0, 2), hex), transcript);
+      db.prepare('INSERT INTO artifacts VALUES (?, ?, ?, ?, ?, ?, ?)').run(`sha256:${hex}`, transcript.length, 'transcript', 'run_X1', 'run', '2026-11-20T00:00:02.000Z', 'local');
+    } finally {
+      db.close();
+    }
+    mkdirSync(join(dir, 'repo'), { recursive: true });
+    writeFileSync(join(dir, 'repo', 'owner-private.txt'), 'OWNER-CHECKOUT-CONTENT-MUST-NOT-BE-COPIED\n');
+    return { dir, dataRoot };
+  }
+
+  function filesUnder(root: string): string[] {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else out.push(path);
+      }
+    };
+    walk(root);
+    return out.sort();
+  }
+
+  const allText = (root: string): string => filesUnder(root).map((f) => readFileSync(f, 'latin1')).join('\n');
+
+  it('copies the decision records, run, work-item and attempt rows, steps, events with their hook decisions and the host transcript of a blocked run', async () => {
+    const { captureEvidence } = await harness();
+    const { dataRoot } = scratchWith({ blocked: true });
+    const dest = join(temp('eval-evidence-dest'), 'T01-B');
+    const manifest = captureEvidence({ dataRoot, dest });
+    const read = (name: string): Array<Record<string, unknown>> => readFileSync(join(dest, name), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as Record<string, unknown>);
+    assert.match(String(read('decisions.jsonl')[0]?.['issue']), /the unit made no in-scope change; the host or the hook denied 4 call\(s\)/);
+    assert.equal(read('runs.jsonl')[0]?.['state'], 'blocked_on_decision');
+    assert.equal(read('work_items.jsonl')[0]?.['item_id'], 'A');
+    assert.equal(read('attempts.jsonl')[0]?.['outcome'], 'denied');
+    assert.equal(read('run_steps.jsonl')[0]?.['step'], 'launch');
+    assert.equal(read('contracts.jsonl')[0]?.['version'], 1);
+    const events = read('events.jsonl');
+    assert.equal(events[0]?.['type'], 'hook.decision');
+    assert.match(String(events[0]?.['data_json']), /outside-read-set/);
+    const transcripts = filesUnder(join(dest, 'transcripts'));
+    assert.equal(transcripts.length, 1);
+    assert.equal(readFileSync(transcripts[0] as string, 'utf8'), TRANSCRIPT_BODY);
+    assert.deepEqual(manifest.truncated, []);
+    assert.ok(manifest.files.some((f) => f.name === 'decisions.jsonl' && f.rows === 1));
+    assert.deepEqual(JSON.parse(readFileSync(join(dest, 'manifest.json'), 'utf8')), JSON.parse(JSON.stringify(manifest)));
+  });
+
+  it('copies on a success too, with no decision record, and reads nothing but the data root: the arm repository is never copied', async () => {
+    const { captureEvidence } = await harness();
+    const { dataRoot } = scratchWith({ blocked: false });
+    const dest = join(temp('eval-evidence-dest'), 'T01-A');
+    const manifest = captureEvidence({ dataRoot, dest });
+    assert.equal(readFileSync(join(dest, 'decisions.jsonl'), 'utf8'), '');
+    assert.match(readFileSync(join(dest, 'runs.jsonl'), 'utf8'), /"state":"closed"/);
+    assert.equal(filesUnder(join(dest, 'transcripts')).length, 1);
+    assert.ok(manifest.bytes > 0);
+    assert.doesNotMatch(allText(dest), /OWNER-CHECKOUT-CONTENT-MUST-NOT-BE-COPIED/);
+  });
+
+  it('redacts a seeded secret and every secret-shaped string from every row and the transcript, and a positive control shows the raw scratch holds them', async () => {
+    const { captureEvidence } = await harness();
+    const { Redactor } = await import('../../src/domain/redactor.ts');
+    const { SECRET_CORPUS, SEEDED_VALUE, scanForCorpus, scanTotal } = await import('../helpers/secret-corpus.ts');
+    const text = `${SECRET_CORPUS.map((e) => e.text).join(' | ')} | ${SEEDED_VALUE}`;
+    const transcript = `${TRANSCRIPT_BODY}{"type":"user","message":{"content":[{"type":"tool_result","content":${JSON.stringify(text)}}]}}\n`;
+    const { dataRoot } = scratchWith({ blocked: true, secret: text, transcript });
+    // The positive control: the scratch the copy reads from holds the secrets.
+    const raw = `${readFileSync(join(dataRoot, 'state.db')).toString('latin1')}\n${allText(join(dataRoot, 'artifacts'))}`;
+    assert.ok(scanTotal(scanForCorpus(raw)) > 0, 'the raw scratch holds the corpus');
+    const redactor = new Redactor();
+    assert.ok(redactor.seed(SEEDED_VALUE).ok);
+    const dest = join(temp('eval-evidence-dest'), 'T01-C');
+    captureEvidence({ dataRoot, dest, redactor });
+    const copied = allText(dest);
+    const scan = scanForCorpus(copied);
+    assert.equal(scanTotal(scan), 0, JSON.stringify(scan));
+    assert.match(copied, /\[REDACTED:seeded\]/);
+    assert.match(copied, /\[REDACTED:/);
+    for (const entry of SECRET_CORPUS) assert.ok(!copied.includes(entry.text), entry.kind);
+    // What is not secret is kept: the evidence is still readable.
+    assert.match(copied, /outside-read-set/);
+    assert.match(copied, /Permission to use Bash has been denied/);
+  });
+
+  it('is bounded: a run over the cap keeps whole lines up to it, ends each cut file with a note and records every truncation in the manifest', async () => {
+    const { captureEvidence, EVIDENCE_CAP_BYTES } = await harness();
+    assert.equal(EVIDENCE_CAP_BYTES, 5 * 1024 * 1024);
+    const bigTranscript = '{"type":"assistant","text":"line of the transcript"}\n'.repeat(4000);
+    const { dataRoot } = scratchWith({ blocked: true, transcript: bigTranscript, extraEvents: 300 });
+    const dest = join(temp('eval-evidence-dest'), 'T01-B');
+    const capBytes = 6000;
+    const manifest = captureEvidence({ dataRoot, dest, capBytes });
+    const total = filesUnder(dest).filter((f) => !f.endsWith('manifest.json')).reduce((n, f) => n + statSync(f).size, 0);
+    assert.ok(total <= capBytes, `${total} bytes kept, cap ${capBytes}`);
+    assert.equal(manifest.capBytes, capBytes);
+    assert.ok(manifest.truncated.length > 0, 'a truncation is recorded');
+    assert.ok(manifest.bytes <= capBytes);
+    for (const name of manifest.truncated) assert.match(readFileSync(join(dest, name), 'utf8'), /\[evidence truncated at/, `${name} ends with a note`);
+    // Rows of the first, highest-priority files survive the cap whole.
+    assert.match(readFileSync(join(dest, 'decisions.jsonl'), 'utf8'), /denied 4 call/);
+    // A line is never cut in the middle: every kept row of a jsonl file parses.
+    for (const line of readFileSync(join(dest, 'events.jsonl'), 'utf8').split('\n')) {
+      if (line === '' || line.startsWith('[evidence truncated')) continue;
+      JSON.parse(line);
+    }
+  });
+
+  it('settles a scratch: copies into <evidence>/<task>-<arm> and then removes the scratch, a repeated pair gets a numbered directory, and --keep leaves the scratch', async () => {
+    const { settleScratch } = await harness();
+    const evidenceRoot = temp('eval-evidence-root');
+    const logs: string[] = [];
+    for (const blocked of [true, false]) {
+      const { dir } = scratchWith({ blocked });
+      const kept = settleScratch({ dir, evidenceRoot, task: 'T01', arm: 'B', keep: false, log: (l) => logs.push(l) });
+      assert.equal(existsSync(dir), false, 'the scratch is removed after the copy');
+      assert.ok(kept !== undefined && existsSync(join(kept, 'manifest.json')));
+    }
+    assert.deepEqual(readdirSync(evidenceRoot).sort(), ['T01-B', 'T01-B-2']);
+    const { dir } = scratchWith({ blocked: true });
+    const third = settleScratch({ dir, evidenceRoot, task: 'T02', arm: 'C', keep: true, log: (l) => logs.push(l) });
+    assert.equal(existsSync(dir), true, '--keep leaves the scratch');
+    assert.ok(third !== undefined && third.endsWith('T02-C'));
+    assert.ok(logs.some((l) => l.includes('kept ')));
+  });
+
+  it('removes the scratch with no evidence directory named, and a failing copy still removes it and says so instead of hiding the run result', async () => {
+    const { settleScratch } = await harness();
+    const logs: string[] = [];
+    const plain = scratchWith({ blocked: true });
+    assert.equal(settleScratch({ dir: plain.dir, evidenceRoot: undefined, task: 'T01', arm: 'A', keep: false, log: (l) => logs.push(l) }), undefined);
+    assert.equal(existsSync(plain.dir), false);
+    const broken = temp('eval-evidence-broken');
+    writeFileSync(join(broken, 'not-a-directory'), 'x');
+    const noDb = temp('eval-evidence-nodb');
+    mkdirSync(join(noDb, 'arm', 'data'), { recursive: true });
+    const result = settleScratch({ dir: noDb, evidenceRoot: join(broken, 'not-a-directory'), task: 'T01', arm: 'A', keep: false, log: (l) => logs.push(l) });
+    assert.equal(result, undefined);
+    assert.equal(existsSync(noDb), false);
+    assert.ok(logs.some((l) => /evidence/.test(l)), logs.join('\n'));
+  });
+
+  it('accepts --evidence-dir on the command line and refuses it without a value', () => {
+    const ledger = phase4Ledger(undefined);
+    const ok = runScript(['--dry-run', '--task-ids', 'T01', '--evidence-dir', join(temp('eval-evidence-flag'), 'e')], ledger.env);
+    assert.equal(ok.code, 0, ok.stderr);
+    const bad = runScript(['--dry-run', '--evidence-dir'], ledger.env);
+    assert.equal(bad.code, 64, bad.stderr);
   });
 });
