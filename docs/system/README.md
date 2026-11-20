@@ -1,6 +1,6 @@
 # Built system documentation
 
-This tree describes AVARICE as it is built. It covers the onboarding of one existing repository to an active project record, and the unattended run of one or several work items on an onboarded repository to a reviewable local branch. It includes the decisions a run opens, the owner's answers, amendments and cancel, and the notifications and check-ins that reach the owner. It also covers the interactive shell. Every document here is written from the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
+This tree describes AVARICE as it is built. It covers the onboarding of one existing repository to an active project record, and the unattended run of one or several work items on an onboarded repository to a reviewable local branch. It includes the decisions a run opens, the owner's answers, amendments and cancel, and the notifications and check-ins that reach the owner. It also covers the interactive shell, the profiles that keep one owner's contexts apart with their credentials and redaction, the policy and approvals that gate privileged actions, the `doctor` diagnosis and the portability layer. Every document here is written from the code and describes current behavior. The proposal-era specification in [`docs/`](../) describes the intended design and stays as written; where the code differs, this tree follows the code and the difference is listed in [findings.md](findings.md).
 
 ## How to read this
 
@@ -20,6 +20,10 @@ A new document carries the mark "drafted, not yet reviewed" under its title unti
 | [autonomy-and-decisions.md](autonomy-and-decisions.md) | Decision records, their classes and authority, the response checks, the stale re-open, withdraw, the amendment request, pickup without polling, notification and check-ins |
 | [checks-and-evidence.md](checks-and-evidence.md) | The dependency install, validation of declared checks, the baseline, required checks, the test inventory, evidence and gates G1 to G4, repair |
 | [interactive-shell.md](interactive-shell.md) | The shell that `avarice` opens with no arguments on a terminal |
+| [profiles-and-credentials.md](profiles-and-credentials.md) | Profile names and classes, selection and binding, the config file and its keys, roots and isolation, credential references and providers, redaction, transcript retention |
+| [policy-and-approvals.md](policy-and-approvals.md) | The action table, the ranked policy sources, approvals from request to expiry, privileged commands in the hook, no replay after an interruption, the enforcement map, the manual equivalents |
+| [doctor.md](doctor.md) | The diagnosis command: what it reads, its report sections, findings, flags and exit codes, host admission and enforcement, record incompatibility |
+| [portability.md](portability.md) | Capability descriptors, step requirements and the unsupported refusal, the fake-remote adapters, the contract suite and the portability proof |
 | [containment.md](containment.md) | Launch checks, generated settings, the PreToolUse hook, budgets, the sandboxed executor, the egress proxy, git safety, root placement, the identity rule of the owner commands |
 | [indexes-and-context.md](indexes-and-context.md) | The code graph, intel and knowledge indexes, and `avarice context` |
 | [data-model.md](data-model.md) | The ledger, events, decisions and notifications, contract versions, budgets, the artifact store, the project record, files on disk |
@@ -42,11 +46,13 @@ Each proposal document in `docs/`, and each decision record in `docs/decisions/`
 | [architecture.md](../architecture.md) | [overview.md](overview.md) |
 | [existing-tooling-assessment.md](../existing-tooling-assessment.md) | [integrations.md](integrations.md) |
 | [requirements.md](../requirements.md) | partly: [cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md), [runs.md](runs.md), [checks-and-evidence.md](checks-and-evidence.md) |
-| [operations-and-testing.md](../operations-and-testing.md) | partly: [processes.md](processes.md), [coverage.md](coverage.md), [checks-and-evidence.md](checks-and-evidence.md) |
+| [operations-and-testing.md](../operations-and-testing.md) | partly: [processes.md](processes.md), [coverage.md](coverage.md), [checks-and-evidence.md](checks-and-evidence.md), [doctor.md](doctor.md) for `doctor`, [portability.md](portability.md) for the portability proof |
 | [autonomy-and-decisions.md](../autonomy-and-decisions.md) | partly: [autonomy-and-decisions.md](autonomy-and-decisions.md), [runs.md](runs.md), [cli-reference.md](cli-reference.md) for `decide`, `digest`, `schedule` and `cancel`, [config-reference.md](config-reference.md) for the profile `notify` keys |
 | [extensions.md](../extensions.md) | partly: [cli-reference.md](cli-reference.md), [interactive-shell.md](interactive-shell.md), [runs.md](runs.md), for the command table, the shell and the supervisor |
 | [decisions/ADR-006-unattended-delegation.md](../decisions/ADR-006-unattended-delegation.md) | partly: [runs.md](runs.md), [autonomy-and-decisions.md](autonomy-and-decisions.md) (the proposal is still marked Proposed) |
 | [decisions/ADR-013-interactive-shell.md](../decisions/ADR-013-interactive-shell.md) | [interactive-shell.md](interactive-shell.md) |
-| [deployment-and-portability.md](../deployment-and-portability.md) | none yet |
-| [enterprise-adaptation.md](../enterprise-adaptation.md) | none yet |
+| [deployment-and-portability.md](../deployment-and-portability.md) | partly: [portability.md](portability.md), for the local adapters, the descriptors and the portability proof; nothing of a remote deployment is built |
+| [enterprise-adaptation.md](../enterprise-adaptation.md) | partly: [policy-and-approvals.md](policy-and-approvals.md), [profiles-and-credentials.md](profiles-and-credentials.md), [doctor.md](doctor.md), for the policy model, the profiles, the credential references, the enforcement map and the manual modes |
+| [decisions/ADR-005-policy-approvals-and-profiles.md](../decisions/ADR-005-policy-approvals-and-profiles.md) | partly: [policy-and-approvals.md](policy-and-approvals.md), [profiles-and-credentials.md](profiles-and-credentials.md) |
+| [decisions/ADR-009-credential-broker.md](../decisions/ADR-009-credential-broker.md) | partly: [profiles-and-credentials.md](profiles-and-credentials.md) (the broker is wired and has no caller yet) |
 | [implementation-plan.md](../implementation-plan.md), [reference-system-comparison.md](../reference-system-comparison.md), [reference-system-deep-dive.md](../reference-system-deep-dive.md) | none: planning and comparison material, not a description of the system |
