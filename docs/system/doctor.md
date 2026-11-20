@@ -4,13 +4,13 @@
 
 `avarice doctor` reports what is installed and what is wrong with it, and gives a fix for each problem. This document describes it as implemented in the read model, the command, the dependency set and the probes (`src/app/doctor.ts`, `src/cli/commands/doctor.ts`, `src/cli/doctor-deps.ts`, `src/adapters/diagnostics/probes.ts`, `src/ports/diagnostics.ts`). The host admission rule it applies is in `src/domain/host-admission.ts` and the launch checks it mirrors are in `src/adapters/host-claude/launch-preflight.ts`.
 
-Doctor exists to explain the problems that make the other commands refuse to start, so it runs when the rest of AVARICE does not: with a store written by a newer build, a missing or incompatible GSD, or a host that is absent or refused. It reads and never writes, except for the one repair behind a flag. The flags and exit codes are in [cli-reference.md](cli-reference.md), the profile it reports on in [profiles-and-credentials.md](profiles-and-credentials.md), and the host and launch checks in [containment.md](containment.md).
+Doctor explains the problems that make the other commands refuse to start. It therefore runs when the rest of AVARICE does not: with a store written by a newer build, a missing or incompatible GSD, or a host that is absent or refused. It reads and never writes, except for the one repair behind a flag. The flags and exit codes are in [cli-reference.md](cli-reference.md), the profile it reports on in [profiles-and-credentials.md](profiles-and-credentials.md), and the host and launch checks in [containment.md](containment.md).
 
-## What it reads and what it never touches
+## Reads and writes
 
 Doctor has its own dependency set instead of the normal composition. It runs no migration, takes no backup, takes no lease, requires no GSD and composes no host. It resolves the profile as every command does, which creates the profile's directories and configuration file when they are absent and nothing else. It opens the store read-only and only when the store is a readable store of this build's schema.
 
-Every probe that starts a process has its own 1-second timeout and is killed without a way to ignore the signal, so a hung `claude` or `graphify` costs doctor its bound and no more. The probes get a small environment: `PATH` and a few identity and locale variables, never a variable that carries a credential. Doctor never resolves a credential. A configured reference is shown as the reference it is, and a string that does not have the shape of a reference is shown as "not a credential reference", so a secret typed where a reference belongs is never echoed. Every string of the report passes through the process redactor, and the text view strips control characters.
+Every probe that starts a process, except the online authentication check, has its own 1-second timeout and is killed without a way to ignore the signal. A hung `claude` or `graphify` therefore costs doctor its bound and no more. The probes get a small environment: `PATH` and a few identity and locale variables, never a variable that carries a credential. Doctor never resolves a credential. A configured reference is shown as the reference it is. A string that does not have the shape of a reference is shown as "not a credential reference", so a secret typed where a reference belongs is never echoed. Every string of the report passes through the process redactor, and the text view strips control characters.
 
 Offline, doctor is expected to finish in under 2 seconds. A test asserts this under a wrapper that denies the network. The code itself enforces only the per-probe bound.
 
@@ -31,7 +31,7 @@ The exit code is 0 when no finding has level `error`, 3 when at least one does, 
 
 **Repair.** The repair deletes files whose names begin `.tmp-`, directly under a shard directory of the artifact store, whose last change is an hour old or more. It reports how many it removed and how many it kept as newer. It opens no store for writing and edits no run, lease or record.
 
-**Extensions.** For the Claude configuration directory in use, and for the default one when another is in use, doctor reports whether the directory exists, how many AVARICE attended hook entries its settings hold, and which skills it holds.
+**Extensions.** Doctor reports on the Claude configuration directory in use, and on the default one when another is in use. For each it reports whether the directory exists, how many AVARICE attended hook entries its settings hold, and which AVARICE skills (names that start with `avarice-`) it holds.
 
 ## The report
 
@@ -70,13 +70,13 @@ A finding has a level, an area and a fix. An `error` is a problem that stops som
 | `limits` | The profile's `limits` section cannot be used | None |
 | `events` | None | Debug events refused because the events table reached its bound |
 | `online` | None | A delegated CLI that is absent, timed out or failed its authentication check |
-| `extensions` | None | The attended hook registered in more than one configuration directory or more than once in one; a skill installed in more than one directory; a `CLAUDE.md` line that mentions pushing or opening a pull request without approval |
+| `extensions` | None | The attended hook registered in more than one configuration directory or more than once in one; an AVARICE skill installed in more than one directory; a `CLAUDE.md` line that mentions pushing or opening a pull request without approval |
 
 A host that is not admitted is a warning, not an error, because analysis and planning in restricted mode still work on it. A store written by a newer build is read-only for doctor and untouched, and its finding tells the owner to run the build that wrote it or restore a backup.
 
 ## Host admission and enforcement
 
-The `host` section answers whether a contained run could start, and why not when it could not.
+The `host` section answers whether the host side of a contained run could start (admission, sandbox and hook entry), and why not when it could not. The `gsd` section answers the GSD side.
 
 **Admission label.** The label is one of four.
 
@@ -87,9 +87,7 @@ The `host` section answers whether a contained run could start, and why not when
 | `refused` | Any other case; the refusal rule says which |
 | `absent` | No `claude` was found |
 
-The verified list holds six versions: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 and 2.1.326. A version joins the list only after a recorded live containment run on it with no failure. The one verified minor is 2.1, from patch 312. Versions compare as numbers per component, so 2.1.100 is above 2.1.99.
-
-**Refusal rules.** `host-version-unreadable` is an answer that starts with no version. `host-version-unknown` is a version that is not three decimal numbers. `host-minor-unverified` is a minor with no verified patch, such as 2.2.0 or 3.0.0. `host-patch-below-range` is a patch under the lowest verified one of its minor. `host-unavailable` is an unverified patch whose `--help` cannot be read, or a `--version` that did not answer. `host-flag-missing:` and a flag name is an unverified patch whose `--help` lacks one of seven flags: `--setting-sources`, `--permission-prompts`, `--permission-mode`, `--max-budget-usd`, `--settings`, `--plugin-dir` and `--agents`. A verified version skips the flag check. The flag check proves a name is listed and shows nothing about how the host behaves.
+Doctor applies the admission rule to the version that `claude --version` reports. The verified list, the verified minor, the seven flags the contained launch line needs and the refusal rules are in [containment.md](containment.md#refusals-before-launch). The refusal rule that doctor prints is one of those. `host-version-unknown` cannot appear in doctor's report, because doctor passes on only an answer that starts with three numbers, and a version that is not three decimal numbers is therefore reported as `host-version-unreadable`. The launch preflight does report it.
 
 **Enforcement.** The level is `enforced` when the host is admitted, the sandbox probe applies a profile and the hook entry is readable. It is `restricted` when the host is not enforced and `--help` lists all six flags the restricted launch line uses: `--restricted`, `--settings`, `--setting-sources`, `--permission-mode`, `--permission-prompts` and `--max-budget-usd`. Otherwise it is `none`. A host with a `sandbox` of `unavailable` or an unreadable hook entry is therefore at most `restricted`, and the matching finding names the way out.
 
@@ -103,13 +101,10 @@ A project record is tied to the revision and the GSD version it was built under.
 2. The located gsd-core is outside the adapter's admitted range.
 3. The located gsd-core's minor differs from the minor the record was built under.
 
-The finding names the record, its version and revision, the reason, and the fix, which is to reinstall the GSD line the record was built under or to re-onboard after the adapter supports the new version. `start` applies the same rule before it creates anything and refuses with code `record-incompatible` and exit 3. When no gsd-core is admitted at all, `start` still tells a project that has an active record that the record is incompatible, ahead of the generic refusal that GSD was not found.
+The finding names the record, its version and revision, the reason, and the fix. The fix is to reinstall the GSD line the record was built under, or to re-onboard after the adapter supports the new version. `start` applies the same rule before it creates anything and refuses with code `record-incompatible` and exit 3. When no gsd-core is admitted at all, `start` still tells a project that has an active record that the record is incompatible, ahead of the generic refusal that GSD was not found.
 
 ## Quirks
 
-- A host that is not admitted is a warning, and the exit code stays 0 unless another finding is an error.
-- Doctor creates the profile's directories and configuration file when they are absent. It is not free of writes on a first run.
-- The store's integrity check is the quick check, so a corrupt index can pass it.
-- The proposal's example output shows an integrity check line, a data root size and an events write-failure line. The built report runs the quick check, shows the data root as local only because profile preparation refuses a non-local root, and has no write-failure line.
+- The example output in the diagnostics section of [operations-and-testing.md](../operations-and-testing.md) shows an integrity check line, a data root size and an events write-failure line. The built report runs the quick check, shows the data root as local only because profile preparation refuses a non-local root, and has no write-failure line.
 - The report lists only the adapter configurations the store has recorded, which are written by the last command that composed a host or store, so it can lag the configuration.
-- The offline bound is asserted by a test and is not enforced by the code, apart from the 1-second limit on each process probe.
+

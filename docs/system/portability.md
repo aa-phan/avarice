@@ -4,17 +4,17 @@
 
 AVARICE's workflows depend on ports, and each adapter says what it can do, so an adapter can be swapped by configuration without changing the code that uses it. This document describes the capability descriptors, the step requirements and their refusal as implemented in the descriptor type, the requirement table and the composition check (`src/ports/capability.ts`, `src/domain/capability-requirements.ts`, `src/app/capabilities.ts`). It also describes the test support that proves the swap: the fake-remote adapters and their seeded fault source, the contract suite and the workflow proof (`test/helpers/fake-remote-executor.ts`, `test/helpers/fake-remote-artifact-store.ts`, `test/helpers/seeded-faults.ts`, `test/contract/`, `test/integration/portability-proof.test.ts`).
 
-Only the local adapters ship. What the proof establishes is narrower than a remote deployment: the domain and application code reach the executor and the artifact store only through their ports, and the workflows survive serialization, delay, duplicate responses and calls whose end they never saw. The interfaces and tables the descriptors appear in are in [integrations.md](integrations.md) and [data-model.md](data-model.md), and the refusals surface in [runs.md](runs.md) and [onboarding.md](onboarding.md).
+Only the local adapters ship. The proof establishes less than a remote deployment would. The domain and application code reach the executor and the artifact store only through their ports, and the workflows survive serialization, delay, duplicate responses and calls whose end they never saw. The interfaces and tables the descriptors appear in are in [integrations.md](integrations.md) and [data-model.md](data-model.md), and the refusals surface in [runs.md](runs.md) and [onboarding.md](onboarding.md).
 
 ## Capability descriptors
 
-Every adapter publishes a static descriptor. It has a port name, an adapter name, a version, a map of capabilities that are true or false, optional attributes that are text, optional extensions, and a flag for whether it works with no network. Composition records the descriptor of every adapter it builds in the store, so a changed adapter shows up as a changed record.
+Every adapter publishes a descriptor. The executor and host adapters build theirs when it is first read, because it needs a probe. The descriptor has a port name, an adapter name and a version. It has a map of capabilities that are true or false, optional attributes that are text and optional extensions. It also has a flag for whether the adapter works with no network. Composition records the descriptor of every adapter it builds in the store, so a changed adapter shows up as a changed record.
 
 Fifteen files under the ports directory define the ports. Twelve are adapter ports that declare a descriptor. The other three are the descriptor type itself, the ledger and the diagnostics port, which are not adapters a workflow swaps. A structural test reads the port files, so a new adapter port that forgets its descriptor fails it. The capability table of an adapter is typed over its port's methods where that is possible, so a method added to a port cannot go undeclared.
 
 | Port | Adapters | Capabilities | Attributes |
 |---|---|---|---|
-| `agent-host` | `claude-code`, `unavailable` | `contained-invocation`, `headless`, `resume` (false); a restricted host has `restricted-invocation` in place of the first | `enforcement`, and for an enforced host `claudeVersion` and `admission`; `reason` when not enforced |
+| `agent-host` | `claude-code`, `unavailable` | `claude-code`: `contained-invocation` (true only when its readiness checks pass), `headless` (true) and `resume` (false); a restricted host declares `restricted-invocation` (true only when its readiness check passes) in place of the first. `unavailable`: `contained-invocation` (false) only | `enforcement`, and for an enforced host `claudeVersion` and `admission`; `reason` when not enforced; `mode` on a restricted host |
 | `executor` | `local-sandbox-exec` | `remote` (false), `cancel`, `process-group-kill` | `enforcement` |
 | `artifact-store` | `local-fs` | `put`, `get`, `has`, `contentAddressed` | `redacted` when the store is wrapped by the redactor |
 | `staging-workspace` | `clone`, `worktree` | One per method | `strategy` |
@@ -54,15 +54,15 @@ Two steps call the check. The entry gate of a run asks for the unit requirement.
 
 ## Extensions
 
-An adapter's own features are named `<provider>.<feature>`, such as `github.draftPr`: a lower-case provider, a dot, and a feature name. An extension is never a key of the capabilities map, so an adapter's feature cannot widen the map a step is checked against. A test holds every production descriptor to the rule. A provider's own identifiers are kept verbatim: a context reference from the intel index is `<index file>#<key>` and one from the graph is the node's own ID, so an identifier is never rewritten into an AVARICE one.
+An adapter's own features are named `<provider>.<feature>`, such as `github.draftPr`: a lower-case provider, a dot, and a feature name. An extension is never a key of the capabilities map, so an adapter's feature cannot widen the map a step is checked against. A test holds every production descriptor to the rule. A provider's own identifiers are kept verbatim. A context reference from the intel index is `<index file>#<key>` and one from the graph is the node's own ID, so an identifier is never rewritten into an AVARICE one.
 
 ## Fake-remote adapters
 
 Two adapters stand in for a remote executor and a remote artifact store. They are test support and are never composed in production, which the proof checks: the production entry ignores the variable that selects them, and no file under the source, entry or scripts directories names it.
 
-Both put every call and response through JSON text, give each call a seeded latency of a few milliseconds, drop 5% of responses and deliver 2% twice. The commands and blobs behind them are the real local executor and a local store in a directory of its own.
+Both put every call and response through JSON text, give each call a seeded latency (the ranges are under "Limits of the proof"), drop 5% of responses and deliver 2% twice. The commands and blobs behind them are the real local executor and a local store in a directory of its own.
 
-**The executor.** The key of a call is its invocation identifier plus a digest of the call, so two commands that carry one identifier never read each other's answer. The server runs a command at most once and keeps the response text under the key until the client has it, so a retry of a call whose response was dropped is answered from the stored response. The client retries a dropped response up to six attempts in all and then reports `timeout` with an unknown side effect, because the command may have run. A duplicated response is delivered a second time under the same key and discarded. The descriptor says `remote` is true, with attributes for the transport and the seed.
+**The executor.** The key of a call is its invocation identifier plus a digest of the call, so two commands that carry one identifier never read each other's answer. The server runs a command at most once. It keeps the response text under the key until the client has it, so a retry of a call whose response was dropped is answered from the stored response. The client retries a dropped response up to six attempts in all and then reports `timeout` with an unknown side effect, because the command may have run. A duplicated response is delivered a second time under the same key and discarded. The descriptor says `remote` is true, with attributes for the transport and the seed.
 
 **The artifact store.** The port is synchronous, because the ledger writes an artifact inside a transaction. The latency is therefore a blocking wait, and a dropped response is retried in a loop of up to three attempts, after which the call is `unavailable`. The retry is safe because the store is content-addressed: a put of bytes the remote already holds is a no-op that returns the same digest.
 
@@ -70,7 +70,7 @@ Both put every call and response through JSON text, give each call a seeded late
 
 | Variable | Effect |
 |---|---|
-| `AVARICE_TEST_REMOTE` | Swaps the executor and the artifact store for the fakes |
+| `AVARICE_TEST_REMOTE` | When set to `1`, swaps the executor and the artifact store for the fakes; any other value does nothing |
 | `AVARICE_TEST_REMOTE_SEED` | The seed; 42 when unset |
 | `AVARICE_TEST_REMOTE_LOG` | A file that receives one JSON line per fault event |
 | `AVARICE_TEST_REMOTE_ROOT` | The directory that plays the remote store; the data root with `-remote` appended when unset |
@@ -94,9 +94,9 @@ An adapter reports a command whose end it never saw as an error naming the side 
 
 The proof runs four workflows twice, once with the local adapters and once with the fakes under two seeds, and compares the end states. The workflows are an onboarding to an active record with its indexes, a run to `ready_for_review`, a discard and retry of a crashed unit, and a kill and resume of a supervisor killed during verification. For a run the comparison covers the run, its items, its attempts, its evidence, its gates and the commit tree handed off. For an onboarding it covers the record, its indexes, its map digests and its snapshot manifest.
 
-The proof also checks that the faults were exercised: each seed dropped at least one response and duplicated at least one across the workflows, and no command ran twice, which it reads from the log of calls to the real executor. The swap is measured as a change to nothing under the source. The check lists the commits of the plan that built the proof, found by their commit subject, and requires `git log --name-only` over them, limited to the source directory, to list no file. It skips when that plan's base commit is not in the checkout's history.
+The proof also checks that the faults were exercised. Across the workflows each seed dropped at least one response and duplicated at least one. No command ran twice, which the proof reads from the log of calls to the real executor. The swap is measured as a change to nothing under the source. The commits that built the proof are found by their subject line, and the check requires that none of them changes a file under the source directory. The check is skipped in a checkout whose history lacks the commit range it starts from.
 
-## What the proof does not show
+## Limits of the proof
 
 The fakes live in the same process as the code they test. They cannot show these.
 
@@ -106,7 +106,7 @@ The fakes live in the same process as the code they test. They cannot show these
 - Filesystem and object-store semantics. The remote store is a local directory with the local store's atomic rename, which a network share or an object store does not offer.
 - Worker differences and performance. The commands run in this machine's sandbox, and nothing measures throughput.
 
-A real remote adapter needs the deployment tests named in the portability proposal.
+A real remote adapter needs deployment tests that this proof does not provide. The portability proposal ([deployment-and-portability.md](../deployment-and-portability.md), the staging section) plans them.
 
 ## Quirks
 
