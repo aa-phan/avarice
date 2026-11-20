@@ -483,7 +483,13 @@ export function briefFor(task: EvalTask): string {
   const clean = task.brief.replace(/\r\n/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
   const lines = clean.split('\n');
   const title = (lines[0] ?? '').trim().slice(0, 200).replace(/^["']|["']$/g, '') || task.id;
-  const behavior = lines.map((line) => (/^\s{0,3}#{1,6}(\s|$)/.test(line) ? line.replace('#', '\\#') : line)).join('\n').trim();
+  const message = lines.map((line) => (/^\s{0,3}#{1,6}(\s|$)/.test(line) ? line.replace('#', '\\#') : line)).join('\n').trim();
+  // The commit messages ask for work the harness cannot run or judge (an end-to-end spec: its file is a denied read and its command is no required check). A unit that took
+  // such a bullet literally finished the change and then ended on a question, which the run recorded as an acceptance decision (plan 04-36 diagnostic). The scope line
+  // is the same for every task and arm; the commit message above it is kept whole.
+  const commands = task.checks.map((c) => c.argv.join(' ')).join(', ');
+  const scope = `Only the required checks can run in this environment: ${commands}. Any end-to-end or browser test named above is out of scope: do not write it, do not ask whether to cover it and do not stop for it. Make the change and its unit tests, run the required checks, and finish the rest of the change without waiting for an answer.`;
+  const behavior = `${message}\n\n${scope}`;
   return [
     '---',
     `title: ${title.replace(/^\s+|\s+$/g, '')}`,
