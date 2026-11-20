@@ -102,7 +102,7 @@ The prompt of the command-line action is an editor over key presses:
 | Enter | Submit. |
 | Escape, Ctrl-C | Cancel. Ctrl-D cancels on an empty line and otherwise deletes the character at the cursor. |
 
-Other Ctrl combinations are ignored. Completion works only on the first word, and only with the cursor at the end of the line. One match completes with a trailing space. Several matches extend to their common prefix and are listed above the line until the next key. Only the twenty command names are offered (the fifteen of the first release and `approve`, `doctor`, `evidence`, `pr` and `comment`), never flags, subcommands or IDs. Line mode has no editing, history recall or completion beyond what the terminal gives.
+Other Ctrl combinations are ignored. Completion works only on the first word, and only with the cursor at the end of the line. One match completes with a trailing space. Several matches extend to their common prefix and are listed above the line until the next key. Only the twenty command names are offered, never flags, subcommands or IDs. Line mode has no editing, history recall or completion beyond what the terminal gives.
 
 ## Command history
 
