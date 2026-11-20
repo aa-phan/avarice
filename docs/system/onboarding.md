@@ -8,8 +8,8 @@ Onboarding takes one existing git repository to one immutable project record, in
 
 Three commands drive the flow.
 
-- `repo add` registers the project and preflights it. It creates an onboarding in `discovered`, takes no lease and runs no stage. It always stores mapping mode `full`, promotion `none` and no budget overrides.
-- `onboard` does the same registration, then takes the lease and runs the stage loop to a stop state. It accepts mode `full` or `fast`; the CLI rejects any other mode.
+- `repo add` registers the project and preflights it. It creates an onboarding in `discovered`, takes no lease and runs no stage. It always stores mapping mode `full`, promotion `none` and no budget overrides, and with `--profile` it binds the repository to a profile (see [profiles-and-credentials.md](profiles-and-credentials.md#selecting-a-profile)).
+- `onboard` does the same registration, then takes the lease and runs the stage loop to a stop state. It accepts mode `full` or `fast`, a promotion of `none`, `copy` or `commit`, budget overrides, and `--restricted`; the CLI rejects any other mode. On a project that already has an active record it is a refresh of that record (see [Refresh](#refresh)).
 - `resume` continues an onboarding by ID.
 
 An onboarding ends in `active` only through activation. The other stop states are `blocked`, `incompatible` and `deactivated`.
@@ -60,19 +60,30 @@ Preflight inspects the repository without opening any working-tree file. Committ
 
 Refusals, checked in this order:
 
-1. A promotion value other than `none`, `copy` or `commit` is refused as invalid, naming the three. Promotion itself runs after activation (see [cli-reference.md](cli-reference.md#promotion)).
-2. A project (same root commit and path) that already has an active record is refused as a conflict.
+1. A promotion value other than `none`, `copy` or `commit` is refused as invalid, naming the three. Promotion itself runs after activation (see [Promotion](#promotion)).
+2. For `repo add`, a project (same root commit and path) that already has an active record is refused as a conflict. `onboard` does not refuse it: the onboarding is a refresh of the record.
 3. A project with a live onboarding in any state other than `discovered` is refused as a conflict that names the onboarding and the resume command.
 
-An onboarding still in `discovered` is continued instead of duplicated, whether it came from `repo add` or from a kill right after registration. Onboardings in stop states are ignored, so a blocked project can be onboarded again from scratch.
+An onboarding still in `discovered` is continued instead of duplicated, whether it came from `repo add` or from a kill right after registration. It keeps the request it was registered with, so `--restricted` given to one registered without it, or the reverse, is refused. Onboardings in stop states are ignored, so a blocked project can be onboarded again from scratch.
 
-What preflight records, as names and classifications only: default branch, uncommitted and untracked file names, instruction files, submodules, nested repositories, workspace manifests, ADR directories, runtimes, tracked file and byte counts, and the existing-state block. Each list is capped at 1000 entries; a cut is named under a `truncated` key.
+What preflight records, as names and classifications only: default branch, uncommitted and untracked file names, instruction files, submodules, nested repositories, workspace manifests, ADR directories, runtimes, tracked file and byte counts, the existing-state block and, when the project has an active record, the record version and revision the onboarding refreshes. Each list is capped at 1000 entries; a cut is named under a `truncated` key. The existing-state block holds whether a `.planning/` directory exists, the class of the codebase map (see below), the outcome that class has before GSD's drift check, the drift (empty until staging) and the user-owned planning files.
 
-### Existing planning state and the promotion rule
+### An existing codebase map
 
 The existing `.planning/codebase/` map is classified as one of: none, stamped-complete (all seven files stamped), stamped-partial, unstamped, unknown-format (a file that is not one of GSD's seven), user-edited (a commit touched a file after the commit that wrote its stamp, or uncommitted changes sit under `.planning/`). Classes are tested in this order. First is none (no map files and no uncommitted change under `.planning/codebase/`). Then come unknown-format, user-edited and unstamped, and last stamped-complete or stamped-partial. Unknown-format therefore outranks user-edited.
 
-The class never changes the outcome. Every class ends in the same recorded outcome, isolated regeneration: the map is rebuilt in staging and the user's `.planning/` is never touched. A stamped-complete map is flagged as adoption deferred. Mapping modes `adopt` and `paths` exist in the type but are not available (see mapping).
+The class decides what happens to the map. A stamp alone never makes a map adoptable: a complete stamped map is adopted only when GSD's own drift check, run in staging and never in the user's checkout, passes.
+
+| Class | Outcome |
+|---|---|
+| none | the map is made |
+| stamped-complete | adopted when the drift check passes; refreshed when it blocks; mapped in full in staging when the verdict cannot be given (no stamp that resolves, no structure document, a failed run) |
+| stamped-partial, unstamped | mapped in full in staging |
+| unknown-format, user-edited | isolated regeneration: the map is mapped in staging and the user's files stay as they are |
+
+Preflight, which reads only the checkout, records the outcome as it stands without a drift verdict. The workspace stage runs the drift check for a stamped-complete map, plans the refresh (see [Refresh](#refresh)), and records the final outcome and the drift result in the mapping plan and in the project record. Every regeneration happens in staging, and the user's `.planning/` is never written except by a promotion the owner asked for.
+
+The files that stay the user's are named in the existing-state block as the user-owned planning files: for an unknown-format map every file of it, and for a user-edited one the files edited after their stamp and every changed file under `.planning/`. `repo add` prints them and the note for the class.
 
 ## Contract compilation and budgets
 
@@ -83,11 +94,11 @@ It then compiles the onboarding contract from the stored request and preflight, 
 The contract fixes, for this run only:
 
 - Mapping mode: default `full`.
-- Agent write sets, one each for map, intel and knowledge: `.planning/codebase/**`, `.planning/intel/**`, `.avarice-knowledge/**`. Files AVARICE itself writes are separate: the GSD config and the `.planning/graphs/` directory. The delete list is always empty.
+- Agent write sets, one each for map, intel and knowledge: `.planning/codebase/**`, `.planning/intel/**`, `.avarice-knowledge/**`. Files AVARICE itself writes are separate: the GSD config and the `.planning/graphs/` directory. The delete list is the map write set when the existing-map answer is `refresh` and the repository has a map, and empty otherwise. It describes the staging copy, where every regeneration happens, and never the user's checkout.
 - Read exclusions (`.git`, `build`, `coverage`, `dist`, `node_modules`, `vendor`), secret-path globs removed from the read scope, and read-only inspection commands plus the intel verb.
 - Knowledge documents: all Markdown under `docs/`, plus each ADR directory preflight found.
 - The existing-map answer: `refresh`. It is passed to the mapper in its prompt (see mapping).
-- Which indexes are on: all three.
+- Which indexes are on: all three. The profile may switch the knowledge pass off (`adapters.knowledgePass`), which the record then shows as disabled.
 - The decision lists: four decisions that need a human, four prohibited decisions.
 
 Budgets, with the preset ceilings:
@@ -121,19 +132,41 @@ Before the first host invocation, AVARICE probes GSD in staging, decides the map
 Mode decision, in order:
 
 1. GSD reports the repository is not brownfield (for example a README-only repository): mode `skip`, completeness none, whatever was requested.
-2. Requested `paths`: blocked with `scope_unavailable`.
-3. Requested `adopt`: blocked with `scope_unavailable`.
-4. Requested `skip`: skip. Requested `fast`: fast. Anything else: full.
+2. Requested `skip`: skip. Requested `fast`, or a restricted onboarding: fast.
+3. Requested `adopt`: adopt when the outcome for the existing map is adoption, otherwise refused as unsupported with the reduced mode `full`.
+4. Requested `paths`: the directories of the contract's read scope, or invalid when that scope is the whole repository.
+5. Otherwise, when a refresh plan exists, by the plan (see [Refresh](#refresh)): incremental adopts the map with no mapper, a scoped plan maps its paths, and a full plan maps everything, or the directories of a narrower contract read scope.
+6. Otherwise by the outcome for the existing map: adoption takes the map with no mapper; a refresh outcome with no plan, or any other outcome, maps in full in staging, or in the directories of a narrower contract read scope.
 
-The CLI only offers full and fast, so `paths` and `adopt` are reachable only through a stored request that bypasses the CLI.
+Before the first invocation the mode also has to be one the admitted GSD can perform. A mode whose capability GSD lacks (`map-paths` for `paths`, `adopt-map` for `adopt`) blocks the onboarding with `scope_unavailable`, naming the capability and the reduced mode, and nothing is simulated. The admitted GSD declares both capabilities. The CLI offers only full and fast, so `adopt` and `paths` are reached through a refresh or an existing map, or through a stored request that bypasses the CLI.
 
 | Mode | Files required | Completeness | Scope in the record |
 |---|---|---|---|
 | full | seven map files | complete | `.` |
 | fast | four map files (stack, integrations, architecture, structure) | partial | those four files |
+| paths | seven map files | partial | the named directories |
+| adopt | four map files | complete when all seven map files are present, otherwise partial | the files of the map |
 | skip | none | none | empty |
 
-Completeness is derived from the mode, never from what the documents say.
+Completeness is derived from the mode and, for an adopted map, from the files present, never from what the documents say. An adopted map runs no invocation and no budget, and goes straight to validation, which judges its files like any other map's. The record then says the map was adopted (`provenance: adopted`).
+
+### Refresh
+
+An onboarding of a project that has an active record is a refresh of that record, and so is the onboarding of a repository whose existing map is stamped complete. The workspace stage plans how much of the map to rebuild from what changed since the revision the map describes, which is the active record's revision or the map's stamp. The facts are GSD's drift verdict in staging, the paths that changed (outside `.planning/`), the top-level directories the new HEAD added, and whether a manifest or workspace file changed. The plan is chosen by this table, the first row that applies deciding.
+
+| Order | Condition | Plan, and the reason it records |
+|---|---|---|
+| 1 | no stamp, or no revision to measure from | full: `no-stamp` |
+| 2 | GSD could not judge the map | full: `drift-unreadable` |
+| 3 | a manifest or workspace file changed | full: `manifest-change` |
+| 4 | at least 3 new top-level directories | full: `new-top-level-dirs` |
+| 5 | GSD reports no drift | incremental: `no-change` when nothing changed, else `no-structural-change` |
+| 6 | drift confined to at most 50 named paths that can travel as one `--paths` value and are no manifest | paths: `drift-block`, mapping those paths |
+| 7 | any other drift | full: `drift-block` |
+
+An incremental plan adopts the map and runs no mapper, and the indexes are brought up to date from the changed paths (see [indexes-and-context.md](indexes-and-context.md#refreshing-the-code-graph)). The constants, including the 29 manifest names, are in [config-reference.md](config-reference.md#refresh-planning). Changed paths or revisions that git cannot resolve, or a diff past the port's bound, plan a full map with the reason `changed-paths-unavailable`. The plan and the facts behind it are the `refresh` block of the mapping plan, which keeps at most 200 changed paths; an incremental refresh whose list was cut is not used for the indexes.
+
+The map an active record holds in AVARICE's artifact store is not restored into the new staging copy, which is cloned from the user's repository. A refresh of a project whose map the owner never promoted therefore has no stamp to measure from and plans a full map.
 
 The map stage runs one contained host invocation in staging: the full or fast map command. `skip` runs no invocation and moves straight to validation. The existing-map answer is always appended to the prompt. Every map prompt, whatever the mode and restricted included, also ends with a secrets rule: the map documents are scanned for credentials and a document that holds one is rejected, so the mapper is told never to write a value of any kind the scan reports (the kinds are read from the scan's own pattern list), whether it is a real secret, a placeholder, a development default or an example. It names the connection string with a user name and password before the host as the common case, and tells the mapper to describe the setting instead (its name, where its value comes from and where a local default lives) and to pass the rule to the mapper subagent. The rule carries no example URL, so a copy of it cannot trip the scan. The scan itself is unchanged. Staging holds an empty map directory even for a repository with no map, because AVARICE creates it before launch. GSD reads an existing directory as an existing map and asks, and a headless session cannot answer.
 
@@ -149,11 +182,11 @@ The invocation's outcome is classified from measured facts, not from what the mo
 
 The next state follows: progressed or inconclusive go to `validating`; budget exhausted, denied, failed and no progress go to `blocked` (`budget_exhausted` for the first, `decision` for the rest). A host that refuses to start for lack of a containment layer blocks with `enforcement_failure`. A hook-recorded deny for a spent budget during the invocation overrides the host's own outcome.
 
-AVARICE stamps the map itself after the invocation, for fast and full, through GSD's stamp command, because the mapper's own stamp call is a write the hook denies. The stamp runs after progressed, no-progress and inconclusive endings. A failed stamp is recorded and not raised; the unstamped files then fail validation. Inconclusive endings are not treated as failures: the staging map is validated and accepted if complete.
+AVARICE stamps the map itself after the invocation, for fast, full and paths, through GSD's stamp command, because the mapper's own stamp call is a write the hook denies. The stamp runs after progressed, no-progress and inconclusive endings. A failed stamp is recorded and not raised; the unstamped files then fail validation. Inconclusive endings are not treated as failures: the staging map is validated and accepted if complete.
 
 ### Restricted map
 
-`onboard --restricted` runs one fast map through the restricted host instead of the contained one. That host has no shell and confines its file tools to the working directory, whatever the hook admits, and AVARICE grants it no other directory. GSD's workflow specs sit outside the staging copy, so before the map stage reserves its invocation it copies the specs the fast map reads into the staging copy. A contained onboarding stages nothing.
+`onboard --restricted` runs one fast map through the restricted host instead of the contained one, for a host that cannot be contained (see [containment.md](containment.md#restricted-mode)). The mode is fast whatever an existing map or a refresh would choose, so the map never claims more than four files, and the record says `partial (restricted)`. Only the code graph is built; the intel and knowledge steps are recorded absent with the reason `restricted`. That host has no shell and confines its file tools to the working directory, whatever the hook admits, and AVARICE grants it no other directory. GSD's workflow specs sit outside the staging copy, so before the map stage reserves its invocation it copies the specs the fast map reads into the staging copy. A contained onboarding stages nothing. A restricted onboarding whose host cannot start the restricted line blocks with `enforcement_failure` before any invocation and does not fall back to the contained host.
 
 - **What is copied.** Three seed files (the map workflow, the fast scan workflow and the reference the mapper agent loads) and every Markdown file under GSD's workflows, references or templates directories that they name, followed transitively. The source is the gsd-core directory that GSD's inspect recorded, the same directory the hook policy holds as a read root. A closure of more than 32 files or 512 KiB is refused whole, and so is a missing seed; nothing is written in either case.
 - **Where.** Under `.claude/gsd-core/` in the staging copy, the place the map skill reads before its global install. Every file is mode 0444, and a marker file names the directory as AVARICE's.
@@ -165,7 +198,7 @@ The restricted line itself is unchanged: it carries no directory grant, and the 
 
 ## Enforcement check
 
-After GSD is configured and before mapping, the workspace stage reads the host's declared enforcement. Anything other than "enforced" blocks with `enforcement_failure`; this is where an unavailable host stops an onboarding. No host invocation has happened when this block comes from the workspace stage.
+After GSD is configured and before mapping, the workspace stage reads the host's declared enforcement. Anything other than "enforced" blocks with `enforcement_failure`, and the message says to rerun with `--restricted`; this is where an unavailable host stops an onboarding. For a restricted onboarding the stage reads the restricted host's own descriptor instead, which needs only a `claude` that lists the restricted flags. No host invocation has happened when this block comes from the workspace stage. The same stage checks that the admitted GSD declares what the chosen mapping mode needs, and an onboarding that needs a capability GSD lacks is blocked with `scope_unavailable`.
 
 ## Validation and the retry rule
 
@@ -190,7 +223,7 @@ Extra files the mapper leaves in the map directory are neither validated nor sto
 
 ## Index stage
 
-In `planning_ready` the index steps run in a fixed order: code-graph, intel, knowledge. Their detail is in [indexes-and-context.md](indexes-and-context.md). For each step the checkpoint is committed first, the step runs, and its result is stored as a step row. A resumed onboarding skips steps with a completed row and reruns the one that was cut short. A step that fails, throws or finds nothing is stored as absent with a reason and a warning event; an index never blocks activation. A step may also report disabled when the contract turned it off, and the record then says nothing about it. The last checkpoint names activation.
+In `planning_ready` the index steps run in a fixed order: code-graph, intel, knowledge. Their detail is in [indexes-and-context.md](indexes-and-context.md). For each step the checkpoint is committed first, the step runs, and its result is stored as a step row. A resumed onboarding skips steps with a completed row and reruns the one that was cut short. A step that fails, throws or finds nothing is stored as absent with a reason and a warning event; an index never blocks activation. A step may also report disabled when the contract turned it off or, for the knowledge step, the profile did (`adapters.knowledgePass`), and the record then says nothing about it. When the onboarding is a refresh with an incremental plan, the code-graph and knowledge steps work from the changed paths and the changed documents instead of building new; the knowledge corpus holds the documents of the map, the planning documents, the decision records, the contract's documents and GSD's phase files and state file, and the cost cap decides how many of them one invocation can pay for ([indexes-and-context.md](indexes-and-context.md#the-cost-cap)). A restricted onboarding builds the code graph only. The last checkpoint names activation.
 
 ## Activation
 
@@ -202,13 +235,27 @@ If the check passes, activation:
 2. Reads an optional repository proposal file from staging at the pin (size capped at 64 KiB), treats it as data, and narrows it against the profile policy. Rejected parts, unparseable input and oversize input become findings.
 3. Builds the record and inserts it as the next version while moving to `active`, in one ledger transaction.
 
-Project record contents: schema and record version; repository identity (root commit, remote, default branch); the onboarded revision and an active revision that starts equal to it; profile; routine policy preset; promotion `none`; GSD version, runtime, adapter and capabilities and the config AVARICE applied; the contract's run ID, version and digest; the existing-state block, instruction files and not-mapped names from preflight; findings (rejected earlier validation attempts, extra map files, narrowing refusals; capped at 50); artifacts (staging location and path, per-file path, digest and stamp, and the snapshot digest); mapping (mode, scope, completeness label, mapped-at time, freshness fresh); folded index results (graph, intel, and an absent list); path grants, execution grants and commands. The record holds paths, digests and revisions, never document text.
+Project record contents: schema and record version; repository identity (root commit, remote, default branch); the onboarded revision and an active revision that starts equal to it; profile; routine policy preset; promotion `none`; GSD version, runtime, adapter and capabilities and the config AVARICE applied; the contract's run ID, version and digest; the existing-state block (with the final outcome and drift result from the mapping plan), instruction files and not-mapped names from preflight; `restricted: true` when the map was made under the restricted launch; findings (rejected earlier validation attempts, extra map files, narrowing refusals; capped at 50); artifacts (staging location and path, per-file path, digest and stamp, and the snapshot digest); mapping (mode, scope, completeness label, mapped-at time, freshness fresh, and `provenance: adopted` for an adopted map); folded index results (graph, intel, and an absent list); path grants, execution grants and commands. The record holds paths, digests and revisions, never document text.
 
 Authority defaults grant nothing: no write paths, no endpoints, no credentials, read-only tool class, local-sandbox environment. Repository proposals can only narrow: the protected path list only grows, and accepted commands arrive as proposals with a status.
 
-The completeness label is the mode's label (complete for full, partial for fast, none for skip). The record states the label and scope that validation judged.
+The completeness label is the mode's label (complete for full, partial for fast and paths, none for skip) and, for an adopted map, complete only when all seven files are present. The record states the label and scope that validation judged. The status of a restricted record reads `partial (restricted)`.
 
-The record version is previous plus one, but preflight refuses an onboarding while an active record exists, so a record is always version 1 in practice.
+The record version is the previous version plus one. A refresh activates the next version and marks the previous one superseded in the same transaction, so a project's record version grows with each completed refresh.
+
+## Promotion
+
+`onboard --promote copy` or `commit` puts the accepted map into the user's repository after activation. It runs by AVARICE itself, outside any contained invocation, in the stage after activation under the same lease, and it is the only code that writes to the user's checkout during an onboarding. `none` does nothing. The onboarding is already active when promotion runs, so nothing here moves its state, and a promotion that did not happen is a note and a recorded outcome, not a failure.
+
+Promotion is a privileged action, `onboarding.promote.copy` or `onboarding.promote.commit`. It starts only after the approval gate lets it, with the onboarding contract as the source: the contract names exactly this action and the onboarding, so it needs no approval from the owner. A policy rule that denies the action refuses it, and the output names the rule (see [policy-and-approvals.md](policy-and-approvals.md#how-an-action-reaches-an-approval)). The start is recorded before anything is written, so a kill leaves a start with no end.
+
+- **Copy.** Each accepted file is written under `.planning/` of the checkout only where the target is absent. A target with the same bytes is counted as present. A target that differs, a symbolic link, a directory or a path whose parent is not a directory is left untouched and reported as a conflict. A file is written beside its target and linked into place, and a link refuses an existing name, so a file that appears between the check and the write is a conflict too. Nothing is replaced or deleted. One permission decision on the onboarding lists the files left untouched.
+- **Commit.** One commit is built in the staging clone from the pin and the accepted files, then fetched into the user's repository by a create-only fetch to the branch `avarice/onboard-<onboarding id>`. The commit message is `docs(planning): adopt GSD codebase map from AVARICE onboarding <id>` and its identity is `AVARICE <avarice@localhost>`, whatever the machine's own identity and signing configuration say. HEAD, the index, the working tree and every other ref stay as they were. A branch of that name that already exists is a failure, reported in the output.
+- **Source of the files.** The accepted files are read back from the artifact store by the digests the active record names, the bytes that were validated, and not from the staging tree. A promoted path is a path under `.planning/` of plain segments.
+- **Resume.** A promotion whose start was recorded and whose end was not is never run again. Resume opens one permission decision on the onboarding that names it and writes nothing. The decisions of an onboarding hang off its contract's carrier run, never appear in `avarice inbox`, and offer only `withdraw`; nothing can answer them into an approval.
+- **Kill points.** The test seam names two points between a privileged action's recorded start and its end: right after the start and after the write took effect but before its outcome was recorded.
+
+The outcome is the step `promote` of the onboarding. The command line is in [cli-reference.md](cli-reference.md#promotion).
 
 ## Checkpoints and kill points
 
@@ -232,9 +279,11 @@ Every other stage is idempotent and simply runs again from the committed state. 
 ## Quirks to know about
 
 - `repo add` stores mode `full` and no budget overrides. A later `onboard --mode fast` or `--budget ...` continues that same onboarding and its stored request wins, so the flags are ignored. Likewise the pin is HEAD at the first registration: commits made between `repo add` and `onboard` are not mapped.
-- The existing-map class never changes behavior. Even a user-edited map is regenerated in staging; the user's files are never touched.
+- A user-edited or unknown-format map is regenerated in staging and the user's files are never touched, while a stamped-complete one can be adopted or refreshed; the final outcome waits for GSD's drift check in staging.
 - A refused contract compile blocks with reason `decision`. A raised or unknown `--budget` is the normal way to reach it, because the CLI checks only the shape of budget values. An unknown promotion value is refused earlier, by preflight.
-- The mapping modes `paths` and `adopt` are accepted by the contract compiler and by the mode type, then block with `scope_unavailable` at the workspace stage.
+- The mapping modes `paths` and `adopt` are chosen by a refresh or an existing map, and by a stored request that bypasses the CLI. A request for `adopt` on a map that is not adoptable is refused as unsupported with the reduced mode `full`, and `paths` with a contract read scope that is the whole repository is invalid.
+- A refresh of a project whose map was never promoted has no stamp, so it maps in full: the artifact store's copy of the map is not put back into staging.
+- A restricted record cannot start a contained run. `start` refuses it until a contained onboarding on an enforced host replaces it.
 - A README-only repository takes mode `skip` regardless of the requested mode, and ends active with an empty codebase list and completeness none.
 - An inconclusive map ending is not a failure; a denied one is never retried.
 - A resume costs budget. The interrupted invocation's reservation is charged as spent at the next reservation attempt (the relaunch, or the intel invocation when reconciliation accepts the files). The charge covers invocations and cost but not wall clock, and a relaunch is a new invocation. The prelude itself charges nothing.
