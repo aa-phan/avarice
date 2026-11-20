@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-37-PLAN.md
-last_updated: "2026-11-20T08:33:34.204Z"
+stopped_at: Completed 04-38-PLAN.md
+last_updated: "2026-11-20T09:04:13.006Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: caad6ceb13f5e950a3fb78c07747cf494c2a740d
+state_head: e8a5250a1878e69e14c25f753a88bb7cd42f09c9
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 38 of 39
+Plan: 39 of 39
 Status: Ready to execute
 Last activity: 2026-11-16 — Phase 04 execution started
 
@@ -200,6 +200,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P35 | 16h 19m | 3 tasks | 28 files |
 | Phase 04 P36 | 5h 44m (continuation) | 3 tasks | 3 files |
 | Phase 04 P37 | 90 min | 3 tasks | 10 files |
+| Phase 04 P38 | not captured | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -496,6 +497,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-36: the portfolio-6 stop on T01 is classified as the brief (harness); briefFor states the required checks and rules end-to-end work out of scope — Kept evidence of a diagnostic run showed the unit finished the change and the verifier returned human_needed for the e2e bullet it could not verify; no change under src/
 - [Phase 04]: ADR-015: AC-8 failed on its 50 percent token bound (B 94.4, C 88.5 percent of A); the D-08 rule keeps the knowledge pass on, adapters.knowledgePass stays true — C ties B on success (4 of 6) and costs fewer run tokens, so the rule's second condition does not hold; the rule ignores setup cost (C onboarding 0.83 USD against 0.12 for B), recorded as a negative consequence for the owner
 - [Phase 04]: The four new subsystem documents are listed in README.md and coverage.md as drafted and never marked reviewed; policy is evaluated only by the approval gate, so the hook ignores organization rules (findings.md) — CLAUDE.md requires a new document to be listed when written; the fresh prose reviews belong to plan 04-39
+- [Phase 04]: Plan 04-38: counts outside the hook rule row are left to plan 04-39's recount; the worklist hand-off lists the new values
+- [Phase 04]: Plan 04-38: event kinds are counted as the kinds written through an event append (50), since the old counting pattern also matches action names
 
 ### Roadmap Evolution
 
@@ -563,8 +566,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-20T08:33:34.172Z
-Stopped at: Completed 04-37-PLAN.md
+Last session: 2026-11-20T09:04:02.006Z
+Stopped at: Completed 04-38-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
