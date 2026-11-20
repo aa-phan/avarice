@@ -34,3 +34,8 @@ Verdict rule: a group passes when its last round records no BLOCKER and no WARNI
 
 | Round | Group | Report | sha256 of the reviewed documents | Verdict | Found and done |
 |---|---|---|---|---|---|
+| 1 | A | `round-1-A.md` (report sha256 `14bbf0c6…`) | `profiles-and-credentials.md` fa789146…, `policy-and-approvals.md` 7dcc306a…, `findings.md` b5b48d79… | FAIL | 0 BLOCKER, 4 WARNING, 8 NIT; all BLOCKER and WARNING fixed in `88a2994`, dispositions in `round-1-dispositions.md` |
+| 1 | B | `round-1-B.md` (report sha256 `18446948…`) | `doctor.md` 1c470bd3…, `portability.md` 8193c42f…, `overview.md` eb9d2078…, `README.md` f87c3e38… | FAIL | 1 BLOCKER, 8 WARNING, 9 NIT; all BLOCKER and WARNING fixed in `30edf0b`, dispositions in `round-1-dispositions.md` |
+| 1 | C | `round-1-C.md` (report sha256 `a7b77ed1…`) | `containment.md` ea33b95d…, `data-model.md` e7a42e7b…, `integrations.md` 5f192d35… | FAIL | 0 BLOCKER, 7 WARNING, 1 NIT; all BLOCKER and WARNING fixed in `c2e2823`, dispositions in `round-1-dispositions.md` |
+| 1 | D | `round-1-D.md` (report sha256 `0aed5faf…`) | `cli-reference.md` 31aad86b…, `config-reference.md` fc1411d0…, `interactive-shell.md` 324b86ff… | FAIL | 2 BLOCKER, 4 WARNING, 4 NIT; all BLOCKER and WARNING fixed in `f33d27a`, dispositions in `round-1-dispositions.md` |
+| 1 | E | `round-1-E.md` (report sha256 `ec81ac42…`) | `indexes-and-context.md` 83a698ea…, `onboarding.md` 07ae6c13…, `runs.md` 93369ba2…, `checks-and-evidence.md` 5e34cf9d…, `processes.md` 38c57f2f… | FAIL | 1 BLOCKER, 3 WARNING, 2 NIT; all BLOCKER and WARNING fixed in `ffbc9dd`, dispositions in `round-1-dispositions.md` |
