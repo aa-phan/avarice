@@ -95,6 +95,39 @@
     "offlineCheck": "the portfolio's four checks run in a clone of the kept repository with a copy of the owner's node_modules whose tool caches were removed: typecheck wrote node_modules/.tmp (4 files), test wrote node_modules/.cache/imagetools (14), node_modules/.vite/vitest and node_modules/.vitest-cache (76); lint and format:check wrote nothing. All are inside the declared globs. The clone and the kept scratch were removed afterwards; the owner's checkout and node_modules were only read.",
     "notProvenOffline": "that no second pre-model gate follows the check validation: the first portfolio-6 run is the test, and a shared stop halts the plan"
   },
+  "diagnostic2": {
+    "run": "T01 arm B, --task-ids T01 --arms B --cap-usd 0.40, --evidence-dir 04-36-evidence, --out 04-36-diagnostic2-results.json (a results file of its own, so it does not count toward portfolio-6); log ac8-diag2.log in the job's tmp directory",
+    "spendUsd": 0.20245659,
+    "spendDetail": "onboarding 0.07765968, run 0.12479692; run reported 1891606 tokens over 3 turns and 384 s",
+    "result": "blocked_on_decision (decision), no branch; item A of the run made the change and stopped on a question",
+    "evidenceDir": "04-36-evidence/T01-B (13 files, 1610006 bytes, nothing truncated; AC-5 pattern scan 0 hits)",
+    "decisionRecord": {
+      "decision": "dec_01M7VCCMHYW7B15HV0BWSZCX0Y",
+      "class": "acceptance",
+      "urgency": "blocking",
+      "options": "1: allow `npm run test:e2e` as an extra check and the unit adds the Playwright spec; 2: keep the four commands only and cover the case in the unit test alone",
+      "issue": "the unit-scope fix is in place and all four required checks passed, but the end-to-end coverage you asked for is not done: tests/e2e/motion.spec.ts was not created because the plan's e2e check is `npm run test:e2e`, which is not in the allowed command list",
+      "runTransition": "running -> blocked_on_decision, reason decision, class acceptance, signal verification-human-needed (run.transition event 253)"
+    },
+    "whatTheUnitDid": {
+      "changedFiles": ["src/anim/MotionFeatures.tsx", "tests/unit/motion-features.test.tsx (new)"],
+      "checks": "typecheck, lint, format:check and test all passed (316 tests)",
+      "workflow": "the GSD quick workflow: 4 subagents (gsd-planner, gsd-plan-checker, gsd-executor, gsd-verifier), 29 Reads, 5 Writes, 5 Bash, 2 Glob, 2 Grep; it wrote PLAN.md, SUMMARY.md and a VERIFICATION.md with `status: human_needed` under .planning/quick/",
+      "ledgerOutcome": "the invocation ended with outcome denied (1 hook denial, 0 host denials) and the item then went to verification, where the human_needed status of its VERIFICATION.md opened the acceptance decision"
+    },
+    "deniedCalls": [
+      { "call": "Bash `ls -d .planning/quick/*/` (the GSD quick workflow listing quick task directories)", "by": "the PreToolUse hook, rule shell-syntax (a glob in a Bash command)", "also": "listed in the permission_denials of a subagent's result (the invocation's own final result lists none)", "consequence": "the unit read the directory with the Glob tool instead and went on" },
+      { "call": "Read .claude/gsd-core/workflows/quick.md and CLAUDE.md in the clone", "by": "not denied: the files do not exist (tool error)", "consequence": "none" }
+    ],
+    "hookDenialsInTheArmsOnboarding": "map invocation 3 (shell-syntax, shell-not-allowed, shell-syntax) and intel invocation 2 (shell-syntax, shell-gsd-no-preamble): routine for the onboarding units, both ended progressed",
+    "classification": "the BRIEF (harness). The harness hands the unit the historical commit message as the brief; its second bullet, `Add unit and e2e coverage for the reduced-then-off case`, asks for an end-to-end spec that the harness neither runs nor judges (tests/e2e/motion.spec.ts is a denied read and a held-out artifact; `npm run test:e2e` is neither a required check nor an allowed command). The unit finished everything that can be checked, the verifier could not verify the e2e bullet and reported human_needed, and AVARICE ended the item on an acceptance decision as it is documented to (src/domain/outcome.ts: a human_needed verification pauses). Not an AVARICE product defect and not a design decision: the product did what it says on a brief that asks for unverifiable work. Not the read set, the arm repository setup or the judge wiring.",
+    "shared": "yes for the tasks: the briefs of T02 (`e2e drag, modifier and repeat cases`) and T05 (`e2e density cases at pixel ratio 1 and 3`) ask for e2e work too, and T03's held-out set names two e2e specs; T04 and T06 do not",
+    "notEstablished": "portfolio-6 arm C ended differently: a short invocation (6 turns, 12.5 s, no change) with 2 hook denials (shell-syntax on Bash, outside-read-set on Glob) and 2 host permission denials, decision class permission. Its transcript was lost with the scratch, so whether it is the same GSD quick start (`ls -d .planning/quick/*/` and a glob) with a haiku that gave up, or something else, is not established; this run (arm B, the same first denial) recovered from it. The evidence capture is now on for every run of the resumed portfolio-6, so a recurrence is diagnosable from the kept records at no extra cost.",
+    "fix": "briefFor (scripts/eval-retrieval.ts) keeps the commit message whole and adds one scope paragraph, identical for every task and arm: only the required checks (named from the task) can run in this environment; an end-to-end or browser test named above is out of scope: do not write it, do not ask whether to cover it and do not stop for it; make the change and its unit tests, run the required checks and finish. RED commit e6d3b5a, GREEN commit 12b5d19. test/unit/eval-retrieval.test.ts 45 of 45, unit suite 2874 of 2874, typecheck and check:boundaries clean. Nothing under src/ changed. The approved task list and its digest are untouched.",
+    "limit": "the offline test shows the brief carries the paragraph; it cannot show that a unit will no longer end on a question. The first resumed T01 runs are that test, and a stop shared by every arm halts the plan.",
+    "blockedPortfolio6T01Entries": "moved unchanged (git mv) from test/benchmark/phase4/eval-results.json to 04-36-portfolio6-t01-blocked-results.json, so they do not count; portfolio-6 restarts a fresh eval-results.json",
+    "spentAfter": { "planUsd": 2.5070546, "phase4Usd": 6.4337306, "ledgerLines": 52 }
+  },
   "harnessChanges": {
     "taskIdsSelector": "selectTasks: named approved tasks in the order given; an id off the approved list, a repeat or an empty list is refused (exit 3); not with --tasks (exit 64); approved digest unchanged and printed",
     "merge": "--merge (needs --out): readResultsFile/skipRecorded keep recorded runs, skip their (task, arm) pairs, refuse a file of another approved list, a malformed one or a duplicate pair; a live start over a file that holds runs is refused without --merge; nothing to run exits 0 without a model; header gains taskIds and invocations",

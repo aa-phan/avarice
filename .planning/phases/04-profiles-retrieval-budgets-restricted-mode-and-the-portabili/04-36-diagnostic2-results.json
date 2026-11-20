@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-evaluation",
+  "generatedAt": "2026-11-20T02:14:37.025Z",
+  "tasksFile": {
+    "path": "/Users/aphan/avarice/.claude/worktrees/phase-04/test/benchmark/phase4/eval-tasks.json",
+    "sha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z"
+  },
+  "claudeVersion": "2.1.326 (Claude Code)",
+  "caps": {
+    "runUsd": 0.4,
+    "onboardUsd": {
+      "A": 0.6,
+      "B": 0.6,
+      "C": 1.1
+    },
+    "mapUsd": 0.6
+  },
+  "projection": {
+    "runs": 1,
+    "runUsd": 0.4,
+    "onboardUsd": 0.6,
+    "mapUsd": 0,
+    "mapParents": 0,
+    "totalUsd": 1
+  },
+  "taskIds": [
+    "T01"
+  ],
+  "invocations": [
+    {
+      "generatedAt": "2026-11-20T02:14:37.026Z",
+      "taskIds": [
+        "T01"
+      ],
+      "arms": [
+        "B"
+      ],
+      "runs": 1,
+      "runCapUsd": 0.4,
+      "onboardCapUsd": {
+        "A": 0.6,
+        "B": 0.6,
+        "C": 1.1
+      },
+      "projection": {
+        "runs": 1,
+        "runUsd": 0.4,
+        "onboardUsd": 0.6,
+        "mapUsd": 0,
+        "mapParents": 0,
+        "totalUsd": 1
+      }
+    }
+  ],
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "B",
+      "success": false,
+      "tokens": 1891606,
+      "costUsd": 0.124796915,
+      "runId": "run_01M7VBZJC2MK5J2KQYM89QHPTJ",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.077659675,
+        "tokens": 1819824,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    }
+  ],
+  "summary": {
+    "arms": {
+      "B": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 1891606,
+        "costUsd": 0.124797,
+        "judgeErrors": 0
+      }
+    },
+    "ac8": {
+      "pass": false,
+      "via": null,
+      "reason": "arm A has no totals, so there is nothing to compare against",
+      "arms": {}
+    },
+    "knowledge": {
+      "outcome": "on",
+      "reason": "arms B and C were not both run, so the pass stays on"
+    }
+  }
+}
