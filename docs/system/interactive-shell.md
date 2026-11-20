@@ -83,7 +83,7 @@ The command-line action takes one line in the one-shot grammar without the progr
 
 Line mode lists the same menu, including the command-line item. A line that is not a menu key (`1` to `7`, `:`, `d` or `q`, case-insensitive) is also taken as a command-line entry directly, without the prompt. A blank line redraws the menu.
 
-Amending a contract has no menu action. It is reached through the command line, by typing `contract amend <run> --reason "<why>" ...` at the `avarice> ` prompt, or as a line in line mode. `cancel`, `digest` and `schedule` are reached the same way. The commands that need an owner at a terminal (`contract amend`, `decide`, `cancel`, `schedule`) judge the terminal and the process tree of the shell's own process. They therefore work from a shell that runs at a real terminal and outside a run. A question such as `apply contract v<n+1>? [y/N] ` is asked through the shell's prompt and not from standard input. In full-screen mode the output the command has printed so far stays on screen above the question. In line mode it is printed before the question. Escape or end of input at that prompt counts as no answer, so nothing is amended.
+Amending a contract has no menu action. It is reached through the command line, by typing `contract amend <run> --reason "<why>" ...` at the `avarice> ` prompt, or as a line in line mode. `cancel`, `digest`, `schedule`, `approve` and `doctor` are reached the same way. The commands that need an owner at a terminal (`contract amend`, `decide`, `cancel`, `schedule`, `approve`) judge the terminal and the process tree of the shell's own process. They therefore work from a shell that runs at a real terminal and outside a run. A question such as `apply contract v<n+1>? [y/N] ` is asked through the shell's prompt and not from standard input. In full-screen mode the output the command has printed so far stays on screen above the question. In line mode it is printed before the question. Escape or end of input at that prompt counts as no answer, so nothing is amended.
 
 Everything printed from a command, a ledger row or a model is stripped of the characters listed under [output style](cli-reference.md#output-style) before it is drawn. A recorded title that carries an escape sequence cannot rewrite the terminal. The strip prevents it at the display; it does not change what is stored.
 
@@ -102,18 +102,19 @@ The prompt of the command-line action is an editor over key presses:
 | Enter | Submit. |
 | Escape, Ctrl-C | Cancel. Ctrl-D cancels on an empty line and otherwise deletes the character at the cursor. |
 
-Other Ctrl combinations are ignored. Completion works only on the first word, and only with the cursor at the end of the line. One match completes with a trailing space. Several matches extend to their common prefix and are listed above the line until the next key. Only the fifteen command names are offered, never flags, subcommands or IDs. Line mode has no editing, history recall or completion beyond what the terminal gives.
+Other Ctrl combinations are ignored. Completion works only on the first word, and only with the cursor at the end of the line. One match completes with a trailing space. Several matches extend to their common prefix and are listed above the line until the next key. Only the twenty command names are offered (the fifteen of the first release and `approve`, `doctor`, `evidence`, `pr` and `comment`), never flags, subcommands or IDs. Line mode has no editing, history recall or completion beyond what the terminal gives.
 
 ## Command history
 
 Each command-line entry that runs is recorded in `shell-history` in the data root, at the data root that [config-reference.md](config-reference.md) names. The file holds one entry per line, oldest first. It is created with mode 0600, and an existing file is tightened to 0600 on the next write, because a line can name a brief path or a run ID.
 
-- An entry is stored with escape sequences and every control character removed, and trimmed. An entry empty after that is not stored.
+- An entry is stored with escape sequences and every control character removed, then redacted, and trimmed. The redaction replaces a secret-shaped string, and a credential value this process seeded, with its `[REDACTED:<kind>]` marker, so a token pasted into a command line never reaches the file. The control characters go first, so an escape sequence cannot split a secret and hide it from the patterns. An entry empty after that is not stored.
 - The cap is 1000 lines. A write that would pass the cap rewrites the file without its oldest lines. It writes a temporary file in the same directory and renames it over the original, so a crash leaves the old file or the new one. A file longer than the cap is read as its last 1000 lines.
 - The up arrow recalls the entries loaded at start plus those added in this session.
 - Entries are not deduplicated, and a line is stored as typed, including a leading `avarice`.
 - Only command-line entries are recorded. Menu choices (start, resume, status, inbox, watch, decide) are not, and neither are `quit` and `exit`.
 - History is a convenience. A missing, unreadable or unwritable file gives an empty history or a skipped entry and never stops the shell or reports an error. When the profile cannot be resolved at start, nothing is read or written.
+- The shell reads the history, and draws its own home view and read-only views, under `personal-local`. A command typed at the prompt is dispatched like a one-shot command and follows `--profile` and `AVARICE_PROFILE`, so under another profile the home view and the history are still the default profile's.
 
 ## How the shell reads the ledger
 

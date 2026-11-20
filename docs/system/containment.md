@@ -20,6 +20,9 @@ The onboarding lifecycle is in [onboarding.md](onboarding.md). The run lifecycle
 | PreToolUse hook | Every tool call: read confinement, write set, command identity, subagent types, budgets; for runs also protected paths, read-before-edit and loop limits | AVARICE hook process | Prevents: exit 2 or a deny blocks the call; settings also say block on failure |
 | ConfigChange hook | No settings, hook or permission change during the invocation | AVARICE hook process | Prevents: always refuses |
 | Budgets | Invocation, tool-call, subagent, wall-clock and cost limits | AVARICE ledger, hook, host cost cap, adapter timer | Prevents a reservation, a call or a launch; kills the process group at the wall clock |
+| Retrieval budgets | Searches, whole-file reads and bytes per run, one authorized broad discovery, and the per-step caps of a context query | AVARICE ledger, hook and context assembler | Prevents: a search past a row, or a whole-repository search nobody authorized, is denied |
+| Privileged commands | `git push`, `gh pr create` and the other forms that leave the machine, named as privileged actions | AVARICE hook, in a run and in an attended session | Prevents: the call is denied until the owner approves the request; a documented bypass remains (see [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook)) |
+| Restricted launch | Analysis and planning only, for a host that cannot be contained | The host's own `--restricted`, AVARICE's argument judgment and readiness check | Prevents the contained line from starting on a host that cannot be contained; what the restricted line removes is the host's behavior (see [Restricted mode](#restricted-mode)) |
 | Sandboxed executor | AVARICE's own subprocesses: network only to one loopback port a supervisor step names, declared writes only, named reads denied | AVARICE, Seatbelt | Prevents; `unavailable` when no sandbox, and the command is not run |
 | Egress proxy | A supervisor step reaches only the registry hosts named for it | AVARICE process, outside the sandbox | Prevents and records every attempt |
 | Safe git | No repository hook, fsmonitor or prompt runs; filter drivers are blanked only on AVARICE's own status, diff, checkout, worktree and clone-commit calls; the supervisor's commit and hand-off use fixed options | AVARICE | Prevents: unsafe arguments refused before git runs |
@@ -71,14 +74,17 @@ Checks run in this order and the first failure is the only one reported. Every r
 | 2 | `hook-script-unreadable` | The script of any AVARICE hook entry is not a readable file |
 | 2b | `hook-self-test` | The hook, started as the settings start it against a scratch copy of the policy and a scratch ledger, does not deny a Write outside the write roots (cannot start, crashes, times out, prints non-JSON, or allows) |
 | 3 | `sandbox-unavailable` | The sandbox probe (Seatbelt applying an allow-default profile to a trivial command) fails or cannot start |
-| 4 | `host-unavailable` | `claude --version` fails, hangs past 10 seconds or exits non-zero |
+| 4 | `host-unavailable` | `claude --version` fails, hangs past 10 seconds or exits non-zero, or an unverified patch's `claude --help` cannot be read |
 | 4 | `host-version-unreadable` | The output does not start with a version number |
-| 4 | `host-version-not-admitted:{version}` | The version is not in the admitted list |
+| 4 | `host-version-unknown` | The reported version is not three decimal numbers |
+| 4 | `host-minor-unverified` | The minor has no verified patch (anything but 2.1) |
+| 4 | `host-patch-below-range` | The patch is below the lowest verified patch of its minor (2.1.311 and under) |
+| 4 | `host-flag-missing:{flag}` | An unverified patch whose `--help` does not list one of the seven flags the contained launch line uses |
 | 5 | `launch-args:{reason}` | The finished argument list fails judgment (below) |
 
 The nine required settings keys are: permission mode `dontAsk`; bypass permissions mode disabled; sandbox enabled; sandbox fail-if-unavailable true; unsandboxed commands false; auto-allow-bash-if-sandboxed false; excluded commands empty; network allowed domains empty; network allowlist strict. Preflight checks these keys and the hook entries only. It does not re-check the allow and deny lists or the filesystem lists; those are trusted from the generator.
 
-The admitted host versions are a constant list of six: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 and 2.1.326. A version is meant to be added only after a live containment run on it shows no containment failure; the code does not check that, it checks membership. The version probe, the sandbox probe and the hook self-test run with a minimal environment (a fixed `PATH` plus `HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR` and `CLAUDE_CONFIG_DIR` when set).
+Two kinds of host version are admitted. Six are verified, by a constant list: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 and 2.1.326. A version is meant to join the list only after a live containment run on it shows no containment failure; the code does not check that, it checks membership. A patch of the verified minor 2.1 that is at or above 2.1.312 and not listed is admitted as an unverified patch, only while `claude --help` still lists the seven flags the launch line uses: `--setting-sources`, `--permission-prompts`, `--permission-mode`, `--max-budget-usd`, `--settings`, `--plugin-dir` and `--agents`. The flag check proves a flag is listed, never that the host honors it. Versions compare as numbers per component, so 2.1.100 is above 2.1.99. `doctor` labels the two kinds `verified` and `admitted (unverified patch)` (see [doctor.md](doctor.md#host-admission-and-enforcement)). The version probe, the sandbox probe and the hook self-test run with a minimal environment (a fixed `PATH` plus `HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR` and `CLAUDE_CONFIG_DIR` when set).
 
 Launch argument judgment refuses:
 
@@ -97,7 +103,7 @@ A refused launch still settles its reservation: the invocation unit is spent, wi
 
 ### Host readiness
 
-The host adapter also has a startup readiness check behind its capability descriptor: hook script readable, sandbox probe, admitted version. It is evaluated once per adapter, so it does not run the hook self-test and does not read any settings file. The production composition replaces the adapter with a host that refuses every invocation when that check fails, recording the reason.
+The host adapter also has a startup readiness check behind its capability descriptor: hook script readable, sandbox probe, admitted version (and, for an unverified patch, the flag listing). It is evaluated once per adapter, so it does not run the hook self-test and does not read any settings file. The production composition replaces the adapter with a host that refuses every invocation when that check fails, recording the reason.
 
 A run reads the same descriptor in its `verify-enforcement` action, the dynamic half of gate G0. The two halves select different reasons. A descriptor that does not report `enforced` blocks the run with `enforcement_failure`. A static G0 failure from the contract blocks it with `decision`. Both are recorded as a G0 gate row before the run moves on or blocks. Every launch still repeats the version, sandbox and hook checks itself, so a stale descriptor cannot launch a host that no longer passes them.
 
@@ -116,6 +122,27 @@ The outcome kind comes from facts only (the host's final result, the exit, the H
 7. Any host permission denial or hook denial is `denied`; otherwise `no_progress`.
 
 A run's unit stage classifies the unit again with its own facts, the pause signal and the clone's changes, so for runs the adapter's kind is an input, not the final word. In a run with several items that stage may attribute a numbered choice to another item, and it then does not treat the choice as a pause. It does so only for a unit whose own work is verified, and only when every choice line matches the options of exactly one other item that owns a choice. Any doubt keeps the pause. The rule is in [runs.md](runs.md). The Claude host keeps the last 2000 characters of the unit's final text, with control characters removed, and returns them as the outcome's question and nowhere else. No event, step result or log line carries them, and [runs.md](runs.md#the-unit-running) says how they become a decision's options. Stage handling of each kind belongs to [onboarding.md](onboarding.md) and [runs.md](runs.md).
+
+## Restricted mode
+
+Restricted mode is for a host that cannot be contained: its version is not admitted, the sandbox does not apply a profile, or the hook entry cannot be read. The owner asks for it with `start --restricted` or `onboard --restricted`. It gives analysis and planning only, and nothing that runs repository code. Without the flag, a host that cannot be contained refuses, and the refusal says how to ask for restricted mode. Nothing falls back: a contained request never uses the restricted host, and a restricted request never uses the contained one.
+
+**The restricted host.** It is the same Claude Code adapter in restricted mode. It is built beside the contained host and is not recorded in the ledger. Its descriptor says `enforcement: restricted` when `claude --help` lists the six flags the restricted line uses (`--restricted`, `--settings`, `--setting-sources`, `--permission-mode`, `--permission-prompts` and `--max-budget-usd`), and `enforcement: none` with the reason otherwise. A restricted onboarding also needs `--plugin-dir` and `--agents` listed. It declares the capabilities `restricted-invocation` and `headless`, and no resume. It asks for no admitted version, no sandbox and no hook, because a host that fails those is who the mode is for.
+
+**The launch line.** One invocation is:
+
+```
+claude -p <prompt> --restricted --setting-sources "" --settings <file> --permission-mode dontAsk --permission-prompts none
+  --strict-mcp-config --mcp-config <file> --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>
+```
+
+A restricted onboarding adds `--plugin-dir <dir> --agents <file>` after `--settings`, the generated pair that delivers GSD's mapper, and a continued session ends `--resume <id>` and carries no `--session-id`. The line names no `--tools`, `--allowedTools` or `--add-dir`, so nothing is granted back. `--restricted` removes the host's tools that run commands or code and its web fetch, ignores user, project and local settings, and confines the file tools to the working directory. Whether the host honors each of these is the host's behavior; AVARICE proves that the flags are listed and that the generated settings deny by default. Live runs on 2.1.326 (2026-11-17 and 2026-11-18) showed the host accepting `--restricted` beside `--setting-sources ""` and `--strict-mcp-config`, its tool list holding no shell and no web fetch, the hooks still running under the flag, and the file tools writing only inside the clone. `--setting-sources ""` and `--strict-mcp-config` stay beside `--restricted` on purpose: a host that refuses the combination fails closed, and nothing launches.
+
+**Readiness before each restricted launch.** The generated settings file must exist, parse as a JSON object and set `permissions.defaultMode` to `dontAsk`, so anything the settings do not allow is refused with nobody to ask. Then `claude --help` must list the line's flags. The refusals are `settings-missing`, `settings-invalid`, `settings-key:permissions.defaultMode`, `host-unavailable` and `host-flag-missing:{flag}`. There is no sandbox probe, no hook self-test and no version check.
+
+**Argument judgment.** The finished argument list is judged before any process starts, and a refusal is `restricted:{reason}`. It requires `--restricted`, permission mode `dontAsk`, permission prompts `none`, an empty setting-sources, the generated settings file, strict MCP config and a positive cost cap. It refuses the flags that would give back what `--restricted` removed, whatever their value: `--bare`, `--safe-mode`, `--tools`, `--allowedTools`, `--allowed-tools`, `--add-dir`, `--permission-prompt-tool`, `--agent`, `--dangerously-skip-permissions` and `--allow-dangerously-skip-permissions`. `--plugin-dir` and `--agents` are admitted for an onboarding only, as a pair.
+
+**What a restricted run and onboarding do.** A restricted run is one invocation in the run's clone. The host reads the clone, writes a plan and a list of questions under a directory the patch leaves out, and edits the working copy. The settings give it no command, no subagent and no network. The supervisor stores the plan, the patch and the questions as artifacts and ends the run blocked on one permission decision; no check or gate ran, so the run never reaches review. Nothing is committed, handed off or written to the owner's repository. A restricted onboarding is one fast map, with the code graph as its only index. Because the host confines its file tools to the working directory and has no shell, AVARICE copies the GSD specification files the fast map reads (seven files, about 56 KB, on GSD 1.17) into the staging copy before the invocation, read-only, and removes them the moment the invocation settles. The record says `partial (restricted)` and a contained run refuses to start on it. The flows are in [runs.md](runs.md#restricted-runs) and [onboarding.md](onboarding.md#restricted-map).
 
 ## Purposes and their scopes
 
@@ -158,7 +185,7 @@ Every existing entry is listed in the sandbox write denies for one reason. The w
 
 ### The default AVARICE parents
 
-Every run sandbox denies reads of the default parents of all AVARICE profile roots: `~/.local/share/avarice` (all default data roots), `~/.config/avarice` (the config home) and `~/.local/share/avarice-work` (all default work roots, which hold other profiles' run clones). The run's own clone and scratch directory lie under the work parent and are re-allowed one by one. The Seatbelt profile also gives back the metadata of each directory between a denied root and a re-allowed path. It gives no contents and no listing, so programs can resolve the real path of a file below it. The same denial and re-allowance apply to the supervisor commands in "Commands AVARICE runs for checks". The limit this leaves is under "Limits of containment".
+Every run sandbox denies reads of the default parents of all AVARICE profile roots: `~/.local/share/avarice` (all default data roots), `~/.config/avarice` (the config home) and `~/.local/share/avarice-work` (all default work roots, which hold other profiles' run clones). The run's own clone and scratch directory lie under the work parent and are re-allowed one by one. The Seatbelt profile also gives back the metadata of each directory between a denied root and a re-allowed path. It gives no contents and no listing, so programs can resolve the real path of a file below it. The same denial and re-allowance apply to the supervisor commands in "Commands AVARICE runs for checks". The parents cover the default roots only. A profile whose roots an environment variable moved is named by its own configuration, so the composition gives every invocation scope, onboarding and run alike, the data root, work root and configuration home of every other profile it finds under the configuration home in use and the default one, and the scope denies reads of them too. The roots are realpath'd and listed once, and the selected profile's own roots are never among them. A configuration that cannot be used only adds nothing to the list, so a hostile file can add a denial and never open a path. The limit this leaves is under "Limits of containment".
 
 ### Bash strategies
 
@@ -200,16 +227,20 @@ The decision and its charge are one step. The pure rules decide first. For an al
 | Any tool named in the policy's denied tools | Deny `no-human-prompts` (set for runs: the interactive question tool) | none |
 | Edit, Write, MultiEdit, NotebookEdit | Allow when the target passes the write rules below (`write-set`); else `outside-write-set` or `protected-path`; `unresolvable-path` if it cannot be resolved | toolCalls |
 | Read | Read rules below (`read-set` on allow) | toolCalls |
-| Grep, Glob | Read rules applied to the search path (the working directory when no path is given); for a Glob whose pattern is absolute, also to the literal directory prefix before the first wildcard | toolCalls |
+| Grep, Glob | Read rules applied to the search path (the working directory when no path is given); for a Glob whose pattern is absolute, also to the literal directory prefix before the first wildcard. For a run whose policy carries retrieval limits, the call also charges `retrieval.searches`, and an unfiltered search rooted at the clone is a broad discovery (see [Retrieval budgets](#retrieval-budgets)) | toolCalls, and `retrieval.searches` |
 | Bash | Deny `background-shell` when the call runs in the background and the policy denies that (runs); otherwise command identity rules below (`shell-identity` on allow, `agent-command` when the allow rests on a contract command) | toolCalls |
 | Agent, Task | Allow when the subagent type is in the policy's list (`subagent-type`); a call with no type counts as `general-purpose`, which no purpose lists; else deny `subagent-type` | subagentsTotal |
 | WebFetch, WebSearch | Deny `network-tool` | none |
 | Skill, TodoWrite, TaskOutput, BashOutput | Allow (`meta`); the host's rules decide which skill loads | toolCalls |
 | Any other tool name | Deny `unknown-tool` | none |
 
+A Bash command that is a privileged form is denied before the prefix rules, so the refusal names the action and the approval route and not the bare prefix. In an attended session, outside any run, the same classification applies to Bash calls only (see [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook)).
+
 The subagent types a policy lists are the names in the invocation's agents file plus a per-purpose extra list that is empty for every purpose. Subagent tool calls reach the same hook with an agent identifier, which is recorded, and draw on the same budget.
 
-The decision rule names are a contract surface: 35 distinct rule IDs, of which 6 appear on allow decisions (`write-set`, `read-set`, `subagent-type`, `meta`, `shell-identity`, `agent-command`) and 30 on deny decisions. `subagent-type` appears on both. Two of the deny rules, `budget_exhausted` and `budget:subagentsConcurrent`, are decided by the hook entry when it applies the budget, not by the pure rules. The count and its command are in the coverage ledger.
+The decision rule names are a contract surface: 38 distinct rule IDs, of which 6 appear on allow decisions (`write-set`, `read-set`, `subagent-type`, `meta`, `shell-identity`, `agent-command`) and 33 on deny decisions. `subagent-type` appears on both. Four of the deny rules, `budget_exhausted`, `budget:subagentsConcurrent`, `budget:retrieval.searches` and `retrieval:broad-discovery-spent`, are decided by the hook entry when it applies the budget, not by the pure rules. Three of the 38 belong to retrieval (see [Retrieval budgets](#retrieval-budgets)). The count and its command are in the coverage ledger; the command's pattern accepts a dot in an ID, which `budget:retrieval.searches` needs.
+
+Outside the 38, a shell command that is a privileged form is denied with the rule `privileged:` followed by its action, one of six: `privileged:git.push`, `privileged:scm.pr.create`, `privileged:scm.pr.merge`, `privileged:scm.pr.update`, `privileged:release.publish` and `privileged:scm.api.write`. The classification, its documented bypass and the approval route are in [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook).
 
 ### Read rules
 
@@ -314,14 +345,39 @@ For an allowed Agent call the hook first counts the invocation's subagents in fl
 
 Across items, the subagent limits are the run's, not an item's. The concurrent cap stays at 2 whatever the number of items, and it is counted within one invocation. The total is one balance drawn from by every unit, retry, repair and resumed session of every item. It is 10 per item (a planner, up to two plan checkers, an executor and a verifier for a unit and for its retry, two rounds). A brief of more items therefore has a larger total. It is a ledger row that survives kills and resumes. An invocation of a later item therefore finds what the earlier items left. Nothing is refunded: subagents already spent stay spent, and an amendment that raises the total is the only way to add more.
 
+### Hook entry flags
+
+The hook entry is one program started by the host with these arguments. It has no other interface, and anything it cannot make sense of ends in exit 2.
+
+| Argument | Meaning |
+|---|---|
+| `--event pre`, `post` or `config-change` | Which host event this call answers. Any other value, or none, is refused. |
+| `--policy <file>` | The invocation's hook policy. Required for a run or an onboarding; refused with `--attended`. |
+| `--attended` | The owner's own session: enforce privileged-action approvals and nothing else, for Bash calls only. Needs `--data-root`, and only `--event pre` does anything. |
+| `--data-root <dir>` | An absolute path to the profile's data root, which holds the ledger. Required with `--attended`. |
+| `--avarice-attended-hook` | A marker `install-host` finds its own settings entry by. It has no meaning to the hook. |
+
 ### Events the hook records
 
 - `hook.decision`: level info for allow and warn for deny. It carries tool, rule, the owner and invocation IDs, the agent identifier when present, the charged budget name, and for subagent calls the tool-use ID and a background flag. Never a tool payload. For a run the owner ID field carries the run ID.
 - `tool.completed` (post events, including failures, which add a failed flag): attributes the completed call. A file write records its working-copy-relative target (clipped to 256 characters with a digest when longer), or an outside-the-working-copy flag, or an unresolved-target flag. A subagent completion records whether it freed a slot.
 - `loop.limit`: the reason (`consecutive-denials` or `ineffective-search`), the count and the limit, written in the same transaction as the decision that reached it.
 - `config.change.denied`: written best effort on every ConfigChange, which is refused every time whether or not the event could be written.
+- `policy.denied` with `source: hook`, and `approval.requested`, for a privileged form: the denial and the request are written in one transaction. In an attended session the request carries no run ID (see [policy-and-approvals.md](policy-and-approvals.md#approvals)).
 
 Post-hook failures do not block anything: the call has already run, and the settings do not set block on failure for them. A completion that cannot be recorded only leaves a subagent slot held, and loses the read record a later edit would need.
+
+## Retrieval budgets
+
+An agent that searches the repository is bounded by caps, so a run cannot read the whole repository by repeated search or by one unbounded one. The caps are the nine of the profile's `retrieval` section (defaults and units in [config-reference.md](config-reference.md#the-retrieval-section)). A profile may lower each and nothing raises one. Four of them are counted for a run and live as budget rows beside the five budgets, created with the contract and surviving kills and resumes: `retrieval.searches`, `retrieval.fullReads`, `retrieval.fullReadBytes` and `retrieval.broadDiscovery`. The contract sets each from the profile's cap, and `start --budget retrieval.searches`, `retrieval.fullReads` or `retrieval.fullReadBytes` may lower it. The built-in limit of `retrieval.searches` is the run's tool-call limit. A row is spent with an all-or-nothing update, so processes that retrieve at once cannot spend more than a row's limit, and a refusal leaves every row as it was. Nothing is refunded: a search that started counts whatever the source answered. A contract compiled before the rows existed has none, and its run is counted in memory against the profile's caps.
+
+**Broad discovery.** A search of the whole repository with no term, glob or type filter is a broad discovery. A run may make one, and only when the brief says `broadDiscovery: true`, which gives `retrieval.broadDiscovery` a limit of 1 and otherwise 0. The authorization cannot come from a start override. A broad discovery also counts as a search.
+
+**In the hook.** Every Grep or Glob of a run whose policy carries retrieval limits is charged to `retrieval.searches` besides `toolCalls`, in the same transaction as the decision. An unfiltered search rooted at the clone is denied `retrieval:broad-discovery-not-authorized` unless the contract authorized one, with the corrective sentence that says to search a directory or add a filter. An authorized one is allowed once and also charged to `retrieval.broadDiscovery`. A search past a spent row is denied `budget:retrieval.searches`, or `retrieval:broad-discovery-spent` for the second broad discovery. The `hook.decision` event lists the extra row in its `alsoCharged` field. A policy without retrieval limits, as in an onboarding, charges nothing extra.
+
+**In the context assembler.** Each source search, and each further page of a paged source, is one search against the same rows. A query with no term, or marked broad, is a broad discovery, and an attended `avarice context` authorizes none. The other caps bound one query: handles per source, bytes of excerpt per source, hits per search, seconds per search (a search past the limit is abandoned with no side effect), lines per snippet, snippets per pack and pages per source. A cap that cuts an answer says so in the pack's notes.
+
+Whole-file reads have a counter pair, `retrieval.fullReads` and `retrieval.fullReadBytes`, and a rule that a single read above the cap is refused whatever is left. No code path performs a whole-file read through that guard: the host's own Read tool is judged by the read rules and charged to `toolCalls` only. The two rows are therefore created and never spent.
 
 ## Budgets and reservations
 
@@ -343,7 +399,7 @@ Settlement. Nothing is refunded. An invocation always settles after it ran: one 
 
 These services write two events. Neither carries transcript text.
 
-- `invocation.finished`: the owner IDs, the invocation ID, purpose, outcome, reported cost, charged cost and its basis, duration and the permission denial count. When the host ran it also carries its exit, signal, timeout flag, moved-HEAD flag, hook denial counts, turn count, transcript size, result subtype, terminal reason and subagent count.
+- `invocation.finished`: the owner IDs, the invocation ID, purpose, outcome, reported cost, charged cost and its basis, duration and the permission denial count. When the host ran it also carries its exit, signal, timeout flag, moved-HEAD flag, hook denial counts, turn count, transcript size, result subtype, terminal reason and subagent count, and, when the adapter measured them, `tokens` (the input, cache-creation, cache-read and output token counts of the invocation summed) and `transcriptDigest`.
 - `invocation.orphan-charged`: the owner ID, the invocations charged and the cost charged.
 
 ## The sandboxed executor
@@ -391,7 +447,7 @@ The install, validation, baseline, item and final check commands and the test-in
 
 ## Owner commands and the terminal identity rule
 
-Four commands act for the owner and never for the agent: `contract amend` widens a run, `decide` answers a decision, `cancel` ends a run, and `schedule install` and `schedule remove` manage the digest LaunchAgent. Each applies one identity rule in its argument check, which runs before the profile is resolved. A refusal therefore creates nothing: no data root, no ledger, no row, no event and no file. `digest` is not one of them, and refuses only inside a run.
+Five commands act for the owner and never for the agent: `contract amend` widens a run, `decide` answers a decision, `cancel` ends a run, `approve` grants or revokes the approval of a privileged action, and `schedule install` and `schedule remove` manage the digest LaunchAgent. Each applies one identity rule in its argument check, which runs before the profile is resolved. A refusal therefore creates nothing: no data root, no ledger, no row, no event and no file. `digest` is not one of them, and refuses only inside a run.
 
 The checks apply in this order, and the first that fails is the only one reported. Each is a usage error (exit 64, `avarice <command>: <reason>`).
 
@@ -403,7 +459,9 @@ The checks apply in this order, and the first that fails is the only one reporte
 
 The chain is read with `/bin/ps`, one process at a time, and only when the first two checks passed. A chain that cannot be read, that loops or that is longer than 64 processes counts as inside a run, so the refusal fails closed. A command line is cut to 400 characters keeping its start and its end, because the supervisor's signature sits at the end. The agent's shell is a descendant of the supervisor that launched it, so the walk up the parent chain finds the supervisor. The environment marker, by contrast, can be unset by a process, so it stops accidents only. The process tree is the stronger check, but it follows parent pointers. A descendant reparented to process 1 has no supervisor on its chain, and no test shows that a run cannot produce one.
 
-Once the profile is open, `decide`, `cancel` and `schedule` also require the data root to be owned by the user running the command. Otherwise they refuse with `only the user who owns the profile answers a decision`, `cancels a run` or `schedules its digest` (exit 64). `contract amend` makes no such check of its own. The ledger's own refusal to open a store owned by another user is what stands behind it.
+The commands that record what the owner pastes in (`context add`, `evidence add`, `pr record`) apply only the first and the third check, so a script may record a paste without a terminal and a run's own process cannot record for itself.
+
+Once the profile is open, `decide`, `cancel`, `schedule` and `approve` also require the data root to be owned by the user running the command. Otherwise they refuse with `only the user who owns the profile answers a decision`, `cancels a run`, `schedules its digest` or `approves an action` (exit 64). `contract amend` makes no such check of its own. The ledger's own refusal to open a store owned by another user is what stands behind it.
 
 The answer of `decide` and the amendment of `contract amend` record the operating system user as `owner:<name>`, with control characters removed (`unknown` when the system has no name). `cancel` and `schedule` record no owner. A refusal at these three checks writes no event, because it says nothing about a run or a decision. The responder checks that `decide` then applies to an answer are in [autonomy-and-decisions.md](autonomy-and-decisions.md#response-checks). The hook's denied prefix `avarice` and the never-granted words keep the agent from naming these commands at all (see "Command identity (Bash)"), so the identity rule is a second barrier.
 
@@ -457,7 +515,9 @@ Each refusal is `invalid` for the root's field; the `~/.claude*` and non-local-m
 
 ## Secret redaction
 
-The stored transcript is redacted before it is written: secret-shaped strings (private keys, tokens, cloud key IDs, authorization headers, credentials in URLs) are replaced by `[REDACTED:{kind}]`. The output of each declared check is redacted the same way before it is stored as an artifact. Secret scanning of map documents and the knowledge corpus is described in [onboarding.md](onboarding.md) and [indexes-and-context.md](indexes-and-context.md).
+Redaction replaces a secret-shaped string (private keys, tokens, cloud key IDs, authorization headers, credentials in URLs) and a credential value the process seeded with `[REDACTED:{kind}]`. It runs at every boundary where text is stored: each text artifact before the artifact store writes it, every event's data before the event is bounded and hashed (so the stored row hash covers the redacted text), transcript lines before the transcript cap is applied, a shell history entry after its control characters are stripped, a brief before it becomes a title, work items and a contract, and the path of a read the hook records, which when it holds a secret-shaped string is stored with the marker and a `#` and 16 hexadecimal characters of the digest of the whole path. The output of each declared check is redacted the same way before it is stored. The patterns, the seeded values, what redaction does not cover and the transcript retention rule are in [profiles-and-credentials.md](profiles-and-credentials.md#redaction). Secret scanning of map documents and the knowledge corpus is described in [onboarding.md](onboarding.md) and [indexes-and-context.md](indexes-and-context.md).
+
+Two limits are specific to the hook. It is a separate process and seeds nothing, so it redacts by pattern only, and a credential value that only this process knew is not recognized there. A map document is stored as the mapper wrote it, since the validation rejects one that holds a secret.
 
 ## Limits of containment
 
@@ -465,7 +525,9 @@ These are the places where containment detects, or does not reach, instead of pr
 
 - **A new entry at an unlisted location.** The sandbox lets a shell write anywhere under the working directory except the existing entries it lists. A file created at an unlisted location is not prevented. Onboarding detects it at activation. A run detects it at G2 and G4, but only when git does not ignore the path. The run's list of denied existing entries comes from what the clone tracks at its head. An untracked entry that already exists (installed dependencies, for example) is therefore writable and, when git ignores it, outside the gate. Only a command the contract lists, or a file tool inside its write globs, can write at all; the hook admits no other writer.
 - **Protected globs and write roots at the sandbox.** The sandbox denies writes at the static prefix of each protected glob and at the listed entries a glob matches. A protected glob that starts with a wildcard has no prefix. Inside a write root it is held by the hook for file tools and by the gates for contract commands, not by the sandbox. The sandbox grants writes by directory root. The finer glob rules, the split between modify, create and delete, and read-before-edit are therefore enforced by the hook and the gates, not at the shell.
-- **Profile roots outside the default parents.** A run denies its own profile's data root and work root, and the default parents of every profile's roots. A profile whose roots were moved with `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` or `AVARICE_CONFIG_HOME` is not covered, and neither is this profile's config home when it is moved. Another profile's moved roots stay readable to a run and to the supervisor's check commands.
+- **Another profile's roots.** A run and an onboarding deny reads of their own profile's data root and work root, of the default parents of every profile's roots, and of the data root, work root and configuration home of every other profile found on the machine, wherever an environment variable moved them. The roots come from the profile configurations under the configuration home in use and the default one. The denial reaches the host's file tools and the supervisor's declared checks, validation, baseline and dependency install. What stays open is a profile whose configuration was never seen from either configuration home, a configuration that does not parse or holds a relative root (it denies nothing until repaired), and a root changed by environment variable after the configuration was written. A profiles directory that cannot be listed fails the command rather than reading as no profiles.
+- **Command classification.** The privileged-action rules judge a command as the shell would split it. A command name built from a variable or an alias, a script or function that pushes, and `bash -c` over a computed string are not classified. What holds then is the sandbox, which gives a command no network and no credentials, and the protections of the platform itself.
+- **Restricted mode proves flags, not behavior.** The restricted launch rests on the host's own `--restricted`. AVARICE checks that the flags are listed and that the generated settings deny by default. A restricted run skips the preparation that would run repository code, so it reads the checkout as it is.
 - **Credentials stored elsewhere.** The credential denial is a list of known locations. A credential kept anywhere else under the home directory stays readable to a sandboxed command, because reads are otherwise allowed by default. An allow list of readable paths would close this, but node and npm need many system paths, so it is not in place.
 - **Network detection in declared-check validation.** Validation prevents network access with the sandbox: no domain, and one loopback port in front of a proxy that allows nothing. It detects an attempt in two ways: the proxy records a connection made through the proxy, and the check's output is searched for the resolver and connection error text. A program that ignores the proxy settings is blocked by the sandbox and is detected only when its error text reaches the output. A check that swallows the failure leaves nothing to find, and the verdict is `active`. When the proxy cannot start, the check runs with no network at all and only the output search remains. A check that exits non-zero is not rejected for that; validation judges only the writes outside its declared paths and the network.
 - **Install scripts.** The install's ignore-scripts switch is an environment variable for the package manager. It does not constrain a package manager that does not read it. The sandbox bounds what a script can do either way: network only to the allowed registry, writes only to `node_modules` and the scratch directory.
@@ -493,5 +555,8 @@ These are the places where containment detects, or does not reach, instead of pr
 - A background Bash call is refused for a run, but a background Agent call is still allowed and holds its concurrency slot until the invocation ends.
 - Read-before-edit keeps one record per agent, so a read by the main agent does not let a subagent edit the file.
 - The decision rule `subagent-type` is both an allow and a deny rule ID.
+- The retrieval caps `fullReads` and `fullReadBytes` are counted nowhere: the whole-file guard has no caller outside tests.
+- A retry in a run after the owner approved a privileged action is denied again and records a fresh request, because a run never consumes an approval.
+- A search with a glob or type filter, or one rooted below the clone, is never a broad discovery, so an agent that adds a filter to a whole-repository search is charged one search and nothing else.
 - The run's check commands may read the user's checkout and a moved work root, which an agent invocation cannot.
 - Validation of declared checks passes the read denials without the read re-allowance that the other check commands pass. The validation clone lies in the run's directory under the work root, so under the default roots it falls inside a denied parent. Whether a check can then read its clone was not tested.

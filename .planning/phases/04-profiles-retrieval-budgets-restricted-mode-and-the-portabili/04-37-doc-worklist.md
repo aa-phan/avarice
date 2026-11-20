@@ -10,15 +10,15 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 
 | # | Surface | Kind | Code | Target | Owner | Status |
 |---|---|---|---|---|---|---|
-| 1 | Live-spend test variables `AVARICE_PHASE4_CEILING_USD` (lower-only, ceiling 40), `AVARICE_PHASE4_LEDGER`, `AVARICE_PHASE4_PLAN` | env var | test/helpers/live-harness.ts:209 | config-reference.md (test variables) | 04-38 | todo |
+| 1 | Live-spend test variables `AVARICE_PHASE4_CEILING_USD` (lower-only, ceiling 40), `AVARICE_PHASE4_LEDGER`, `AVARICE_PHASE4_PLAN` | env var | test/helpers/live-harness.ts:209 | config-reference.md (test variables) | 04-38 | drafted |
 | 2 | Spend ledger `test/containment/live-spend-phase4.jsonl` and the refusal when a case cap would pass the ceiling | test tooling | test/helpers/live-harness.ts:209 | coverage.md (test files) | 04-39 | deferred 04-39 |
-| 3 | Global flag `--profile <name>`: grammar, exit 64 for a bad or valueless name | flag | src/cli/main.ts:124 | cli-reference.md; PC | 04-38 | todo |
+| 3 | Global flag `--profile <name>`: grammar, exit 64 for a bad or valueless name | flag | src/cli/main.ts:124 | cli-reference.md; PC | 04-38 | drafted |
 | 4 | Selection precedence binding, flag, `AVARICE_PROFILE`, `personal-local`; the variable is ignored under a binding | env var, rule | src/domain/profile.ts:51 | PC; config-reference.md | 04-37 | drafted |
-| 5 | `repo add --profile <name> <path>` writes the binding; without it nothing is bound | flag | src/cli/commands/repo.ts | cli-reference.md; PC | 04-38 | todo |
+| 5 | `repo add --profile <name> <path>` writes the binding; without it nothing is bound | flag | src/cli/commands/repo.ts | cli-reference.md; PC | 04-38 | drafted |
 | 6 | Binding registry `<configHome>/bindings.json` (mode 0600, schema 1, 64 KiB, refused whole when one entry is invalid) | file | src/adapters/fs/profile-bindings.ts:14 | PC | 04-37 | drafted |
 | 7 | Profile config key `remotePatterns` and the enterprise remote refusal | config key | src/adapters/fs/profile-bindings.ts:181; src/cli/profile-gate.ts | PC; config-reference.md | 04-37 | drafted |
-| 8 | Exit 3 refusals for a bound repository, an enterprise remote, an untrusted registry or enterprise config; 70 for an unreadable one | exit code | src/cli/main.ts:149; src/cli/profile-gate.ts:12 | cli-reference.md; PC | 04-38 | todo |
-| 9 | Default roots `~/.local/share/avarice/<profile>` and `avarice-work/<profile>` for every profile; `init --profile` takes any valid name | config key | src/adapters/fs/profile-paths.ts:98 | PC; config-reference.md; cli-reference.md | 04-38 | todo |
+| 8 | Exit 3 refusals for a bound repository, an enterprise remote, an untrusted registry or enterprise config; 70 for an unreadable one | exit code | src/cli/main.ts:149; src/cli/profile-gate.ts:12 | cli-reference.md; PC | 04-38 | drafted |
+| 9 | Default roots `~/.local/share/avarice/<profile>` and `avarice-work/<profile>` for every profile; `init --profile` takes any valid name | config key | src/adapters/fs/profile-paths.ts:98 | PC; config-reference.md; cli-reference.md | 04-38 | drafted |
 | 10 | Action table: read, local-write and privileged actions, deny by default for a name not in it | rule | src/domain/action-class.ts:6 | PA | 04-37 | drafted |
 | 11 | Policy file shape: `rules[]`, `when`, `effect`, `approvalSource`; 256 rules, 64 KiB, unknown keys refused | file | src/domain/policy.ts:119 | PA | 04-37 | drafted |
 | 12 | Reserved rule IDs and the built-in rule IDs | rule | src/domain/policy.ts:47 | PA | 04-37 | drafted |
@@ -57,8 +57,8 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 45 | ADR-014 and its counterpart row | decision | docs/decisions/ADR-014-host-patch-admission.md | README.md (counterparts) | 04-39 | deferred 04-39 |
 | 46 | Moved-root isolation closed: denial of other profiles' roots to declared checks, validation, baseline, `npm ci` and the host; residual for a config never seen or unparsable | rule | src/adapters/fs/profile-registry.ts:31 | PC; containment.md | 04-37 | drafted |
 | 47 | `AVARICE_PROFILE` carried to the detached supervisor and the digest LaunchAgent plist | env var | src/cli/spawn-supervisor.ts; src/adapters/schedule/launchd.ts | PC; integrations.md; cli-reference.md | 04-38 | todo |
-| 48 | `schedule install` and `remove` accept `--profile` | flag | src/cli/commands/schedule.ts | cli-reference.md | 04-38 | todo |
-| 49 | `ProfilePaths.otherRoots`, `ScopeInput.profileRoots` and `RunScopeInput.profileRoots` | port | src/adapters/fs/profile-registry.ts; src/domain/invocation-scope.ts | containment.md | 04-38 | todo |
+| 48 | `schedule install` and `remove` accept `--profile` | flag | src/cli/commands/schedule.ts | cli-reference.md | 04-38 | drafted |
+| 49 | `ProfilePaths.otherRoots`, `ScopeInput.profileRoots` and `RunScopeInput.profileRoots` | port | src/adapters/fs/profile-registry.ts; src/domain/invocation-scope.ts | containment.md | 04-38 | drafted |
 | 50 | Status read model builds each run from one batch (`loadRunStatusInputs`) | port | src/app/run-status.ts; src/ports/ledger.ts | data-model.md | 04-38 | todo |
 | 51 | `status` latency bound and `scripts/status-bench.ts` (`--runs`, `--samples`, exit 1 at p95 300 ms) | test tooling | scripts/status-bench.ts | cli-reference.md (if it records performance); coverage.md | 04-39 | deferred 04-39 |
 | 52 | Refresh modes incremental, paths, full and the reason strings | rule | src/domain/refresh-plan.ts; src/app/refresh.ts | onboarding.md | 04-38 | todo |
@@ -94,14 +94,14 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 82 | Findings closed: transcript secret split by the cap; whole transcripts always kept | finding | src/adapters/host-claude/claude-host.ts | findings.md | 04-39 | deferred 04-39 |
 | 83 | Privileged rule IDs `privileged:git.push` and the five others; action `scm.api.write` | rule | src/domain/hook-decision.ts:130, :800 | PA; containment.md | 04-37 | drafted |
 | 84 | Parameters an approval binds per form | rule | src/domain/privileged-commands.ts:300 | PA | 04-37 | drafted |
-| 85 | Hook entry flags `--event pre|post|config-change`, `--policy`, `--attended`, `--avarice-attended-hook`, `--data-root` and their refusals | flag | src/hook/pre-tool-use.ts:89 | PA; containment.md | 04-38 | todo |
+| 85 | Hook entry flags `--event pre|post|config-change`, `--policy`, `--attended`, `--avarice-attended-hook`, `--data-root` and their refusals | flag | src/hook/pre-tool-use.ts:89 | PA; containment.md | 04-38 | drafted |
 | 86 | Attended settings entry (Bash matcher, 5 s timeout, `onFailure: block`, mode 0600, existing mode and indentation kept) | integration | src/adapters/host-claude/attended-hook-install.ts:51 | PA; integrations.md | 04-37 | drafted |
 | 87 | `install-host` second output block `hook attended`, adapter config `host-hook:attended`, exit 3 for an unusable settings file | command | src/cli/commands/install-host.ts | cli-reference.md; data-model.md | 04-38 | todo |
 | 88 | Events `policy.denied` (with `source: hook`) and attended `approval.requested` carrying no run ID | event | src/hook/pre-tool-use.ts:283 | PA; data-model.md | 04-37 | drafted |
 | 89 | Attended mode behaviour: Bash only, deny message, pass once after approval, store opened only for privileged forms, session ID grammar | rule | src/hook/pre-tool-use.ts:539 | PA | 04-37 | drafted |
 | 90 | Documented bypass of command classification | rule | src/domain/privileged-commands.ts:1 | PA; containment.md | 04-37 | drafted |
 | 91 | Quirk: a retry in a run after approval is still denied and records a fresh request | rule | src/hook/pre-tool-use.ts:363 | PA | 04-37 | drafted |
-| 92 | Hook rule count 38 (6 allow, 33 deny, one on both) and the coverage command that counts 37 | rule | src/domain/hook-decision.ts | containment.md; coverage.md | 04-38 | todo |
+| 92 | Hook rule count 38 (6 allow, 33 deny, one on both) and the coverage command that counts 37 | rule | src/domain/hook-decision.ts | containment.md; coverage.md | 04-38 | drafted |
 | 93 | `task_refs` has a writer; providers `manual-brief`, `gsd-intel`, `gsd-graph` and their ID and revision forms | table | src/adapters/sqlite/ledger.ts:795 | data-model.md; indexes-and-context.md | 04-38 | todo |
 | 94 | Blocked reasons now set: `ref_changed`, `ref_deleted`, `access_revoked`; the decision they open | rule | src/app/resume-refs.ts; src/app/run-resume.ts | runs.md | 04-38 | todo |
 | 95 | Resume step: refresh every reference between the no-replay check and reconcile; `task_refs.refreshed` event | event | src/app/resume-refs.ts | runs.md; data-model.md; processes.md | 04-38 | todo |
@@ -133,9 +133,9 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 121 | Item pack adds manual excerpts after the index items (first fit within the remaining budget, untrusted) | rule | src/app/manual-inputs.ts:210 | indexes-and-context.md | 04-38 | todo |
 | 122 | Manual evidence is not a check and never satisfies a gate; `status` lists it apart | rule | src/app/manual-inputs.ts:272 | checks-and-evidence.md; PA | 04-38 | todo |
 | 123 | Five manual equivalents of `docs/enterprise-adaptation.md` exist except `avarice export --events` | finding | src/cli/main.ts:20 | PA; findings.md; integrations.md | 04-39 | deferred 04-39 |
-| 124 | Profile config key `retrieval` (nine caps), brief key `broadDiscovery`, `start --budget retrieval.*` | config key | src/app/retrieval-guard.ts; src/domain/retrieval-rules.ts | config-reference.md; cli-reference.md | 04-38 | todo |
+| 124 | Profile config key `retrieval` (nine caps), brief key `broadDiscovery`, `start --budget retrieval.*` | config key | src/app/retrieval-guard.ts; src/domain/retrieval-rules.ts | config-reference.md; cli-reference.md | 04-38 | drafted |
 | 125 | Contract keys `budgets.retrieval`, budget rows `retrieval.*`, rules `retrieval:*`, context output fields `profile`, `accessScope`, `access_revoked` | rule | src/app/retrieval-guard.ts; src/app/context.ts | runs.md; containment.md; data-model.md | 04-38 | todo |
-| 126 | Hook rules `budget:retrieval.searches`, `retrieval:broad-discovery-not-authorized`, `retrieval:broad-discovery-spent`; policy file `retrieval`; `alsoCharged` | rule | src/domain/hook-decision.ts; src/hook/pre-tool-use.ts | containment.md | 04-38 | todo |
+| 126 | Hook rules `budget:retrieval.searches`, `retrieval:broad-discovery-not-authorized`, `retrieval:broad-discovery-spent`; policy file `retrieval`; `alsoCharged` | rule | src/domain/hook-decision.ts; src/hook/pre-tool-use.ts | containment.md | 04-38 | drafted |
 | 127 | Profile config key `limits` (six limits), degradations (pack, active-run bound `active-runs`, check queue, output cut, artifact quota, debug event bound) | config key | src/domain/resource-bounds.ts:26; src/app/resource-limits.ts | config-reference.md; runs.md; checks-and-evidence.md; cli-reference.md | 04-38 | todo |
 | 128 | Pack ceiling and effective budget `min(ceiling, floor((32768 - contract bytes - fence bytes) / 4))`, at most 8,192; `context:pack` step keys | rule | src/app/context.ts | config-reference.md; indexes-and-context.md; runs.md | 04-38 | todo |
 | 129 | Doctor report key `events` and findings areas `limits` and `events` | table | src/app/doctor.ts | DR | 04-37 | drafted |
@@ -158,7 +158,7 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 146 | Enforcement map findings: `Enforcer` type has no `os-sandbox` member; rows still say the proving test does not exist though tests exist | finding | src/domain/result.ts:4; src/domain/enforcement-map.ts:96 | findings.md | 04-39 | logged |
 | 147 | Findings: `workspaceRoots` and `freshnessWindowHours` are in the key set and read nowhere | finding | src/domain/profile.ts:109 | findings.md | 04-39 | logged |
 | 148 | Findings: `docs/enterprise-adaptation.md` enforcer vocabulary and agent-host row against the written table | finding | src/domain/enforcement-map.ts:5 | findings.md | 04-39 | deferred 04-39 |
-| 149 | Live containment cases, admission of 2.1.326, restricted-run and restricted-onboarding confirmations | test tooling | test/containment/LIVE-CASES.md | containment.md (admitted versions); coverage.md | 04-38 | todo |
+| 149 | Live containment cases, admission of 2.1.326, restricted-run and restricted-onboarding confirmations | test tooling | test/containment/LIVE-CASES.md | containment.md (admitted versions); coverage.md | 04-38 | drafted |
 | 150 | AC-14 benchmark: per-repository results and digests | test tooling | test/benchmark | coverage.md | 04-39 | deferred 04-39 |
 
 ## Hand-off

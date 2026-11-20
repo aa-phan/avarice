@@ -26,7 +26,7 @@ Counted at commit `187409e` on 2026-11-14. Every command below was re-run at tha
 | Ports | 12 (plus one shared descriptor) | `ls src/ports` (13 files) |
 | External systems | 17 table rows (16 used, `gh` proven unused; `pgrep` and `ps` share a row) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic, the launchd job and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
-| Hook rules | 35 distinct rule IDs (6 allow, 30 deny, one on both) | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l` |
+| Hook rules | 38 distinct rule IDs (6 allow, 33 deny, one on both), re-run at `c663696` on 2026-11-20; the six `privileged:<action>` rules are built from a prefix and an action and are not in the count | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_.][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l`; the character class after the first word takes a dot, which `budget:retrieval.searches` needs (without it the count is 37) |
 | Diagram sources | 8 | `ls docs/system/diagrams/*.puml` |
 | Source lines | 35,093 (180 files) | `git ls-files src \| xargs wc -l` |
 | Test files | 173 | `git ls-files test \| grep -c '\.test\.ts$'` |
@@ -50,7 +50,7 @@ Counted at commit `187409e` on 2026-11-14. Every command below was re-run at tha
 | Read-only commands, denied prefixes, denied find actions | 11 of 11, 16 of 16, 10 of 10 | containment.md |
 | GSD verbs | map 11, intel 14, run 14 | containment.md |
 | Required settings keys, admitted host versions | 9 of 9, 6 of 6 | containment.md |
-| Hook rule IDs | 35 of 35 | containment.md |
+| Hook rule IDs | 38 of 38 | containment.md |
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
 | Tables, event kinds, artifact kinds, ID prefixes, migrations | 24 of 24, 39 of 39, 7 of 7, 9 of 9, 3 of 3 | data-model.md |

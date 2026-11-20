@@ -1,14 +1,14 @@
 # Configuration reference
 
-This document describes every configuration input AVARICE reads and every built-in limit that acts as configuration. The inputs are the environment variables that the `avarice` CLI, its detached supervisor and its hook read and set. They also include the profile `config.json`, the repository-side `.avarice/config.json` and `.planning/config.json`, the `routine` and `onboarding` presets, and the sandbox and egress-proxy settings. The sources are the profile and root resolution and the notify section reader (`src/adapters/fs/profile-paths.ts`, `src/adapters/fs/profile-config.ts`, `src/domain/notify-policy.ts`). They also include the repository conventions and the run contract (`src/domain/conventions.ts`, `src/domain/run-contract.ts`, `src/domain/run-preflight.ts`, `src/domain/policy-narrowing.ts`), the run services (`src/app/`), the host, executor and proxy adapters (`src/adapters/`), and the CLI (`src/cli/`).
+This document describes every configuration input AVARICE reads and every built-in limit that acts as configuration. The inputs are the environment variables that the `avarice` CLI, its detached supervisor and its hook read and set. They also include the profile `config.json`, the repository-side `.avarice/config.json` and `.planning/config.json`, the `routine` and `onboarding` presets, and the sandbox and egress-proxy settings. The sources are the profile and root resolution and the section readers (`src/domain/profile.ts`, `src/adapters/fs/profile-paths.ts`, `src/adapters/fs/profile-config.ts`, `src/domain/notify-policy.ts`, `src/domain/resource-bounds.ts`, `src/domain/retrieval-rules.ts`, `src/domain/context-adapters.ts`, `src/domain/credential-ref.ts`, `src/domain/redactor.ts`). They also include the repository conventions and the run contract (`src/domain/conventions.ts`, `src/domain/run-contract.ts`, `src/domain/run-preflight.ts`, `src/domain/policy-narrowing.ts`), the run services (`src/app/`), the host, executor and proxy adapters (`src/adapters/`), and the CLI (`src/cli/`).
 
 ## Summary
 
-- AVARICE reads 9 `AVARICE_*` variables and sets 4: `AVARICE_RUN` for the contained host, and the three root variables for the detached run supervisor. It reads 10 other variables: `HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `GSD_HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR`, `NO_COLOR` and `TERM`. Eight more `AVARICE_*` names in the source are constants, not variables: `AVARICE_WRITE_SET`, `AVARICE_TRACKED_WRITABLE`, `AVARICE_SECRET_PATTERNS`, `AVARICE_COMMIT_IDENTITY`, `AVARICE_EXECUTOR_ADDENDUM`, `AVARICE_VERIFIER_ADDENDUM`, `AVARICE_RUN_SHELL_ADDENDUM` and `AVARICE_RUN_SKILL`.
+- AVARICE reads 11 `AVARICE_*` variables and sets 5: `AVARICE_RUN` for the contained host, and `AVARICE_PROFILE` with the three root variables for the detached run supervisor. It reads 10 other variables: `HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `GSD_HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR`, `NO_COLOR` and `TERM`. Eight more `AVARICE_*` names in the source are constants, not variables: `AVARICE_WRITE_SET`, `AVARICE_TRACKED_WRITABLE`, `AVARICE_SECRET_PATTERNS`, `AVARICE_COMMIT_IDENTITY`, `AVARICE_EXECUTOR_ADDENDUM`, `AVARICE_VERIFIER_ADDENDUM`, `AVARICE_RUN_SHELL_ADDENDUM` and `AVARICE_RUN_SKILL`.
 - `PYTHONDONTWRITEBYTECODE`, the proxy variables, `CI` and the `GIT_*` variables are set for child processes and never read. `NO_COLOR` is both read (by the CLI) and set (for graphify).
-- The profile `config.json` has four keys that AVARICE writes once and never reads back, so all four are dead knobs. It also holds one section the owner writes by hand, `notify`, which is read each time a notification or a digest needs it, with the two exceptions listed under [The `notify` section](#the-notify-section). The effective roots always come from the environment variables or their defaults.
+- Each profile has one `config.json` with a closed set of 14 keys. AVARICE writes four of them once, when it creates the file, and reads every key back; `workspaceRoots` and `freshnessWindowHours` are in the set and read by nothing, so they are dead knobs. The sections the owner writes by hand are `notify`, `limits`, `retrieval`, `credentials`, `adapters`, `retention`, `policy` and `remotePatterns`. The effective roots come from the environment variable, then the file, then a default that carries the profile's name.
 - The repository's `.avarice/config.json` is the only configuration file AVARICE parses, as untrusted data that can only narrow authority. Two readers parse it for different purposes and accept different keys. `.planning/config.json` is written by gsd-core in the working copy and is never parsed by AVARICE.
-- There is no configuration file for budgets, versions or limits. They are built-in constants. A run's budgets are lowered per run only through `avarice start --budget name=value`, and an onboarding's through `avarice onboard --budget name=value`.
+- Resource limits and retrieval caps are profile settings (the `limits` and `retrieval` sections). Versions and the budgets of a run or an onboarding are built-in constants. A run's budgets are lowered per run only through `avarice start --budget name=value`, and an onboarding's through `avarice onboard --budget name=value`.
 - The sandboxed executor listens on no port. Its only network allowance is outbound connections to loopback ports that an AVARICE supervisor step names. The only listener is a per-step allowlist proxy on an operating-system-chosen port of 127.0.0.1.
 
 ## Environment variables AVARICE reads
@@ -18,14 +18,16 @@ Every row names a read on a production path unless marked otherwise. An empty va
 | Variable | Default | Effect | Usage |
 |---|---|---|---|
 | `AVARICE_CONFIG_HOME` | `~/.config/avarice` | Directory that holds the profile config file. Resolved to an absolute path. | Set to relocate the config. It must not sit under any `~/.claude*` directory or under the real path of `CLAUDE_CONFIG_DIR`, and must not nest with the other roots; otherwise every command that opens the profile refuses. |
-| `AVARICE_DATA_ROOT` | `~/.local/share/avarice/personal-local` | Directory that holds the ledger database (`state.db`), artifacts, run contract files, the shell history and per-invocation files. Created with mode 0700. | Set to move state. It must be on a local mount: a network or non-local mount is refused because SQLite WAL is unsafe there. The same placement rules as the config home apply. |
-| `AVARICE_WORK_ROOT` | `~/.local/share/avarice-work/personal-local` | Directory for staging workspaces and for each run's clone and scratch directory. Created with mode 0700. | Set to move staging and run clones. Same placement rules as the config home. Under a custom value the supervisor's own sandboxed commands deny it less completely (see the quirks). |
+| `AVARICE_PROFILE` | unset (then `personal-local`) | The profile a command runs under when no `--profile` flag is given and the repository is not bound to one. | Set to work under a profile other than the default. It must follow the profile grammar (`personal-local`, `personal-extended`, `enterprise-<org>`) when it is the value that would be chosen, otherwise the command exits 64. It is ignored for a repository bound to a profile. The detached supervisor and the digest LaunchAgent receive it from the command that started them. |
+| `AVARICE_DEBUG_TRANSCRIPTS` | unset | The value `1` stores the whole redacted transcript of every host invocation, as the profile's `retention.transcripts: "full"` does. | Any other value, including an empty one, leaves the profile's `retention` in force. Read where the host is launched (see [profiles-and-credentials.md](profiles-and-credentials.md#transcript-retention)). |
+| `AVARICE_DATA_ROOT` | `~/.local/share/avarice/<profile>` | Directory that holds the ledger database (`state.db`), artifacts, run contract files, the shell history and per-invocation files. Created with mode 0700. | Set to move state. It must be on a local mount: a network or non-local mount is refused because SQLite WAL is unsafe there. The same placement rules as the config home apply. |
+| `AVARICE_WORK_ROOT` | `~/.local/share/avarice-work/<profile>` | Directory for staging workspaces and for each run's clone and scratch directory. Created with mode 0700. | Set to move staging and run clones. Same placement rules as the config home. Under a custom value the supervisor's own sandboxed commands deny it less completely (see the quirks). |
 | `AVARICE_CLAUDE_BIN` | first `claude` on `PATH` | Absolute path of the `claude` executable used as the contained host. | Set when `claude` is not on `PATH` or to pin one install. When neither resolves, the host is unavailable: an onboarding is blocked with reason `enforcement_failure` at the workspace stage's enforcement check, and the reason (`claude was not found ...`) is recorded in the host descriptor. The same fallback applies when no admitted gsd-core is located, the GSD shim preamble is missing, the sandbox is unusable or the version is not admitted. The binary must report an admitted version (see built-in constants). |
 | `AVARICE_HOOK_ENTRY` | the `pre-tool-use` hook script of this checkout | Path of the hook program written into the host settings. | Override only to substitute a hook; the host is launched with whatever this names. A self-test of the hook runs before launch. |
 | `AVARICE_GRAPHIFY_BIN` | first `graphify` on `PATH` | Path of the `graphify` executable for code extraction and the knowledge pass. | When set and non-empty it is the only candidate: if it names no executable file, graphify is reported missing and `PATH` is not tried. Only absolute `PATH` entries are searched. A missing graphify does not fail startup; it fails the index step that needs it. |
 | `AVARICE_LEASE_TTL_MS` | `180000` | Lease time-to-live, in milliseconds, for an onboarding and for a run supervisor. The lease is renewed every third of the TTL (at least 1 ms). | Read on the production path, but used as a test seam (short leases for fault tests). A value that is not a positive safe integer, including an empty one, silently falls back to the default. |
 | `AVARICE_FAULT` | unset | Kills the process with SIGKILL when execution reaches the named checkpoint (`name`, or `name#N` for the Nth arrival). | Test-only fault injection, but the read is on the production path: an operator who sets it gets a SIGKILL with no cleanup. The run supervisor also fires checkpoints named `after-checkpoint:<action>` and `after-transition:<state>`. Do not set it outside tests. Unlike the other variables an empty value is not treated as unset (it matches no checkpoint). |
-| `AVARICE_RUN` | unset | The run marker. Any value, including an empty one, counts as set. | Not for operators to set. The host launch sets it (next section). While set, bare `avarice` does not open the interactive shell and exits 64 with the usage text, the shell refuses to open, and `install-host`, `digest`, `contract amend`, `decide`, `cancel` and `schedule` are refused with exit 64. No other command reads it. A process can unset it, so it is a guard against accidental use, not a containment control; the owner commands also judge the process tree (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)). |
+| `AVARICE_RUN` | unset | The run marker. Any value, including an empty one, counts as set. | Not for operators to set. The host launch sets it (next section). While set, bare `avarice` does not open the interactive shell and exits 64 with the usage text, the shell refuses to open, and `install-host`, `digest`, `contract amend`, `decide`, `cancel`, `schedule`, `approve`, `context add`, `evidence add` and `pr record` are refused with exit 64. No other command reads it. A process can unset it, so it is a guard against accidental use, not a containment control; the owner commands also judge the process tree (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)). |
 | `HOME` | the OS home directory | Base for the default roots, the gsd-core candidate `~/.claude/gsd-core`, the default `~/.claude` config directory and the default skill directory of `install-host`. It is also the base of the credential locations that sandboxed commands may not read, and it is forwarded to children. | Normally inherited. Empty is treated as unset for AVARICE's own path resolution. |
 | `PATH` | none (see children) | Search path for `claude` and `graphify` (absolute entries only for graphify). Forwarded to git children. Its value is also appended to the directory of the running Node binary to form the `PATH` of check, install and list commands. | Must contain `git`; the git child falls back to a fixed path list only when `PATH` is empty. The check sandbox falls back to `/usr/bin:/bin` when `PATH` is unset. |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Host configuration directory. Used for the root placement rules, for the gsd-core candidate `<dir>/gsd-core`, as the skills root for the host, as the default target of `install-host`, and forwarded to the host and gsd-core. | Set when Claude Code is installed in a nondefault directory. `install-host --config-dir` overrides it. |
@@ -36,7 +38,7 @@ Every row names a read on a production path unless marked otherwise. An empty va
 | `NO_COLOR` | unset | Any value, including an empty one, turns colour and cursor escapes off. | Standard convention. Colour is on only when the stream is a terminal, `NO_COLOR` is unset and `TERM` is not `dumb`. |
 | `TERM` | unset | `dumb` selects the plain line mode of the interactive shell and turns colour off. | Any other value, or none, leaves the full-screen mode and colour on when the streams are terminals. |
 
-Test-only seams: `AVARICE_FAKE_HOST` is read only by the test fake host. `AVARICE_TEST_NOTIFIER` is read only by the test entry point, which then keeps the real osascript notifier (pointed at a fake script by the profile's `notify.local.osascriptPath`) instead of a silent one. Nothing in the shipped source references either, so neither has any effect on the CLI. The notify keys of the profile config are in "Profile config file".
+Test-only seams: `AVARICE_FAKE_HOST` is read only by the test fake host. `AVARICE_TEST_NOTIFIER` is read only by the test entry point, which then keeps the real osascript notifier (pointed at a fake script by the profile's `notify.local.osascriptPath`) instead of a silent one. `AVARICE_TEST_REMOTE=1` makes the test entry point replace the executor and the artifact store with the fake-remote adapters (see [portability.md](portability.md#fake-remote-adapters)), and three variables shape them: `AVARICE_TEST_REMOTE_SEED` (a non-negative integer, default 42, the seed of the fault source), `AVARICE_TEST_REMOTE_LOG` (a file that receives every drop, duplicate and run as one JSON line) and `AVARICE_TEST_REMOTE_ROOT` (the data root of the store that plays the remote, by default the data root with `-remote` appended). The live-spend tooling of the test suite reads `AVARICE_PHASE4_CEILING_USD` (lowers the live-model spend ceiling of 40 USD and never raises it; a value that is not a positive number is ignored), `AVARICE_PHASE4_LEDGER` (the file the spend is recorded in) and `AVARICE_PHASE4_PLAN` (the plan name new spend is recorded under). Nothing in the shipped source references any of them, so none has any effect on the CLI. The notify keys of the profile config are in "Profile config file".
 
 ## Environment variables AVARICE sets for child processes
 
@@ -55,25 +57,85 @@ Children get an allowlisted environment built from nothing; names not listed her
 | check validation (sandboxed) | the sandbox set, the check's `env`, plus `HTTP_PROXY`, `HTTPS_PROXY`, `npm_config_proxy`, `npm_config_https_proxy` (all `http://127.0.0.1:<proxy port>`) | Proxy variables only when the detector proxy started. Here too the sandbox set overrides the check's `env`. |
 | graphify | the git set with `HOME` and `LANG`, `TMPDIR` when set, `PATH`, `PYTHONDONTWRITEBYTECODE=1`, `NO_COLOR=1` | `PATH` is the directory of the graphify binary, then `/usr/bin`, `/bin`, `/opt/homebrew/bin`. |
 | host and sandbox probes | `PATH=/usr/bin:/bin:/opt/homebrew/bin` and the six passthrough names | Used for the host version and capability probes and the sandbox probe. |
-| run supervisor (detached) | the whole environment of the starting command, with three overrides, a fourth for a run that recorded a host configuration directory, and `NODE_TEST_CONTEXT` removed | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT` and `AVARICE_WORK_ROOT` are set to the roots the starting command resolved, whatever the environment said. `CLAUDE_CONFIG_DIR` is set to the directory the run recorded when it started, so every supervisor of the run, from whichever terminal, runs the host under the same one; a run that recorded none keeps the command's value. `NODE_TEST_CONTEXT` is dropped so a test entry does not do nothing. The supervisor then builds every child environment as in the rows above. |
+| run supervisor (detached) | the whole environment of the starting command, with four overrides, a fifth for a run that recorded a host configuration directory, and `NODE_TEST_CONTEXT` removed | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT` and `AVARICE_WORK_ROOT` are set to the roots the starting command resolved, whatever the environment said, and `AVARICE_PROFILE` to the profile it selected, because a supervisor has no repository to read a binding from. `CLAUDE_CONFIG_DIR` is set to the directory the run recorded when it started, so every supervisor of the run, from whichever terminal, runs the host under the same one; a run that recorded none keeps the command's value. `NODE_TEST_CONTEXT` is dropped so a test entry does not do nothing. The supervisor then builds every child environment as in the rows above. |
 | hook | none set | The hook is started by the host and inherits the host environment above. |
 | `osascript`, `launchctl`, `plutil` (banner and schedule) | none set | Started with an argument list and no `env` option, so each inherits the whole environment of the AVARICE process that starts it. They are the owner's own tools, run outside any sandbox. |
-| digest LaunchAgent (launchd) | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` | Written into the agent's property list by `schedule install` from the roots the command resolved, and the only variables it writes, so the scheduled `avarice digest` reads the same profile as the command that installed it. |
+| digest LaunchAgent (launchd) | `AVARICE_CONFIG_HOME`, `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT`, `AVARICE_PROFILE` | Written into the agent's property list by `schedule install` from the roots and the profile the command selected, and the only variables it writes, so the scheduled `avarice digest` reads the same profile as the command that installed it. |
 
 Every sandboxed command runs with exactly the environment it is given: the executor inherits nothing.
 
 ## Profile config file
 
-Location: `<config home>/profiles/personal-local/config.json`, mode 0600. It is created when absent, by any command that opens the profile (not only `avarice init`), and never rewritten. `avarice init` only reports it. Only one profile exists, `personal-local`; `init --profile` accepts that name only.
+Location: `<config home>/profiles/<profile>/config.json`, mode 0600, one file per profile. It is created when absent, by any command that opens the profile (not only `avarice init`), holding `schema`, `profile`, `dataRoot` and `workRoot`, and it is never rewritten. After that the owner edits it by hand and every command reads it back. It is opened without following a symbolic link and used only as a regular file of at most 64 KiB; a missing file means every default. `avarice init` only reports it. Who reads each key, what a bad section stops, and how profiles are selected are in [profiles-and-credentials.md](profiles-and-credentials.md#the-configuration-file).
 
-| Key | Written value | Read by | Status |
+The key set is closed: a key outside the table is refused by name. Sections stay raw until the module that owns them parses them, so a bad value is reported by the command that reads it.
+
+| Key | Type | Default | Constraint | Usage |
+|---|---|---|---|---|
+| `schema` | number | `1` (may be left out of a hand-written file) | Must be `1`. | Checked and nothing else. |
+| `profile` | string, or `{ id, class }` | the selected profile (may be left out) | Must name the selected profile, and the class must be the one its name has. | Checked and nothing else. |
+| `dataRoot` | string | `~/.local/share/avarice/<profile>` | An absolute path or one that starts with `~/`, at most 4096 characters, no control character. A relative path is refused. | Where the ledger, artifacts and run contract files live. The variable `AVARICE_DATA_ROOT` wins over it. |
+| `workRoot` | string | `~/.local/share/avarice-work/<profile>` | The same. | Where clones and scratch live. `AVARICE_WORK_ROOT` wins over it. |
+| `notify` | object | see [The `notify` section](#the-notify-section) | Per that section. | Banner destinations, digest times, quiet hours. |
+| `limits` | object | see [The `limits` section](#the-limits-section) | Per that section. | The six resource bounds. |
+| `retrieval` | object | see [The `retrieval` section](#the-retrieval-section) | Per that section. | The nine retrieval caps. |
+| `credentials` | object | none | Per [The `credentials` section](#the-credentials-section). | Named credential references and approved helpers. |
+| `adapters` | object | see [The `adapters` section](#the-adapters-section) | Per that section. | Which context sources are built and whether the knowledge pass runs. |
+| `retention` | object | `{ "transcripts": "summary" }` | `transcripts` is `summary` or `full`; any other value, or a non-object, is refused. | How much of a host transcript is stored (see [profiles-and-credentials.md](profiles-and-credentials.md#transcript-retention)). |
+| `policy` | object | none | `organizationFile`: a path of at most 1024 characters with no control character, resolved against the directory of this file, read only for an enterprise profile. The remaining keys are a policy file's `schema` and `rules`, judged by the policy rules. | The organization policy file and the user's own policy (see [policy-and-approvals.md](policy-and-approvals.md#policy-sources-and-ranks)). |
+| `remotePatterns` | list of strings | none | At most 64 entries, each 1 to 256 characters, in the form `host/path` with `*` for characters within one path segment. | The remotes an enterprise profile claims (see [profiles-and-credentials.md](profiles-and-credentials.md#selecting-a-profile)). |
+| `workspaceRoots` | any | none | None. | Dead knob: in the key set and read by no code. |
+| `freshnessWindowHours` | any | none | None. | Dead knob: in the key set and read by no code. |
+
+The roots come from the environment variable, then the configuration key, then the default, on every run. Placement rules for them are in [profiles-and-credentials.md](profiles-and-credentials.md#roots-and-isolation).
+
+### The `limits` section
+
+An object of limit names to whole numbers above 0, parsed as a whole: an unknown name, a value that is not a whole number above 0 and a `maxConcurrentChecks` above 2 are refused, naming `limits.<key>`. A profile may raise or lower a limit within that. Nothing in a run's contract overrides a limit. A section that cannot be used does not stop composition: the defaults stay in force so a typo never removes a bound, `start` refuses the run, and `doctor` names the section.
+
+| Key | Default | Unit | Effect when reached |
 |---|---|---|---|
-| `schema` | `1` | nothing | dead knob |
-| `profile` | `personal-local` | nothing | dead knob |
-| `dataRoot` | the resolved data root at first creation | nothing | dead knob |
-| `workRoot` | the resolved work root at first creation | nothing | dead knob |
+| `contextTokens` | 24000 | tokens (four characters each) | The ceiling of a run's context pack and the default budget of `avarice context`. A run's pack is also bound by the room the 32 KiB prompt leaves, so the smaller of the two applies (see [The context pack budget](#the-context-pack-budget)). Past it the pack drops its lowest-ranked items and lists them as omitted. |
+| `maxConcurrentChecks` | 1 | checks | The checks of one run that may run at once; at most 2, because they share one clone. Further checks wait in a queue in the supervisor and start in declaration order. |
+| `artifactQuotaMiB` | 2048 | MiB | Stored artifact bytes per profile. A new blob that would pass the quota is refused before anything is written and nothing records a pointer to it. The count is taken when the process starts, so the quota stops runaway growth and is not an exact ledger. |
+| `maxActiveRuns` | 20 | runs | Runs that have not ended (not failed, cancelled or closed). At the limit `start` is refused, before anything is created, and names up to ten of the runs. |
+| `maxEventRows` | 500000 | rows | Rows of the events table after which a `debug` event is refused and counted in the meta key `events_dropped_debug`. An event at `info` or above is always written, and nothing prunes old rows. |
+| `checkOutputBytes` | 5242880 | bytes of one stream | Bytes of one output stream of one check that are kept; the rest is cut with a marker. |
 
-Editing those four keys changes nothing. Because they are written once, they can disagree with the roots in use after an environment variable changes. The roots come from `AVARICE_DATA_ROOT`, `AVARICE_WORK_ROOT` and the defaults on every run.
+### The `retrieval` section
+
+An object of cap names to whole numbers above 0, each at most the built-in value. An unknown name, a value that is not a whole number above 0 and a value above the built-in one are refused, naming `retrieval.<key>`: caps can only be lowered. A bad section refuses `start` and every query that reads it.
+
+| Key | Built-in | Unit | What it bounds |
+|---|---|---|---|
+| `indexEntries` | 2000 | handles | Handles one source's search may return; more are cut and a note says so. |
+| `returnedBytes` | 65536 | bytes | Bytes of excerpt text one source's answer may carry; the excerpts after the limit keep only a marker. |
+| `searchHits` | 200 | hits | Hits of one scoped search. |
+| `queryTimeoutMs` | 10000 | milliseconds | How long one search may run before it is abandoned. |
+| `snippetLines` | 40 | lines | Lines in one bounded snippet. |
+| `snippets` | 30 | snippets | Snippets read into one pack; later ones are listed as omitted. |
+| `fullReads` | 20 | files per run | Whole-file reads a run may make. A run's contract may lower it with `--budget retrieval.fullReads`. |
+| `fullReadBytes` | 262144 | bytes per run | Bytes of whole-file reads in all. A run's contract may lower it with `--budget retrieval.fullReadBytes`. |
+| `maxPages` | 5 | pages | Pages of a source that declares itself paged. No local source does. |
+
+A run's contract adds two retrieval counters of its own: `searches`, whose built-in limit is the run's tool-call limit and which `--budget retrieval.searches` may lower, and `broadDiscovery`, 1 when the brief authorizes it and 0 otherwise. The counters, the rows that hold them and the hook's rules for them are in [containment.md](containment.md#retrieval-budgets).
+
+### The `credentials` section
+
+An object whose keys are credential names, each a string reference, plus one reserved key `helpers`. A name is 1 to 128 letters, digits, `.`, `_` or `-`. A reference is `keychain:<service>`, `cmd:<helper name>` or `delegated:<cli>`, with the name after the colon following the same grammar; `env:` and any other scheme are refused. `helpers` maps a helper name to an absolute path of at most 1024 characters with no control character and no `.`, `..` or empty segment, and a `cmd:` reference runs only a helper listed there. Which providers a profile may use depends on its class (see [profiles-and-credentials.md](profiles-and-credentials.md#credentials)). A bad section stops every command that is not read-only with exit 70, naming `credentials.<key>`.
+
+### The `adapters` section
+
+| Key | Type | Default | Constraint | Usage |
+|---|---|---|---|---|
+| `adapters.context` | list of strings | `["gsd-intel", "gsd-graph", "gsd-planning", "git-files"]` | Each entry is one of those four names, once. An empty list is accepted and selects no source, so no pack is built. Anything that is not a list is refused. | The context sources composition builds, each recorded in `adapter_configs` as `context-<source>`. |
+| `adapters.knowledgePass` | boolean | `true` | Any other type is refused. | `false` records the knowledge index step as disabled and starts no knowledge invocation during onboarding (see [onboarding.md](onboarding.md#index-stage)). |
+
+A bad `adapters` section stops every command, read-only ones included, with exit 70.
+
+### The context pack budget
+
+A run's context pack is bound by two numbers, and the smaller is the budget: the profile's `limits.contextTokens`, and a quarter of the bytes the 32 KiB run prompt (32768 bytes) leaves after the unit's contract text and the fixed text around the pack. The second number is at most 8192 tokens and shrinks with the contract, so the default ceiling of 24000 does not bind a run's pack until the ceiling is set below the room. The step that records the pack holds both numbers and the tokens used, so a short pack says which bound applied. A pack that does not fit the prompt is cut from its end. `avarice context` has no prompt and uses `limits.contextTokens` as its default budget.
 
 ### The `notify` section
 
@@ -201,21 +263,25 @@ The full flag contract is in [cli-reference.md](cli-reference.md).
 | Flag | Default | Effect |
 |---|---|---|
 | `onboard --policy onboarding` | required | The only onboarding policy. |
+| `--profile <name>` (every command) | `AVARICE_PROFILE`, else `personal-local` | The profile the command runs under; `repo add --profile` also binds the repository to it. |
 | `onboard --mode full\|fast` | `full` | Mapping mode. |
+| `onboard --restricted` | off | Maps fast under the restricted launch, for a host that cannot be contained; conflicts with `--mode full`. |
 | `onboard --promote none\|copy\|commit` | `none` | What happens to the accepted map after activation; any other value is refused. |
 | `onboard --budget name=value` (repeatable) | none | Lowers an onboarding budget; see the onboarding preset. |
 | `start --brief <file>` | required | The brief file; see the run limits for its caps. |
 | `start --policy routine` | required | The only run policy. |
 | `start --project <id>` | the registered repository that contains the current directory | Names the project instead. |
-| `start --budget name=value` (repeatable) | none | Lowers a run budget; see the routine preset. |
+| `start --budget name=value` (repeatable) | none | Lowers a run budget; see the routine preset. The three retrieval caps `retrieval.searches`, `retrieval.fullReads` and `retrieval.fullReadBytes` are among the names. |
+| `start --restricted` | off | Starts the run in restricted mode: analysis and planning only. |
 | `start --wait` | off | Follows the run for at most its wall-clock budget plus 15 minutes. |
 | `resume <id> --wait` | off | Follows a resumed run for at most 24 hours. |
 | `decide <id> ... --wait` | off | Follows a supervisor that `decide` started, for at most 24 hours. |
 | `cancel <id> --wait` | off | Follows a cancel that a supervisor carries out, for at most 24 hours. |
 | `contract amend <run> --budget name=value` (repeatable) | none | Changes a budget of a running contract, up or down. It is the one way a limit rises. |
-| `install-host --config-dir <dir>` | the `CLAUDE_CONFIG_DIR` value, else `~/.claude` | Directory that receives the `avarice-run` skill. |
-| `context --budget N` | `4000` | Token budget for a context query, whole number 1 to 100000. |
-| `init --profile personal-local` | `personal-local` | Only that profile is accepted. |
+| `install-host --config-dir <dir>` | the `CLAUDE_CONFIG_DIR` value, else `~/.claude` | Directory that receives the `avarice-run` skill and the attended hook entry in `settings.json`. |
+| `context --budget N` | the profile's `limits.contextTokens` (24000) | Token budget for a context query, whole number 1 to 100000. |
+| `init --profile <name>` | `personal-local` | Any name that follows the profile grammar. |
+| `doctor --json\|--online\|--repair\|--extensions` | off | Output form and the extra sections of the diagnosis (see [doctor.md](doctor.md#the-command)). |
 
 The `--budget` value is `name=value` with a number. The name and the lower-only rule belong to the preset's compiler, so a misspelled name is refused after the command line is accepted.
 
@@ -271,11 +337,11 @@ The loop limits are prevention. At 25 searches in a row with no read, edit or wr
 |---|---|
 | Staleness: commits | at most 25 commits past the onboarded revision outside `.avarice/` and `.planning/`; more refuses the start (`stale-commits`) |
 | Staleness: age | the oldest such commit at most 14 days old; older refuses the start (`stale-age`) |
-| Start refusal order | `revision-mismatch`, `not-descendant`, `stale-commits`, `stale-age`, `no-conventions`, `no-planning`; the first that applies is reported |
+| Start refusal order | `revision-mismatch`, `not-descendant`, `stale-commits`, `stale-age`, `no-conventions`, `no-planning`; the first that applies is reported. `record-incompatible`, `restricted-record` and `active-runs` are judged before them (see [cli-reference.md](cli-reference.md#start)). |
 | Brief file | 64 KiB; 4096 characters per line; title 1 to 200 characters; at most 128 items per list section; at most 20 work items; at most 20 acceptance criteria; `expectedDecisions` 0 to 1000 (format in [runs.md](runs.md)) |
 | Conventions file | 262144 bytes read; 500 commits walked |
 | Run prompt | 32 KiB for the whole `/gsd-quick` prompt; the context pack is cut to fit, the contract text never is |
-| Context pack in a run | 4000 tokens |
+| Context pack in a run | the smaller of `limits.contextTokens` and a quarter of what the 32 KiB prompt leaves, so at most 8192 tokens (see [The context pack budget](#the-context-pack-budget)) |
 | Quick record read | 64 KiB; a larger record counts as a verifier verdict of gaps found, which can only block |
 | Quick record archive | 2 MiB per changed artifact file; a larger file makes the classification step return an error |
 | Blocked issue text | 1000 characters |
@@ -316,7 +382,7 @@ For the dependency install the proxy prevents: a connection to any host not on t
 
 | Constant | Value |
 |---|---|
-| Claude Code versions | `2.1.312`, `2.1.316`, `2.1.317`, `2.1.318`, `2.1.319`, `2.1.326`; any other reported version is refused |
+| Claude Code versions | Verified: `2.1.312`, `2.1.316`, `2.1.317`, `2.1.318`, `2.1.319`, `2.1.326`. A patch of the verified minor 2.1 at or above 2.1.312 that is not listed is admitted as an unverified patch when `claude --help` still lists every flag the contained launch line uses. Any other version is refused: `host-minor-unverified` (a minor with no verified patch), `host-patch-below-range` (a patch under 312), `host-version-unknown` (not three numbers), `host-flag-missing:<flag>` (an unverified patch whose help lacks a flag) or `host-unavailable` (the help cannot be read). See [doctor.md](doctor.md#host-admission-and-enforcement) and [containment.md](containment.md#launch-readiness). |
 | gsd-core | package `@opengsd/gsd-core`, version matching `1.17.x` |
 | Node | `>=22.22.3` declared in the package manifest; not compared at runtime |
 | Bundled SQLite | accepted from 3.44.6 on the 3.44 line, 3.50.7 on 3.50, 3.51.3 on 3.51, and any later line; 3.45 to 3.49, older versions and unreadable version strings are refused |
@@ -343,6 +409,16 @@ The cost per invocation also sets how large the knowledge corpus may be: the cor
 
 Subagents per map round: full 4, fast 1, paths 4, skip 0, adopt 0, plus a mapper re-run allowance per round of 2 for full and none for the other modes (a full map therefore derives 12 with one retry); the knowledge pass and intel add none. The contract also fixes the model (`haiku`), the read-excluded directories (`.git`, `build`, `coverage`, `dist`, `node_modules`, `vendor`), the secret globs (`**/*.key`, `**/*.pem`, `**/.env`, `**/.env.*`, `**/id_ed25519*`, `**/id_rsa*`) and the read-only command list. The source states that changing any preset value changes the policy revision. How the derived totals are computed is in [onboarding.md](onboarding.md).
 
+### Refresh planning
+
+When an onboarding refreshes an active record, the plan for how much of the map to rebuild comes from these constants (the decision table is in [onboarding.md](onboarding.md#refresh)).
+
+| Constant | Value |
+|---|---|
+| Drift threshold | 3: at least 3 new top-level directories since the revision the map describes send the refresh to a full map; fewer than 3 leave the choice to GSD's drift verdict. It is GSD's own default `workflow.drift_threshold`, reused here as a count of directories. Not configurable. |
+| Manifest names | 29 basenames, matched at any depth: `package.json`, `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `yarn.lock`, `bun.lockb`, `turbo.json`, `nx.json`, `lerna.json`, `rush.json`, `Cargo.toml`, `Cargo.lock`, `go.mod`, `go.sum`, `go.work`, `pyproject.toml`, `poetry.lock`, `requirements.txt`, `Pipfile`, `Gemfile`, `Gemfile.lock`, `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts`, `composer.json`, `mix.exs`. A change to one sends the refresh to a full map. |
+| Scoped refresh cap | at most 50 affected paths; more, or a path that cannot travel as one `--paths` value, is not scoped |
+
 The two presets differ in two override rules: a run override must be above 0 where an onboarding override may be 0, and a run has no `retry` override.
 
 ### Timeouts and size limits
@@ -364,7 +440,7 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 | Host preflight probe timeout | 10 s |
 | Hook | stdin cap 1 MiB; database busy timeout 4 s |
 | Event caps | string 1024 characters; JSON 8192 characters |
-| Context query budget | default 4000, max 100000 tokens |
+| Context query budget | default `limits.contextTokens` (24000), max 100000 tokens |
 | Proposal file | 65536 bytes |
 | Installed skill | an existing `SKILL.md` over 256 KiB is not one AVARICE wrote and is left untouched |
 | Profile config read | 64 KiB, opened without following a symbolic link |
@@ -379,7 +455,11 @@ Only limits that surface to an operator as a refusal, a timeout or a cut are lis
 
 - An empty `AVARICE_FAULT` is read as "set", an empty `AVARICE_RUN` counts as set, and an empty `NO_COLOR` counts as set. Every other variable treats empty as unset or, for the lease TTL, as invalid and therefore the default.
 - `AVARICE_LEASE_TTL_MS` falls back to the default for any invalid value without a message.
-- `AVARICE_RUN` is read by the shell gate, `install-host`, `digest` and the owner commands (`contract amend`, `decide`, `cancel`, `schedule`). `start`, `supervise` and the other commands do not look at it.
+- `AVARICE_RUN` is read by the shell gate, `install-host`, `digest` and the owner commands (`contract amend`, `decide`, `cancel`, `schedule`, `approve`), and by the commands that record a manual input (`context add`, `evidence add`, `pr record`). `start`, `supervise` and the other commands do not look at it.
+- `AVARICE_PROFILE` is ignored under a repository binding and is judged only when it is the value that would be chosen, so a malformed value in the environment does not stop a command that names `--profile` or runs in a bound repository.
+- The `limits` section does not stop composition when it is bad (the defaults stay in force), while a bad `retrieval`, `credentials`, `retention` or `adapters` section stops the commands that read it. `start` and `doctor` are where a bad `limits` section is reported.
+- The default `limits.contextTokens` of 24000 is above the 8192 tokens the 32 KiB run prompt can ever hold, so it is a ceiling for `avarice context` only until it is set below that.
+- `workspaceRoots` and `freshnessWindowHours` are accepted in a profile config and read by nothing.
 - Children differ in how they get `PATH`: git falls back to a fixed `PATH` only when the parent's is empty, while graphify and the host build their own `PATH` regardless of the parent.
 - A run host and a run's checks differ in home and temp. The host keeps the forwarded `HOME` and gets `TMPDIR` at `<scratch>/tmp`. Checks, install and list commands get both set to the scratch directory itself.
 - A check's `env` cannot change `CI`, `LANG` or the other sandbox names. Only the reserved names and prefixes listed above are refused at parse, so the sandbox names are accepted there and the sandbox value silently wins.
