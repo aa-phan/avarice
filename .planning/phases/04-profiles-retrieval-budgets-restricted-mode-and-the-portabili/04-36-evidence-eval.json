@@ -65,6 +65,19 @@
     "caps": { "planTotalUsd": 33.0, "spentByPlanUsd": 0.88534423, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40, "portfolio6CapBoundUsd": "about 23.40 (to be checked against the harness's dry run before the first run)" },
     "diagnosisRule": "a cause in the harness, the arm repository, a brief or the judge wiring is fixed offline (RED then GREEN, with a unit test) and the plan proceeds; a cause in AVARICE product code (src/) or a design decision stops the plan with a classification and fix options"
   },
+  "ruling3": {
+    "ownerReply": "keep evidence, diagnose",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-20T02:06:38Z",
+    "recordedBefore": "any change or spend after portfolio-6 T01 (Phase 4 ledger at 50 lines, 6.231274 USD, plan 04-36 2.304598 USD when this was written)",
+    "authorized": [
+      "a harness change (RED then GREEN, scripts/eval-retrieval.ts and its unit test): before a run's scratch is removed, copy the run's decision records, run, work-item and attempt rows, steps, events and host transcript into an evidence directory under the plan's phase folder; everything copied passes the AC-5 redaction rules; nothing is copied from the owner's checkout beyond what the run itself produced; the copy is bounded (5 MB per run) and any truncation is recorded; unit tests for the copy on a block, on a success and for a seeded secret",
+      "the three blocked portfolio-6 T01 entries are moved aside, as the pilot's were, so they do not count",
+      "one diagnostic run of T01 arm B (run cap 0.40 USD) with the evidence capture on; the decision record, the denied calls' inputs, the hook and host denials and the transcript are read and the stop is classified with evidence"
+    ],
+    "thenRule": "a cause in the evaluation harness, an arm repository's setup, the read set the harness declares, a brief, or the judge/environment wiring is fixed offline (TDD, eval-retrieval tests, unit suite, typecheck, check:boundaries) and portfolio-6 (T01 to T06, arms A B C, --merge, the portfolio --node-modules) resumes with the same stop conditions (9 or more of 18 budget_exhausted / no branch / judging error; an unexpected stop shared by every arm; caps not fitting). A cause in AVARICE product code under src/ (for example how a unit with no change and some denials is ended), haiku behaviour that only a product or routing change can address, or a design decision stops the plan with a classification and fix options, with no change under src/ and no further spend",
+    "caps": { "planTotalUsd": 33.0, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40 }
+  },
   "diagnostic": {
     "run": "T01 arm B, --keep, --cap-usd 0.10, scratch /private/tmp/avarice-eval-diag (outside ~/.claude*: a first attempt with a scratch under ~/.claude-edu was refused by `avarice init` before any model call and cost nothing)",
     "spendUsd": 0.08386034,
