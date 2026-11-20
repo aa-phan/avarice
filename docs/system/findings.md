@@ -21,7 +21,7 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 ## From config-reference
 
 - `src/adapters/host-claude/env.ts:16`: comment says AVARICE_RUN marks a contained run for commands and the hook, but nothing in src or bin reads it; only tests check it. No longer holds at 72a86b1 for commands: `src/cli/main.ts:58` (now at `src/cli/main.ts:71`), `src/cli/shell/shell.ts:532` (now at `src/cli/shell/shell.ts:547`) and `src/cli/commands/install-host.ts:25` read it. The hook still does not.
-- `src/adapters/fs/profile-paths.ts:90`: profile config.json (schema, profile, dataRoot, workRoot) is written once and never read; it can go stale against the roots in use
+- `src/adapters/fs/profile-paths.ts:90`: profile config.json (schema, profile, dataRoot, workRoot) is written once and never read; it can go stale against the roots in use. No longer holds at `c663696`: every command reads the file back, and a root comes from the variable, then the file, then the default (see [profiles-and-credentials.md](profiles-and-credentials.md#the-configuration-file)).
 - `src/adapters/fs/profile-paths.ts:91`: the profile config file is created by every command that resolves the profile, while init.ts:2 describes it as the init path
 - `src/app/onboarding-service.ts:32`: AVARICE_FAULT SIGKILL injection is read on the production path with no build-time gate
 - `src/app/onboarding-service.ts:43`: an invalid AVARICE_LEASE_TTL_MS silently falls back to the default
@@ -275,6 +275,12 @@ A line marked "spec contradiction" means a proposal-era document in `docs/` stat
 - `src/app/run-stages/prepare.ts:145`: AVARICE writes the run's GSD settings into the clone's `.planning/config.json` before the unit runs, so in a repository that tracks that file a unit and its verifier see it modified at session start. The kept evidence of the AC-8 evaluation shows verifiers reporting it as "modified from the start", and in three of six runs that ended without a branch the verifier paused as `human_needed` (the only stated reason in one of them).
 - `src/domain/hook-decision.ts:516` and `src/domain/hook-decision.ts:648`: a verifier subagent's refused calls count toward the invocation's consecutive-denials limit. `git -C <clone> diff` is refused as `shell-not-allowed` because it starts with an option, and three such refusals ended one evaluation run in a `repeated_failure` decision.
 - `scripts/eval-retrieval.ts:1`: the three-arm evaluation harness of the retrieval evaluation (its modes and flags, the arms as profile configurations, the leakage guards, the judge, the results file, the cost projection and the ceiling checks) has no document in `docs/system/`. The knowledge-pass decision that its result produced is recorded in `docs/decisions/ADR-015-knowledge-pass-default.md`.
+
+## From the existing documents' update for the profile, retrieval and shell surfaces
+
+- `src/cli/shell/shell.ts:161`: the interactive shell resolves the default profile for its own home view, its read-only views and its history file, ignoring `AVARICE_PROFILE`, while a command typed at its prompt follows `--profile` and the variable. Under another profile the home view and the history are the default profile's. Intent unknown.
+- `src/app/retrieval-guard.ts:88`: `beginRead`, the guard of whole-file reads against `retrieval.fullReads` and `retrieval.fullReadBytes`, has no caller outside tests, and the hook charges a Read to `toolCalls` only. The two rows are created for a run and never spent, so the caps for whole-file reads do not bound anything a run does.
+- `src/domain/resource-bounds.ts:27`: `limits.contextTokens` defaults to 24000, above the 8192 tokens the 32 KiB run prompt can hold (`src/app/run-gsd-config.ts:53`), so for a run the ceiling never binds until a profile sets it below the prompt's room. It is the default budget of `avarice context` only.
 
 ## Proposal documents edited before the documentation rule
 
