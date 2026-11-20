@@ -1,0 +1,71 @@
+@startuml
+title Approve a privileged action
+
+actor Owner
+participant "Agent session" as Agent
+participant "PreToolUse hook" as Hook
+database Ledger
+participant "avarice approve" as Approve
+
+note over Agent, Hook : two callers reach the hook with a shell command:\na unit of a run (scope is the run), or the owner's own\nhost session with the attended hook installed (scope is that session)
+
+== A privileged command is refused ==
+Agent -> Hook : shell command
+Hook -> Hook : classify the command line (push, pull request create, merge or edit,\nrelease create, API write, package publish)
+alt not a privileged form
+  Hook --> Agent : this check says nothing; a run's command rules,\nor in an attended session the host's own rules, decide
+else privileged form, in a run
+  Hook -> Ledger : request for this scope, action and parameter digest\n(the waiting one again, else a new one), and the denial
+  Hook --> Agent : denied, the owner approves with: avarice approve REQUEST
+else privileged form, attended session
+  Hook -> Ledger : take a usable approval for this scope, action and digest
+  alt no usable approval
+    Hook -> Ledger : request (the waiting one again, else a new one), and the denial
+    Hook --> Agent : denied, the owner approves with: avarice approve REQUEST
+  else an approval was taken
+    Ledger --> Hook : approval consumed, action start recorded, one transaction
+    Hook --> Agent : no output, the command goes on to the host's own rules
+  end
+end
+note over Hook : a run never consumes an approval: the denial stands\nwhether or not one was granted
+
+== The owner approves ==
+Owner -> Approve : approve REQUEST
+alt not a terminal, inside a run, from a run's process tree,\nor not the user who owns the profile
+  Approve --> Owner : refused (64), nothing written
+else request unknown
+  Approve --> Owner : refused (64)
+else request already approved
+  Approve --> Owner : not applied (3)
+else request found
+  Approve --> Owner : action, scope, parameter summary, digest,\nand "one use, 30 minutes"
+  Owner --> Approve : yes or no
+  alt anything but yes
+    Approve --> Owner : not approved (0), nothing written
+  else yes
+    Approve -> Ledger : approval for exactly these parameters, granted by the owner
+    Approve --> Owner : granted, used once, expires in 30 minutes (0)
+  end
+end
+
+== The owner takes an approval back ==
+Owner -> Approve : approve --revoke APPROVAL
+alt approval unknown
+  Approve --> Owner : refused (64)
+else already revoked or already consumed
+  Approve --> Owner : not applied (3)
+else usable
+  Approve -> Ledger : approval revoked
+  Approve --> Owner : revoked (0)
+end
+
+== The retry ==
+Agent -> Hook : the same command, same session, same parameters
+alt attended session, approval unexpired and unused
+  Hook -> Ledger : approval consumed with the action's start
+  Hook --> Agent : the command passes once
+else run, or approval expired, revoked, used or for other parameters
+  Hook -> Ledger : a new request, since the earlier one was answered
+  Hook --> Agent : denied again, with the new request
+end
+@enduml
