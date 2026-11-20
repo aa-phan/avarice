@@ -97,7 +97,7 @@ The checks of one pass start in declaration order and, by default, one at a time
 
 Each check run produces one insert-only evidence row, one `check-output` artifact and one `check.finished` event. The artifact holds the command line and the standard output and error as the check printed them, or a "not run" line with the cause when no sandbox was available. Secret-shaped strings in that text are replaced by `[REDACTED:{kind}]` before the artifact is stored, as in a transcript (see [containment.md](containment.md#secret-redaction)). The artifact is kept for the life of the run. The event carries the run and attempt, the check name, the pass label, the status, the exit code, the duration, the evidence ID and, when set, the pre-existing flag.
 
-The artifact is subject to the profile's `limits.artifactQuotaMiB`. A new blob that would take the store past the quota is refused before anything is written, and the refusal ends the pass as a store error: no artifact record, evidence row or event exists for that check, and the checks already started are let finish. The quota is counted when the process starts, so another process's writes are not seen until the next start.
+The artifact is subject to the profile's `limits.artifactQuotaMiB`. A new blob that would take the store past the quota is refused before anything is written. The refusal ends the pass as a store error. No artifact record, evidence row or event exists for that check, and the checks already started are let finish. The quota is counted when the process starts, so another process's writes are not seen until the next start.
 
 A command result maps to an evidence status as follows. A pass is `passed`, a non-zero exit is `failed`, a command that could not spawn or had no sandbox is `unavailable`, and a timeout or a cancel is `inconclusive`. Any other value is `inconclusive` and never `passed`.
 
@@ -110,11 +110,11 @@ Evidence is an insert-only row per measured fact. It has a status, an independen
 | `passed` | A check or inventory that passed, a passing GSD verification, an unchanged path. |
 | `failed` | A check that exited non-zero, a failing GSD verification, a changed path. |
 | `unavailable` | No sandbox, or a spawn error. |
-| `inconclusive` | A timeout or a cancel; also a check the resume reconcile marks after an interrupted final pass. |
+| `inconclusive` | A timeout or a cancel; also a check the resume reconcile marks after an interrupted final pass, and every manual evidence row (see [Manual evidence](#manual-evidence)). |
 | `skipped` | Never written. The ledger accepts it. |
 | `stale` | Written only by an amendment, as a copy of a row it invalidates (see "Stale rows after an amendment"). No check pass writes it. |
 
-The kinds written are `check`, `test-inventory`, `diff` and `gsd-verdict`. The domain also names `mutation`, `ci`, `review` and `manual`; none is written. Independence is `deterministic` for every row AVARICE measured and `model-review` for the GSD verdict. The value `external` exists in the type and is never written.
+The kinds a run writes are `check`, `test-inventory`, `diff` and `gsd-verdict`. The domain also names `mutation`, which is never written. The kinds `ci`, `review` and `manual` are written only by `evidence add` (see [Manual evidence](#manual-evidence)). Independence is `deterministic` for every row AVARICE measured and `model-review` for the GSD verdict. The value `external` is written only by `evidence add`.
 
 A row's revision is `git:<commit>` when the working tree matches its commit exactly, and otherwise `tree:sha256:<digest>` of the tree content (tracked and untracked files, ignored files excluded). The revision is taken before a check runs. The baseline rows are measured in a clone that holds the untracked GSD configuration file, so they carry a tree revision unless the repository ignores that file. G2 rows carry a tree revision, because the unit has changed the clone. Only the final proof runs on a clean commit.
 

@@ -2,13 +2,13 @@
 
 This document describes the index steps of the onboarding index stage: the step registry, the code-graph, intel and knowledge steps, the graph merge, the graph and knowledge validators and the graphify graph adapter. It also describes the `avarice context` retrieval and the context pack of a run (`src/app/context.ts`, `src/app/retrieval-guard.ts`, `src/domain/retrieval-rules.ts`, `src/domain/cache-scope.ts`): the application module, the retrieval caps, and the four context adapters for GSD intel, the GSD graph, the GSD planning sections and the file search (`src/adapters/context/`).
 
-Onboarding builds up to three indexes after mapping: a code-only graph, GSD intel, and a knowledge pass that adds document nodes to the graph. Each is optional. A step that fails records the index as absent with a reason and onboarding goes on to activation. `avarice context` asks the recorded indexes through GSD's own readers, then the planning sections and the file search, within a token budget, finds handles first and reads only the ones it picks, and prints any text that came from a document inside an untrusted-data fence.
+Onboarding builds up to three indexes after mapping: a code-only graph, GSD intel, and a knowledge pass that adds document nodes to the graph. Each is optional. A step that fails records the index as absent with a reason and onboarding goes on to activation. `avarice context` asks the recorded indexes through GSD's own readers, then the planning sections and the file search, within a token budget. It finds handles first and reads only the ones it picks. It prints any text that came from a document inside an untrusted-data fence.
 
 The onboarding lifecycle is in [onboarding.md](onboarding.md), the hook rules that confine the model invocations are in [containment.md](containment.md), the flags of every command are in [cli-reference.md](cli-reference.md), and the stored record and ledger shapes are in [data-model.md](data-model.md).
 
 ## The index steps
 
-Three steps run in a fixed order: code graph, intel, knowledge. The registry is the only list the stage loop and activation know. Each step gets a checkpoint named `index:{name}` before it runs and a stored result after it, so a resumed onboarding skips the steps that already have a result and re-runs the one that was cut short.
+Three steps run in a fixed order: code graph, intel, knowledge. The registry is the only list the stage loop and activation know. Each step gets a checkpoint named `index:{name}` before it runs and a stored result after it. A resumed onboarding therefore skips the steps that already have a result and re-runs the one that was cut short.
 
 A step returns one of three statuses.
 
@@ -53,9 +53,9 @@ A failed or timed-out graphify command is `timeout` for a timeout and `extract-f
 
 ### Refreshing the code graph
 
-An onboarding of a project that already has an active record may refresh the graph instead of building it new, when the refresh plan chose an incremental refresh (see [onboarding.md](onboarding.md#refresh)) and recorded every changed path. The extraction still runs over the whole tree, because a graph of a path subset loses the edges that leave the subset, and `graphify update` is never used. The previous graph is read from the staging copy of the active record and validated as any code graph is, and the new extraction is applied to it: the nodes of each changed path are replaced by the new extraction's, and the nodes of a changed path that is no longer a regular file are dropped. The step's result carries a `refresh` block with the mode `incremental`, the revision it started from, the number of changed and deleted paths, the files extracted and the node-level difference.
+An onboarding of a project that already has an active record may refresh the graph instead of building it new, when the refresh plan chose an incremental refresh (see [onboarding.md](onboarding.md#refresh)) and recorded every changed path. The extraction still runs over the whole tree, because a graph of a path subset loses the edges that leave the subset, and `graphify update` is never used. The previous graph is read from the staging copy of the active record and validated as any code graph is. The new extraction is applied to it. The nodes of each changed path are replaced by the new extraction's, and the nodes of a changed path that is no longer a regular file are dropped. The step's result carries a `refresh` block with the mode `incremental`, the revision it started from, the number of changed and deleted paths, the files extracted and the node-level difference.
 
-The build goes on whole, and the block says `whole` with the reason, when anything is missing: the record names no previous graph, the previous graph cannot be read or is not usable, or the changed paths cannot be examined. The previous graph can add information and never decides what the new graph is.
+The build goes on whole when anything is missing, and the block then says `whole` with the reason. Something is missing when the record names no previous graph, when the previous graph cannot be read or is not usable, or when the changed paths cannot be examined. The previous graph can add information and never decides what the new graph is.
 
 ### What validation requires
 
@@ -68,7 +68,7 @@ The graph is accepted when all of these hold, and every problem found is reporte
 
 ### What the record states
 
-The graph entry records the paths of `graph.json` and `code-graph.json`, the digest, the build commit as `git:` plus the commit, the tool as `graphify@{version}`, freshness `fresh`, node counts by file type and edge counts by confidence tier. The node counts always list `document`, which is 0 for a code-only graph.
+The graph entry records the paths of `graph.json` and `code-graph.json` and the digest. It records the build commit as `git:` plus the commit, and the tool as `graphify@{version}`. It also records freshness `fresh`, node counts by file type and edge counts by confidence tier. The node counts always list `document`, which is 0 for a code-only graph.
 
 ## Intel
 
@@ -118,7 +118,7 @@ A candidate is left out, and listed with its reason in the manifest, when it is:
 
 #### The cost cap
 
-One invocation has to fit its own cost cap. The classifier needs every chunk of the plan, so a session that stops early, with chunks unwritten, ends `no_progress` and the whole pass is lost; a session that overruns its cap ends `budget_exhausted` and its written chunks are discarded. The corpus is therefore limited to the chunks one invocation can pay for. The cost of a session over n chunks is modelled as a power law,
+One invocation has to fit its own cost cap. The classifier needs every chunk of the plan. A session that stops early, with chunks unwritten, ends `no_progress` and the whole pass is lost. A session that overruns its cap ends `budget_exhausted` and its written chunks are discarded. The corpus is therefore limited to the chunks one invocation can pay for. The cost of a session over n chunks is modelled as a power law,
 
 `session cost(n) = 0.0255 x n^1.376` USD,
 
@@ -126,11 +126,11 @@ and the limit is the largest n whose modelled cost fits two thirds of the cost c
 
 `floor((cost cap x 2/3 / 0.0255)^(1 / 1.376))` chunks.
 
-The cost cap is the one the knowledge invocation would be granted: the contract's per-invocation cost cap, or what is left of the run's cost budget when that is smaller. It is read from the contract, not from any one run's authorization. The model is fitted to measured sessions. A session over 6 chunks cost 0.30 USD, and two sessions over 12 chunks cost 0.75 and 0.81 USD, the second of them ending 0.006 USD over a 0.8 USD cap. Doubling the chunks multiplied the cost by about 2.6, not 2, because every chunk read makes the following turns dearer. The exponent is the logarithm to base 2 of the ratio of the 12-chunk mean (0.78 USD) to the 6-chunk cost, and the factor is set so the curve passes through the 6-chunk point. The planned share of two thirds leaves a third of the cap free for the spread between sessions (the two 12-chunk sessions differ by 7 percent). The limit is 9 chunks at a cap of 0.8 USD (modelled 0.52 USD, and the dearest measured session scaled to 9 chunks is 0.54 USD), 15 chunks at 1.6 USD, and 23 chunks at the 3.0 USD default of the onboarding contract. It never falls as the cap rises.
+The cost cap is the one the knowledge invocation would be granted: the contract's per-invocation cost cap, or what is left of the run's cost budget when that is smaller. It is read from the contract, not from any one run's authorization. The model is fitted to measured sessions. A session over 6 chunks cost 0.30 USD, and two sessions over 12 chunks cost 0.75 and 0.81 USD, the second of them ending 0.006 USD over a 0.8 USD cap. Doubling the chunks multiplied the cost by about 2.6, not 2, because every chunk read makes the following turns dearer. The exponent is the logarithm to base 2 of the ratio of the 12-chunk mean (0.78 USD) to the 6-chunk cost, and the factor is set so the curve passes through the 6-chunk point. The planned share of two thirds leaves a third of the cap free for the spread between sessions (the two 12-chunk sessions differ by 7 percent). The limit is 9 chunks at a cap of 0.8 USD, 15 chunks at 1.6 USD, and 23 chunks at the 3.0 USD default of the onboarding contract. At 9 chunks the model gives 0.52 USD, and the dearest measured session scaled to 9 chunks is 0.54 USD. It never falls as the cap rises.
 
 Candidates are taken in the priority order of the table, and a document is kept while the documents kept so far, packed into chunks as described below, plan to no more chunks than the limit. The first document that does not fit, and every later document the other rules would have kept, is left out as `cost-cap`. The kept documents are therefore always a prefix of the priority order: the map, the planning documents, the decision records and the documents are kept before any GSD phase file. A corpus that fits the limit is selected exactly as without it.
 
-The omission is stated, not silent. Each left-out document is in the manifest's excluded list with the reason `cost-cap`, and the manifest, and its digest, list only the documents that were sent. The `knowledge` object of the record gains a `corpusCap` object when the cap left something out (see "What the record states"). A refresh works over the kept set: the documents whose content changed among those kept go to the model, the others are cache hits, and a document that was left out stays left out until the limit admits it.
+The omission is stated, not silent. Each left-out document is in the manifest's excluded list with the reason `cost-cap`, and the manifest, and its digest, list only the documents that were sent. The `knowledge` object of the record gains a `corpusCap` object when the cap left something out (see "What the record states"). A refresh works over the kept set. The documents whose content changed among those kept go to the model, and the others are cache hits. A document that was left out stays left out until the limit admits it.
 
 The pass can be switched off for a profile with `adapters.knowledgePass`. It is on by default: an evaluation against a code-only arm found it no less successful and cheaper in run tokens, though dearer to onboard (see [ADR-015](../decisions/ADR-015-knowledge-pass-default.md)).
 
@@ -138,7 +138,7 @@ The manifest ties each copy to its source path, the onboarded revision and a SHA
 
 ### Refreshing the knowledge pass
 
-An onboarding of a project with an active record runs the pass over the documents that changed. A document is extracted again when it is new, when its content digest differs from the earlier pass's, or when the earlier graph has no document node for it. Every other document is a cache hit and keeps the nodes the earlier pass made for it, and the corpus the model reads holds the documents to extract and no other. When nothing changed no invocation starts and no unit is reserved: the earlier pass's document nodes are joined to the new code graph. The step's result carries a `refresh` block with the mode `incremental`, the changed documents and the number of cache hits, and the counts of nodes and edges retained and edges dropped by the merge. The pass runs whole, and the block says `whole` with the reason, when the earlier pass cannot be used: the record holds no knowledge pass or no corpus manifest, or the earlier manifest or merged graph cannot be read, is not what the record digests, or is not a graph.
+An onboarding of a project with an active record runs the pass over the documents that changed. A document is extracted again when it is new, when its content digest differs from the earlier pass's, or when the earlier graph has no document node for it. Every other document is a cache hit and keeps the nodes the earlier pass made for it, and the corpus the model reads holds the documents to extract and no other. When nothing changed no invocation starts and no unit is reserved: the earlier pass's document nodes are joined to the new code graph. The step's result carries a `refresh` block with the mode `incremental`, the changed documents and the number of cache hits, and the counts of nodes and edges retained and edges dropped by the merge. The pass runs whole when the earlier pass cannot be used, and the block then says `whole` with the reason. The earlier pass cannot be used in two cases. One is that the record holds no knowledge pass or no corpus manifest. The other is that the earlier manifest or merged graph cannot be read, is not what the record digests, or is not a graph.
 
 ### Chunk plan
 
@@ -200,7 +200,7 @@ There are two half rules and they are independent: at least half the chunks usab
 
 AVARICE writes the merged graph into a work directory outside staging, runs graphify's cluster-only mode on it, and requires the result to keep the build commit. It installs `graph.json` and `GRAPH_REPORT.md` by copying each beside its target and renaming over it, so a failed copy leaves the code-only graph. A failed install is `cluster-failed` and needs no rollback. The merge does not write `code-graph.json`, so it stays the code-only graph.
 
-After installation, AVARICE reads the file back, has GSD snapshot it, and requires GSD to report it fresh. Any failure from this point (`cluster-failed` for read-back, `stale-after-install` for GSD) reinstalls the code-only graph from the code step's work directory, which rewrites `graph.json`, `code-graph.json` (with the same bytes) and `GRAPH_REPORT.md`, and takes GSD's snapshot again. If restoring itself fails, the event detail says so, and the record still lists the knowledge index as absent.
+After installation, AVARICE reads the file back, has GSD snapshot it, and requires GSD to report it fresh. Any failure from this point (`cluster-failed` for read-back, `stale-after-install` for GSD) reinstalls the code-only graph from the code step's work directory. That rewrites `graph.json`, `code-graph.json` (with the same bytes) and `GRAPH_REPORT.md`, and takes GSD's snapshot again. If restoring itself fails, the event detail says so, and the record still lists the knowledge index as absent.
 
 A clustering failure is `cluster-failed`, or `timeout` or `graphify-missing` when that is the cause.
 
@@ -218,7 +218,7 @@ The graph entry's digest is replaced by the digest of the merged `graph.json`, a
 | `dropped` | counts: `dangling` edges, `astDocument` edges, and `unread` documents that got no node |
 | `corpusCap` | present only when the cost cap left documents out: `perInvocationCapUsd` (the cap the limit came from), `chunkLimit`, `chunks` (the chunks the kept documents plan to), `documentsKept`, `documentsOmitted`, and `omitted` (the areas of the omitted documents, named as `corpus` names them, at most 50, with `omittedMoreAreas` for the rest) |
 
-The corpus field names only what the documents with nodes cover. A directory whose documents were never read is not claimed. Documents left out of the manifest at selection (too large, secret, over the file cap, over the cost cap) are not in `documentsExpected` or in `unread`; they appear in the manifest's excluded list, and the ones the cost cap left out are also counted in `corpusCap`.
+The corpus field names only what the documents with nodes cover. A directory whose documents were never read is not claimed. Documents left out of the manifest at selection (too large, secret, over the file cap, over the cost cap) are not in `documentsExpected` or in `unread`. They appear in the manifest's excluded list, and the ones the cost cap left out are also counted in `corpusCap`.
 
 ### Forbidden sources
 
@@ -239,21 +239,21 @@ A pack draws on up to four sources. Each answers in two steps, a find that retur
 | `gsd-planning` | whole sections of `.planning/PROJECT.md` and `REQUIREMENTS.md` in the staging copy and, in the directory of the phase GSD marks in progress, that phase's `CONTEXT.md`, `PLAN.md` and `LEARNINGS.md` | kind `section`, ID `<file>#<heading slug>`, revision `gsd-state:sha256:<hex>` of GSD's state file (`gsd-state:absent` without one), scope the file |
 | `git-files` | a fixed-string search of the tracked files at one revision of the repository, or of the run's clone, inside the read scope; committed objects only, so an uncommitted edit or an untracked secret cannot answer | kind `snippet`, ID `<path>:<line>`, revision `git:<commit>`, scope the path |
 
-The planning sections are the document fallback: a section is a heading to the next heading, a handle needs every word of the term (at most 8 words and 200 characters), at most 50 handles are returned, and a section is cut at 6000 characters. The file search returns at most 5 hits per file and never reads a blob over 1 MiB. A snippet is the hit line with up to 20 lines before and 19 after, at most 1500 characters. Planning and file-search text is untrusted and printed fenced, like a document node of the graph. The planning sections open each file without following a link and read only a regular file of at most 256 KiB.
+The planning sections are the document fallback. A section is a heading to the next heading, and a handle needs every word of the term (at most 8 words and 200 characters). At most 50 handles are returned, and a section is cut at 6000 characters. The file search returns at most 5 hits per file and never reads a blob over 1 MiB. A snippet is the hit line with up to 20 lines before and 19 after, at most 1500 characters. Planning and file-search text is untrusted and printed fenced, like a document node of the graph. The planning sections open each file without following a link and read only a regular file of at most 256 KiB.
 
 ### How a pack is assembled
 
 The assembly asks every source for handles first and reads only what it picks, in three steps.
 
 1. **Find.** The sources are asked in the order intel, graph, planning sections, file search. Intel and the planning sections may use at most half of the budget, rounded up, and the graph and the file search the whole of it. The planning sections are skipped, with a note, when the graph already returned a document node for the term. Each find is one search against the retrieval caps, and so is each further page of a source that declares itself paged (no local source does). A find that outlasts `queryTimeoutMs` is abandoned with no side effect. A source returns at most `indexEntries` handles and `searchHits` hits; a cut is a note. A handle whose access was revoked is dropped before anything is read and listed as omitted with the reason `access_revoked`.
-2. **Rank and pick.** Handles are ranked by source order, then by the best confidence tier among the edges that led to them (`EXTRACTED`, then a handle with no edge, then `INFERRED`, then `AMBIGUOUS`), then by the order the source returned them. A handle already seen under the same provider, kind and ID is dropped. The rest are picked first-fit: a handle that does not fit the budget, or its source's share, is left out whole, listed as omitted with its estimate, and a smaller one after it may still fit. At most `snippets` snippets are picked for one pack.
+2. **Rank and pick.** Handles are ranked by source order, then by the best confidence tier among the edges that led to them. The tiers rank `EXTRACTED` first, then a handle with no edge, then `INFERRED`, then `AMBIGUOUS`. The last key is the order the source returned them. A handle already seen under the same provider, kind and ID is dropped. The rest are picked first-fit. A handle that does not fit the budget, or its source's share, is left out whole and listed as omitted with its estimate. A smaller one after it may still fit. At most `snippets` snippets are picked for one pack.
 3. **Read.** Each source reads its picked handles in one call. An answer is cut at `returnedBytes` bytes of excerpt text, the later excerpts keeping only a marker. A source that refuses the read as unauthenticated or denied has revoked what it was asked for: none of it is in the pack and each handle is listed as omitted with `access_revoked`. A stale item that cites a path is checked against the repository's current HEAD, and an item whose path is gone has its text replaced by a one-line marker and a note.
 
 The pack's total is the sum of the picked handles' estimates, a token being four characters. The report carries the term, budget, tokens used, the project (with `restricted` when its map was made by a restricted onboarding), the items, the omitted handles and the notes.
 
 ### What a read adds from the graph
 
-A graph node's neighbours enter its excerpt by the relation of the edge that leads to them. The table is the one measured on real graphs, and a relation it does not list, including one a later graphify adds, is `id-only`, so an unknown edge never pulls a neighbour's content into a pack.
+A graph node's neighbours enter its excerpt by the relation of the edge that leads to them. The table is the one measured on real graphs. A relation it does not list, including one a later graphify adds, is `id-only`, so an unknown edge never pulls a neighbour's content into a pack.
 
 | Rule | Relations | What the excerpt gets |
 |---|---|---|
@@ -265,13 +265,20 @@ A containment edge is followed down only from the parent; seen from the child it
 
 ### Reuse and access
 
-A retried item's new pack may keep an item from the pack it built before, without reading it again, when the cache rule holds: the same profile, the same access scope (a digest of the read lists, exclusions and secret globs the pack was built under), the source still at the revision the item was read at, and the reference not revoked. The item carries `profile` and `accessScope` for that reason. Everything else is read again, and the report says which was which. The ledger keeps references and never excerpt text, so a supervisor that starts afresh reuses nothing.
+A retried item's new pack may keep an item from the pack it built before, without reading it again, when the cache rule holds. The rule holds when all of these are true:
 
-A reference the run recorded as `access_revoked` never reaches a new pack: its handle is listed as omitted. `ContextSource.refresh` judges a reference against the repository as it is now, and it is what a resume uses (see [runs.md](runs.md#reference-refresh-on-resume)).
+- the profile is the same;
+- the access scope is the same (a digest of the read lists, exclusions and secret globs the pack was built under);
+- the source is still at the revision the item was read at;
+- the reference is not revoked.
+
+The item carries `profile` and `accessScope` for that reason. Everything else is read again, and the report says which was which. The ledger keeps references and never excerpt text, so a supervisor that starts afresh reuses nothing.
+
+A reference the run recorded as `access_revoked` never reaches a new pack: its handle is listed as omitted. Each context source judges a reference against the repository as it is now, and a resume uses that judgment (see [runs.md](runs.md#reference-refresh-on-resume)).
 
 ### Manual excerpts
 
-The excerpts the owner recorded with `context add` follow the index items in a run's pack, in the order of their references, first-fit within what is left of the budget. They are untrusted, cited by the title the owner gave and the digest of the file, and redacted again on the way out so a credential learned after the excerpt was stored does not reach a prompt. An excerpt that does not fit, cannot be read or is not valid UTF-8 is left out with a note and never stops the run.
+The excerpts the owner recorded with `context add` follow the index items in a run's pack, in the order of their references, first-fit within what is left of the budget. They are untrusted and cited by the title the owner gave and the digest of the file. They are redacted again on the way out, so a credential learned after the excerpt was stored does not reach a prompt. An excerpt that does not fit, cannot be read or is not valid UTF-8 is left out with a note and never stops the run.
 
 ### What it asks
 
@@ -290,7 +297,7 @@ Each item carries a freshness label.
 | planning sections | `fresh` while GSD's state file has the digest the reference was recorded against, `stale` once GSD has moved the state on |
 | file search | `fresh` at the revision it searched |
 
-A stale index still answers. For an index that is not fresh (stale, changed or unavailable), each path an item cites is checked against the repository's current HEAD, and the item states whether the cited path is or is not there. A cited path that cannot be tested (not a repository path, or git did not run) gets no statement.
+A stale index still answers. For an index that is not fresh (stale, changed or unavailable), each path an item cites is checked against the repository's current HEAD. The item states whether the cited path is or is not there. A cited path that cannot be tested (not a repository path, or git did not run) gets no statement.
 
 On a refresh by a resume, `stale` means the index was built before the repository's current HEAD. `changed` means the reference's revision is no longer the index's, `deleted` that the cited path is gone from HEAD, `access_revoked` that the source refuses the reference, and `unavailable` that nothing could be judged. The rules of the run are in [runs.md](runs.md#reference-refresh-on-resume).
 
@@ -318,7 +325,7 @@ Exit codes: 0 for an answer, including no match; 64 for a usage error; 70 for an
 
 - Intel items are never fenced, although the intel files are written by a model that reads the repository. The fence applies to graph nodes that are not code and to the other three sources.
 - Freshness is judged against the repository's HEAD at query time, not against the staging copy. A new commit makes every item stale at once, and the graph's document nodes carry no freshness of their own beyond that.
-- A project with an index that is disabled in the contract and one that failed look the same to `context`: both are "not in the project record", and only a failed one adds an absent reason.
+- A project with an index that is disabled in the contract and one that failed look the same to `context`. Both are "not in the project record", and only a failed one adds an absent reason.
 - The planning sections and the file search need no index, so a project whose graph and intel are both absent still answers from them.
 - A source that the profile left out of `adapters.context` is never asked, and an empty list gives a pack with no items.
 - A reference is recorded with its revision when a pack is built and a re-recorded reference replaces its row, so a reference's revision is the one of its last pack, not of its first.
