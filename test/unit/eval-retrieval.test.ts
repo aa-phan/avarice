@@ -453,6 +453,33 @@ describe('the brief of a run', () => {
     assert.match(text, /^size: small$/m);
     assert.doesNotMatch(text, /\u0007/);
   });
+
+  // The historical commit messages of the portfolio ask for "unit and e2e coverage". The harness runs and judges the four required checks and the held-out unit test only (the
+  // e2e spec is a denied read and `npm run test:e2e` is neither a required check nor an allowed command), so a unit that took the bullet literally finished the change, found the
+  // e2e coverage unverifiable and ended on a question, which the run recorded as an acceptance decision (the diagnostic of plan 04-36: run_01M7VBZJC2MK5J2KQYM89QHPTJ).
+  it('states, for every task alike, that only the required checks run here and that end-to-end work is out of scope and no reason to ask or stop, and keeps the commit message whole', async () => {
+    const { briefFor } = await harness();
+    const { parseBrief } = await import('../../src/domain/brief.ts');
+    const leak = leakFixture();
+    const e2e = { ...leak.task, brief: 'fix(x): reduced then off\n\n- hold the loader\n- Add unit and e2e coverage for the reduced-then-off case' };
+    const text = briefFor(e2e);
+    const parsed = parseBrief(text, { kind: 'file', id: 'brief.md' });
+    assert.ok(parsed.ok, JSON.stringify(parsed));
+    assert.match(parsed.value.behavior, /Add unit and e2e coverage for the reduced-then-off case/, 'the commit message is kept whole');
+    assert.match(parsed.value.behavior, /hold the loader/);
+    const behavior = parsed.value.behavior;
+    assert.match(behavior, /Only the required checks can run in this environment/);
+    for (const check of e2e.checks) assert.ok(behavior.includes(check.argv.join(' ')), `names ${check.argv.join(' ')}`);
+    assert.match(behavior, /end-to-end or browser test/i);
+    assert.match(behavior, /out of scope/i);
+    assert.match(behavior, /do not write it, do not ask whether to cover it and do not stop for it/i);
+    assert.match(behavior, /finish the rest of the change/i);
+    // The same wording for a task that does not mention e2e: the arms and the tasks are briefed alike.
+    const plain = parseBrief(briefFor(leak.task), { kind: 'file', id: 'brief.md' });
+    assert.ok(plain.ok);
+    assert.match(plain.value.behavior, /Only the required checks can run in this environment/);
+    assert.equal(plain.value.title, 'fix(x): make a two');
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
