@@ -8,7 +8,7 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 
 | System | Direction | Protocol | Version expectation | When missing or wrong |
 |---|---|---|---|---|
-| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume`; `claude --help` read for the flags the launch line uses | 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 or 2.1.326 verified; another patch of 2.1 from 312 admitted while its help lists the flags | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure, and `--restricted` is the way to analysis and planning only |
+| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume`; `claude --help` read for the flags the launch line uses | a verified version, or an unverified patch of the verified minor while its help lists the flags (the list is in [containment.md](containment.md#refusals-before-launch)) | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure, and `--restricted` is the way to analysis and planning only |
 | Claude configuration directory | AVARICE writes two files; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` and the attended hook entry in `settings.json`, written by `install-host`; GSD and user skills read | none | `install-host` refuses a link, an unmarked skill or an unusable settings file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
 | `/usr/bin/security` | a `keychain:` credential reference spawns it, macOS only | `find-generic-password -s <service> -w`; the value arrives on stdout | any macOS | the reference does not resolve and the failure is recorded in the `credential.resolve` event |
 | A credential helper | a `cmd:` reference runs one executable the profile approved | the helper's path is the whole argument list; stdout, trimmed, is the credential | none | the reference does not resolve |
@@ -42,7 +42,7 @@ GSD verbs and graphify do not spawn directly; they go through the sandboxed exec
 
 ## Ports and wired adapters
 
-The ports directory holds fifteen files: twelve adapter ports that declare a descriptor, and three that are not adapters a workflow swaps (the descriptor type every adapter publishes, the ledger and the diagnostics port). The descriptors, the step requirements and the portability proof are in [portability.md](portability.md). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of the command executor, the artifact store, the staging workspace, the run source, the run workspace, the egress proxy, the graph tool, the GSD adapter (when present), the agent host, each context source the profile builds and each credential provider its class allows are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The notifier has a descriptor that composition does not record, and the restricted host is built beside the host and never recorded. The names are listed in [data-model.md](data-model.md#adapter-descriptors).
+The ports directory holds the adapter ports and three support files. The descriptors, the step requirements and the portability proof are in [portability.md](portability.md). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of every adapter it builds are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The notifier has a descriptor that composition does not record, and the restricted host is built beside the host and never recorded. The names are listed in [data-model.md](data-model.md#adapter-descriptors).
 
 | Port | Production adapter | Test-only adapters |
 |---|---|---|
@@ -85,16 +85,9 @@ AVARICE spawns the host headlessly, once per contained invocation (map, intel, k
 
 `claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file> [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config <file> --allowedTools Glob,Grep --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>`
 
-`--setting-sources ""` means none of the user's own settings load. As observed on 2.1.316 to 2.1.319, the admitted host removes its Glob and Grep tools from a session that has a shell, and from every agent that session starts. It keeps them when the launch line names one of them. The line names both as allowed tools, which grants nothing the generated settings do not already allow and keeps the two search tools in the session and in its agents. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run. Before spawning, a refusal check judges the finished argument list. It refuses each of these:
+``--setting-sources ""` means none of the user's own settings load. The admitted host is recorded as removing its Glob and Grep tools from a session that has a shell, and from every agent that session starts. It keeps them when the launch line names one of them. No test checks this. The line names both as allowed tools, which grants nothing the generated settings do not already allow and keeps the two search tools in the session and in its agents. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run.
 
-- `--bare`, anything starting with `--dangerously`, `--allow-dangerously`, `--add-dir`, `--allowed-tools` and `--permission-prompt-tool`;
-- `--allowedTools` with any value other than `Glob,Grep`, in its `=` form, or a second time;
-- a prompt that is empty or starts with a dash;
-- any permission mode other than `dontAsk`, and a `--permission-prompts` value other than `none`;
-- a non-empty setting-sources value, a missing settings file and a missing `--strict-mcp-config`;
-- a budget that is not a positive finite number.
-
-The host's environment is built from nothing. It holds the safe-git variables, the GSD pass-through names (`HOME`, `LANG`, `TMPDIR`, `USER`, `LOGNAME`, `CLAUDE_CONFIG_DIR`, each only when set), a `PATH` of the gsd-core `bin` directory then `/usr/bin:/bin:/opt/homebrew/bin`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, and `AVARICE_RUN`. For an onboarding `AVARICE_RUN` holds the onboarding ID; for a run it holds the run ID. A run that has a scratch directory also gets `TMPDIR` set to a `tmp` directory inside it, `npm_config_cache` set to an `npm-cache` directory inside it, and `npm_config_update_notifier=false`, so the notifier cannot reach for the network. AVARICE makes both directories before the launch. Proxy, token and loader variables never arrive.
+Before spawning, a refusal check judges the finished argument list, and the host's environment is built from nothing. The refusals are listed in [containment.md](containment.md#refusals-before-launch) and the environment in [containment.md](containment.md#environment-scrubbing).
 
 The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. The ID must be a UUID, and the adapter generates one otherwise.
 
@@ -123,36 +116,15 @@ The parser reads stdout as it arrives, line by line. It keeps only the `system/i
 
 ### Outcome classification
 
-The outcome kind comes from facts, never from model text. The first rule that applies decides:
-
-1. The staging HEAD moved: failed. This is also recorded as a containment finding by the caller. For a run, the HEAD checked is the run clone's.
-2. No result event, or the wall clock fired: inconclusive.
-3. Subtype `error_max_budget_usd`, terminal reason `budget_exhausted`, or a hook-recorded budget denial: budget exhausted.
-4. The result's error flag is not exactly false, the exit code is not zero, or the process ended by signal: failed.
-5. A structural pause signal was supplied: paused.
-6. Every expected file exists in staging: progressed.
-7. Any permission denial or hook denial: denied.
-8. Otherwise: no progress.
-
-A result with no boolean error flag is therefore never a success. The host adapter never supplies a pause signal, so the host never returns paused. Only the run's unit stage supplies one. It reads a waiting-JSON file, a verification status that asks for a human, or a final message that ends in a question followed by numbered choices. [runs.md](runs.md) owns that stage. A pause routes the item to a decision, and the run continues with the items the decision does not touch ([runs.md](runs.md#several-items)). A staging read above the size limit counts as the file being present. A run passes no expected files.
+The outcome kind comes from facts, never from model text, and the rules are in [containment.md](containment.md#running-the-host). A result with no boolean error flag is never a success. The host adapter never supplies a pause signal, so the host never returns paused; only the run's unit stage supplies one, and [runs.md](runs.md) owns that stage. A staging read above the size limit counts as the file being present, and a run passes no expected files.
 
 ### Time, kill and transcript
 
-The wall clock is enforced by AVARICE: at the limit the process group gets SIGTERM, then SIGKILL after a 10 second grace; a caller abort takes the same path. After the host exits, the group is swept once more with SIGKILL so background subagent shells die with it. AVARICE waits up to 2 seconds for the output pipe to close, then cuts it. stderr is drained and discarded. The transcript (stdout) is capped at 20 MiB with a truncation note, redacted for secrets, and stored as an artifact; a transcript that cannot be stored is an error, not a silent gap. A spawn failure returns unavailable.
+The wall clock, the kill sequence and the transcript cap are described in [containment.md](containment.md#running-the-host). After the host exits, AVARICE waits up to 2 seconds for the output pipe to close, then cuts it. A spawn failure returns unavailable.
 
 ### Admitted versions and readiness
 
-Six versions are verified: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319 and 2.1.326. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. A patch of the verified minor 2.1 that is at or above 2.1.312 and not listed is admitted as an unverified patch while `claude --help` still lists the seven flags the launch line uses; the check proves a flag is listed and never that the host honors it. Every other version is refused.
-
-Before every launch the adapter proves each layer, and any refusal is a denial with rule `enforcement_failure:<reason>` with nothing spawned. These checks prevent a launch. None of them asks the running host which sandbox it applied.
-
-- The generated settings carry the required permission and sandbox keys (default mode `dontAsk`, bypass disabled, sandbox enabled and fail-if-unavailable, no unsandboxed commands, no auto-allowed sandboxed Bash, no excluded commands, empty network allowlist with strict allowlist). The check reads the generated file, not the host's effective settings.
-- The hook is configured for PreToolUse and ConfigChange with `onFailure: block`, for PostToolUse and PostToolUseFailure without that requirement, and every hook script is readable.
-- A self-test starts the hook the way the settings would, feeds it a write outside the write roots, and requires a deny verdict.
-- The sandbox probe applies a profile. It proves that `sandbox-exec` works on this machine.
-- The host version is admitted, verified or as an unverified patch whose help lists the flags.
-
-Reasons seen by callers: `host-unavailable` (`--version` failed or timed out, or an unverified patch's help cannot be read), `host-version-unreadable`, `host-version-unknown`, `host-minor-unverified`, `host-patch-below-range`, `host-flag-missing:<flag>`, `sandbox-unavailable`, `hook-script-unreadable` and `hook-self-test`. Four groups of reasons follow. The settings group has `settings-missing`, `settings-invalid` and `settings-key:<path>`. The hook configuration group has `hook-missing`, `config-hook-missing`, `hook-not-blocking`, `post-hook-missing` and `post-failure-hook-missing`. The invocation files group has `invocation-files:<kind>`, and the launch arguments group has `launch-args:<rule>`.
+The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. Which versions are admitted, the flag check on an unverified patch, and the checks that run before every launch with the reason of each refusal are in [containment.md](containment.md#refusals-before-launch). Those checks prevent a launch. None of them asks the running host which sandbox it applied.
 
 ### Hook, called by Claude Code
 
@@ -160,7 +132,9 @@ The generated settings register AVARICE's hook command as the Node binary that i
 
 ### Reaping by session ID
 
-On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--(session-id|resume) <uuid>"` (10 second timeout), which finds a fresh host and a resumed one alike, and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains either flag followed by that exact UUID is terminated.
+On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--(session-id|resume) <uuid>"` (10 second timeout), which finds a fresh host and a resumed one alike, and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group. How the matches are signalled is in [containment.md](containment.md#session-id). A process alive 5 seconds after SIGKILL is an error.
+
+Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains either flag followed by that exact UUID is terminated.
 
 ### The restricted host
 
@@ -190,7 +164,7 @@ The write is conservative. These rules prevent the overwrite or the write:
 
 A refusal of a link, a non-directory or an unmarked file exits 3. The `AVARICE_RUN` refusal and bad arguments exit 64, and a read or write failure exits 70. The digest of the installed text is recorded in the ledger as the adapter-config row `host-skill:avarice-run`; if only that record fails, the file is in place and the command still exits 70.
 
-The settings entry has the matcher `Bash` and one command hook with a timeout of 5 seconds and `onFailure: block`. Its command line runs AVARICE's hook in attended mode with the profile's data root and carries the marker argument `--avarice-attended-hook`, because settings JSON has no comment field to mark an entry as AVARICE's. The file is the owner's: every other key and every other entry keeps its content, the file keeps its indentation and its mode, a new file is created with mode 0600, and only an entry that carries the marker is ever replaced. It is written through a temporary file and a rename. The command refuses, writing nothing, when `settings.json` is a symbolic link, is over 1 MiB, is not a JSON object with the hook structure, or holds an entry that mixes the marker with another command, and the skill stays installed (exit 3). The entry's digest is recorded as the adapter-config row `host-hook:attended`. What the entry enforces is in [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook).
+The settings entry has the matcher `Bash` and one command hook with a timeout of 5 seconds and `onFailure: block`. Its command line runs AVARICE's hook in attended mode with the profile's data root and carries the marker argument `--avarice-attended-hook`, because settings JSON has no comment field to mark an entry as AVARICE's. The file is the owner's. Every other key and every other entry keeps its content, the file keeps its indentation and its mode, and a new file is created with mode 0600. Only an entry that carries the marker is ever replaced. It is written through a temporary file and a rename. The command refuses, writing nothing, in four cases (exit 3). The cases are a symbolic link, a file over 1 MiB, a file that is not a JSON object with the hook structure, and an entry that mixes the marker with another command. The skill stays installed. The entry's digest is recorded as the adapter-config row `host-hook:attended`. What the entry enforces is in [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook).
 
 The host adapter also reads this directory: it links skills from it into the plugin directory and keeps GSD's secret read guard script as a hook. It never writes there.
 
@@ -233,7 +207,7 @@ Admission runs `node bin/gsd-tools.cjs runtime-identity --raw` (5 second timeout
 
 The agents directory is derived as the sibling `agents` directory of the located gsd-core directory, not located independently.
 
-The adapter declares what it drives as capabilities: `init-onboard`, `map-full`, `map-fast`, `map-paths` (GSD's `--paths` scope on the map workflow), `adopt-map` (taking a committed, stamped map whose drift check passed, with no workflow run), `stamp` and `verify-drift` are true, and `ingest-docs` is false because the adapter does not drive it. A mapping mode whose capability is false is refused before any host starts, with the reduced mode the step names (see [onboarding.md](onboarding.md#mapping)).
+The adapter declares what it drives as capabilities. `init-onboard`, `map-full`, `map-fast`, `stamp` and `verify-drift` are true. So are `map-paths` (GSD's `--paths` scope on the map workflow) and `adopt-map` (taking a committed, stamped map whose drift check passed, with no workflow run). `ingest-docs` is false because the adapter does not drive it. A mapping mode whose capability is false is refused before any host starts, with the reduced mode the step names (see [onboarding.md](onboarding.md#mapping)).
 
 ### Verbs driven
 
@@ -253,7 +227,7 @@ Every other GSD call goes through the command executor, sandboxed with the netwo
 
 Setting keys must be dotted identifiers and values plain tokens; query terms must be non-empty, at most 200 characters, free of control characters and not start with a dash. Output is JSON; output that starts with `@file:` is a spill, followed to the absolute path it names (up to 16 MiB). Several fields are validated (map readiness and the brownfield flag), and a result that fails the shape check is an invalid error. A disabled capability is a result, not an error, for intel and graph reads.
 
-Failure mapping: timeout or cancel is a timeout error with unknown side effects. A spawn error is unavailable, and so is exit code 69. Any other non-zero exit is internal, carrying the first line of stderr. An end by signal is internal, naming the signal. Truncated or non-JSON output is internal. The adapter publishes a capability list: init-onboard, map-full, map-fast, stamp and verify-drift are true; map-paths and ingest-docs are false; initializing planning is unsupported.
+Failure mapping: timeout or cancel is a timeout error with unknown side effects. A spawn error is unavailable, and so is exit code 69. Any other non-zero exit is internal, carrying the first line of stderr. An end by signal is internal, naming the signal. Truncated or non-JSON output is internal. Initializing planning is unsupported.
 
 Inside the contained host, GSD is reached through its own shim: every GSD workflow shell block begins with a long line defining `gsd_run`. Hook policy admits `gsd_run` read verbs only after a command whose first bytes hash to the fingerprint AVARICE took from that line. The line is read from the located gsd-core's `workflows/map-codebase.md` (first line starting `_GSD_SHIM_NAME=`, the file's size capped at 1 MiB). If the file or the line is missing, the host is not admitted. A GSD release that changes the line gets its own fingerprint automatically; one that moves or renames it is refused.
 
@@ -263,15 +237,7 @@ The read verbs the hook admits per purpose are listed in [containment.md](contai
 
 AVARICE calls the `git` found on `PATH` for every operation, always through one wrapper, never a shell. No version is checked. The wrapper rejects anything but a subcommand as the first argument (so no `-c`, `-C`, `--git-dir`) and rejects `--config-env` anywhere. Its environment holds the caller's `PATH`, `HOME` and `LANG` (with defaults when `PATH` or `LANG` is empty) plus a fixed set that disables hooks (`core.hooksPath=/dev/null`), `core.fsmonitor`, system config, system attributes, optional locks and terminal prompts. On calls that compare or write working files, every `filter.<name>` clean, smudge and process command in the repository is blanked for that call, and `filter.<name>.required` is set to false. The default timeout is 10 seconds. Run source listings allow 60. Clone, checkout and fetch allow 120, and so do the run workspace tree operations and the hand-off fetch. A timeout, an unrunnable git (unavailable) and a non-zero exit (internal, with the first stderr line) are distinct errors.
 
-Three subcommands accept only listed options. Anything else is refused before git runs, which prevents a caller from re-enabling what the environment turns off.
-
-| Subcommand | Options admitted |
-|---|---|
-| `clone` | `--local`, `--no-hardlinks`, `--no-checkout`, `--quiet`, `-q` |
-| `fetch` | `--no-tags`, `--no-write-fetch-head`, `--quiet`, `-q`; a refspec with a leading `+` is refused anywhere |
-| `commit` | `--no-verify`, `--no-gpg-sign`, `--quiet`, `-q`, and `-m` with its message as the value |
-
-A caller can also ask for a fixed commit identity (name, email and signing off), fsck of transferred objects, a temporary index file (an absolute path only) and literal pathspecs. These map to fixed configuration keys and environment variables, never free-form ones. A `fetch` always runs with automatic gc and maintenance off, so it cannot start a repack or prune of the repository it writes to.
+Three subcommands accept only listed options, and a caller can ask for a fixed commit identity, fsck of transferred objects, a temporary index file and literal pathspecs. The refusals, the filter neutralization and the options admitted are in [containment.md](containment.md#git-safety).
 
 | Group | Commands |
 |---|---|
@@ -298,18 +264,12 @@ The run workspace is the git side of one run. Everything in it runs in the super
 - Unpark: puts the parked content, file modes and deletions back on the current HEAD in batches, with `restore --source=<park tree> --worktree`. It refuses with a conflict, naming the paths, when a parked path changed between the base HEAD and HEAD or is modified now. It refuses a path whose parent is a symbolic link, and a second call changes nothing. [runs.md](runs.md#several-items) says when a park happens.
 - Drop park: deletes only the park ref, with `update-ref -d`. A ref that is already gone is success, and the objects stay until git collects them.
 - Restore and remove: put named tracked files back to their content at HEAD, or delete named untracked files and the directories they leave empty. An untracked path given to restore, or a tracked path given to remove, is a conflict and nothing is changed.
-- Commit: the supervisor commits exactly the given clone-relative paths under the fixed identity `AVARICE <avarice@localhost.invalid>`, unsigned, with `--no-verify`. Trailers are appended after a blank line, and each must be a single `Key: value` line. An empty list, an absolute path, a `..` segment, a `.git` segment, a leading dash, an empty message or a message with a NUL is refused. A path is split into segments at a slash only, so a backslash is part of a file name and `a\b` is one name, not `a/b`. A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
+- Commit: the supervisor commits exactly the given clone-relative paths under a fixed identity, unsigned, with `--no-verify`. The paths, message and trailers it refuses are in [containment.md](containment.md#the-supervisors-commit-and-the-hand-off). A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
 - Read: a clone file as UTF-8 under a size limit, refusing traversal, absolute paths and symbolic links that leave the clone.
 
 ### Fetch into the source repository
 
-The hand-off is the one write AVARICE makes to the user's repository. It fetches the run branch of the clone into the source as a new local branch of the same name, and it is create-only:
-
-- It resolves the branch in the clone and the source's top level, then checks the source for that ref. The same commit already there is success with nothing created; a different commit is a conflict and nothing is fetched.
-- The fetch is never forced, takes no tags, writes no fetch-head, and runs with fsck on, because the objects come from a tree an agent wrote into.
-- Afterwards the ref must exist at the commit; any other state is an internal error.
-
-It runs no checkout, reset or clean and changes neither the index nor the working tree of the user's checkout. It does write the objects the new branch needs into the source's object database. After a failure the ref may or may not exist, and a later hand-off finds it through the same check. Onboarding staging never writes to the user's repository.
+The hand-off is the one write AVARICE makes to the user's repository. It fetches the run branch of the clone into the source as a new local branch of the same name, and it is create-only. The rules of the fetch are in [containment.md](containment.md#the-supervisors-commit-and-the-hand-off). It runs no checkout, reset or clean and changes neither the index nor the working tree of the user's checkout. It does write the objects the new branch needs into the source's object database. After a failure the ref may or may not exist, and a later hand-off finds it through the same check. Onboarding staging never writes to the user's repository.
 
 ### Run source
 
@@ -343,15 +303,7 @@ Commands run through the sandboxed executor with network denied and one writable
 
 ## macOS sandbox
 
-The command executor wraps every command as `/usr/bin/sandbox-exec -p <profile> <argv>` with the given environment only, in its own process group. The profile starts from allow-default and denies network and all writes. It then applies these rules in order, and later rules win:
-
-1. For each loopback port the command was given, allow outbound connections to `localhost:<port>`. This is the only network a command can have, because Seatbelt cannot filter by host name.
-2. Re-allow writes for the system temp areas, `/dev/null`, `/dev/dtracehelper` and tty devices.
-3. Deny writes under the command's working directory.
-4. Re-allow writes under each declared write path.
-5. Deny reads of the named paths.
-6. Re-allow reads of each re-allowed path, which wins over the denials.
-7. Give back the metadata of each directory above a re-allowed path that lies inside a denied one, without its contents or a listing. A program can then resolve the real path of a file below it.
+The command executor wraps every command as `/usr/bin/sandbox-exec -p <profile> <argv>` with the given environment only, in its own process group. The profile starts from allow-default and denies network and all writes. The rules it applies, in order, are in [containment.md](containment.md#the-sandboxed-executor).
 
 Paths are resolved to real locations first, and a path with a quote, backslash, newline or NUL is refused rather than escaped.
 

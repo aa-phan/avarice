@@ -81,6 +81,7 @@ This document lists what the grounding did not determine, and for each entry wha
 - Whether the package manager's ignore-scripts environment variable outranks a flag in a declared install argv: npm behavior, not in this code. Checked: `src/app/checks.ts:364`.
 - Whether the settings keys the host honors (permission rules, sandbox lists) take effect as generated: host behavior, outside this code. Checked: settings generator and preflight.
 - Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no runtime claim is made.
+- Whether the restricted launch behaves as its flags say. The delivery record reports live runs on 2.1.326 (2026-11-17 and 2026-11-18) in which the host accepted `--restricted` beside `--setting-sources ""` and `--strict-mcp-config`, listed no shell and no web fetch, kept the hooks running and wrote files only inside the clone. No test at HEAD asserts it, so the documents do not.
 - `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the earlier text of this tree and `src/app/stages/activate.ts:98`.
 
 ## From data-model (run slice)
