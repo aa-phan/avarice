@@ -62,7 +62,7 @@ The launch line is generated from these inputs and never composed from free text
 - the named agent, when the purpose runs an agent directly;
 - permission mode `dontAsk` and permission prompts `none`;
 - strict MCP config with the empty MCP file;
-- the allowed tools Glob and Grep, which the host would otherwise remove from a session that has a shell and from the agents it starts;
+- the allowed tools Glob and Grep (a code comment records that the host would otherwise remove them from a session that has a shell and from the agents it starts; no test checks this);
 - the model, and the cost cap as the host's budget flag;
 - stream-json output with verbose, and the session ID as the last pair, `--session-id <uuid>`.
 

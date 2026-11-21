@@ -145,7 +145,8 @@ A carrier row is inserted once per onboarding and no code updates it afterwards,
 - one `context-<source>` for each context source the profile builds (`context-gsd-intel`, `context-gsd-graph`, `context-gsd-planning`, `context-git-files`);
 - one `credential-<provider>` for each provider the profile's class allows (`credential-keychain`, `credential-cmd`, `credential-delegated`);
 - the two that `install-host` writes: `host-skill:avarice-run` and `host-hook:attended`.
- The restricted host is built beside the host and is not recorded. A read-only command records none.
+
+The restricted host is built beside the host and is not recorded. A read-only command records none.
 
 Two columns are never set by any caller: a checkpoint's GSD state digest and an evidence row's external reference.
 
