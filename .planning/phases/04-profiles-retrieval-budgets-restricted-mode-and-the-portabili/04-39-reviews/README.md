@@ -44,3 +44,9 @@ Verdict rule: a group passes when its last round records no BLOCKER and no WARNI
 | 2 | C | `round-2-C.md` (report sha256 `d6518e52…`) | `containment.md` 9688bc84…, `data-model.md` abbd06a0…, `integrations.md` f7f9a9ba… | FAIL | 0 BLOCKER, 1 WARNING, 3 NIT; all fixed in `5026ed6` (one NIT in part), dispositions in `round-2-dispositions.md` |
 | 2 | D | `round-2-D.md` (report sha256 `1766b691…`) | `cli-reference.md` d33adcfb…, `config-reference.md` 1caf4388…, `interactive-shell.md` db03b0b5… | PASS | 0 BLOCKER, 0 WARNING, 2 NIT; NITs deferred, documents not edited |
 | 2 | E | `round-2-E.md` (report sha256 `6b68504d…`) | `indexes-and-context.md` f2f42953…, `onboarding.md` 61c29ca5…, `runs.md` b08aac78…, `checks-and-evidence.md` 27757927…, `processes.md` d73dedef… | PASS | 0 BLOCKER, 0 WARNING, 3 NIT; NITs deferred, documents not edited |
+| 3 | A | `round-3-A.md` (report sha256 `0c9e855c…`) | `profiles-and-credentials.md` 94fa6160…, `policy-and-approvals.md` 47dec0fa…, `findings.md` 584b2440… | PASS | 0 BLOCKER, 0 WARNING, 3 NIT; NITs deferred, documents not edited |
+| 3 | C | `round-3-C.md` (report sha256 `6e31f87f…`) | `containment.md` 2a9e13df…, `data-model.md` 65f171c3…, `integrations.md` 94dec0d4… | FAIL | 0 BLOCKER, 3 WARNING, 2 NIT; dispositions in `round-3-dispositions.md` |
+
+## Deviation: a fourth round for group C
+
+Group C is still not clean after round 3, which the round budget above answers with a report to the owner. The owner (Aaron Phan) was asked whether to exceed the three-round limit for group C and replied verbatim "round 4" (2026-11-21). One extra fix-and-review round is therefore allowed for group C only, by a fresh reviewer, recorded as `round-4-C.md`. It is a deviation from the plan's round budget of three rounds per group. No other group is affected; groups A, B, D and E keep the three-round limit.
