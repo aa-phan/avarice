@@ -35,7 +35,7 @@ A command that names a repository (`repo add <path>`, `onboard <path>`) is judge
 
 The file is `config.json` in the profile's directory under the configuration home, hand-edited, mode 0600. AVARICE writes it once, when it is absent, with the profile and its two roots, and never rewrites it. Every command reads it back. It is opened without following a symbolic link and used only as a regular file of at most 64 KiB, so a planted link or a large file cannot steer a command. A missing file means the defaults.
 
-The key set is closed, and a key outside it is refused by name. `schema` and `profile` may be left out of a hand-written file. When present, `schema` is 1 and `profile` is the selected profile's name, or an object with `id` and `class` that agree with it. The roots are checked for shape only (at most 4,096 characters, no control characters). Each section stays raw until the module that owns it parses it, so a bad value is reported by the command that reads it.
+The key set is closed, and a key outside it is refused by name. A file the parser refuses ends the command with exit 70. `schema` and `profile` may be left out of a hand-written file. When present, `schema` is 1 and `profile` is the selected profile's name, or an object with `id` and `class` that agree with it. The roots are checked for shape only (at most 4,096 characters, no control characters). Each section stays raw until the module that owns it parses it, so a bad value is reported by the command that reads it.
 
 | Key | Holds | Read by | Refused when |
 |---|---|---|---|
@@ -115,13 +115,8 @@ The profile key `retention.transcripts` is `summary`, the default, or `full`. Wi
 
 ## Quirks
 
-- `workspaceRoots` and `freshnessWindowHours` are accepted in the configuration and read by nothing.
 - No command or stage resolves a credential yet. The broker is wired into the dependencies and tested, and has no caller outside composition.
 - A repository registered in two profiles' stores locks the second store for every command that is not read-only until the stray project is dealt with.
 - Two processes that backfill bindings at once can drop one entry. The next command that may write adds it again.
 - The first `config.json` records the roots in effect when it was written, including any environment override of that moment, and the file is never updated.
-- An invalid `config.json` exits 70, while an untrusted binding registry or enterprise configuration exits 3.
-- A personal profile that names an organization policy file does not read it.
 - A cmd helper cannot reach the network, so a helper that must contact a server fails as unavailable.
-- A keychain failure other than "no item" is reported as unavailable, unless the value is over 16 KiB. Nothing produces an unauthenticated outcome.
-- A helper's output is trimmed on both sides, and a keychain value loses one trailing newline, so a secret whose own edges are whitespace changes.

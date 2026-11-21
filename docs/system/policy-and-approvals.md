@@ -31,7 +31,7 @@ Four ranked sources decide whether an action is allowed, denied or needs an appr
 | 3 | User policy | The rest of the profile config's `policy` section: `schema` and `rules` |
 | 4 | Repository policy | `.avarice/policy.json` in the repository, read from the pinned commit |
 
-A policy file is data. It has `schema` 1 and a list of at most 256 rules, in at most 64 KiB, and any other key is refused. A rule has an `id` and an `action`, each of 1 to 64 lower-case letters, digits, dots, underscores and hyphens. It has an `effect` of `allow`, `deny` or `require-approval`, and optionally a `when` and, on a require-approval rule only, an `approvalSource`.
+A policy file is data. It has `schema` 1 and a list of at most 256 rules, in at most 64 KiB, and any other key is refused. A rule has an `id` and an `action`, each of 1 to 64 lower-case letters, digits, dots, underscores and hyphens, starting with a letter or a digit. It has an `effect` of `allow`, `deny` or `require-approval`, and optionally a `when` and, on a require-approval rule only, an `approvalSource`.
 
 A `when` holds 1 to 8 parameter names with non-empty string values of at most 128 characters. The rule applies only when every named parameter is present and equal. A number or a boolean parameter is matched by its text, and any other value has no text to match. Rule IDs are unique within a file, and the prefixes `builtin.` and `sec5.` and the ID `org.invalid-or-missing` are reserved. A file that breaks any of this is refused whole.
 
@@ -144,7 +144,7 @@ The enforcement map is a code table of 18 controls: who enforces each one, what 
 | `restricted-mode`: restricted mode when a layer is unavailable | avarice | Drops the run to restricted and refuses unattended runs; never substitutes instructions, an unapproved sandbox or an unapproved egress path | A restricted run produces a plan, a patch file and a decision list only, and the host must honor its restricted flag | None named in the table |
 | `hook-cost-fields`: finer budget enforcement from token or cost fields in hook input | host | None until the host provides the fields | Whether hook input carries those fields is not established; no profile relies on it | Unverified |
 
-Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows and the two host-limitation rows have no proof by design. The three rows with no test named say in the table that the proving test does not exist, although the suites that exercise them are tracked.
+Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The three rows with no test named say in the table that the proving test does not exist, although the suites that exercise them are tracked.
 
 ## Manual equivalents
 
@@ -172,12 +172,6 @@ The four commands that record something refuse inside a run and from a run's pro
 
 ## Quirks
 
-- Policy files are consulted only by the approval gate, whose one caller is the promotion of an onboarding's map. The hook does not read them. An organization rule that denies `git.push` does not stop the hook from consuming an approval of it in an attended session.
-- A policy rule's `approvalSource` is stored and never read: every approval is written with the source `local-user`.
-- Of the 22 classed actions, 8 have a call site. The other names, including `deploy`, `export` and the three transport names, are classes with nothing that raises them.
 - An approval is tied to a scope and to parameters, not to who or what asks. Any process of the same scope that presents the same action and parameters within 30 minutes uses it.
 - An attended approval leaves an `action.started` event with no `action.finished`, because only the pre-tool-use entry is installed. Nothing reconciles an attended scope, so the dangling start is never reported to the owner.
 - The attended entry has a 5-second timeout and blocks on failure, so a slow or failing hook blocks the owner's own shell call.
-- A request that the owner grants stops waiting, so a retry that the hook still denies records a new request ID. In a run every retry takes this path.
-- An approval binds option names and not values: `gh pr create --title a` and `--title b` share one approval, and `git push --force` needs its own.
-- The enforcement map is data. No code reads it, and three of its rows say no test exists although tests do.
