@@ -382,6 +382,47 @@ describe('attended mode: a privileged form is denied until the owner approves it
   });
 });
 
+describe('attended mode denies a line it cannot check instead of passing it silently (CR-01, FR-12, T-04-105)', () => {
+  const p = profile();
+  // The comment keeps the push a push; the line is longer than the classifier reads.
+  const overLong = `git push origin main #${'x'.repeat(70_000 - 'git push origin main #'.length)}`;
+
+  it('denies a Bash command of 70,000 characters with privileged:unparseable and names the limit', () => {
+    assert.equal(overLong.length, 70_000);
+    const denied = attendedHook(p.dataRoot, attendedCall(overLong));
+    assert.equal(denied.code, 0, denied.stderr);
+    assert.notEqual(denied.stdout, '', 'the hook printed no decision for a line it could not check');
+    assert.equal(parsed(denied.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    const reason = parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /^avarice: privileged:unparseable: /);
+    assert.match(reason, /65,536/);
+  });
+
+  it('records one policy.denied for scope attended:s1, no approval request and no approval row, and no command text', () => {
+    const denied = eventsOf(p.roots, 'policy.denied');
+    assert.equal(denied.length, 1);
+    const data = dataOf(denied[0] as EventDb);
+    assert.equal(data['ruleId'], 'privileged:unparseable');
+    assert.equal(data['scope'], 'attended:s1');
+    assert.equal(eventsOf(p.roots, 'approval.requested').length, 0);
+    assert.equal(approvalsOf(p.roots).length, 0);
+    const text = (denied[0] as EventDb).data_json;
+    assert.ok(!text.includes('git push') && !text.includes('xxxx'), 'the command is not an event field');
+  });
+
+  it('still opens no store for a command that is not privileged', () => {
+    const none = attendedHook(join(p.roots.base, 'no-such-data'), attendedCall('ls'));
+    assert.deepEqual([none.code, none.stdout], [0, '']);
+  });
+
+  it('in a run the same 70,000-character line is refused as shell-syntax (the run keeps its own 16,384-character check)', () => {
+    const fx = fixture();
+    const result = runHook(fx, 'pre', bash(overLong));
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(parsed(result.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: shell-syntax: /);
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 

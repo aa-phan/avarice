@@ -408,6 +408,18 @@ export function classifyCommandLine(command: string): PrivilegedCommand | null {
   return null;
 }
 
+// The three answers about a shell line (plan 04-40; CR-01): nothing privileged, the privileged commands it holds, or a line the classifier could not read.
+export type LineClassification =
+  | { kind: 'none' }
+  | { kind: 'privileged'; commands: PrivilegedCommand[] }
+  | { kind: 'unparseable'; reason: string };
+
+export const UNPARSEABLE_RULE = 'privileged:unparseable';
+
+export function classifyLine(_command: string): LineClassification {
+  throw new Error('not implemented');
+}
+
 // The reason the model is told with a refusal of a privileged form: the action, and the command the owner runs to approve it.
 export function privilegedReason(action: string, requestId: string): string {
   return `${action} needs an approval for these parameters; the owner approves it at a terminal with: avarice approve ${requestId}`;
