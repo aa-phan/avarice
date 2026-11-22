@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-55-PLAN.md
-last_updated: "2026-11-22T23:13:49.969Z"
+stopped_at: Completed 04-52-PLAN.md
+last_updated: "2026-11-22T23:22:00.158Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: bfee960df6b52720f956556fc323411ca1db653d
+state_head: 886d63fc0d5b378fffc86888cc85291073958bd2
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 12 of 55
+Plan: 13 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -214,6 +214,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P49 | not captured | 2 tasks | 7 files |
 | Phase 04 P51 | 19 min | 3 tasks | 10 files |
 | Phase 04 P55 | 9 min | 2 tasks | 5 files |
+| Phase 04 P52 | not captured | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -534,6 +535,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-51: an approval binds gitOptions, env, the line digest and the attended cwd rather than refusing redirected forms — The owner can still approve a redirected command, but only that exact command from that directory (CR-03, FR-12)
 - [Phase 04]: 04-51: a gh api body from a file or standard input is unapprovable (privileged:unapprovable) and denies the whole attended line before any request or consumption — The line digest cannot bind a body that is not on the line (WR-04, T-04-138)
 - [Phase 04]: 04-55: WR-11 fixed at D-09's values. The hook charges every Read of a run to retrieval.fullReads (one file) and retrieval.fullReadBytes (the bytes of the lines it asks for, default the first 2000) in the transaction that charges toolCalls; RETRIEVAL_CAPS is unchanged and beginRead gets no caller.
+- [Phase 04]: 04-52: WR-39 to WR-42 are test-only fixes recorded with planted-regression red evidence; IN-03 fixed with reading evidence only — The fix report states the kind of red evidence for each entry rather than presenting it as a failure on unfixed source
+- [Phase 04]: 04-52: WR-28, WR-29, WR-32 and WR-36 are deferred to plan 04-50, which may move them to fixed — AC-8 is decided at execute time and the four rows have no effect on the recorded verdict
 
 ### Roadmap Evolution
 
@@ -601,8 +604,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T23:13:44.348Z
-Stopped at: Completed 04-55-PLAN.md
+Last session: 2026-11-22T23:21:59.893Z
+Stopped at: Completed 04-52-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
