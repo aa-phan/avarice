@@ -4,18 +4,23 @@ This ledger tracks how much of the built system the `docs/system/` tree covers, 
 
 ## Denominators
 
-Counted at commit `187409e` on 2026-11-14. Every command below was re-run at that commit; the code has not changed since, only the documents. Since the previous count (`40adc1f`) the code gained five commands, a third migration with a table and two indexes, eleven event kinds, a port, four external systems and about 8,500 source lines.
+Counted at commit `9bf839d` on 2026-11-22. Every command below was re-run at that commit; the code has not changed since, only the documents and planning records. Since the previous count (`187409e`, 2026-11-14) the code gained five commands (twenty in all), a fourth migration, eleven event kinds, two ports, three external system rows, five profile config keys, two `AVARICE_*` names and about 11,500 source lines.
 
 | Surface | Count | Command |
 |---|---|---|
-| CLI commands | 15 (`init`, `repo`, `onboard`, `start`, `supervise`, `status`, `inbox`, `resume`, `context`, `install-host`, `contract`, `decide`, `digest`, `schedule`, `cancel`), plus bare `avarice` | `grep -n "COMMANDS =" src/cli/main.ts` |
+| CLI commands | 20 (`init`, `repo`, `onboard`, `start`, `supervise`, `status`, `inbox`, `resume`, `context`, `install-host`, `contract`, `decide`, `digest`, `schedule`, `cancel`, `approve`, `doctor`, `evidence`, `pr`, `comment`), plus bare `avarice` | `grep -n "COMMANDS =" src/cli/main.ts` |
 | Hook entry points | 1 (PreToolUse, also serving post and config-change events) | `git ls-files src/hook` |
-| `AVARICE_*` names | 17: 9 environment variables read (`AVARICE_RUN` among them, which is also set), 8 constants | `git grep -ohE "AVARICE_[A-Z0-9_]+" -- src bin \| sort -u`, classified by reading each site |
-| Other environment variables read | 10 (`HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `GSD_HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR`, `NO_COLOR`, `TERM`) | `git grep -nE "process[.]env\|env[[]" -- src bin`, plus the passthrough lists in the GSD, graphify and host adapters |
-| Profile config keys | 9: 4 written once and never read (all dead), 5 `notify` keys read (`destinations`, `digestTimes`, `quietHours`, `batchWindowMinutes`, `local.osascriptPath`) | the single write site in the profile paths adapter; `NOTIFY_KEYS` and `LOCAL_KEYS` in the notify policy |
-| SQLite tables | 24 (22 with a writer, 2 without: `task_refs`, `approvals`) | `git grep "CREATE TABLE" -- src`; writers by `git grep -ohE "INSERT( OR [A-Z]+)? INTO [a-z_]+" -- src` |
-| Event kinds | 39 | `git grep -h -o -E "'(amendment\|attempt\|check\|config\|containment\|contract\|decision\|evidence\|gate\|handoff\|hook\|index\|invocation\|item\|loop\|notify\|onboarding\|run\|tool\|verification\|work_item)[.][a-z_.-]+'" -- src \| grep -vE "'(config[.]json\|notify[.](destinations\|local))'" \| sort -u \| wc -l` |
-| Schema migrations | 3 | `ls src/adapters/sqlite/migrations` |
+| `AVARICE_*` names | 19: 11 environment variables read (`AVARICE_RUN` among them, which is also set), 8 constants; 5 are set for child processes (`AVARICE_RUN`, `AVARICE_PROFILE` and the three root variables) | `git grep -ohE "AVARICE_[A-Z0-9_]+" -- src bin \| sort -u`, classified by reading each site |
+| Other environment variables read | 12 (`HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `GSD_HOME`, `USER`, `LOGNAME`, `LANG`, `TMPDIR`, `NO_COLOR`, `TERM`, `XDG_CONFIG_HOME`, `GH_CONFIG_DIR`) | `git grep -nE "process[.]env\|env[[]" -- src bin`, plus the passthrough lists in the GSD, graphify, host and diagnostics adapters |
+| Profile config keys | 14: 4 written once and read back (`schema`, `profile`, `dataRoot`, `workRoot`), 8 sections read by the module that owns each, 2 dead (`workspaceRoots`, `freshnessWindowHours`); the `notify` section has 5 keys (`destinations`, `digestTimes`, `quietHours`, `batchWindowMinutes`, `local.osascriptPath`) | `SECTION_KEYS` in the profile rules plus the four written keys; readers by `git grep -n workspaceRoots -- src`; `NOTIFY_KEYS` and `LOCAL_KEYS` in the notify policy |
+| Credential providers | 3 (`keychain`, `cmd`, `delegated`) | `ProviderName` in the credential reference module |
+| Action table | 22 names: 3 read, 4 local-write, 15 privileged | `sed -n 1,40p src/domain/action-class.ts \| grep -cE "^  '?[a-z.-]+'?: '(read\|local-write\|privileged)'"` |
+| Enforcement map | 18 controls | `grep -c "^    id: '" src/domain/enforcement-map.ts` |
+| Doctor finding areas | 11 (`profile`, `runtime`, `store`, `host`, `gsd`, `records`, `runs`, `limits`, `events`, `online`, `extensions`) | `git grep -ohE "area: '[a-z]+'" -- src \| sort -u` |
+| SQLite tables | 24, every one with a writer | `git grep "CREATE TABLE" -- src`; writers by `git grep -ohE "INSERT( OR [A-Z]+)? INTO [a-z_]+" -- src` |
+| Event kinds | 50 | `git grep -h -o -E "'(action\|amendment\|approval\|attempt\|check\|config\|containment\|contract\|credential\|decision\|evidence\|gate\|handoff\|hook\|index\|invocation\|item\|loop\|manual\|notify\|onboarding\|policy\|run\|task_refs\|tool\|verification\|work_item)[.][a-z_.-]+'" -- src \| grep -vE "'(config[.]json\|notify[.](destinations\|local)\|handoff[.]local-branch\|onboarding[.](index[.]graph\|map[.][a-z]+\|planning[.]init\|promote[.][a-z]+\|stage)\|run[.](check\|handoff\|install\|unit))'" \| sort -u \| wc -l`; the exclusions are action names that share a prefix with an event kind, and the output equals the kind list of the data model |
+| Schema migrations | 4 | `ls src/adapters/sqlite/migrations` |
+| ID prefixes | 11 | `ID_PREFIXES` in the ID module |
 | Onboarding lifecycle states and transitions | 14 and 29 | a script importing the lifecycle module: `ONBOARDING_STATES.length`, `TRANSITIONS.length` |
 | Run lifecycle states and transitions | 11 and 37 | a script importing the run lifecycle module: `RUN_STATES.length`, `RUN_TRANSITIONS.length` |
 | Run blocked reasons | 7 | the same import, `RUN_BLOCKED_REASONS.length` |
@@ -23,39 +28,48 @@ Counted at commit `187409e` on 2026-11-14. Every command below was re-run at tha
 | Work item states and edges | 6 and 11 (7 listed, plus one into `blocked_on_decision` from each of the four states that are neither `done` nor `blocked_on_decision`) | the same import, `WORK_ITEM_STATES.length`; the edges read from the table in the run lifecycle module, which does not export it |
 | Decision classes | 5 | `DecisionClassName` in the decision policy |
 | Gate rules | G1 6, G2 8, G3 3, G4 7 | `G1_RULES`, `G2_RULES`, `G3_RULES` and `G4_RULES` in the gates module |
-| Ports | 12 (plus one shared descriptor) | `ls src/ports` (13 files) |
-| External systems | 17 table rows (16 used, `gh` proven unused; `pgrep` and `ps` share a row) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic, the launchd job and the Claude configuration directory, classified by reading each site |
 | Index steps | 3 | the index step registry |
-| Hook rules | 38 distinct rule IDs (6 allow, 33 deny, one on both), re-run at `c663696` on 2026-11-20; the six `privileged:<action>` rules are built from a prefix and an action and are not in the count | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_.][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l`; the character class after the first word takes a dot, which `budget:retrieval.searches` needs (without it the count is 37) |
-| Diagram sources | 8 | `ls docs/system/diagrams/*.puml` |
-| Source lines | 35,093 (180 files) | `git ls-files src \| xargs wc -l` |
-| Test files | 173 | `git ls-files test \| grep -c '\.test\.ts$'` |
-| Import-boundary lint | passes (99 files) | `node scripts/check-boundaries.ts` |
+| Ports | 15 files, 12 of them adapter ports that declare a descriptor (the others are the descriptor type, the ledger and the diagnostics port) | `ls src/ports` |
+| External systems | 20 table rows (19 used, `gh` proven unused; `pgrep` and `ps` share a row) | spawn sites: `git grep -nE "spawn\|execFile\|execSync" -- src bin`, plus the registry traffic, the launchd job, the vendor CLI of a delegated credential and the Claude configuration directory, classified by reading each site |
+| Hook rules | 38 distinct rule IDs (6 allow, 33 deny, one on both); the six `privileged:<action>` rules are built from a prefix and an action and are not in the count | `grep -ohE "(return \|deny\(\|_RULE = \|\?\?= \|null : \|rule: \|rule: seen[.]agentCommand [?] )'[a-z]+([-:_.][a-zA-Z]+)*'( : '[a-z-]+')?" src/domain/hook-decision.ts src/hook/pre-tool-use.ts \| grep -oE "'[^']+'" \| sort -u \| wc -l`; the character class after the first word takes a dot, which `budget:retrieval.searches` needs (without it the count is 37) |
+| Diagram sources | 9 | `ls docs/system/diagrams/*.puml` |
+| Source lines | 46,639 (240 files) | `git ls-files src \| xargs cat \| wc -l`; `git ls-files src \| wc -l` |
+| Test files | 239: 90 unit, 116 integration, 17 fault, 11 containment, 3 mutation, 2 contract (plus two contract case files and a README) | `git ls-files test \| grep -c '\.test\.ts$'`; per directory with `sed -E 's#^test/([^/]+)/.*#\1#' \| sort \| uniq -c` |
+| Live-spend ledgers | 4 files under `test/containment`, one per live phase, each with a hard ceiling checked before a live call (phase 4: 40 USD); the harness refuses a case cap that would pass the ceiling | `ls test/containment \| grep live-spend`; `PHASE4_CEILING_USD` in the live harness |
+| Footprint guard | 1 test file, 32 tests, passing: no runtime dependencies, no install lifecycle script, pinned development dependencies, the reserved example names and the network host allowlist | `node --test test/unit/footprint.test.ts` |
+| Benchmarks | status latency script (exit 1 at a p95 of 300 ms or more); the portability benchmark directory with 5 approved repositories (AC-14) and 20 evaluation tasks | `scripts/status-bench.ts`; `test/benchmark/phase4/ac14-repositories.json` (`repositories`) and `eval-tasks.json` (`tasks`) |
+| Import-boundary lint | passes (132 files) | `node scripts/check-boundaries.ts` |
 
 ## Documented counts
 
 | Surface | Documented | Where |
 |---|---|---|
-| CLI commands | 15 of 15, all flags, 4 exit codes | cli-reference.md |
-| Environment variables read | 17 of 17 `AVARICE_*` names and 10 of 10 other names | config-reference.md |
-| Profile config keys | 9 of 9: 4 marked dead, 5 `notify` keys with type, default and constraint | config-reference.md |
+| CLI commands | 20 of 20, all flags, 4 exit codes | cli-reference.md |
+| Environment variables read | 19 of 19 `AVARICE_*` names and 10 of 12 other names (`XDG_CONFIG_HOME` and `GH_CONFIG_DIR`, passed to a vendor CLI by `doctor --online`, are not in the document; see Outstanding) | config-reference.md |
+| Profile config keys | 14 of 14: 2 marked dead, 5 `notify` keys with type, default and constraint, the `limits` and `retrieval` sections | config-reference.md |
+| Credential providers | 3 of 3 | profiles-and-credentials.md |
+| Action table | 22 of 22 | policy-and-approvals.md |
+| Enforcement map | 18 of 18 | policy-and-approvals.md |
+| Doctor report sections and finding areas | 11 of 11 sections (plus 3 present only under a flag), 11 of 11 areas | doctor.md |
+| Capability-descriptor ports | 12 of 12 | portability.md |
 | Onboarding lifecycle states and transitions | 14 of 14, 29 of 29 | onboarding.md |
 | Validation checks | 7 of 7 | onboarding.md |
 | Run lifecycle states and transitions | 11 of 11, 37 of 37 | runs.md |
 | Run blocked reasons, step statuses, work item states and edges | 7 of 7, 6 of 6, 6 of 6 and 11 of 11 | runs.md |
-| Run start refusal codes, overridable budget names, run GSD settings | 10 of 10, 7 of 7, 7 of 7 | runs.md |
+| Run start refusal codes, overridable budget names, run GSD settings | 13 of 13, 7 of 7, 7 of 7 | runs.md |
 | Run outcome kinds, decision classes, budget rows | 7 of 7, 5 of 5, 5 of 5 | runs.md, autonomy-and-decisions.md |
 | Evidence statuses, G1, G2, G3 and G4 rules, skip and focus markers, validation verdicts | 6 of 6, 6 of 6, 8 of 8, 3 of 3, 7 of 7, 12 of 12, 3 of 3 | checks-and-evidence.md |
-| Shell actions, command names offered by completion | 8 of 8, 15 of 15 | interactive-shell.md |
+| Shell actions, command names offered by completion | 8 of 8, 20 of 20 | interactive-shell.md |
 | Read-only commands, denied prefixes, denied find actions | 11 of 11, 16 of 16, 10 of 10 | containment.md |
 | GSD verbs | map 11, intel 14, run 14 | containment.md |
 | Required settings keys, admitted host versions | 9 of 9, 6 of 6 | containment.md |
 | Hook rule IDs | 38 of 38 | containment.md |
 | Budgets | 5 of 5 for an onboarding, 5 of 5 for a run | containment.md, onboarding.md, runs.md |
 | Index steps, absent reasons | 3 of 3, 16 of 16 distinct | indexes-and-context.md |
-| Tables, event kinds, artifact kinds, ID prefixes, migrations | 24 of 24, 39 of 39, 7 of 7, 9 of 9, 3 of 3 | data-model.md |
-| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 12 of 12 (plus the descriptor), 17 of 17, 6 of 6, 4 of 4, 6 of 6 | integrations.md |
-| Flows traced, diagram sources | 8 of 8, 8 of 8 | processes.md |
+| Tables, event kinds, artifact kinds, ID prefixes, migrations | 24 of 24, 50 of 50, 13 of 13, 11 of 11, 4 of 4 | data-model.md |
+| Ports, external systems, admitted host versions, run purpose agents, proxy responses | 12 adapter ports of 15 port files, 20 of 20, 6 of 6, 4 of 4, 6 of 6 | integrations.md |
+| Flows traced, diagram sources | 9 of 9, 9 of 9 | processes.md |
+| Test tooling (spend ledgers, footprint guard, benchmarks) | counted above, not documented in `docs/system/` | this ledger |
 
 ## Per-document status
 
@@ -84,10 +98,13 @@ Reviewed means a second reader (a fresh-eyes reviewer) checked claims against th
 | policy-and-approvals.md | reviewed | new; written from the approval gate, the approve command, the policy evaluator, the privileged-command classifier, the hook, the enforcement map and the manual-input code; passed a fresh review in three rounds (`04-39-reviews/round-1-A.md`, `04-39-reviews/round-2-A.md`, `04-39-reviews/round-3-A.md`) against the code, with no BLOCKER or WARNING in round 3 (a pass with three nits, deferred); round 1 had four WARNINGs and round 2 one across the group, all fixed from the code (`04-39-reviews/round-1-dispositions.md`, `04-39-reviews/round-2-dispositions.md`); the only edit after round 3 removed the status mark under the title (no claim changed) |
 | doctor.md | reviewed | new; written from the doctor read model, command, dependency set and probes and from the host admission rule; passed a fresh review in two rounds (`04-39-reviews/round-1-B.md`, `04-39-reviews/round-2-B.md`) against the code, with no BLOCKER or WARNING in round 2 (a pass with two nits, deferred); round 1 had one BLOCKER and eight WARNINGs across the group, all fixed from the code (`04-39-reviews/round-1-dispositions.md`); the only edit after round 2 removed the status mark under the title (no claim changed) |
 | portability.md | reviewed | new; written from the descriptor, requirement and composition code and from the fake-remote adapters, the contract suite and the workflow proof; passed a fresh review in two rounds (`04-39-reviews/round-1-B.md`, `04-39-reviews/round-2-B.md`) against the code, with no BLOCKER or WARNING in round 2 (a pass with two nits, deferred); round 1 had one BLOCKER and eight WARNINGs across the group, all fixed from the code (`04-39-reviews/round-1-dispositions.md`); the only edit after round 2 removed the status mark under the title (no claim changed) |
-| coverage.md | ledger | counts re-run at `187409e`; later commits change documents only |
+| coverage.md | ledger | counts re-run at `9bf839d`; later commits change documents and planning records only |
 
 ## Outstanding
 
-- Rendering the eight PlantUML diagrams; no render step exists in the repository.
+- Rendering the nine PlantUML diagrams; no render step exists in the repository.
+- A fresh review of `containment.md`, `data-model.md` and `integrations.md`, which are `changed after review`: four rounds (`04-39-reviews/round-1-C.md` to `04-39-reviews/round-4-C.md`) did not pass, the owner ruled "close drafted" after round 4 (`04-39-reviews/README.md`), and the three fixes made after round 4 (`04-39-reviews/round-4-dispositions.md`) have not been read by a fresh reviewer.
+- `config-reference.md` omits two environment variables the code reads: `XDG_CONFIG_HOME` and `GH_CONFIG_DIR` are passed to the vendor CLI that `doctor --online` runs for a delegated credential (`src/adapters/diagnostics/probes.ts`). The document passed its review, so the addition waits for the next documentation pass.
+- Nits left in documents that passed review, recorded in `04-39-reviews/round-2-dispositions.md` and `04-39-reviews/round-3-dispositions.md` and in the round reports: the SQLite version thresholds listed in both `config-reference.md` and `data-model.md` (one fact, one home; `config-reference.md` should link to the data model).
 - The owner's classification of every line in findings.md.
 - The owner's decision on the proposal documents this branch edited before the documentation rule reached it, listed in findings.md.

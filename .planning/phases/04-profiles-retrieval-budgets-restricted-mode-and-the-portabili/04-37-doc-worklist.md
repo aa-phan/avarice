@@ -11,7 +11,7 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | # | Surface | Kind | Code | Target | Owner | Status |
 |---|---|---|---|---|---|---|
 | 1 | Live-spend test variables `AVARICE_PHASE4_CEILING_USD` (lower-only, ceiling 40), `AVARICE_PHASE4_LEDGER`, `AVARICE_PHASE4_PLAN` | env var | test/helpers/live-harness.ts:209 | config-reference.md (test variables) | 04-38 | drafted |
-| 2 | Spend ledger `test/containment/live-spend-phase4.jsonl` and the refusal when a case cap would pass the ceiling | test tooling | test/helpers/live-harness.ts:209 | coverage.md (test files) | 04-39 | deferred 04-39 |
+| 2 | Spend ledger `test/containment/live-spend-phase4.jsonl` and the refusal when a case cap would pass the ceiling | test tooling | test/helpers/live-harness.ts:209 | coverage.md (test files) | 04-39 | closed 04-39 |
 | 3 | Global flag `--profile <name>`: grammar, exit 64 for a bad or valueless name | flag | src/cli/main.ts:124 | cli-reference.md; PC | 04-38 | drafted |
 | 4 | Selection precedence binding, flag, `AVARICE_PROFILE`, `personal-local`; the variable is ignored under a binding | env var, rule | src/domain/profile.ts:51 | PC; config-reference.md | 04-37 | drafted |
 | 5 | `repo add --profile <name> <path>` writes the binding; without it nothing is bound | flag | src/cli/commands/repo.ts | cli-reference.md; PC | 04-38 | drafted |
@@ -27,7 +27,7 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 15 | Repository policy read from git objects at the pin; link, submodule or over 64 KiB refused | file | src/adapters/fs/policy-sources.ts:45 | PA | 04-37 | drafted |
 | 16 | Organization file read without following a link, regular file, 64 KiB | file | src/adapters/fs/policy-sources.ts:19 | PA | 04-37 | drafted |
 | 17 | Profile config keys `policy.organizationFile` and the `policy` section as the user policy | config key | src/cli/composition.ts:146 | PC; PA; config-reference.md | 04-37 | drafted |
-| 18 | Footprint guard: reserved names `acme` and `example.com` and the host allowlist | test tooling | test/unit/footprint.test.ts | coverage.md (test files) | 04-39 | deferred 04-39 |
+| 18 | Footprint guard: reserved names `acme` and `example.com` and the host allowlist | test tooling | test/unit/footprint.test.ts | coverage.md (test files) | 04-39 | closed 04-39 |
 | 19 | Step requirement table: nine steps, their port and capability, reduced modes | rule | src/domain/capability-requirements.ts:47 | PT | 04-37 | drafted |
 | 20 | Refusal shape `unsupported`, capability `<port>.<capability>`, `reducedMode`; false equals absent | rule | src/domain/capability-requirements.ts:72; src/app/capabilities.ts | PT | 04-37 | drafted |
 | 21 | Where the refusal applies: the entry gate (`capability` failure row, reason `enforcement_failure`) and the onboarding workspace stage (`scope_unavailable`) | rule | src/app/capabilities.ts; src/app/stages/workspace.ts | PT; runs.md; onboarding.md | 04-37 | drafted |
@@ -60,7 +60,7 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 48 | `schedule install` and `remove` accept `--profile` | flag | src/cli/commands/schedule.ts | cli-reference.md | 04-38 | drafted |
 | 49 | `ProfilePaths.otherRoots`, `ScopeInput.profileRoots` and `RunScopeInput.profileRoots` | port | src/adapters/fs/profile-registry.ts; src/domain/invocation-scope.ts | containment.md | 04-38 | drafted |
 | 50 | Status read model builds each run from one batch (`loadRunStatusInputs`) | port | src/app/run-status.ts; src/ports/ledger.ts | data-model.md | 04-38 | drafted |
-| 51 | `status` latency bound and `scripts/status-bench.ts` (`--runs`, `--samples`, exit 1 at p95 300 ms) | test tooling | scripts/status-bench.ts | cli-reference.md (if it records performance); coverage.md | 04-39 | deferred 04-39 |
+| 51 | `status` latency bound and `scripts/status-bench.ts` (`--runs`, `--samples`, exit 1 at p95 300 ms) | test tooling | scripts/status-bench.ts | cli-reference.md (if it records performance); coverage.md | 04-39 | closed 04-39 |
 | 52 | Refresh modes incremental, paths, full and the reason strings | rule | src/domain/refresh-plan.ts; src/app/refresh.ts | onboarding.md | 04-38 | drafted |
 | 53 | Refresh threshold (3 new top-level directories), 29 manifest basenames, 50-path cap | config key | src/domain/refresh-plan.ts:16, :19 | onboarding.md; config-reference.md | 04-38 | drafted |
 | 54 | `avarice onboard` of an active project refreshes (exit 0); `repo add` still refuses | command | src/cli/commands/onboard.ts; src/app/refresh.ts | cli-reference.md; onboarding.md | 04-38 | drafted |
@@ -123,7 +123,7 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 111 | `start` refuses an incompatible record (`record-incompatible`, exit 3); `recordCompatibility` | rule | src/app/doctor.ts:196; src/app/run-start.ts:210 | DR; runs.md; cli-reference.md | 04-37 | drafted |
 | 112 | `doctor --repair` removes `.tmp-*` files an hour old or more under `artifacts/<shard>/` | flag | src/app/doctor.ts | DR | 04-37 | drafted |
 | 113 | Findings: doctor's incompatibility is derived, never written; `docs/operations-and-testing.md` lists checks and lines doctor does not run or print | finding | src/app/doctor.ts:196 | findings.md | 04-39 | closed 04-39 |
-| 114 | Counts: 17 then 20 commands, one port `Diagnostics`, frozen snapshot `doctor.json` | table | src/cli/main.ts:20; src/ports/diagnostics.ts | coverage.md | 04-39 | deferred 04-39 |
+| 114 | Counts: 17 then 20 commands, one port `Diagnostics`, frozen snapshot `doctor.json` | table | src/cli/main.ts:20; src/ports/diagnostics.ts | coverage.md | 04-39 | closed 04-39 |
 | 115 | Context sources now four (intel, graph, planning, git-files); pack `source` values `gsd-planning`, `git-files`; `confirmCitedPaths` | rule | src/app/context.ts; src/adapters/context/git-files.ts; gsd-planning.ts | indexes-and-context.md; integrations.md | 04-38 | drafted |
 | 116 | Profile config key `adapters.context`, one `context-<adapter>` row per source in `adapter_configs` | config key | src/domain/context-adapters.ts:8 | config-reference.md; data-model.md | 04-38 | drafted |
 | 117 | `task_refs` pairs `git-files`/`snippet` and `gsd-planning`/`section`; ID forms; planning revision form `gsd-state:sha256:<hex>` | table | src/adapters/context/gsd-planning.ts | data-model.md | 04-38 | drafted |
@@ -154,12 +154,12 @@ The new documents are `policy-and-approvals.md` (PA), `profiles-and-credentials.
 | 142 | Contract suite `test/contract` (11 executor cases, 10 artifact cases), how an adapter joins, what the proof does not show | test tooling | test/contract/README.md | PT | 04-37 | drafted |
 | 143 | Portability proof: four workflows twice, end-state comparison, seeds, AC-7 measurement | test tooling | test/integration | PT | 04-37 | drafted |
 | 144 | Finding: `gsd:<verb>` and `graphify:<id>` give separate calls one `invocationId` | finding | src/adapters/gsd/gsd-tools.ts:91; src/adapters/graph/graphify.ts:122 | findings.md | 04-39 | closed 04-39 |
-| 145 | Counts: 4 test files under `test/contract`, one new integration test file | table | test/contract | coverage.md | 04-39 | deferred 04-39 |
+| 145 | Counts: 4 test files under `test/contract`, one new integration test file | table | test/contract | coverage.md | 04-39 | closed 04-39 |
 | 146 | Enforcement map findings: `Enforcer` type has no `os-sandbox` member; rows still say the proving test does not exist though tests exist | finding | src/domain/result.ts:4; src/domain/enforcement-map.ts:96 | findings.md | 04-39 | closed 04-39 |
 | 147 | Findings: `workspaceRoots` and `freshnessWindowHours` are in the key set and read nowhere | finding | src/domain/profile.ts:109 | findings.md | 04-39 | closed 04-39 |
 | 148 | Findings: `docs/enterprise-adaptation.md` enforcer vocabulary and agent-host row against the written table | finding | src/domain/enforcement-map.ts:5 | findings.md | 04-39 | closed 04-39 |
 | 149 | Live containment cases, admission of 2.1.326, restricted-run and restricted-onboarding confirmations | test tooling | test/containment/LIVE-CASES.md | containment.md (admitted versions); coverage.md | 04-38 | drafted |
-| 150 | AC-14 benchmark: per-repository results and digests | test tooling | test/benchmark | coverage.md | 04-39 | deferred 04-39 |
+| 150 | AC-14 benchmark: per-repository results and digests | test tooling | test/benchmark | coverage.md | 04-39 | closed 04-39 |
 
 ## Hand-off
 
