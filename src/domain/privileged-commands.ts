@@ -614,6 +614,9 @@ const GH_FORMS: Readonly<Record<string, ArgSpec>> = {
 // The options with which `gh api` sends a body or fields: it makes a request that names no method a POST (gh api --help).
 const GH_API_FIELD_OPTIONS: readonly string[] = ['-f', '-F', '--field', '--raw-field', '--input'];
 
+// npm's command names and aliases, each mapped to the command it runs (plan 04-51; WR-03).
+export const NPM_COMMANDS: Readonly<Record<string, string>> = {};
+
 const NPM_PUBLISH: ArgSpec = {
   valued: { '--registry': 'registry', '--tag': 'tag', '--access': 'access', '--otp': null, '--prefix': null, '-C': null, '--workspace': null, '-w': null, '--userconfig': null, '--globalconfig': null, '--cache': null, '--loglevel': null },
   positional: ['subcommand', 'package', 'operands*'],

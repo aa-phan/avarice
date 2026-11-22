@@ -743,6 +743,42 @@ describe('an attended call that needs a decision and has no usable directory fai
   });
 });
 
+describe('a push started through a shell string, eval or a wrapper is denied like the push itself (WR-01, WR-03, T-04-137)', () => {
+  const p = profile();
+  const rule = (out: Attended): string => (out.stdout === '' ? 'allow' : /^avarice: ([^:]+:[^:]+|[^:]+):/.exec(parsed(out.stdout).hookSpecificOutput.permissionDecisionReason)?.[1] ?? 'deny');
+
+  it('denies each as the privileged action it starts, with a request', () => {
+    const cases: Array<[string, string]> = [
+      ['bash -c "git push origin main"', 'privileged:git.push'],
+      ["sh -c 'npm publish'", 'privileged:release.publish'],
+      ['eval "git push"', 'privileged:git.push'],
+      ['timeout 5 git push', 'privileged:git.push'],
+      ['xargs git push', 'privileged:git.push'],
+      ['setsid git push', 'privileged:git.push'],
+      ['stdbuf -o0 git push', 'privileged:git.push'],
+      ['ionice -c3 git push', 'privileged:git.push'],
+      ['flock /tmp/l git push', 'privileged:git.push'],
+      ["flock /tmp/l -c 'git push'", 'privileged:git.push'],
+      ['npm --scope @x publish', 'privileged:release.publish'],
+      ['npm --fetch-retries 3 publish', 'privileged:release.publish'],
+      ['npm --cwd pkg publish', 'privileged:release.publish'],
+    ];
+    for (const [command, expected] of cases) {
+      const before = eventsOf(p.roots, 'approval.requested').length;
+      const out = attendedHook(p.dataRoot, attendedCall(command));
+      assert.equal(rule(out), expected, command);
+      assert.equal(eventsOf(p.roots, 'approval.requested').length, before + 1, command);
+    }
+  });
+
+  it('allows a computed shell string, and a command that only has publish as an argument, without a decision', () => {
+    for (const command of ['bash -c "$X"', 'sh -c "$(cat f)"', 'npm install publish', 'npm view publish']) {
+      const out = attendedHook(p.dataRoot, attendedCall(command));
+      assert.deepEqual([out.code, out.stdout], [0, ''], command);
+    }
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 

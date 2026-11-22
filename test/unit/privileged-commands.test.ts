@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-import { classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
+import { NPM_COMMANDS, classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
 import { runUnderShell, shellAvailable } from '../helpers/shell-oracle.ts';
 import type { Shell } from '../helpers/shell-oracle.ts';
 
@@ -235,6 +235,31 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['gh api repos/o/r/pulls -X POST', 1],
   ['npm test && npm publish', 1],
   ['npm publish', 1],
+  // Another program starts the command (plan 04-51; WR-01, WR-03): the stubs for the shells and the wrappers are linked into the stub directory, so a shell
+  // started on a literal string really runs the stub.
+  ['bash -c "git push origin main"', 1],
+  ["sh -c 'npm publish'", 1],
+  ['eval "git push"', 1],
+  ['eval git push origin main', 1],
+  ['timeout 5 git push', 1],
+  ['xargs git push', 1],
+  ['setsid git push', 1],
+  ['stdbuf -o0 git push', 1],
+  ['ionice -c3 git push', 1],
+  ['flock /tmp/l git push', 1],
+  ["flock /tmp/l -c 'git push'", 1],
+  ["bash -lc 'echo hi; git push origin main'", 1],
+  ["bash -c \"bash -c 'git push origin main'\"", 1],
+  ['bash -c "echo $(git push)"', 1],
+  ['FOO=1 sh -c "git push"', 1],
+  ['bash -c "$X"', 0],
+  ['sh -c "$(cat f)"', 0],
+  ['bash -c "echo git push"', 0],
+  ['npm --scope @x publish', 1],
+  ['npm --fetch-retries 3 publish', 1],
+  ['npm --cwd pkg publish', 1],
+  ['npm install publish', 0],
+  ['npm view publish', 0],
   ['gh api repos/o/r/pulls', 0],
   ['git status', 0],
   ["echo 'git push'", 0],
@@ -341,5 +366,125 @@ describe('the line digest binds everything else on the line (CR-03, FR-12, T-04-
 
   it('classifyShellCommand, which sees one command and not the line, adds no line', () => {
     assert.deepEqual(classifyShellCommand(['git', 'push', 'origin', 'main']), { action: 'git.push', params: { remote: 'origin', refspec: 'main' } });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// A push or a publish started through another program (plan 04-51; WR-01, WR-03, T-04-137)
+// ---------------------------------------------------------------------------------------------------------
+
+describe('a shell started on a literal string, eval and the wrappers run the command they are given (WR-01, T-04-137)', () => {
+  const FORMS: ReadonlyArray<readonly [string, string]> = [
+    ['bash -c "git push origin main"', 'git.push'],
+    ["sh -c 'npm publish'", 'release.publish'],
+    ['eval "git push"', 'git.push'],
+    ['eval git push origin main', 'git.push'],
+    ['timeout 5 git push', 'git.push'],
+    ['timeout -s KILL 5 git push', 'git.push'],
+    ['timeout --signal=KILL --foreground 5 git push', 'git.push'],
+    ['xargs git push', 'git.push'],
+    ['xargs -n 1 -I{} git push {}', 'git.push'],
+    ['setsid git push', 'git.push'],
+    ['setsid -f git push', 'git.push'],
+    ['stdbuf -o0 git push', 'git.push'],
+    ['stdbuf -o 0 -e L git push', 'git.push'],
+    ['ionice -c3 git push', 'git.push'],
+    ['ionice -c 2 -n 7 git push', 'git.push'],
+    ['flock /tmp/l git push', 'git.push'],
+    ['flock -w 5 /tmp/l git push', 'git.push'],
+    ["flock /tmp/l -c 'git push'", 'git.push'],
+    ["flock -c 'git push' /tmp/l", 'git.push'],
+    ["bash -lc 'git push origin main'", 'git.push'],
+    ["/bin/zsh -f -c 'git push'", 'git.push'],
+    ["dash -c 'git push'", 'git.push'],
+    ["ksh -c 'git push'", 'git.push'],
+    ["bash --norc -c 'git push'", 'git.push'],
+    ["bash -o pipefail -c 'git push'", 'git.push'],
+    ["bash -c 'echo hi; git push origin main'", 'git.push'],
+    ["bash -c \"bash -c 'git push origin main'\"", 'git.push'],
+    ['bash -c "eval \\"git push\\""', 'git.push'],
+    ["sudo timeout 5 bash -c 'git push'", 'git.push'],
+    ['bash -c "echo $(git push)"', 'git.push'],
+    ["bash -c 'echo $(npm publish)'", 'release.publish'],
+    ['bash -c "git push origin $BRANCH"', 'git.push'],
+  ];
+  for (const [line, action] of FORMS) {
+    it(`${JSON.stringify(line)} is ${action}`, () => {
+      assert.deepEqual(actionsOf(line).slice(0, 1), [action]);
+    });
+  }
+
+  it('names every command of a shell string, in order', () => {
+    assert.deepEqual(actionsOf("bash -c 'git push a; npm publish'"), ['git.push', 'release.publish']);
+  });
+
+  it('takes the target of the inner command, and carries the outer assignments on it', () => {
+    const inner = firstOf("FOO=1 bash -c 'git push origin main'");
+    assert.equal(inner.params['remote'], 'origin');
+    assert.equal(inner.params['refspec'], 'main');
+    assert.equal(inner.params['env'], 'FOO=1');
+    assert.equal(firstOf("bash -c 'BAR=2 git push origin main'").params['env'], 'BAR=2');
+    assert.equal(firstOf("FOO=1 bash -c 'BAR=2 git push origin main'").params['env'], 'FOO=1 BAR=2');
+  });
+
+  it('keeps the whole outer line in the digest of the inner command', () => {
+    const text = "bash -c 'git push origin main'";
+    assert.equal(firstOf(text).params['line'], lineDigest(text));
+  });
+
+  it('a computed string stays unclassified, while the commands of its substitution are still read', () => {
+    assert.deepEqual(classifyLine('bash -c "$X"'), { kind: 'none' });
+    assert.deepEqual(classifyLine('sh -c "$(cat f)"'), { kind: 'none' });
+    assert.deepEqual(classifyLine('eval "$CMD"'), { kind: 'none' });
+    assert.deepEqual(actionsOf('sh -c "$(git push)"'), ['git.push']);
+  });
+
+  it('a shell that is not given a string, or a script, is not read as holding a push', () => {
+    for (const line of ['bash script.sh git push', 'bash -x script.sh', 'sh', 'bash -c', 'eval', 'timeout', 'flock /tmp/l', 'xargs', 'bash -c "echo git push"', "eval 'echo git push'"]) {
+      assert.deepEqual(classifyLine(line), { kind: 'none' }, line);
+    }
+  });
+
+  it('a shell string that cannot be read is unparseable, never none', () => {
+    assert.equal(classifyLine('bash -c \'echo "unterminated\'').kind, 'unparseable');
+    assert.equal(classifyLine("eval 'echo $(git status'").kind, 'unparseable');
+  });
+
+  it('shell strings nested more than the scanner reads are unparseable', () => {
+    let line = 'git push';
+    for (let level = 0; level < 12; level += 1) line = `bash -c ${JSON.stringify(line)}`;
+    assert.equal(classifyLine(line).kind, 'unparseable');
+  });
+});
+
+describe('npm publish is found after any option, and only as the subcommand (WR-03, T-04-137)', () => {
+  const published = (line: string): boolean => actionsOf(line).includes('release.publish');
+
+  it('classifies publish after an option npm takes a value for', () => {
+    for (const line of ['npm --scope @x publish', 'npm --fetch-retries 3 publish', 'npm --cwd pkg publish', 'npm --loglevel info publish', 'npm --prefix test publish', 'npm -w pkg publish', 'npm --registry https://r.example publish', 'npm --scope=@x publish']) {
+      assert.ok(published(line), line);
+    }
+  });
+
+  it("classifies npm's own abbreviations of publish", () => {
+    for (const line of ['npm pub', 'npm publi', 'npm pu']) assert.ok(published(line), line);
+  });
+
+  it('does not name a command that has the word publish as an argument', () => {
+    for (const line of ['npm install publish', 'npm view publish', 'npm i publish', 'npm info publish', 'npm run publish', 'npm test publish', 'npm --scope @x install publish']) {
+      assert.ok(!published(line), line);
+    }
+  });
+
+  it('exports the table of npm command names and aliases', () => {
+    for (const name of ['publish', 'install', 'view', 'i', 'info', 'run', 'run-script', 'unpublish']) assert.ok(Object.hasOwn(NPM_COMMANDS, name), name);
+    assert.equal(NPM_COMMANDS['info'], 'view');
+    assert.equal(NPM_COMMANDS['publish'], 'publish');
+  });
+
+  it('drops the subcommand and the option values before it from the parameters, by position', () => {
+    assert.equal(firstOf('npm --scope @x publish').params['package'], undefined);
+    assert.equal(firstOf('npm --scope @x publish ./pkg.tgz').params['package'], './pkg.tgz');
+    assert.equal(firstOf('npm publish publish').params['package'], 'publish', 'a package named publish is a package');
   });
 });

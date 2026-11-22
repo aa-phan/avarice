@@ -40,6 +40,15 @@ export function runUnderShell(shell: Shell, line: string): string[][] {
     stub(bin, 'cat', 'exec /bin/cat "$@"');
     stub(bin, 'diff', '/bin/cat "$@" >/dev/null 2>&1\nexit 0');
     stub(bin, 'bash', `exec ${single(SHELL_PATHS.bash)} "$@"`);
+    // Shells and wrappers (plan 04-51; WR-01): each does what the real one does with the arguments the corpus gives it, and runs the stub programs through PATH. None of the
+    // wrappers is installed on every machine the suite runs on, so the oracle brings its own.
+    stub(bin, 'sh', 'exec /bin/sh "$@"');
+    stub(bin, 'timeout', 'while [ $# -gt 0 ]; do case "$1" in -s|-k) shift 2;; -*) shift;; *) break;; esac; done\nshift\nexec "$@"');
+    stub(bin, 'xargs', 'exec "$@"');
+    stub(bin, 'setsid', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'stdbuf', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'ionice', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'flock', 'cmd=\nwhile [ $# -gt 0 ]; do case "$1" in -c) cmd="$2"; shift 2;; -w|-E) shift 2;; -*) shift;; *) break;; esac; done\nshift\nwhile [ $# -gt 0 ]; do case "$1" in -c) cmd="$2"; shift 2;; *) break;; esac; done\nif [ -n "$cmd" ]; then exec /bin/sh -c "$cmd"; fi\nexec "$@"');
     spawnSync(SHELL_PATHS[shell], [...SHELL_FLAGS[shell], line], { cwd: root, env: { PATH: bin, HOME: root, LC_ALL: 'C' }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 });
     if (!existsSync(log)) return [];
     return readFileSync(log, 'utf8')
