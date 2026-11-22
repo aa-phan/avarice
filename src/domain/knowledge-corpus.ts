@@ -178,7 +178,9 @@ export const KNOWLEDGE_COST = { chunkUsd: 0.0255, exponent: 1.376, capShare: 2 /
 // The modelled cost in USD of one knowledge session over `chunks` chunks.
 export const knowledgeSessionCost = (chunks: number): number => KNOWLEDGE_COST.chunkUsd * chunks ** KNOWLEDGE_COST.exponent;
 
+// 0 when no positive finite cap is left: a negative cap would make the formula NaN, which removes the corpus cap exactly when no budget is left (WR-05).
 export function knowledgeChunkLimit(costCapUsd: number): number {
+  if (!Number.isFinite(costCapUsd) || costCapUsd <= 0) return 0;
   const fits = Math.floor((costCapUsd * KNOWLEDGE_COST.capShare / KNOWLEDGE_COST.chunkUsd) ** (1 / KNOWLEDGE_COST.exponent) + 1e-9);
   return Math.max(1, fits);
 }

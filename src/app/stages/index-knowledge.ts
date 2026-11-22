@@ -258,6 +258,8 @@ export async function runKnowledgeStep(deps: AppDeps, ctx: IndexStepContext): Pr
   const costCap = invocationCostCap(deps, row);
   if (!costCap.ok) return costCap;
   const chunkLimit = knowledgeChunkLimit(costCap.value);
+  // No positive cost cap is left, so no invocation could be paid for: stop before a corpus is built or an invocation started (WR-05, OPS-5).
+  if (chunkLimit === 0) return absent('budget_exhausted', `no cost cap is left for a knowledge invocation (${costCap.value} USD), so no knowledge invocation was started`);
   const selection = selectKnowledgeCorpus({ ...rules, sizes: sizes.value, secretGlobs: contract.body.files.secretGlobs, readGlobs: contract.body.files.read, limits: { maxChunks: chunkLimit } });
 
   // 2. Copy with a manifest, in the data root and as an artifact (never inside the corpus).
