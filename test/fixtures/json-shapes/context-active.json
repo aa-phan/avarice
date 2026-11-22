@@ -25,6 +25,7 @@
       "estTokens": 24,
       "reason": "matched \"answer\" in file-roles.json",
       "freshness": "fresh",
+      "untrusted": true,
       "profile": "personal-local",
       "accessScope": "sha256:<sha256>"
     },
@@ -44,6 +45,7 @@
       "estTokens": 33,
       "reason": "matched \"answer\" in arch-decisions.json",
       "freshness": "fresh",
+      "untrusted": true,
       "profile": "personal-local",
       "accessScope": "sha256:<sha256>"
     },
