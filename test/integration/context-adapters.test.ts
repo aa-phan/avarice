@@ -15,7 +15,7 @@ import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service
 import { confirmCitedPaths, queryContext, renderContext } from '../../src/app/context.ts';
 import type { ContextReport } from '../../src/app/context.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
-import type { ContextQuery } from '../../src/ports/context-source.ts';
+import type { ContextQuery, ExternalRef } from '../../src/ports/context-source.ts';
 import { makeRoots } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
 import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
@@ -355,6 +355,82 @@ describe('gsd-planning: sections of the planning files, read-only from the stagi
     const gone = await source.refresh(handle.ref, refreshQuery);
     assert.ok(gone.ok);
     assert.equal(gone.value.freshness, 'deleted');
+  });
+});
+
+describe('gsd-planning refresh walks only real directories (WR-20, T-04-109)', () => {
+  const nowMs = () => Date.parse('2026-11-17T00:00:00Z');
+  const STATE = PLANNING_FILES['.planning/state.json'] as string;
+  const OUTSIDE_CONTEXT = '# Phase 4 context\n\n## Decisions\n\nzorbflux text that lives outside the staging copy.\n';
+  const ID = 'phases/04-current/04-CONTEXT.md#decisions';
+  const refOf = (revision?: string): ExternalRef => ({ provider: 'gsd-planning', kind: 'section', id: ID, ...(revision !== undefined ? { revision } : {}), retrievedAt: '2026-11-17T00:00:00.000Z', scope: '.planning/phases/04-current/04-CONTEXT.md', freshness: 'fresh' });
+  const refreshQueryOf = (dir: string) => ({ workspace: { stagingPath: dir, repoPath: dir }, indexRevision: 'git:0123456789abcdef' });
+
+  it('answers a real phase file with a live state (the positive control for the two link cases)', async () => {
+    const dir = planningDir();
+    const source = new GsdPlanningContext({ nowMs });
+    const found = await source.find(planningQuery(dir, 'zorbflux decision'), 4000);
+    assert.ok(found.ok);
+    const handle = found.value.find((h) => h.ref.id === ID);
+    assert.ok(handle, found.value.map((h) => h.ref.id).join(', '));
+    const refreshed = await source.refresh(handle.ref, refreshQueryOf(dir));
+    assert.ok(refreshed.ok);
+    assert.equal(refreshed.value.freshness, 'fresh');
+  });
+
+  it('answers deleted when .planning/phases is a symbolic link to a directory outside the staging copy that holds the section', async () => {
+    const outside = planningDir({ 'phases/04-current/04-CONTEXT.md': OUTSIDE_CONTEXT });
+    const dir = planningDir({ '.planning/state.json': STATE });
+    symlinkSync(join(outside, 'phases'), join(dir, '.planning', 'phases'));
+    const source = new GsdPlanningContext({ nowMs });
+    const refreshed = await source.refresh(refOf(), refreshQueryOf(dir));
+    assert.ok(refreshed.ok, JSON.stringify(refreshed));
+    assert.equal(refreshed.value.freshness, 'deleted');
+  });
+
+  it('answers deleted when only .planning/phases/<dir> is a symbolic link to a directory outside the staging copy', async () => {
+    const outside = planningDir({ 'phases/04-current/04-CONTEXT.md': OUTSIDE_CONTEXT });
+    const dir = planningDir({ '.planning/state.json': STATE });
+    mkdirSync(join(dir, '.planning', 'phases'), { recursive: true });
+    symlinkSync(join(outside, 'phases', '04-current'), join(dir, '.planning', 'phases', '04-current'));
+    const source = new GsdPlanningContext({ nowMs });
+    const refreshed = await source.refresh(refOf(), refreshQueryOf(dir));
+    assert.ok(refreshed.ok, JSON.stringify(refreshed));
+    assert.equal(refreshed.value.freshness, 'deleted');
+  });
+});
+
+describe('git-files: an excluded directory is excluded at any depth (WR-21, T-04-111)', () => {
+  const nowMs = () => Date.parse('2026-11-17T00:00:00Z');
+  const FILES: Record<string, string> = {
+    'README.md': '# nested\n',
+    'src/app.ts': 'export const nestedzork = 1;\n',
+    'node_modules/root.js': 'nestedzork at the root\n',
+    'packages/app/node_modules/x.js': 'nestedzork in a nested node_modules\n',
+    'services/api/vendor/y.go': 'nestedzork in a nested vendor\n',
+    'build/out.map': 'nestedzork in a root build map\n',
+    'pkg/build/keep.map': 'nestedzork in a nested build map\n',
+  };
+  const scopeOf = (readExclude: string[]) => ({ read: ['**'], readExclude, secretGlobs: [] as string[] });
+  const hitsOf = async (readExclude: string[]): Promise<string[]> => {
+    const repo = makeScratchRepo({ files: FILES });
+    cleanup.push(repo.base);
+    const source = new GitFilesContext({ nowMs });
+    const found = await source.find(queryOf(repo, 'nestedzork', { readScope: scopeOf(readExclude) }), 4000);
+    assert.ok(found.ok, JSON.stringify(found));
+    return found.value.map((h) => h.ref.scope ?? '').sort();
+  };
+
+  it('drops a hit under packages/app/node_modules and services/api/vendor as it drops one under the root directory, and keeps the hits elsewhere', async () => {
+    const hits = await hitsOf(['node_modules', 'vendor']);
+    assert.deepEqual(hits, ['build/out.map', 'pkg/build/keep.map', 'src/app.ts']);
+  });
+
+  it('keeps the root-anchored meaning of an entry written as a glob: build/*.map drops build/out.map and not pkg/build/keep.map', async () => {
+    const hits = await hitsOf(['build/*.map']);
+    assert.ok(!hits.includes('build/out.map'), hits.join(', '));
+    assert.ok(hits.includes('pkg/build/keep.map'), hits.join(', '));
+    assert.ok(hits.includes('packages/app/node_modules/x.js'), 'an unrelated directory is not excluded by a glob entry');
   });
 });
 
