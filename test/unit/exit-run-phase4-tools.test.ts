@@ -481,3 +481,67 @@ describe('run-one records spend at no less than the onboarding may have cost (pl
     assert.deepEqual(finishedCosts([]), { costUsd: 0, costAssumed: false });
   });
 });
+
+describe('the AC-14 runner refuses an unknown retry target and a ruling that names no repository (plan 04-46, WR-35, T-04-128)', () => {
+  let dir: string;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'avarice-exit-run-sh-'));
+  });
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // A stand-in for node that records its arguments, prints two approved ids for `ids` and exits 0 for everything else, so the runner's own logic is what is measured and no model starts.
+  function stub(name: string): { node: string; log: string } {
+    const log = join(dir, `${name}.log`);
+    const node = join(dir, `${name}-node`);
+    writeFileSync(node, `#!/bin/bash\necho "$*" >> "${log}"\nfor a in "$@"; do if [ "$a" = ids ]; then printf 'r1\\nr2\\n'; fi; done\nexit 0\n`, { mode: 0o755 });
+    return { node, log };
+  }
+  const runnerOf = (args: string[], node: string) => spawnSync('bash', [join(ROOT, 'scripts', 'exit-run-phase4.sh'), ...args], { encoding: 'utf8', env: { ...process.env, AVARICE_NODE: node } });
+  const runOneCalls = (log: string): string[] => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((l) => / run-one /.test(l)) : []);
+
+  it('exits 2 naming an id that is not on the approved list, and calls run-one zero times', () => {
+    const s = stub('unknown-id');
+    const ran = runnerOf(['--run', '--only', 'NOT-AN-ID'], s.node);
+    assert.equal(ran.status, 2, ran.stderr);
+    assert.match(ran.stderr, /NOT-AN-ID is not on the approved list/);
+    assert.deepEqual(runOneCalls(s.log), []);
+  });
+
+  it('matches the id as a whole line: a prefix of an approved id is not on the list', () => {
+    const s = stub('prefix-id');
+    const ran = runnerOf(['--run', '--only', 'r'], s.node);
+    assert.equal(ran.status, 2, ran.stderr);
+    assert.deepEqual(runOneCalls(s.log), []);
+  });
+
+  it('exits 2 with the usage text for --ruling-ref without --only, and calls run-one zero times', () => {
+    const s = stub('ruling-alone');
+    const ran = runnerOf(['--run', '--ruling-ref', 'r1'], s.node);
+    assert.equal(ran.status, 2, ran.stderr);
+    assert.match(ran.stderr, /usage:/);
+    assert.match(ran.stderr, /--ruling-ref needs --only/);
+    assert.deepEqual(runOneCalls(s.log), []);
+  });
+
+  it('still runs one approved id on --only, with its ruling reference', () => {
+    const s = stub('known-id');
+    const ran = runnerOf(['--run', '--only', 'r2', '--ruling-ref', 'ruling-7'], s.node);
+    assert.equal(ran.status, 0, ran.stderr);
+    const calls = runOneCalls(s.log);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0] ?? '', / run-one r2 --ruling-ref ruling-7$/);
+  });
+});
+
+describe('the headers state what the authorization record guards (plan 04-46, WR-34, T-04-127)', () => {
+  for (const file of ['exit-run-phase4-tools.ts', 'eval-retrieval.ts']) {
+    it(`${file} says the authorization record is a procedural guard and the spend ledger's ceiling the mechanical one`, () => {
+      const header = readFileSync(join(ROOT, 'scripts', file), 'utf8').split('\n').slice(0, 45).filter((l) => l.startsWith('//')).map((l) => l.replace(/^\/\/\s*/, '')).join(' ');
+      assert.match(header, /procedural guard/);
+      assert.match(header, /agent running as the owner/);
+      assert.match(header, /ceiling is the mechanical guard/);
+    });
+  }
+});
