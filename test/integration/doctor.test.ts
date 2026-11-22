@@ -4,9 +4,10 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { attendedEntryPaths, installAttendedHook } from '../../src/adapters/host-claude/attended-hook-install.ts';
 import { findSecrets } from '../../src/domain/secret-patterns.ts';
 import { disposeDoctorFixtures, doctor, doctorFixture, fakeGsd, initStore, reportOf, statePath, temp, writeProfileConfig } from '../helpers/doctor-fixtures.ts';
 import type { DoctorFixture } from '../helpers/doctor-fixtures.ts';
@@ -278,6 +279,72 @@ describe('--extensions reports configuration directories, duplicate registration
     const rep = reportOf(doctor(f, ['--json']));
     assert.equal(rep.extensions, undefined);
     assert.ok(!rep.findings.some((x) => x.area === 'extensions'));
+  });
+});
+
+// WR-25, OPS-1, T-04-123: the attended entry blocks every Bash call when its script or its node executable is gone, so `--extensions` reports that as an error.
+describe('--extensions reports an attended entry whose hook script or node executable is gone (WR-25, OPS-1)', () => {
+  // An attended entry written by installAttendedHook for a hook script that exists, in a Claude directory of its own.
+  function installed(f: DoctorFixture, name: string): { dir: string; script: string } {
+    const dir = join(f.home, name);
+    const script = join(f.home, `${name}-hook.ts`);
+    writeFileSync(script, '// hook\n');
+    const result = installAttendedHook(dir, { hookEntry: script, dataRoot: f.roots.AVARICE_DATA_ROOT });
+    assert.ok(result.ok, JSON.stringify(result));
+    return { dir, script };
+  }
+  const extensionErrors = (f: DoctorFixture, dir: string): Array<{ level: string; area: string; message: string; fix: string }> => {
+    const r = doctor(f, ['--extensions', '--json'], { CLAUDE_CONFIG_DIR: dir });
+    return reportOf(r).findings.filter((x) => x.area === 'extensions' && x.level === 'error');
+  };
+
+  it('lists an error naming the deleted hook script, with a fix naming avarice install-host', () => {
+    const f = doctorFixture();
+    const { dir, script } = installed(f, 'claude-gone-script');
+    rmSync(script);
+    const found = extensionErrors(f, dir);
+    assert.equal(found.length, 1, JSON.stringify(found));
+    assert.ok(found[0]?.message.includes(script), 'the message names the script');
+    assert.match(found[0]?.fix ?? '', /avarice install-host/);
+    assert.equal(doctor(f, ['--extensions'], { CLAUDE_CONFIG_DIR: dir }).code, 3, 'an error finding ends doctor with exit 3');
+  });
+
+  it('lists an error naming a node executable that does not exist', () => {
+    const f = doctorFixture();
+    const { dir } = installed(f, 'claude-gone-node');
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, readFileSync(file, 'utf8').replace(JSON.stringify(process.execPath).slice(1, -1), '/nonexistent/node-gone/bin/node'));
+    const found = extensionErrors(f, dir);
+    assert.equal(found.length, 1, JSON.stringify(found));
+    assert.ok(found[0]?.message.includes('/nonexistent/node-gone/bin/node'), 'the message names the node path');
+    assert.match(found[0]?.fix ?? '', /avarice install-host/);
+  });
+
+  it('lists no such finding for a healthy entry, and adds no key to the extensions JSON', () => {
+    const f = doctorFixture();
+    const { dir } = installed(f, 'claude-healthy');
+    assert.deepEqual(extensionErrors(f, dir), []);
+    const rep = reportOf(doctor(f, ['--extensions', '--json'], { CLAUDE_CONFIG_DIR: dir }));
+    assert.deepEqual(Object.keys(rep.extensions ?? {}).sort(), ['activeConfigDir', 'configDirs']);
+    assert.deepEqual(Object.keys(rep.extensions?.configDirs[0] ?? {}).sort(), ['active', 'attendedHookEntries', 'exists', 'path', 'skills']);
+  });
+});
+
+describe('attendedEntryPaths reads back the command installAttendedHook wrote', () => {
+  it('returns the node path and the hook script path, also for paths that need quoting, and null for any other command', () => {
+    const f = doctorFixture();
+    const script = join(f.home, "it's a hook dir", 'pre tool use.ts');
+    mkdirSync(join(f.home, "it's a hook dir"), { recursive: true });
+    writeFileSync(script, '// hook\n');
+    const dir = join(f.home, 'claude-roundtrip');
+    const result = installAttendedHook(dir, { hookEntry: script, dataRoot: f.roots.AVARICE_DATA_ROOT });
+    assert.ok(result.ok, JSON.stringify(result));
+    const settings = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')) as { hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> } };
+    const command = settings.hooks.PreToolUse[0]?.hooks[0]?.command as string;
+    assert.deepEqual(attendedEntryPaths(command), { node: process.execPath, script });
+    assert.equal(attendedEntryPaths('node hook.ts --event pre --attended --avarice-attended-hook'), null);
+    assert.equal(attendedEntryPaths('echo hello'), null);
+    assert.equal(attendedEntryPaths(''), null);
   });
 });
 

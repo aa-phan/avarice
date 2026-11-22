@@ -69,6 +69,11 @@ export function hookEntryProblem(path: string): string | undefined {
   }
 }
 
+// The node executable and the hook script a command written by attendedHookEntry runs, or null for any other command (a skeleton: filled in by the next commit).
+export function attendedEntryPaths(_command: string): { node: string; script: string } | null {
+  return null;
+}
+
 function lstatOrNull(path: string): Stats | null {
   try {
     return lstatSync(path);
