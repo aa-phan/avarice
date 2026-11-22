@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyLine, classifyShellCommand } from '../../src/domain/privileged-commands.ts';
+import { classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
 import { runUnderShell, shellAvailable } from '../helpers/shell-oracle.ts';
 import type { Shell } from '../helpers/shell-oracle.ts';
 
@@ -183,6 +183,8 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['FOO="a b" git push origin main', 1],
   ['command git push origin main', 1],
   ['exec git push origin main', 1],
+  ['time git push origin main', 1],
+  ['time -p git push origin main', 1],
   ["git 'push' origin main", 1],
   ['cd . && git push origin main', 1],
   ['echo ok; git push origin main', 1],
@@ -250,8 +252,10 @@ describe('the differential oracle: every privileged command a shell runs on the 
     it(`under ${shell}${available ? '' : ' (skipped: /bin/zsh is not installed on this machine)'}`, { skip: available ? false : `${shell} is not installed` }, () => {
       for (const { line, runs } of CORPUS) {
         const performed = runUnderShell(shell, line)
-          .map((argv) => classifyShellCommand(argv))
-          .filter((found) => found !== null);
+          .flatMap((argv) => {
+            const found = classifyShellCommand(argv);
+            return found === null || isUnparseable(found) ? [] : [found];
+          });
         // bash expands a redirection target twice when the redirection fails, so a line may run a command more often than it names it: at least `runs`, and none for a line that only mentions one.
         if (shell === 'bash') assert.ok(runs === 0 ? performed.length === 0 : performed.length >= runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
         const found = classifyLine(line);

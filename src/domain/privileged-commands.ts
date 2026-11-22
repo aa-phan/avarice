@@ -3,12 +3,15 @@
 // hook can refuse it with the rule `privileged:<action>` and offer the approval route instead of the bare prefix rule. Pure: it reads text and returns a name and
 // the parameters an approval binds. The hook entry, the run decision and the attended mode all ask this one module.
 //
-// What it recognizes is the command word and its arguments as the shell would split them: a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`,
-// `nice`, `sudo` and `time` in front of the program, the program's directory (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`,
-// `--git-dir`), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a backtick, and a command substitution, also inside double quotes. It does not
-// run or expand anything: a name the shell builds from a variable, an alias, a script that pushes, `bash -c` over a computed string and a function are the
-// documented bypass of command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own
-// protections are the controls that hold when this one is evaded.
+// What it recognizes is the command word and its arguments as the shell would split them (plan 04-40): the quoting, comment, here-document and redirection rules of the
+// shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo` and `time` (with `-p`) in front of the program, the program's directory
+// (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
+// backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
+// MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
+// and both callers refuse it: no limit and no parse failure is read as "not privileged". It does not run or expand anything: a name the shell builds at run time (a
+// variable, an alias, a function), a script that pushes, and a shell started on a computed string (`bash -c` over a built string) are the documented bypass of
+// command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
+// hold when this one is evaded.
 //
 // The parameters are what an approval is bound to (src/domain/approval.ts): the target of the effect (remote and refspec, base and head, tag, endpoint and method)
 // and the NAMES of the options given (`--force`, `--title`), never an option's value, so a title or a body is not bound and `--force` is.
@@ -412,25 +415,40 @@ export function commandsOf(command: string): Commands {
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // A word that begins a command in a compound statement and is not the command: the program is the word after it.
-const RESERVED_WORDS: ReadonlySet<string> = new Set(['!', '{', '}', 'then', 'do', 'else', 'elif', 'if', 'while', 'until', 'time']);
-// Programs that run the command that follows them, and the options of each that take a separate value.
+const RESERVED_WORDS: ReadonlySet<string> = new Set(['!', '{', '}', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
+// Programs that run the command that follows them, and the options of each that take a separate value. Options that take none (`time -p`) are skipped as they are met.
+// Looked up with Object.hasOwn: a word that exists only on the object prototype (`constructor`, `__proto__`) is a program, not a wrapper (WR-02).
 const WRAPPERS: Readonly<Record<string, readonly string[]>> = {
   env: ['-u', '--unset', '-C', '--chdir', '-P'],
   command: [],
   exec: ['-a'],
   nohup: [],
   builtin: [],
+  time: [],
   nice: ['-n', '--adjustment'],
   sudo: ['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir', '--chroot'],
 };
 
 const baseOf = (word: string): string => (word.split('/').pop() ?? '').toLowerCase();
 
+// How many assignment, reserved and wrapper words the classifier reads before the program. A command with more is unparseable: the program cannot be found, so the line
+// is refused, never read as "not privileged" (CR-01).
+export const MAX_PREFIX_WORDS = 16;
+
+// A command whose program the classifier could not find: it is not an answer of "not privileged".
+export interface UnparseableCommand {
+  unparseable: string;
+}
+
+export const isUnparseable = (found: PrivilegedCommand | null | UnparseableCommand): found is UnparseableCommand => found !== null && 'unparseable' in found;
+
+const isPrefixWord = (word: string): boolean => ASSIGNMENT.test(word) || RESERVED_WORDS.has(word) || Object.hasOwn(WRAPPERS, baseOf(word));
+
 // The command's words with what comes before the program removed: assignments, reserved words and wrappers with their options. Null when the command
 // runs nothing (`command -v git` only looks the program up).
-function programWords(words: readonly string[]): string[] | null {
+function programWords(words: readonly string[]): string[] | null | UnparseableCommand {
   let rest = [...words];
-  for (let guard = 0; guard < 16; guard += 1) {
+  for (let guard = 0; guard < MAX_PREFIX_WORDS; guard += 1) {
     const first = rest[0];
     if (first === undefined) return rest;
     if (ASSIGNMENT.test(first) || RESERVED_WORDS.has(first)) {
@@ -438,8 +456,8 @@ function programWords(words: readonly string[]): string[] | null {
       continue;
     }
     const wrapper = baseOf(first);
-    const valued = WRAPPERS[wrapper];
-    if (valued === undefined) return rest;
+    if (!Object.hasOwn(WRAPPERS, wrapper)) return rest;
+    const valued = WRAPPERS[wrapper] as readonly string[];
     let i = 1;
     for (; i < rest.length; i += 1) {
       const arg = rest[i] as string;
@@ -464,6 +482,8 @@ function programWords(words: readonly string[]): string[] | null {
     }
     rest = rest.slice(i);
   }
+  const next = rest[0];
+  if (next !== undefined && isPrefixWord(next)) return { unparseable: `more than ${MAX_PREFIX_WORDS} assignment, reserved or wrapper words before the program` };
   return rest;
 }
 
@@ -611,10 +631,13 @@ function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
   return { action: form.action, params };
 }
 
-// The privileged action one command is, or null. `words` are the words of a single command (no `;`, `&&` or `|`).
-export function classifyShellCommand(words: readonly string[]): PrivilegedCommand | null {
+// The privileged action one command is, null for a command that is not privileged, or an unparseable command whose program could not be found. `words` are the words of a
+// single command (no `;`, `&&` or `|`).
+export function classifyShellCommand(words: readonly string[]): PrivilegedCommand | null | UnparseableCommand {
   const program = programWords(words);
-  if (program === null || program.length === 0) return null;
+  if (program === null) return null;
+  if (!Array.isArray(program)) return program;
+  if (program.length === 0) return null;
   const args = program.slice(1);
   switch (baseOf(program[0] as string)) {
     case 'git':
@@ -644,6 +667,7 @@ export function classifyLine(command: string): LineClassification {
   const commands: PrivilegedCommand[] = [];
   for (const words of split.commands) {
     const found = classifyShellCommand(words);
+    if (found !== null && isUnparseable(found)) return { kind: 'unparseable', reason: found.unparseable };
     if (found !== null) commands.push(found);
   }
   return commands.length === 0 ? { kind: 'none' } : { kind: 'privileged', commands };
