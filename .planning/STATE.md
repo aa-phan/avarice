@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-43-PLAN.md
-last_updated: "2026-11-22T21:29:45.199Z"
+stopped_at: Completed 04-44-PLAN.md
+last_updated: "2026-11-22T21:42:46.688Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: b5aa524aaebda5d94cac46abfd34ad9f0eeb4827
+state_head: 7ce94c77baa2c85d0bf11b3beb7940964770ccdb
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 43
+  completed_plans: 44
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 5 of 55
+Plan: 6 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -206,6 +206,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P41 | not captured | 3 tasks | 12 files |
 | Phase 04 P42 | 75 min | 3 tasks | 14 files |
 | Phase 04 P43 | 7 min | 3 tasks | 11 files |
+| Phase 04 P44 | 13min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -514,6 +515,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-43: an other-profile config that cannot be read is unavailable and stops the deny-list computation, naming the profile; only a corrupt config is skipped (WR-17) — A deny list that could not be computed must not read as a shorter one.
 - [Phase 04]: 04-43: bindings.json writes are serialized by bindings.json.lock (pid and start time, 2 s wait, dead-holder takeover), re-read under the lock, fsynced before the rename; backfillBindings holds the lock once (WR-15) — A lost binding lets a bound repository open under another profile.
 - [Phase 04]: 04-43: the cmd: provider judges credential size from stdout ending in TRUNCATION_MARKER, not the combined truncated flag (WR-16) — A verbose helper stderr must not make a good credential look oversized.
+- [Phase 04]: 04-44: restricted scope check reuses the contained run's breaches rule; out-of-scope paths are excluded from the patch, named in the block text and recorded as a scope-of-writes containment.finding
+- [Phase 04]: 04-44: the restricted:outputs step is recorded twice (judged with captured false, then stored with captured true); a resume re-takes the outputs from the clone and never relaunches the host
 
 ### Roadmap Evolution
 
@@ -581,8 +584,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:29:45.163Z
-Stopped at: Completed 04-43-PLAN.md
+Last session: 2026-11-22T21:42:40.461Z
+Stopped at: Completed 04-44-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
