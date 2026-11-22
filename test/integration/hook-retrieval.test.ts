@@ -142,6 +142,47 @@ describe('broad discovery (CON-10, S-16, T-04-81)', () => {
   });
 });
 
+describe('tracer: a Grep whose glob matches every file is a broad discovery (WR-06, CON-10, T-04-131)', () => {
+  const EVERY_FILE_GLOBS = ['*', '**', '**/*', '*.*', './**/*', '{*,.*}'];
+  const rootGrep = (glob: string) => ({ tool_name: 'Grep', tool_input: { pattern: 'x', glob } });
+
+  it('without broadDiscovery denies each every-file glob at the clone root as retrieval:broad-discovery-not-authorized, charging nothing', () => {
+    const fx = retrievalFixture(10, false);
+    for (const glob of EVERY_FILE_GLOBS) assert.equal(outcome(runHook(fx, 'pre', rootGrep(glob)).stdout), 'retrieval:broad-discovery-not-authorized', glob);
+    assert.equal(budgetUsed(fx, 'retrieval.searches'), 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+    assert.equal(budgetUsed(fx, 'retrieval.broadDiscovery'), 0);
+  });
+
+  it('with broadDiscovery allows the first every-file Grep, charging searches and broadDiscovery, and denies the second as retrieval:broad-discovery-spent', () => {
+    const fx = retrievalFixture(5, true);
+    assert.equal(outcome(runHook(fx, 'pre', rootGrep('**/*')).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.searches'), 1);
+    assert.equal(budgetUsed(fx, 'retrieval.broadDiscovery'), 1);
+    assert.equal(outcome(runHook(fx, 'pre', rootGrep('*')).stdout), 'retrieval:broad-discovery-spent');
+    assert.equal(budgetUsed(fx, 'retrieval.broadDiscovery'), 1);
+  });
+
+  it('keeps a Grep with a real glob or a type a filtered search, charged to retrieval.searches only', () => {
+    const fx = retrievalFixture(10, false);
+    const filtered = [
+      { tool_name: 'Grep', tool_input: { pattern: 'x', glob: '*.ts' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', glob: 'src/**/*.ts' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', type: 'ts' } },
+    ];
+    for (const call of filtered) assert.equal(outcome(runHook(fx, 'pre', call).stdout), 'allowed', JSON.stringify(call));
+    assert.equal(budgetUsed(fx, 'retrieval.searches'), 3);
+    assert.equal(budgetUsed(fx, 'retrieval.broadDiscovery'), 0);
+  });
+
+  it('treats a Glob whose pattern holds a brace group as unfiltered', () => {
+    const fx = retrievalFixture(10, false);
+    for (const pattern of ['{*,.*}', '**/*.{ts,js}']) {
+      assert.equal(outcome(runHook(fx, 'pre', { tool_name: 'Glob', tool_input: { pattern } }).stdout), 'retrieval:broad-discovery-not-authorized', pattern);
+    }
+  });
+});
+
 describe('onboarding purposes keep their hook decisions (policy-gated rules)', () => {
   it('a policy without a retrieval block allows an unfiltered Grep and charges toolCalls only', () => {
     const fx = makeHookFixture();

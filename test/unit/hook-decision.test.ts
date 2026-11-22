@@ -565,6 +565,14 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     assert.deepEqual(normalizeToolCall('Read', { file_path: '/r' }, STAGING), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } });
     assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } });
     assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.ts', path: 'src' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: `${STAGING}/src` } });
+    for (const glob of ['*', '**', '**/*', '*.*', './**/*', '{*,.*}', 'src/{a,b}']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } }, `Grep glob ${glob} matches every file`);
+    }
+    for (const glob of ['*.ts', 'src/**/*.ts']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } }, `Grep glob ${glob} filters`);
+    }
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', type: 'ts' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
+    assert.deepEqual(normalizeToolCall('Glob', { pattern: '{*,.*}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true } });
     assert.deepEqual(normalizeToolCall('Bash', { command: 'ls', run_in_background: true }, STAGING), { ok: true, call: { kind: 'shell', command: 'ls', background: true, cwd: STAGING } });
     assert.deepEqual(normalizeToolCall('Agent', { subagent_type: 'a' }, STAGING), { ok: true, call: { kind: 'subagent', subagentType: 'a' } });
     assert.deepEqual(normalizeToolCall('Task', {}, STAGING), { ok: true, call: { kind: 'subagent', subagentType: null } });
