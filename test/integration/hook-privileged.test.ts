@@ -537,6 +537,83 @@ describe('tracer: in an attended session every privileged command of a line need
   });
 });
 
+describe('a line that names one command twice needs two approvals, and the oldest approval is spent first (CR-04, FR-13)', () => {
+  const p = profile();
+  const twice = attendedCall('git push origin main; git push origin main');
+  const once = attendedCall('git push origin main');
+  const outcome = (out: Attended): string => (out.stdout === '' ? 'allow' : parsed(out.stdout).hookSpecificOutput.permissionDecision);
+  let first = '';
+
+  it('denies the line, and one approval of the request named spends nothing: the line is denied again and a second request is named', async () => {
+    const denied = attendedHook(p.dataRoot, twice);
+    assert.equal(outcome(denied), 'deny');
+    first = hintsOf(denied)[0] as string;
+    await approve(p.roots, first);
+    const again = attendedHook(p.dataRoot, twice);
+    assert.equal(outcome(again), 'deny', 'one approval let a line run a command twice');
+    const rows = approvalsOf(p.roots);
+    assert.equal(rows.length, 1);
+    assert.equal((rows[0] as ApprovalDb).consumed_at, null, 'the lone approval was not spent');
+    assert.equal(eventsOf(p.roots, 'action.started').length, 0);
+    const named = hintsOf(again);
+    assert.equal(named.length, 1, 'only the command without an approval is named');
+    assert.notEqual(named[0], first, 'the approved request is not named again');
+  });
+
+  it('after the second approval the line is allowed once and both approvals are consumed', async () => {
+    await approve(p.roots, hintsOf(attendedHook(p.dataRoot, twice))[0] as string);
+    const allowed = attendedHook(p.dataRoot, twice);
+    assert.deepEqual([allowed.code, allowed.stdout], [0, ''], allowed.stderr);
+    const rows = approvalsOf(p.roots);
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((r) => r.consumed_at !== null));
+    assert.equal(eventsOf(p.roots, 'action.started').length, 2);
+    assert.equal(outcome(attendedHook(p.dataRoot, twice)), 'deny', 'both were spent');
+  });
+
+  it('with two usable approvals granted at different times, one command takes the earlier and leaves the later', async () => {
+    const q = profile();
+    const named = hintsOf(attendedHook(q.dataRoot, twice))[0] as string;
+    await approve(q.roots, named);
+    await approve(q.roots, hintsOf(attendedHook(q.dataRoot, twice))[0] as string);
+    const before = approvalsOf(q.roots);
+    assert.equal(before.length, 2);
+    const [older, newer] = before as [ApprovalDb, ApprovalDb];
+    assert.ok(before.every((r) => r.consumed_at === null));
+    const allowed = attendedHook(q.dataRoot, once);
+    assert.deepEqual([allowed.code, allowed.stdout], [0, ''], allowed.stderr);
+    const after = approvalsOf(q.roots);
+    assert.notEqual((after.find((r) => r.approval_id === older.approval_id) as ApprovalDb).consumed_at, null, 'the earlier approval was spent');
+    assert.equal((after.find((r) => r.approval_id === newer.approval_id) as ApprovalDb).consumed_at, null, 'the later approval was left');
+  });
+});
+
+describe('the requests of a line are listed in the order its commands run (CR-04, SEC-6)', () => {
+  const p = profile();
+
+  it('names the pr create inside a substitution before the push that follows it, and records the requests in that order', () => {
+    const denied = attendedHook(p.dataRoot, attendedCall('echo $(gh pr create --base main) && git push origin main'));
+    assert.equal(parsed(denied.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    assert.deepEqual(requestedActions(p.roots), ['scm.pr.create', 'git.push']);
+    assert.deepEqual(hintsOf(denied), eventsOf(p.roots, 'approval.requested').map((row) => dataOf(row)['requestId']));
+    assert.match(parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:scm\.pr\.create: scm\.pr\.create needs .*; git\.push needs /);
+    assert.equal(eventsOf(p.roots, 'policy.denied').length, 2);
+  });
+});
+
+describe('in a run a compound line is denied with the rule of its first privileged command, unchanged (CR-04)', () => {
+  it('denies true; git push origin main && npm publish as privileged:git.push and names one request', () => {
+    const fx = fixture();
+    const result = runHook(fx, 'pre', bash('true; git push origin main && npm publish'));
+    assert.equal(result.code, 0, result.stderr);
+    const reason = parsed(result.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /^avarice: privileged:git\.push: /);
+    assert.equal((reason.match(/avarice approve apr_/g) ?? []).length, 1);
+    assert.deepEqual(eventRows(fx, 'hook.decision').map(dataOf).map((d) => d['rule']), ['privileged:git.push']);
+    assert.equal(eventRows(fx, 'approval.requested').length, 1);
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 
