@@ -6,6 +6,7 @@
 import { err } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
+import { TRUNCATION_MARKER } from '../../ports/command-executor.ts';
 import type { CommandExecutor } from '../../ports/command-executor.ts';
 import type { CredentialProvider, ResolveContext, SecretHandle } from '../../ports/credential-provider.ts';
 import { sealValue, seedOnResolved } from './handle.ts';
@@ -74,7 +75,9 @@ export class CmdProvider implements CredentialProvider {
     if (result.status !== 'passed' || result.exitCode !== 0) {
       return err({ kind: 'unavailable', cause: `the helper did not succeed (${result.status === 'failed' && result.exitCode !== null ? `exit ${result.exitCode}` : result.status})` });
     }
-    if (result.truncated) return err({ kind: 'invalid', field: 'value', reason: `the helper printed more than ${HELPER_OUTPUT_LIMIT_BYTES} bytes` });
+    // `truncated` is set when either stream was cut, so a helper that only fills stderr would look oversized. A stream that hit the limit ends with
+    // the marker, so the size of the credential is judged from stdout's own ending, and stderr stays unread.
+    if (result.stdout.endsWith(TRUNCATION_MARKER)) return err({ kind: 'invalid', field: 'value', reason: `the helper printed more than ${HELPER_OUTPUT_LIMIT_BYTES} bytes` });
     return sealValue(result.stdout.trim(), this.#onResolved);
   }
 }
