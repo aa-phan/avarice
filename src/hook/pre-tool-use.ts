@@ -21,7 +21,7 @@ import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
 import { BROAD_DISCOVERY_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
-import { UNPARSEABLE_RULE, classifyLine, privilegedReason } from '../domain/privileged-commands.ts';
+import { UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
 import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
 import { processRedactor } from '../adapters/redaction/process-redactor.ts';
@@ -528,8 +528,9 @@ function configChange(policyPath: string | undefined): never {
 // ---------------------------------------------------------------------------------------------------------
 // Attended mode (plan 04-19; FR-12, S-4, T-04-50): the owner's own host session, the same entry installed by `avarice install-host` in the settings.json beside
 // the skill. It enforces privileged-action approvals only. A Bash call that is not a privileged form (and every other tool) is allowed without a decision,
-// without opening the store and without an event. A privileged form consumes one approval of the scope `attended:<session id>`, the action and the digest
-// of its parameters in the same transaction that records the action's start, or is denied with a request the owner approves with `avarice approve`. Any
+// without opening the store and without an event. Each privileged command of a line consumes one approval of the scope `attended:<session id>`, the action and the digest
+// of its parameters in the same transaction that records the action's start (all of the line's commands or none), or the line is denied with a request for each
+// command that has no approval, which the owner approves with `avarice approve`. Any
 // error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
 // ---------------------------------------------------------------------------------------------------------
 
@@ -574,37 +575,51 @@ function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): v
   if (typeof session !== 'string' || !SESSION_ID.test(session)) fail('a privileged call needs the host session_id as a plain token');
   const scope = `attended:${session}`;
   if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
-  // One approval is consumed for the first privileged command of the line (plan 04-48 extends this to every command).
-  const { action, params } = classified.commands[0] as PrivilegedCommand;
-  const privileged = { action, params };
-
   const db = openLedger(join(dataRoot, 'state.db'));
-  let requestId: string | null;
+  let unapproved: { action: string; requestId: string }[];
   try {
-    requestId = inTransaction(db, () => {
-      const nowMs = Date.now();
-      const digest = paramsDigest(params);
-      const consumed = consumeApprovalRow(db, {
-        scope,
-        action,
-        paramsDigest: digest,
-        nowMs,
-        startEvent: { type: 'action.started', data: { scope, action, paramsDigest: digest, paramsSummary: paramsSummary(params), source: 'approval' } },
-      });
-      return consumed !== null ? null : recordPrivilegedDenial(db, { scope, tool, privileged, nowMs });
-    });
+    unapproved = inTransaction(db, () => consumeLine(db, scope, tool, classified.commands, Date.now()));
   } finally {
     db.close();
   }
-  if (requestId !== null) {
+  const first = unapproved[0];
+  if (first !== undefined) {
     emit({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: `avarice: ${PRIVILEGED_RULE_PREFIX}${action}: ${privilegedReason(action, requestId)}`,
+        permissionDecisionReason: `avarice: ${PRIVILEGED_RULE_PREFIX}${first.action}: ${privilegedLineReason(unapproved)}`,
       },
     });
   }
+}
+
+// One usable approval for each privileged command of a line, taken all or none (plan 04-48; CR-04, FR-12, FR-13, T-04-130): one owner decision authorizes one
+// action. The caller's BEGIN IMMEDIATE transaction is open; the approvals are consumed in line order under a savepoint, each taking the oldest usable approval of its
+// scope, action and digest, so a command named twice takes two. If any command has none, the savepoint is rolled back, so no approval is spent and no
+// `action.started` event stays, and every command that lacked one is denied with a request (an already waiting request is named again). Returns the denied
+// commands' request IDs in line order, empty when the line may run.
+function consumeLine(db: DatabaseSync, scope: string, tool: string, commands: readonly PrivilegedCommand[], nowMs: number): { action: string; requestId: string }[] {
+  db.exec('SAVEPOINT consume_line');
+  const missing: PrivilegedCommand[] = [];
+  for (const { action, params } of commands) {
+    const digest = paramsDigest(params);
+    const consumed = consumeApprovalRow(db, {
+      scope,
+      action,
+      paramsDigest: digest,
+      nowMs,
+      startEvent: { type: 'action.started', data: { scope, action, paramsDigest: digest, paramsSummary: paramsSummary(params), source: 'approval' } },
+    });
+    if (consumed === null) missing.push({ action, params });
+  }
+  if (missing.length === 0) {
+    db.exec('RELEASE consume_line');
+    return [];
+  }
+  db.exec('ROLLBACK TO consume_line');
+  db.exec('RELEASE consume_line');
+  return missing.map((privileged) => ({ action: privileged.action, requestId: recordPrivilegedDenial(db, { scope, tool, privileged, nowMs }) }));
 }
 
 function attendedMain(args: HookArgs): void {

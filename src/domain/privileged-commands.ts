@@ -677,3 +677,8 @@ export function classifyLine(command: string): LineClassification {
 export function privilegedReason(action: string, requestId: string): string {
   return `${action} needs an approval for these parameters; the owner approves it at a terminal with: avarice approve ${requestId}`;
 }
+
+// The reason for a line with several privileged commands that lack an approval (plan 04-48; CR-04): one clause for each, in the order the commands appear.
+export function privilegedLineReason(entries: readonly { action: string; requestId: string }[]): string {
+  return entries.map((entry) => privilegedReason(entry.action, entry.requestId)).join('; ');
+}
