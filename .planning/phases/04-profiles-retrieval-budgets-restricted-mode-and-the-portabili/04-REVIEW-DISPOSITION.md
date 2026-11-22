@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "Attended hook allows any privileged command longer than 65,536 characters, and the parser fails open past its nesting and wrapper limits (part A)"
   - id: CR-02
     severity: critical
@@ -303,7 +303,7 @@ findings:
     severity: info
     disposition: open
     title: "the seeded credential value is excluded from the hook-target input of the AC-5 corpus (part H)"
-open: 75
+open: 74
 total: 75
 recorded: 2026-11-22T08:41:20.573Z
 ---
@@ -312,7 +312,7 @@ recorded: 2026-11-22T08:41:20.573Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
+| CR-01 | critical | fixed | 04-REVIEW-FIX.md |
 | CR-02 | critical | open | - |
 | CR-03 | critical | open | - |
 | CR-04 | critical | open | - |
