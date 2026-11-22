@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 49/55 plans executed in 26 waves: 39 executed in waves 1-18, and 16 gap-closure plans (04-40 to 04-55) in waves 19-26 from 04-VERIFICATION.md (one branch, one PR, D-01)
+**Plans**: 50/55 plans executed in 26 waves: 39 executed in waves 1-18, and 16 gap-closure plans (04-40 to 04-55) in waves 19-26 from 04-VERIFICATION.md (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -156,7 +156,7 @@ Plans:
 - [x] 04-49-PLAN.md — Broad-discovery and knowledge cost caps fail closed (WR-05, WR-06)
 
 **Wave 21** *(blocked on Wave 20 completion)*
-- [ ] 04-51-PLAN.md — Approvals bind what changes a command's effect; classifier coverage; SEC-6 row (CR-03, WR-01, WR-03, WR-04)
+- [x] 04-51-PLAN.md — Approvals bind what changes a command's effect; classifier coverage; SEC-6 row (CR-03, WR-01, WR-03, WR-04)
 
 **Wave 22** *(blocked on Wave 21 completion)*
 - [ ] 04-55-PLAN.md — Whole-file read caps enforced in the hook's Read path at D-09's values (WR-11)
@@ -275,7 +275,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
-| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 49/55 | In Progress | - |
+| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 50/55 | In Progress | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-49-PLAN.md
-last_updated: "2026-11-22T22:34:52.412Z"
+stopped_at: Completed 04-51-PLAN.md
+last_updated: "2026-11-22T23:00:20.656Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 0eab5a5c125986e5f4df25c3bdac27e460837668
+state_head: 8cb7a7896826a2ecc421c2d2de766d0cd3fa0369
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 10 of 55
+Plan: 11 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -212,6 +212,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P47 | 20 min | 3 tasks | 10 files |
 | Phase 04 P48 | not captured | 2 tasks | 5 files |
 | Phase 04 P49 | not captured | 2 tasks | 7 files |
+| Phase 04 P51 | 19 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -529,6 +530,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-47: a security test is proven by a planted regression the old test passes; the race tests retry only the evidence of a race (up to 5 attempts) and keep exactness assertions on every attempt — A vacuous oracle reports a broken control as working (T-04-129); times use performance.timeOrigin + performance.now() because a store call can finish inside one millisecond
 - [Phase 04]: 04-48: the attended hook consumes one approval per privileged command under a savepoint, all or none; commands lacking an approval are read from the consume results
 - [Phase 04]: 04-49: a Grep glob that matches every file or holds a brace group is unfiltered; knowledgeChunkLimit is 0 without a positive finite cost cap and the knowledge stage stops absent/budget_exhausted before building a corpus (WR-05, WR-06)
+- [Phase 04]: 04-51: an approval binds gitOptions, env, the line digest and the attended cwd rather than refusing redirected forms — The owner can still approve a redirected command, but only that exact command from that directory (CR-03, FR-12)
+- [Phase 04]: 04-51: a gh api body from a file or standard input is unapprovable (privileged:unapprovable) and denies the whole attended line before any request or consumption — The line digest cannot bind a body that is not on the line (WR-04, T-04-138)
 
 ### Roadmap Evolution
 
@@ -596,8 +599,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T22:34:52.374Z
-Stopped at: Completed 04-49-PLAN.md
+Last session: 2026-11-22T23:00:20.610Z
+Stopped at: Completed 04-51-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
