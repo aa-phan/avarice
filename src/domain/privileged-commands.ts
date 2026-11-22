@@ -14,7 +14,14 @@
 // hold when this one is evaded.
 //
 // The parameters are what an approval is bound to (src/domain/approval.ts): the target of the effect (remote and refspec, base and head, tag, endpoint and method)
-// and the NAMES of the options given (`--force`, `--title`), never an option's value, so a title or a body is not bound and `--force` is.
+// and the NAMES of the options given (`--force`, `--title`), never an option's value, so a title or a body is not bound and `--force` is. What redirects a command's
+// effect from outside its own options is bound too (plan 04-51; CR-03, T-04-136): `gitOptions`, git's global options before the subcommand, verbatim with their values; `env`,
+// the assignments before the program and the options and assignments of an `env` wrapper, verbatim and in order (every name, because HOME and XDG_CONFIG_HOME steer git and
+// gh as GIT_ and GH_ names do); and `line`, `sha256:` and the first 32 hex digits of the SHA-256 of the exact command text, which binds everything else on the line (an earlier
+// cd or git config, a wrapper's options, a gh api body) to the command the owner saw. What an approval still does not bind is the documented residual of the enforcement map:
+// names built at run time, and repository or shell state changed by an earlier separate call.
+import { sha256Hex } from './digest.ts';
+
 export interface PrivilegedCommand {
   action: string;
   params: Record<string, string>;
@@ -444,19 +451,31 @@ export const isUnparseable = (found: PrivilegedCommand | null | UnparseableComma
 
 const isPrefixWord = (word: string): boolean => ASSIGNMENT.test(word) || RESERVED_WORDS.has(word) || Object.hasOwn(WRAPPERS, baseOf(word));
 
-// The command's words with what comes before the program removed: assignments, reserved words and wrappers with their options. Null when the command
-// runs nothing (`command -v git` only looks the program up).
-function programWords(words: readonly string[]): string[] | null | UnparseableCommand {
+// The program and its words with what comes before it removed: assignments, reserved words and wrappers with their options. `env` is what is bound of the prefix (CR-03): the
+// assignment words before the program and an `env` wrapper's options and assignments, verbatim and in order. Null when the command runs nothing (`command -v git` only
+// looks the program up).
+interface Program {
+  words: string[];
+  env: string[];
+}
+
+function programWords(words: readonly string[]): Program | null | UnparseableCommand {
   let rest = [...words];
+  const env: string[] = [];
   for (let guard = 0; guard < MAX_PREFIX_WORDS; guard += 1) {
     const first = rest[0];
-    if (first === undefined) return rest;
-    if (ASSIGNMENT.test(first) || RESERVED_WORDS.has(first)) {
+    if (first === undefined) return { words: rest, env };
+    if (ASSIGNMENT.test(first)) {
+      env.push(first);
+      rest = rest.slice(1);
+      continue;
+    }
+    if (RESERVED_WORDS.has(first)) {
       rest = rest.slice(1);
       continue;
     }
     const wrapper = baseOf(first);
-    if (!Object.hasOwn(WRAPPERS, wrapper)) return rest;
+    if (!Object.hasOwn(WRAPPERS, wrapper)) return { words: rest, env };
     const valued = WRAPPERS[wrapper] as readonly string[];
     let i = 1;
     for (; i < rest.length; i += 1) {
@@ -469,22 +488,28 @@ function programWords(words: readonly string[]): string[] | null | UnparseableCo
       if (wrapper === 'command' && (arg === '-v' || arg === '-V')) return null;
       if (wrapper === 'env' && (arg === '-S' || arg === '--split-string')) {
         const value = rest[i + 1] ?? '';
+        env.push(arg, value);
         rest = [...rest.slice(0, i), ...value.split(/\s+/).filter((w) => w !== ''), ...rest.slice(i + 2)];
         i -= 1;
         continue;
       }
       if (wrapper === 'env' && arg.startsWith('--split-string=')) {
+        env.push(arg);
         rest = [...rest.slice(0, i), ...arg.slice('--split-string='.length).split(/\s+/).filter((w) => w !== ''), ...rest.slice(i + 1)];
         i -= 1;
         continue;
       }
-      if (valued.includes(arg)) i += 1;
+      if (wrapper === 'env') env.push(arg);
+      if (valued.includes(arg)) {
+        i += 1;
+        if (wrapper === 'env' && rest[i] !== undefined) env.push(rest[i] as string);
+      }
     }
     rest = rest.slice(i);
   }
   const next = rest[0];
   if (next !== undefined && isPrefixWord(next)) return { unparseable: `more than ${MAX_PREFIX_WORDS} assignment, reserved or wrapper words before the program` };
-  return rest;
+  return { words: rest, env };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -596,14 +621,22 @@ const NPM_PUBLISH: ArgSpec = {
 
 function classifyGit(args: readonly string[]): PrivilegedCommand | null {
   let i = 0;
+  // The global options before the subcommand, verbatim with their values: `-c remote.origin.url=...` and `-C dir` redirect the push, so an approval binds them (CR-03).
+  const globals: string[] = [];
   for (; i < args.length; i += 1) {
     const arg = args[i] as string;
     if (!arg.startsWith('-') || arg === '-') break;
-    if (GIT_VALUED_GLOBALS.includes(arg)) i += 1;
+    globals.push(arg);
+    if (GIT_VALUED_GLOBALS.includes(arg) && i + 1 < args.length) {
+      i += 1;
+      globals.push(args[i] as string);
+    }
   }
   if (args[i] !== 'push') return null;
   const form = formOf('git', ['push']) as CommandForm;
-  return { action: form.action, params: paramsOf(parseArgs(args.slice(i + 1), GIT_PUSH), GIT_PUSH) };
+  const params = paramsOf(parseArgs(args.slice(i + 1), GIT_PUSH), GIT_PUSH);
+  if (globals.length > 0) params['gitOptions'] = globals.join(' ');
+  return { action: form.action, params };
 }
 
 function classifyGh(args: readonly string[]): PrivilegedCommand | null {
@@ -636,19 +669,25 @@ function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
 export function classifyShellCommand(words: readonly string[]): PrivilegedCommand | null | UnparseableCommand {
   const program = programWords(words);
   if (program === null) return null;
-  if (!Array.isArray(program)) return program;
-  if (program.length === 0) return null;
-  const args = program.slice(1);
-  switch (baseOf(program[0] as string)) {
+  if ('unparseable' in program) return program;
+  if (program.words.length === 0) return null;
+  const args = program.words.slice(1);
+  let found: PrivilegedCommand | null;
+  switch (baseOf(program.words[0] as string)) {
     case 'git':
-      return classifyGit(args);
+      found = classifyGit(args);
+      break;
     case 'gh':
-      return classifyGh(args);
+      found = classifyGh(args);
+      break;
     case 'npm':
-      return classifyNpm(args);
+      found = classifyNpm(args);
+      break;
     default:
-      return null;
+      found = null;
   }
+  if (found !== null && program.env.length > 0) found.params['env'] = program.env.join(' ');
+  return found;
 }
 
 // The three answers about a shell line (plan 04-40; CR-01): nothing privileged, the privileged commands it holds, or a line the classifier could not read.
@@ -665,10 +704,12 @@ export function classifyLine(command: string): LineClassification {
   const split = commandsOf(command);
   if (!split.ok) return { kind: 'unparseable', reason: split.reason };
   const commands: PrivilegedCommand[] = [];
+  // Binds the whole line to the approval: an earlier cd, a git config, a wrapper's options or a gh api body change a command's effect without changing its own words.
+  const line = `sha256:${sha256Hex(command).slice(0, 32)}`;
   for (const words of split.commands) {
     const found = classifyShellCommand(words);
     if (found !== null && isUnparseable(found)) return { kind: 'unparseable', reason: found.unparseable };
-    if (found !== null) commands.push(found);
+    if (found !== null) commands.push({ ...found, params: { ...found.params, line } });
   }
   return commands.length === 0 ? { kind: 'none' } : { kind: 'privileged', commands };
 }

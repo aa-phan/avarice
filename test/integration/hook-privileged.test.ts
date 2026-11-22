@@ -588,7 +588,9 @@ describe('a line that names one command twice needs two approvals, and the oldes
     assert.equal(outcome(attendedHook(p.dataRoot, twice)), 'deny', 'both were spent');
   });
 
-  it('with two usable approvals granted at different times, one command takes the earlier and leaves the later', async () => {
+  // An approval binds the whole line (plan 04-51; CR-03), so two approvals granted at different times are usable only by a line that is the same text: the first command of
+  // `twice` takes the earlier of its two approvals and the second command the later, and the two action.started events name them in that order.
+  it('with two usable approvals granted at different times, the first command takes the earlier and the second the later', async () => {
     const q = profile();
     const named = hintsOf(attendedHook(q.dataRoot, twice))[0] as string;
     await approve(q.roots, named);
@@ -597,11 +599,13 @@ describe('a line that names one command twice needs two approvals, and the oldes
     assert.equal(before.length, 2);
     const [older, newer] = before as [ApprovalDb, ApprovalDb];
     assert.ok(before.every((r) => r.consumed_at === null));
-    const allowed = attendedHook(q.dataRoot, once);
+    const lone = attendedHook(q.dataRoot, once);
+    assert.equal(parsed(lone.stdout).hookSpecificOutput.permissionDecision, 'deny', 'the line is bound: the same command on another line does not take the approvals');
+    assert.ok(approvalsOf(q.roots).every((r) => r.consumed_at === null));
+    const allowed = attendedHook(q.dataRoot, twice);
     assert.deepEqual([allowed.code, allowed.stdout], [0, ''], allowed.stderr);
-    const after = approvalsOf(q.roots);
-    assert.notEqual((after.find((r) => r.approval_id === older.approval_id) as ApprovalDb).consumed_at, null, 'the earlier approval was spent');
-    assert.equal((after.find((r) => r.approval_id === newer.approval_id) as ApprovalDb).consumed_at, null, 'the later approval was left');
+    const started = eventsOf(q.roots, 'action.started').map((row) => dataOf(row)['approvalId']);
+    assert.deepEqual(started, [older.approval_id, newer.approval_id], 'the earlier approval was spent first');
   });
 });
 

@@ -562,6 +562,22 @@ function denyUnparseable(dataRoot: string, scope: string, tool: string, reason: 
   });
 }
 
+// The canonical path of the directory the hook input says the call runs in. A call that needs a decision (privileged, or one that could not be read) without an absolute,
+// existing directory is refused with exit 2: what an approval was granted for cannot be checked against a directory that is not known (CR-03, FR-12).
+function attendedCwd(input: Record<string, unknown>): string {
+  const given = input['cwd'];
+  const canonical = typeof given === 'string' ? canonicalAbsolute(given) : null;
+  if (canonical === null) return fail('a privileged call needs the hook input cwd as an absolute path');
+  let directory = false;
+  try {
+    directory = statSync(canonical).isDirectory();
+  } catch {
+    directory = false;
+  }
+  if (!directory) return fail('a privileged call needs the hook input cwd to be an existing directory');
+  return canonical;
+}
+
 function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): void {
   const tool = input['tool_name'];
   if (typeof tool !== 'string' || tool === '') fail('the hook input has no tool_name');
@@ -574,11 +590,14 @@ function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): v
   const session = input['session_id'];
   if (typeof session !== 'string' || !SESSION_ID.test(session)) fail('a privileged call needs the host session_id as a plain token');
   const scope = `attended:${session}`;
+  const cwd = attendedCwd(input);
   if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
+  // The directory the owner's command runs in is part of what an approval binds (CR-03): `cd` is no word of the command, so a push approved in one repository is not one in another.
+  const bound = classified.commands.map((command) => ({ action: command.action, params: { ...command.params, cwd } }));
   const db = openLedger(join(dataRoot, 'state.db'));
   let unapproved: { action: string; requestId: string }[];
   try {
-    unapproved = inTransaction(db, () => consumeLine(db, scope, tool, classified.commands, Date.now()));
+    unapproved = inTransaction(db, () => consumeLine(db, scope, tool, bound, Date.now()));
   } finally {
     db.close();
   }
