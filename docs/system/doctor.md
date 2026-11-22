@@ -1,7 +1,5 @@
 # Doctor
 
-*drafted, not yet reviewed*
-
 `avarice doctor` reports what is installed and what is wrong with it, and gives a fix for each problem. This document describes it as implemented in the read model, the command, the dependency set and the probes (`src/app/doctor.ts`, `src/cli/commands/doctor.ts`, `src/cli/doctor-deps.ts`, `src/adapters/diagnostics/probes.ts`, `src/ports/diagnostics.ts`). The host admission rule it applies is in `src/domain/host-admission.ts` and the launch checks it mirrors are in `src/adapters/host-claude/launch-preflight.ts`.
 
 Doctor explains the problems that make the other commands refuse to start. It therefore runs when the rest of AVARICE does not: with a store written by a newer build, a missing or incompatible GSD, or a host that is absent or refused. It reads and never writes, except for the one repair behind a flag. The flags and exit codes are in [cli-reference.md](cli-reference.md), the profile it reports on in [profiles-and-credentials.md](profiles-and-credentials.md), and the host and launch checks in [containment.md](containment.md).

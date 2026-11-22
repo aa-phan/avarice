@@ -1,7 +1,5 @@
 # Profiles and credentials
 
-*drafted, not yet reviewed*
-
 A profile is a named, separate set of directories and a store, and everything AVARICE keeps about secrets is scoped to it. This document describes profile identity and selection as implemented in the profile rules and the command dispatcher (`src/domain/profile.ts`, `src/cli/main.ts`, `src/cli/profile-gate.ts`), and the roots, configuration file, binding registry and sibling-profile registry (`src/adapters/fs/profile-paths.ts`, `src/adapters/fs/profile-config.ts`, `src/adapters/fs/profile-bindings.ts`, `src/adapters/fs/profile-registry.ts`). The composition that checks all of it before a store opens is `src/cli/composition.ts`. Credential references and the broker are in `src/domain/credential-ref.ts`, `src/app/credentials.ts` and `src/adapters/credential/`. Redaction is in `src/domain/redactor.ts`, `src/domain/secret-patterns.ts`, `src/adapters/redaction/process-redactor.ts`, `src/adapters/fs/redacting-artifact-store.ts` and `src/adapters/host-claude/transcript-collector.ts`.
 
 A command runs under exactly one profile, chosen before any directory or store exists. The profile fixes where the data, the work copies and the configuration live, which credential providers it may use, and which policy applies. The policy side is in [policy-and-approvals.md](policy-and-approvals.md). Defaults for every key are in [config-reference.md](config-reference.md), the flags and exit codes in [cli-reference.md](cli-reference.md), and the tables in [data-model.md](data-model.md).

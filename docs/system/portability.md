@@ -1,7 +1,5 @@
 # Portability
 
-*drafted, not yet reviewed*
-
 AVARICE's workflows depend on ports, and each adapter says what it can do, so an adapter can be swapped by configuration without changing the code that uses it. This document describes the capability descriptors, the step requirements and their refusal as implemented in the descriptor type, the requirement table and the composition check (`src/ports/capability.ts`, `src/domain/capability-requirements.ts`, `src/app/capabilities.ts`). It also describes the test support that proves the swap: the fake-remote adapters and their seeded fault source, the contract suite and the workflow proof (`test/helpers/fake-remote-executor.ts`, `test/helpers/fake-remote-artifact-store.ts`, `test/helpers/seeded-faults.ts`, `test/contract/`, `test/integration/portability-proof.test.ts`).
 
 Only the local adapters ship. The proof establishes less than a remote deployment would. The domain and application code reach the executor and the artifact store only through their ports, and the workflows survive serialization, delay, duplicate responses and calls whose end they never saw. The interfaces and tables the descriptors appear in are in [integrations.md](integrations.md) and [data-model.md](data-model.md), and the refusals surface in [runs.md](runs.md) and [onboarding.md](onboarding.md).
