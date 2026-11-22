@@ -9,22 +9,33 @@ participant "avarice approve" as Approve
 
 note over Agent, Hook : two callers reach the hook with a shell command:\na unit of a run (scope is the run), or the owner's own\nhost session with the attended hook installed (scope is that session)
 
-== A privileged command is refused ==
-Agent -> Hook : shell command
-Hook -> Hook : classify the command line (push, pull request create, merge or edit,\nrelease create, API write, package publish)
-alt not a privileged form
+== A line with privileged commands is refused ==
+Agent -> Hook : shell line, possibly with several commands
+Hook -> Hook : classify every command of the line (push, pull request create, merge or edit,\nrelease create, API write, package publish)
+alt no privileged command
   Hook --> Agent : this check says nothing; a run's command rules,\nor in an attended session the host's own rules, decide
-else privileged form, in a run
-  Hook -> Ledger : request for this scope, action and parameter digest\n(the waiting one again, else a new one), and the denial
+else the line cannot be read, in a run
+  Hook --> Agent : denied as a shell syntax error, no request
+else a privileged command, in a run
+  Hook -> Ledger : request for the first privileged command's scope, action and parameter digest\n(the waiting one again, else a new one), and the denial
   Hook --> Agent : denied, the owner approves with: avarice approve REQUEST
-else privileged form, attended session
-  Hook -> Ledger : take a usable approval for this scope, action and digest
-  alt no usable approval
-    Hook -> Ledger : request (the waiting one again, else a new one), and the denial
-    Hook --> Agent : denied, the owner approves with: avarice approve REQUEST
-  else an approval was taken
-    Ledger --> Hook : approval consumed, action start recorded, one transaction
-    Hook --> Agent : no output, the command goes on to the host's own rules
+else attended session
+  alt the line cannot be read
+    Hook -> Ledger : the denial, no request
+    Hook --> Agent : denied as unparseable, split the line or use the Write tool
+  else a command takes its body from a file or standard input
+    Hook -> Ledger : one denial for each such command, no request
+    Hook --> Agent : denied as unapprovable, pass the fields inline
+  else every privileged command is bound to its parameters, the exact line and the directory
+    Hook -> Ledger : take one usable approval for each command (scope, action, digest), oldest first
+    alt every command has an approval
+      Ledger --> Hook : all approvals consumed, one action start for each, one transaction
+      Hook --> Agent : no output, the line goes on to the host's own rules
+    else one or more commands have none
+      Ledger --> Hook : nothing consumed, the partial take is rolled back
+      Hook -> Ledger : a request for each command without an approval\n(the waiting one again, else a new one), and a denial for each
+      Hook --> Agent : denied, one avarice approve REQUEST clause for each missing approval
+    end
   end
 end
 note over Hook : a run never consumes an approval: the denial stands\nwhether or not one was granted
@@ -60,11 +71,11 @@ else usable
 end
 
 == The retry ==
-Agent -> Hook : the same command, same session, same parameters
-alt attended session, approval unexpired and unused
-  Hook -> Ledger : approval consumed with the action's start
-  Hook --> Agent : the command passes once
-else run, or approval expired, revoked, used or for other parameters
+Agent -> Hook : the same line, same session, same directory
+alt attended session, an approval unexpired and unused for each privileged command
+  Hook -> Ledger : approvals consumed with the actions' starts
+  Hook --> Agent : the line passes once
+else run, or an approval expired, revoked, used or for other parameters,\na changed line or another directory
   Hook -> Ledger : a new request, since the earlier one was answered
   Hook --> Agent : denied again, with the new request
 end
