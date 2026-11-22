@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-51-PLAN.md
-last_updated: "2026-11-22T23:00:20.656Z"
+stopped_at: Completed 04-55-PLAN.md
+last_updated: "2026-11-22T23:13:49.969Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 8cb7a7896826a2ecc421c2d2de766d0cd3fa0369
+state_head: bfee960df6b52720f956556fc323411ca1db653d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 11 of 55
+Plan: 12 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -213,6 +213,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P48 | not captured | 2 tasks | 5 files |
 | Phase 04 P49 | not captured | 2 tasks | 7 files |
 | Phase 04 P51 | 19 min | 3 tasks | 10 files |
+| Phase 04 P55 | 9 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -532,6 +533,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-49: a Grep glob that matches every file or holds a brace group is unfiltered; knowledgeChunkLimit is 0 without a positive finite cost cap and the knowledge stage stops absent/budget_exhausted before building a corpus (WR-05, WR-06)
 - [Phase 04]: 04-51: an approval binds gitOptions, env, the line digest and the attended cwd rather than refusing redirected forms — The owner can still approve a redirected command, but only that exact command from that directory (CR-03, FR-12)
 - [Phase 04]: 04-51: a gh api body from a file or standard input is unapprovable (privileged:unapprovable) and denies the whole attended line before any request or consumption — The line digest cannot bind a body that is not on the line (WR-04, T-04-138)
+- [Phase 04]: 04-55: WR-11 fixed at D-09's values. The hook charges every Read of a run to retrieval.fullReads (one file) and retrieval.fullReadBytes (the bytes of the lines it asks for, default the first 2000) in the transaction that charges toolCalls; RETRIEVAL_CAPS is unchanged and beginRead gets no caller.
 
 ### Roadmap Evolution
 
@@ -599,8 +601,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T23:00:20.610Z
-Stopped at: Completed 04-51-PLAN.md
+Last session: 2026-11-22T23:13:44.348Z
+Stopped at: Completed 04-55-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
