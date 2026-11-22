@@ -108,32 +108,145 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-// The artifact kind of every `artifacts.put(` call in src: a string literal, or a constant named in the call and defined as a string
-// literal in the same file.
-function storedKinds(): Map<string, string[]> {
-  const kinds = new Map<string, string[]>();
-  for (const file of sourceFiles(join(REPO_ROOT, 'src'))) {
-    const text = readFileSync(file, 'utf8');
-    for (const match of text.matchAll(/artifacts\.put\([\s\S]{0,400}?\{\s*kind:\s*(\w+|'[^']+')/g)) {
-      const raw = match[1] as string;
-      let kind: string | undefined;
-      if (raw.startsWith("'")) kind = raw.slice(1, -1);
-      else kind = new RegExp(`const ${raw}\\s*=\\s*'([^']+)'`).exec(text)?.[1];
-      assert.ok(kind !== undefined, `${file}: the kind ${raw} is not a string literal or a constant of the file`);
-      kinds.set(kind, [...(kinds.get(kind) ?? []), file.slice(REPO_ROOT.length + 1)]);
+// The text between the parenthesis that opens at `open` and its closing parenthesis, skipping string and template literals.
+function balanced(text: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    const ch = text[i] as string;
+    if (ch === "'" || ch === '"' || ch === '`') {
+      for (i += 1; i < text.length && text[i] !== ch; i += 1) if (text[i] === '\\') i += 1;
+    } else if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return text.slice(open + 1, i);
     }
   }
-  return kinds;
+  throw new Error(`an unbalanced call at offset ${open}`);
+}
+
+// The top-level, comma-separated parts of an argument or parameter list.
+function topLevelParts(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const ch = list[i] as string;
+    if (ch === "'" || ch === '"' || ch === '`') {
+      for (i += 1; i < list.length && list[i] !== ch; i += 1) if (list[i] === '\\') i += 1;
+    } else if ('([{'.includes(ch)) depth += 1;
+    else if (')]}'.includes(ch)) depth -= 1;
+    else if (ch === ',' && depth === 0) {
+      parts.push(list.slice(from, i).trim());
+      from = i + 1;
+    }
+  }
+  const last = list.slice(from).trim();
+  if (last !== '') parts.push(last);
+  return parts;
+}
+
+// A kind written as a string literal, or as a constant defined as a string literal in the file or in another file of src.
+function kindOf(expression: string, text: string, allText: string[]): string | undefined {
+  const literal = /^'([^']+)'$/.exec(expression);
+  if (literal !== null) return literal[1];
+  if (!/^\w+$/.test(expression)) return undefined;
+  const definition = new RegExp(`const ${expression}\\s*(?::\\s*string\\s*)?=\\s*'([^']+)'`);
+  for (const source of [text, ...allText]) {
+    const found = definition.exec(source);
+    if (found !== null) return found[1];
+  }
+  return undefined;
+}
+
+interface PutCall {
+  // The call's options argument as it is written.
+  written: string;
+  // The kinds the call can store, as far as the scan resolved them; empty when any of them was not resolved.
+  kinds: string[];
+}
+
+// Every `artifacts.put(` call of a file, with the kinds it resolves. `{ kind: X }` names the kind in the call. The shorthand `{ kind, runId }` passes the parameter `kind`
+// of the enclosing function, so its kinds are the arguments that the function's call sites in the file pass for that parameter.
+function putCalls(text: string, allText: string[]): PutCall[] {
+  const calls: PutCall[] = [];
+  for (const match of text.matchAll(/\bartifacts\.put\(/g)) {
+    const at = match.index ?? 0;
+    const options = topLevelParts(balanced(text, at + match[0].length - 1))[1] ?? '';
+    const named = /^\{\s*kind\s*:\s*(\w+|'[^']+')\s*[,}]/.exec(options);
+    if (named !== null) {
+      const kind = kindOf(named[1] as string, text, allText);
+      calls.push({ written: options, kinds: kind === undefined ? [] : [kind] });
+      continue;
+    }
+    const head = [...text.slice(0, at).matchAll(/\bfunction\s+(\w+)\s*\(/g)].pop();
+    if (!/^\{\s*kind\s*[,}]/.test(options) || head === undefined) {
+      calls.push({ written: options, kinds: [] });
+      continue;
+    }
+    const name = head[1] as string;
+    const headAt = head.index ?? 0;
+    const params = topLevelParts(balanced(text, headAt + head[0].length - 1)).map((part) => part.split(':')[0]?.trim());
+    const position = params.indexOf('kind');
+    const kinds: string[] = [];
+    for (const site of text.matchAll(new RegExp(`\\b${name}\\(`, 'g'))) {
+      const siteAt = site.index ?? 0;
+      if (siteAt === headAt + head[0].indexOf(name)) continue;
+      const argument = position < 0 ? undefined : topLevelParts(balanced(text, siteAt + site[0].length - 1))[position];
+      const kind = argument === undefined ? undefined : kindOf(argument, text, allText);
+      // One call site the scan cannot read leaves the whole call unresolved: the scan must not report a kind it did not read.
+      if (kind === undefined) {
+        kinds.length = 0;
+        break;
+      }
+      kinds.push(kind);
+    }
+    calls.push({ written: options, kinds });
+  }
+  return calls;
+}
+
+// The artifact kind of every `artifacts.put(` call in src, and the calls the scan could not resolve. A file whose calls the scan read fewer of than the file holds is unresolved.
+function storedKinds(): { kinds: Map<string, string[]>; unresolved: string[] } {
+  const files = sourceFiles(join(REPO_ROOT, 'src'));
+  const texts = files.map((file) => readFileSync(file, 'utf8'));
+  const kinds = new Map<string, string[]>();
+  const unresolved: string[] = [];
+  files.forEach((file, index) => {
+    const text = texts[index] as string;
+    const name = file.slice(REPO_ROOT.length + 1);
+    const calls = putCalls(text, texts);
+    const held = [...text.matchAll(/\bartifacts\.put\(/g)].length;
+    if (calls.length !== held) unresolved.push(`${name}: the scan resolved ${calls.length} of ${held} artifacts.put calls`);
+    for (const call of calls) {
+      if (call.kinds.length === 0) unresolved.push(`${name}: the kind of artifacts.put(..., ${call.written}) was not resolved`);
+      for (const kind of call.kinds) kinds.set(kind, [...(kinds.get(kind) ?? []), name]);
+    }
+  });
+  return { kinds, unresolved };
 }
 
 describe('the artifact kinds the code stores (source scan)', () => {
+  it('resolves the kind of every artifacts.put call in src, the shorthand { kind, runId } calls included', () => {
+    assert.deepEqual(storedKinds().unresolved, [], 'every call is read and its kind is a string literal, a constant, or the arguments of the helper that passes it');
+  });
+
   it('every kind stored through artifacts.put is a map kind or is in REDACTED_TEXT_KINDS', () => {
-    const kinds = storedKinds();
-    assert.ok(kinds.size >= 7, `the scan found the call sites (${[...kinds.keys()].join(', ')})`);
+    const { kinds } = storedKinds();
+    // The kinds the code stores today: eight named in their calls and five passed through storeText and storeOutput. A scan that stops reading a call site fails here.
+    const stored = [...MAP_KINDS, 'check-output', 'test-inventory', 'gsd-quick-record', 'knowledge-manifest', 'transcript', 'transcript-summary', 'manual-context', 'manual-evidence', 'restricted-plan', 'restricted-patch', 'restricted-decisions'];
+    for (const kind of stored) assert.ok(kinds.has(kind), `the scan sees the kind ${kind} (it found ${[...kinds.keys()].join(', ')})`);
+    assert.ok(kinds.size >= stored.length, `the scan found ${kinds.size} distinct kinds, the code stores at least ${stored.length}`);
     for (const [kind, files] of kinds) {
       assert.ok(MAP_KINDS.includes(kind) || REDACTED_TEXT_KINDS.includes(kind), `artifact kind ${kind} (${files.join(', ')}) is neither a map kind nor in REDACTED_TEXT_KINDS: decide whether it is redacted`);
     }
-    for (const kind of MAP_KINDS) assert.ok(kinds.has(kind), `the scan sees the map kind ${kind}`);
+  });
+
+  it('reads the kinds a shorthand call passes through its helper, and leaves a call unresolved when a call site cannot be read', () => {
+    const helper = 'function store(deps, runId, kind, bytes) {\n  return deps.artifacts.put(bytes, { kind, runId });\n}\n';
+    const read = putCalls(`${helper}store(deps, id, SHARED, b);\nstore(deps, id, 'other-kind', b);\nconst SHARED = 'shared-kind';\n`, []);
+    assert.deepEqual(read.map((call) => call.kinds), [['shared-kind', 'other-kind']]);
+    const blind = putCalls(`${helper}store(deps, id, computed(), b);\n`, []);
+    assert.deepEqual(blind.map((call) => call.kinds), [[]]);
   });
 });
 
