@@ -4,8 +4,9 @@
 //
 // The registry reads those configs and returns paths to deny, so a planted or hostile file can only add a deny, never open a path. Each config is
 // read as the profile config always is (no link followed, a regular file, a size cap, the closed key set); a directory that is not a profile
-// name, a profile directory that is a link, a file that does not parse and a root that is not absolute are skipped. A profile whose config
-// home was never seen from here cannot be found; that residual is documented.
+// name, a profile directory that is a link, a file that does not parse and a root that is not absolute are skipped. A config that exists but
+// cannot be read (as opposed to one that is corrupt) is `unavailable` and stops the computation. A profile whose config home was never seen
+// from here cannot be found; that residual is documented.
 import { lstatSync, readdirSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { join } from 'node:path';
@@ -49,7 +50,12 @@ export function knownProfileRoots(configHome: string, selected: string, options:
         // The selected profile's own config, in the config home it runs from, names its own roots.
         if (home === inUse && entry === selected) continue;
         const config = readProfileConfig(home, entry);
-        if (!config.ok) continue;
+        // A config that is corrupt is skipped, as documented above. One that exists but cannot be read (permissions, I/O) stops the computation,
+        // naming the profile: its moved roots would otherwise leave the deny list, and a list that could not be computed must not read as a shorter one.
+        if (!config.ok) {
+          if (config.error.kind === 'unavailable') return unavailable(`cannot read the config of profile ${entry} under ${home}: ${config.error.cause}`);
+          continue;
+        }
         for (const [field, value] of [['dataRoot', config.value.dataRoot], ['workRoot', config.value.workRoot]] as const) {
           const root = configRoot(value, options.home, field);
           if (!root.ok || root.value === undefined) continue;
