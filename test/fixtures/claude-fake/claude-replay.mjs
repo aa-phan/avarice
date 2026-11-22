@@ -19,6 +19,7 @@
 //                    chunk of that plan (a document node for each file) to the chunk's `output`; map files are never written there
 //   stamp            string | false   last_mapped_commit for the documents (default: git HEAD of the working directory)
 //   writes           { relPath: content }   other files to write, relative to the working directory
+//   symlinks         { relPath: target }    symbolic links to make in the working directory, after the writes (a link out of the clone, for example)
 //   extraLines       string[]  raw lines printed before the transcript's result (for example text a secret scan must catch)
 //   resultText       string    replaces the `result` text of the transcript's result line (a pause question, for example)
 //   sleepMs          number    sleep before writing anything
@@ -28,7 +29,7 @@
 //   ignoreSigterm    boolean   ignore SIGTERM, so only SIGKILL ends the process
 //   background       boolean   start a `sleep 300` in the same process group and log its pid (children.log)
 //   commit           boolean   make a commit in the working directory (moves HEAD)
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -139,6 +140,11 @@ if (flag('--agent') === 'gsd-intel-updater' && script.intel === true) {
   writeFile(join('.planning', 'intel', '.last-refresh.json'), refreshSnapshot(files));
 }
 for (const [rel, content] of Object.entries(script.writes ?? {})) writeFile(rel, content);
+for (const [rel, target] of Object.entries(script.symlinks ?? {})) {
+  const link = join(process.cwd(), rel);
+  mkdirSync(dirname(link), { recursive: true });
+  symlinkSync(target, link);
+}
 if (script.commit === true) git('-c', 'user.name=Fake', '-c', 'user.email=fake@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'moved by the fake host');
 
 if (script.transcript !== undefined && script.transcript !== null) {

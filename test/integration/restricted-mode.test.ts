@@ -194,6 +194,55 @@ describe('a restricted patch holds only what the contract allowed (WR-13, CON-4,
   });
 });
 
+// ---- a bad output of the uncontained host ends the run blocked, once (plan 04-44; WR-12, CON-4) -------------------------------------------------
+
+describe('a bad output of the restricted host ends the run blocked and launches the host once (WR-12, CON-4, T-04-120)', () => {
+  const issueOf = (f: Fixture, runId: string): string => rows<{ issue: string }>(f.roots, 'SELECT issue FROM decisions WHERE run_id = ?', runId)[0]?.issue ?? '';
+
+  it('blocks on a plan over 256 KiB, names the unreadable plan, and a resume does not launch the host again', () => {
+    const f = fixture({ writes: { ...WRITES, '.avarice-restricted/PLAN.md': 'x'.repeat(300 * 1024) } });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state, 'blocked_on_decision');
+    assert.match(issueOf(f, runId), /the plan could not be read \(.*exceeds the limit/);
+    assert.match(issueOf(f, runId), /avarice cancel/, 'the ending survives');
+    assert.equal(f.fake.argvs().length, 1, 'the host was launched once');
+    assert.deepEqual(artifactsOf(f.roots, runId).map((a) => a.kind), ['restricted-patch'], 'what could be read is stored');
+    assert.ok(rows<{ step: string }>(f.roots, 'SELECT step FROM run_steps WHERE run_id = ?', runId).some((s) => s.step === 'restricted:outputs'), 'the outputs step is recorded');
+
+    const resumed = runCli(['resume', runId, '--wait'], { roots: f.roots, cwd: f.repo.path, env: { AVARICE_CLAUDE_BIN: f.fake.bin }, timeoutMs: 180_000 });
+    assert.ok(resumed.code === 3 || resumed.code === 0, resumed.stdout + resumed.stderr);
+    assert.equal(f.fake.argvs().length, 1, 'a resume does not launch the host again');
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state, 'blocked_on_decision');
+  });
+
+  it('blocks on a plan that is a symbolic link out of the clone, naming the problem, with the host launched once', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'avarice-restricted-outside-'));
+    cleanup.push(outside);
+    const secret = join(outside, 'secret.txt');
+    writeFileSync(secret, 'not for the owner\n');
+    const f = fixture({ writes: { 'src/slug.ts': FIXED_SLUG }, symlinks: { '.avarice-restricted/PLAN.md': secret } });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state, 'blocked_on_decision');
+    assert.match(issueOf(f, runId), /the plan could not be read \(denied/);
+    assert.equal(f.fake.argvs().length, 1, 'the host was launched once');
+    assert.ok(!artifactsOf(f.roots, runId).some((a) => a.kind === 'restricted-plan'), 'the linked file was not stored as the plan');
+  });
+
+  it('does not store a patch over 1 MiB and says so in the block text', () => {
+    const f = fixture({ writes: { ...WRITES, 'src/big.ts': `// ${'y'.repeat(1200 * 1024)}\n` } });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+    assert.match(issueOf(f, runId), /the patch is larger than the 1 MiB limit and was not stored/);
+    assert.deepEqual(artifactsOf(f.roots, runId).map((a) => a.kind), ['restricted-plan'], 'no patch artifact');
+    assert.equal(f.fake.argvs().length, 1);
+  });
+});
+
 // ---- the decision list, the status label and resume (task 2) ---------------------------------------------------------------------------------
 
 const QUESTIONS = 'Should an empty title give an empty slug or an error?\nShould a non-ASCII letter be kept or dropped?\n';

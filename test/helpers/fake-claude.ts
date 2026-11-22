@@ -21,6 +21,8 @@ export interface FakeClaudeScript {
   knowledge?: boolean;
   stamp?: string | false;
   writes?: Readonly<Record<string, string>>;
+  // Symbolic links to make in the working directory after the writes: relative path -> link target.
+  symlinks?: Readonly<Record<string, string>>;
   extraLines?: readonly string[];
   // Replaces the `result` text of the transcript's final result line (a pause question, for example).
   resultText?: string;
