@@ -76,9 +76,10 @@ export interface HookPolicy {
   // file must not have changed since (CON-7); `loopLimits` stop the invocation on repeated denials or ineffective searches (CON-14).
   readBeforeEdit?: boolean;
   loopLimits?: LoopLimits;
-  // The run purpose (plan 04-29; CON-10, CON-11): the contract's retrieval limits for the agent's own Grep and Glob calls. With the block present every search also
+  // The run purpose (plan 04-29; CON-10, CON-11): the contract's retrieval limits for the agent's own Grep, Glob and Read calls. With the block present every search also
   // charges the `retrieval.searches` budget row in the transaction that charges `toolCalls`, and an unfiltered whole-repository search is refused unless
-  // `broadDiscovery` is true, then allowed once (it charges `retrieval.broadDiscovery`). `searches` is the contract's limit, for the record: the ledger row decides.
+  // `broadDiscovery` is true, then allowed once (it charges `retrieval.broadDiscovery`). Every Read also charges `retrieval.fullReads` (one file) and
+  // `retrieval.fullReadBytes` (the bytes it can return) the same way (WR-11). `searches` is the contract's limit, for the record: the ledger row decides.
   // Absent for the onboarding purposes and for a contract compiled before the retrieval caps existed: the search rules above then apply alone.
   retrieval?: RetrievalPolicy;
 }
@@ -99,7 +100,8 @@ export interface HookDecision {
   // The budget one allowed call charges; on a deny of a spent row, the row that was spent.
   budget?: BudgetName;
   // Further rows the same allowed call charges in the same transaction (plan 04-29): `retrieval.searches` for a search of a run with retrieval limits, and
-  // `retrieval.broadDiscovery` too for an unfiltered whole-repository one. The call is allowed only when every row has room; the first without room is named.
+  // `retrieval.broadDiscovery` too for an unfiltered whole-repository one; `retrieval.fullReads` and `retrieval.fullReadBytes`, in that order, for a Read of such a
+  // run (WR-11). The call is allowed only when every row has room; the first without room is named.
   alsoCharges?: RetrievalRow[];
   // The hook prints an allow (hook-allow strategy); otherwise an allow is silent.
   explicit?: boolean;
@@ -110,7 +112,7 @@ export interface HookDecision {
   privileged?: PrivilegedCommand;
 }
 
-export type RetrievalRow = 'retrieval.searches' | 'retrieval.broadDiscovery';
+export type RetrievalRow = 'retrieval.searches' | 'retrieval.broadDiscovery' | 'retrieval.fullReads' | 'retrieval.fullReadBytes';
 export type BudgetName = 'toolCalls' | 'subagentsTotal' | RetrievalRow;
 
 export type Canon = (path: string) => string | null;
@@ -125,6 +127,9 @@ export const SUBAGENT_CONCURRENT_RULE = 'budget:subagentsConcurrent';
 export const SEARCHES_SPENT_RULE = 'budget:retrieval.searches';
 export const BROAD_DISCOVERY_NOT_AUTHORIZED_RULE = 'retrieval:broad-discovery-not-authorized';
 export const BROAD_DISCOVERY_SPENT_RULE = 'retrieval:broad-discovery-spent';
+// The rules of a Read refused for want of whole-file retrieval budget (WR-11): the run has read all the files its contract allows, or this read would pass the bytes.
+export const FULL_READS_SPENT_RULE = 'budget:retrieval.fullReads';
+export const FULL_READ_BYTES_SPENT_RULE = 'budget:retrieval.fullReadBytes';
 
 // The rule of a privileged shell form refused for want of an approval: `privileged:<action>`.
 export const PRIVILEGED_RULE_PREFIX = 'privileged:';
@@ -851,7 +856,9 @@ export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, can
     }
     case 'file-read': {
       const rule = checkRead(call.paths, policy, canon);
-      return rule !== null ? deny(rule) : { decision: 'allow', rule: 'read-set', budget: 'toolCalls' };
+      if (rule !== null) return deny(rule);
+      // WR-11: under a retrieval policy every Read is a whole-file read, charged to both whole-file rows in the transaction that charges toolCalls.
+      return { decision: 'allow', rule: 'read-set', budget: 'toolCalls', ...(policy.retrieval !== undefined ? { alsoCharges: ['retrieval.fullReads', 'retrieval.fullReadBytes'] satisfies RetrievalRow[] } : {}) };
     }
     case 'search': {
       const rule = checkRead(call.patternRoot === undefined ? [call.path] : [call.path, call.patternRoot], policy, canon);

@@ -19,7 +19,7 @@ import { isAbsolute, join, relative } from 'node:path';
 import { paramsDigest, paramsSummary } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
-import { BROAD_DISCOVERY_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import { BROAD_DISCOVERY_SPENT_RULE, FULL_READ_BYTES_SPENT_RULE, FULL_READS_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { UNAPPROVABLE_RULE, UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
@@ -219,6 +219,22 @@ function fileState(path: string): FileState {
   return { exists: true, digest: 'sha256:' + sha256Hex(readFileSync(path)) };
 }
 
+// The bytes a Read of the file at `path` is charged: the size of the canonical path when it is a regular file; 0 for a path that cannot be resolved, is missing or is not
+// a file. Any other error propagates and the caller exits 2.
+function measureRead(path: string): number {
+  const canonical = canonicalAbsolute(path);
+  if (canonical === null) return 0;
+  let stat;
+  try {
+    stat = statSync(canonical);
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 0;
+    throw e;
+  }
+  return stat.isFile() ? stat.size : 0;
+}
+
 const isUnder = (path: string, root: string): boolean => path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`);
 
 const agentOf = (input: Record<string, unknown>): string => {
@@ -303,20 +319,23 @@ function recordPrivilegedDenial(db: DatabaseSync, o: PrivilegedDenial): string {
   return requestId;
 }
 
-// Charges one unit to each named budget row of the run, all or none (plan 04-29; CON-11). The caller's BEGIN IMMEDIATE transaction is open and holds the ledger's
+// Charges the named budget rows of the run, all or none (plan 04-29; CON-11): one unit each, or the amount given for the row (WR-11: a Read charges its bytes to retrieval.fullReadBytes). The caller's BEGIN IMMEDIATE transaction is open and holds the ledger's
 // write lock, so checking every row and then writing every row cannot interleave with another hook process: a search is never charged `toolCalls` and refused for
 // want of a `retrieval.searches` unit, and a unit is never charged without the event row that records it. Returns the first row with no room (the rows are checked in
-// the order given), or null when all were charged. No row at all is a broken ledger (fail closed); a row at its limit is the budget doing its job.
-function chargeRows(db: DatabaseSync, runId: string, names: readonly BudgetName[]): BudgetName | null {
-  const room = db.prepare('SELECT used + reserved + 1 <= limit_value AS room FROM budgets WHERE run_id = ? AND name = ?');
+// the order given, every one before any is charged), or null when all were charged. No row at all is a broken ledger (fail closed); a row at its limit is the budget doing
+// its job.
+type Amounts = Partial<Record<BudgetName, number>>;
+function chargeRows(db: DatabaseSync, runId: string, names: readonly BudgetName[], amounts: Amounts = {}): BudgetName | null {
+  const room = db.prepare('SELECT used + reserved + ? <= limit_value AS room FROM budgets WHERE run_id = ? AND name = ?');
   for (const name of names) {
-    const row = room.get(runId, name) as { room: number } | undefined;
+    const row = room.get(amounts[name] ?? 1, runId, name) as { room: number } | undefined;
     if (row === undefined) throw new Error(`the ledger has no ${name} budget for run ${runId}`);
     if (Number(row.room) !== 1) return name;
   }
-  const charge = db.prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value');
+  const charge = db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ? AND used + reserved + ? <= limit_value');
   for (const name of names) {
-    if (Number(charge.run(runId, name).changes) === 0) throw new Error(`the ${name} budget of run ${runId} changed while it was locked`);
+    const amount = amounts[name] ?? 1;
+    if (Number(charge.run(amount, runId, name, amount).changes) === 0) throw new Error(`the ${name} budget of run ${runId} changed while it was locked`);
   }
   return null;
 }
@@ -325,6 +344,8 @@ function chargeRows(db: DatabaseSync, runId: string, names: readonly BudgetName[
 function spentDecision(name: BudgetName): HookDecision {
   if (name === 'retrieval.searches') return { decision: 'deny', rule: SEARCHES_SPENT_RULE, budget: name, reason: 'the run has made all the searches its contract allows; read what was found or report what is missing' };
   if (name === 'retrieval.broadDiscovery') return { decision: 'deny', rule: BROAD_DISCOVERY_SPENT_RULE, budget: name, reason: 'the one whole-repository search the contract allows was made; search a directory or add a filter' };
+  if (name === 'retrieval.fullReads') return { decision: 'deny', rule: FULL_READS_SPENT_RULE, budget: name, reason: 'the run has read all the whole files its contract allows; work from what was read or report what is missing' };
+  if (name === 'retrieval.fullReadBytes') return { decision: 'deny', rule: FULL_READ_BYTES_SPENT_RULE, budget: name, reason: 'this read would pass the bytes of whole-file reads the contract allows; read fewer lines with offset and limit, or report what is missing' };
   return { decision: 'deny', rule: 'budget_exhausted', budget: name };
 }
 
@@ -351,6 +372,10 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
     const rel = staging !== null && isUnder(canonical, staging) ? relative(staging, canonical) : canonical;
     edit = { canonical, state: fileState(canonical), display: rel.length > MAX_TARGET_CHARS ? rel.slice(0, MAX_TARGET_CHARS) : rel };
   }
+
+  // WR-11: the bytes an allowed Read of a run with retrieval limits can return, measured before the ledger is opened (any error but a path that is not a file exits 2).
+  let readBytes = 0;
+  if (policy.retrieval !== undefined && decided.decision === 'allow' && normalized.call.kind === 'file-read') readBytes = measureRead(normalized.call.paths[0] as string);
 
   const limits = policy.loopLimits;
   const db = openLedger(policy.ledgerPath);
@@ -385,7 +410,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       if (result.decision === 'allow' && result.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
         result = { decision: 'deny', rule: SUBAGENT_CONCURRENT_RULE };
       } else if (result.decision === 'allow' && result.budget !== undefined) {
-        const refused = chargeRows(db, policy.runId, [result.budget, ...(result.alsoCharges ?? [])]);
+        const refused = chargeRows(db, policy.runId, [result.budget, ...(result.alsoCharges ?? [])], { 'retrieval.fullReadBytes': readBytes });
         if (refused !== null) result = spentDecision(refused);
       }
       // CON-14: this denial is the Nth in a row when N-1 denials directly precede it in the invocation's decision events (by seq). The count
