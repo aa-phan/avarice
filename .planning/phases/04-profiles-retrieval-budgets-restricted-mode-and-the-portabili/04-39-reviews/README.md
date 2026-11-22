@@ -46,7 +46,12 @@ Verdict rule: a group passes when its last round records no BLOCKER and no WARNI
 | 2 | E | `round-2-E.md` (report sha256 `6b68504d…`) | `indexes-and-context.md` f2f42953…, `onboarding.md` 61c29ca5…, `runs.md` b08aac78…, `checks-and-evidence.md` 27757927…, `processes.md` d73dedef… | PASS | 0 BLOCKER, 0 WARNING, 3 NIT; NITs deferred, documents not edited |
 | 3 | A | `round-3-A.md` (report sha256 `0c9e855c…`) | `profiles-and-credentials.md` 94fa6160…, `policy-and-approvals.md` 47dec0fa…, `findings.md` 584b2440… | PASS | 0 BLOCKER, 0 WARNING, 3 NIT; NITs deferred, documents not edited |
 | 3 | C | `round-3-C.md` (report sha256 `6e31f87f…`) | `containment.md` 2a9e13df…, `data-model.md` 65f171c3…, `integrations.md` 94dec0d4… | FAIL | 0 BLOCKER, 3 WARNING, 2 NIT; dispositions in `round-3-dispositions.md` |
+| 4 | C | `round-4-C.md` (report sha256 `7c306646…`) | `containment.md` 6c604f8a…, `data-model.md` 65f171c3…, `integrations.md` c75b7a21… | FAIL | 0 BLOCKER, 1 WARNING, 2 NIT; owner ruling "close drafted" (below); the WARNING and both NITs fixed after the round, dispositions in `round-4-dispositions.md` |
 
 ## Deviation: a fourth round for group C
 
 Group C is still not clean after round 3, which the round budget above answers with a report to the owner. The owner (Aaron Phan) was asked whether to exceed the three-round limit for group C and replied verbatim "round 4" (2026-11-21). One extra fix-and-review round is therefore allowed for group C only, by a fresh reviewer, recorded as `round-4-C.md`. It is a deviation from the plan's round budget of three rounds per group. No other group is affected; groups A, B, D and E keep the three-round limit.
+
+## Owner ruling after round 4: close drafted
+
+Group C is still not clean after the extra round, and its review budget is exhausted. The owner (Aaron Phan) replied verbatim "close drafted" (2026-11-22). The three findings are fixed against the code anyway, but no fresh reviewer checks the fixes, so `containment.md`, `data-model.md` and `integrations.md` are not marked `reviewed`. `coverage.md` records them as changed after review, naming `round-4-C.md` and the reason, so the next documentation pass picks them up. Success criterion 6 of the plan (every new or changed document reviewed) is therefore incomplete for these three documents.
