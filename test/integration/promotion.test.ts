@@ -220,6 +220,27 @@ describe('copy never overwrites a file of the checkout (S-28, T-04-56)', () => {
     }
     assert.equal(treeDigest(repo.path), before);
   });
+
+  // WR-22 (T-04-121): a promoted path is an ordinary planning file. A `.git` segment in any letter case would plant a repository inside the owner's checkout, and a
+  // path that is not in normal form would pass the duplicate check as a different name than the one written.
+  for (const path of [`${MAP_DIR}/.git/HEAD`, '.planning/.GIT/config', '.planning/.../a.md', '.planning//a.md', '.planning/a.md/']) {
+    it(`refuses ${JSON.stringify(path)} with an invalid error naming it, before anything is written into the checkout`, () => {
+      const { repo } = fixture();
+      const before = checkoutSnapshot(repo.path);
+      const copied = new CloneStagingWorkspace().copyIntoCheckout(repo.path, [{ path, content: Buffer.from('x') }]);
+      assert.ok(!copied.ok, `${path} was promoted`);
+      assert.equal(copied.error.kind, 'invalid');
+      assert.ok(copied.error.kind === 'invalid' && copied.error.reason.includes(JSON.stringify(path)), `the error names the path: ${JSON.stringify(copied.error)}`);
+      assert.deepEqual(checkoutSnapshot(repo.path), before, 'the checkout tree digest is unchanged');
+    });
+  }
+
+  it('still promotes an ordinary map file next to a refused path rule', () => {
+    const { repo } = fixture();
+    const copied = new CloneStagingWorkspace().copyIntoCheckout(repo.path, [{ path: `${MAP_DIR}/STACK.md`, content: Buffer.from('accepted\n') }]);
+    assert.ok(copied.ok, JSON.stringify(copied));
+    assert.deepEqual(copied.value.written, [`${MAP_DIR}/STACK.md`]);
+  });
 });
 
 describe('commit makes one create-only branch and changes nothing else in the repository (D-15, ONB-5, T-04-58)', () => {
