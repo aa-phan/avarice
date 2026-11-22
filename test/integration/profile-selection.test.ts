@@ -3,7 +3,7 @@
 // ones under test and nothing here touches the real profile locations.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -408,6 +408,43 @@ describe('enterprise remote refusal (D-16, T-04-09)', () => {
     assert.equal(r.code, 3, r.stderr);
     assert.match(r.stderr, /enterprise-acme/);
     assert.match(r.stderr, /remotePatterns/);
+  });
+});
+
+// WR-17 (T-04-116, SEC-1): another profile's config that exists but cannot be read leaves its moved roots out of the sandbox deny list of every run
+// of the selected profile. The composition refuses before it opens a store, instead of starting with a shorter list.
+describe('an unreadable config of another profile stops the composition (WR-17, T-04-116)', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+  // A personal name, so that the enterprise pattern read of main() (which has its own refusal) is not what stops the command.
+  const otherName = 'personal-extended';
+
+  it('refuses the command naming the unreadable config and creates no store for the selected profile', () => {
+    const home = tempDir('avarice-home-');
+    const dir = join(home, '.config', 'avarice', 'profiles', otherName);
+    mkdirSync(dir, { recursive: true });
+    const configPath = join(dir, 'config.json');
+    writeFileSync(configPath, JSON.stringify({ schema: 1, profile: otherName, dataRoot: join(home, 'moved', 'other-data'), workRoot: join(home, 'moved', 'other-work') }));
+    chmodSync(configPath, 0o000);
+    try {
+      const r = runCli(['status', '--json'], { env: homeEnv(home), cwd: home });
+      assert.equal(r.code, 70, r.stderr);
+      assert.match(r.stderr, /cannot read the other profiles/);
+      assert.match(r.stderr, new RegExp(otherName));
+      assert.equal(existsSync(join(dataRootOf(home, 'personal-local'), 'state.db')), false, 'no store was opened for the selected profile');
+      const composed = createDeps({ ...process.env, ...homeEnv(home) } as NodeJS.ProcessEnv, {}, { readOnly: true, profile: 'personal-local' });
+      assert.equal(composed.ok, false);
+      if (!composed.ok) assert.match(composed.message, new RegExp(otherName));
+    } finally {
+      chmodSync(configPath, 0o600);
+    }
+  });
+
+  it('still composes when the other profile config is only corrupt, which stays skipped', () => {
+    const home = tempDir('avarice-home-');
+    const dir = join(home, '.config', 'avarice', 'profiles', otherName);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'config.json'), '{ not json');
+    const r = runCli(['status', '--json'], { env: homeEnv(home), cwd: home });
+    assert.equal(r.code, 0, r.stderr);
   });
 });
 

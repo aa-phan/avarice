@@ -142,4 +142,33 @@ describe('knownProfileRoots (D-19)', () => {
       chmodSync(join(configHome, 'profiles'), 0o700);
     }
   });
+
+  // WR-17 (T-04-116): a profile config that exists but cannot be read leaves that profile's moved roots out of the deny list. A list that could not
+  // be computed must not read as a shorter one, so the error names the profile and the registry stops; a config that is merely corrupt stays skipped.
+  describe('a profile config that cannot be read (WR-17)', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+    it('is an unavailable error naming the profile, not a shorter list', () => {
+      const moved = join(base, 'wr17-moved');
+      const configHome = configHomeWith({ [ent('other-a')]: { dataRoot: join(moved, 'a-data'), workRoot: join(moved, 'a-work') } });
+      const configPath = join(configHome, 'profiles', ent('other-a'), 'config.json');
+      chmodSync(configPath, 0o000);
+      try {
+        const result = knownProfileRoots(configHome, 'personal-local', OWN());
+        assert.equal(result.ok, false, 'an unreadable config must stop the deny-list computation');
+        if (result.ok) return;
+        assert.equal(result.error.kind, 'unavailable');
+        assert.match(JSON.stringify(result.error), new RegExp(ent('other-a')), 'the error names the profile whose config could not be read');
+      } finally {
+        chmodSync(configPath, 0o600);
+      }
+    });
+
+    it('still skips a corrupt config next to it, and returns the roots of the readable profiles when nothing is unreadable', () => {
+      const configHome = configHomeWith({
+        [ent('other-b')]: '{ not json',
+        [ent('other-c')]: { dataRoot: join(base, 'wr17-c-data') },
+      });
+      const found = roots(configHome);
+      assert.ok(found.includes(join(base, 'wr17-c-data')), JSON.stringify(found));
+    });
+  });
 });
