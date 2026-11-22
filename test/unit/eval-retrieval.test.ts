@@ -414,6 +414,80 @@ describe("--live needs the owner's recorded spend authorization (plan 04-46, WR-
   });
 });
 
+describe('the evaluation records every model step at no less than it may have cost (plan 04-46, WR-30, T-04-126)', () => {
+  const costs = (chargedUsd: number, finished: number) => ({ chargedUsd, tokens: 100 * finished, finished, tokensComplete: true });
+
+  it('amounts: a timeout after one finished invocation records the larger of the charge and the cap', async () => {
+    const { stepSpendUsd } = await harness();
+    assert.equal(stepSpendUsd({ costs: costs(0.1, 1), code: null, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: costs(0.55, 2), code: null, capUsd: 0.4 }), 0.55);
+  });
+
+  it('amounts: an exit before any invocation.finished event records the cap, whatever the exit code', async () => {
+    const { stepSpendUsd } = await harness();
+    assert.equal(stepSpendUsd({ costs: costs(0, 0), code: 1, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: costs(0, 0), code: 0, capUsd: 0.4 }), 0.4);
+  });
+
+  it('amounts: a ledger that could not be read records the cap, and a finished step that ended on its own records what it was charged', async () => {
+    const { stepSpendUsd } = await harness();
+    assert.equal(stepSpendUsd({ costs: undefined, code: 0, capUsd: 0.6 }), 0.6);
+    assert.equal(stepSpendUsd({ costs: costs(0.12, 1), code: 0, capUsd: 0.4 }), 0.12);
+    assert.equal(stepSpendUsd({ costs: costs(0.12, 1), code: 1, capUsd: 0.4 }), 0.12);
+  });
+
+  // spendStep against a temporary Phase 4 ledger and a temporary data root.
+  async function stepAgainst(options: { dataRoot: (dir: string) => void; code: number | null; cap: number }): Promise<{ recorded: number[]; thrown: unknown }> {
+    const { spendStep } = await harness();
+    const ledger = phase4Ledger(undefined);
+    const dir = temp('eval-spend-step');
+    options.dataRoot(dir);
+    const saved = process.env['AVARICE_PHASE4_LEDGER'];
+    process.env['AVARICE_PHASE4_LEDGER'] = ledger.path;
+    let thrown: unknown;
+    try {
+      const roots = { base: dir, AVARICE_CONFIG_HOME: join(dir, 'config'), AVARICE_DATA_ROOT: dir, AVARICE_WORK_ROOT: join(dir, 'work') };
+      await spendStep({ plan: '04-46', claudeVersion: 'x' }, 'eval-T01-A-run', options.cap, roots, false, () => ({ code: options.code }));
+    } catch (e) {
+      thrown = e;
+    } finally {
+      if (saved === undefined) delete process.env['AVARICE_PHASE4_LEDGER'];
+      else process.env['AVARICE_PHASE4_LEDGER'] = saved;
+    }
+    const recorded = existsSync(ledger.path) ? readFileSync(ledger.path, 'utf8').split('\n').filter((l) => l !== '').map((l) => (JSON.parse(l) as { costUsd: number }).costUsd) : [];
+    return { recorded, thrown };
+  }
+
+  const stateDb = (dir: string, events: Array<Record<string, unknown>>): void => {
+    const db = new DatabaseSync(join(dir, 'state.db'));
+    db.exec('CREATE TABLE events (seq INTEGER PRIMARY KEY, type TEXT NOT NULL, data_json TEXT NOT NULL)');
+    for (const data of events) db.prepare('INSERT INTO events (type, data_json) VALUES (?, ?)').run('invocation.finished', JSON.stringify(data));
+    db.close();
+  };
+
+  it('records the cap and then rethrows when the ledger read throws', async () => {
+    const result = await stepAgainst({ dataRoot: (dir) => writeFileSync(join(dir, 'state.db'), 'this is not a database'), code: 0, cap: 0.4 });
+    assert.deepEqual(result.recorded, [0.4]);
+    assert.ok(result.thrown instanceof Error, 'the read error still propagates');
+  });
+
+  it('records the cap for a step the timeout killed after one finished invocation', async () => {
+    const result = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.1, tokens: 50 }]), code: null, cap: 0.4 });
+    assert.deepEqual(result.recorded, [0.4]);
+    assert.equal(result.thrown, undefined);
+  });
+
+  it('records the cap for a step that exited non-zero with no finished invocation', async () => {
+    const early = await stepAgainst({ dataRoot: (dir) => stateDb(dir, []), code: 1, cap: 0.4 });
+    assert.deepEqual(early.recorded, [0.4]);
+  });
+
+  it('records what the ledger charged for a step that ended on its own', async () => {
+    const done = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.12, tokens: 50 }]), code: 0, cap: 0.4 });
+    assert.deepEqual(done.recorded, [0.12]);
+  });
+});
+
 // ---- leakage ---------------------------------------------------------------------------------------------------------------------------------
 
 interface Leak {

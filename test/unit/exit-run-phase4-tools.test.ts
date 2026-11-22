@@ -442,3 +442,42 @@ describe('the stop-loss counts stopped attempts (owner ruling 3 authorizes a thi
     assert.match(stopLossRefusal([stopped(1), stopped(2), active(3)]) ?? '', /stopped 2 times/);
   });
 });
+
+const tools = () => import('../../scripts/exit-run-phase4-tools.ts');
+
+describe('run-one records spend at no less than the onboarding may have cost (plan 04-46, WR-31, T-04-126)', () => {
+  const base = { ledgerError: undefined, root: '/data', runStatus: 0 as number | null, hostStarted: true, costAssumed: false, reportedUsd: 0.3, capUsd: 1.6 };
+
+  it('records the per-repository cap when the ledger read failed, the profile root was unreadable or the run timed out', async () => {
+    const { runOneSpendUsd } = await tools();
+    assert.equal(runOneSpendUsd({ ...base, ledgerError: 'database is locked', hostStarted: false, reportedUsd: 0 }), 1.6);
+    assert.equal(runOneSpendUsd({ ...base, root: undefined, hostStarted: false, reportedUsd: 0 }), 1.6);
+    assert.equal(runOneSpendUsd({ ...base, runStatus: null, hostStarted: false, reportedUsd: 0 }), 1.6);
+    assert.equal(runOneSpendUsd({ ...base, runStatus: null }), 1.6, 'a timeout is the cap even after a reported 0.30 USD invocation');
+  });
+
+  it('records the cap when the host was not confirmed started and the CLI exited non-zero', async () => {
+    const { runOneSpendUsd } = await tools();
+    assert.equal(runOneSpendUsd({ ...base, hostStarted: false, runStatus: 1, reportedUsd: 0 }), 1.6);
+    assert.equal(runOneSpendUsd({ ...base, hostStarted: false, runStatus: 0, reportedUsd: 0 }), 0, 'a clean exit that started no host spent nothing');
+  });
+
+  it('takes the larger of the cap and the reported sum when some costs were assumed', async () => {
+    const { runOneSpendUsd } = await tools();
+    assert.equal(runOneSpendUsd({ ...base, costAssumed: true, reportedUsd: 0.3 }), 1.6);
+    assert.equal(runOneSpendUsd({ ...base, costAssumed: true, reportedUsd: 2.1 }), 2.1);
+    assert.equal(runOneSpendUsd({ ...base, costAssumed: true, reportedUsd: 0 }), 1.6);
+  });
+
+  it('records the reported sum when every invocation reported its cost', async () => {
+    const { runOneSpendUsd } = await tools();
+    assert.equal(runOneSpendUsd({ ...base, reportedUsd: 0.3 }), 0.3);
+  });
+
+  it('sums costChargedUsd where an invocation has it and costUsd otherwise, and marks an invocation with neither as assumed', async () => {
+    const { finishedCosts } = await tools();
+    assert.deepEqual(finishedCosts([{ costChargedUsd: 0.5, costUsd: 0.2 }, { costUsd: 0.25 }]), { costUsd: 0.75, costAssumed: false });
+    assert.deepEqual(finishedCosts([{ costChargedUsd: 0.5 }, {}]), { costUsd: 0.5, costAssumed: true });
+    assert.deepEqual(finishedCosts([]), { costUsd: 0, costAssumed: false });
+  });
+});
