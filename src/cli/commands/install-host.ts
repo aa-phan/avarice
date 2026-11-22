@@ -2,7 +2,7 @@
 // Writes the `avarice-run` skill to `<claude config dir>/skills/avarice-run/SKILL.md` for attended sessions (docs/extensions.md entry 3), and the attended
 // PreToolUse hook entry to `<claude config dir>/settings.json` beside it (entries 2 and 4; plan 04-19), so a privileged shell form in the owner's own session
 // needs an approval. The directory is --config-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude. Idempotent: an identical file or entry is `unchanged`. It refuses
-// inside a run (AVARICE_RUN is set), refuses a symbolic link at `skills`, `skills/avarice-run`, SKILL.md or settings.json, refuses to overwrite a SKILL.md
+// inside a run (AVARICE_RUN is set, or a run supervisor is an ancestor process), refuses a symbolic link at `skills`, `skills/avarice-run`, SKILL.md or settings.json, refuses to overwrite a SKILL.md
 // that does not carry the AVARICE marker line, and replaces in settings.json only an entry whose command carries the `--avarice-attended-hook` marker, leaving
 // every other key and entry as it was (CS-11, RC-5, CON-6, T-04-52). It records the content digest of the skill as the adapter config
 // `host-skill:avarice-run` and the digest of the hook entry as `host-hook:attended`. Exit 0 installed, unchanged or updated; 3 refused; 64 usage or inside a
@@ -16,6 +16,8 @@ import { installAttendedHook } from '../../adapters/host-claude/attended-hook-in
 import { installSkill } from '../../adapters/host-claude/skill-install.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
+import { refuseInsideRun } from '../identity.ts';
+import type { IdentityContext } from '../identity.ts';
 import { errorLine, resultLine, stripControl } from '../render/style.ts';
 
 const EXIT_REFUSED = 3;
@@ -26,9 +28,11 @@ export const HOOK_CONFIG_NAME = 'host-hook:attended';
 
 const USAGE = 'usage: avarice install-host [--config-dir <dir>]';
 
-// Checked before the profile is resolved, so a refusal inside a run leaves nothing on disk: no store, no profile, no skill.
-export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  if (env['AVARICE_RUN'] !== undefined) return 'refused inside a run (AVARICE_RUN is set)';
+// Checked before the profile is resolved, so a refusal inside a run leaves nothing on disk: no store, no profile, no skill. A run is refused by its marker and by its
+// process tree (WR-24, T-04-122), because the command writes an executable hook entry into the owner's host settings.
+export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env, context?: IdentityContext): string | undefined {
+  const refused = refuseInsideRun(env, context);
+  if (refused !== undefined) return refused;
   if (args.positionals.length > 0) return `install-host takes no argument, found ${JSON.stringify(args.positionals[0])}\n${USAGE}`;
   const dir = args.flags['config-dir'];
   if (dir === true || dir === '') return `--config-dir needs a directory\n${USAGE}`;

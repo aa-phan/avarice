@@ -254,7 +254,7 @@ const INSIDE_A_RUN = (): Result<ProcessEntry[]> =>
 async function installHostInProcess(s: Setup, ancestry: () => Result<ProcessEntry[]>): Promise<{ code: number; out: string; err: string }> {
   const out: string[] = [];
   const err: string[] = [];
-  const env = { ...profileEnv(s.roots), CLAUDE_CONFIG_DIR: s.claude };
+  const env: NodeJS.ProcessEnv = { ...profileEnv(s.roots), CLAUDE_CONFIG_DIR: s.claude };
   delete env['AVARICE_RUN'];
   const code = await main(['install-host', '--config-dir', s.claude], { env, io: { out: (t) => void out.push(t), err: (t) => void err.push(t) }, ancestry });
   return { code, out: out.join(''), err: err.join('') };
