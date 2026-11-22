@@ -323,15 +323,22 @@ function blockOnInterruptedActions(ctx: RunStageContext): Result<boolean> {
   if (interrupted.length === 0) return ok(false);
   const current = deps.ledger.getRun(runId);
   if (!current.ok) return current;
-  if (current.value.state !== 'blocked_on_decision') {
-    const decisionIds = interrupted.map((d) => d.decisionId);
-    ctx.note(`a privileged action started and never finished; it was not repeated (decision ${decisionIds.join(', ')})`);
-    const blocked = ctx.transition(current.value, 'blocked_on_decision', 'none', {
-      reason: 'enforcement_failure',
-      data: { interruptedActions: interrupted.length, decisionIds, class: 'permission' },
-    });
-    if (!blocked.ok) return blocked;
+  let row = current.value;
+  if (row.state === 'blocked_on_decision' && row.reason === 'enforcement_failure') return ok(true);
+  // A run blocked on an answered item decision is going to be continued by this resume (the supervisor continues a block with reason `decision`); a blocked
+  // run cannot move to blocked_on_decision again, so it is paused and blocked again with the reason of the interrupted action, as blockOnChangedRefs does.
+  if (row.state === 'blocked_on_decision') {
+    const paused = ctx.transition(row, 'paused', 'reconcile', { data: { reason: 'interrupted action' } });
+    if (!paused.ok) return paused;
+    row = paused.value;
   }
+  const decisionIds = interrupted.map((d) => d.decisionId);
+  ctx.note(`a privileged action started and never finished; it was not repeated (decision ${decisionIds.join(', ')})`);
+  const blocked = ctx.transition(row, 'blocked_on_decision', 'none', {
+    reason: 'enforcement_failure',
+    data: { interruptedActions: interrupted.length, decisionIds, class: 'permission' },
+  });
+  if (!blocked.ok) return blocked;
   return ok(true);
 }
 

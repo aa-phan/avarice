@@ -185,8 +185,8 @@ describe('resume reaps every started launch before anything else (plan 01-21)', 
 // A started launch that cannot be reaped is a host nobody can vouch for: the resume stops with an internal error that names the onboarding and marks no launch
 // interrupted, so a relaunch never runs beside a host that may still be writing (WR-07, CON-4).
 describe('resume stops when a started launch cannot be reaped (WR-07, CON-4)', () => {
-  const assertStopped = async (f: Fixture): Promise<void> => {
-    const resumed = await resumeOnboarding(f.deps, f.onboardingId);
+  const assertStopped = async (f: Fixture, deps: AppDeps = f.deps): Promise<void> => {
+    const resumed = await resumeOnboarding(deps, f.onboardingId);
     assert.equal(resumed.ok, false, 'the resume stops with an error');
     assert.equal(!resumed.ok && resumed.error.kind, 'internal');
     assert.ok(!resumed.ok && resumed.error.kind === 'internal' && resumed.error.cause.includes(f.onboardingId), `the error names the onboarding: ${JSON.stringify(!resumed.ok && resumed.error)}`);
@@ -199,7 +199,10 @@ describe('resume stops when a started launch cannot be reaped (WR-07, CON-4)', (
       const recorded = f.deps.ledger.recordStepResult(f.onboardingId, { step: 'mapping:plan', attempt: 2, status: 'completed', result: { mode: 'full', restricted: true }, nowMs: Date.now(), completedAtMs: Date.now() });
       assert.ok(recorded.ok, 'the restricted plan is recorded');
       insertStarted(f.deps, f.onboardingId, 'intel');
-      await assertStopped(f);
+      // The deployment composes no restricted host; the contained host is never a stand-in for it (T-04-66).
+      const withoutRestricted: AppDeps = { ...f.deps };
+      delete withoutRestricted.restrictedHost;
+      await assertStopped(f, withoutRestricted);
       assert.equal(f.reapCalls.length, 0, 'the contained host is not asked to reap a restricted launch');
     } finally {
       f.close();

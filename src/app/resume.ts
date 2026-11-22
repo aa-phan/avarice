@@ -6,7 +6,7 @@
 // map invocation was in flight is then reconciled: the staging map files decide whether the invocation finished.
 // Every other stage is idempotent and simply runs again from the committed state. A privileged action that started and did not finish (promotion) is the
 // exception: it is not run again, resume opens a decision instead (FR-15).
-import { ok } from '../domain/result.ts';
+import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import { isStopState } from '../domain/onboarding-lifecycle.ts';
 import { requiredFilesFor } from '../domain/mapping.ts';
@@ -23,7 +23,9 @@ const LAUNCH_PREFIX = 'launch:';
 const VALIDATE = 'validate';
 
 // Terminates the host process of an interrupted invocation, found by the session ID its `started` step recorded. A
-// host that cannot be searched for or ended stops the resume: relaunching beside a survivor is not an option.
+// host that cannot be searched for or ended stops the resume: relaunching beside a survivor is not an option. So does a started launch that cannot be
+// reaped at all (no host is composed for its mode, the host has no reap, or the step recorded no session ID): it is called only for a step whose launch
+// recorded a start, and its host may still be running (WR-07, CON-4).
 async function reapInterrupted(ctx: StageContext, started: unknown, runId: string): Promise<Result<void>> {
   const { deps, onboardingId } = ctx;
   const body = typeof started === 'object' && started !== null ? (started as Record<string, unknown>) : {};
@@ -32,7 +34,8 @@ async function reapInterrupted(ctx: StageContext, started: unknown, runId: strin
   const plan = loadMappingPlan(deps, onboardingId);
   if (!plan.ok) return plan;
   const host = hostOfOnboarding(deps, plan.value);
-  if (host?.reap === undefined || typeof sessionId !== 'string' || sessionId === '') return ok(undefined);
+  if (host?.reap === undefined) return err({ kind: 'internal', cause: `onboarding ${onboardingId} has a started launch that cannot be reaped: no host with a reap is composed for its mode` });
+  if (typeof sessionId !== 'string' || sessionId === '') return err({ kind: 'internal', cause: `onboarding ${onboardingId} has a started launch that cannot be reaped: it recorded no session ID` });
   const reaped = await host.reap({ sessionId });
   if (!reaped.ok) return reaped;
   if (reaped.value.terminated === 0) return ok(undefined);
