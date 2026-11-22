@@ -89,7 +89,7 @@ AVARICE spawns the host headlessly, once per contained invocation (map, intel, k
 
 Before spawning, a refusal check judges the finished argument list, and the host's environment is built from nothing. The refusals are listed in [containment.md](containment.md#refusals-before-launch) and the environment in [containment.md](containment.md#environment-scrubbing).
 
-The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. The ID must be a UUID, and the adapter generates one otherwise.
+The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. A caller-supplied ID must be a UUID, or the adapter refuses it as invalid; the adapter generates a UUID only when the caller gives none.
 
 A paused item's session is continued with the host's resume flag. The line then ends `--resume <session-id>` in place of `--session-id <uuid>`; the host refuses both together, so one is never added beside the other, and every other flag stays as above. The host looks for a session only in the configuration directory of the process that launches it. A run therefore records the directory it started under, and every supervisor launches the host with it (see [runs.md](runs.md#the-detached-supervisor)). A session the host does not know ends as an error result with no turns, no cost and exit 1. The run reads that as a session that is gone and answers with a fresh unit.
 

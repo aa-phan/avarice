@@ -164,7 +164,7 @@ Four purposes exist, each with its own write scope, extensions and shell policy.
 | Purpose | Working directory | Writable | Reads | Shell | Skill and agents | Subagents |
 |---|---|---|---|---|---|---|
 | map | staging | the codebase map directory under the planning directory | staging, the GSD core and agents directories, the allowed skill's real directory | Bash allowed, hook identity rules | the map skill; the mapper agent | contract totals |
-| intel | staging | the intel directory under the planning directory | as map | as map, plus three intel-writing GSD verbs | no skill; the intel-updater agent runs directly | none |
+| intel | staging | the intel directory under the planning directory | as map | as map, plus three intel GSD verbs | no skill; the intel-updater agent runs directly | none |
 | knowledge | the knowledge corpus directory inside staging | the extraction directory inside the corpus | the corpus only | none: Bash denied in settings and by the hook | none | none |
 | run | the run's clone | the contract's write, create and artifact globs, plus the run's scratch directory | the clone, the scratch directory, the GSD core and agents directories, the allowed skill's real directory | Bash allowed; the hook admits read-only commands, the allowed GSD verbs and the contract's own commands | the quick skill; the planner, plan checker, executor and verifier agents | contract totals |
 
