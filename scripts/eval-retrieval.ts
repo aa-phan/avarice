@@ -740,7 +740,7 @@ export function settleScratch(options: SettleOptions): string | undefined {
   return evidence;
 }
 
-interface LiveContext {
+export interface LiveContext {
   evidenceRoot: string | undefined;
   scratch: string;
   claudeBin: string;
@@ -753,7 +753,7 @@ interface LiveContext {
   log: (line: string) => void;
 }
 
-interface LedgerCosts {
+export interface LedgerCosts {
   chargedUsd: number;
   tokens: number;
   finished: number;
@@ -800,15 +800,32 @@ function writeArmProfile(ctx: LiveContext, roots: CliRoots, arm: ArmId): void {
   writeFileSync(path, `${JSON.stringify({ ...(isRecord(existing) ? existing : {}), ...armProfileConfig(arm) }, null, 2)}\n`, { mode: 0o600 });
 }
 
-// One model-spending step: the ceiling is checked against the step's cap first, and the cost the ledger shows afterwards (what the budgets charged: a killed invocation is
-// charged its reservation) is recorded in the Phase 4 spend ledger. A step the CLI never finished (the process was killed by the timeout, so the host may have run and left
-// no record) is recorded at its cap, the way the Phase 3 tools did for a cost the host did not report.
-async function spendStep<T extends { code: number | null }>(ctx: LiveContext, label: string, capUsd: number, roots: CliRoots, onboarding: boolean, fn: () => T): Promise<{ result: T; costs: LedgerCosts }> {
+// What a model step is recorded at in the Phase 4 spend ledger (WR-30). The ledger is the only thing that enforces the ceiling, so an amount that cannot be known is the
+// step's cap, as the Phase 3 tools recorded it, and never less than the charge the ledger shows: a read that failed (`costs` undefined), a step the timeout killed
+// (`code` null, so an invocation may have been in flight when the process died) and a step that ended with no invocation.finished event (the host may have run and left no
+// record) each record at least the cap.
+export function stepSpendUsd(input: { costs: LedgerCosts | undefined; code: number | null; capUsd: number }): number {
+  if (input.costs === undefined) return input.capUsd;
+  const floor = input.code === null || input.costs.finished === 0 ? input.capUsd : 0;
+  return Math.max(input.costs.chargedUsd, floor);
+}
+
+// One model-spending step: the ceiling is checked against the step's cap first, and the amount `stepSpendUsd` gives (what the budgets charged: a killed invocation is
+// charged its reservation, never less than the cap when the step's cost cannot be known) is recorded in the Phase 4 spend ledger. A ledger read that throws is recorded at
+// the cap first and then rethrown, so the error never costs the ledger the spend.
+export async function spendStep<T extends { code: number | null }>(ctx: Pick<LiveContext, 'plan' | 'claudeVersion'>, label: string, capUsd: number, roots: CliRoots, onboarding: boolean, fn: () => T): Promise<{ result: T; costs: LedgerCosts }> {
   if (!fitsPhase4Ceiling(capUsd)) throw new CeilingStop(ceilingRefusal(label, capUsd));
   const result = fn();
-  const costs = costsOf(roots.AVARICE_DATA_ROOT, onboarding);
-  const spent = costs.finished > 0 ? costs.chargedUsd : result.code === null ? capUsd : 0;
+  let costs: LedgerCosts | undefined;
+  let readError: unknown;
+  try {
+    costs = costsOf(roots.AVARICE_DATA_ROOT, onboarding);
+  } catch (e) {
+    readError = e;
+  }
+  const spent = stepSpendUsd({ costs, code: result.code, capUsd });
   if (spent > 0) recordPhase4Spend({ plan: ctx.plan, case: label, costUsd: spent, claudeVersion: ctx.claudeVersion });
+  if (costs === undefined) throw readError;
   return { result, costs };
 }
 

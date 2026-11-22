@@ -731,6 +731,29 @@ const parseObject = (text: string | null | undefined): Json => {
   }
 };
 
+// The cost of the invocations an onboarding finished: what the budgets charged (`costChargedUsd`, larger than the host's own figure for a killed invocation) where an
+// invocation has it, the host-reported `costUsd` otherwise. An invocation with neither is not counted and marks the sum as assumed (WR-31).
+export function finishedCosts(finished: readonly Record<string, unknown>[]): { costUsd: number; costAssumed: boolean } {
+  let total = 0;
+  let known = 0;
+  for (const f of finished) {
+    const charged = typeof f['costChargedUsd'] === 'number' ? f['costChargedUsd'] : typeof f['costUsd'] === 'number' ? f['costUsd'] : undefined;
+    if (charged === undefined) continue;
+    known += 1;
+    total += charged;
+  }
+  return { costUsd: round(total), costAssumed: finished.length > 0 && known < finished.length };
+}
+
+// What `run-one` records in the Phase 4 spend ledger (WR-31): the per-repository cap whenever the spend cannot be known (the ledger read failed, the profile root was
+// unreadable, the process was killed by the timeout, or the host was not confirmed started while the CLI exited non-zero), and the larger of the cap and the reported sum when
+// some invocations reported no cost. Never less than the reported sum.
+export function runOneSpendUsd(input: { ledgerError: string | undefined; root: string | undefined; runStatus: number | null; hostStarted: boolean; costAssumed: boolean; reportedUsd: number; capUsd: number }): number {
+  const unknown = input.ledgerError !== undefined || input.root === undefined || input.runStatus === null || (!input.hostStarted && input.runStatus !== 0);
+  if (unknown || input.costAssumed) return Math.max(input.capUsd, input.reportedUsd);
+  return input.reportedUsd;
+}
+
 // What the owner's ledger holds about the onboarding that ran: the record, the mapping outcome, the indexes, the knowledge pass and the cost.
 function ledgerFacts(dataRoot: string, repoPath: string, startedAt: string, seqBefore: number): Json {
   const [onboarding] = readLedger<{ onboarding_id: string; state: string; project_id: string; preflight_json: string }>(
@@ -743,12 +766,10 @@ function ledgerFacts(dataRoot: string, repoPath: string, startedAt: string, seqB
   const events = readLedger<{ type: string; data_json: string }>(dataRoot, "SELECT type, data_json FROM events WHERE seq > ? AND type IN ('invocation.finished', 'containment.finding')", seqBefore);
   const finished = events.filter((e) => e.type === 'invocation.finished').map((e) => parseObject(e.data_json));
   const findings = events.filter((e) => e.type === 'containment.finding').map((e) => clip(String(parseObject(e.data_json)['reason'] ?? e.data_json), 300));
-  const reported = finished.filter((f) => typeof f['costUsd'] === 'number');
   const facts: Json = {
     hostStarted: finished.length > 0,
     invocations: finished.length,
-    costUsd: round(reported.reduce((sum, f) => sum + (f['costUsd'] as number), 0)),
-    costAssumed: finished.length > 0 && reported.length < finished.length,
+    ...finishedCosts(finished),
     containmentFindings: findings,
   };
   if (onboarding === undefined) return { ...facts, state: 'none' };
@@ -885,8 +906,16 @@ export async function runOne(argv: readonly string[]): Promise<number> {
   const differences = stateDifferences(before, after);
   const findings = facts['containmentFindings'] as string[];
   const containmentFailures = findings.length + (differences.length > 0 ? 1 : 0);
-  // A host that started and reported no cost is recorded at the cap, as every live harness of this project does.
-  const costUsd = facts['hostStarted'] === true ? (facts['costAssumed'] === true && (facts['costUsd'] as number) === 0 ? perRepo : (facts['costUsd'] as number)) : 0;
+  // A spend that cannot be known is recorded at the cap, as every live harness of this project does (WR-31).
+  const costUsd = runOneSpendUsd({
+    ledgerError,
+    root,
+    runStatus: ran.status,
+    hostStarted: facts['hostStarted'] === true,
+    costAssumed: facts['costAssumed'] === true,
+    reportedUsd: typeof facts['costUsd'] === 'number' ? facts['costUsd'] : 0,
+    capUsd: perRepo,
+  });
   if (costUsd > 0) recordPhase4Spend({ plan: PLAN, case: `ac14-${id}`, costUsd, claudeVersion: String(host['claudeVersion'] ?? HOST_VERSION) });
   const existingState = isObject(facts['existingState']) ? facts['existingState'] : undefined;
   const dryMap = dryRepo?.['existingMap'];
