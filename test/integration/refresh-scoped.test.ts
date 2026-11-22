@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createDeps } from '../../src/cli/composition.ts';
+import { prepareInvocation } from '../../src/app/invocation.ts';
 import { runOnboarding, startOnboarding } from '../../src/app/onboarding-service.ts';
 import { locateGsdCore } from '../../src/adapters/gsd/locate.ts';
 import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
@@ -246,5 +247,65 @@ describe('a refresh with nothing to measure from plans a full map (ONB-11)', () 
     assert.equal(plan?.refresh?.mode, 'full');
     assert.match(plan?.refresh?.reason ?? '', /^no-stamp/);
     assert.equal(latestRecord(roots).version, 2);
+  });
+});
+
+// A stored plan in `paths` mode that names no usable scope must never widen the mapper to the whole read scope (WR-10, T-04-35). The refusal is tested where
+// the invocation is prepared, with the plan damaged in the ledger the way a bad record or a later change of the planner could leave it.
+describe('a damaged path-scoped mapping plan is refused instead of reading the whole repository (WR-10, ONB-11)', () => {
+  async function prepared(damage: { paths: unknown }): Promise<{ result: ReturnType<typeof prepareInvocation>; launchRowsBefore: number; launchRowsAfter: number; staging: string }> {
+    const { roots, repo } = fixture();
+    const first = await onboard(roots, repo);
+    assert.equal(first.outcome.state, 'active', first.outcome.message ?? '');
+    const env = { ...process.env, AVARICE_CONFIG_HOME: roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: roots.AVARICE_WORK_ROOT };
+    const composed = createDeps(env, { host: new FakeAgentHost({}) });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const { deps } = composed.value;
+      const row = deps.ledger.getOnboarding(first.onboardingId);
+      assert.ok(row.ok);
+      const recorded = deps.ledger.recordStepResult(first.onboardingId, { step: 'mapping:plan', attempt: 9, status: 'completed', result: { mode: 'paths', ...damage }, nowMs: Date.now(), completedAtMs: Date.now() });
+      assert.ok(recorded.ok, 'the plan is recorded');
+      const count = (): number => {
+        const steps = deps.ledger.getStepResults(first.onboardingId);
+        assert.ok(steps.ok);
+        return steps.value.filter((s) => s.step === 'launch:map').length;
+      };
+      const launchRowsBefore = count();
+      const result = prepareInvocation(deps, row.value, 'map', '/gsd-map-codebase', { expectedFiles: [] });
+      return { result, launchRowsBefore, launchRowsAfter: count(), staging: row.value.stagingWorktree ?? '' };
+    } finally {
+      composed.value.close();
+    }
+  }
+
+  const cases: Array<[string, unknown[]]> = [
+    ['an empty list', []],
+    ['a list holding a number', ['apps/api', 7]],
+    ["a list holding '../outside'", ['apps/api', '../outside']],
+  ];
+  for (const [name, paths] of cases) {
+    it(`${name}: the map is not launched and the error is invalid with field mapping:plan`, async () => {
+      const outcome = await prepared({ paths });
+      assert.ok(!outcome.result.ok, 'prepareInvocation refuses the plan');
+      assert.equal(outcome.result.error.kind, 'invalid');
+      assert.ok(outcome.result.error.kind === 'invalid' && outcome.result.error.field === 'mapping:plan', JSON.stringify(outcome.result.error));
+      assert.equal(outcome.launchRowsAfter, outcome.launchRowsBefore, 'no launch step was recorded');
+    });
+  }
+
+  it('a plan with no paths field at all is refused the same way', async () => {
+    const outcome = await prepared({ paths: undefined });
+    assert.ok(!outcome.result.ok);
+    assert.ok(outcome.result.error.kind === 'invalid' && outcome.result.error.field === 'mapping:plan', JSON.stringify(outcome.result.error));
+    assert.equal(outcome.launchRowsAfter, outcome.launchRowsBefore);
+  });
+
+  it('a valid paths plan still narrows the read scope to the paths plus .planning', async () => {
+    const outcome = await prepared({ paths: ['apps/api'] });
+    assert.ok(outcome.result.ok, JSON.stringify(outcome.result));
+    assert.ok(outcome.result.value.granted);
+    const confined = outcome.result.value.prepared.request.scope.readConfine.filter((path) => path.startsWith(`${outcome.staging}/`)).map((path) => path.slice(outcome.staging.length + 1)).sort();
+    assert.deepEqual(confined, ['.planning', 'apps/api']);
   });
 });
