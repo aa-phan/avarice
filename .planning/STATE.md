@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-45-PLAN.md
-last_updated: "2026-11-22T21:51:00.213Z"
+stopped_at: Completed 04-46-PLAN.md
+last_updated: "2026-11-22T22:03:07.669Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: a16d5b625826d5149ef7f2234f0bec5215737173
+state_head: a82de488a23b8e455545b1d6ac2086c8d3a061e5
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 45
+  completed_plans: 46
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 7 of 55
+Plan: 8 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -208,6 +208,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P43 | 7 min | 3 tasks | 11 files |
 | Phase 04 P44 | 13min | 3 tasks | 10 files |
 | Phase 04 P45 | 33 min | 3 tasks | 13 files |
+| Phase 04 P46 | 11 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -520,6 +521,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-44: the restricted:outputs step is recorded twice (judged with captured false, then stored with captured true); a resume re-takes the outputs from the clone and never relaunches the host
 - [Phase 04]: 04-45: install-host's process-tree refusal is a usage-time refusal (exit 64) like its AVARICE_RUN refusal and the sibling evidence/context/pr commands; a hook entry that is not a readable regular file is refused with exit 3 before anything is written — main() maps every usage() refusal to exit 64 and an existing test pins it; the plan text said exit 3 for the tree refusal
 - [Phase 04]: 04-45: doctor reads attended entries through the diagnostics port (attendedCommands) and checks files via doctor-deps using attendedEntryPaths, which lives beside attendedHookEntry; any command not in the written form yields no finding — keeps src/app free of adapter imports; writer and reader cannot drift
+- [Phase 04]: 04-46: the evaluation's --live checks AVARICE_LIVE and --authorization right after option parsing and the record's content (list digest, task ids, arms, cap, 24 hours) before the ceiling and before any clone, onboarding or ledger write; an empty merge plan needs no record — The record can only be matched once the plan and projection exist, but nothing may be cloned or recorded before it is judged; a plan with nothing to run cannot spend
+- [Phase 04]: 04-46: run-one records max(per-repository cap, reported sum) for an unknown spend, and both authorization records are procedural guards with the Phase 4 ledger ceiling the mechanical one — A reported sum above the cap must never be under-recorded; WR-34 is accepted on the reason that an agent running as the owner can write any owner-writable file
 
 ### Roadmap Evolution
 
@@ -587,8 +590,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:51:00.160Z
-Stopped at: Completed 04-45-PLAN.md
+Last session: 2026-11-22T22:03:07.628Z
+Stopped at: Completed 04-46-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
