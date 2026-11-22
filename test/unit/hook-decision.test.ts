@@ -567,6 +567,16 @@ describe('a file read under a run retrieval policy charges the whole-file rows (
     assert.deepEqual(d.alsoCharges, ['retrieval.fullReads', 'retrieval.fullReadBytes']);
   });
 
+  it('keeps an offset and a limit that are positive whole numbers on the normalized Read and drops any other value', () => {
+    const readCall = (extra: Record<string, unknown>) => normalizeToolCall('Read', { file_path: '/r', ...extra }, STAGING);
+    assert.deepEqual(readCall({ offset: 11, limit: 5 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], offset: 11, limit: 5 } });
+    assert.deepEqual(readCall({ offset: 3 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], offset: 3 } });
+    assert.deepEqual(readCall({ limit: 1 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], limit: 1 } });
+    for (const bad of [0, -1, 1.5, '5', null, NaN, Infinity, 2 ** 60]) {
+      assert.deepEqual(readCall({ offset: bad, limit: bad }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } }, String(bad));
+    }
+  });
+
   it('charges no further row when the policy has no retrieval block', () => {
     const d = decide(read(`${STAGING}/src/a.ts`), policy({ purpose: 'run' }));
     assert.equal(d.decision, 'allow');

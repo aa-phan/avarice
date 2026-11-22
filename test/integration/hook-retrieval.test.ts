@@ -4,7 +4,7 @@
 // allowed once. No model is called.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { writeHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
@@ -116,6 +116,147 @@ describe('tracer: a run Read is charged to the whole-file rows and the 21st is r
     const allowed = eventRows(fx, 'hook.decision').map((r) => JSON.parse(r.data_json) as Record<string, unknown>).at(-1);
     assert.equal(allowed?.['budget'], 'toolCalls');
     assert.deepEqual(allowed?.['alsoCharged'], ['retrieval.fullReads', 'retrieval.fullReadBytes']);
+  });
+});
+
+// The lines of a file as text: `count` lines of `width` bytes each, the newline included.
+const linesOf = (count: number, width: number): string => `${'b'.repeat(width - 1)}\n`.repeat(count);
+function textFile(fx: HookFixture, name: string, text: string): string {
+  const path = join(fx.staging, 'src', name);
+  mkdirSync(join(fx.staging, 'src'), { recursive: true });
+  writeFileSync(path, text);
+  return path;
+}
+const CAP_BYTES = RETRIEVAL_CAPS.fullReadBytes;
+
+describe('the byte cap at and one past its limit (WR-11, D-09)', () => {
+  it('allows reads totalling exactly 262144 bytes and denies the next Read of a 1-byte file with budget:retrieval.fullReadBytes, leaving the row at 262144', () => {
+    const fx = retrievalFixture(3, false);
+    const big = fileOf(fx, 'big.txt', 65536);
+    for (let n = 0; n < 4; n += 1) assert.equal(outcome(runHook(fx, 'pre', readOf(big)).stdout), 'allowed', `read ${n + 1}`);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), CAP_BYTES);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'one.txt', 1))).stdout), 'budget:retrieval.fullReadBytes');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), CAP_BYTES);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 4);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 4, 'a refused read charges nothing');
+  });
+
+  it('in a fresh run denies a single Read of a 262145-byte file with no newline, charging nothing, and allows one of 262144 bytes', () => {
+    const fx = retrievalFixture(3, false);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'over.txt', CAP_BYTES + 1))).stdout), 'budget:retrieval.fullReadBytes');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 0);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'exact.txt', CAP_BYTES))).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), CAP_BYTES);
+  });
+
+  it('names retrieval.fullReads first when the file row and the byte row both have no room, and budget_exhausted when toolCalls has none either', () => {
+    const both = retrievalFixture(3, false, { limits: { 'retrieval.fullReads': 0, 'retrieval.fullReadBytes': 0 } });
+    assert.equal(outcome(runHook(both, 'pre', readOf(fileOf(both, 'ten.txt', 10))).stdout), 'budget:retrieval.fullReads');
+    const all = retrievalFixture(3, false, { limits: { toolCalls: 0, 'retrieval.fullReads': 0, 'retrieval.fullReadBytes': 0 } });
+    assert.equal(outcome(runHook(all, 'pre', readOf(fileOf(all, 'ten.txt', 10))).stdout), 'budget_exhausted');
+    assert.equal(budgetUsed(all, 'retrieval.fullReads'), 0);
+  });
+});
+
+describe('a Read is charged the bytes of the lines it asks for (WR-11)', () => {
+  it('charges 50 bytes for offset 11 and limit 5 of a file of 100 lines of 10 bytes', () => {
+    const fx = retrievalFixture(3, false);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(textFile(fx, 'hundred.txt', linesOf(100, 10)), { offset: 11, limit: 5 })).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 50);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 1);
+  });
+
+  it('charges the first 2000 lines of a 3000-line file for a Read with neither offset nor limit', () => {
+    const fx = retrievalFixture(3, false);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(textFile(fx, 'long.txt', linesOf(3000, 20)))).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 40_000);
+  });
+
+  it('charges a limit alone from the first line, an offset alone to 2000 lines past it, and never more than the file holds', () => {
+    const fx = retrievalFixture(10, false);
+    const file = textFile(fx, 'long.txt', linesOf(3000, 20));
+    assert.equal(outcome(runHook(fx, 'pre', readOf(file, { limit: 3 })).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 60);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(file, { offset: 2500 })).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 60 + 501 * 20);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(file, { offset: 5000, limit: 50 })).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 60 + 501 * 20, 'a range past the end of the file holds no bytes');
+  });
+
+  it('ignores an offset or limit that is not a positive whole number and charges the default range', () => {
+    const fx = retrievalFixture(10, false);
+    const file = textFile(fx, 'hundred.txt', linesOf(100, 10));
+    for (const extra of [{ offset: 0 }, { offset: -3 }, { offset: 1.5 }, { limit: '5' }, { limit: 0 }]) {
+      assert.equal(outcome(runHook(fx, 'pre', readOf(file, extra)).stdout), 'allowed', JSON.stringify(extra));
+    }
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 5 * 1000);
+  });
+
+  it('refuses a range it cannot measure within 64 MiB of scanning, and charges nothing (T-04-144)', () => {
+    const fx = retrievalFixture(3, false);
+    const file = join(fx.staging, 'src', 'newlines.txt');
+    mkdirSync(join(fx.staging, 'src'), { recursive: true });
+    writeFileSync(file, Buffer.alloc(64 * 1024 * 1024 + 100, 10));
+    assert.equal(outcome(runHook(fx, 'pre', readOf(file, { offset: 64 * 1024 * 1024 + 50, limit: 5 })).stdout), 'budget:retrieval.fullReadBytes');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 0);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(file, { offset: 1000, limit: 5 })).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 5);
+  });
+});
+
+describe('a Read of a path with no bytes to count (WR-11 empty edge)', () => {
+  it('charges one file and 0 bytes for a path that does not exist, a directory and a 0-byte file', () => {
+    const fx = retrievalFixture(3, false);
+    const empty = textFile(fx, 'empty.txt', '');
+    for (const path of [join(fx.staging, 'src', 'missing.txt'), join(fx.staging, 'src'), empty]) assert.equal(outcome(runHook(fx, 'pre', readOf(path)).stdout), 'allowed', path);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 3);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 3);
+  });
+
+  it('allows a Read of 0 bytes where the byte row is spent, and refuses one of a byte', () => {
+    const fx = retrievalFixture(3, false, { limits: { 'retrieval.fullReadBytes': 0 } });
+    assert.equal(outcome(runHook(fx, 'pre', readOf(textFile(fx, 'empty.txt', ''))).stdout), 'allowed');
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'one.txt', 1))).stdout), 'budget:retrieval.fullReadBytes');
+  });
+
+  it('exits 2 when a regular file cannot be opened to be measured', { skip: process.getuid?.() === 0 }, () => {
+    const fx = retrievalFixture(3, false);
+    const locked = fileOf(fx, 'locked.txt', 10);
+    chmodSync(locked, 0o000);
+    const result = runHook(fx, 'pre', readOf(locked));
+    chmodSync(locked, 0o600);
+    assert.equal(result.code, 2);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+  });
+});
+
+describe('the ledger must hold the whole-file rows of a run with retrieval limits (WR-11, fail closed)', () => {
+  const read = (fx: HookFixture) => runHook(fx, 'pre', readOf(join(fx.staging, 'src', 'a.ts')));
+
+  it('exits 2 when retrieval.fullReads is missing, and when retrieval.fullReadBytes is missing', () => {
+    const noFiles = makeHookFixture({ limits: { 'retrieval.searches': 3, 'retrieval.fullReadBytes': CAP_BYTES }, policy: { purpose: 'run', retrieval: { searches: 3, broadDiscovery: false } } });
+    const noBytes = makeHookFixture({ limits: { 'retrieval.searches': 3, 'retrieval.fullReads': 20 }, policy: { purpose: 'run', retrieval: { searches: 3, broadDiscovery: false } } });
+    fixtures.push(noFiles, noBytes);
+    const first = read(noFiles);
+    assert.equal(first.code, 2);
+    assert.match(first.stderr, /no retrieval\.fullReads budget/);
+    const second = read(noBytes);
+    assert.equal(second.code, 2);
+    assert.match(second.stderr, /no retrieval\.fullReadBytes budget/);
+    assert.equal(budgetUsed(noFiles, 'toolCalls'), 0);
+    assert.equal(budgetUsed(noBytes, 'toolCalls'), 0);
+  });
+
+  it('charges neither row for a policy without a retrieval block (an onboarding invocation or an older contract)', () => {
+    const fx = makeHookFixture({ limits: { 'retrieval.fullReads': 20, 'retrieval.fullReadBytes': CAP_BYTES } });
+    fixtures.push(fx);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'ten.txt', 10))).stdout), 'allowed');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 0);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 1);
   });
 });
 
@@ -309,6 +450,30 @@ describe('parallel subagents share one exact counter (S-16, CS-16, T-04-80)', ()
       assert.equal(budgetUsed(fx, 'retrieval.searches'), allowed, `iteration ${iteration}: used is the allowed count`);
       assert.equal(budgetUsed(fx, 'toolCalls'), allowed, `iteration ${iteration}: a refused search charges no tool call`);
       assert.equal(decisions(fx).filter((d) => d.decision === 'allow').length, allowed);
+      assert.ok(chainIsIntact(fx.ledgerPath));
+    }
+  });
+
+  it(`six processes issuing ${SEARCHES_EACH} Reads each against retrieval.fullReads ${LIMIT}: exactly ${LIMIT} allowed, used ${LIMIT}, and a refused Read charges no tool call, over ${ITERATIONS} iterations (WR-11)`, async () => {
+    for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+      const fx = retrievalFixture(3, false, { limits: { 'retrieval.fullReads': LIMIT } });
+      const ten = fileOf(fx, 'ten.txt', 10);
+      const workers = Array.from({ length: WORKERS }, async (_, worker) => {
+        const outcomes: string[] = [];
+        for (let n = 0; n < SEARCHES_EACH; n += 1) {
+          const result = await runHookAsync(fx, 'pre', { ...readOf(ten), agent_id: `agent${worker}` });
+          assert.equal(result.code, 0, result.stderr);
+          outcomes.push(outcome(result.stdout));
+        }
+        return outcomes;
+      });
+      const all = (await Promise.all(workers)).flat();
+      const allowed = all.filter((o) => o === 'allowed').length;
+      assert.equal(allowed, LIMIT, `iteration ${iteration}: ${all.join(' ')}`);
+      assert.equal(all.filter((o) => o === 'budget:retrieval.fullReads').length, WORKERS * SEARCHES_EACH - LIMIT, `iteration ${iteration}`);
+      assert.equal(budgetUsed(fx, 'retrieval.fullReads'), allowed, `iteration ${iteration}: used is the allowed count`);
+      assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), allowed * 10, `iteration ${iteration}`);
+      assert.equal(budgetUsed(fx, 'toolCalls'), allowed, `iteration ${iteration}: a refused Read charges no tool call`);
       assert.ok(chainIsIntact(fx.ledgerPath));
     }
   });
