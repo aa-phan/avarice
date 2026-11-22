@@ -8,10 +8,14 @@
 // never reaches ready_for_review, because no check and no gate ran: its host lacks required enforcement, and AVARICE does not run repository code outside that
 // enforcement. Nothing is committed, nothing is handed off and nothing is written to the owner's repository; the owner applies the patch by hand and cancels the run.
 //
+// The host is not trusted with what it leaves behind (WR-12, WR-13): the patch is held to the contract's write scope (a changed path outside it, or a protected path,
+// is left out of the patch and named in the block text), and a plan, patch or question list that cannot be read, is too large or links out of the clone is a problem
+// named in the block text, never a stage error, so the run still ends blocked and a resume never launches the host again.
+//
 // A run killed during its invocation is continued by this same function: the contract is still restricted, the host that launched is reaped by the resume, the clone is
 // put back to the pin, and the restricted line is launched again. It can never become a contained run, because nothing here reads anything but the contract.
 import { err, ok } from '../../domain/result.ts';
-import type { Result } from '../../domain/result.ts';
+import type { PortError, Result } from '../../domain/result.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import { storedText } from '../../domain/quick-record.ts';
 import type { RunRow } from '../../ports/ledger.ts';
@@ -36,12 +40,18 @@ export const RESTRICTED_OUTPUTS_STEP = 'restricted:outputs';
 const RUN_RETENTION = 'run';
 const STORE = 'local';
 const MAX_OUTPUT_BYTES = 256 * 1024;
+// The most a restricted patch may hold (the plan and the questions have MAX_OUTPUT_BYTES): a larger one is not stored and the block text says so.
+export const MAX_PATCH_BYTES = 1024 * 1024;
 const MAX_BEHAVIOR_CHARS = 8000;
 const MAX_LINE_CHARS = 500;
 // How many out-of-scope paths the block text names and the step result keeps, and how long a named path may be.
 const MAX_NAMED_PATHS = 5;
 const MAX_NAMED_PATH_CHARS = 80;
 const MAX_RECORDED_PATHS = 50;
+const MAX_PATH_CHARS = 200;
+// The block text is cut at 1000 characters; what is said about the outputs is kept to a share of it, so the ending the owner needs always survives.
+const MAX_PROBLEM_CHARS = 150;
+const MAX_FINDINGS_CHARS = 440;
 
 export interface RestrictedItem {
   row: RunRow;
@@ -157,11 +167,107 @@ function scopeBreaches(changes: readonly PathChange[], contract: RunContract): s
 
 // What the owner is told besides the outputs, before the ending: the changed paths the contract does not allow, which are not in the patch. The issue text is cut
 // at ISSUE_MAX_CHARS, so the names are few and short and the ending always stays whole.
-function findingsText(outOfScope: readonly string[]): string {
-  if (outOfScope.length === 0) return '';
-  const named = outOfScope.slice(0, MAX_NAMED_PATHS).map((p) => storedText(p, MAX_NAMED_PATH_CHARS));
-  const more = outOfScope.length > named.length ? ` and ${outOfScope.length - named.length} more` : '';
-  return ` ${outOfScope.length} changed ${outOfScope.length === 1 ? 'path is' : 'paths are'} outside what the contract allows (a protected path, or not in its write or create paths) and left out of the patch: ${named.join(', ')}${more}.`;
+function findingsText(problems: readonly string[], outOfScope: readonly string[]): string {
+  const sentences = problems.map((p) => `${storedText(p, MAX_PROBLEM_CHARS)}.`);
+  if (outOfScope.length > 0) {
+    const named = outOfScope.slice(0, MAX_NAMED_PATHS).map((p) => storedText(p, MAX_NAMED_PATH_CHARS));
+    const more = outOfScope.length > named.length ? ` and ${outOfScope.length - named.length} more` : '';
+    sentences.push(
+      `${outOfScope.length} changed ${outOfScope.length === 1 ? 'path is' : 'paths are'} outside what the contract allows (a protected path, or not in its write or create paths) and left out of the patch: ${named.join(', ')}${more}.`,
+    );
+  }
+  if (sentences.length === 0) return '';
+  const text = sentences.join(' ');
+  return ` ${text.length <= MAX_FINDINGS_CHARS ? text : `${text.slice(0, MAX_FINDINGS_CHARS)}...`}`;
+}
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : []);
+
+// A failed read or patch as one short clause: the reason of an invalid input (the size, the file kind), the rule of a denial, or the kind of any other failure.
+function failureClause(error: PortError): string {
+  if (error.kind === 'invalid') return storedText(error.reason, MAX_PROBLEM_CHARS);
+  if (error.kind === 'denied') return storedText(`denied: ${error.rule}`, MAX_PROBLEM_CHARS);
+  return error.kind;
+}
+
+// What the host left in the clone, read as findings and not as stage errors: the host is the one thing a restricted run does not trust, so an output it makes unreadable,
+// too large or a link out of the clone is a problem to tell the owner, never a reason to stop the stage after the host ran (a resume would launch it again).
+interface Outputs {
+  planText: string | null;
+  patchText: string | null;
+  questionText: string | null;
+  problems: string[];
+  outOfScope: string[];
+}
+
+function readOutputs(ctx: RunStageContext, contract: RunContract, clone: string): Result<Outputs> {
+  const workspace = ctx.deps.runWorkspace;
+  if (workspace === undefined) return err({ kind: 'internal', cause: 'the run workspace is not composed' });
+  const problems: string[] = [];
+  const read = (rel: string, what: string): string | null => {
+    // Confined to the clone, no symlink followed.
+    const text = workspace.readText(clone, rel, MAX_OUTPUT_BYTES);
+    if (text.ok) return text.value;
+    problems.push(`the ${what} could not be read (${failureClause(text.error)})`);
+    return null;
+  };
+  const planText = read(RESTRICTED_PLAN_FILE, 'plan');
+
+  // The host cannot be contained, so the patch is held to the contract here, after the fact: a changed path the contract does not allow (a protected path, or one
+  // outside the write and create sets) is left out of the patch and named in the block text.
+  let outOfScope: string[] = [];
+  let patchText: string | null = null;
+  const changes = workspace.status(clone);
+  if (!changes.ok) {
+    problems.push(`the changed paths could not be read (${failureClause(changes.error)}), so no patch was stored`);
+  } else {
+    outOfScope = scopeBreaches(changes.value, contract);
+    const patch = workspace.patch(clone, { exclude: [RESTRICTED_DIR, ...outOfScope] });
+    if (!patch.ok) problems.push(`the patch could not be built (${failureClause(patch.error)}) and was not stored`);
+    else if (Buffer.byteLength(patch.value) > MAX_PATCH_BYTES) problems.push('the patch is larger than the 1 MiB limit and was not stored');
+    else patchText = patch.value;
+  }
+
+  const questionText = read(RESTRICTED_QUESTIONS_FILE, 'question list');
+  return ok({ planText, patchText, questionText, problems, outOfScope });
+}
+
+// The outputs of a restricted invocation: read as findings, recorded as a step, stored as artifacts and ended through the block. The step is recorded as soon as the
+// outputs are judged and before anything else that can fail, so a failure of the artifact store or of the ledger finishes the block on a resume (the outputs are taken
+// again from the clone) and never launches the host again. Only a failure of that bookkeeping is returned as an error.
+function captureOutputs(ctx: RunStageContext, item: RestrictedItem, attemptId: string, hostKind: string): Result<'moved'> {
+  const { deps } = ctx;
+  const outputs = readOutputs(ctx, item.contract, item.workspacePath);
+  if (!outputs.ok) return outputs;
+  const { planText, patchText, questionText, problems, outOfScope } = outputs.value;
+  const questions = questionText === null ? 0 : questionText.split('\n').filter((line) => line.trim() !== '').length;
+  const judged = { questions, hostKind, outOfScope: outOfScope.slice(0, MAX_RECORDED_PATHS).map((p) => storedText(p, MAX_PATH_CHARS)), problems, attemptId };
+  const record = (result: Record<string, unknown>): Result<unknown> => {
+    const nowMs = deps.clock.nowMs();
+    return deps.ledger.recordRunStep(ctx.runId, { step: RESTRICTED_OUTPUTS_STEP, status: 'completed', result, nowMs, completedAtMs: nowMs });
+  };
+  const judgedRecord = record({ ...judged, captured: false });
+  if (!judgedRecord.ok) return judgedRecord;
+
+  const stored: { plan?: Stored; patch?: Stored; decisions?: Stored } = {};
+  if (planText !== null && planText.trim() !== '') {
+    const put = storeOutput(ctx, RESTRICTED_PLAN_KIND, planText);
+    if (!put.ok) return put;
+    stored.plan = put.value;
+  }
+  if (patchText !== null && patchText !== '') {
+    const put = storeOutput(ctx, RESTRICTED_PATCH_KIND, patchText);
+    if (!put.ok) return put;
+    stored.patch = put.value;
+  }
+  if (questionText !== null && questions > 0) {
+    const put = storeOutput(ctx, RESTRICTED_DECISIONS_KIND, questionText);
+    if (!put.ok) return put;
+    stored.decisions = put.value;
+  }
+  const storedRecord = record({ ...judged, ...stored, captured: true });
+  if (!storedRecord.ok) return storedRecord;
+  return blockWithOutputs(ctx, item, attemptId, { ...stored, questions, hostKind, outOfScope, problems });
 }
 
 // The run's end: one permission decision that names what the run left, and the run blocked (enforcement_failure). `withdraw` is the only answer a permission
@@ -170,7 +276,7 @@ function blockWithOutputs(
   ctx: RunStageContext,
   item: RestrictedItem,
   attemptId: string | undefined,
-  found: { plan?: Stored; patch?: Stored; decisions?: Stored; questions: number; hostKind: string; outOfScope: readonly string[] },
+  found: { plan?: Stored; patch?: Stored; decisions?: Stored; questions: number; hostKind: string; outOfScope: readonly string[]; problems: readonly string[] },
 ): Result<'moved'> {
   const parts = [
     found.plan !== undefined ? `plan ${found.plan.digest}` : 'no plan was written',
@@ -181,7 +287,7 @@ function blockWithOutputs(
   const blocked = blockRun(ctx, {
     reason: 'enforcement_failure',
     signal: { kind: 'enforcement', check: 'restricted-run' },
-    issue: `restricted run (the host cannot be contained; the host reported ${found.hostKind}): ${parts.join('; ')}.${findingsText(found.outOfScope)} ${ISSUE_ENDING}`,
+    issue: `restricted run (the host cannot be contained; the host reported ${found.hostKind}): ${parts.join('; ')}.${findingsText(found.problems, found.outOfScope)} ${ISSUE_ENDING}`,
     evidenceRefs,
     ...(found.outOfScope.length > 0 ? { finding: { check: 'scope-of-writes', paths: found.outOfScope } } : {}),
     ...(attemptId !== undefined ? { attemptId } : {}),
@@ -227,6 +333,8 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
     const open = deps.ledger.listDecisions({ runId: ctx.runId, state: 'open' });
     if (!open.ok) return open;
     const body = isObject(done.result) ? done.result : {};
+    // A kill between the judgment of the outputs and their storage: the host has run and the clone still holds what it left, so the outputs are taken again from it.
+    if (body['captured'] === false) return captureOutputs(ctx, item, attemptId.value, typeof body['hostKind'] === 'string' ? body['hostKind'] : 'unknown');
     if (open.value.some((d) => d.class === 'permission')) {
       const current = deps.ledger.getRun(ctx.runId);
       if (!current.ok) return current;
@@ -246,7 +354,8 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
       ...(decisions !== undefined ? { decisions } : {}),
       questions: typeof body['questions'] === 'number' ? body['questions'] : 0,
       hostKind: typeof body['hostKind'] === 'string' ? body['hostKind'] : 'unknown',
-      outOfScope: Array.isArray(body['outOfScope']) ? body['outOfScope'].filter((p): p is string => typeof p === 'string') : [],
+      outOfScope: strings(body['outOfScope']),
+      problems: strings(body['problems']),
     });
   }
 
@@ -304,48 +413,5 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
     return blocked.ok ? ok('moved') : blocked;
   }
 
-  // The outputs, read from the clone through the workspace port (confined to the clone, no symlink followed) and stored as artifacts.
-  const stored: { plan?: Stored; patch?: Stored; decisions?: Stored } = {};
-  let questions = 0;
-  const planText = workspace.readText(clone, RESTRICTED_PLAN_FILE, MAX_OUTPUT_BYTES);
-  if (!planText.ok) return planText;
-  if (planText.value !== null && planText.value.trim() !== '') {
-    const put = storeOutput(ctx, RESTRICTED_PLAN_KIND, planText.value);
-    if (!put.ok) return put;
-    stored.plan = put.value;
-  }
-  // The host cannot be contained, so the patch is held to the contract here, after the fact: a changed path the contract does not allow (a protected path, or one
-  // outside the write and create sets) is left out of the patch and named in the block text.
-  const changes = workspace.status(clone);
-  if (!changes.ok) return changes;
-  const outOfScope = scopeBreaches(changes.value, contract);
-  const patchText = workspace.patch(clone, { exclude: [RESTRICTED_DIR, ...outOfScope] });
-  if (!patchText.ok) return patchText;
-  if (patchText.value !== '') {
-    const put = storeOutput(ctx, RESTRICTED_PATCH_KIND, patchText.value);
-    if (!put.ok) return put;
-    stored.patch = put.value;
-  }
-  const questionText = workspace.readText(clone, RESTRICTED_QUESTIONS_FILE, MAX_OUTPUT_BYTES);
-  if (!questionText.ok) return questionText;
-  if (questionText.value !== null) {
-    questions = questionText.value.split('\n').filter((line) => line.trim() !== '').length;
-    if (questions > 0) {
-      const put = storeOutput(ctx, RESTRICTED_DECISIONS_KIND, questionText.value);
-      if (!put.ok) return put;
-      stored.decisions = put.value;
-    }
-  }
-
-  const hostKind = outcome.value.kind;
-  const nowMs = deps.clock.nowMs();
-  const recorded = deps.ledger.recordRunStep(ctx.runId, {
-    step: RESTRICTED_OUTPUTS_STEP,
-    status: 'completed',
-    result: { ...stored, questions, hostKind, outOfScope: outOfScope.slice(0, MAX_RECORDED_PATHS), attemptId: attemptId.value },
-    nowMs,
-    completedAtMs: nowMs,
-  });
-  if (!recorded.ok) return recorded;
-  return blockWithOutputs(ctx, item, attemptId.value, { ...stored, questions, hostKind, outOfScope });
+  return captureOutputs(ctx, item, attemptId.value, outcome.value.kind);
 }
