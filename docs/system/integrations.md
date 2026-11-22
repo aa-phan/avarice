@@ -11,7 +11,7 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 | Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume`; `claude --help` read for the flags the launch line uses | a verified version, or an unverified patch of the verified minor while its help lists the flags (the list is in [containment.md](containment.md#refusals-before-launch)) | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure, and `--restricted` is the way to analysis and planning only |
 | Claude configuration directory | AVARICE writes two files; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` and the attended hook entry in `settings.json`, written by `install-host`; GSD and user skills read | none | `install-host` refuses a link, an unmarked skill or an unusable settings file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
 | `/usr/bin/security` | a `keychain:` credential reference spawns it, macOS only | `find-generic-password -s <service> -w`; the value arrives on stdout | any macOS | the reference does not resolve and the failure is recorded in the `credential.resolve` event |
-| A credential helper | a `cmd:` reference runs one executable the profile approved | the helper's path is the whole argument list; stdout, trimmed, is the credential | none | the reference does not resolve |
+| A credential helper | a `cmd:` reference runs one executable the profile approved | the helper's path is the whole argument list; stdout, trimmed, is the credential; stdout cut at 16 KiB is refused as too large, and stderr is never read | none | the reference does not resolve |
 | A vendor CLI | `doctor --online` runs `<cli> auth status` for each `delegated:<cli>` reference | exit status of the named CLI | none | doctor reports the CLI missing, timed out or failing, and that is a finding |
 | GSD (`@opengsd/gsd-core`) | AVARICE spawns `gsd-tools.cjs` under Node; Claude Code runs GSD's own shell shim inside the host; a run drives GSD's quick workflow through the host | JSON on stdout, one verb per process | 1.17.x only | no GSD adapter; onboarding stops as incompatible; no host |
 | git | AVARICE spawns it | argv arrays, minimal environment, plain-text output | none checked | the failing call returns an error; the run or onboarding stops at that step |
@@ -157,7 +157,8 @@ The hook script comes from `AVARICE_HOOK_ENTRY` or the script in this checkout. 
 
 The write is conservative. These rules prevent the overwrite or the write:
 
-- The command refuses to run when `AVARICE_RUN` is set, before any profile or store is touched.
+- The command refuses to run when `AVARICE_RUN` is set or a run supervisor is an ancestor process, before any profile or store is touched. When the process table cannot be read it refuses.
+- The command refuses, before it writes the skill or the settings, a hook entry script that does not exist, is not a regular file or is not readable (exit 3), because the entry blocks every attended Bash call when its script fails.
 - The configuration directory itself may be a symbolic link; the `skills` directory, the `avarice-run` directory and the file may not. A link or a non-directory there is refused and nothing is written.
 - An existing file is overwritten only when it is a regular file of at most 256 KiB that carries the AVARICE marker line. Any other file is left untouched and refused.
 - The write goes to a temporary file created exclusively, then a rename, so a reader sees the old file or the new one. An identical existing file is reported unchanged.
@@ -363,7 +364,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | No admitted gsd-core | no GSD adapter, no context sources, contained host replaced by the refusing host; onboarding stops incompatible |
 | `claude` missing or version not admitted | refusing host; the onboarding is blocked with reason `enforcement_failure` at the workspace stage's enforcement check, and the message says to rerun with `--restricted` |
 | A restricted request on a host whose help lacks a restricted flag | `start --restricted` is refused (exit 3) and a restricted onboarding is blocked with reason `enforcement_failure`; nothing falls back to the contained host |
-| A `keychain:` reference with no item, or a `cmd:` helper that fails or prints too much | the reference does not resolve; the `credential.resolve` event records the outcome, never the value |
+| A `keychain:` reference with no item, or a `cmd:` helper that fails or whose standard output is cut at the 16 KiB cap | the reference does not resolve; the `credential.resolve` event records the outcome, never the value |
 | Sandbox cannot apply a profile | executor unavailable; every GSD, graphify, install, check and host launch is refused |
 | Host exceeds wall clock | process group terminated; outcome is inconclusive |
 | Host moves the clone's HEAD | outcome failed, with a containment finding |
@@ -376,7 +377,8 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | Run branch already in the source at another commit | the hand-off is a conflict and nothing is fetched |
 | Supervisor cannot be spawned | the command exits 70; the run stays stored |
 | `install-host` meets a link, an unmarked skill or an unusable settings file | refused (exit 3); a refused settings file leaves the skill installed |
-| `install-host` runs inside a run or with bad arguments | refused (exit 64), nothing written |
+| `install-host` runs inside a run (marker or process tree) or with bad arguments | refused (exit 64), nothing written |
+| `install-host` finds the hook entry script missing, not a regular file or unreadable | refused (exit 3), nothing written |
 | A banner cannot be delivered (`osascript` missing, killed at 10 seconds or failing) | the row ends `failed` with its code and `digest` exits 70 (see [autonomy-and-decisions.md](autonomy-and-decisions.md#notification)); no decision changes and no run changes |
 | `schedule install` cannot load the agent (`plutil` rejects the file or `launchctl bootstrap` fails) | exit 70 with the tool's first error line; a new file is removed again, and a replaced one stays in place unloaded |
 | A scheduled digest fails under launchd | the error is in `logs/digest.log` in the data root; nothing else records it |

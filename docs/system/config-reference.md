@@ -114,11 +114,11 @@ An object of cap names to whole numbers above 0, each at most the built-in value
 | `queryTimeoutMs` | 10000 | milliseconds | How long one search may run before it is abandoned. |
 | `snippetLines` | 40 | lines | Lines in one bounded snippet. |
 | `snippets` | 30 | snippets | Snippets read into one pack; later ones are listed as omitted. |
-| `fullReads` | 20 | files per run | Whole-file reads a run may make. A run's contract may lower it with `--budget retrieval.fullReads`. |
-| `fullReadBytes` | 262144 | bytes per run | Bytes of whole-file reads in all. A run's contract may lower it with `--budget retrieval.fullReadBytes`. |
+| `fullReads` | 20 | files per run | Reads of a file a run may make with its Read tool, each counted as one file whatever range it asks for. A Read past the cap is refused with `budget:retrieval.fullReads`. A run's contract may lower it with `--budget retrieval.fullReads`. |
+| `fullReadBytes` | 262144 | bytes per run | Bytes the run's Reads can return in all: the bytes of the lines each Read asks for. A Read that would pass the cap is refused with `budget:retrieval.fullReadBytes`, and a single Read above the cap is refused whatever is left. A run's contract may lower it with `--budget retrieval.fullReadBytes`. |
 | `maxPages` | 5 | pages | Pages of a source that declares itself paged. No local source does. |
 
-A run's contract adds two retrieval counters of its own: `searches`, whose built-in limit is the run's tool-call limit and which `--budget retrieval.searches` may lower, and `broadDiscovery`, 1 when the brief authorizes it and 0 otherwise. The counters, the rows that hold them and the hook's rules for them are in [containment.md](containment.md#retrieval-budgets).
+A run's contract adds two retrieval counters of its own: `searches`, whose built-in limit is the run's tool-call limit and which `--budget retrieval.searches` may lower, and `broadDiscovery`, 1 when the brief authorizes it and 0 otherwise. The counters, the rows that hold them and the hook's rules for them, including how a Read is counted against `fullReads` and `fullReadBytes`, are in [containment.md](containment.md#retrieval-budgets).
 
 ### The `credentials` section
 
@@ -317,7 +317,7 @@ Other values:
 | Run artifacts | `.planning/quick/**`, `.planning/STATE.md`, `.planning/config.json`, plus the conventions' `paths.artifacts` and every check's `writes` | yes |
 | Always protected from the agent | `.git/**` and `.planning/config.json`, added when the agent's scope is built | yes |
 | Secret globs (read denied) | `**/*.key`, `**/*.pem`, `**/.env`, `**/.env.*`, `**/id_ed25519*`, `**/id_rsa*` | yes |
-| Read scope | everything (`**`), read-exclude `.git` | the read-exclude list is recorded only |
+| Read scope | everything (`**`), read-exclude `.git` | the hook does not read the read-exclude list; the file search of a context pack does, and treats an entry with no `*` or `?` as a directory at any depth (see [indexes-and-context.md](indexes-and-context.md#the-sources)) |
 | Escalation: consecutive denials | 3 | yes, by the hook |
 | Escalation: consecutive searches | 25 | yes, by the hook |
 | Escalation: no-progress invocations | 2 | dead: recorded, read by nothing |

@@ -10,7 +10,7 @@ A profile has three roots, and each profile has its own ledger and its own roots
 
 | Root | Default | Override | Holds |
 |---|---|---|---|
-| Config home | `~/.config/avarice` | `AVARICE_CONFIG_HOME` | `profiles/personal-local/config.json`, shared by every profile: the file `bindings.json`, which binds repositories to profiles |
+| Config home | `~/.config/avarice` | `AVARICE_CONFIG_HOME` | `profiles/personal-local/config.json`, shared by every profile: the file `bindings.json`, which binds repositories to profiles, and `bindings.json.lock`, which exists while a process writes it and holds that process's ID and start time |
 | Data root | `~/.local/share/avarice/personal-local` | `AVARICE_DATA_ROOT` | the ledger, backups, artifacts, contract files, per-invocation files, shell history |
 | Work root | `~/.local/share/avarice-work/personal-local` | `AVARICE_WORK_ROOT` | staging clones, run clones, scratch directories and graph build output |
 

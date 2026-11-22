@@ -545,10 +545,11 @@ Writes one skill, `avarice-run`, and one hook entry into a Claude Code configura
 | `--config-dir` | directory | the `CLAUDE_CONFIG_DIR` environment variable when set and non-empty, else `~/.claude` | Bare or empty is a usage error (64). The value is resolved to an absolute path. The flag wins over the variable. |
 | positionals | none | | Any positional is a usage error (64). |
 
-Inside a run (the `AVARICE_RUN` environment variable set, as it is for a contained invocation) the command refuses with exit 64 before the profile is prepared: `avarice install-host: refused inside a run (AVARICE_RUN is set)`.
+Inside a run the command refuses with exit 64 before the profile is prepared, because it writes an executable hook entry into the owner's host settings. A run is recognized by the `AVARICE_RUN` environment variable, which a contained invocation has (`avarice install-host: refused inside a run (AVARICE_RUN is set)`), and by its process tree, when a run supervisor is an ancestor of the command (`refused from inside a run's process tree`). When the process table cannot be read the command refuses, so it fails closed.
 
 Behavior:
 
+- Before it writes anything, the command checks the hook entry script the settings entry will run: the path in `AVARICE_HOOK_ENTRY`, else the script of this checkout. A script that does not exist, is not a regular file or is not readable is refused with exit 3 and `avarice install-host: refused: the hook entry <path> does not exist | is not a regular file | is not readable; nothing was written`. No skill and no `settings.json` is created or changed on that refusal. The entry blocks every attended Bash call when its script fails, so installing one that points at nothing would block the owner's own shell. A link to a regular file is followed, as the host follows it.
 - The configuration directory is created when absent (mode 0700). It may itself be a symbolic link and is resolved first. Beneath it the command creates `skills/avarice-run/SKILL.md`; directories it creates there are mode 0755.
 - It refuses, without writing, in three cases. `skills` or `skills/avarice-run` is a symbolic link or not a directory. `SKILL.md` is a symbolic link or not a regular file. An existing `SKILL.md` is larger than 256 KiB.
 - It also refuses when an existing `SKILL.md` has no line equal to the marker `<!-- written by avarice install-host -->`. A file that carries the marker is replaced; one that already equals the new text is left alone.
@@ -562,7 +563,7 @@ The file is the owner's, not AVARICE's. Every other key and every other entry ke
 
 Output (stdout), two blocks: `skill avarice-run: installed|unchanged|updated`, `path: <SKILL.md path>`, `digest: sha256:<hex>`, then `hook attended: installed|unchanged|updated`, `path: <settings.json path>`, `digest: sha256:<hex>`. There is no `--json` form.
 
-Exit: 0 installed, updated or unchanged. 3 refused (`avarice install-host: refused: <rule>`, and for the hook `the skill is in place; the attended hook was refused: <rule>`, so the settings file is unusable but the skill stays installed). 64 usage or inside a run. 70 failure, including a write error (`failed: cannot install the avarice-run skill: <code>`), a failure to write the hook (`the skill is in place; the attended hook failed: ...`) and a failure to record either (`the skill is in place but its record failed: ...`, `the attended hook is in place but its record failed: ...`).
+Exit: 0 installed, updated or unchanged. 3 refused (`avarice install-host: refused: <rule>`, a hook entry script that cannot be used with nothing written, and for the settings file `the skill is in place; the attended hook was refused: <rule>`, so the settings file is unusable but the skill stays installed). 64 usage or inside a run. 70 failure, including a write error (`failed: cannot install the avarice-run skill: <code>`), a failure to write the hook (`the skill is in place; the attended hook failed: ...`) and a failure to record either (`the skill is in place but its record failed: ...`, `the attended hook is in place but its record failed: ...`).
 
 Side effects: the skill file and the settings entry above, and two adapter records in the ledger: `host-skill:avarice-run` holding the skill name, path and digest, and `host-hook:attended` holding the hook, the settings path and the entry's digest. Both are written also when the file was unchanged. Takes no lease. Not read-only.
 
@@ -790,12 +791,13 @@ Grants or revokes the approval of a privileged action. The first form takes the 
 
 The command needs a person at a terminal and refuses anything else before the profile is resolved, so a refusal creates nothing. It refuses inside a run, without a terminal on both standard input and output, and from the process tree of a run (see [containment.md](containment.md#owner-commands-and-the-terminal-identity-rule)). Once the profile is open, a data root that another user owns is refused with `only the user who owns the profile approves an action` (64).
 
-Output (stdout) for a grant: `approval request <id>`, then indented `action:`, `scope:`, `params:`, `digest:` and `grants:` lines, then a question. An answer of yes prints `approval <apv id> granted for <action>; used once, expires <time>`. Any other answer prints `not approved` and writes nothing. A revocation prints `approval <id> revoked (<action> in <scope>)`. Every value passes the control-character strip.
+Output (stdout) for a grant: `approval request <id>`, then indented `action:`, `scope:`, `params:`, `digest:` and `grants:` lines, then a question. The `params:` line is the summary of the bound parameters in key order: the parameters of the command, and `gitOptions`, `env`, `line` (the digest of the exact command text) and `cwd` (the directory of an attended call) when the request has them. A value longer than 80 characters, or a summary longer than 400, ends with an ellipsis, and the digest binds the full values. An answer of yes prints `approval <apv id> granted for <action>; used once, expires <time>`. Any other answer prints `not approved` and writes nothing. A revocation prints `approval <id> revoked (<action> in <scope>)`. Every value passes the control-character strip.
 
 | Case | Stderr | Exit |
 |---|---|---|
 | The request was already approved; the approval was already revoked or consumed | `avarice approve: not applied: conflict: ...` | 3 |
-| No such request or approval | `avarice approve: no such approval request (not found: ...)` or `no such approval (...)` | 64 |
+| An unknown request ID | `avarice approve: no such approval request (not found: ...)` | 64 |
+| An unknown approval ID, with `--revoke` | `avarice approve: no such approval (not found: ...)` | 64 |
 | No terminal to ask on | `avarice approve: needs an interactive terminal to ask` | 64 |
 | A malformed ID, a second ID, or a refusal of who runs it | the reason and the usage lines | 64 |
 | Internal failure | `avarice approve: failed: ...` | 70 |
@@ -890,7 +892,7 @@ The command has no refusal for a run environment and needs no terminal. Output: 
 - `context add` is told from a search only by one of its three flags. `context add --file notes.txt` without `--source` and `--run` is the recording form and fails its usage check, while `context add user` is a search for the term `add user`.
 - `doctor` exits 3 for an error finding: it is the one command whose exit code reports on the system and not on the request.
 - `approve --revoke` is a boolean flag, so `approve --revoke apv_x` and `approve --revoke=apv_x` name the same approval.
-- The attended hook entry that `install-host` writes can leave the skill installed and the command at exit 3 or 70, because the skill is written first.
+- The attended hook entry that `install-host` writes can leave the skill installed and the command at exit 3 or 70, because the skill is written before the settings file. A hook entry script that cannot be used is the exception: it is checked first and leaves nothing written.
 - The data-root owner check of `decide`, `cancel` and `schedule` runs after the profile is prepared and the ledger is opened. The ledger open itself refuses a store file owned by another user, so the command's own check is a second guard. `contract amend` makes no such check.
 - `digest` exits 0 when quiet hours held its banner or when nothing waits, so a scheduled run that posted nothing is not a failure. Only an undelivered banner is exit 70.
 - The wait of `start --wait` is bounded by the contract's wall clock plus 15 minutes and ends with exit 3 and a "still running" line when the supervisor outlives it. The wait of `resume --wait` is bounded by 24 hours regardless of the contract.

@@ -29,7 +29,7 @@ The exit code is 0 when no finding has level `error`, 3 when at least one does, 
 
 **Repair.** The repair deletes files whose names begin `.tmp-`, directly under a shard directory of the artifact store, whose last change is an hour old or more. It reports how many it removed and how many it kept as newer. It opens no store for writing and edits no run, lease or record.
 
-**Extensions.** Doctor reports on the Claude configuration directory in use, and on the default one when another is in use. For each it reports whether the directory exists, how many AVARICE attended hook entries its settings hold, and which AVARICE skills (names that start with `avarice-`) it holds.
+**Extensions.** Doctor reports on the Claude configuration directory in use, and on the default one when another is in use. For each it reports whether the directory exists, how many AVARICE attended hook entries its settings hold, and which AVARICE skills (names that start with `avarice-`) it holds. Each attended entry is also read back: an entry blocks every attended Bash call when its command fails, so the node executable and the hook script that the entry runs must be regular files (a link to one counts). A missing one is an error finding that names the entry's settings file, the role and the path, and its fix is to run `avarice install-host`, which rewrites the entry. Doctor then exits 3. Only a command in the form `install-host` writes can be read this way; an entry written by hand in another form is not checked. The `--json` keys do not change.
 
 ## The report
 
@@ -68,7 +68,7 @@ A finding has a level, an area and a fix. An `error` is a problem that stops som
 | `limits` | The profile's `limits` section cannot be used | None |
 | `events` | None | Debug events refused because the events table reached its bound |
 | `online` | None | A delegated CLI that is absent, timed out or failed its authentication check |
-| `extensions` | None | The attended hook registered in more than one configuration directory or more than once in one; an AVARICE skill installed in more than one directory; a `CLAUDE.md` line that mentions pushing or opening a pull request without approval |
+| `extensions` | An attended hook entry whose node executable or hook script is not a regular file now | The attended hook registered in more than one configuration directory or more than once in one; an AVARICE skill installed in more than one directory; a `CLAUDE.md` line that mentions pushing or opening a pull request without approval |
 
 A host that is not admitted is a warning, not an error, because analysis and planning in restricted mode still work on it. A store written by a newer build is read-only for doctor and untouched, and its finding tells the owner to run the build that wrote it or restore a backup.
 
