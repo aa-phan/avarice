@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
-status: executing
-stopped_at: Completed 04-38-PLAN.md
-last_updated: "2026-11-20T09:04:13.006Z"
+status: verifying
+stopped_at: Completed 04-39-PLAN.md
+last_updated: "2026-11-22T08:05:29.426Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase 04 execution started
-state_head: e8a5250a1878e69e14c25f753a88bb7cd42f09c9
+state_head: 713069d325164ce9440152e194a4cb7209dc288c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 39
-  completed_plans: 38
+  completed_plans: 39
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
 Plan: 39 of 39
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-16 — Phase 04 execution started
 
 ## Performance Metrics
@@ -201,6 +201,7 @@ Last activity: 2026-11-16 — Phase 04 execution started
 | Phase 04 P36 | 5h 44m (continuation) | 3 tasks | 3 files |
 | Phase 04 P37 | 90 min | 3 tasks | 10 files |
 | Phase 04 P38 | not captured | 3 tasks | 15 files |
+| Phase 04 P39 | not captured | 3 tasks | 39 files |
 
 ## Accumulated Context
 
@@ -499,6 +500,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: The four new subsystem documents are listed in README.md and coverage.md as drafted and never marked reviewed; policy is evaluated only by the approval gate, so the hook ignores organization rules (findings.md) — CLAUDE.md requires a new document to be listed when written; the fresh prose reviews belong to plan 04-39
 - [Phase 04]: Plan 04-38: counts outside the hook rule row are left to plan 04-39's recount; the worklist hand-off lists the new values
 - [Phase 04]: Plan 04-38: event kinds are counted as the kinds written through an event append (50), since the old counting pattern also matches action names
+- [Phase 04]: Group C documents (containment, data-model, integrations) closed unreviewed by the owner's ruling 'close drafted' after four failed rounds; coverage.md records them as changed after review
 
 ### Roadmap Evolution
 
@@ -566,8 +568,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-20T09:04:02.006Z
-Stopped at: Completed 04-38-PLAN.md
+Last session: 2026-11-22T08:05:29.361Z
+Stopped at: Completed 04-39-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
