@@ -5,6 +5,8 @@
 //   3. require-approval needs a source: a contract authorization that names exactly this action and these parameters, else an approval of the same scope,
 //      action and canonical parameter digest that is unexpired, unrevoked and unconsumed, consumed in the transaction that records the start
 //      (`consumeApprovalAndStart`), so an approval starts one action once even when two processes race for it;
+//   3a. before a privileged start is recorded the scope is read: an earlier start of the same action with the same parameter digest that has no end may have
+//      taken effect, so a second start is denied with rule `interrupted-action-open` and nothing is recorded (FR-15). The rule lives here so no caller can skip it;
 //   4. with no source the action is denied with rule `approval-required:<apr id>` and an `approval.requested` event, and the message names the command the
 //      owner runs: `avarice approve <apr id>`.
 //
@@ -72,6 +74,9 @@ function textParams(params: Readonly<Record<string, unknown>>): Record<string, s
   return out;
 }
 
+// The rule of a denial because an earlier start of the same action and parameters has no end.
+export const OPEN_START_RULE = 'interrupted-action-open';
+
 function startData(input: AuthorizeInput, digest: string, source: string): Record<string, unknown> {
   return {
     scope: input.scope,
@@ -98,6 +103,20 @@ export function authorizeAction(deps: AppDeps, input: AuthorizeInput): Result<Au
 
   if (decision.effect === 'deny') {
     return ok({ effect: 'deny', rule: decision.ruleId, message: `${input.action} is denied by policy rule ${decision.ruleId}` });
+  }
+
+  // No path below starts an action while an earlier start of it with the same parameters has no end (FR-15). A read or local-write action leaves no record.
+  if (decision.effect !== 'allow' || classifyAction(input.action) === 'privileged') {
+    const events = deps.ledger.listActionEvents(input.scope);
+    if (!events.ok) return events;
+    const open = openSteps(events.value).find((s) => s.data['action'] === input.action && s.data['paramsDigest'] === digest);
+    if (open !== undefined) {
+      return ok({
+        effect: 'deny',
+        rule: OPEN_START_RULE,
+        message: `${input.action} was started with these parameters (event ${open.seq}) and its end was never recorded; it may have taken effect, so it is not started again`,
+      });
+    }
   }
 
   // The start of a privileged action is recorded; a read or local-write action that policy allows leaves no record (it needs no replay rule).
@@ -155,14 +174,16 @@ export function authorizeAction(deps: AppDeps, input: AuthorizeInput): Result<Au
   });
 }
 
-// The starts of a scope that have no end: an `action.finished` ends the earliest open start of its action, an `action.interrupted` ends the start it names.
+// The starts of a scope that have no end: an `action.finished` ends the start it names by `startSeq`, or, when it names none (an end recorded before the field
+// existed), the earliest open start of its action; an `action.interrupted` ends the start it names.
 function openSteps(events: readonly ActionEventRow[]): ActionEventRow[] {
   const open: ActionEventRow[] = [];
   for (const event of events) {
     if (event.type === 'action.started') {
       open.push(event);
     } else if (event.type === 'action.finished') {
-      const at = open.findIndex((s) => s.data['action'] === event.data['action']);
+      const named = event.data['startSeq'];
+      const at = typeof named === 'number' ? open.findIndex((s) => s.seq === named) : open.findIndex((s) => s.data['action'] === event.data['action']);
       if (at >= 0) open.splice(at, 1);
     } else if (event.type === 'action.interrupted') {
       const at = open.findIndex((s) => s.seq === event.data['startSeq']);
@@ -172,19 +193,21 @@ function openSteps(events: readonly ActionEventRow[]): ActionEventRow[] {
   return open;
 }
 
-// Records that a privileged action ended, whatever its outcome. An end with no open start of that action in the scope is a caller that never asked.
-export function finishPrivilegedAction(deps: AppDeps, scope: string, action: string, outcome: PrivilegedOutcome): Result<void> {
+// Records that a privileged action ended, whatever its outcome. An end with no open start of that action in the scope is a caller that never asked. `startSeq`
+// is the start the gate returned: the end is recorded against exactly that start. Without it the end closes the earliest open start of the action.
+export function finishPrivilegedAction(deps: AppDeps, scope: string, action: string, outcome: PrivilegedOutcome, startSeq?: number): Result<void> {
   const events = deps.ledger.listActionEvents(scope);
   if (!events.ok) return events;
-  if (!openSteps(events.value).some((s) => s.data['action'] === action)) {
-    return err({ kind: 'conflict', expected: `an open start of ${action} in ${scope}`, actual: 'no action.started without an end' });
+  const open = openSteps(events.value).filter((s) => s.data['action'] === action);
+  if (startSeq === undefined ? open.length === 0 : !open.some((s) => s.seq === startSeq)) {
+    return err({ kind: 'conflict', expected: `an open start of ${action} in ${scope}${startSeq !== undefined ? ` at event ${startSeq}` : ''}`, actual: 'no action.started without an end' });
   }
   const runId = scopeRunId(scope);
   const finished = deps.ledger.appendEvent({
     type: 'action.finished',
     ...(outcome.status === 'failed' ? { level: 'warn' as const } : {}),
     ...(runId !== undefined ? { runId } : {}),
-    data: { scope, action, status: outcome.status },
+    data: { scope, action, status: outcome.status, ...(startSeq !== undefined ? { startSeq } : {}) },
     nowMs: deps.clock.nowMs(),
   });
   return finished.ok ? ok(undefined) : finished;

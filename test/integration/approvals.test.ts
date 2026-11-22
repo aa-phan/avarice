@@ -173,6 +173,12 @@ function grant(roots: CliRoots, scope: string, action: string, params: Readonly<
   );
 }
 
+// Ends the start of `scm.pr.create` the gate returned, as the caller of a privileged action does when it is done.
+function finish(roots: CliRoots, scope: string, startSeq: number | undefined, clock: Clock): void {
+  const ended = withDeps(roots, (deps) => finishPrivilegedAction(deps, scope, 'scm.pr.create', { status: 'succeeded' }, startSeq), clock);
+  assert.ok(ended.ok, JSON.stringify(ended));
+}
+
 const allowed = (outcome: AuthorizeOutcome): Extract<AuthorizeOutcome, { effect: 'allow' }> => {
   assert.ok(outcome.effect === 'allow', `expected allow, got ${JSON.stringify(outcome)}`);
   return outcome;
@@ -323,6 +329,8 @@ describe('single use (FR-15 adjacency edge)', () => {
     denied(authorize(roots, { ...PR, scope: 'run_TWICE' }, clock));
     assert.equal(eventsOf(roots, 'action.started').length, 1, 'only the first started');
 
+    // The first start ends (WR-09): the gate refuses a second start of the same parameters while the first has no end, whatever approval is held.
+    finish(roots, 'run_TWICE', first.startSeq, clock);
     grant(roots, 'run_TWICE', 'scm.pr.create', PR.params, clock);
     allowed(authorize(roots, { ...PR, scope: 'run_TWICE' }, clock));
     assert.equal(eventsOf(roots, 'action.started').length, 2);
@@ -350,7 +358,9 @@ describe('single use (FR-15 adjacency edge)', () => {
     const older = grant(roots, 'run_ORDER', 'scm.pr.create', PR.params, clock);
     clock.t = T0 + 1000;
     const newer = grant(roots, 'run_ORDER', 'scm.pr.create', PR.params, clock);
-    assert.equal(allowed(authorize(roots, { ...PR, scope: 'run_ORDER' }, clock)).approvalId, older.approvalId);
+    const first = allowed(authorize(roots, { ...PR, scope: 'run_ORDER' }, clock));
+    assert.equal(first.approvalId, older.approvalId);
+    finish(roots, 'run_ORDER', first.startSeq, clock);
     assert.equal(allowed(authorize(roots, { ...PR, scope: 'run_ORDER' }, clock)).approvalId, newer.approvalId);
   });
 });

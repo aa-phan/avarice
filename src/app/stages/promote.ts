@@ -107,7 +107,9 @@ export const promoteStage: Stage = (ctx: StageContext, row: OnboardingRow): Resu
 
   ctx.fault(`${PROMOTE_STARTED_FAULT}${action}`);
 
-  const finish = (status: 'succeeded' | 'failed'): Result<void> => finishPrivilegedAction(deps, row.onboardingId, action, { status });
+  // The end is recorded against the start the gate returned, so no other open start of this action is closed by it.
+  const startSeq = authorized.value.startSeq;
+  const finish = (status: 'succeeded' | 'failed'): Result<void> => finishPrivilegedAction(deps, row.onboardingId, action, { status }, startSeq);
 
   if (mode === 'copy') {
     const copied = deps.staging.copyIntoCheckout(project.value.repoPath, files.value);
