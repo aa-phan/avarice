@@ -248,7 +248,7 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['ionice -c3 git push', 1],
   ['flock /tmp/l git push', 1],
   ["flock /tmp/l -c 'git push'", 1],
-  ["bash -lc 'echo hi; git push origin main'", 1],
+  ["bash -c 'echo hi; git push origin main'", 1],
   ["bash -c \"bash -c 'git push origin main'\"", 1],
   ['bash -c "echo $(git push)"', 1],
   ['FOO=1 sh -c "git push"', 1],

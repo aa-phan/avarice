@@ -4,12 +4,13 @@
 // the parameters an approval binds. The hook entry, the run decision and the attended mode all ask this one module.
 //
 // What it recognizes is the command word and its arguments as the shell would split them (plan 04-40): the quoting, comment, here-document and redirection rules of the
-// shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo` and `time` (with `-p`) in front of the program, the program's directory
+// shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo`, `time` (with `-p`), `timeout`, `xargs`, `setsid`, `stdbuf`, `ionice` and `flock` in front of the program, a shell started on a literal string (`bash -c 'git push'`, plan 04-51) and `eval`, the program's directory
 // (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
 // backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
 // MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
 // and both callers refuse it: no limit and no parse failure is read as "not privileged". It does not run or expand anything: a name the shell builds at run time (a
-// variable, an alias, a function), a script that pushes, and a shell started on a computed string (`bash -c` over a built string) are the documented bypass of
+// variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string, text piped into a shell) and repository or shell
+// state changed by an earlier separate call are the documented bypass of
 // command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
 // hold when this one is evaded.
 //
@@ -409,10 +410,10 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
 // The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands.
 export type Commands = { ok: true; commands: string[][] } | { ok: false; reason: string };
 
-export function commandsOf(command: string): Commands {
+export function commandsOf(command: string, depth = 0): Commands {
   if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
   const scan: Scan = { text: command, out: [], failure: undefined };
-  scanCommands(scan, 0, command.length, 0, 'top', false);
+  scanCommands(scan, 0, command.length, depth, 'top', false);
   return scan.failure === undefined ? { ok: true, commands: scan.out } : { ok: false, reason: scan.failure };
 }
 
@@ -423,17 +424,29 @@ export function commandsOf(command: string): Commands {
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // A word that begins a command in a compound statement and is not the command: the program is the word after it.
 const RESERVED_WORDS: ReadonlySet<string> = new Set(['!', '{', '}', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
-// Programs that run the command that follows them, and the options of each that take a separate value. Options that take none (`time -p`) are skipped as they are met.
-// Looked up with Object.hasOwn: a word that exists only on the object prototype (`constructor`, `__proto__`) is a program, not a wrapper (WR-02).
-const WRAPPERS: Readonly<Record<string, readonly string[]>> = {
-  env: ['-u', '--unset', '-C', '--chdir', '-P'],
-  command: [],
-  exec: ['-a'],
-  nohup: [],
-  builtin: [],
-  time: [],
-  nice: ['-n', '--adjustment'],
-  sudo: ['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir', '--chroot'],
+// Programs that run the command that follows them: the options of each that take a separate value, and the operands (a duration) that come after the options and before the
+// command. Options that take none (`time -p`) are skipped as they are met. Looked up with Object.hasOwn: a word that exists only on the object prototype (`constructor`,
+// `__proto__`) is a program, not a wrapper (WR-02). `flock` is read apart (flockWords): its lock file may come before or after its `-c` option.
+interface WrapperSpec {
+  valued: readonly string[];
+  operands?: number;
+}
+
+const WRAPPERS: Readonly<Record<string, WrapperSpec>> = {
+  env: { valued: ['-u', '--unset', '-C', '--chdir', '-P'] },
+  command: { valued: [] },
+  exec: { valued: ['-a'] },
+  nohup: { valued: [] },
+  builtin: { valued: [] },
+  time: { valued: [] },
+  nice: { valued: ['-n', '--adjustment'] },
+  sudo: { valued: ['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir', '--chroot'] },
+  timeout: { valued: ['-s', '--signal', '-k', '--kill-after'], operands: 1 },
+  xargs: { valued: ['-a', '--arg-file', '-d', '--delimiter', '-E', '--eof', '-I', '-J', '-L', '--max-lines', '-n', '--max-args', '-P', '--max-procs', '-R', '-S', '-s', '--max-chars'] },
+  setsid: { valued: [] },
+  stdbuf: { valued: ['-i', '-o', '-e', '--input', '--output', '--error'] },
+  ionice: { valued: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'] },
+  flock: { valued: ['-w', '--timeout', '-E', '--conflict-exit-code'] },
 };
 
 const baseOf = (word: string): string => (word.split('/').pop() ?? '').toLowerCase();
@@ -450,6 +463,38 @@ export interface UnparseableCommand {
 export const isUnparseable = (found: PrivilegedCommand | null | UnparseableCommand): found is UnparseableCommand => found !== null && 'unparseable' in found;
 
 const isPrefixWord = (word: string): boolean => ASSIGNMENT.test(word) || RESERVED_WORDS.has(word) || Object.hasOwn(WRAPPERS, baseOf(word));
+
+// What `flock [options] lock-file command...` or `flock [options] lock-file -c string` runs: the command words, or `sh -c string` for the string form. The options may come
+// before and after the lock file, and the lock file is the first word that is not an option or an option's value.
+function flockWords(words: readonly string[]): string[] {
+  const valued = (WRAPPERS['flock'] as WrapperSpec).valued;
+  let file = false;
+  let string: string | undefined;
+  let i = 1;
+  for (; i < words.length; i += 1) {
+    const arg = words[i] as string;
+    if (arg === '--') {
+      i += 1;
+      if (!file && i < words.length) i += 1;
+      break;
+    }
+    if (arg.startsWith('-') && arg !== '-') {
+      if (arg === '-c' || arg === '--command') {
+        string = words[i + 1];
+        i += 1;
+      } else if (arg.startsWith('--command=')) {
+        string = arg.slice('--command='.length);
+      } else if (valued.includes(arg)) {
+        i += 1;
+      }
+    } else if (!file) {
+      file = true;
+    } else {
+      break;
+    }
+  }
+  return string !== undefined ? ['sh', '-c', string] : words.slice(i);
+}
 
 // The program and its words with what comes before it removed: assignments, reserved words and wrappers with their options. `env` is what is bound of the prefix (CR-03): the
 // assignment words before the program and an `env` wrapper's options and assignments, verbatim and in order. Null when the command runs nothing (`command -v git` only
@@ -476,7 +521,12 @@ function programWords(words: readonly string[]): Program | null | UnparseableCom
     }
     const wrapper = baseOf(first);
     if (!Object.hasOwn(WRAPPERS, wrapper)) return { words: rest, env };
-    const valued = WRAPPERS[wrapper] as readonly string[];
+    if (wrapper === 'flock') {
+      rest = flockWords(rest);
+      continue;
+    }
+    const spec = WRAPPERS[wrapper] as WrapperSpec;
+    const valued = spec.valued;
     let i = 1;
     for (; i < rest.length; i += 1) {
       const arg = rest[i] as string;
@@ -505,7 +555,7 @@ function programWords(words: readonly string[]): Program | null | UnparseableCom
         if (wrapper === 'env' && rest[i] !== undefined) env.push(rest[i] as string);
       }
     }
-    rest = rest.slice(i);
+    rest = rest.slice(i + (spec.operands ?? 0));
   }
   const next = rest[0];
   if (next !== undefined && isPrefixWord(next)) return { unparseable: `more than ${MAX_PREFIX_WORDS} assignment, reserved or wrapper words before the program` };
@@ -614,13 +664,65 @@ const GH_FORMS: Readonly<Record<string, ArgSpec>> = {
 // The options with which `gh api` sends a body or fields: it makes a request that names no method a POST (gh api --help).
 const GH_API_FIELD_OPTIONS: readonly string[] = ['-f', '-F', '--field', '--raw-field', '--input'];
 
-// npm's command names and aliases, each mapped to the command it runs (plan 04-51; WR-03).
-export const NPM_COMMANDS: Readonly<Record<string, string>> = {};
+// npm's command names and aliases, each mapped to the command it runs (plan 04-51; WR-03), as npm resolves them (lib/utils/cmd-list.js). npm also accepts any unambiguous
+// abbreviation of a name (`npm pub`), which npmCommandOf resolves.
+const NPM_COMMAND_NAMES: readonly string[] = [
+  'access', 'adduser', 'approve-scripts', 'audit', 'bin', 'bugs', 'cache', 'ci', 'completion', 'config', 'dedupe', 'deny-scripts', 'deprecate', 'diff', 'dist-tag', 'docs', 'doctor',
+  'edit', 'exec', 'explain', 'explore', 'find-dupes', 'fund', 'get', 'help', 'help-search', 'hook', 'init', 'install', 'install-ci-test', 'install-scripts', 'install-test', 'link',
+  'll', 'login', 'logout', 'ls', 'org', 'outdated', 'owner', 'pack', 'ping', 'pkg', 'prefix', 'profile', 'prune', 'publish', 'query', 'rebuild', 'repo', 'restart', 'root', 'run',
+  'sbom', 'search', 'set', 'set-script', 'shrinkwrap', 'stage', 'star', 'stars', 'start', 'stop', 'team', 'test', 'token', 'trust', 'undeprecate', 'uninstall', 'unpublish', 'unstar',
+  'update', 'version', 'view', 'whoami',
+];
+const NPM_ALIASES: Readonly<Record<string, string>> = {
+  author: 'owner', home: 'docs', issues: 'bugs', info: 'view', show: 'view', find: 'search', add: 'install', unlink: 'uninstall', remove: 'uninstall', rm: 'uninstall', r: 'uninstall',
+  un: 'uninstall', rb: 'rebuild', list: 'ls', ln: 'link', create: 'init', i: 'install', it: 'install-test', cit: 'install-ci-test', u: 'update', up: 'update', c: 'config', s: 'search',
+  se: 'search', tst: 'test', t: 'test', ddp: 'dedupe', v: 'view', 'run-script': 'run', 'clean-install': 'ci', 'clean-install-test': 'install-ci-test', x: 'exec', why: 'explain',
+  la: 'll', verison: 'version', ic: 'ci', innit: 'init', in: 'install', ins: 'install', inst: 'install', insta: 'install', instal: 'install', isnt: 'install', isnta: 'install',
+  isntal: 'install', isntall: 'install', 'install-clean': 'ci', 'isntall-clean': 'ci', hlep: 'help', 'dist-tags': 'dist-tag', upgrade: 'update', udpate: 'update', rum: 'run', sit: 'install-ci-test',
+  urn: 'run', ogr: 'org', 'add-user': 'adduser',
+};
+export const NPM_COMMANDS: Readonly<Record<string, string>> = Object.freeze({ ...Object.fromEntries(NPM_COMMAND_NAMES.map((name) => [name, name])), ...NPM_ALIASES });
+
+// The npm command a word names: an exact command or alias, else the one command that every name beginning with the word resolves to.
+function npmCommandOf(word: string): string | undefined {
+  if (Object.hasOwn(NPM_COMMANDS, word)) return NPM_COMMANDS[word];
+  const resolved = new Set<string>();
+  for (const [name, command] of Object.entries(NPM_COMMANDS)) if (name.startsWith(word)) resolved.add(command);
+  return resolved.size === 1 ? [...resolved][0] : undefined;
+}
+
+// The npm options that take a separate value, so the value is not mistaken for the subcommand (`npm --loglevel info publish`, `npm --prefix test publish`). An option missing
+// here whose value is the name of an npm command is the one way to hide the subcommand; the line digest and the SCM platform's protections are what hold then.
+const NPM_VALUED_OPTIONS: readonly string[] = [
+  '--access', '--auth-type', '--before', '--ca', '--cache', '--cafile', '--call', '--cert', '--ci-name', '--cidr', '--cwd', '--depth', '--diff', '--diff-dst-prefix', '--diff-src-prefix',
+  '--diff-unified', '--editor', '--fetch-retries', '--fetch-retry-factor', '--fetch-retry-maxtimeout', '--fetch-retry-mintimeout', '--fetch-timeout', '--globalconfig', '--heading',
+  '--https-proxy', '--include', '--init-author-email', '--init-author-name', '--init-author-url', '--init-license', '--init-module', '--init-version', '--install-strategy', '--key',
+  '--local-address', '--location', '--lockfile-version', '--loglevel', '--logs-dir', '--logs-max', '--maxsockets', '--message', '--node-options', '--node-version', '--noproxy',
+  '--npm-version', '--omit', '--otp', '--pack-destination', '--package', '--prefix', '--preid', '--provenance-file', '--proxy', '--registry', '--save-prefix', '--scope', '--script-shell',
+  '--searchexclude', '--searchlimit', '--searchopts', '--searchstaleness', '--shell', '--tag', '--tag-version-prefix', '--umask', '--user-agent', '--userconfig', '--viewer', '--which',
+  '--workspace', '--expect-result-count', '--expect-results', '--min-release-age', '-C', '-w', '-m', '-c',
+];
 
 const NPM_PUBLISH: ArgSpec = {
-  valued: { '--registry': 'registry', '--tag': 'tag', '--access': 'access', '--otp': null, '--prefix': null, '-C': null, '--workspace': null, '-w': null, '--userconfig': null, '--globalconfig': null, '--cache': null, '--loglevel': null },
-  positional: ['subcommand', 'package', 'operands*'],
+  valued: { ...Object.fromEntries(NPM_VALUED_OPTIONS.map((name) => [name, null])), '--registry': 'registry', '--tag': 'tag', '--access': 'access' },
+  positional: ['package', 'operands*'],
 };
+
+// A shell started on a string (plan 04-51; WR-01): the string after `-c` among its options. Undefined when the shell is not given one (a script, standard input, no `-c`).
+const SHELLS: readonly string[] = ['sh', 'bash', 'zsh', 'dash', 'ksh'];
+const SHELL_VALUED: readonly string[] = ['-o', '+o', '-O', '+O', '--rcfile', '--init-file'];
+
+function shellString(args: readonly string[]): string | undefined {
+  let command = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') return command ? args[i + 1] : undefined;
+    if ((!arg.startsWith('-') && !arg.startsWith('+')) || arg === '-' || arg === '+') return command ? arg : undefined;
+    if (SHELL_VALUED.includes(arg)) i += 1;
+    else if (/^-[A-Za-z]+$/.test(arg) && arg.includes('c')) command = true;
+  }
+  return undefined;
+}
 
 function classifyGit(args: readonly string[]): PrivilegedCommand | null {
   let i = 0;
@@ -659,38 +761,64 @@ function classifyGh(args: readonly string[]): PrivilegedCommand | null {
 
 function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
   const parsed = parseArgs(args, NPM_PUBLISH);
-  if (parsed.positionals[0] !== 'publish') return null;
+  // The subcommand is the first positional that is an npm command (an option's value npm does not know is skipped), so `npm install publish` is an install. It and what
+  // precedes it are dropped by position: the positionals that remain are the package and its operands.
+  const at = parsed.positionals.findIndex((word) => npmCommandOf(word) !== undefined);
+  if (at === -1 || npmCommandOf(parsed.positionals[at] as string) !== 'publish') return null;
+  parsed.positionals = parsed.positionals.slice(at + 1);
   const form = formOf('npm', ['publish']) as CommandForm;
-  // `subcommand` is the word `publish` itself: it is not a parameter.
-  const params = paramsOf(parsed, NPM_PUBLISH);
-  delete params['subcommand'];
-  return { action: form.action, params };
+  return { action: form.action, params: paramsOf(parsed, NPM_PUBLISH) };
 }
 
-// The privileged action one command is, null for a command that is not privileged, or an unparseable command whose program could not be found. `words` are the words of a
-// single command (no `;`, `&&` or `|`).
-export function classifyShellCommand(words: readonly string[]): PrivilegedCommand | null | UnparseableCommand {
+// The privileged commands one command runs, or an unparseable command whose program (or whose shell string) could not be read. `words` are the words of a single command
+// (no `;`, `&&` or `|`). A shell started on a literal string and `eval` run the commands of their string (plan 04-51; WR-01): the string is read by the same scanner one
+// level deeper, so a computed string (`bash -c "$X"`, text left to a variable or a substitution) holds no command of its own, while the commands of a substitution inside it
+// were already scanned with the line.
+function classifyWords(words: readonly string[], depth: number): PrivilegedCommand[] | UnparseableCommand {
   const program = programWords(words);
-  if (program === null) return null;
+  if (program === null) return [];
   if ('unparseable' in program) return program;
-  if (program.words.length === 0) return null;
+  if (program.words.length === 0) return [];
   const args = program.words.slice(1);
-  let found: PrivilegedCommand | null;
-  switch (baseOf(program.words[0] as string)) {
-    case 'git':
-      found = classifyGit(args);
-      break;
-    case 'gh':
-      found = classifyGh(args);
-      break;
-    case 'npm':
-      found = classifyNpm(args);
-      break;
-    default:
-      found = null;
+  const name = baseOf(program.words[0] as string);
+  let found: PrivilegedCommand[];
+  if (name === 'git' || name === 'gh' || name === 'npm') {
+    const one = name === 'git' ? classifyGit(args) : name === 'gh' ? classifyGh(args) : classifyNpm(args);
+    found = one === null ? [] : [one];
+  } else if (SHELLS.includes(name) || name === 'eval') {
+    const text = name === 'eval' ? (args.length > 0 ? args.join(' ') : undefined) : shellString(args);
+    if (text === undefined) return [];
+    const nested = classifyString(text, depth + 1);
+    if ('unparseable' in nested) return nested;
+    found = nested;
+  } else {
+    return [];
   }
-  if (found !== null && program.env.length > 0) found.params['env'] = program.env.join(' ');
+  if (program.env.length > 0) {
+    for (const command of found) command.params['env'] = [program.env.join(' '), command.params['env']].filter((part) => part !== undefined).join(' ');
+  }
   return found;
+}
+
+// The privileged commands of a string that a shell or eval runs, `depth` levels below the line.
+function classifyString(text: string, depth: number): PrivilegedCommand[] | UnparseableCommand {
+  const split = commandsOf(text, depth);
+  if (!split.ok) return { unparseable: split.reason };
+  const commands: PrivilegedCommand[] = [];
+  for (const words of split.commands) {
+    const found = classifyWords(words, depth);
+    if ('unparseable' in found) return found;
+    commands.push(...found);
+  }
+  return commands;
+}
+
+// The privileged action the first privileged command of one command is, null for a command that is not privileged, or an unparseable command whose program could not be
+// found. `words` are the words of a single command (no `;`, `&&` or `|`); classifyLine answers for every command a line holds.
+export function classifyShellCommand(words: readonly string[]): PrivilegedCommand | null | UnparseableCommand {
+  const found = classifyWords(words, 0);
+  if ('unparseable' in found) return found;
+  return found[0] ?? null;
 }
 
 // The three answers about a shell line (plan 04-40; CR-01): nothing privileged, the privileged commands it holds, or a line the classifier could not read.
@@ -710,9 +838,9 @@ export function classifyLine(command: string): LineClassification {
   // Binds the whole line to the approval: an earlier cd, a git config, a wrapper's options or a gh api body change a command's effect without changing its own words.
   const line = `sha256:${sha256Hex(command).slice(0, 32)}`;
   for (const words of split.commands) {
-    const found = classifyShellCommand(words);
-    if (found !== null && isUnparseable(found)) return { kind: 'unparseable', reason: found.unparseable };
-    if (found !== null) commands.push({ ...found, params: { ...found.params, line } });
+    const found = classifyWords(words, 0);
+    if ('unparseable' in found) return { kind: 'unparseable', reason: found.unparseable };
+    for (const one of found) commands.push({ ...one, params: { ...one.params, line } });
   }
   return commands.length === 0 ? { kind: 'none' } : { kind: 'privileged', commands };
 }
