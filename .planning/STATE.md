@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-47-PLAN.md
-last_updated: "2026-11-22T22:13:24.852Z"
+stopped_at: Completed 04-48-PLAN.md
+last_updated: "2026-11-22T22:21:59.276Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 3597f155d1d6914aac5540e73f857a3b7fa23075
+state_head: 93a74151fcd6f5dfab67a469e17c1a240d866701
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 9 of 55
+Plan: 10 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -210,6 +210,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P45 | 33 min | 3 tasks | 13 files |
 | Phase 04 P46 | 11 min | 3 tasks | 8 files |
 | Phase 04 P47 | 20 min | 3 tasks | 10 files |
+| Phase 04 P48 | not captured | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -525,6 +526,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-46: the evaluation's --live checks AVARICE_LIVE and --authorization right after option parsing and the record's content (list digest, task ids, arms, cap, 24 hours) before the ceiling and before any clone, onboarding or ledger write; an empty merge plan needs no record — The record can only be matched once the plan and projection exist, but nothing may be cloned or recorded before it is judged; a plan with nothing to run cannot spend
 - [Phase 04]: 04-46: run-one records max(per-repository cap, reported sum) for an unknown spend, and both authorization records are procedural guards with the Phase 4 ledger ceiling the mechanical one — A reported sum above the cap must never be under-recorded; WR-34 is accepted on the reason that an agent running as the owner can write any owner-writable file
 - [Phase 04]: 04-47: a security test is proven by a planted regression the old test passes; the race tests retry only the evidence of a race (up to 5 attempts) and keep exactness assertions on every attempt — A vacuous oracle reports a broken control as working (T-04-129); times use performance.timeOrigin + performance.now() because a store call can finish inside one millisecond
+- [Phase 04]: 04-48: the attended hook consumes one approval per privileged command under a savepoint, all or none; commands lacking an approval are read from the consume results
 
 ### Roadmap Evolution
 
@@ -592,8 +594,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T22:13:18.134Z
-Stopped at: Completed 04-47-PLAN.md
+Last session: 2026-11-22T22:21:59.240Z
+Stopped at: Completed 04-48-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
