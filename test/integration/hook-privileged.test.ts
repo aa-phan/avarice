@@ -424,6 +424,25 @@ describe('attended mode denies a line it cannot check instead of passing it sile
   });
 });
 
+describe('attended mode allows the owner a commit whose message is a here-document with apostrophes (CR-02, T-04-107)', () => {
+  const p = profile();
+  const commit = ['git commit -m "$(cat <<\'EOF\'', "Fix the planner's (scope) handling", "# what's next", 'we should git push later', 'EOF', ')"'].join('\n');
+
+  it('prints nothing and records no event, because the line holds no privileged command', () => {
+    const out = attendedHook(p.dataRoot, attendedCall(commit));
+    assert.deepEqual([out.code, out.stdout], [0, ''], out.stderr);
+    assert.equal(ledgerRows<{ n: number }>(p.roots, 'SELECT count(*) AS n FROM events')[0]?.n, 0);
+  });
+
+  it('denies a push hidden after a quoted `)` inside a substitution, with the approve hint (CR-02)', () => {
+    const out = attendedHook(p.dataRoot, attendedCall('echo $(echo ")"; git push)'));
+    assert.match(parsed(out.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:git\.push: /);
+    hintOf(out);
+    const inQuotes = attendedHook(p.dataRoot, attendedCall('echo "$(echo ")"; git push)"'));
+    assert.match(parsed(inQuotes.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:git\.push: /);
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 
