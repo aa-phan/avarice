@@ -12,7 +12,8 @@
 #   scripts/exit-run-phase4.sh --run [--only ID] [--ruling-ref TEXT]
 #       The live onboardings (spends). Each approved repository in the list's order through the tools' `run-one`, then `verify`. It halts at the first repository
 #       that does not end active with equal digests (D-04: the evidence is recorded, nothing is retried by this script) and exits with that repository's code
-#       (75 = stop and ask the owner). `--only ID` runs one repository, as a retry after the owner's ruling (`--ruling-ref` names the ruling).
+#       (75 = stop and ask the owner). `--only ID` runs one repository, as a retry after the owner's ruling (`--ruling-ref` names the ruling and needs `--only`).
+#       An `--only` id that is not on the approved list exits 2 and runs nothing.
 #   scripts/exit-run-phase4.sh --verify     5 of 5 active, every digest equal, 0 containment failures.
 #   scripts/exit-run-phase4.sh --finish     verify, then record the close of the benchmark in the evidence file.
 #
@@ -51,13 +52,17 @@ case "$mode" in
     ruling=""
     while [ $# -gt 0 ]; do
       case "$1" in
-        --only) shift; [ $# -gt 0 ] || usage; only="$1" ;;
+        --only) shift; { [ $# -gt 0 ] && [ -n "$1" ]; } || usage; only="$1" ;;
         --ruling-ref) shift; [ $# -gt 0 ] || usage; ruling="$1" ;;
         *) usage ;;
       esac
       shift
     done
+    # One ruling reference unlocks the retry of one repository: without --only it would reach every run-one.
+    if [ -n "$ruling" ] && [ -z "$only" ]; then echo "exit-run-phase4: --ruling-ref needs --only" >&2; usage; fi
     ids="$("${TOOLS[@]}" ids)" || exit 2
+    # A retry that names no approved repository would run nothing and report success.
+    if [ -n "$only" ] && ! printf '%s\n' "$ids" | grep -Fqx -- "$only"; then echo "exit-run-phase4: $only is not on the approved list" >&2; exit 2; fi
     for id in $ids; do
       if [ -n "$only" ] && [ "$id" != "$only" ]; then continue; fi
       "${TOOLS[@]}" run-one "$id" ${ruling:+--ruling-ref "$ruling"}

@@ -1,7 +1,8 @@
 // Tools of the AC-14 brownfield benchmark (plan 04-35; ONB-6, ONB-11, ONB-15; D-03, D-04, D-05), driven in order by scripts/exit-run-phase4.sh. Five
 // repositories the owner approved (test/benchmark/phase4/ac14-repositories.json) are onboarded live with the knowledge pass, each from a checkout whose bytes and
 // refs are digested before and after. Spend is the owner's: nothing here starts a model except `run-one`, and `run-one` refuses until the owner has recorded an
-// authorization from their own terminal.
+// authorization from their own terminal. That record is a procedural guard: an agent running as the owner's user could write it by hand, so the Phase 4 spend ledger's
+// ceiling is the mechanical guard, and `run-one` records every spend it cannot measure at the per-repository cap.
 //
 //   dry-run [--per-repo USD] [--profile extended|local] [--list F] [--evidence F]
 //       Reads the approved list (exit 1 for a draft), clones each public repository at its pin into the benchmark clone root (network read only; an existing

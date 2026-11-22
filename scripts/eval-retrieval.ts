@@ -21,6 +21,9 @@
 //               the ceiling, then checks the ceiling again before each model step and records each step's spend in the Phase 4 ledger under AVARICE_PHASE4_PLAN (default 04-36).
 //               Needs --out.
 //
+// The authorization record is a procedural guard: an agent running as the owner's user could write the file by hand, so the Phase 4 spend ledger's ceiling is the mechanical
+// guard, and every step is recorded there at no less than it may have cost.
+//
 // Flags: --tasks <n> (the first n approved tasks, default all), --task-ids T01,T07 (exactly these approved tasks, in this order; an id off the approved list is refused; not with
 //        --tasks), --merge (needs --out: keep the runs the file already holds, skip their (task, arm) pairs and add the rest; refused when the file came from another approved list;
 //        a live start over a file that holds runs is refused without it), --arms A,B,C, --cap-usd <n> (the per-run cost cap, default 0.40), --out <file> (the results JSON),
