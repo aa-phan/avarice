@@ -147,6 +147,8 @@ const deny = (rule: string, reason?: string): HookDecision => ({ decision: 'deny
 const named = (value: unknown): boolean => typeof value === 'string' && value !== '';
 // A Glob pattern that names every file below its root (`*`, `**`, `**/*`, `*.*`, `./**/*`): no narrower than no pattern at all.
 const MATCHES_EVERY_FILE = /^(\.\/)?(\*\*?\/)*\*\*?(\.\*)?$/;
+// The hook does not expand braces, so a pattern holding a brace group is judged as the widest file set it could name (WR-06).
+const narrowsFiles = (pattern: string): boolean => pattern !== '' && !MATCHES_EVERY_FILE.test(pattern) && !pattern.includes('{');
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const absolutize = (cwd: string, path: string): string => (path.startsWith('/') ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
 
@@ -177,9 +179,11 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
         const literal = pattern.split(/[*?[{]/, 1)[0] ?? '/';
         call.patternRoot = literal.endsWith('/') ? literal : literal.slice(0, literal.lastIndexOf('/') + 1);
       }
-      // A Grep is filtered by a glob or a type; a Glob by what its pattern names below its root (an absolute pattern's root is not a filter).
+      // A Grep is filtered by a type or by a glob that narrows the files; a Glob by what its pattern names below its root (an absolute pattern's root is not a filter).
       const below = typeof pattern === 'string' ? pattern.slice(call.patternRoot?.length ?? 0) : '';
-      if (tool === 'Grep' ? !named(input['glob']) && !named(input['type']) : below === '' || MATCHES_EVERY_FILE.test(below)) call.unfiltered = true;
+      const glob = input['glob'];
+      const filtered = tool === 'Grep' ? named(input['type']) || (typeof glob === 'string' && narrowsFiles(glob)) : narrowsFiles(below);
+      if (!filtered) call.unfiltered = true;
       return { ok: true, call };
     }
     case 'Bash': {
