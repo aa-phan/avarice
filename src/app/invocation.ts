@@ -104,9 +104,13 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   // held to is narrowed to the planned paths, and the hook enforces it through the scope's read confinement. The stored contract is not changed.
   const mappingPlan = purpose === 'map' ? loadMappingPlan(deps, onboarding.onboardingId) : ok(null);
   if (!mappingPlan.ok) return mappingPlan;
+  // A paths plan that names no valid scope is refused, never read as the whole read scope: nothing was reserved, started or recorded (WR-10).
   const scopePaths = mappingPlan.value?.mode === 'paths' ? mappingPlan.value.paths : undefined;
+  if (mappingPlan.value?.mode === 'paths' && !(scopePaths !== undefined && scopePaths.length > 0 && scopePaths.every(isScopePath))) {
+    return err({ kind: 'invalid', field: 'mapping:plan', reason: 'a path-scoped map names no valid scope path; it was not launched' });
+  }
   const effectiveContract =
-    scopePaths !== undefined && scopePaths.length > 0 && scopePaths.every(isScopePath)
+    scopePaths !== undefined
       ? { ...contract.value.body, files: { ...contract.value.body.files, read: [...scopePaths.map((path) => `${path}/**`), PLANNING_READ_GLOB] } }
       : contract.value.body;
 

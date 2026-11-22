@@ -100,6 +100,10 @@ export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<Sto
   }
   const answer = body['existingMapAnswer'];
   const paths = body['paths'];
+  // A path list with an entry that is not a string is a damaged plan: it is refused, never narrowed to the entries that are strings (WR-10).
+  if (mode === 'paths' && Array.isArray(paths) && !paths.every((p) => typeof p === 'string')) {
+    return err({ kind: 'invalid', field: 'mapping:plan', reason: 'a path-scoped map names an entry that is not a path; it was not launched' });
+  }
   const drift = typeof body['drift'] === 'object' && body['drift'] !== null ? (body['drift'] as Record<string, unknown>)['verdict'] : undefined;
   return ok({
     mode: mode as MappingMode,
@@ -108,7 +112,7 @@ export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<Sto
     ...(typeof body['outcome'] === 'string' ? { outcome: body['outcome'] } : {}),
     ...(typeof drift === 'string' ? { drift } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
-    ...(Array.isArray(paths) ? { paths: paths.filter((p): p is string => typeof p === 'string') } : {}),
+    ...(Array.isArray(paths) ? { paths: paths as string[] } : {}),
     ...(body['restricted'] === true ? { restricted: true as const } : {}),
   });
 }

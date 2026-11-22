@@ -305,7 +305,7 @@ describe('a damaged path-scoped mapping plan is refused instead of reading the w
     const outcome = await prepared({ paths: ['apps/api'] });
     assert.ok(outcome.result.ok, JSON.stringify(outcome.result));
     assert.ok(outcome.result.value.granted);
-    const confined = outcome.result.value.prepared.request.scope.readConfine.filter((path) => path.startsWith(`${outcome.staging}/`)).map((path) => path.slice(outcome.staging.length + 1)).sort();
+    const confined = outcome.result.value.prepared.request.scope.readConfine?.filter((path) => path.startsWith(`${outcome.staging}/`)).map((path) => path.slice(outcome.staging.length + 1)).sort();
     assert.deepEqual(confined, ['.planning', 'apps/api']);
   });
 });
