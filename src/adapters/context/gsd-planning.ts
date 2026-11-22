@@ -254,7 +254,11 @@ export class GsdPlanningContext implements ContextSource {
     if (!allowed || !isCitablePath(file) || slug === '') return err({ kind: 'invalid', field: 'ref.id', reason: `${ref.id} is not a planning section ID` });
     const root = join(query.workspace.stagingPath, PLANNING_DIR);
     const settled = (freshness: Freshness, revision?: string): Result<ExternalRef> => ok({ ...ref, ...(revision !== undefined ? { revision } : {}), retrievedAt, freshness });
-    const text = isRealDirectory(root) ? readRegular(join(root, file), MAX_FILE_BYTES) : undefined;
+    // `readRegular` refuses a link only as the last component, so every directory above the file is checked first: a planted link at `phases` or at a phase directory
+    // answers `deleted` before any file is opened (WR-20, T-04-109).
+    const directories = file.split('/').slice(0, -1);
+    const walkable = isRealDirectory(root) && directories.every((_, i) => isRealDirectory(join(root, ...directories.slice(0, i + 1))));
+    const text = walkable ? readRegular(join(root, file), MAX_FILE_BYTES) : undefined;
     if (text === undefined || !sectionsOf(text, file).some((s) => s.slug === slug)) return settled('deleted');
     const stateText = readRegular(join(root, 'state.json'), MAX_STATE_BYTES);
     if (stateText === undefined) return settled('unavailable', STATE_ABSENT);

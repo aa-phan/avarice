@@ -42,10 +42,18 @@ interface Found {
 
 const rootOf = (workspace: ContextQuery['workspace']): string => workspace.worktreePath ?? workspace.repoPath;
 
+// The globs one `readExclude` entry stands for. A plain entry (no `*` or `?`) names a directory and excludes it at any depth, so `node_modules` drops
+// `packages/app/node_modules/x.js` as it drops `node_modules/x.js` (WR-21). An entry with a glob character keeps its root-anchored meaning: it is matched as written, with
+// whatever lies below a match.
+function excludeGlobsOf(entry: string): string[] {
+  if (/[*?]/.test(entry)) return [entry, `${entry}/**`];
+  return [entry, `${entry}/**`, `**/${entry}/**`];
+}
+
 // Whether `path` may be returned under `scope`: inside a read glob, outside every excluded directory (a directory name or a glob) and every secret glob.
 function inScope(path: string, scope: ContextReadScope): boolean {
   if (!matchesAny(path, scope.read)) return false;
-  const excluded = [...scope.readExclude, ...scope.readExclude.map((entry) => `${entry}/**`), ...scope.secretGlobs];
+  const excluded = [...scope.readExclude.flatMap(excludeGlobsOf), ...scope.secretGlobs];
   return !matchesAny(path, excluded);
 }
 
