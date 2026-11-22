@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-import { NPM_COMMANDS, classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
+import { NPM_COMMANDS, UNAPPROVABLE_RULE, classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
 import { runUnderShell, shellAvailable } from '../helpers/shell-oracle.ts';
 import type { Shell } from '../helpers/shell-oracle.ts';
 
@@ -486,5 +486,40 @@ describe('npm publish is found after any option, and only as the subcommand (WR-
     assert.equal(firstOf('npm --scope @x publish').params['package'], undefined);
     assert.equal(firstOf('npm --scope @x publish ./pkg.tgz').params['package'], './pkg.tgz');
     assert.equal(firstOf('npm publish publish').params['package'], 'publish', 'a package named publish is a package');
+  });
+});
+
+describe('gh api forms whose body cannot be bound are marked unapprovable (WR-04, T-04-138)', () => {
+  const reasonOf = (line: string): string | undefined => {
+    const found = classifyLine(line);
+    return found.kind === 'privileged' ? found.commands[0]?.unapprovable : undefined;
+  };
+
+  it('exports the rule name', () => {
+    assert.equal(UNAPPROVABLE_RULE, 'privileged:unapprovable');
+  });
+
+  it('marks --input and a -F or --field value that starts with @, with a reason that names the file or standard input', () => {
+    for (const line of ['gh api graphql -F query=@q.graphql', 'gh api repos/o/r/issues --input body.json', 'gh api repos/o/r/issues --input=body.json', 'gh api repos/o/r/issues -F body=@-', 'gh api repos/o/r/issues --field body=@b.txt', 'gh api repos/o/r/issues -Fbody=@b.txt', 'gh api repos/o/r/issues --field=body=@b.txt', 'gh api -X PATCH repos/o/r --input -']) {
+      assert.match(reasonOf(line) ?? '', /file or standard input/, line);
+    }
+  });
+
+  it('does not mark inline fields, a raw field that starts with @, or a read', () => {
+    for (const line of ["gh api graphql -f query='mutation { a }'", 'gh api repos/o/r/issues -F title=x', 'gh api repos/o/r/issues -f body=@literal', 'gh api repos/o/r/issues -X POST -H "X: @y"', 'gh api repos/o/r/pulls -X POST']) {
+      assert.equal(reasonOf(line), undefined, line);
+    }
+  });
+
+  it('a body from a file on a GET is no privileged command at all', () => {
+    assert.deepEqual(classifyLine('gh api -X GET repos/o/r --input body.json'), { kind: 'none' });
+  });
+
+  it('inline queries that differ only in a value the old binding dropped have different digests (line)', () => {
+    assert.notDeepEqual(firstOf("gh api graphql -f query='mutation { a }'").params, firstOf("gh api graphql -f query='mutation { b }'").params);
+  });
+
+  it('classifies the unapprovable form as the same action, so a run still denies it as privileged:scm.api.write', () => {
+    assert.equal(firstOf('gh api graphql -F query=@q.graphql').action, 'scm.api.write');
   });
 });

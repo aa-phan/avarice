@@ -134,3 +134,77 @@ describe('ENFORCEMENT_MAP (SEC-6)', () => {
     assert.deepEqual(external, ['scm-branch-protection', 'ci-gates', 'identity']);
   });
 });
+
+// SEC-6 ordering: nothing sorts the map, so its order is specified here. Rewriting a row cannot reorder the map (plan 04-51).
+const MAP_ORDER: readonly string[] = [
+  'scm-branch-protection',
+  'ci-gates',
+  'identity',
+  'host-managed-permissions',
+  'sandbox-confinement',
+  'tool-call-decisions',
+  'budgets',
+  'privileged-approval',
+  'approval-single-use',
+  'profile-isolation',
+  'redaction',
+  'prompt-injection',
+  'write-scope',
+  'network-scope',
+  'credential-denial',
+  'organization-policy-fail-closed',
+  'restricted-mode',
+  'hook-cost-fields',
+];
+
+describe('the enforcement map keeps its specified order (SEC-6 ordering, plan 04-51)', () => {
+  it('lists the ids in the order of the documented table, then the rows the strength and policy sections add', () => {
+    assert.deepEqual(
+      ENFORCEMENT_MAP.map((row) => row.id),
+      MAP_ORDER,
+    );
+  });
+
+  it('keeps the privileged-approval row between budgets and approval-single-use', () => {
+    const ids = ENFORCEMENT_MAP.map((row) => row.id);
+    const at = ids.indexOf('privileged-approval');
+    assert.equal(ids[at - 1], 'budgets');
+    assert.equal(ids[at + 1], 'approval-single-use');
+  });
+});
+
+describe('the privileged-approval row says what the gate does and does not do (SEC-6, IN-03, plan 04-51)', () => {
+  const row = ENFORCEMENT_MAP.find((r) => r.id === 'privileged-approval') as EnforcementRow;
+
+  it('says the hook classifies every command of a Bash call and consumes one approval per privileged command, bound to its parameters, the line and the directory', () => {
+    assert.match(row.avariceRole, /classifies every command of a Bash call/);
+    assert.match(row.avariceRole, /one approval per privileged command/);
+    assert.match(row.avariceRole, /parameters/);
+    assert.match(row.avariceRole, /line/);
+    assert.match(row.avariceRole, /directory/);
+    assert.doesNotMatch(row.avariceRole, /evaluates policy/, 'the hook does not evaluate policy for an attended session');
+  });
+
+  it('names the seven covered forms, as a closed list', () => {
+    for (const form of ['git push', 'gh pr create', 'gh pr merge', 'gh pr edit', 'gh release create', 'gh api', 'npm publish']) {
+      assert.ok(row.bypassLimitation.includes(form), `the row does not name ${form}`);
+    }
+    assert.match(row.bypassLimitation, /only these/i);
+  });
+
+  it('names the residual bypasses: an earlier separate call, and names built at run time', () => {
+    assert.match(row.bypassLimitation, /earlier separate call/);
+    assert.match(row.bypassLimitation, /built at run time/);
+    assert.match(row.bypassLimitation, /variables, aliases, functions, scripts/);
+    assert.match(row.bypassLimitation, /removed hook/);
+  });
+
+  it('names a tracked test as its proof, in place and not unverified', () => {
+    assert.deepEqual(row.test, { kind: 'test', path: 'test/integration/hook-privileged.test.ts' });
+    assert.ok(trackedFiles().has('test/integration/hook-privileged.test.ts'));
+  });
+
+  it('keeps passing the table checker', () => {
+    assert.deepEqual(mapProblems(ENFORCEMENT_MAP, trackedFiles()), []);
+  });
+});

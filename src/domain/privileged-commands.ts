@@ -26,7 +26,12 @@ import { sha256Hex } from './digest.ts';
 export interface PrivilegedCommand {
   action: string;
   params: Record<string, string>;
+  // Set when no approval can bind what the command does (plan 04-51; WR-04): the reason, in words the owner and the model are told.
+  unapprovable?: string;
 }
+
+// The attended deny rule for a command that cannot be approved: it names no request, because there is nothing the owner could approve.
+export const UNAPPROVABLE_RULE = 'privileged:unapprovable';
 
 // One recognized form: a program, the words that follow it (after its global options), and the action it is. `gh api` is privileged only for a method that is
 // not GET, which the parser decides.

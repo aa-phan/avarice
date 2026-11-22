@@ -779,6 +779,64 @@ describe('a push started through a shell string, eval or a wrapper is denied lik
   });
 });
 
+describe('a gh api body that comes from a file or standard input is refused, not approved blind (WR-04, T-04-138)', () => {
+  const p = profile();
+  const UNAPPROVABLE = ['gh api graphql -F query=@q.graphql', 'gh api repos/o/r/issues --input body.json', 'gh api repos/o/r/issues -F body=@-', 'gh api repos/o/r/issues --field body=@body.txt', 'gh api repos/o/r/issues --input=body.json'];
+
+  it('denies each with privileged:unapprovable and a reason that says to pass the fields inline, with no request and one policy.denied', () => {
+    for (const command of UNAPPROVABLE) {
+      const denied = eventsOf(p.roots, 'policy.denied').length;
+      const out = attendedHook(p.dataRoot, attendedCall(command));
+      assert.equal(out.code, 0, out.stderr);
+      const reason = parsed(out.stdout).hookSpecificOutput.permissionDecisionReason;
+      assert.equal(parsed(out.stdout).hookSpecificOutput.permissionDecision, 'deny', command);
+      assert.match(reason, /^avarice: privileged:unapprovable: /, command);
+      assert.match(reason, /file or standard input/);
+      assert.match(reason, /inline/);
+      assert.ok(!/avarice approve/.test(reason), 'no approval is offered');
+      assert.equal(eventsOf(p.roots, 'policy.denied').length, denied + 1, command);
+    }
+    assert.equal(eventsOf(p.roots, 'approval.requested').length, 0);
+    assert.equal(approvalsOf(p.roots).length, 0);
+    const last = dataOf(eventsOf(p.roots, 'policy.denied').slice(-1)[0] as EventDb);
+    assert.equal(last['ruleId'], 'privileged:unapprovable');
+    assert.equal(last['scope'], 'attended:s1');
+    assert.equal(last['action'], 'scm.api.write');
+  });
+
+  it('a line with one unapprovable command and one approvable command consumes nothing and is denied as unapprovable', async () => {
+    const q = profile();
+    await approve(q.roots, hintOf(attendedHook(q.dataRoot, attendedCall('git push origin main'))));
+    const out = attendedHook(q.dataRoot, attendedCall('git push origin main && gh api repos/o/r/issues --input body.json'));
+    assert.match(parsed(out.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:unapprovable: /);
+    assert.equal((approvalsOf(q.roots)[0] as ApprovalDb).consumed_at, null, 'the approval of the push was not spent');
+    assert.equal(eventsOf(q.roots, 'action.started').length, 0);
+    assert.equal(eventsOf(q.roots, 'approval.requested').length, 1, 'no request was minted for the push on that line');
+    assert.equal(eventsOf(q.roots, 'policy.denied').length, 1, 'one denial, for the unapprovable command');
+  });
+
+  it('an inline field is approvable, and two different inline queries have different digests', () => {
+    const q = profile();
+    const one = attendedHook(q.dataRoot, attendedCall("gh api graphql -f query='mutation { a }'"));
+    const two = attendedHook(q.dataRoot, attendedCall("gh api graphql -f query='mutation { b }'"));
+    assert.match(parsed(one.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:scm\.api\.write: /);
+    assert.notEqual(hintOf(one), hintOf(two));
+    const requested = eventsOf(q.roots, 'approval.requested').map((row) => dataOf(row)['paramsDigest']);
+    assert.equal(requested.length, 2);
+    assert.notEqual(requested[0], requested[1]);
+    assert.equal(eventsOf(q.roots, 'policy.denied').map((row) => dataOf(row)['ruleId']).includes('privileged:unapprovable'), false);
+  });
+
+  it('in a run the same forms are still denied as privileged:scm.api.write', () => {
+    for (const command of UNAPPROVABLE) {
+      const fx = fixture();
+      const result = runHook(fx, 'pre', bash(command));
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(parsed(result.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:scm\.api\.write: /, command);
+    }
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 
