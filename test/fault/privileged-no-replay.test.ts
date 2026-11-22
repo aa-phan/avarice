@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { authorizeAction, finishPrivilegedAction, openPrivilegedSteps } from '../../src/app/authorize.ts';
+import { decide } from '../../src/app/decide.ts';
+import { isBlockedRunContinuable } from '../../src/app/run-stages/schedule.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { paramsDigest } from '../../src/domain/approval.ts';
@@ -300,5 +302,55 @@ describe('the approval gate itself refuses to start an action whose earlier star
       assert.ok(open.ok);
       assert.deepEqual(open.value.map((s) => s.paramsSummary), ['step=second']);
     });
+  });
+});
+
+describe('a run blocked on an answered item decision that also has an interrupted privileged action is re-blocked, not continued (WR-08, FR-15)', () => {
+  const blocked = startBlocked(cleanup);
+  const { roots } = blocked.f;
+  const { runId } = blocked;
+  const resumedHost = s17Host({ question: undefined });
+  const continuable = (): boolean =>
+    withDeps(roots, (deps) => {
+      const run = deps.ledger.getRun(runId);
+      assert.ok(run.ok);
+      const result = isBlockedRunContinuable(deps, run.value);
+      assert.ok(result.ok);
+      return result.value;
+    });
+  const permissionDecisions = (): DecisionDb[] => decisionsOf(roots, runId).filter((d) => d.class === 'permission');
+
+  it('the answer makes the blocked run continuable, and a privileged start is then left open', () => {
+    withDeps(roots, (deps) => {
+      const answered = decide(deps, {
+        decisionId: blocked.decisionId,
+        answer: { key: '1' },
+        identity: { interactive: true, underRun: false, inRunTree: false, ownsProfile: true },
+        responder: 'test',
+        nowMs: deps.clock.nowMs(),
+      });
+      assert.ok(answered.ok && answered.value.kind === 'answered', JSON.stringify(answered));
+      const started = authorizeAction(deps, { scope: runId, action: SYNTHETIC, params: { step: 'wr08' }, contractAuthorization: { action: SYNTHETIC, params: { step: 'wr08' } } });
+      assert.ok(started.ok && started.value.effect === 'allow', JSON.stringify(started));
+    });
+    assert.deepEqual(runOf(roots, runId), { state: 'blocked_on_decision', reason: 'decision' });
+    assert.equal(continuable(), true);
+  });
+
+  it('resume re-blocks the run with reason enforcement_failure, opens the permission decision, and the supervisor no longer continues it', () => {
+    const resumed = resumeRunCli(roots, runId, resumedHost);
+    assert.notEqual(resumed.code, 0, 'the run is not delivered: it waits for the owner');
+    assert.deepEqual(runOf(roots, runId), { state: 'blocked_on_decision', reason: 'enforcement_failure' });
+    const open = permissionDecisions();
+    assert.equal(open.length, 1);
+    assert.equal(open[0]?.state, 'open');
+    assert.equal(continuable(), false);
+  });
+
+  it('a run already blocked with reason enforcement_failure is left as it is and opens no second decision', () => {
+    const again = resumeRunCli(roots, runId, resumedHost);
+    assert.notEqual(again.code, 0);
+    assert.deepEqual(runOf(roots, runId), { state: 'blocked_on_decision', reason: 'enforcement_failure' });
+    assert.equal(permissionDecisions().length, 1);
   });
 });
