@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-40-PLAN.md
-last_updated: "2026-11-22T20:24:11.380Z"
+stopped_at: Completed 04-41-PLAN.md
+last_updated: "2026-11-22T20:54:06.995Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 4f47742e2f9951ff6b3fbfda91c4d521cbefcd46
+state_head: 8166106264668fd421d6795d9b76ebc7473ecd7d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 2 of 55
+Plan: 3 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -203,6 +203,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P38 | not captured | 3 tasks | 15 files |
 | Phase 04 P39 | not captured | 3 tasks | 39 files |
 | Phase 04 P40 | not captured | 3 tasks | 9 files |
+| Phase 04 P41 | not captured | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -504,6 +505,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: Group C documents (containment, data-model, integrations) closed unreviewed by the owner's ruling 'close drafted' after four failed rounds; coverage.md records them as changed after review
 - [Phase 04]: 04-40: classifyShellCommand answers PrivilegedCommand, null or { unparseable } so the 17th prefix word cannot read as not privileged — No exported classifier may answer not-privileged for a command it could not read (CR-01)
 - [Phase 04]: 04-40: the attended unparseable denial records policy.denied with rule privileged:unparseable and creates no approval request; a run keeps shell-syntax — Nothing is named that the owner could approve; run-mode rule names do not change
+- [Phase 04]: 04-41: a readExclude entry with a glob character keeps the entry and entry/** forms; only a plain name also matches at any depth — dropping the /** form would stop excluding below a one-level glob such as dist/*
+- [Phase 04]: 04-41: a graph neighbour that is not a known code node counts as foreign text under every read rule, so the code node's excerpt is untrusted — the non-id-only path prints a free-text fileType or an unknown node's ID, which would otherwise reach the pack unfenced
 
 ### Roadmap Evolution
 
@@ -571,8 +574,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T20:24:05.410Z
-Stopped at: Completed 04-40-PLAN.md
+Last session: 2026-11-22T20:54:06.956Z
+Stopped at: Completed 04-41-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
