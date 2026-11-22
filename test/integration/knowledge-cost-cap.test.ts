@@ -206,9 +206,10 @@ describe('an onboarding with no cost cap left starts no knowledge invocation (WR
     try {
       const started = startOnboarding(composed.value.deps, { repoPath: f.repo.path, policy: 'onboarding', budgetOverrides: { costUsdPerInvocation: CAP_USD } });
       assert.ok(started.ok, JSON.stringify(started));
+      // The budget rows are created when the contract is stored, inside the run; a trigger overruns the cost row the moment it exists.
       const db = new DatabaseSync(join(f.roots.AVARICE_DATA_ROOT, 'state.db'));
       try {
-        db.prepare("UPDATE budgets SET used = limit_value + 1 WHERE name = 'costUsd'").run();
+        db.exec("CREATE TRIGGER overrun_cost AFTER INSERT ON budgets WHEN NEW.name = 'costUsd' BEGIN UPDATE budgets SET used = limit_value + 1 WHERE run_id = NEW.run_id AND name = 'costUsd'; END");
       } finally {
         db.close();
       }
@@ -225,10 +226,11 @@ describe('an onboarding with no cost cap left starts no knowledge invocation (WR
     const host = freshHost();
     const run = await onboardOverrun(f, host);
     assert.equal(host.calls.length, 0, 'the fake knowledge host was never called');
-    const step = stepOf(f.roots, run.onboardingId);
+    const step = stepOf(f.roots, run.onboardingId) as (KnowledgeStep & { detail?: string }) | null;
     assert.equal(step?.status, 'absent', JSON.stringify(step));
     assert.equal(step?.reason, 'budget_exhausted');
-    assert.equal(manifestExists(f.roots, run.onboardingId), false, 'no corpus manifest was written');
+    assert.equal(manifestExists(f.roots, run.onboardingId), false, 'no corpus manifest was written: with no cap left no corpus is built at all');
+    assert.match(step?.detail ?? '', /no cost cap is left/, 'the step says why');
   });
 });
 
