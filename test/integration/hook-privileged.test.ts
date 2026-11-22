@@ -4,6 +4,7 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -35,12 +36,18 @@ interface Deny {
 const parsed = (stdout: string): Deny => JSON.parse(stdout) as Deny;
 const dataOf = (row: { data_json: string }): Record<string, unknown> => JSON.parse(row.data_json) as Record<string, unknown>;
 const bash = (command: string): { tool_name: string; tool_input: { command: string } } => ({ tool_name: 'Bash', tool_input: { command } });
+// What an approval binds besides the options (plan 04-51; CR-03): the digest of the exact command text, and for an attended call the directory it runs in.
+const lineDigest = (text: string): string => `sha256:${createHash('sha256').update(text).digest('hex').slice(0, 32)}`;
 
 describe('the classification table (FR-12)', () => {
+  // The action and the parameters that name the target and the options. The bindings that tie an approval to the rest of the command (`gitOptions`, `env`, `line`; plan
+  // 04-51) are left out here and tested where they are defined, so the spellings of one push are still compared on what they push.
   const classes = (command: string): [string, Record<string, string>] | null => {
     const found = classifyLine(command);
     const first = found.kind === 'privileged' ? found.commands[0] : undefined;
-    return first === undefined ? null : [first.action, first.params];
+    if (first === undefined) return null;
+    const { line: _line, gitOptions: _gitOptions, env: _env, ...target } = first.params;
+    return [first.action, target];
   };
 
   it('names git push by its remote and refspec, whatever way the command is spelled', () => {
@@ -73,6 +80,16 @@ describe('the classification table (FR-12)', () => {
       assert.deepEqual(classes(command), expected, command);
     }
     assert.deepEqual(classes('git push\nls'), ['git.push', {}]);
+  });
+
+  it('does not expect identical params across spellings: a spelling that changes the effect changes the params (CR-03)', () => {
+    const full = (command: string): Record<string, string> => {
+      const found = classifyLine(command);
+      return found.kind === 'privileged' ? (found.commands[0]?.params as Record<string, string>) : {};
+    };
+    assert.notDeepEqual(full('git -C . push origin main'), full('git push origin main'));
+    assert.notDeepEqual(full('FOO=1 git push origin main'), full('git push origin main'));
+    assert.notDeepEqual(full('env git push origin main'), full('git push origin main'), 'the line differs');
   });
 
   it('binds the options a push changes its effect with, by name', () => {
@@ -169,7 +186,7 @@ describe('tracer: in a run, gh pr create is denied as privileged with the approv
     assert.equal(data['requestId'], requestId);
     assert.equal(data['scope'], 'run_1');
     assert.equal(data['action'], 'scm.pr.create');
-    assert.equal(data['paramsDigest'], paramsDigest({ base: 'main', options: '--title' }));
+    assert.equal(data['paramsDigest'], paramsDigest({ base: 'main', options: '--title', line: lineDigest('gh pr create --title "x" --base main') }));
     assert.equal(data['ruleId'], 'privileged:scm.pr.create');
 
     const denied = eventRows(fx, 'policy.denied');
@@ -270,7 +287,7 @@ function attendedHook(dataRoot: string | null, input: unknown, extra: readonly s
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-const attendedCall = (command: string, session = 's1'): Record<string, unknown> => ({ session_id: session, hook_event_name: 'PreToolUse', cwd: '/tmp', tool_name: 'Bash', tool_input: { command } });
+const attendedCall = (command: string, session = 's1', cwd = '/tmp'): Record<string, unknown> => ({ session_id: session, hook_event_name: 'PreToolUse', cwd, tool_name: 'Bash', tool_input: { command } });
 
 interface EventDb {
   seq: number;
@@ -324,7 +341,7 @@ describe('attended mode: a privileged form is denied until the owner approves it
     assert.equal(data['scope'], 'attended:s1');
     assert.equal(data['action'], 'git.push');
     assert.equal(data['requestId'], requestId);
-    assert.equal(data['paramsDigest'], paramsDigest({ remote: 'origin', refspec: 'main' }));
+    assert.equal(data['paramsDigest'], paramsDigest({ remote: 'origin', refspec: 'main', line: lineDigest('git push origin main'), cwd: realpathSync('/tmp') }));
     assert.equal(eventsOf(p.roots, 'policy.denied').length, 1);
     assert.equal(approvalsOf(p.roots).length, 0);
   });
@@ -611,6 +628,114 @@ describe('in a run a compound line is denied with the rule of its first privileg
     assert.equal((reason.match(/avarice approve apr_/g) ?? []).length, 1);
     assert.deepEqual(eventRows(fx, 'hook.decision').map(dataOf).map((d) => d['rule']), ['privileged:git.push']);
     assert.equal(eventRows(fx, 'approval.requested').length, 1);
+  });
+});
+
+describe('tracer: an approval is spent only on the command the owner saw, run where they saw it (CR-03, FR-12, T-04-136)', () => {
+  const p = profile();
+  const elsewhere = join(realpathSync(p.roots.base), 'elsewhere');
+  mkdirSync(elsewhere, { recursive: true });
+  const plainPush = attendedCall('git push origin main');
+  const plainPr = attendedCall('gh pr create --base main');
+  const denies = (out: Attended): boolean => out.stdout !== '' && parsed(out.stdout).hookSpecificOutput.permissionDecision === 'deny';
+
+  it('the owner approves the plain push and the plain pr create, from /tmp in session s1', async () => {
+    for (const call of [plainPush, plainPr]) await approve(p.roots, hintOf(attendedHook(p.dataRoot, call)));
+    assert.equal(approvalsOf(p.roots).length, 2);
+    assert.ok(approvalsOf(p.roots).every((a) => a.consumed_at === null));
+  });
+
+  it('each redirected form is denied with a new request and leaves both approvals unconsumed', () => {
+    const forms: Array<[string, Record<string, unknown>]> = [
+      ['a git -c option that moves the remote', attendedCall('git -c remote.origin.url=https://evil/x.git push origin main')],
+      ['a git -C option that moves the repository', attendedCall('git -C /other push origin main')],
+      ['an assignment that changes the transport', attendedCall('GIT_SSH_COMMAND=x git push origin main')],
+      ['an earlier cd', attendedCall('cd /x && git push origin main')],
+      ['an assignment that redirects gh', attendedCall('GH_REPO=evil/repo gh pr create --base main')],
+      ['the plain push from another directory', attendedCall('git push origin main', 's1', elsewhere)],
+      ['the plain pr create from another directory', attendedCall('gh pr create --base main', 's1', elsewhere)],
+    ];
+    for (const [what, call] of forms) {
+      const requests = eventsOf(p.roots, 'approval.requested').length;
+      const out = attendedHook(p.dataRoot, call);
+      assert.equal(out.code, 0, out.stderr);
+      assert.ok(denies(out), `${what} was not denied`);
+      assert.equal(eventsOf(p.roots, 'approval.requested').length, requests + 1, `${what}: no new request`);
+      assert.ok(approvalsOf(p.roots).every((a) => a.consumed_at === null), `${what} took an approval`);
+    }
+    assert.equal(eventsOf(p.roots, 'action.started').length, 0);
+  });
+
+  it('the exact approved lines from /tmp are allowed once each', () => {
+    for (const call of [plainPush, plainPr]) {
+      const allowed = attendedHook(p.dataRoot, call);
+      assert.deepEqual([allowed.code, allowed.stdout], [0, ''], allowed.stderr);
+    }
+    assert.ok(approvalsOf(p.roots).every((a) => a.consumed_at !== null));
+    assert.ok(denies(attendedHook(p.dataRoot, plainPush)), 'the push approval was spent');
+  });
+
+  it('a directory that is a symbolic link is bound as the path it resolves to', async () => {
+    const q = profile();
+    const link = join(realpathSync(q.roots.base), 'tmp-link');
+    symlinkSync(realpathSync('/tmp'), link);
+    await approve(q.roots, hintOf(attendedHook(q.dataRoot, attendedCall('git push origin main', 's1', link))));
+    const allowed = attendedHook(q.dataRoot, attendedCall('git push origin main', 's1', '/tmp'));
+    assert.deepEqual([allowed.code, allowed.stdout], [0, ''], 'the link and the directory it names are one directory');
+  });
+});
+
+describe('the approval request shows what it binds, and a value cut for display ends with an ellipsis (CR-03, FR-12 precision)', () => {
+  const p = profile();
+  const summaryOf = (call: Record<string, unknown>): { summary: string; digest: string } => {
+    attendedHook(p.dataRoot, call);
+    const rows = eventsOf(p.roots, 'approval.requested');
+    const data = dataOf(rows[rows.length - 1] as EventDb);
+    return { summary: data['paramsSummary'] as string, digest: data['paramsDigest'] as string };
+  };
+
+  it('shows gitOptions, env, the line digest and the directory', () => {
+    const { summary } = summaryOf(attendedCall('FOO=1 git -c remote.origin.url=https://evil/x.git push origin main'));
+    assert.match(summary, /gitOptions=-c remote\.origin\.url=https:\/\/evil\/x\.git/);
+    assert.match(summary, /env=FOO=1/);
+    assert.match(summary, /line=sha256:[0-9a-f]{32}/);
+    assert.ok(summary.includes(`cwd=${realpathSync('/tmp')}`), summary);
+  });
+
+  it('cuts a long value with an ellipsis for display, and the digest still binds the whole value', () => {
+    const head = `http.extraHeader=${'a'.repeat(100)}`;
+    const one = summaryOf(attendedCall(`git -c ${head}1 push origin main`));
+    const two = summaryOf(attendedCall(`git -c ${head}2 push origin main`));
+    assert.match(one.summary, /gitOptions=-c http\.extraHeader=a+…/);
+    assert.ok(!one.summary.includes(`${head}1`), 'the full value is not shown');
+    assert.notEqual(one.digest, two.digest, 'the values differ only past the cut');
+  });
+});
+
+describe('an attended call that needs a decision and has no usable directory fails closed (CR-03, FR-12)', () => {
+  const p = profile();
+  const bare = (command: string, cwd?: unknown): Record<string, unknown> => ({ session_id: 's1', hook_event_name: 'PreToolUse', ...(cwd === undefined ? {} : { cwd }), tool_name: 'Bash', tool_input: { command } });
+
+  it('exits 2 for a privileged call with no cwd, a relative cwd, a cwd that is not a string and a cwd that does not exist', () => {
+    for (const cwd of [undefined, 'relative/dir', 42, '', join(p.roots.base, 'no-such-dir')]) {
+      const out = attendedHook(p.dataRoot, bare('git push origin main', cwd));
+      assert.equal(out.code, 2, `${JSON.stringify(cwd)}: ${out.stdout}`);
+      assert.match(out.stderr, /avarice hook:.*cwd/);
+    }
+  });
+
+  it('exits 2 for an unparseable call without a usable cwd, and a file is not a directory', () => {
+    assert.equal(attendedHook(p.dataRoot, bare('echo "unterminated')).code, 2);
+    assert.equal(attendedHook(p.dataRoot, bare('echo "unterminated', 'relative')).code, 2);
+    writeFileSync(join(p.roots.base, 'a-file'), 'x');
+    assert.equal(attendedHook(p.dataRoot, bare('git push origin main', join(p.roots.base, 'a-file'))).code, 2);
+  });
+
+  it('does not need a cwd for a call that is not privileged, and records nothing for the refusals', () => {
+    const none = attendedHook(p.dataRoot, bare('ls'));
+    assert.deepEqual([none.code, none.stdout], [0, '']);
+    assert.equal(ledgerRows<{ n: number }>(p.roots, 'SELECT count(*) AS n FROM events')[0]?.n, 0);
+    assert.equal(approvalsOf(p.roots).length, 0);
   });
 });
 

