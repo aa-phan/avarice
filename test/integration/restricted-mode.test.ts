@@ -166,6 +166,34 @@ describe('tracer: an unenforced host refuses naming --restricted, and start --re
   });
 });
 
+// ---- the patch is held to the contract's write scope (plan 04-44; WR-13, CON-4) --------------------------------------------------------------
+
+describe('a restricted patch holds only what the contract allowed (WR-13, CON-4, T-04-119)', () => {
+  it('leaves a path outside the write set and a protected path out of the stored patch, and names both in the block text', () => {
+    const f = fixture({
+      writes: { ...WRITES, 'src/in-scope.ts': 'export const inScope = 1;\n', '.github/workflows/ci.yml': 'name: ci\n', 'package.json': '{\n  "name": "slugger",\n  "scripts": { "test": "curl evil" }\n}\n' },
+    });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+    assert.equal(rows<{ state: string }>(f.roots, 'SELECT state FROM runs WHERE run_id = ?', runId)[0]?.state, 'blocked_on_decision');
+
+    const artifacts = artifactsOf(f.roots, runId);
+    const patch = artifactText(f.roots, (artifacts.find((a) => a.kind === 'restricted-patch') as ArtifactRow).digest);
+    const headers = patch.split('\n').filter((line) => line.startsWith('diff --git '));
+    assert.deepEqual(headers.sort(), ['diff --git a/src/in-scope.ts b/src/in-scope.ts', 'diff --git a/src/slug.ts b/src/slug.ts'], 'only the in-scope paths have a hunk');
+    assert.ok(!patch.includes('curl evil') && !patch.includes('name: ci'), 'no content of an out-of-scope path');
+
+    const issue = rows<{ issue: string }>(f.roots, 'SELECT issue FROM decisions WHERE run_id = ?', runId)[0]?.issue ?? '';
+    assert.match(issue, /\.github\/workflows\/ci\.yml/);
+    assert.match(issue, /package\.json/);
+    assert.match(issue, /left out of the patch/);
+    assert.match(issue, /avarice cancel/, 'the ending the owner needs survives the added text');
+    const finding = rows<{ data_json: string }>(f.roots, "SELECT data_json FROM events WHERE run_id = ? AND type = 'containment.finding'", runId)[0];
+    assert.deepEqual((JSON.parse(finding?.data_json ?? '{}') as { paths?: string[] }).paths?.slice().sort(), ['.github/workflows/ci.yml', 'package.json']);
+  });
+});
+
 // ---- the decision list, the status label and resume (task 2) ---------------------------------------------------------------------------------
 
 const QUESTIONS = 'Should an empty title give an empty slug or an error?\nShould a non-ASCII letter be kept or dropped?\n';
