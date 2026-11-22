@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-44-PLAN.md
-last_updated: "2026-11-22T21:42:46.688Z"
+stopped_at: Completed 04-45-PLAN.md
+last_updated: "2026-11-22T21:51:00.213Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 7ce94c77baa2c85d0bf11b3beb7940964770ccdb
+state_head: a16d5b625826d5149ef7f2234f0bec5215737173
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 6 of 55
+Plan: 7 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -207,6 +207,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P42 | 75 min | 3 tasks | 14 files |
 | Phase 04 P43 | 7 min | 3 tasks | 11 files |
 | Phase 04 P44 | 13min | 3 tasks | 10 files |
+| Phase 04 P45 | 33 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -517,6 +518,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-43: the cmd: provider judges credential size from stdout ending in TRUNCATION_MARKER, not the combined truncated flag (WR-16) — A verbose helper stderr must not make a good credential look oversized.
 - [Phase 04]: 04-44: restricted scope check reuses the contained run's breaches rule; out-of-scope paths are excluded from the patch, named in the block text and recorded as a scope-of-writes containment.finding
 - [Phase 04]: 04-44: the restricted:outputs step is recorded twice (judged with captured false, then stored with captured true); a resume re-takes the outputs from the clone and never relaunches the host
+- [Phase 04]: 04-45: install-host's process-tree refusal is a usage-time refusal (exit 64) like its AVARICE_RUN refusal and the sibling evidence/context/pr commands; a hook entry that is not a readable regular file is refused with exit 3 before anything is written — main() maps every usage() refusal to exit 64 and an existing test pins it; the plan text said exit 3 for the tree refusal
+- [Phase 04]: 04-45: doctor reads attended entries through the diagnostics port (attendedCommands) and checks files via doctor-deps using attendedEntryPaths, which lives beside attendedHookEntry; any command not in the written form yields no finding — keeps src/app free of adapter imports; writer and reader cannot drift
 
 ### Roadmap Evolution
 
@@ -584,8 +587,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:42:40.461Z
-Stopped at: Completed 04-44-PLAN.md
+Last session: 2026-11-22T21:51:00.160Z
+Stopped at: Completed 04-45-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
