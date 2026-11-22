@@ -105,20 +105,30 @@ describe('classifyLine says none for lines that only mention a push (CR-02)', ()
   });
 });
 
-it('reads a line of 65,536 quotes, parentheses and dollar signs in under 200 ms', () => {
-  const unit = '"($)"\'$()\'';
-  const line = unit.repeat(Math.ceil(65_536 / unit.length)).slice(0, 65_536);
-  assert.equal(line.length, 65_536);
-  const started = performance.now();
-  const found = classifyLine(line);
-  const ms = performance.now() - started;
-  assert.ok(ms < 200, `took ${ms.toFixed(1)} ms`);
-  assert.notEqual(found.kind, 'privileged');
+describe('reads a line of 65,536 characters made of quotes, parentheses and dollar signs in under 200 ms (CR-01)', () => {
+  const lineOf = (unit: string): string => unit.repeat(Math.ceil(65_536 / unit.length)).slice(0, 65_536);
+  // The first holds a quoted `)` inside a substitution and an arithmetic expansion in every repetition and scans to the end; the others end in a refusal or a tolerant body.
+  const adversarial: ReadonlyArray<readonly [string, string]> = [
+    ['balanced substitutions and groups', lineOf('echo "$(echo \')\')" \'(\' $((1)) ; ')],
+    ['unclosed quotes and parentheses', lineOf('"($)"\'$()\'')],
+    ['backquotes inside backquotes', lineOf('`echo \\`x\\`` ')],
+    ['a here-document body of quotes and substitutions', `cat <<A\n${lineOf('\'"$(`\n').slice(0, 65_536 - 'cat <<A\n'.length)}`],
+  ];
+  for (const [what, line] of adversarial) {
+    it(what, () => {
+      assert.equal(line.length, 65_536);
+      const started = performance.now();
+      const found = classifyLine(line);
+      const ms = performance.now() - started;
+      assert.ok(ms < 200, `took ${ms.toFixed(1)} ms`);
+      assert.notEqual(found.kind, 'privileged');
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------------------------------------
 // The differential oracle (T-04-106): bash itself, and zsh where it is installed, run each line with stub git, gh and npm; every privileged invocation the shell
-// performs is one classifyLine returned. `runs` is how many privileged invocations bash performs, so a stub that fails to run cannot make the test pass by doing nothing.
+// performs is one classifyLine returned. `runs` is how many privileged invocations bash performs at least, so a stub that fails to run cannot make the test pass by doing nothing.
 // ---------------------------------------------------------------------------------------------------------
 
 interface CorpusLine {
@@ -206,7 +216,8 @@ describe('the differential oracle: every privileged command a shell runs on the 
         const performed = runUnderShell(shell, line)
           .map((argv) => classifyShellCommand(argv))
           .filter((found) => found !== null);
-        if (shell === 'bash') assert.equal(performed.length, runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
+        // bash expands a redirection target twice when the redirection fails, so a line may run a command more often than it names it: at least `runs`, and none for a line that only mentions one.
+        if (shell === 'bash') assert.ok(runs === 0 ? performed.length === 0 : performed.length >= runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
         const found = classifyLine(line);
         const commands = found.kind === 'privileged' ? found.commands : [];
         for (const one of performed) {

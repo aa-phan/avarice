@@ -39,137 +39,361 @@ const formOf = (program: CommandForm['program'], words: readonly string[]): Comm
   PRIVILEGED_COMMAND_FORMS.find((form) => form.program === program && form.words.length === words.length && form.words.every((w, i) => words[i] === w));
 
 // ---------------------------------------------------------------------------------------------------------
-// Splitting a command line into the commands it holds
+// Scanning a command line for the commands it holds
 // ---------------------------------------------------------------------------------------------------------
+//
+// One recursive scanner reads the text once per nesting level, as the shell reads it (plan 04-40; CR-01, CR-02, WR-01, T-04-105, T-04-106). It follows the
+// shell's own rules: single quotes are literal; double quotes honour a backslash before a quote, backslash, dollar or backtick and hold substitutions; `$'...'` is a word
+// with backslash escapes; a backslash outside quotes makes the next character literal and a backslash-newline is removed; `#` at the start of a word starts a comment;
+// `$(`, `$((`, backticks and `<(` `>(` are scanned by this same scanner, inside or outside double quotes, so a quoted `)` never ends a substitution; a redirection and
+// its target are no words of the command, and a here-document body is read after the line that names it. A limit passed, or a quote, substitution or backtick left
+// open outside a here-document body, ends the scan with a reason: such a line is unparseable, never "no commands".
 
 const MAX_COMMAND_CHARS = 65_536;
 const MAX_NESTING = 8;
 
-// The index of the `)` that closes a `$(` opened just before `from`, or the end of the text for one that never closes. Single-quoted spans are skipped.
-function closingParen(text: string, from: number): number {
-  let depth = 1;
-  for (let i = from; i < text.length; i += 1) {
-    const c = text[i] as string;
-    if (c === "'") {
-      const end = text.indexOf("'", i + 1);
-      if (end === -1) return text.length;
-      i = end;
-    } else if (c === '\\') {
+type Terminator = 'top' | ')' | '`' | '\\`';
+
+interface Scan {
+  text: string;
+  out: string[][];
+  failure: string | undefined;
+}
+
+interface Pending {
+  delimiter: string;
+  stripTabs: boolean;
+  quoted: boolean;
+}
+
+interface Word {
+  text: string;
+  started: boolean;
+  quoted: boolean;
+  pos: number;
+}
+
+const fail = (scan: Scan, reason: string): void => {
+  scan.failure ??= reason;
+};
+
+// What ends a word outside quotes: a blank, a command separator, a parenthesis or a redirection.
+const WORD_STOP = ' \t;&|\n\r()<>';
+
+const ANSI_SIMPLE: Readonly<Record<string, string>> = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+
+// The text of a `$'...'` word with its backslash escapes decoded, so `$'\x67it'` is the word git.
+function decodeAnsiC(body: string): string {
+  let out = '';
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i] as string;
+    const next = body[i + 1];
+    if (ch !== '\\' || next === undefined) {
+      out += ch;
+    } else if (Object.hasOwn(ANSI_SIMPLE, next)) {
+      out += ANSI_SIMPLE[next] ?? '';
       i += 1;
-    } else if (c === '(') {
-      depth += 1;
-    } else if (c === ')') {
-      depth -= 1;
-      if (depth === 0) return i;
+    } else if (next === 'x' && /^[0-9a-fA-F]{1,2}/.test(body.slice(i + 2, i + 4))) {
+      const digits = (/^[0-9a-fA-F]{1,2}/.exec(body.slice(i + 2, i + 4)) as RegExpExecArray)[0];
+      out += String.fromCharCode(parseInt(digits, 16));
+      i += 1 + digits.length;
+    } else if (next >= '0' && next <= '7') {
+      const digits = (/^[0-7]{1,3}/.exec(body.slice(i + 1, i + 4)) as RegExpExecArray)[0];
+      out += String.fromCharCode(parseInt(digits, 8) & 0xff);
+      i += digits.length;
+    } else if ((next === 'u' || next === 'U') && /^[0-9a-fA-F]{1,8}/.test(body.slice(i + 2, i + 10))) {
+      const digits = (/^[0-9a-fA-F]{1,8}/.exec(body.slice(i + 2, i + (next === 'u' ? 6 : 10))) as RegExpExecArray)[0];
+      const code = parseInt(digits, 16);
+      out += code <= 0x10ffff ? String.fromCodePoint(code) : '';
+      i += 1 + digits.length;
+    } else {
+      out += ch;
     }
   }
-  return text.length;
+  return out;
 }
 
-function closingBacktick(text: string, from: number): number {
-  for (let i = from; i < text.length; i += 1) {
-    if (text[i] === '\\') i += 1;
-    else if (text[i] === '`') return i;
+// A substitution opened just before `pos`: the position after its terminator. An unterminated one is a failure outside a here-document body, and runs to the end inside one.
+function scanSubstitution(scan: Scan, pos: number, end: number, depth: number, term: Terminator, tolerant: boolean): number {
+  const next = scanCommands(scan, pos, end, depth + 1, term, tolerant);
+  if (scan.failure !== undefined) return end;
+  if (next >= 0) return next;
+  if (!tolerant) fail(scan, term === ')' ? 'a command substitution is not closed' : 'a backquote is not closed');
+  return end;
+}
+
+interface Quoted {
+  text: string;
+  pos: number;
+  closed: boolean;
+}
+
+// The inside of a double-quoted string that opens just before `pos`.
+function readDouble(scan: Scan, pos: number, end: number, depth: number, tolerant: boolean, term: Terminator): Quoted {
+  const t = scan.text;
+  let text = '';
+  while (pos < end && scan.failure === undefined) {
+    const ch = t[pos] as string;
+    if (ch === '"') return { text, pos: pos + 1, closed: true };
+    if (ch === '\\') {
+      const next = pos + 1 < end ? t[pos + 1] : undefined;
+      if (next === undefined) {
+        text += '\\';
+        pos += 1;
+      } else if (next === '\n') {
+        pos += 2;
+      } else if (next === '"' || next === '\\' || next === '$' || next === '`') {
+        text += next;
+        pos += 2;
+      } else {
+        text += '\\';
+        pos += 1;
+      }
+    } else if (ch === '$' && t[pos + 1] === '(' && pos + 1 < end) {
+      pos = scanSubstitution(scan, pos + 2, end, depth, ')', tolerant);
+      text += '$';
+    } else if (ch === '`') {
+      if (term === '`') break;
+      pos = scanSubstitution(scan, pos + 1, end, depth, '`', tolerant);
+      text += '$';
+    } else {
+      text += ch;
+      pos += 1;
+    }
   }
-  return text.length;
+  return { text, pos, closed: false };
 }
 
-const isSpace = (c: string): boolean => c === ' ' || c === '\t';
-const SEPARATORS = ';&|\n\r()';
+// One word: quotes removed, a backslash making the next character literal, substitutions scanned for commands (and standing for `$`). A process substitution at the start
+// is a word of its own.
+function readWord(scan: Scan, pos: number, end: number, depth: number, tolerant: boolean, term: Terminator): Word {
+  const t = scan.text;
+  if ((t[pos] === '<' || t[pos] === '>') && t[pos + 1] === '(') {
+    const after = scanSubstitution(scan, pos + 2, end, depth, ')', tolerant);
+    return { text: `${t[pos]}(`, started: true, quoted: false, pos: after };
+  }
+  let text = '';
+  let started = false;
+  let quoted = false;
+  while (pos < end && scan.failure === undefined) {
+    const ch = t[pos] as string;
+    if (WORD_STOP.includes(ch)) break;
+    if (ch === '\\') {
+      const next = pos + 1 < end ? t[pos + 1] : undefined;
+      if (term === '\\`' && next === '`') break;
+      if (next === undefined) {
+        text += '\\';
+        started = true;
+        pos += 1;
+      } else if (next === '\n') {
+        pos += 2;
+      } else if (term === '`' && next === '`') {
+        pos = scanSubstitution(scan, pos + 2, end, depth, '\\`', tolerant);
+        text += '$';
+        started = true;
+      } else if (term === '\\`' && next === '\\' && t[pos + 2] === '`') {
+        fail(scan, 'backquotes are nested more than two deep');
+      } else {
+        text += next;
+        started = true;
+        quoted = true;
+        pos += 2;
+      }
+    } else if (ch === "'") {
+      const close = t.indexOf("'", pos + 1);
+      if (close === -1 || close >= end) {
+        if (!tolerant) {
+          fail(scan, 'a single quote is not closed');
+          break;
+        }
+        text += "'";
+        started = true;
+        pos += 1;
+      } else {
+        text += t.slice(pos + 1, close);
+        started = true;
+        quoted = true;
+        pos = close + 1;
+      }
+    } else if (ch === '"') {
+      const inside = readDouble(scan, pos + 1, end, depth, tolerant, term);
+      if (scan.failure !== undefined) break;
+      if (inside.closed) {
+        text += inside.text;
+        started = true;
+        quoted = true;
+        pos = inside.pos;
+      } else if (tolerant) {
+        text += '"';
+        started = true;
+        pos += 1;
+      } else {
+        fail(scan, 'a double quote is not closed');
+        break;
+      }
+    } else if (ch === '$') {
+      const next = pos + 1 < end ? t[pos + 1] : undefined;
+      if (next === "'") {
+        let close = pos + 2;
+        while (close < end && t[close] !== "'") close += t[close] === '\\' ? 2 : 1;
+        if (close >= end) {
+          if (!tolerant) {
+            fail(scan, "a $'...' string is not closed");
+            break;
+          }
+          text += '$';
+          started = true;
+          pos += 1;
+        } else {
+          text += decodeAnsiC(t.slice(pos + 2, close));
+          started = true;
+          quoted = true;
+          pos = close + 1;
+        }
+      } else if (next === '"') {
+        pos += 1;
+      } else if (next === '(') {
+        pos = scanSubstitution(scan, pos + 2, end, depth, ')', tolerant);
+        text += '$';
+        started = true;
+      } else {
+        text += '$';
+        started = true;
+        pos += 1;
+      }
+    } else if (ch === '`') {
+      if (term === '`') break;
+      pos = scanSubstitution(scan, pos + 1, end, depth, '`', tolerant);
+      text += '$';
+      started = true;
+    } else {
+      text += ch;
+      started = true;
+      pos += 1;
+    }
+  }
+  return { text, started, quoted, pos };
+}
 
-// Every command of the line as its words, the commands inside substitutions included. Quotes are removed, a backslash makes the next character literal, a
-// redirection and its target are dropped. The text is not expanded: `$x` is a word.
-function splitInto(text: string, out: string[][], depth: number, failure: { reason?: string }): void {
+// Text that a here-document without a quoted delimiter expands: only backslashes, `$(...)` and backticks matter; quotes are ordinary characters.
+function scanExpansions(scan: Scan, pos: number, end: number, depth: number): void {
+  const t = scan.text;
+  while (pos < end && scan.failure === undefined) {
+    const ch = t[pos] as string;
+    if (ch === '\\') pos += 2;
+    else if (ch === '$' && t[pos + 1] === '(' && pos + 1 < end) pos = scanSubstitution(scan, pos + 2, end, depth, ')', true);
+    else if (ch === '`') pos = scanSubstitution(scan, pos + 1, end, depth, '`', true);
+    else pos += 1;
+  }
+}
+
+// The here-document bodies that begin after the newline just before `pos`, each running to the line that equals its delimiter or to `end`. A body is classified as commands,
+// read tolerantly (it may be fed to an interpreter), and, when its delimiter is not quoted, also for the substitutions the shell would expand in it. Returns the position
+// after the last delimiter line.
+function readBodies(scan: Scan, pos: number, end: number, depth: number, pending: Pending[]): number {
+  const t = scan.text;
+  for (const here of pending) {
+    const bodyStart = pos;
+    let bodyEnd = end;
+    while (pos < end) {
+      const newline = t.indexOf('\n', pos);
+      const lineEnd = newline === -1 || newline >= end ? end : newline;
+      const line = t.slice(pos, lineEnd);
+      const next = lineEnd < end ? lineEnd + 1 : end;
+      if ((here.stripTabs ? line.replace(/^\t+/, '') : line) === here.delimiter) {
+        bodyEnd = pos;
+        pos = next;
+        break;
+      }
+      pos = next;
+    }
+    scanCommands(scan, bodyStart, bodyEnd, depth + 1, 'top', true);
+    if (!here.quoted) scanExpansions(scan, bodyStart, bodyEnd, depth + 1);
+  }
+  return pos;
+}
+
+const REDIRECTIONS: readonly string[] = ['<<<', '<<-', '<<', '<&', '<>', '<', '>>', '>&', '>|', '>', '&>>', '&>'];
+
+// Commands of the text between `pos` and `end`, appended to scan.out. Returns the position after the terminator, or -1 when the text ended before it.
+function scanCommands(scan: Scan, pos: number, end: number, depth: number, term: Terminator, tolerant: boolean): number {
   if (depth > MAX_NESTING) {
-    failure.reason ??= `more than ${MAX_NESTING} nested command substitutions`;
-    return;
+    fail(scan, `more than ${MAX_NESTING} nested command substitutions`);
+    return end;
   }
+  const t = scan.text;
   let words: string[] = [];
-  let word = '';
-  let inWord = false;
-  const flush = (): void => {
-    if (inWord) words.push(word);
-    word = '';
-    inWord = false;
-  };
+  let groups = 0;
+  const pending: Pending[] = [];
   const endCommand = (): void => {
-    flush();
-    if (words.length > 0) out.push(words);
+    if (words.length > 0) scan.out.push(words);
     words = [];
   };
-  let i = 0;
-  while (i < text.length) {
-    const c = text[i] as string;
-    if (c === '\\') {
-      const next = text[i + 1];
-      if (next === undefined) break;
-      if (next !== '\n') {
-        word += next;
-        inWord = true;
-      }
-      i += 2;
-    } else if (c === "'") {
-      const end = text.indexOf("'", i + 1);
-      word += text.slice(i + 1, end === -1 ? text.length : end);
-      inWord = true;
-      i = end === -1 ? text.length : end + 1;
-    } else if (c === '"') {
-      inWord = true;
-      i += 1;
-      while (i < text.length && text[i] !== '"') {
-        const d = text[i] as string;
-        if (d === '\\') {
-          word += text[i + 1] ?? '';
-          i += 2;
-        } else if (d === '$' && text[i + 1] === '(') {
-          const end = closingParen(text, i + 2);
-          splitInto(text.slice(i + 2, end), out, depth + 1, failure);
-          i = end + 1;
-        } else if (d === '`') {
-          const end = closingBacktick(text, i + 1);
-          splitInto(text.slice(i + 1, end), out, depth + 1, failure);
-          i = end + 1;
-        } else {
-          word += d;
-          i += 1;
-        }
-      }
-      i += 1;
-    } else if (c === '$' && text[i + 1] === '(') {
-      const end = closingParen(text, i + 2);
-      splitInto(text.slice(i + 2, end), out, depth + 1, failure);
-      word += '$';
-      inWord = true;
-      i = end + 1;
-    } else if (c === '`') {
-      const end = closingBacktick(text, i + 1);
-      splitInto(text.slice(i + 1, end), out, depth + 1, failure);
-      inWord = true;
-      i = end + 1;
-    } else if (isSpace(c)) {
-      flush();
-      i += 1;
-    } else if (SEPARATORS.includes(c)) {
+  // A redirection operator at `pos` and its target, which is read as a word (substitutions in it are classified) and is no word of the command.
+  const redirect = (at: number): number => {
+    const operator = REDIRECTIONS.find((op) => t.startsWith(op, at)) as string;
+    let p = at + operator.length;
+    while (p < end && (t[p] === ' ' || t[p] === '\t')) p += 1;
+    if (p >= end || ';&|\n\r()'.includes(t[p] as string)) return p;
+    const target = readWord(scan, p, end, depth, tolerant, term);
+    if (operator === '<<' || operator === '<<-') pending.push({ delimiter: target.text, stripTabs: operator === '<<-', quoted: target.quoted });
+    return Math.max(target.pos, p + 1);
+  };
+  while (pos < end && scan.failure === undefined) {
+    const ch = t[pos] as string;
+    if (ch === ' ' || ch === '\t') {
+      pos += 1;
+    } else if (term === '\\`' && ch === '\\' && t[pos + 1] === '`') {
       endCommand();
-      i += 1;
-    } else if (c === '<' || c === '>') {
-      // A redirection: the file descriptor before it, the operator and its target are no words of the command.
-      if (inWord && /^[0-9]+$/.test(word)) {
-        word = '';
-        inWord = false;
+      return pos + 2;
+    } else if (term === '`' && ch === '`') {
+      endCommand();
+      return pos + 1;
+    } else if (ch === '\\' && t[pos + 1] === '\n') {
+      pos += 2;
+    } else if (ch === '#') {
+      while (pos < end && t[pos] !== '\n') pos += 1;
+    } else if (ch === '\n' || ch === '\r') {
+      endCommand();
+      pos += 1;
+      if (ch === '\n' && pending.length > 0) pos = readBodies(scan, pos, end, depth, pending.splice(0));
+    } else if (ch === ';' || ch === '|') {
+      endCommand();
+      pos += 1;
+    } else if (ch === '&') {
+      if (t[pos + 1] === '>') {
+        pos = redirect(pos);
       } else {
-        flush();
+        endCommand();
+        pos += 1;
       }
-      while (i < text.length && '<>&|'.includes(text[i] as string)) i += 1;
-      while (i < text.length && isSpace(text[i] as string)) i += 1;
-      while (i < text.length && !isSpace(text[i] as string) && !SEPARATORS.includes(text[i] as string)) i += 1;
+    } else if (ch === '(') {
+      endCommand();
+      groups += 1;
+      pos += 1;
+    } else if (ch === ')') {
+      endCommand();
+      if (groups > 0) {
+        groups -= 1;
+        pos += 1;
+      } else if (term === ')') {
+        return pos + 1;
+      } else {
+        pos += 1;
+      }
+    } else if ((ch === '<' || ch === '>') && t[pos + 1] !== '(') {
+      pos = redirect(pos);
     } else {
-      word += c;
-      inWord = true;
-      i += 1;
+      const word = readWord(scan, pos, end, depth, tolerant, term);
+      const next = word.pos < end ? t[word.pos] : undefined;
+      // `2>&1`: a number touching a redirection operator is the file descriptor, no word of the command.
+      const descriptor = word.started && !word.quoted && /^[0-9]+$/.test(word.text) && (next === '<' || next === '>');
+      if (word.started && !descriptor) words.push(word.text);
+      pos = Math.max(word.pos, pos + 1);
     }
   }
   endCommand();
+  return term === 'top' ? end : -1;
 }
 
 // The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands.
@@ -177,10 +401,9 @@ export type Commands = { ok: true; commands: string[][] } | { ok: false; reason:
 
 export function commandsOf(command: string): Commands {
   if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
-  const out: string[][] = [];
-  const failure: { reason?: string } = {};
-  splitInto(command, out, 0, failure);
-  return failure.reason === undefined ? { ok: true, commands: out } : { ok: false, reason: failure.reason };
+  const scan: Scan = { text: command, out: [], failure: undefined };
+  scanCommands(scan, 0, command.length, 0, 'top', false);
+  return scan.failure === undefined ? { ok: true, commands: scan.out } : { ok: false, reason: scan.failure };
 }
 
 // ---------------------------------------------------------------------------------------------------------
