@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-41-PLAN.md
-last_updated: "2026-11-22T20:54:06.995Z"
+stopped_at: Completed 04-42-PLAN.md
+last_updated: "2026-11-22T21:21:24.961Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 8166106264668fd421d6795d9b76ebc7473ecd7d
+state_head: 258b9295b0028a774769b10f23fef25a1bc32914
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 3 of 55
+Plan: 4 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -204,6 +204,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P39 | not captured | 3 tasks | 39 files |
 | Phase 04 P40 | not captured | 3 tasks | 9 files |
 | Phase 04 P41 | not captured | 3 tasks | 12 files |
+| Phase 04 P42 | 75 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -507,6 +508,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-40: the attended unparseable denial records policy.denied with rule privileged:unparseable and creates no approval request; a run keeps shell-syntax — Nothing is named that the owner could approve; run-mode rule names do not change
 - [Phase 04]: 04-41: a readExclude entry with a glob character keeps the entry and entry/** forms; only a plain name also matches at any depth — dropping the /** form would stop excluding below a one-level glob such as dist/*
 - [Phase 04]: 04-41: a graph neighbour that is not a known code node counts as foreign text under every read rule, so the code node's excerpt is untrusted — the non-id-only path prints a free-text fileType or an unknown node's ID, which would otherwise reach the pack unfenced
+- [Phase 04]: 04-42: the no-replay rule lives in the approval gate: authorizeAction denies interrupted-action-open for a second start with an open earlier start of the same action and parameter digest; action.finished names its start by startSeq (optional, legacy ends close the earliest open start)
+- [Phase 04]: 04-42: a blocked run with an interrupted privileged action is paused and re-blocked with enforcement_failure; an unreapable started onboarding launch and a damaged paths mapping plan stop with typed errors (internal, invalid mapping:plan) instead of continuing or widening
 
 ### Roadmap Evolution
 
@@ -574,8 +577,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-22T20:54:06.956Z
-Stopped at: Completed 04-41-PLAN.md
+Last session: 2026-11-22T21:21:24.920Z
+Stopped at: Completed 04-42-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
