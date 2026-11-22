@@ -557,6 +557,23 @@ describe('subagents, web, meta and unknown tools', () => {
   });
 });
 
+describe('a file read under a run retrieval policy charges the whole-file rows (WR-11, CON-10, CON-11)', () => {
+  const retrieval = { searches: 400, broadDiscovery: false };
+
+  it('returns toolCalls as the budget and the two whole-file rows as alsoCharges, in that order', () => {
+    const d = decide(read(`${STAGING}/src/a.ts`), policy({ purpose: 'run', retrieval }));
+    assert.equal(d.decision, 'allow');
+    assert.equal(d.budget, 'toolCalls');
+    assert.deepEqual(d.alsoCharges, ['retrieval.fullReads', 'retrieval.fullReadBytes']);
+  });
+
+  it('charges no further row when the policy has no retrieval block', () => {
+    const d = decide(read(`${STAGING}/src/a.ts`), policy({ purpose: 'run' }));
+    assert.equal(d.decision, 'allow');
+    assert.equal(d.alsoCharges, undefined);
+  });
+});
+
 describe('normalizeToolCall and parseHookPolicy', () => {
   it('maps Claude tool names to normalized calls and resolves relative paths against cwd', () => {
     assert.deepEqual(normalizeToolCall('Write', { file_path: '/a/b' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'Write', paths: ['/a/b'] } });

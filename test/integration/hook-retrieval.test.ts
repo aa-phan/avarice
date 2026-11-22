@@ -4,7 +4,7 @@
 // allowed once. No model is called.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { writeHookPolicy } from '../../src/adapters/host-claude/hook-policy.ts';
@@ -12,6 +12,7 @@ import type { HookPolicy } from '../../src/domain/hook-decision.ts';
 import { computeInvocationScope, computeRunScope } from '../../src/domain/invocation-scope.ts';
 import type { RunScopeInput } from '../../src/domain/invocation-scope.ts';
 import { compileOnboardingContract } from '../../src/domain/onboarding-contract.ts';
+import { RETRIEVAL_CAPS } from '../../src/domain/retrieval-rules.ts';
 import { budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook, runHookAsync } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 
@@ -19,7 +20,7 @@ const fixtures: HookFixture[] = [];
 const retrievalFixture = (searches: number, broadDiscovery: boolean, extra: Parameters<typeof makeHookFixture>[0] = {}): HookFixture => {
   const fx = makeHookFixture({
     ...extra,
-    limits: { 'retrieval.searches': searches, 'retrieval.broadDiscovery': broadDiscovery ? 1 : 0, ...extra.limits },
+    limits: { 'retrieval.searches': searches, 'retrieval.broadDiscovery': broadDiscovery ? 1 : 0, 'retrieval.fullReads': RETRIEVAL_CAPS.fullReads, 'retrieval.fullReadBytes': RETRIEVAL_CAPS.fullReadBytes, ...extra.limits },
     policy: { purpose: 'run', retrieval: { searches, broadDiscovery }, ...extra.policy },
   });
   fixtures.push(fx);
@@ -82,6 +83,39 @@ describe('tracer: a run Grep is charged to retrieval.searches and denied once th
     assert.equal(result.code, 2);
     assert.match(result.stderr, /no retrieval\.searches budget/);
     assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+  });
+});
+
+// A file of `size` bytes under the clone, and the Read call that names it.
+function fileOf(fx: HookFixture, name: string, size: number): string {
+  const path = join(fx.staging, 'src', name);
+  mkdirSync(join(fx.staging, 'src'), { recursive: true });
+  writeFileSync(path, 'a'.repeat(size));
+  return path;
+}
+const readOf = (file_path: string, extra: Record<string, unknown> = {}) => ({ tool_name: 'Read', tool_input: { file_path, ...extra } });
+
+describe('tracer: a run Read is charged to the whole-file rows and the 21st is refused (WR-11, CON-10, CON-11, D-09)', () => {
+  it('allows twenty Reads of a 10-byte file and denies the 21st with budget:retrieval.fullReads; the rows end at 20, 200 and 20 tool calls', () => {
+    const fx = retrievalFixture(3, false);
+    const ten = fileOf(fx, 'ten.txt', 10);
+    for (let n = 0; n < 20; n += 1) assert.equal(outcome(runHook(fx, 'pre', readOf(ten)).stdout), 'allowed', `read ${n + 1}`);
+    const last = runHook(fx, 'pre', readOf(ten));
+    assert.equal(last.code, 0, last.stderr);
+    assert.equal(outcome(last.stdout), 'budget:retrieval.fullReads');
+    assert.equal(budgetUsed(fx, 'retrieval.fullReads'), 20);
+    assert.equal(budgetUsed(fx, 'retrieval.fullReadBytes'), 200);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 20, 'a refused read charges nothing, not even a tool call');
+    assert.deepEqual(decisions(fx).at(-1), { onboardingId: 'onb_1', invocationId: 'inv_1', tool: 'Read', decision: 'deny', rule: 'budget:retrieval.fullReads', budget: 'retrieval.fullReads' });
+    assert.ok(chainIsIntact(fx.ledgerPath));
+  });
+
+  it('records the allowed Read as charging toolCalls with retrieval.fullReads and retrieval.fullReadBytes alongside', () => {
+    const fx = retrievalFixture(3, false);
+    assert.equal(outcome(runHook(fx, 'pre', readOf(fileOf(fx, 'ten.txt', 10))).stdout), 'allowed');
+    const allowed = eventRows(fx, 'hook.decision').map((r) => JSON.parse(r.data_json) as Record<string, unknown>).at(-1);
+    assert.equal(allowed?.['budget'], 'toolCalls');
+    assert.deepEqual(allowed?.['alsoCharged'], ['retrieval.fullReads', 'retrieval.fullReadBytes']);
   });
 });
 
