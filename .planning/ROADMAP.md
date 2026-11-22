@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 54 plans in 24 waves: 39 executed in waves 1-18, and 15 gap-closure plans (04-40 to 04-54) in waves 19-24 from 04-VERIFICATION.md (one branch, one PR, D-01)
+**Plans**: 54 plans in 25 waves: 39 executed in waves 1-18, and 15 gap-closure plans (04-40 to 04-54) in waves 19-25 from 04-VERIFICATION.md (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -154,18 +154,20 @@ Plans:
 **Wave 20** *(blocked on Wave 19 completion)*
 - [ ] 04-48-PLAN.md — One approval per privileged command on a line (CR-04)
 - [ ] 04-49-PLAN.md — Broad-discovery and knowledge cost caps fail closed (WR-05, WR-06)
-- [ ] 04-50-PLAN.md — AC-8: owner decision on the token bound (checkpoint), then the chosen branch
 
 **Wave 21** *(blocked on Wave 20 completion)*
 - [ ] 04-51-PLAN.md — Approvals bind what changes a command's effect; classifier coverage; SEC-6 row (CR-03, WR-01, WR-03, WR-04)
 
-**Wave 22** *(blocked on Wave 21 completion)*
-- [ ] 04-52-PLAN.md — Review triage recorded: dispositions for CR-01 to CR-05 and the 42 warnings
+**Wave 22** *(blocked on Wave 21 completion; after the SC3 chain so no SC3 plan waits on the owner)*
+- [ ] 04-50-PLAN.md — AC-8: owner decision on the token bound (checkpoint), then the chosen branch
 
 **Wave 23** *(blocked on Wave 22 completion)*
-- [ ] 04-53-PLAN.md — Documentation: docs/system updated for the gap plans
+- [ ] 04-52-PLAN.md — Review triage recorded: dispositions for CR-01 to CR-05 and the 42 warnings
 
 **Wave 24** *(blocked on Wave 23 completion)*
+- [ ] 04-53-PLAN.md — Documentation: docs/system updated for the gap plans
+
+**Wave 25** *(blocked on Wave 24 completion)*
 - [ ] 04-54-PLAN.md — Documentation: findings, README tables, coverage, fresh reviews
 
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
