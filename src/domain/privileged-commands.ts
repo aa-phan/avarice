@@ -749,6 +749,35 @@ function classifyGit(args: readonly string[]): PrivilegedCommand | null {
   return { action: form.action, params };
 }
 
+// Why a gh api request cannot be approved when its body is not on the line: the line digest binds only the words the owner saw, and a file or standard input is not one.
+const BODY_FROM_FILE = 'the request body comes from a file or standard input, which an approval cannot bind; pass the fields inline with -f name=value or -F name=value';
+
+// Whether a `gh api` request takes its body from a file or standard input: `--input`, or a `-F`/`--field` value (`name=@file`, `name=@-`) that starts with @. A raw `-f` value
+// starting with @ is a literal string. The values of the other options are skipped, so a header that mentions `-F` is no field.
+function ghApiBodyFromFile(args: readonly string[], spec: ArgSpec): boolean {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') break;
+    if (arg === '--input' || arg.startsWith('--input=')) return true;
+    let field: string | undefined;
+    if (arg === '-F' || arg === '--field') {
+      field = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--field=')) {
+      field = arg.slice('--field='.length);
+    } else if (arg.startsWith('-F') && !arg.startsWith('--')) {
+      field = arg.slice(2);
+    } else if (Object.hasOwn(spec.valued, arg)) {
+      i += 1;
+    }
+    if (field !== undefined) {
+      const eq = field.indexOf('=');
+      if (eq !== -1 && field.slice(eq + 1).startsWith('@')) return true;
+    }
+  }
+  return false;
+}
+
 function classifyGh(args: readonly string[]): PrivilegedCommand | null {
   const key = args[0] === 'api' ? 'api' : `${args[0] ?? ''} ${args[1] ?? ''}`;
   const spec = GH_FORMS[key];
@@ -760,6 +789,7 @@ function classifyGh(args: readonly string[]): PrivilegedCommand | null {
     const method = given ?? (GH_API_FIELD_OPTIONS.some((option) => parsed.seen.has(option)) ? 'POST' : 'GET');
     if (method === 'GET') return null;
     parsed.values['method'] = method;
+    if (ghApiBodyFromFile(args.slice(1), spec)) return { action: form.action, params: paramsOf(parsed, spec), unapprovable: BODY_FROM_FILE };
   }
   return { action: form.action, params: paramsOf(parsed, spec) };
 }

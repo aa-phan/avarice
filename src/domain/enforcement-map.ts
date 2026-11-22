@@ -91,9 +91,11 @@ export const ENFORCEMENT_MAP: readonly EnforcementRow[] = [
     id: 'privileged-approval',
     control: 'Privileged-command approval in the host',
     enforcer: 'host',
-    avariceRole: 'Evaluates policy in the PreToolUse hook the host runs',
-    bypassLimitation: 'Commands outside the host, obfuscated shell, or a removed hook are not seen',
-    test: proved('04-19'),
+    avariceRole:
+      "The PreToolUse hook the host runs classifies every command of a Bash call and consumes one approval per privileged command, bound to the command's parameters, the exact line and the directory it runs in; a command no approval can bind (a gh api body read from a file or standard input) is denied with no request",
+    bypassLimitation:
+      "Covers only these forms: git push, gh pr create, gh pr merge, gh pr edit, gh release create, gh api with a method other than GET, and npm publish; every other command, including the other gh and git forms, is not seen. An approval does not bind names built at run time (variables, aliases, functions, scripts, a shell started on a computed string, text piped into a shell), or repository and shell state changed by an earlier separate call (a remote's URL, git config, an exported variable); the SCM platform's own protections are authoritative there. A removed hook is caught by the launch preflight, not by the hook, and commands outside the host are not seen",
+    test: tracked('test/integration/hook-privileged.test.ts'),
   },
   {
     id: 'approval-single-use',

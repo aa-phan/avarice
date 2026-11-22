@@ -807,12 +807,14 @@ describe('a gh api body that comes from a file or standard input is refused, not
   it('a line with one unapprovable command and one approvable command consumes nothing and is denied as unapprovable', async () => {
     const q = profile();
     await approve(q.roots, hintOf(attendedHook(q.dataRoot, attendedCall('git push origin main'))));
+    const deniedBefore = eventsOf(q.roots, 'policy.denied').length;
     const out = attendedHook(q.dataRoot, attendedCall('git push origin main && gh api repos/o/r/issues --input body.json'));
     assert.match(parsed(out.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:unapprovable: /);
     assert.equal((approvalsOf(q.roots)[0] as ApprovalDb).consumed_at, null, 'the approval of the push was not spent');
     assert.equal(eventsOf(q.roots, 'action.started').length, 0);
     assert.equal(eventsOf(q.roots, 'approval.requested').length, 1, 'no request was minted for the push on that line');
-    assert.equal(eventsOf(q.roots, 'policy.denied').length, 1, 'one denial, for the unapprovable command');
+    assert.equal(eventsOf(q.roots, 'policy.denied').length, deniedBefore + 1, 'one denial, for the unapprovable command');
+    assert.equal(dataOf(eventsOf(q.roots, 'policy.denied').slice(-1)[0] as EventDb)['ruleId'], 'privileged:unapprovable');
   });
 
   it('an inline field is approvable, and two different inline queries have different digests', () => {

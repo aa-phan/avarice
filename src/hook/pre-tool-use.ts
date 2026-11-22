@@ -21,7 +21,7 @@ import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
 import { BROAD_DISCOVERY_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
-import { UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
+import { UNAPPROVABLE_RULE, UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
 import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
 import { processRedactor } from '../adapters/redaction/process-redactor.ts';
@@ -530,8 +530,8 @@ function configChange(policyPath: string | undefined): never {
 // the skill. It enforces privileged-action approvals only. A Bash call that is not a privileged form (and every other tool) is allowed without a decision,
 // without opening the store and without an event. Each privileged command of a line consumes one approval of the scope `attended:<session id>`, the action and the digest
 // of its parameters in the same transaction that records the action's start (all of the line's commands or none), or the line is denied with a request for each
-// command that has no approval, which the owner approves with `avarice approve`. Any
-// error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
+// command that has no approval, which the owner approves with `avarice approve`. A line holding a command that cannot be approved (a gh api body from a file or standard
+// input) is denied with `privileged:unapprovable` before anything is consumed. Any error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
 // ---------------------------------------------------------------------------------------------------------
 
 // The host's session ID as a plain token: it becomes part of an approval scope.
@@ -558,6 +558,34 @@ function denyUnparseable(dataRoot: string, scope: string, tool: string, reason: 
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
       permissionDecisionReason: `avarice: ${UNPARSEABLE_RULE}: the command could not be checked for privileged actions (${reason}); split it into shorter commands, or write files with the Write tool`,
+    },
+  });
+}
+
+// A command no approval can cover (plan 04-51; WR-04, T-04-138): a gh api request whose body is a file or standard input, which the line digest cannot bind. The line is denied
+// before any approval is consumed and no request is made, because there is nothing the owner could approve; one `policy.denied` is recorded for each such command, with no
+// command text.
+function denyUnapprovable(dataRoot: string, scope: string, tool: string, blocked: readonly PrivilegedCommand[]): void {
+  const db = openLedger(join(dataRoot, 'state.db'));
+  try {
+    inTransaction(db, () => {
+      for (const command of blocked) {
+        appendEventRow(db, {
+          type: 'policy.denied',
+          level: 'warn',
+          data: { ruleId: UNAPPROVABLE_RULE, action: command.action, scope, tool: short(tool), reason: short(command.unapprovable ?? ''), source: 'hook' },
+          nowMs: Date.now(),
+        });
+      }
+    });
+  } finally {
+    db.close();
+  }
+  emit({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `avarice: ${UNAPPROVABLE_RULE}: ${blocked[0]?.unapprovable ?? 'the command cannot be approved'}`,
     },
   });
 }
@@ -593,6 +621,8 @@ function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): v
   const cwd = attendedCwd(input);
   if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
   // The directory the owner's command runs in is part of what an approval binds (CR-03): `cd` is no word of the command, so a push approved in one repository is not one in another.
+  const blocked = classified.commands.filter((command) => command.unapprovable !== undefined);
+  if (blocked.length > 0) return denyUnapprovable(dataRoot, scope, tool, blocked);
   const bound = classified.commands.map((command) => ({ action: command.action, params: { ...command.params, cwd } }));
   const db = openLedger(join(dataRoot, 'state.db'));
   let unapproved: { action: string; requestId: string }[];
