@@ -470,6 +470,73 @@ describe('attended mode allows the owner a commit whose message is a here-docume
   });
 });
 
+// Every request ID a denial names, in the order the reason names them.
+const hintsOf = (out: Attended): string[] => [...parsed(out.stdout).hookSpecificOutput.permissionDecisionReason.matchAll(/avarice approve (apr_[0-9A-Z]{26})/g)].map((m) => m[1] as string);
+const requestedActions = (roots: CliRoots): string[] => eventsOf(roots, 'approval.requested').map((row) => dataOf(row)['action'] as string);
+const approve = async (roots: CliRoots, id: string): Promise<void> => {
+  const ran = await runMain(roots, ['approve', id], { answers: ['y'] });
+  assert.equal(ran.code, 0, ran.out + ran.err);
+};
+
+describe('tracer: in an attended session every privileged command of a line needs its own approval (CR-04, FR-12, FR-13, T-04-130)', () => {
+  const p = profile();
+  const line = attendedCall('true; git push origin main && npm publish');
+  let requests: string[] = [];
+
+  it('denies the line with one request for git.push and one for release.publish, git.push first, and one policy.denied for each', () => {
+    const denied = attendedHook(p.dataRoot, line);
+    assert.equal(denied.code, 0, denied.stderr);
+    assert.equal(parsed(denied.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    requests = hintsOf(denied);
+    assert.equal(requests.length, 2, parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason);
+    assert.deepEqual(requestedActions(p.roots), ['git.push', 'release.publish']);
+    assert.deepEqual(
+      eventsOf(p.roots, 'approval.requested').map((row) => dataOf(row)['requestId']),
+      requests,
+      'the reason names the requests in the order of the line',
+    );
+    assert.deepEqual(
+      eventsOf(p.roots, 'policy.denied').map((row) => dataOf(row)['action']),
+      ['git.push', 'release.publish'],
+    );
+    assert.match(parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:git\.push: /);
+  });
+
+  it('one approval of the push alone does not let the line run: it is denied again, the push approval stays unconsumed and the publish request is named again', async () => {
+    await approve(p.roots, requests[0] as string);
+    const again = attendedHook(p.dataRoot, line);
+    assert.equal(again.code, 0, again.stderr);
+    assert.equal(again.stdout === '' ? 'allow' : parsed(again.stdout).hookSpecificOutput.permissionDecision, 'deny', 'the line ran with one approval');
+    const rows = approvalsOf(p.roots);
+    assert.equal(rows.length, 1);
+    assert.equal((rows[0] as ApprovalDb).action, 'git.push');
+    assert.equal((rows[0] as ApprovalDb).consumed_at, null, 'the lone push approval was not spent');
+    assert.deepEqual(hintsOf(again), [requests[1]], 'only the publish request is named, the one already waiting');
+    assert.equal(eventsOf(p.roots, 'approval.requested').length, 2, 'no new request was minted');
+    assert.equal(eventsOf(p.roots, 'action.started').length, 0);
+  });
+
+  it('after the owner approves both, the line is allowed once: both approvals are consumed and two action.started events name them', async () => {
+    await approve(p.roots, requests[1] as string);
+    const allowed = attendedHook(p.dataRoot, line);
+    assert.deepEqual([allowed.code, allowed.stdout], [0, ''], allowed.stderr);
+    const rows = approvalsOf(p.roots);
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((r) => r.consumed_at !== null));
+    const started = eventsOf(p.roots, 'action.started').map((row) => dataOf(row));
+    assert.deepEqual(started.map((d) => d['action']), ['git.push', 'release.publish']);
+    assert.deepEqual(started.map((d) => d['approvalId']), rows.map((r) => r.approval_id));
+  });
+
+  it('a fourth submission is denied again with fresh requests', () => {
+    const fourth = attendedHook(p.dataRoot, line);
+    assert.equal(parsed(fourth.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    assert.equal(hintsOf(fourth).length, 2);
+    assert.equal(eventsOf(p.roots, 'approval.requested').length, 4);
+    assert.equal(eventsOf(p.roots, 'action.started').length, 2, 'nothing started the fourth time');
+  });
+});
+
 describe('attended mode fails closed (CON-3)', () => {
   const p = profile();
 
