@@ -13,12 +13,13 @@
 // rule `privileged:<action>` and an approval request, recorded as `policy.denied` and `approval.requested` in the same transaction (plan 04-19). With
 // `--attended --data-root <dir>` the same entry serves the owner's own host session: it enforces privileged-action approvals only (see "Attended mode").
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { isAbsolute, join, relative } from 'node:path';
 import { paramsDigest, paramsSummary } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
+import { RETRIEVAL_CAPS } from '../domain/retrieval-rules.ts';
 import { BROAD_DISCOVERY_SPENT_RULE, FULL_READ_BYTES_SPENT_RULE, FULL_READS_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
 import { UNAPPROVABLE_RULE, UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
@@ -36,6 +37,10 @@ const BUSY_TIMEOUT_MS = 4000;
 const MAX_DIGEST_BYTES = 8 * 1024 * 1024;
 // How many of an invocation's latest decisions the search count looks through (the tool-call budget keeps an invocation far below it).
 const MAX_SEARCH_SCAN = 2000;
+// How many lines the host Read tool returns when the call names no limit (WR-11: the hook charges those lines).
+const HOST_READ_DEFAULT_LINES = 2000;
+// The most bytes the hook scans to measure one Read. A range it cannot measure by then (an offset far into a large file) is refused, so a Read cannot stall the hook (T-04-144).
+const MAX_READ_SCAN_BYTES = 64 * 1024 * 1024;
 
 // The key a file is recorded under in `hook_reads`, for the read-before-edit rule (SEC-3). The path is a lookup key, written and read here with the same function, so a
 // path that holds a secret-shaped string is stored with the redaction marker and a short digest of the whole path (two such files stay two keys) and never as typed.
@@ -219,10 +224,13 @@ function fileState(path: string): FileState {
   return { exists: true, digest: 'sha256:' + sha256Hex(readFileSync(path)) };
 }
 
-// The bytes a Read of the file at `path` is charged: the size of the canonical path when it is a regular file; 0 for a path that cannot be resolved, is missing or is not
-// a file. Any other error propagates and the caller exits 2.
-function measureRead(path: string): number {
-  const canonical = canonicalAbsolute(path);
+// The bytes a Read can return, which is what it is charged (WR-11): the bytes of the lines it asks for, from `offset` (default the first line) for `limit` lines (default
+// HOST_READ_DEFAULT_LINES), the newline of each included, counted with a chunked read of the canonical path and never more than the file holds. The scan stops at the end of
+// the range or of the file, or as soon as the count passes the byte cap (no row can hold more, because nothing raises a cap): that count is the cap plus one, which no row has room
+// for. A range not resolved after MAX_READ_SCAN_BYTES is charged the same. A path that cannot be resolved, is missing or is not a regular file is charged 0 bytes; any other
+// error propagates and the caller exits 2.
+function measureRead(call: Extract<NormalizedToolCall, { kind: 'file-read' }>): number {
+  const canonical = canonicalAbsolute(call.paths[0] as string);
   if (canonical === null) return 0;
   let stat;
   try {
@@ -232,7 +240,40 @@ function measureRead(path: string): number {
     if (code === 'ENOENT' || code === 'ENOTDIR') return 0;
     throw e;
   }
-  return stat.isFile() ? stat.size : 0;
+  if (!stat.isFile() || stat.size === 0) return 0;
+  const cap = RETRIEVAL_CAPS.fullReadBytes;
+  const first = call.offset ?? 1;
+  const last = first + (call.limit ?? HOST_READ_DEFAULT_LINES) - 1;
+  const fd = openSync(canonical, 'r');
+  try {
+    const chunk = Buffer.allocUnsafe(65_536);
+    let line = 1;
+    let counted = 0;
+    let scanned = 0;
+    for (;;) {
+      const n = readSync(fd, chunk, 0, chunk.length, null);
+      if (n === 0) return counted;
+      scanned += n;
+      const read = chunk.subarray(0, n);
+      let at = 0;
+      while (at < n) {
+        const newline = read.indexOf(10, at);
+        const end = newline === -1 ? n : newline + 1;
+        if (line >= first) {
+          counted += end - at;
+          if (counted > cap) return cap + 1;
+        }
+        at = end;
+        if (newline !== -1) {
+          line += 1;
+          if (line > last) return counted;
+        }
+      }
+      if (scanned >= MAX_READ_SCAN_BYTES) return cap + 1;
+    }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 const isUnder = (path: string, root: string): boolean => path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`);
@@ -375,7 +416,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
 
   // WR-11: the bytes an allowed Read of a run with retrieval limits can return, measured before the ledger is opened (any error but a path that is not a file exits 2).
   let readBytes = 0;
-  if (policy.retrieval !== undefined && decided.decision === 'allow' && normalized.call.kind === 'file-read') readBytes = measureRead(normalized.call.paths[0] as string);
+  if (policy.retrieval !== undefined && decided.decision === 'allow' && normalized.call.kind === 'file-read') readBytes = measureRead(normalized.call);
 
   const limits = policy.loopLimits;
   const db = openLedger(policy.ledgerPath);

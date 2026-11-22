@@ -4,6 +4,10 @@
 // `spendBudgets`, so processes that retrieve at once can never spend more than a row's limit, and a refusal leaves every row as it was. With no run (the attended
 // `avarice context`) the counters are in memory and last one query, against the profile's caps.
 //
+// The agent's own Read calls in a run are not charged here: the PreToolUse hook (src/hook/pre-tool-use.ts) charges each one to `retrieval.fullReads` and
+// `retrieval.fullReadBytes` in the transaction that charges its searches and `toolCalls` (WR-11). `beginRead` is for a caller in this process that reads whole files
+// for a run; none exists yet, and it keeps its own tests.
+//
 // Nothing here refunds: a search that was started counts, whatever the source answered. A contract compiled before the retrieval budgets existed has no rows; a run on
 // it is counted in memory against the profile's caps, which is all it was ever bound by.
 import { BROAD_DISCOVERY_PER_RUN, RETRIEVAL_ROWS, effectiveCaps, parseRetrievalSection } from '../domain/retrieval-rules.ts';

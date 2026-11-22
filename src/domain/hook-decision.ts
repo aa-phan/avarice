@@ -20,7 +20,8 @@ import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation
 
 export type NormalizedToolCall =
   | { kind: 'file-write'; tool: string; paths: string[] }
-  | { kind: 'file-read'; tool: string; paths: string[] }
+  // `offset` and `limit` are the Read's first line and line count when each is a positive whole number (WR-11: the hook charges the bytes of those lines).
+  | { kind: 'file-read'; tool: string; paths: string[]; offset?: number; limit?: number }
   // `unfiltered` is set when the call names no glob or type filter (a Grep) and no pattern narrower than every file (a Glob); with the path at the clone root it is a
   // whole-repository search (plan 04-29; CON-10).
   | { kind: 'search'; tool: string; path: string; patternRoot?: string; unfiltered?: true }
@@ -154,6 +155,7 @@ const named = (value: unknown): boolean => typeof value === 'string' && value !=
 const MATCHES_EVERY_FILE = /^(\.\/)?(\*\*?\/)*\*\*?(\.\*)?$/;
 // The hook does not expand braces, so a pattern holding a brace group is judged as the widest file set it could name (WR-06).
 const narrowsFiles = (pattern: string): boolean => pattern !== '' && !MATCHES_EVERY_FILE.test(pattern) && !pattern.includes('{');
+const isPositiveWhole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const absolutize = (cwd: string, path: string): string => (path.startsWith('/') ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
 
@@ -171,7 +173,10 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
   switch (tool) {
     case 'Read': {
       const path = requiredPath(input, 'file_path', cwd);
-      return path === null ? { ok: false, reason: 'Read input has no file_path' } : { ok: true, call: { kind: 'file-read', tool, paths: [path] } };
+      if (path === null) return { ok: false, reason: 'Read input has no file_path' };
+      const offset = input['offset'];
+      const limit = input['limit'];
+      return { ok: true, call: { kind: 'file-read', tool, paths: [path], ...(isPositiveWhole(offset) ? { offset } : {}), ...(isPositiveWhole(limit) ? { limit } : {}) } };
     }
     case 'Grep':
     case 'Glob': {
