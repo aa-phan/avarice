@@ -77,9 +77,18 @@ function readRuleOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[]): ReadRul
   return widestRule(edges.filter((e) => e.source === node.id || e.target === node.id).map((e) => ruleAt(e, node.id)));
 }
 
-function excerptOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[], byId: ReadonlyMap<string, GsdGraphNode>): string {
+// The excerpt of a node, and whether it shows any text that is not a code label: the node's own description, or the ID or kind of a neighbour that is not a code node
+// in the answer. A caller prints such an excerpt as data (WR-18).
+function excerptOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[], byId: ReadonlyMap<string, GsdGraphNode>): { text: string; foreignText: boolean } {
   const lines = [`${clip(node.label)} [${node.fileType ?? 'unknown'}]${node.sourceFile !== null ? ` in ${node.sourceFile}` : ''}`];
+  let foreignText = node.description !== null;
   if (node.description !== null) lines.push(clip(node.description));
+  // Every neighbour an edge line names goes through here, so the flag cannot miss a line.
+  const neighbour = (rule: ReadRule, id: string): string => {
+    const other = byId.get(id);
+    if (other?.fileType !== 'code') foreignText = true;
+    return describeNeighbour(rule, other, id);
+  };
   const edgeLines: string[] = [];
   const full = (): boolean => edgeLines.length >= MAX_EDGES_IN_EXCERPT;
   const shown = new Set<string>([node.id]);
@@ -92,7 +101,7 @@ function excerptOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[], byId: Rea
       if (full()) return;
       if (shown.has(edge.target)) continue;
       shown.add(edge.target);
-      edgeLines.push(`${'  '.repeat(depth - 1)}-> ${edge.relation ?? 'related to'} ${describeNeighbour('descendants', byId.get(edge.target), edge.target)} (${edge.confidence ?? 'no tier'})`);
+      edgeLines.push(`${'  '.repeat(depth - 1)}-> ${edge.relation ?? 'related to'} ${neighbour('descendants', edge.target)} (${edge.confidence ?? 'no tier'})`);
       descend(edge.target, depth + 1);
     }
   };
@@ -105,13 +114,13 @@ function excerptOf(node: GsdGraphNode, edges: readonly GsdGraphEdge[], byId: Rea
     if (rule === 'descendants') {
       if (shown.has(other)) continue;
       shown.add(other);
-      edgeLines.push(`-> ${edge.relation ?? 'related to'} ${describeNeighbour(rule, byId.get(other), other)} (${edge.confidence ?? 'no tier'})`);
+      edgeLines.push(`-> ${edge.relation ?? 'related to'} ${neighbour(rule, other)} (${edge.confidence ?? 'no tier'})`);
       descend(other, 2);
       continue;
     }
-    edgeLines.push(`${outgoing ? '->' : '<-'} ${edge.relation ?? 'related to'} ${describeNeighbour(rule, byId.get(other), other)} (${edge.confidence ?? 'no tier'})`);
+    edgeLines.push(`${outgoing ? '->' : '<-'} ${edge.relation ?? 'related to'} ${neighbour(rule, other)} (${edge.confidence ?? 'no tier'})`);
   }
-  return [...lines, ...edgeLines].join('\n');
+  return { text: [...lines, ...edgeLines].join('\n'), foreignText };
 }
 
 export class GsdGraphContext implements ContextSource {
@@ -148,7 +157,7 @@ export class GsdGraphContext implements ContextSource {
     const handles: ContextHandle[] = [];
     for (const node of nodes) {
       const confidence = bestTier(node.id, edges);
-      const excerpt = excerptOf(node, edges, byId);
+      const { text: excerpt, foreignText } = excerptOf(node, edges, byId);
       const cited = node.sourceFile !== null && isCitablePath(node.sourceFile) ? node.sourceFile : undefined;
       const ref: ExternalRef = {
         provider: 'gsd-graph',
@@ -168,8 +177,9 @@ export class GsdGraphContext implements ContextSource {
         readRule: readRuleOf(node, edges),
         ...(confidence !== undefined ? { confidence } : {}),
         // Anything that is not code (a document, or a concept or rationale a model read out of one) is data, not
-        // instruction: its text is printed fenced and never acted on.
-        ...(node.fileType !== 'code' ? { untrusted: true } : {}),
+        // instruction: its text is printed fenced and never acted on. So is the excerpt of a code node that shows such text:
+        // its description, or the ID of a neighbour that is not code.
+        ...(node.fileType !== 'code' || foreignText ? { untrusted: true } : {}),
         ...(cited !== undefined ? { citedPath: cited } : {}),
       };
       if (freshness !== 'fresh' && cited !== undefined) {

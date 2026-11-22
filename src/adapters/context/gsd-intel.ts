@@ -93,6 +93,8 @@ export class GsdIntelContext implements ContextSource {
           estTokens: estimateTokens(excerpt) + estimateTokens(entry.key),
           reason: `matched "${query.term}" in ${match.source}`,
           readRule: 'id-only',
+          // The entries are free text a model derived from the repository, and a hostile repository can commit the files itself: data, never instruction (WR-19).
+          untrusted: true,
         };
         const path = citedPath(match.source, entry.key, entry.value);
         if (path !== undefined && isCitablePath(path)) {
@@ -122,6 +124,7 @@ export class GsdIntelContext implements ContextSource {
         excerpt: found.excerpt,
         estTokens: handle.estTokens,
         reason: handle.reason,
+        untrusted: true,
         ...(handle.confirmed !== undefined ? { confirmed: handle.confirmed } : {}),
         ...(handle.citedPath !== undefined ? { citedPath: handle.citedPath } : {}),
       });

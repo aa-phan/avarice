@@ -323,8 +323,11 @@ describe('document text stays data (S-46 output half, T-01-49)', () => {
       if (l.includes(INJECTION)) assert.ok(i > at && i < end, `line ${i} holds the injected text outside the fence: ${l}`);
     });
     assert.match(lines[at - 2] ?? '', /\(untrusted graph-node, fenced below\)/, 'the heading does not repeat the node text');
-    // Code nodes are not fenced.
-    assert.match(ran.out, /\[gsd-graph\] ledger\n/);
+    // A code node whose excerpt names a document or concept neighbour by ID is fenced as well, not printed by its title (WR-18): in this graph every node is, so
+    // the three code nodes (ledger, postEntry, formatAmount) are fenced like the document and the two concepts. A code node that names only code nodes stays
+    // unfenced (asserted on the adapter in context-adapters.test.ts).
+    assert.doesNotMatch(ran.out, /\[gsd-graph\] ledger\n/);
+    assert.equal(lines.filter((l) => l.includes('[gsd-graph] (untrusted graph-node, fenced below)')).length, 6);
 
     assert.equal(fingerprint(), before, 'the command wrote nothing: ledger rows, contract digests, data root, staging and checkout are unchanged');
   });
