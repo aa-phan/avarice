@@ -51,6 +51,42 @@ describe('the nesting limit is exact: 8 nested substitutions classify and 9 are 
   });
 });
 
+// `command` is a wrapper, so each repetition is one word before the program; the classifier reads 16 and refuses a line with more.
+const prefixed = (words: number): string => `${'command '.repeat(words)}git push origin main`;
+
+describe('the prefix limit is exact: 16 leading wrapper words classify and 17 are unparseable (CR-01, FR-12)', () => {
+  it('classifies a push behind 16 wrapper words', () => {
+    assert.deepEqual(actionsOf(prefixed(16)), ['git.push']);
+  });
+
+  it('says unparseable, naming the limit, for a push behind 17 wrapper words', () => {
+    const found = classifyLine(prefixed(17));
+    assert.equal(found.kind, 'unparseable');
+    if (found.kind === 'unparseable') assert.match(found.reason, /16/);
+  });
+
+  it('counts assignments and reserved words with the wrappers', () => {
+    assert.deepEqual(actionsOf(`${'A=1 '.repeat(16)}git push`), ['git.push']);
+    assert.equal(classifyLine(`${'A=1 '.repeat(17)}git push`).kind, 'unparseable');
+  });
+});
+
+describe('the wrapper table answers only for its own keys (WR-02)', () => {
+  for (const line of ['constructor -x', 'constructor git push', '__proto__ git push', 'toString -x git push', 'hasOwnProperty git push']) {
+    it(`reads ${JSON.stringify(line)} as a command that is no wrapper and is not privileged`, () => {
+      assert.deepEqual(classifyLine(line), { kind: 'none' });
+    });
+  }
+});
+
+describe('time and its -p option are a wrapper (WR-01)', () => {
+  it('classifies a push run under time -p, time and time --', () => {
+    for (const line of ['time -p git push origin main', 'time git push origin main', 'time -p -- git push origin main', 'time -p env FOO=1 git push origin main']) {
+      assert.deepEqual(actionsOf(line), ['git.push'], line);
+    }
+  });
+});
+
 // Lines in which the shell runs a push that the old splitter lost or misread (CR-02, WR-01).
 const FINDS_PUSH: ReadonlyArray<readonly [string, string]> = [
   ['a quoted `)` inside a substitution', 'echo $(echo ")"; git push)'],

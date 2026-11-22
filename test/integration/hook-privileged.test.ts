@@ -424,6 +424,33 @@ describe('attended mode denies a line it cannot check instead of passing it sile
   });
 });
 
+describe('a line with more prefix words than the classifier reads is refused, not passed (CR-01, FR-12)', () => {
+  const p = profile();
+  const seventeen = `${'command '.repeat(17)}git push origin main`;
+
+  it('attended: denies 17 wrapper words before a push with privileged:unparseable and names the limit', () => {
+    const denied = attendedHook(p.dataRoot, attendedCall(seventeen));
+    assert.equal(denied.code, 0, denied.stderr);
+    assert.notEqual(denied.stdout, '', 'the hook printed no decision for a line it could not check');
+    const reason = parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /^avarice: privileged:unparseable: /);
+    assert.match(reason, /16/);
+    assert.equal(eventsOf(p.roots, 'policy.denied').length, 1);
+  });
+
+  it('attended: a push behind 16 wrapper words is still the privileged action git.push', () => {
+    const denied = attendedHook(p.dataRoot, attendedCall(`${'command '.repeat(16)}git push origin main`));
+    assert.match(parsed(denied.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: privileged:git\.push: /);
+  });
+
+  it('in a run, a line with 17 prefix words is refused as shell-syntax', () => {
+    const fx = fixture();
+    const result = runHook(fx, 'pre', bash(seventeen));
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(parsed(result.stdout).hookSpecificOutput.permissionDecisionReason, /^avarice: shell-syntax: /);
+  });
+});
+
 describe('attended mode allows the owner a commit whose message is a here-document with apostrophes (CR-02, T-04-107)', () => {
   const p = profile();
   const commit = ['git commit -m "$(cat <<\'EOF\'', "Fix the planner's (scope) handling", "# what's next", 'we should git push later', 'EOF', ')"'].join('\n');
