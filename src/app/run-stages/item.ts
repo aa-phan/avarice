@@ -345,7 +345,7 @@ const isInScope = (change: PathChange, contract: RunContract): boolean =>
   (change.status === 'deleted' ? matchesAny(change.path, contract.files.delete) : matchesAny(change.path, contract.files.write) || matchesAny(change.path, contract.files.create));
 
 // The paths that break the contract, by the same rules as G2's scope and deletion checks (src/domain/gates.ts): the finding names them.
-function breaches(changes: readonly PathChange[], contract: RunContract): string[] {
+export function breaches(changes: readonly PathChange[], contract: RunContract): string[] {
   const g = contract.files;
   return changes
     .filter((c) => {

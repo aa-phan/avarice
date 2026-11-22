@@ -16,8 +16,10 @@ import type { RunContract } from '../../domain/run-contract.ts';
 import { storedText } from '../../domain/quick-record.ts';
 import type { RunRow } from '../../ports/ledger.ts';
 import type { InvocationRequest } from '../../ports/agent-host.ts';
+import type { PathChange } from '../../ports/run-workspace.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { blockRun } from './blocked.ts';
+import { breaches } from './item.ts';
 import type { RunStageContext } from './stage.ts';
 
 // The directory under the clone where the host leaves its plan and its questions. It is excluded from the patch.
@@ -36,6 +38,10 @@ const STORE = 'local';
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const MAX_BEHAVIOR_CHARS = 8000;
 const MAX_LINE_CHARS = 500;
+// How many out-of-scope paths the block text names and the step result keeps, and how long a named path may be.
+const MAX_NAMED_PATHS = 5;
+const MAX_NAMED_PATH_CHARS = 80;
+const MAX_RECORDED_PATHS = 50;
 
 export interface RestrictedItem {
   row: RunRow;
@@ -139,9 +145,33 @@ function attemptOf(ctx: RunStageContext, itemId: string): Result<string> {
 
 const ISSUE_ENDING = 'No check and no gate ran and nothing was committed or handed off. Apply the patch to your repository by hand (git apply), then end this run with avarice cancel.';
 
+// The changed paths of the clone the contract does not allow, by the rules a contained run's scope check uses. The restricted directory is the host's own output
+// place and is never part of the patch, so it is not judged.
+function scopeBreaches(changes: readonly PathChange[], contract: RunContract): string[] {
+  const own = (path: string): boolean => path === RESTRICTED_DIR || path.startsWith(`${RESTRICTED_DIR}/`);
+  return breaches(
+    changes.filter((c) => !own(c.path)),
+    contract,
+  );
+}
+
+// What the owner is told besides the outputs, before the ending: the changed paths the contract does not allow, which are not in the patch. The issue text is cut
+// at ISSUE_MAX_CHARS, so the names are few and short and the ending always stays whole.
+function findingsText(outOfScope: readonly string[]): string {
+  if (outOfScope.length === 0) return '';
+  const named = outOfScope.slice(0, MAX_NAMED_PATHS).map((p) => storedText(p, MAX_NAMED_PATH_CHARS));
+  const more = outOfScope.length > named.length ? ` and ${outOfScope.length - named.length} more` : '';
+  return ` ${outOfScope.length} changed ${outOfScope.length === 1 ? 'path is' : 'paths are'} outside what the contract allows (a protected path, or not in its write or create paths) and left out of the patch: ${named.join(', ')}${more}.`;
+}
+
 // The run's end: one permission decision that names what the run left, and the run blocked (enforcement_failure). `withdraw` is the only answer a permission
 // decision offers, and answering it applies nothing; the run stays blocked until it is cancelled.
-function blockWithOutputs(ctx: RunStageContext, item: RestrictedItem, attemptId: string | undefined, found: { plan?: Stored; patch?: Stored; decisions?: Stored; questions: number; hostKind: string }): Result<'moved'> {
+function blockWithOutputs(
+  ctx: RunStageContext,
+  item: RestrictedItem,
+  attemptId: string | undefined,
+  found: { plan?: Stored; patch?: Stored; decisions?: Stored; questions: number; hostKind: string; outOfScope: readonly string[] },
+): Result<'moved'> {
   const parts = [
     found.plan !== undefined ? `plan ${found.plan.digest}` : 'no plan was written',
     found.patch !== undefined ? `patch ${found.patch.digest}` : 'no edit was made to the working copy',
@@ -151,8 +181,9 @@ function blockWithOutputs(ctx: RunStageContext, item: RestrictedItem, attemptId:
   const blocked = blockRun(ctx, {
     reason: 'enforcement_failure',
     signal: { kind: 'enforcement', check: 'restricted-run' },
-    issue: `restricted run (the host cannot be contained; the host reported ${found.hostKind}): ${parts.join('; ')}. ${ISSUE_ENDING}`,
+    issue: `restricted run (the host cannot be contained; the host reported ${found.hostKind}): ${parts.join('; ')}.${findingsText(found.outOfScope)} ${ISSUE_ENDING}`,
     evidenceRefs,
+    ...(found.outOfScope.length > 0 ? { finding: { check: 'scope-of-writes', paths: found.outOfScope } } : {}),
     ...(attemptId !== undefined ? { attemptId } : {}),
     itemId: item.itemId,
     data: { mode: 'restricted', host: ctx.deps.restrictedHost?.descriptor.adapter ?? 'none', hostKind: found.hostKind },
@@ -215,6 +246,7 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
       ...(decisions !== undefined ? { decisions } : {}),
       questions: typeof body['questions'] === 'number' ? body['questions'] : 0,
       hostKind: typeof body['hostKind'] === 'string' ? body['hostKind'] : 'unknown',
+      outOfScope: Array.isArray(body['outOfScope']) ? body['outOfScope'].filter((p): p is string => typeof p === 'string') : [],
     });
   }
 
@@ -282,7 +314,12 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
     if (!put.ok) return put;
     stored.plan = put.value;
   }
-  const patchText = workspace.patch(clone, { exclude: [RESTRICTED_DIR] });
+  // The host cannot be contained, so the patch is held to the contract here, after the fact: a changed path the contract does not allow (a protected path, or one
+  // outside the write and create sets) is left out of the patch and named in the block text.
+  const changes = workspace.status(clone);
+  if (!changes.ok) return changes;
+  const outOfScope = scopeBreaches(changes.value, contract);
+  const patchText = workspace.patch(clone, { exclude: [RESTRICTED_DIR, ...outOfScope] });
   if (!patchText.ok) return patchText;
   if (patchText.value !== '') {
     const put = storeOutput(ctx, RESTRICTED_PATCH_KIND, patchText.value);
@@ -305,10 +342,10 @@ export async function runRestrictedItem(ctx: RunStageContext, item: RestrictedIt
   const recorded = deps.ledger.recordRunStep(ctx.runId, {
     step: RESTRICTED_OUTPUTS_STEP,
     status: 'completed',
-    result: { ...stored, questions, hostKind, attemptId: attemptId.value },
+    result: { ...stored, questions, hostKind, outOfScope: outOfScope.slice(0, MAX_RECORDED_PATHS), attemptId: attemptId.value },
     nowMs,
     completedAtMs: nowMs,
   });
   if (!recorded.ok) return recorded;
-  return blockWithOutputs(ctx, item, attemptId.value, { ...stored, questions, hostKind });
+  return blockWithOutputs(ctx, item, attemptId.value, { ...stored, questions, hostKind, outOfScope });
 }
