@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as planning from '../../src/adapters/context/gsd-planning.ts';
+import { GsdPlanningContext, MAX_HEADING_LINE_CHARS, headingOf } from '../../src/adapters/context/gsd-planning.ts';
 
 const cleanup: string[] = [];
 after(() => {
@@ -18,12 +18,6 @@ const CHILD = join(import.meta.dirname, '..', 'helpers', 'planning-heading-child
 // The parser this plan replaced, kept here as the reference for ordinary headings.
 const OLD_HEADING = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/;
 const oldHeading = (line: string): string | null => OLD_HEADING.exec(line.replace(/\r$/, ''))?.[1] ?? null;
-
-const headingOf = (line: string): string | null => {
-  const fn = (planning as unknown as { headingOf?: (l: string) => string | null }).headingOf;
-  assert.equal(typeof fn, 'function', 'gsd-planning.ts exports headingOf');
-  return (fn as (l: string) => string | null)(line);
-};
 
 describe('gsd-planning headings: a pathological heading line no longer stops the supervisor (CR-05)', () => {
   it('finds in a PROJECT.md whose heading is "# a" + 200,000 spaces + "x" within 2 seconds, in a child process', () => {
@@ -90,7 +84,7 @@ describe('gsd-planning headings: headingOf semantics', () => {
   });
 
   it('exports the line cap as 2,000 and treats a heading-shaped line of 2,001 characters as body text', () => {
-    assert.equal((planning as unknown as { MAX_HEADING_LINE_CHARS?: number }).MAX_HEADING_LINE_CHARS, 2000);
+    assert.equal(MAX_HEADING_LINE_CHARS, 2000);
     const atCap = `## ${'x'.repeat(1997)}`;
     const overCap = `## ${'x'.repeat(1998)}`;
     assert.equal(atCap.length, 2000);
@@ -104,7 +98,7 @@ describe('gsd-planning headings: headingOf semantics', () => {
     cleanup.push(dir);
     mkdirSync(join(dir, '.planning'), { recursive: true });
     writeFileSync(join(dir, '.planning', 'PROJECT.md'), `# Top\n\nzorbflux opening\n\n## ${'x'.repeat(1998)}\n\nlater words\n`);
-    const source = new planning.GsdPlanningContext({ nowMs: () => Date.parse('2026-11-17T00:00:00Z') });
+    const source = new GsdPlanningContext({ nowMs: () => Date.parse('2026-11-17T00:00:00Z') });
     const found = await source.find({ term: 'later words', workspace: { stagingPath: dir, repoPath: dir }, indexRevision: 'git:0123456789abcdef' }, 4000);
     assert.ok(found.ok);
     assert.deepEqual(found.value.map((h) => h.ref.id), ['PROJECT.md#top']);

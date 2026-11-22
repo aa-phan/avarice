@@ -126,6 +126,30 @@ function slugOf(heading: string): string {
   return slug === '' ? 'section' : slug;
 }
 
+// A planning line longer than this is body text, never a heading: a crafted line must not cost the supervisor more than a bounded scan (CR-05).
+export const MAX_HEADING_LINE_CHARS = 2000;
+
+const isBlank = (char: string | undefined): boolean => char === ' ' || char === '\t';
+
+// The text of an ATX heading line (one to six hashes, then a space or tab), or null when the line is not one. One trailing carriage return and trailing whitespace are
+// dropped, and a run of closing hashes only when a space or tab precedes it (or it is the whole text). A hand loop, linear in the line, with no backtracking.
+export function headingOf(line: string): string | null {
+  if (line.length > MAX_HEADING_LINE_CHARS) return null;
+  let start = 0;
+  while (start < line.length && line.charCodeAt(start) === 35) start += 1;
+  if (start < 1 || start > 6 || !isBlank(line[start])) return null;
+  while (isBlank(line[start])) start += 1;
+  let end = line.endsWith('\r') ? line.length - 1 : line.length;
+  while (end > start && isBlank(line[end - 1])) end -= 1;
+  let hashes = end;
+  while (hashes > start && line[hashes - 1] === '#') hashes -= 1;
+  if (hashes < end && (hashes === start || isBlank(line[hashes - 1]))) {
+    end = hashes;
+    while (end > start && isBlank(line[end - 1])) end -= 1;
+  }
+  return end > start ? line.slice(start, end) : null;
+}
+
 // Sections delimited by Markdown headings outside code fences. Text before the first heading is the `preamble` section. A slug that repeats gets `-2`, `-3`.
 function sectionsOf(text: string, file: string): Section[] {
   const sections: Section[] = [];
@@ -144,10 +168,10 @@ function sectionsOf(text: string, file: string): Section[] {
   };
   for (const line of text.split('\n')) {
     if (/^\s*(?:```|~~~)/.test(line)) fenced = !fenced;
-    const heading = fenced ? null : /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(line.replace(/\r$/, ''));
-    if (heading !== null && heading[1] !== undefined) {
+    const heading = fenced ? null : headingOf(line);
+    if (heading !== null) {
       close();
-      current = { heading: heading[1], lines: [line], preamble: false };
+      current = { heading, lines: [line], preamble: false };
     } else {
       current ??= { heading: file, lines: [], preamble: true };
       current.lines.push(line);
