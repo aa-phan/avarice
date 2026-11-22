@@ -33,6 +33,11 @@ function checkPromotionPath(path: string): Result<string[]> {
   if (!segments.ok) return segments;
   if (segments.value.length < 2 || segments.value[0] !== PLANNING) return invalid('files', `${JSON.stringify(path)} is not a path under ${PLANNING}/`);
   if (segments.value.some((segment) => !/^[A-Za-z0-9._-]+$/.test(segment))) return invalid('files', `${JSON.stringify(path)} has a character a promoted path does not allow`);
+  // This is the one place that writes into the owner's checkout: a `.git` segment (any letter case, as on a case-insensitive file system) would plant a repository
+  // there, and a segment of dots only is a name no ordinary file has (WR-22, T-04-121).
+  if (segments.value.some((segment) => segment.toLowerCase() === '.git' || /^\.+$/.test(segment))) return invalid('files', `${JSON.stringify(path)} has a segment a promoted path does not allow (.git or only dots)`);
+  // A path that is not in normal form (an empty or `.` segment, a trailing slash) names the same file as its normal form, so the duplicate check would compare unlike names.
+  if (segments.value.join('/') !== path) return invalid('files', `${JSON.stringify(path)} is not in normal form (no empty or . segment, no trailing slash)`);
   return segments;
 }
 
