@@ -2,7 +2,8 @@
 // Writes the `avarice-run` skill to `<claude config dir>/skills/avarice-run/SKILL.md` for attended sessions (docs/extensions.md entry 3), and the attended
 // PreToolUse hook entry to `<claude config dir>/settings.json` beside it (entries 2 and 4; plan 04-19), so a privileged shell form in the owner's own session
 // needs an approval. The directory is --config-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude. Idempotent: an identical file or entry is `unchanged`. It refuses
-// inside a run (AVARICE_RUN is set, or a run supervisor is an ancestor process), refuses a symbolic link at `skills`, `skills/avarice-run`, SKILL.md or settings.json, refuses to overwrite a SKILL.md
+// inside a run (AVARICE_RUN is set, or a run supervisor is an ancestor process), refuses a symbolic link at `skills`, `skills/avarice-run`, SKILL.md or settings.json,
+// refuses, before it writes anything, a hook entry script that is not a readable regular file, refuses to overwrite a SKILL.md
 // that does not carry the AVARICE marker line, and replaces in settings.json only an entry whose command carries the `--avarice-attended-hook` marker, leaving
 // every other key and entry as it was (CS-11, RC-5, CON-6, T-04-52). It records the content digest of the skill as the adapter config
 // `host-skill:avarice-run` and the digest of the hook entry as `host-hook:attended`. Exit 0 installed, unchanged or updated; 3 refused; 64 usage or inside a
@@ -12,7 +13,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describeError } from '../../adapters/sqlite/db.ts';
 import { AVARICE_RUN_SKILL } from '../../adapters/host-claude/avarice-run-skill.ts';
-import { installAttendedHook } from '../../adapters/host-claude/attended-hook-install.ts';
+import { hookEntryProblem, installAttendedHook } from '../../adapters/host-claude/attended-hook-install.ts';
 import { installSkill } from '../../adapters/host-claude/skill-install.ts';
 import type { AppDeps } from '../../app/deps.ts';
 import type { Io, ParsedArgs } from '../args.ts';
@@ -55,6 +56,13 @@ function hookEntryOf(env: NodeJS.ProcessEnv = process.env): string {
 
 export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
   const configDir = configDirOf(args, deps);
+  // The hook entry is checked before the skill is written, so a refusal leaves nothing half-installed (WR-25, T-04-123).
+  const hookEntry = hookEntryOf();
+  const problem = hookEntryProblem(hookEntry);
+  if (problem !== undefined) {
+    io.err(`${errorLine('install-host', `refused: the hook entry ${stripControl(hookEntry)} ${problem}; nothing was written`)}\n`);
+    return EXIT_REFUSED;
+  }
   const installed = installSkill(configDir, AVARICE_RUN_SKILL);
   if (!installed.ok) {
     const e = installed.error;
@@ -75,7 +83,7 @@ export function run(args: ParsedArgs, deps: AppDeps, io: Io): number {
   io.out(`${resultLine(`skill ${AVARICE_RUN_SKILL.name}`, status)}\npath: ${stripControl(path)}\ndigest: ${digest}\n`);
 
   // The attended hook entry, beside the skill. A refusal here leaves the skill in place and says so.
-  const hook = installAttendedHook(configDir, { hookEntry: hookEntryOf(), dataRoot: resolve(deps.profile.dataRoot) });
+  const hook = installAttendedHook(configDir, { hookEntry, dataRoot: resolve(deps.profile.dataRoot) });
   if (!hook.ok) {
     const e = hook.error;
     if (e.kind === 'denied') {

@@ -6,8 +6,8 @@
 // command string, and only such an entry is ever replaced. Every other key and every other entry keeps its content (and the file keeps its indentation and its
 // mode). A symbolic link at settings.json, a file that is not a JSON object with the hook structure, and an entry that mixes the marker with another command
 // are refused with nothing written. The file is written through a temporary file and a rename, so a reader sees the old file or the new one.
-// A refusal is a `denied` error (the command exits 3); a failure to read or write is `internal`.
-import { closeSync, constants, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
+// A refusal is a `denied` error (the command exits 3), including a hook entry script that is not a readable regular file; a failure to read or write is `internal`.
+import { accessSync, closeSync, constants, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { isAbsolute, join } from 'node:path';
@@ -57,6 +57,18 @@ export function attendedHookEntry(options: AttendedHookOptions): Json {
   };
 }
 
+// Why a path cannot be the hook entry script (it is not a readable regular file), or undefined. The entry blocks on failure, so a script that is missing would block every
+// attended Bash call (WR-25, T-04-123). A symbolic link to a regular file is followed: the host runs the script through it.
+export function hookEntryProblem(path: string): string | undefined {
+  try {
+    if (!statSync(path).isFile()) return 'is not a regular file';
+    accessSync(path, constants.R_OK);
+    return undefined;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'ENOENT' ? 'does not exist' : 'is not readable';
+  }
+}
+
 function lstatOrNull(path: string): Stats | null {
   try {
     return lstatSync(path);
@@ -101,6 +113,8 @@ export function installAttendedHook(configDir: string, options: AttendedHookOpti
   for (const [field, value] of [['configDir', configDir], ['hookEntry', options.hookEntry], ['dataRoot', options.dataRoot]] as const) {
     if (!isAbsolute(value)) return err({ kind: 'invalid', field, reason: 'must be an absolute path' });
   }
+  const problem = hookEntryProblem(options.hookEntry);
+  if (problem !== undefined) return refuse(`the hook entry ${options.hookEntry} ${problem}, so nothing was written`);
   const entry = attendedHookEntry(options);
   const digest = digestOf(entry);
   try {

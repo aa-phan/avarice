@@ -51,7 +51,7 @@ export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env, co
 function fail(io: Io, error: PortError): number {
   switch (error.kind) {
     case 'not_found':
-      io.err(`${errorLine('approve', `no such ${error.ref.startsWith('approval ') ? 'approval' : 'approval request'} (${describeError(error)})`)}\n`);
+      io.err(`${errorLine('approve', `no such ${error.ref.startsWith('approval request ') ? 'approval request' : 'approval'} (${describeError(error)})`)}\n`);
       return EXIT_USAGE;
     case 'invalid':
       io.err(`${errorLine('approve', describeError(error))}\n`);
