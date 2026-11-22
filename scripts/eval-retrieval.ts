@@ -14,13 +14,17 @@
 // Modes (one is required):
 //   --dry-run   Plans every run, prints its cap and the projected total against the Phase 4 spend ledger, and exits non-zero when the projection passes the ceiling (D-03).
 //               It spends nothing, starts no model and writes nothing but its own output. It reads the source repositories through `git ls-tree` only.
-//   --live      Runs the plan: refuses first when the whole plan would pass the ceiling, then checks the ceiling again before each model step and records each step's spend
-//               in the Phase 4 ledger under AVARICE_PHASE4_PLAN (default 04-36). Needs --out. Plan 04-36 runs this after the owner authorizes the spend.
+//   --authorize The owner's spend authorization (WR-33): refuses unless stdin and stdout are both an interactive terminal, prints the plan and its projection, asks the owner to
+//               type `authorize`, and writes the record (list digest, task ids, arms, cap, ownerConfirmedAt, terminal) to the file named by --authorization. Starts no model.
+//   --live      Runs the plan: needs AVARICE_LIVE=1 and --authorization naming a record that equals this run's list digest, task ids and arms, whose cap covers the projection and
+//               that the owner confirmed within the last 24 hours (checked before any clone, onboarding or ledger write; exit 3 otherwise), refuses when the whole plan would pass
+//               the ceiling, then checks the ceiling again before each model step and records each step's spend in the Phase 4 ledger under AVARICE_PHASE4_PLAN (default 04-36).
+//               Needs --out.
 //
 // Flags: --tasks <n> (the first n approved tasks, default all), --task-ids T01,T07 (exactly these approved tasks, in this order; an id off the approved list is refused; not with
 //        --tasks), --merge (needs --out: keep the runs the file already holds, skip their (task, arm) pairs and add the rest; refused when the file came from another approved list;
 //        a live start over a file that holds runs is refused without it), --arms A,B,C, --cap-usd <n> (the per-run cost cap, default 0.40), --out <file> (the results JSON),
-//        --tasks-file <file>, --repos-file <file>, --source <repository id>=<path> (repeatable; default the source in the repositories file), --node-modules <id>=<dir>
+//        --authorization <file> (the spend authorization record: written by --authorize, read by --live), --tasks-file <file>, --repos-file <file>, --source <repository id>=<path> (repeatable; default the source in the repositories file), --node-modules <id>=<dir>
 //        (repeatable; the dependency tree the judge copies into its clone; default the source checkout's own when its lockfile equals the parent's), --scratch <dir>, --keep,
 //        --evidence-dir <dir> (before a run's scratch is removed, copy its decision records, rows, steps, events and host transcript into <dir>/<task>-<arm>; redacted, at most
 //        5 MB a run, truncations recorded in the run's manifest.json).
@@ -45,6 +49,8 @@ import type { CommandExecutor } from '../src/ports/command-executor.ts';
 import { ceilingRefusal, claudeVersion, fitsPhase4Ceiling, liveClaudeBin, phase4Ceiling, phase4Spent, recordPhase4Spend } from '../test/helpers/live-harness.ts';
 import { REPO_ROOT, runCli } from '../test/helpers/run-cli.ts';
 import type { CliRoots } from '../test/helpers/run-cli.ts';
+import { authorizeRefusal, realAuthorizeIo } from './exit-run-phase4-tools.ts';
+import type { AuthorizeIo } from './exit-run-phase4-tools.ts';
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // Arms, tasks and the plan
@@ -885,6 +891,8 @@ async function runOne(ctx: LiveContext, run: PlannedRun): Promise<RunResult> {
 interface Options {
   dryRun: boolean;
   live: boolean;
+  authorize: boolean;
+  authorization: string | undefined;
   tasks: number | undefined;
   taskIds: string[] | undefined;
   merge: boolean;
@@ -900,7 +908,7 @@ interface Options {
   evidenceDir: string | undefined;
 }
 
-const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --live --out <file>) [--tasks <n> | --task-ids T01,T07] [--merge] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep] [--evidence-dir <dir>]';
+const USAGE = 'usage: node scripts/eval-retrieval.ts (--dry-run | --authorize --authorization <file> | --live --out <file> --authorization <file>) [--tasks <n> | --task-ids T01,T07] [--merge] [--arms A,B,C] [--cap-usd <n>] [--tasks-file <file>] [--repos-file <file>] [--source <id>=<path>] [--node-modules <id>=<dir>] [--scratch <dir>] [--keep] [--evidence-dir <dir>]';
 
 class UsageError extends Error {}
 
@@ -908,6 +916,8 @@ function parseArgs(argv: readonly string[]): Options {
   const options: Options = {
     dryRun: false,
     live: false,
+    authorize: false,
+    authorization: undefined,
     tasks: undefined,
     taskIds: undefined,
     merge: false,
@@ -943,6 +953,12 @@ function parseArgs(argv: readonly string[]): Options {
         break;
       case '--live':
         options.live = true;
+        break;
+      case '--authorize':
+        options.authorize = true;
+        break;
+      case '--authorization':
+        options.authorization = resolve(value());
         break;
       case '--keep':
         options.keep = true;
@@ -1004,7 +1020,8 @@ function parseArgs(argv: readonly string[]): Options {
         throw new UsageError(`unknown argument ${raw}`);
     }
   }
-  if (options.dryRun === options.live) throw new UsageError('name exactly one of --dry-run and --live');
+  if ([options.dryRun, options.live, options.authorize].filter(Boolean).length !== 1) throw new UsageError('name exactly one of --dry-run, --authorize and --live');
+  if (options.authorize && options.authorization === undefined) throw new UsageError('--authorize needs --authorization <file>');
   if (options.live && options.out === undefined) throw new UsageError('--live needs --out <file>');
   if (options.taskIds !== undefined && options.tasks !== undefined) throw new UsageError('name --tasks or --task-ids, not both');
   if (options.merge && options.out === undefined) throw new UsageError('--merge needs --out <file>');
@@ -1104,13 +1121,110 @@ function writeResults(file: string, header: Record<string, unknown>, results: re
   writeFileSync(file, `${JSON.stringify(resultsDocument(header, results, stopped), null, 2)}\n`);
 }
 
-export async function main(argv: readonly string[]): Promise<number> {
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// The owner's spend authorization (WR-33)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+// A record is current for 24 hours after the owner confirmed it; a confirmation more than five minutes ahead of the clock is not believed.
+export const EVAL_AUTHORIZATION_MAX_AGE_MS = 24 * 3_600_000;
+const EVAL_AUTHORIZATION_SKEW_MS = 5 * 60_000;
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+export interface EvalAuthorizationExpected {
+  listSha256: string;
+  taskIds: readonly string[];
+  arms: readonly string[];
+  projectedUsd: number;
+}
+
+const sameList = (a: unknown, b: readonly string[]): boolean => Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
+
+// What stops a recorded authorization from covering this run: it was confirmed from a terminal within the last 24 hours, it names this approved list, these task ids and
+// these arms, and its cap covers the projection. An empty list means the record covers the run.
+export function evalAuthorizationProblems(record: unknown, expected: EvalAuthorizationExpected, now: Date): string[] {
+  if (!isRecord(record)) return ['no authorization is recorded; the owner runs --authorize in their own terminal'];
+  const problems: string[] = [];
+  const confirmed = record['ownerConfirmedAt'];
+  if (typeof confirmed !== 'string' || !RFC3339.test(confirmed) || Number.isNaN(Date.parse(confirmed))) problems.push('the authorization has no ownerConfirmedAt');
+  else {
+    const age = now.getTime() - Date.parse(confirmed);
+    if (age > EVAL_AUTHORIZATION_MAX_AGE_MS) problems.push(`the authorization was confirmed more than 24 hours ago (${confirmed})`);
+    if (age < -EVAL_AUTHORIZATION_SKEW_MS) problems.push(`the authorization names a confirmation in the future (${confirmed})`);
+  }
+  if (record['terminal'] !== true) problems.push('the authorization was not recorded from an interactive terminal');
+  if (record['listSha256'] !== expected.listSha256) problems.push('the authorization names another version of the approved task list');
+  if (!sameList(record['taskIds'], expected.taskIds)) problems.push(`the authorization names other tasks (${JSON.stringify(record['taskIds'])}) than this run's (${expected.taskIds.join(',')})`);
+  if (!sameList(record['arms'], expected.arms)) problems.push(`the authorization names other arms (${JSON.stringify(record['arms'])}) than this run's (${expected.arms.join(',')})`);
+  const cap = record['capUsd'];
+  if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0) problems.push('the authorization names no cap');
+  else if (cap + 1e-9 < expected.projectedUsd) problems.push(`the authorization's cap ${cap.toFixed(2)} USD is below this run's projection ${expected.projectedUsd.toFixed(2)} USD`);
+  return problems;
+}
+
+function readAuthorization(file: string): unknown {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+// The owner types `authorize` after reading the projection; anything else records nothing. The cap is the projection rounded up to the cent.
+async function authorizeEvaluation(options: Options, expected: EvalAuthorizationExpected, io: AuthorizeIo): Promise<number> {
+  const capUsd = Math.ceil(expected.projectedUsd * 100 - 1e-9) / 100;
+  process.stdout.write(`You are about to authorize live evaluation spend (D-03). Nothing has run yet.\n`);
+  process.stdout.write(`tasks ${expected.taskIds.join(',')}; arms ${expected.arms.join(',')}; per-run cap ${usd(options.capUsd)} USD; authorized cap ${usd(capUsd)} USD for the whole plan\n`);
+  process.stdout.write(`Phase 4 spent ${usd(phase4Spent())} of ${usd(phase4Ceiling())} USD; after the cap ${usd(phase4Spent() + capUsd)} USD; record valid for 24 hours\n`);
+  const answer = (await io.ask('Type "authorize" to record this authorization, anything else to stop: ')).trim();
+  if (answer !== 'authorize') {
+    process.stdout.write('not authorized; nothing was recorded\n');
+    return 1;
+  }
+  const record = {
+    schema: 1,
+    kind: 'avarice-ac8-spend-authorization',
+    ownerConfirmedAt: io.now().toISOString(),
+    terminal: true,
+    listSha256: expected.listSha256,
+    taskIds: expected.taskIds,
+    arms: expected.arms,
+    capUsd,
+    runCapUsd: options.capUsd,
+  };
+  const file = options.authorization as string;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+  process.stdout.write(`recorded in ${file}: ownerConfirmedAt ${record.ownerConfirmedAt}\n`);
+  return 0;
+}
+
+const uniqueTaskIds = (plan: readonly PlannedRun[]): string[] => plan.map((r) => r.task.id).filter((id, i, all) => all.indexOf(id) === i);
+
+export async function main(argv: readonly string[], io: AuthorizeIo = realAuthorizeIo()): Promise<number> {
   let options: Options;
   try {
     options = parseArgs(argv);
   } catch (e) {
     process.stderr.write(`eval-retrieval: ${(e as Error).message}\n${USAGE}\n`);
     return 64;
+  }
+  if (options.authorize) {
+    const refusal = authorizeRefusal(io);
+    if (refusal !== undefined) {
+      process.stderr.write(`eval-retrieval: refused: ${refusal}\n`);
+      return 3;
+    }
+  }
+  if (options.live) {
+    // Before the approved list is read, a repository is touched or the ledger is written: a paid run needs the opt-in and a named authorization record.
+    if (io.env['AVARICE_LIVE'] !== '1') {
+      process.stderr.write('eval-retrieval: refused: --live spends and needs AVARICE_LIVE=1 in the environment\n');
+      return 3;
+    }
+    if (options.authorization === undefined) {
+      process.stderr.write('eval-retrieval: refused: --live needs --authorization <file>, the record the owner wrote with --authorize in their own terminal\n');
+      return 3;
+    }
   }
   let approved: ApprovedTasks;
   try {
@@ -1140,11 +1254,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(`eval-retrieval: nothing to run: every selected (task, arm) pair is already recorded in ${options.out}\n`);
     return 0;
   }
+  const expected: EvalAuthorizationExpected = { listSha256: approved.digest, taskIds: uniqueTaskIds(plan), arms: options.arms, projectedUsd: project.totalUsd };
+  if (options.live) {
+    // The authorization is judged before the ceiling: a run the owner did not authorize is refused whatever the ledger holds.
+    const problems = evalAuthorizationProblems(readAuthorization(options.authorization as string), expected, io.now());
+    if (problems.length > 0) {
+      process.stderr.write(`eval-retrieval: refused: ${problems.join('; ')} (${options.authorization})\n`);
+      return 3;
+    }
+  }
   if (!fitsPhase4Ceiling(project.totalUsd)) {
     process.stderr.write(`eval-retrieval: ${ceilingRefusal('evaluation', project.totalUsd)}\n`);
     return 3;
   }
   if (options.dryRun) return 0;
+  if (options.authorize) return authorizeEvaluation(options, expected, io);
 
   // --live: nothing below runs unless the whole plan fits the ceiling (checked above) and every model step fits it again when it starts.
   const scratch = options.scratch ?? mkdtempSync(join(tmpdir(), 'avarice-eval-'));
