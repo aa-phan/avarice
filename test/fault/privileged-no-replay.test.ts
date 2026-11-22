@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { authorizeAction } from '../../src/app/authorize.ts';
+import { authorizeAction, finishPrivilegedAction, openPrivilegedSteps } from '../../src/app/authorize.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { paramsDigest } from '../../src/domain/approval.ts';
@@ -234,5 +234,71 @@ describe('no decision answer, contract amendment or plan approval writes an appr
     const answered = await withSupervisorEntry(s17Host({ question: undefined }), () => decideMain(blocked.f.roots, [blocked.decisionId, '1', '--wait']));
     assert.equal(answered.code, 0, answered.out + answered.err);
     assert.equal(rows<{ n: number }>(blocked.f.roots, 'SELECT count(*) AS n FROM approvals')[0]?.n, 0);
+  });
+});
+
+describe('the approval gate itself refuses to start an action whose earlier start with the same parameters is still open (WR-09, FR-15)', () => {
+  const SCOPE = 'attended:s_wr09';
+  const params = { target: 'registry.example.com', version: '1.2.3' };
+  const asContract = (p: Record<string, unknown>) => ({ scope: SCOPE, action: SYNTHETIC, params: p, contractAuthorization: { action: SYNTHETIC, params: p } });
+  const startsOf = (roots: CliRoots): number => rows<{ n: number }>(roots, "SELECT count(*) AS n FROM events WHERE type = 'action.started'")[0]?.n ?? 0;
+
+  it('a second start of the same scope, action and parameters is denied with interrupted-action-open and writes no second action.started', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    withDeps(roots, (deps) => {
+      const first = authorizeAction(deps, asContract(params));
+      assert.ok(first.ok && first.value.effect === 'allow', JSON.stringify(first));
+      const second = authorizeAction(deps, asContract(params));
+      assert.ok(second.ok, JSON.stringify(second));
+      assert.equal(second.value.effect, 'deny', JSON.stringify(second.value));
+      assert.ok(second.value.effect === 'deny' && second.value.rule === 'interrupted-action-open', JSON.stringify(second.value));
+    });
+    assert.equal(startsOf(roots), 1, 'the refused start recorded nothing');
+  });
+
+  it('after the first start is finished by its startSeq, the same parameters start normally again', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    withDeps(roots, (deps) => {
+      const first = authorizeAction(deps, asContract(params));
+      assert.ok(first.ok && first.value.effect === 'allow' && first.value.startSeq !== undefined, JSON.stringify(first));
+      const ended = finishPrivilegedAction(deps, SCOPE, SYNTHETIC, { status: 'succeeded' }, first.value.startSeq);
+      assert.ok(ended.ok, JSON.stringify(ended));
+      const third = authorizeAction(deps, asContract(params));
+      assert.ok(third.ok && third.value.effect === 'allow', JSON.stringify(third));
+    });
+    assert.equal(startsOf(roots), 2);
+  });
+
+  it('an earlier start with parameters X left open stays reported as interrupted, with the summary of X, when a later start with parameters Y finishes', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    withDeps(roots, (deps) => {
+      const x = authorizeAction(deps, asContract({ step: 'x-open' }));
+      const y = authorizeAction(deps, asContract({ step: 'y-done' }));
+      assert.ok(x.ok && x.value.effect === 'allow' && x.value.startSeq !== undefined, JSON.stringify(x));
+      assert.ok(y.ok && y.value.effect === 'allow' && y.value.startSeq !== undefined, JSON.stringify(y));
+      const ended = finishPrivilegedAction(deps, SCOPE, SYNTHETIC, { status: 'succeeded' }, y.value.startSeq);
+      assert.ok(ended.ok, JSON.stringify(ended));
+      const open = openPrivilegedSteps(deps, SCOPE);
+      assert.ok(open.ok);
+      assert.deepEqual(open.value.map((s) => ({ seq: s.startSeq, summary: s.paramsSummary })), [{ seq: x.value.startSeq, summary: 'step=x-open' }]);
+    });
+  });
+
+  it('an action.finished written before startSeq existed still closes the earliest open start of its action', () => {
+    const roots = makeRoots();
+    cleanup.push(roots.base);
+    withDeps(roots, (deps) => {
+      const x = authorizeAction(deps, asContract({ step: 'first' }));
+      const y = authorizeAction(deps, asContract({ step: 'second' }));
+      assert.ok(x.ok && y.ok && y.value.effect === 'allow');
+      const legacy = deps.ledger.appendEvent({ type: 'action.finished', data: { scope: SCOPE, action: SYNTHETIC, status: 'succeeded' }, nowMs: deps.clock.nowMs() });
+      assert.ok(legacy.ok);
+      const open = openPrivilegedSteps(deps, SCOPE);
+      assert.ok(open.ok);
+      assert.deepEqual(open.value.map((s) => s.paramsSummary), ['step=second']);
+    });
   });
 });
