@@ -22,6 +22,7 @@ import type { CredentialDeps } from '../../src/app/credentials.ts';
 import { MIGRATIONS, createDeps } from '../../src/cli/composition.ts';
 import { err, ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
+import { TRUNCATION_MARKER } from '../../src/ports/command-executor.ts';
 import type { CommandExecutor, CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
 import { TEST_CLI } from '../helpers/offline.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -352,6 +353,57 @@ describe('the cmd provider (SEC-2, T-04-38)', () => {
     assert.equal(result.value.use((v) => v), HELPER_VALUE);
     assert.deepEqual(outcomes(fx), ['resolved']);
     assert.ok(!credentialEvents(fx).some((row) => row.data_json.includes('diagnostic')));
+  });
+
+  // WR-16 (T-04-118): the executor sets `truncated` when either stream reached the limit, and cuts that stream with TRUNCATION_MARKER. A credential is
+  // too long only when stdout was cut; a verbose helper that fills stderr is not printing an oversized credential.
+  describe('the size of the credential is judged from stdout alone (WR-16, T-04-118)', () => {
+    const LIMIT = 16 * 1024;
+    // 40 characters; no secret pattern matches it.
+    const TOKEN = `${HELPER_VALUE}${['Yc4HfJ', '8sVa6E', 'gU1oXi', 'Z'].join('')}`;
+    const cut = (text: string): string => `${text.slice(0, LIMIT)}${TRUNCATION_MARKER}`;
+
+    it('resolves a helper that prints a 40-character token on stdout and 20 KiB on stderr, and the event carries no value', async () => {
+      assert.equal(TOKEN.length, 40);
+      const executor = new FakeExecutor(() => finished(`${TOKEN}\n`, { stderr: cut('e'.repeat(20 * 1024)), truncated: true }));
+      const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+      const result = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.equal(result.value.use((v) => v), TOKEN);
+      assert.deepEqual(outcomes(fx), ['resolved']);
+      assertValueFree(credentialEvents(fx), TOKEN);
+    });
+
+    it('refuses a helper that prints 20 KiB on stdout as invalid, naming the 16 KiB limit, and the event carries no value', async () => {
+      const printed = 'o'.repeat(20 * 1024);
+      const executor = new FakeExecutor(() => finished(cut(printed), { truncated: true }));
+      const fx = fixture({ cmd: new CmdProvider({ executor, helpers: { 'vault-helper': HELPER_PATH }, cwd: tempDir('avarice-cwd-') }) });
+      const result = await resolveCredential(fx.deps, 'cmd:vault-helper', 'test', { module: 'test' });
+      assert.ok(!result.ok);
+      assert.equal(result.error.kind, 'invalid');
+      assert.match(JSON.stringify(result.error), /16384 bytes/);
+      assert.deepEqual(outcomes(fx), ['invalid']);
+      assert.ok(!JSON.stringify(result).includes('oooooooo'), 'the error holds none of what was printed');
+      assertValueFree(credentialEvents(fx), 'oooooooo');
+    });
+
+    it('does the same through the real sandboxed executor: noisy stderr resolves, a flood on stdout is refused', { skip: enforced ? false : 'the sandbox is not usable here' }, async () => {
+      const dir = tempDir('avarice-helper-');
+      const noisy = join(dir, 'noisy-helper');
+      writeFileSync(noisy, `#!/bin/sh\nprintf '%s\\n' '${TOKEN}'\nhead -c 20480 /dev/zero | tr '\\0' 'e' >&2\n`);
+      chmodSync(noisy, 0o755);
+      const flood = join(dir, 'flood-helper');
+      writeFileSync(flood, `#!/bin/sh\nhead -c 20480 /dev/zero | tr '\\0' 'o'\n`);
+      chmodSync(flood, 0o755);
+      const fx = fixture({ cmd: new CmdProvider({ executor: realExecutor, helpers: { 'noisy-helper': noisy, 'flood-helper': flood }, cwd: dir }) });
+      const resolved = await resolveCredential(fx.deps, 'cmd:noisy-helper', 'test', { module: 'test' });
+      assert.ok(resolved.ok, JSON.stringify(resolved));
+      assert.equal(resolved.value.use((v) => v), TOKEN);
+      const refused = await resolveCredential(fx.deps, 'cmd:flood-helper', 'test', { module: 'test' });
+      assert.ok(!refused.ok);
+      assert.equal(refused.error.kind, 'invalid');
+      assert.deepEqual(outcomes(fx), ['resolved', 'invalid']);
+    });
   });
 });
 
