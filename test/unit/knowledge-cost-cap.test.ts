@@ -55,6 +55,10 @@ describe('knowledgeChunkLimit: the chunks one knowledge invocation fits under it
     assert.ok(knowledgeSessionCost(12) >= 0.7518 && knowledgeSessionCost(12) <= 0.8058, `${knowledgeSessionCost(12)}`);
   });
 
+  it('is 0 when no positive cost cap is left: a negative, zero or non-finite cap fits no chunk, and is never NaN (WR-05, OPS-5)', () => {
+    for (const cap of [-0.1, -3, 0, NaN, -Infinity, Infinity]) assert.equal(knowledgeChunkLimit(cap), 0, `cap ${cap}`);
+  });
+
   it('is the most chunks whose modelled session cost fits the planned share of the cap: 9 chunks at the 0.8 USD cap of the AC-14 authorization', () => {
     assert.equal(knowledgeChunkLimit(0.8), 9);
     assert.ok(knowledgeSessionCost(9) <= 0.8 * KNOWLEDGE_COST.capShare);

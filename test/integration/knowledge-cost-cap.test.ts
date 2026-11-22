@@ -4,7 +4,7 @@
 // extraction per document, no model), real gsd-core and a scratch repository with a committed map.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -122,6 +122,8 @@ function commitFiles(repo: StampedMapRepo, files: Readonly<Record<string, string
   git(repo.path, ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', message]);
 }
 
+const manifestExists = (roots: CliRoots, onboardingId: string): boolean => existsSync(join(roots.AVARICE_DATA_ROOT, 'onboard', onboardingId, 'knowledge', 'manifest.json'));
+
 const manifestOf = (roots: CliRoots, onboardingId: string, name = 'manifest.json'): { text: string; manifest: KnowledgeManifest } => {
   const text = readFileSync(join(roots.AVARICE_DATA_ROOT, 'onboard', onboardingId, 'knowledge', name), 'utf8');
   return { text, manifest: JSON.parse(text) as KnowledgeManifest };
@@ -192,6 +194,41 @@ describe('the knowledge corpus is capped by the cost of one invocation (ruling 2
     const highHost = freshHost();
     assert.equal((await onboard(high, 0.4, highHost)).outcome.state, 'active');
     assert.ok(pathsOf(highHost.plans[0]).length > pathsOf(lowHost.plans[0]).length);
+  });
+});
+
+describe('an onboarding with no cost cap left starts no knowledge invocation (WR-05, OPS-5, T-04-132)', () => {
+  // The run's cost row is overrun before the pass, so the cap the knowledge invocation would be granted (the smaller of the contract's and what is left) is negative.
+  async function onboardOverrun(f: Fixture, host: FakeKnowledgeHost) {
+    const env = { ...process.env, AVARICE_CONFIG_HOME: f.roots.AVARICE_CONFIG_HOME, AVARICE_DATA_ROOT: f.roots.AVARICE_DATA_ROOT, AVARICE_WORK_ROOT: f.roots.AVARICE_WORK_ROOT, AVARICE_GRAPHIFY_BIN: f.graphify };
+    const composed = createDeps(env, { host });
+    assert.ok(composed.ok, 'composition');
+    try {
+      const started = startOnboarding(composed.value.deps, { repoPath: f.repo.path, policy: 'onboarding', budgetOverrides: { costUsdPerInvocation: CAP_USD } });
+      assert.ok(started.ok, JSON.stringify(started));
+      const db = new DatabaseSync(join(f.roots.AVARICE_DATA_ROOT, 'state.db'));
+      try {
+        db.prepare("UPDATE budgets SET used = limit_value + 1 WHERE name = 'costUsd'").run();
+      } finally {
+        db.close();
+      }
+      const outcome = await runOnboarding(composed.value.deps, started.value.onboardingId);
+      assert.ok(outcome.ok);
+      return { outcome: outcome.value, onboardingId: started.value.onboardingId };
+    } finally {
+      composed.value.close();
+    }
+  }
+
+  it('starts no knowledge invocation, builds no corpus, and the knowledge index step names the budget', async () => {
+    const f = fixture();
+    const host = freshHost();
+    const run = await onboardOverrun(f, host);
+    assert.equal(host.calls.length, 0, 'the fake knowledge host was never called');
+    const step = stepOf(f.roots, run.onboardingId);
+    assert.equal(step?.status, 'absent', JSON.stringify(step));
+    assert.equal(step?.reason, 'budget_exhausted');
+    assert.equal(manifestExists(f.roots, run.onboardingId), false, 'no corpus manifest was written');
   });
 });
 
