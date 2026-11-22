@@ -4,7 +4,7 @@
 // link and read only when it is a regular file of at most 64 KiB, so a planted link or a huge file cannot steer which store opens.
 // Entries are validated by hand: a file that does not validate is refused whole (nothing is skipped), because a skipped entry would
 // silently let a bound repository open under another profile.
-import { closeSync, constants, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseProfileName, profileClass } from '../../domain/profile.ts';
 import { err, ok } from '../../domain/result.ts';
@@ -109,6 +109,11 @@ export function readBindings(configHome: string): Result<Binding[]> {
 // git root to bind and is skipped. A project that is already bound to the same profile is left alone; one bound to another profile is a
 // `conflict` naming the repository and that profile, and nothing is written for the projects after it.
 export function backfillBindings(configHome: string, profile: string, projects: ReadonlyArray<{ rootCommit: string; repoPath: string }>, nowMs: number): Result<number> {
+  return withBindingsLock(configHome, () => backfillLocked(configHome, profile, projects, nowMs));
+}
+
+// The backfill of every project under one hold of the lock, so no other writer's binding falls between two of its reads and writes.
+function backfillLocked(configHome: string, profile: string, projects: ReadonlyArray<{ rootCommit: string; repoPath: string }>, nowMs: number): Result<number> {
   let added = 0;
   for (const project of projects) {
     let gitRoot: string;
@@ -123,7 +128,7 @@ export function backfillBindings(configHome: string, profile: string, projects: 
       if (existing.value.profile === profile) continue;
       return err({ kind: 'conflict', expected: profile, actual: `repository ${gitRoot} is bound to ${existing.value.profile}` });
     }
-    const written = writeBinding(configHome, { gitRoot, rootCommit: project.rootCommit, profile, boundAt: new Date(nowMs).toISOString() });
+    const written = addBinding(configHome, { gitRoot, rootCommit: project.rootCommit, profile, boundAt: new Date(nowMs).toISOString() });
     if (!written.ok) return written;
     added += 1;
   }
@@ -137,10 +142,165 @@ export function findBinding(configHome: string, identity: RepositoryIdentity): R
   return ok(all.value.find((b) => b.gitRoot === identity.gitRoot && b.rootCommit === identity.rootCommit));
 }
 
+// How long a writer waits for the lock of another live process before the write fails as unavailable (WR-15).
+export const BINDINGS_LOCK_WAIT_MS = 2000;
+const LOCK_POLL_MS = 10;
+
+export function bindingsLockPathFor(configHome: string): string {
+  return `${bindingsPathFor(configHome)}.lock`;
+}
+
+interface LockHolder {
+  pid: number;
+  startedAt: string;
+}
+
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Whether a process still exists. A lock that names this very process is a leftover of an earlier process that had the same ID, since this
+// process holds a lock only inside one synchronous call and never leaves one behind while it runs.
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as { code?: unknown }).code === 'EPERM';
+  }
+}
+
+type LockState = { kind: 'absent' } | { kind: 'stale'; text: string } | { kind: 'held'; holder: LockHolder | undefined };
+
+// The lock file as found: gone, left by a process that no longer exists (or cut off before it held its holder, and older than the wait), or held.
+function inspectLock(lockPath: string): LockState {
+  let text: string;
+  try {
+    text = readFileSync(lockPath, 'utf8');
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'held', holder: undefined };
+  }
+  let holder: LockHolder | undefined;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (isRecord(parsed) && typeof parsed['pid'] === 'number' && Number.isSafeInteger(parsed['pid']) && parsed['pid'] > 0 && typeof parsed['startedAt'] === 'string') {
+      holder = { pid: parsed['pid'], startedAt: parsed['startedAt'] };
+    }
+  } catch {
+    holder = undefined;
+  }
+  if (holder !== undefined) return processAlive(holder.pid) ? { kind: 'held', holder } : { kind: 'stale', text };
+  // A lock whose holder cannot be read is a holder that has not finished writing it, unless it has been that way for longer than any writer waits.
+  try {
+    if (Date.now() - statSync(lockPath).mtimeMs > BINDINGS_LOCK_WAIT_MS) return { kind: 'stale', text };
+  } catch {
+    return { kind: 'absent' };
+  }
+  return { kind: 'held', holder: undefined };
+}
+
+// Takes a stale lock out of the way: it is renamed to a name of this process (only one contender wins the rename) and removed once it is seen to
+// be the lock that was judged stale. A lock another writer created in the meantime is put back. A third writer creating a lock in the gap between
+// the rename and the put-back is a residual of taking over without a lock of its own: two writers then hold it until the first releases.
+function takeOver(lockPath: string, judged: string): Result<void> {
+  const aside = `${lockPath}.stale.${String(process.pid)}`;
+  try {
+    renameSync(lockPath, aside);
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'ENOENT') return ok(undefined);
+    return err({ kind: 'unavailable', cause: `cannot take over the stale lock ${lockPath}: ${String((e as { code?: unknown }).code ?? 'rename failed')}` });
+  }
+  try {
+    if (readFileSync(aside, 'utf8') !== judged) {
+      try {
+        linkSync(aside, lockPath);
+      } catch {
+        // someone created a lock in the gap; theirs stands
+      }
+    }
+  } catch {
+    // unreadable now: nothing to put back
+  } finally {
+    try {
+      unlinkSync(aside);
+    } catch {
+      // already gone
+    }
+  }
+  return ok(undefined);
+}
+
+function describeHolder(holder: LockHolder | undefined): string {
+  return holder === undefined ? 'a writer whose process could not be read' : `process ${String(holder.pid)}, which started it at ${holder.startedAt}`;
+}
+
+// Runs `fn` while holding the exclusive lock file beside the registry (WR-15): created with the exclusive-create flag, holding this process's ID and
+// start time, waited for at most BINDINGS_LOCK_WAIT_MS, taken over when its holder no longer exists, and removed when `fn` returns or throws.
+function withBindingsLock<T>(configHome: string, fn: () => Result<T>): Result<T> {
+  const lockPath = bindingsLockPathFor(configHome);
+  try {
+    mkdirSync(configHome, { recursive: true, mode: 0o700 });
+  } catch (e) {
+    return err({ kind: 'unavailable', cause: `cannot create ${configHome}: ${(e as { code?: unknown }).code === undefined ? 'mkdir failed' : String((e as { code?: unknown }).code)}` });
+  }
+  const mine = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
+  const deadline = Date.now() + BINDINGS_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const fd = openSync(lockPath, 'wx', 0o600);
+      try {
+        writeFileSync(fd, mine);
+      } catch (e) {
+        closeSync(fd);
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          // never created
+        }
+        return err({ kind: 'unavailable', cause: `cannot write ${lockPath}: ${(e as { code?: unknown }).code === undefined ? 'write failed' : String((e as { code?: unknown }).code)}` });
+      }
+      closeSync(fd);
+      break;
+    } catch (e) {
+      const code = (e as { code?: unknown }).code;
+      if (code !== 'EEXIST') return err({ kind: 'unavailable', cause: `cannot create ${lockPath}: ${typeof code === 'string' ? code : 'open failed'}` });
+    }
+    const state = inspectLock(lockPath);
+    if (state.kind === 'absent') continue;
+    if (state.kind === 'stale') {
+      const taken = takeOver(lockPath, state.text);
+      if (!taken.ok) return taken;
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      return err({ kind: 'unavailable', cause: `${lockPath} is held by ${describeHolder(state.holder)}; gave up waiting after ${String(BINDINGS_LOCK_WAIT_MS / 1000)} seconds` });
+    }
+    pause(LOCK_POLL_MS);
+  }
+  try {
+    return fn();
+  } finally {
+    // Only a lock that still names this process: one taken over from it is another writer's.
+    try {
+      if (readFileSync(lockPath, 'utf8') === mine) unlinkSync(lockPath);
+    } catch {
+      // already gone
+    }
+  }
+}
+
 // Adds a binding. Create-only: a repository already bound to the same profile is left as it is, and one bound to another profile is a
-// `conflict` that changes nothing (a binding is never re-pointed). The file is written to a temporary name and renamed over the
-// registry, mode 0600, so a reader sees the old registry or the new one and never half of either.
+// `conflict` that changes nothing (a binding is never re-pointed). The registry is read, checked and rewritten under the lock, so a binding another
+// process added meanwhile is kept. The file is written to a temporary name through a descriptor (mode 0600), flushed to disk, and renamed over the
+// registry, so a reader sees the old registry or the new one and never half of either, and a crash leaves no empty registry.
 export function writeBinding(configHome: string, binding: Binding): Result<Binding> {
+  return withBindingsLock(configHome, () => addBinding(configHome, binding));
+}
+
+// The read-check-write of one binding; the caller holds the lock.
+function addBinding(configHome: string, binding: Binding): Result<Binding> {
   const existing = readBindings(configHome);
   if (!existing.ok) return existing;
   const same = existing.value.find((b) => b.gitRoot === binding.gitRoot && b.rootCommit === binding.rootCommit);
@@ -150,10 +310,21 @@ export function writeBinding(configHome: string, binding: Binding): Result<Bindi
   }
   if (existing.value.length >= MAX_BINDINGS) return err({ kind: 'invalid', field: BINDINGS_FILE, reason: `the registry already holds ${MAX_BINDINGS} bindings` });
   const path = bindingsPathFor(configHome);
-  const temp = `${path}.${process.pid}.tmp`;
+  const temp = `${path}.${String(process.pid)}.tmp`;
   try {
-    mkdirSync(configHome, { recursive: true, mode: 0o700 });
-    writeFileSync(temp, `${JSON.stringify({ schema: BINDINGS_SCHEMA, bindings: [...existing.value, binding] }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    // Under the lock, a temporary file of this name is a leftover of an earlier process that had this ID.
+    try {
+      unlinkSync(temp);
+    } catch {
+      // none
+    }
+    const fd = openSync(temp, 'wx', 0o600);
+    try {
+      writeFileSync(fd, `${JSON.stringify({ schema: BINDINGS_SCHEMA, bindings: [...existing.value, binding] }, null, 2)}\n`);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(temp, path);
   } catch (e) {
     try {
