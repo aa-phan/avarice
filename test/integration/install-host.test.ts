@@ -3,7 +3,7 @@
 // here is a temp directory named by CLAUDE_CONFIG_DIR; the real ~/.claude is checked to be untouched.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,6 +11,7 @@ import type { ProcessEntry } from '../../src/adapters/proc/ancestry.ts';
 import { main } from '../../src/cli/main.ts';
 import { ok } from '../../src/domain/result.ts';
 import type { Result } from '../../src/domain/result.ts';
+import { installAttendedHook } from '../../src/adapters/host-claude/attended-hook-install.ts';
 import { AVARICE_RUN_SKILL, SKILL_MARKER } from '../../src/adapters/host-claude/avarice-run-skill.ts';
 import { digestOf, sha256Hex } from '../../src/domain/digest.ts';
 import { PRODUCTION_ENTRY, makeRoots, runCli } from '../helpers/run-cli.ts';
@@ -287,5 +288,55 @@ describe('install-host refuses from a run process tree with AVARICE_RUN unset (W
     assert.equal(ran.code, 0, ran.err + ran.out);
     assert.ok(existsSync(skillFile(s.claude)));
     assert.ok(existsSync(join(s.claude, 'settings.json')));
+  });
+});
+
+// WR-25, T-04-123: the attended entry is written with onFailure "block", so an entry whose script is not a readable file would block every attended Bash call. install-host
+// resolves the hook entry first and refuses before it writes anything, so a refusal leaves nothing half-installed.
+describe('install-host refuses a hook entry that is not a readable regular file (WR-25, T-04-123)', () => {
+  const notAFile = (s: Setup): ReadonlyArray<{ name: string; path: string }> => {
+    const base = realpathSync(s.roots.base);
+    const directory = join(base, 'a-directory');
+    mkdirSync(directory);
+    const cases = [
+      { name: 'a path that does not exist', path: join(base, 'no-such-hook.ts') },
+      { name: 'a directory', path: directory },
+    ];
+    if (process.getuid?.() !== 0) {
+      const locked = join(base, 'locked-hook.ts');
+      writeFileSync(locked, '// hook\n');
+      chmodSync(locked, 0o000);
+      cases.push({ name: 'an unreadable file', path: locked });
+    }
+    return cases;
+  };
+
+  for (const which of [0, 1, 2]) {
+    it(`exits 3 naming the path and writes neither the skill nor settings.json (case ${which})`, () => {
+      const s = setup();
+      const found = notAFile(s)[which];
+      if (found === undefined) return;
+      const ran = installHost(s, { AVARICE_HOOK_ENTRY: found.path });
+      assert.equal(ran.code, 3, `${found.name}: ${ran.stderr}${ran.stdout}`);
+      assert.ok(ran.stderr.includes(found.path), 'the message names the path');
+      assert.match(ran.stderr, /nothing was written/);
+      assert.equal(ran.stdout, '', 'nothing was reported as installed');
+      assert.ok(!existsSync(join(s.claude, 'skills')), 'no skills directory');
+      assert.ok(!existsSync(join(s.claude, 'settings.json')), 'no settings.json');
+    });
+  }
+
+  it('installAttendedHook itself refuses such a hook entry with a denied error and writes nothing', () => {
+    const s = setup();
+    const base = realpathSync(s.roots.base);
+    for (const hookEntry of [join(base, 'absent.ts'), base]) {
+      const result = installAttendedHook(s.claude, { hookEntry, dataRoot: join(base, 'data') });
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.error.kind, 'denied');
+        assert.ok(JSON.stringify(result.error).includes(hookEntry));
+      }
+      assert.ok(!existsSync(join(s.claude, 'settings.json')), 'no settings.json');
+    }
   });
 });

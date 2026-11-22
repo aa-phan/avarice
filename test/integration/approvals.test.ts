@@ -247,6 +247,8 @@ describe('an approval is bound to its scope, action, parameters and window (T-04
 
     const unknown = await runMain(roots, ['approve', '--revoke', 'apv_01NOSUCHAPPROVAL0000000'], { clock });
     assert.equal(unknown.code, 64, unknown.out + unknown.err);
+    assert.match(unknown.err, /^avarice approve: no such approval \(/m, 'a missing approval is named an approval, not a request');
+    assert.doesNotMatch(unknown.err, /no such approval request/);
   });
 
   it('refuses to revoke an approval that was already consumed', async () => {
@@ -270,6 +272,7 @@ describe('an approval is bound to its scope, action, parameters and window (T-04
     assert.equal(approvalsOf(roots).length, 0);
     const unknown = await runMain(roots, ['approve', 'apr_01NOSUCHREQUEST00000000'], { answers: ['y'] });
     assert.equal(unknown.code, 64, unknown.out + unknown.err);
+    assert.match(unknown.err, /^avarice approve: no such approval request \(/m, 'a missing request is named a request (WR-27)');
     assert.equal(unknown.questions.length, 0, 'an unknown request is not asked about');
   });
 
