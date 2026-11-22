@@ -21,7 +21,7 @@ import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
 import { BROAD_DISCOVERY_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
 import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
-import { classifyCommandLine, privilegedReason } from '../domain/privileged-commands.ts';
+import { UNPARSEABLE_RULE, classifyLine, privilegedReason } from '../domain/privileged-commands.ts';
 import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
 import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
 import { processRedactor } from '../adapters/redaction/process-redactor.ts';
@@ -536,6 +536,31 @@ function configChange(policyPath: string | undefined): never {
 // The host's session ID as a plain token: it becomes part of an approval scope.
 const SESSION_ID = /^[A-Za-z0-9_.-]{1,100}$/;
 
+// A line the classifier could not read (a limit passed, an unterminated quote or substitution): refused, never passed silently (plan 04-40; CR-01, FR-12). The denial is
+// recorded as `policy.denied` with the rule `privileged:unparseable` and the scope, and holds no command text. It needs no approval: nothing is named that the owner could approve.
+function denyUnparseable(dataRoot: string, scope: string, tool: string, reason: string): void {
+  const db = openLedger(join(dataRoot, 'state.db'));
+  try {
+    inTransaction(db, () => {
+      appendEventRow(db, {
+        type: 'policy.denied',
+        level: 'warn',
+        data: { ruleId: UNPARSEABLE_RULE, scope, tool: short(tool), reason: short(reason), source: 'hook' },
+        nowMs: Date.now(),
+      });
+    });
+  } finally {
+    db.close();
+  }
+  emit({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `avarice: ${UNPARSEABLE_RULE}: the command could not be checked for privileged actions (${reason}); split it into shorter commands, or write files with the Write tool`,
+    },
+  });
+}
+
 function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): void {
   const tool = input['tool_name'];
   if (typeof tool !== 'string' || tool === '') fail('the hook input has no tool_name');
@@ -543,12 +568,15 @@ function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): v
   const toolInput = input['tool_input'];
   const command = typeof toolInput === 'object' && toolInput !== null && !Array.isArray(toolInput) ? (toolInput as Record<string, unknown>)['command'] : undefined;
   if (typeof command !== 'string') fail('the Bash input has no command');
-  const privileged = classifyCommandLine(command);
-  if (privileged === null) return;
+  const classified = classifyLine(command);
+  if (classified.kind === 'none') return;
   const session = input['session_id'];
   if (typeof session !== 'string' || !SESSION_ID.test(session)) fail('a privileged call needs the host session_id as a plain token');
   const scope = `attended:${session}`;
-  const { action, params } = privileged;
+  if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
+  // One approval is consumed for the first privileged command of the line (plan 04-48 extends this to every command).
+  const { action, params } = classified.commands[0] as PrivilegedCommand;
+  const privileged = { action, params };
 
   const db = openLedger(join(dataRoot, 'state.db'));
   let requestId: string | null;

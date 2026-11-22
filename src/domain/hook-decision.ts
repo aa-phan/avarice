@@ -13,7 +13,7 @@ import { matchesAny } from './glob.ts';
 import { sha256Hex } from './digest.ts';
 import { FIND_DENIED_ACTIONS } from './invocation-scope.ts';
 import { lexicalAbsolute } from './normalized-root.ts';
-import { classifyCommandLine } from './privileged-commands.ts';
+import { classifyLine } from './privileged-commands.ts';
 import type { PrivilegedCommand } from './privileged-commands.ts';
 import { shellRuleReason } from './run-shell-rules.ts';
 import type { AgentCommand, BashStrategy, InvocationPurpose } from './invocation-scope.ts';
@@ -796,8 +796,13 @@ function decideShell(call: Extract<NormalizedToolCall, { kind: 'shell' }>, polic
   if (command === '' || command.length > MAX_COMMAND_CHARS) return refuse('shell-syntax');
 
   // Plan 04-19 (FR-12): a privileged form is named before the prefix rules, so the refusal names the action and the approval route instead of the bare prefix.
-  const privileged = classifyCommandLine(command);
-  if (privileged !== null) return { decision: 'deny', rule: `${PRIVILEGED_RULE_PREFIX}${privileged.action}`, privileged };
+  // A line the classifier could not read is refused with the run's existing rule for a line it cannot judge (plan 04-40; CR-01).
+  const classified = classifyLine(command);
+  if (classified.kind === 'unparseable') return refuse('shell-syntax');
+  if (classified.kind === 'privileged') {
+    const privileged = classified.commands[0] as PrivilegedCommand;
+    return { decision: 'deny', rule: `${PRIVILEGED_RULE_PREFIX}${privileged.action}`, privileged };
+  }
 
   let lines: string[] = [command];
   let preamble = false;

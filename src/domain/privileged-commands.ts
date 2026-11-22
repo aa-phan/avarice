@@ -79,8 +79,11 @@ const SEPARATORS = ';&|\n\r()';
 
 // Every command of the line as its words, the commands inside substitutions included. Quotes are removed, a backslash makes the next character literal, a
 // redirection and its target are dropped. The text is not expanded: `$x` is a word.
-function splitInto(text: string, out: string[][], depth: number): void {
-  if (depth > MAX_NESTING) return;
+function splitInto(text: string, out: string[][], depth: number, failure: { reason?: string }): void {
+  if (depth > MAX_NESTING) {
+    failure.reason ??= `more than ${MAX_NESTING} nested command substitutions`;
+    return;
+  }
   let words: string[] = [];
   let word = '';
   let inWord = false;
@@ -120,11 +123,11 @@ function splitInto(text: string, out: string[][], depth: number): void {
           i += 2;
         } else if (d === '$' && text[i + 1] === '(') {
           const end = closingParen(text, i + 2);
-          splitInto(text.slice(i + 2, end), out, depth + 1);
+          splitInto(text.slice(i + 2, end), out, depth + 1, failure);
           i = end + 1;
         } else if (d === '`') {
           const end = closingBacktick(text, i + 1);
-          splitInto(text.slice(i + 1, end), out, depth + 1);
+          splitInto(text.slice(i + 1, end), out, depth + 1, failure);
           i = end + 1;
         } else {
           word += d;
@@ -134,13 +137,13 @@ function splitInto(text: string, out: string[][], depth: number): void {
       i += 1;
     } else if (c === '$' && text[i + 1] === '(') {
       const end = closingParen(text, i + 2);
-      splitInto(text.slice(i + 2, end), out, depth + 1);
+      splitInto(text.slice(i + 2, end), out, depth + 1, failure);
       word += '$';
       inWord = true;
       i = end + 1;
     } else if (c === '`') {
       const end = closingBacktick(text, i + 1);
-      splitInto(text.slice(i + 1, end), out, depth + 1);
+      splitInto(text.slice(i + 1, end), out, depth + 1, failure);
       inWord = true;
       i = end + 1;
     } else if (isSpace(c)) {
@@ -169,12 +172,15 @@ function splitInto(text: string, out: string[][], depth: number): void {
   endCommand();
 }
 
-// The commands of a shell line, each as its words. A line longer than the cap yields none: the hook refuses such a line before it asks.
-export function commandsOf(command: string): string[][] {
-  if (command.length > MAX_COMMAND_CHARS) return [];
+// The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands.
+export type Commands = { ok: true; commands: string[][] } | { ok: false; reason: string };
+
+export function commandsOf(command: string): Commands {
+  if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
   const out: string[][] = [];
-  splitInto(command, out, 0);
-  return out;
+  const failure: { reason?: string } = {};
+  splitInto(command, out, 0, failure);
+  return failure.reason === undefined ? { ok: true, commands: out } : { ok: false, reason: failure.reason };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -399,15 +405,6 @@ export function classifyShellCommand(words: readonly string[]): PrivilegedComman
   }
 }
 
-// The first privileged action a shell line holds, or null. Every command of the line is asked, so `cd x && git push` and `echo $(git push)` are named too.
-export function classifyCommandLine(command: string): PrivilegedCommand | null {
-  for (const words of commandsOf(command)) {
-    const found = classifyShellCommand(words);
-    if (found !== null) return found;
-  }
-  return null;
-}
-
 // The three answers about a shell line (plan 04-40; CR-01): nothing privileged, the privileged commands it holds, or a line the classifier could not read.
 export type LineClassification =
   | { kind: 'none' }
@@ -416,8 +413,17 @@ export type LineClassification =
 
 export const UNPARSEABLE_RULE = 'privileged:unparseable';
 
-export function classifyLine(_command: string): LineClassification {
-  throw new Error('not implemented');
+// Every privileged command a shell line holds, in scan order, so `cd x && git push` and `echo $(git push)` are named too. A line the classifier could not read is
+// 'unparseable', never 'none': both callers refuse it.
+export function classifyLine(command: string): LineClassification {
+  const split = commandsOf(command);
+  if (!split.ok) return { kind: 'unparseable', reason: split.reason };
+  const commands: PrivilegedCommand[] = [];
+  for (const words of split.commands) {
+    const found = classifyShellCommand(words);
+    if (found !== null) commands.push(found);
+  }
+  return commands.length === 0 ? { kind: 'none' } : { kind: 'privileged', commands };
 }
 
 // The reason the model is told with a refusal of a privileged form: the action, and the command the owner runs to approve it.

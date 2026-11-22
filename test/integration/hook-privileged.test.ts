@@ -11,7 +11,7 @@ import { ATTENDED_HOOK_MARKER } from '../../src/adapters/host-claude/attended-ho
 import { createDeps } from '../../src/cli/composition.ts';
 import { paramsDigest } from '../../src/domain/approval.ts';
 import { digestOf } from '../../src/domain/digest.ts';
-import { classifyCommandLine, classifyShellCommand } from '../../src/domain/privileged-commands.ts';
+import { classifyLine, classifyShellCommand } from '../../src/domain/privileged-commands.ts';
 import { HOOK_ENTRY, PREAMBLE, budgetUsed, chainIsIntact, eventRows, makeHookFixture, runHook } from '../helpers/hook-fixture.ts';
 import type { HookFixture } from '../helpers/hook-fixture.ts';
 import { runMain } from '../helpers/decide-cli.ts';
@@ -38,8 +38,9 @@ const bash = (command: string): { tool_name: string; tool_input: { command: stri
 
 describe('the classification table (FR-12)', () => {
   const classes = (command: string): [string, Record<string, string>] | null => {
-    const found = classifyCommandLine(command);
-    return found === null ? null : [found.action, found.params];
+    const found = classifyLine(command);
+    const first = found.kind === 'privileged' ? found.commands[0] : undefined;
+    return first === undefined ? null : [first.action, first.params];
   };
 
   it('names git push by its remote and refspec, whatever way the command is spelled', () => {
