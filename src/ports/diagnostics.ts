@@ -51,12 +51,15 @@ export interface HookSettingsFacts {
   path: string;
   state: 'absent' | 'unreadable' | 'read';
   attendedEntries: number;
+  attendedCommands: string[];
 }
 
 export interface ConfigDirFacts {
   path: string;
   exists: boolean;
   attendedEntries: number;
+  // The command strings of those entries, as written in settings.json.
+  attendedCommands: string[];
   // Names of the `avarice-*` skill directories under `skills/`.
   skills: string[];
   // The 1-based lines of its CLAUDE.md that mention `git push` or opening a pull request without a word of approval on the same line. Never the text of the line.

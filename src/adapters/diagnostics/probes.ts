@@ -71,6 +71,20 @@ function attendedEntriesOf(settings: unknown): number {
   return groups.filter((group) => isObject(group) && Array.isArray(group['hooks']) && group['hooks'].some((hook) => isObject(hook) && typeof hook['command'] === 'string' && hook['command'].includes(ATTENDED_HOOK_MARKER))).length;
 }
 
+// The command strings of the attended entries: every command of a PreToolUse entry that carries the marker.
+function attendedCommandsOf(settings: unknown): string[] {
+  const groups = isObject(settings) && isObject(settings['hooks']) ? settings['hooks']['PreToolUse'] : undefined;
+  if (!Array.isArray(groups)) return [];
+  const commands: string[] = [];
+  for (const group of groups) {
+    if (!isObject(group) || !Array.isArray(group['hooks'])) continue;
+    for (const hook of group['hooks']) {
+      if (isObject(hook) && typeof hook['command'] === 'string' && hook['command'].includes(ATTENDED_HOOK_MARKER)) commands.push(hook['command']);
+    }
+  }
+  return commands;
+}
+
 // Lines of an instruction file that mention pushing or opening a pull request. A line that carries a word of approval, or a prohibition, is not a conflict.
 const PUSH_MENTION = /\bgit\s+push\b|\bgh\s+pr\s+create\b|\b(?:create|open|raise|submit)\s+(?:a\s+|the\s+)?(?:pull request|PR)\b/i;
 const APPROVAL_WORD = /\b(?:approv\w*|ask\w*|confirm\w*|permission|consent|never|do not|don't|must not|without asking)\b/i;
@@ -234,23 +248,26 @@ export class ProcessDiagnostics implements Diagnostics {
   hookSettings(configDir: string): HookSettingsFacts {
     const path = join(configDir, 'settings.json');
     const read = readSmallText(path);
-    if ('absent' in read) return { path, state: 'absent', attendedEntries: 0 };
-    if ('unreadable' in read) return { path, state: 'unreadable', attendedEntries: 0 };
+    if ('absent' in read) return { path, state: 'absent', attendedEntries: 0, attendedCommands: [] };
+    if ('unreadable' in read) return { path, state: 'unreadable', attendedEntries: 0, attendedCommands: [] };
     try {
-      return { path, state: 'read', attendedEntries: attendedEntriesOf(JSON.parse(read.text)) };
+      const parsed: unknown = JSON.parse(read.text);
+      return { path, state: 'read', attendedEntries: attendedEntriesOf(parsed), attendedCommands: attendedCommandsOf(parsed) };
     } catch {
-      return { path, state: 'unreadable', attendedEntries: 0 };
+      return { path, state: 'unreadable', attendedEntries: 0, attendedCommands: [] };
     }
   }
 
   configDir(path: string): ConfigDirFacts {
-    const facts: ConfigDirFacts = { path, exists: false, attendedEntries: 0, skills: [], instructionLines: [] };
+    const facts: ConfigDirFacts = { path, exists: false, attendedEntries: 0, attendedCommands: [], skills: [], instructionLines: [] };
     try {
       facts.exists = statSync(path).isDirectory();
     } catch {
       return facts;
     }
-    facts.attendedEntries = this.hookSettings(path).attendedEntries;
+    const settings = this.hookSettings(path);
+    facts.attendedEntries = settings.attendedEntries;
+    facts.attendedCommands = settings.attendedCommands;
     try {
       for (const entry of readdirSync(join(path, 'skills'), { withFileTypes: true })) {
         if (!entry.name.startsWith('avarice-')) continue;

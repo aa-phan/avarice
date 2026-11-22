@@ -2,11 +2,13 @@
 // createDeps: no migration, no backup, no lease, no GSD requirement, no host composed, no executor probed. It resolves the profile the way every command does (which
 // creates the profile directories and config file when they are absent, and nothing else), reads the profile's config, and builds the bounded probes. It never fails: a
 // profile that cannot be prepared is reported as a finding by the read model, and the sections that do not need it are still filled.
+import { statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ProcessDiagnostics } from '../adapters/diagnostics/probes.ts';
 import { configPathFor, resolveProfile } from '../adapters/fs/profile-paths.ts';
+import { attendedEntryPaths } from '../adapters/host-claude/attended-hook-install.ts';
 import { processRedactor } from '../adapters/redaction/process-redactor.ts';
 import { describeError, openDb } from '../adapters/sqlite/db.ts';
 import type { Db } from '../adapters/sqlite/db.ts';
@@ -19,6 +21,15 @@ import { effectiveHostConfigDir } from './host-config-dir.ts';
 export interface DoctorComposition {
   deps: DoctorDeps;
   close(): void;
+}
+
+// Whether a path is a regular file now (a symbolic link is followed, as the host's process start does).
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 export function createDoctorDeps(env: NodeJS.ProcessEnv, profileName: string): DoctorComposition {
@@ -65,6 +76,14 @@ export function createDoctorDeps(env: NodeJS.ProcessEnv, profileName: string): D
       hookEntry,
       claudeConfigDir,
       extensionDirs: claudeConfigDir === defaultConfigDir ? [claudeConfigDir] : [claudeConfigDir, defaultConfigDir],
+      attendedEntryFiles: (command) => {
+        const paths = attendedEntryPaths(command);
+        if (paths === null) return [];
+        return [
+          { role: 'node executable', path: paths.node, present: isRegularFile(paths.node) },
+          { role: 'hook script', path: paths.script, present: isRegularFile(paths.script) },
+        ];
+      },
       expectedSchema: Math.max(...MIGRATIONS.map((m) => m.version)),
       diagnostics: new ProcessDiagnostics(),
       readLedger,

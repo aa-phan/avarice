@@ -69,9 +69,47 @@ export function hookEntryProblem(path: string): string | undefined {
   }
 }
 
-// The node executable and the hook script a command written by attendedHookEntry runs, or null for any other command (a skeleton: filled in by the next commit).
-export function attendedEntryPaths(_command: string): { node: string; script: string } | null {
-  return null;
+// The words of a command line in the form `quote` writes: bare words and single-quoted runs, with `'\''` for a quote inside one. Null when the text is not in that form.
+function shellWords(command: string): string[] | null {
+  const words: string[] = [];
+  let current = '';
+  let started = false;
+  let quoted = false;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i] as string;
+    if (quoted) {
+      if (c === "'") quoted = false;
+      else current += c;
+    } else if (c === "'") {
+      quoted = true;
+      started = true;
+    } else if (c === '\\') {
+      i += 1;
+      if (i >= command.length) return null;
+      current += command[i] as string;
+      started = true;
+    } else if (c === ' ') {
+      if (started) words.push(current);
+      current = '';
+      started = false;
+    } else {
+      current += c;
+      started = true;
+    }
+  }
+  if (quoted) return null;
+  if (started) words.push(current);
+  return words;
+}
+
+// The node executable and the hook script a command written by attendedHookEntry runs, or null for any other command (a hand-written one, or one in another form). The form
+// is fixed here, beside the writer, so doctor reads back exactly what install-host wrote (WR-25).
+export function attendedEntryPaths(command: string): { node: string; script: string } | null {
+  const words = shellWords(command);
+  if (words === null || words.length !== 9) return null;
+  const [node, warning, script, eventFlag, event, attended, marker, dataFlag] = words as [string, string, string, string, string, string, string, string, string];
+  if (warning !== '--disable-warning=ExperimentalWarning' || eventFlag !== '--event' || event !== 'pre' || attended !== '--attended' || marker !== ATTENDED_HOOK_MARKER || dataFlag !== '--data-root') return null;
+  return { node, script };
 }
 
 function lstatOrNull(path: string): Stats | null {

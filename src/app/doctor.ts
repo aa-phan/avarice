@@ -57,6 +57,9 @@ export interface DoctorDeps {
   // The Claude configuration directory a run would use, and the directories `--extensions` compares (that one, and the default one when it is another).
   claudeConfigDir: string;
   extensionDirs: readonly string[];
+  // The files an attended hook entry's command runs, when the command is the form `install-host` writes (the node executable and the hook script), and whether each is a
+  // regular file now; an empty list for any other command (WR-25).
+  attendedEntryFiles(command: string): ReadonlyArray<{ role: 'node executable' | 'hook script'; path: string; present: boolean }>;
   // The schema version this build writes (the newest migration it ships).
   expectedSchema: number;
   diagnostics: Diagnostics;
@@ -631,6 +634,20 @@ function extensionsSection(deps: DoctorDeps, findings: DoctorFinding[]): DoctorE
   for (const d of existing) {
     if (d.attendedEntries > 1) {
       findings.push({ level: 'warning', area: 'extensions', message: `${d.path}/settings.json holds ${d.attendedEntries} AVARICE attended hook entries`, fix: 'run avarice install-host, which keeps one' });
+    }
+  }
+  // An attended entry blocks every Bash call of an attended session when it fails (onFailure block), so a script or a node executable behind it that is gone is an error.
+  for (const d of existing) {
+    for (const command of d.attendedCommands) {
+      for (const file of deps.attendedEntryFiles(command)) {
+        if (file.present) continue;
+        findings.push({
+          level: 'error',
+          area: 'extensions',
+          message: `the attended hook entry in ${d.path}/settings.json runs a ${file.role} that does not exist: ${file.path}; every attended Bash call is blocked`,
+          fix: 'run avarice install-host, which rewrites the entry for the hook script and node executable it finds now',
+        });
+      }
     }
   }
   const seen = new Map<string, string[]>();
