@@ -1,0 +1,372 @@
+{
+  "schema": 1,
+  "plan": "04-50",
+  "decision": "AC-8: how the token bound is closed for Phase 4 (a: change the bound or requirement, b: make runs read less then re-run, c: accept the failure as an owner override and defer)",
+  "generatedAt": "2026-11-22T23:39:36.198Z",
+  "sources": [
+    "test/benchmark/phase4/eval-results.json",
+    "test/benchmark/phase4/eval-tasks.json",
+    "test/containment/live-spend-phase4.jsonl",
+    "04-36-evidence/{task}-{arm}/transcripts/run-transcript-*.txt"
+  ],
+  "evalResultsSha256": "3b40148356b2f2dd7420d18ed6e6d36b7e6d73378fe8f4d52deeba5fa9e5b5e8",
+  "evalResultsGeneratedAt": "2026-11-20T02:31:07.591Z",
+  "requirement": "AC-8 (docs/requirements.md): a pack arm matches the success of the baseline within half of its tokens",
+  "taskIds": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06"
+  ],
+  "arms": {
+    "A": {
+      "runs": 6,
+      "success": 2,
+      "tokens": 19833920,
+      "meanTokensPerRun": 3305653,
+      "runCostUsd": 1.059208,
+      "setupCostUsd": 1.14,
+      "tokensCompleteRuns": 6,
+      "judgeErrorRuns": 0,
+      "states": {
+        "ready_for_review": 3,
+        "blocked_on_decision (decision)": 3
+      },
+      "perTask": [
+        {
+          "task": "T01",
+          "success": true,
+          "tokens": 2486811,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T02",
+          "success": false,
+          "tokens": 2561571,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T03",
+          "success": false,
+          "tokens": 4746460,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T04",
+          "success": false,
+          "tokens": 3324764,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T05",
+          "success": true,
+          "tokens": 3993902,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T06",
+          "success": false,
+          "tokens": 2720412,
+          "state": "ready_for_review"
+        }
+      ],
+      "shareOfArmA": 1
+    },
+    "B": {
+      "runs": 6,
+      "success": 4,
+      "tokens": 18715894,
+      "meanTokensPerRun": 3119316,
+      "runCostUsd": 0.834206,
+      "setupCostUsd": 0.7,
+      "tokensCompleteRuns": 6,
+      "judgeErrorRuns": 0,
+      "states": {
+        "ready_for_review": 5,
+        "blocked_on_decision (decision)": 1
+      },
+      "perTask": [
+        {
+          "task": "T01",
+          "success": true,
+          "tokens": 3129909,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T02",
+          "success": false,
+          "tokens": 3040412,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T03",
+          "success": true,
+          "tokens": 2877492,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T04",
+          "success": true,
+          "tokens": 3399716,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T05",
+          "success": true,
+          "tokens": 3669406,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T06",
+          "success": false,
+          "tokens": 2598959,
+          "state": "ready_for_review"
+        }
+      ],
+      "shareOfArmA": 0.9436
+    },
+    "C": {
+      "runs": 6,
+      "success": 4,
+      "tokens": 17557851,
+      "meanTokensPerRun": 2926309,
+      "runCostUsd": 0.866293,
+      "setupCostUsd": 4.98,
+      "tokensCompleteRuns": 6,
+      "judgeErrorRuns": 0,
+      "states": {
+        "blocked_on_decision (decision)": 2,
+        "ready_for_review": 4
+      },
+      "perTask": [
+        {
+          "task": "T01",
+          "success": false,
+          "tokens": 3611629,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T02",
+          "success": true,
+          "tokens": 2372642,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T03",
+          "success": true,
+          "tokens": 3210746,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T04",
+          "success": true,
+          "tokens": 2382964,
+          "state": "ready_for_review"
+        },
+        {
+          "task": "T05",
+          "success": false,
+          "tokens": 3434768,
+          "state": "blocked_on_decision (decision)"
+        },
+        {
+          "task": "T06",
+          "success": true,
+          "tokens": 2545102,
+          "state": "ready_for_review"
+        }
+      ],
+      "shareOfArmA": 0.8852
+    }
+  },
+  "verdict": {
+    "recorded": {
+      "pass": false,
+      "via": null,
+      "reason": "no pack arm both matches the success of A and stays within half of its tokens",
+      "arms": {
+        "B": {
+          "successOk": true,
+          "tokensOk": false,
+          "tokenShare": 0.9436306085735952
+        },
+        "C": {
+          "successOk": true,
+          "tokensOk": false,
+          "tokenShare": 0.8852436129620368
+        }
+      }
+    },
+    "recomputedFromRuns": {
+      "bound": 0.5,
+      "tokensAtBound": 9916960,
+      "B": {
+        "successOk": true,
+        "tokensOk": false,
+        "share": 0.9436
+      },
+      "C": {
+        "successOk": true,
+        "tokensOk": false,
+        "share": 0.8852
+      }
+    },
+    "tokensNeededByBForBound": 9916960,
+    "reductionNeededFromB": 0.4701,
+    "reductionNeededFromC": 0.4352
+  },
+  "allRunsEndedInReviewableOrBlockedState": true,
+  "allRunsTokensComplete": true,
+  "everyArmRanSameTaskCount": true,
+  "verdictArithmeticDefectsNote": "WR-28 (infrastructure outcomes and incomplete tokens in the summary) and WR-29 (totals compared across unequal task counts) do not change this verdict: all 18 runs ended in ready_for_review or blocked_on_decision with tokensComplete true, and every arm ran 6 tasks.",
+  "packBudget": {
+    "tokensPerRun": 24000,
+    "decision": "D-13",
+    "shareOfMeanRun": "under 1% of a run (2.9 to 3.3 million tokens)",
+    "consequence": "Shrinking the pack alone cannot reach 50%; reaching it needs the agent to read less (for example tighter search and tool-call budgets). A retrieval cap below the start values of D-09 would itself be an owner decision."
+  },
+  "wholeFileReadCaps": {
+    "values": "20 files and 256 KiB per run (D-09)",
+    "statement": "The whole-file read caps are enforced from plan 04-55 on as a containment fix, not as an AC-8 option. The 18 recorded runs predate that enforcement; a re-run under branch (b) measures runs with the caps enforced. This decision context offers no cap change as an option.",
+    "enforcedBy": "plan 04-55"
+  },
+  "spend": {
+    "ledgerFile": "test/containment/live-spend-phase4.jsonl",
+    "entries": 94,
+    "spentUsd": 16.02,
+    "ceilingUsd": 40,
+    "remainingUsd": 23.98,
+    "recordedEvaluationProjectedCapUsd": 24.6,
+    "recordedEvaluationProjectedCapExceedsRemainingUsd": 0.62,
+    "adr015ApproximateCostOfOneEvaluationUsd": 12
+  },
+  "wr36Scan": {
+    "finding": "WR-36: the arm repository keeps the old held-out file in history",
+    "method": "For each of the 18 run transcripts (04-36-evidence/{task}-{arm}/transcripts/run-transcript-*.txt, summaries excluded), every Bash tool call was read; a call counts when it is a git history read (git show naming HEAD~ or HEAD^, or git log -p / --patch) and names the held-out test path or its file name from test/benchmark/phase4/eval-tasks.json.",
+    "transcriptsScanned": 18,
+    "bashCallsRead": 249,
+    "gitHistoryReadsWithParentRefOrPatch": 0,
+    "gitHistoryReadsNamingHeldOutTest": 0,
+    "otherGitCallsSeen": 16,
+    "otherGitCallsNote": "All of them read the working tree or HEAD (git show HEAD:<path>, git diff, git log --oneline/--stat on a source path); none uses HEAD~ or HEAD^, -p or --patch.",
+    "perRun": [
+      {
+        "task": "T01",
+        "arm": "A",
+        "heldOutPath": "tests/unit/motion-features.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T01",
+        "arm": "B",
+        "heldOutPath": "tests/unit/motion-features.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T01",
+        "arm": "C",
+        "heldOutPath": "tests/unit/motion-features.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T02",
+        "arm": "A",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T02",
+        "arm": "B",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T02",
+        "arm": "C",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T03",
+        "arm": "A",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T03",
+        "arm": "B",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T03",
+        "arm": "C",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T04",
+        "arm": "A",
+        "heldOutPath": "tests/unit/dates.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T04",
+        "arm": "B",
+        "heldOutPath": "tests/unit/dates.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T04",
+        "arm": "C",
+        "heldOutPath": "tests/unit/dates.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T05",
+        "arm": "A",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T05",
+        "arm": "B",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T05",
+        "arm": "C",
+        "heldOutPath": "tests/unit/sections.test.tsx",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T06",
+        "arm": "A",
+        "heldOutPath": "tests/unit/theme.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T06",
+        "arm": "B",
+        "heldOutPath": "tests/unit/theme.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      },
+      {
+        "task": "T06",
+        "arm": "C",
+        "heldOutPath": "tests/unit/theme.test.ts",
+        "gitHistoryReadsNamingHeldOut": 0
+      }
+    ],
+    "conclusion": "No recorded run read the held-out file through git history. The exposure WR-36 describes exists in the arm repositories but is not used in these 18 runs."
+  },
+  "options": {
+    "a": "Change the bound or the requirement through a new ADR (ADR-016), then align docs/requirements.md, the harness verdict bound and ROADMAP SC2; the owner states the new bound or wording",
+    "b": "Make runs read less (needs its own gap plan first), then re-run the evaluation under the plan 04-46 authorization gate; this plan only fixes WR-28, WR-29, WR-32 and WR-36 and writes the re-run specification",
+    "c": "Accept the failure as an owner override in 04-VERIFICATION.md and defer AC-8 to a target the owner names"
+  },
+  "note": "docs/requirements.md calls every acceptance target a proposal that has not been measured. The recorded eval-results.json is never rewritten by any branch."
+}
