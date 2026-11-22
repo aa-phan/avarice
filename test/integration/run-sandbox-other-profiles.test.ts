@@ -247,7 +247,7 @@ describe('composition and the sandbox setup deny the moved roots of every other 
   // CS-7 (the live case of plan 02-20), for a profile moved off the default parents: a declared check, run in the real SandboxedExecutor with the deny
   // paths of the run, reads a file inside the other profile's moved data root. AC-6 needs 0 such reads.
   describe('through the real sandbox (CS-7, AC-6)', { skip: !SANDBOX_AVAILABLE }, () => {
-    const READ = ['-e', 'try { process.stdout.write(require("node:fs").readFileSync(process.argv[1], "utf8")); } catch (e) { process.stderr.write(String(e.code)); process.exit(7); }'];
+    const READ = ['-e', 'try { process.stdout.write(require("node:fs").readFileSync(process.argv[1], "utf8")); } catch (e) { process.stderr.write(String(e.code) + ": " + String(e.message)); process.exit(7); }'];
     let clone = '';
     let sandbox: ReturnType<typeof sandboxSetup>;
 
@@ -276,29 +276,50 @@ describe('composition and the sandbox setup deny the moved roots of every other 
       return result.value;
     }
 
+    // A denial is a command that ran to its end and failed on a permission error: not a timeout or a cancellation (exitCode null), not a program that is missing or broken
+    // (a different message), and not a refusal that has nothing to do with the sandbox.
+    async function denied(argv: readonly string[]): Promise<CommandResult> {
+      const result = await check(argv);
+      const label = argv.join(' ');
+      assert.equal(result.status, 'failed', `${label}: the command ended as ${result.status}, not as a failure`);
+      assert.notEqual(result.exitCode, 0, label);
+      assert.match(result.stderr, /Operation not permitted|Permission denied/i, `${label}: the failure is a permission failure`);
+      return result;
+    }
+
     it('a check reading a file in another profile moved data root fails with a permission error and its output holds no content of the file', async () => {
-      const result = await check([process.execPath, ...READ, join(acme.data, 'state.db')]);
-      assert.notEqual(result.exitCode, 0);
+      const result = await denied([process.execPath, ...READ, join(acme.data, 'state.db')]);
       assert.match(result.stderr, /EPERM|EACCES/);
       assert.equal(`${result.stdout}${result.stderr}`.includes('CANARY-ACME-DATA'), false);
     });
 
     it('the same holds for the moved work root, for listing either root, and for the config home that names them', async () => {
-      const work = await check([process.execPath, ...READ, join(acme.work, 'run_Z/clone/secret.txt')]);
-      assert.notEqual(work.exitCode, 0);
+      const work = await denied([process.execPath, ...READ, join(acme.work, 'run_Z/clone/secret.txt')]);
       assert.equal(`${work.stdout}${work.stderr}`.includes('CANARY-ACME-CLONE'), false);
-      assert.notEqual((await check(['/bin/ls', acme.data])).exitCode, 0);
-      assert.notEqual((await check(['/bin/ls', acme.work])).exitCode, 0);
-      assert.notEqual((await check(['/bin/ls', join(defaultConfigHome, 'profiles')])).exitCode, 0);
-      assert.notEqual((await check(['/bin/cat', join(defaultConfigHome, 'profiles', 'enterprise-acme', 'config.json')])).exitCode, 0);
-      assert.notEqual((await check(['/bin/ls', movedConfigHome])).exitCode, 0);
+      await denied(['/bin/ls', acme.data]);
+      await denied(['/bin/ls', acme.work]);
+      await denied(['/bin/ls', join(defaultConfigHome, 'profiles')]);
+      await denied(['/bin/cat', join(defaultConfigHome, 'profiles', 'enterprise-acme', 'config.json')]);
+      await denied(['/bin/ls', movedConfigHome]);
     });
 
     it('a symbolic link in the clone to the moved data root does not read through', async () => {
       symlinkSync(acme.data, join(clone, 'link-to-acme'));
-      const result = await check([process.execPath, ...READ, join(clone, 'link-to-acme', 'state.db')]);
-      assert.notEqual(result.exitCode, 0);
+      const result = await denied([process.execPath, ...READ, join(clone, 'link-to-acme', 'state.db')]);
       assert.equal(`${result.stdout}${result.stderr}`.includes('CANARY-ACME-DATA'), false);
+    });
+
+    // The controls of the denial cases above: the same binaries run under the same sandbox and succeed on a path it allows, so the denials come from the deny list and not
+    // from a sandbox that cannot run /bin/ls or /bin/cat at all.
+    it('control: /bin/ls lists the run own clone and /bin/cat reads a file in it under the same sandbox', async () => {
+      const listed = await check(['/bin/ls', clone]);
+      assert.equal(listed.status, 'passed', listed.stderr);
+      assert.equal(listed.exitCode, 0, listed.stderr);
+      assert.match(listed.stdout, /\bsrc\b/);
+      const read = await check(['/bin/cat', join(clone, 'src', 'own.txt')]);
+      assert.equal(read.status, 'passed', read.stderr);
+      assert.equal(read.exitCode, 0, read.stderr);
+      assert.equal(read.stdout, 'CANARY-OWN-CLONE');
     });
 
     it('the same script reads a file inside the run own clone', async () => {

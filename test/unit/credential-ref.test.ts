@@ -2,6 +2,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { PROVIDERS_BY_CLASS, credentialClassOf, parseCredentialRef, parseCredentialSection, providersFor } from '../../src/domain/credential-ref.ts';
+import type { Result } from '../../src/domain/result.ts';
+
+// The refusal of a grammar check: it must be refused with the error kind `invalid`, not `denied`, `unavailable` or any other kind. The assertions fail the test; none of
+// them returns early, so a wrong kind for one input cannot hide the inputs after it.
+function invalidOf(parsed: Result<unknown>, label: string): { field: string; reason: string } {
+  assert.ok(!parsed.ok, `${label} is refused`);
+  assert.equal(parsed.error.kind, 'invalid', `${label} is refused as invalid, not as another kind: ${JSON.stringify(parsed.error)}`);
+  assert.ok(parsed.error.kind === 'invalid', label);
+  return { field: parsed.error.field, reason: parsed.error.reason };
+}
 
 describe('parseCredentialRef (SEC-2)', () => {
   it('accepts keychain, cmd and delegated references', () => {
@@ -13,31 +23,24 @@ describe('parseCredentialRef (SEC-2)', () => {
 
   it('refuses env: in every spelling, naming the reference and the reason (S-49)', () => {
     for (const text of ['env:GITHUB_TOKEN', 'ENV:GITHUB_TOKEN', 'Env:X']) {
-      const parsed = parseCredentialRef(text);
-      assert.ok(!parsed.ok, text);
-      assert.equal(parsed.error.kind, 'invalid');
-      if (parsed.error.kind !== 'invalid') return;
-      assert.ok(parsed.error.reason.includes(text), parsed.error.reason);
-      assert.ok(parsed.error.reason.includes('environment variables are not a credential source'), parsed.error.reason);
+      const { reason } = invalidOf(parseCredentialRef(text), text);
+      assert.ok(reason.includes(text), reason);
+      assert.ok(reason.includes('environment variables are not a credential source'), reason);
     }
   });
 
   it('refuses another scheme, an empty or missing name, and a name that could walk out of its lookup, naming the reference', () => {
     for (const text of ['vault:x', 'keychain:', 'keychain:../x', 'keychain:a/b', 'cmd:has space', 'delegated:..', 'keychain:.', 'nocolon', ':x', '', 'keychain:' + 'a'.repeat(129)]) {
-      const parsed = parseCredentialRef(text);
-      assert.ok(!parsed.ok, JSON.stringify(text));
-      if (parsed.ok || parsed.error.kind !== 'invalid') return;
-      assert.ok(parsed.error.reason.includes('credential reference'), parsed.error.reason);
-      if (text.length > 0 && text.length < 64) assert.ok(parsed.error.reason.includes(text), `${text}: ${parsed.error.reason}`);
+      const { reason } = invalidOf(parseCredentialRef(text), JSON.stringify(text));
+      assert.ok(reason.includes('credential reference'), reason);
+      if (text.length > 0 && text.length < 64) assert.ok(reason.includes(text), `${text}: ${reason}`);
     }
   });
 
   it('never prints a control character or an unbounded reference', () => {
-    const parsed = parseCredentialRef(`vault:\u001b[31m${'x'.repeat(500)}`);
-    assert.ok(!parsed.ok);
-    if (parsed.ok || parsed.error.kind !== 'invalid') return;
-    assert.ok(!/[\u0000-\u001f]/.test(parsed.error.reason), 'no control character');
-    assert.ok(parsed.error.reason.length < 400, `${parsed.error.reason.length}`);
+    const { reason } = invalidOf(parseCredentialRef(`vault:\u001b[31m${'x'.repeat(500)}`), 'a reference with a control character and 500 characters');
+    assert.ok(!/[\u0000-\u001f]/.test(reason), 'no control character');
+    assert.ok(reason.length < 400, `${reason.length}`);
   });
 });
 
@@ -75,11 +78,9 @@ describe('parseCredentialSection (SEC-2)', () => {
   });
 
   it('refuses an env: reference naming the key and the reference', () => {
-    const parsed = parseCredentialSection({ github: 'env:GITHUB_TOKEN' });
-    assert.ok(!parsed.ok);
-    if (parsed.ok || parsed.error.kind !== 'invalid') return;
-    assert.equal(parsed.error.field, 'credentials.github');
-    assert.ok(parsed.error.reason.includes('credential reference env:GITHUB_TOKEN is refused: environment variables are not a credential source'), parsed.error.reason);
+    const { field, reason } = invalidOf(parseCredentialSection({ github: 'env:GITHUB_TOKEN' }), 'credentials.github');
+    assert.equal(field, 'credentials.github');
+    assert.ok(reason.includes('credential reference env:GITHUB_TOKEN is refused: environment variables are not a credential source'), reason);
   });
 
   it('refuses a value that is not a reference string, a key outside the grammar and a section that is not an object', () => {
@@ -92,10 +93,8 @@ describe('parseCredentialSection (SEC-2)', () => {
 
   it('refuses a helper that is not an absolute path, a helper name outside the grammar and helpers that is not an object', () => {
     for (const helpers of [{ h: 'vault-helper' }, { h: './vault-helper' }, { h: '/usr/bin/../bin/x' }, { h: '' }, { h: 5 }, { 'bad name': '/usr/bin/x' }, 'nope', ['/usr/bin/x']]) {
-      const parsed = parseCredentialSection({ helpers });
-      assert.ok(!parsed.ok, JSON.stringify(helpers));
-      if (parsed.ok || parsed.error.kind !== 'invalid') return;
-      assert.ok(parsed.error.field.startsWith('credentials.helpers'), parsed.error.field);
+      const { field } = invalidOf(parseCredentialSection({ helpers }), JSON.stringify(helpers));
+      assert.ok(field.startsWith('credentials.helpers'), field);
     }
   });
 
