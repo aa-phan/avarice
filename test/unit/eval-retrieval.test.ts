@@ -138,6 +138,27 @@ function phase4Ledger(spent: number | undefined): { path: string; env: Record<st
   return { path, env: { AVARICE_PHASE4_LEDGER: path } };
 }
 
+// The owner's spend authorization record for the evaluation (plan 04-46, WR-33), as `--authorize` writes it; `change` overrides a field and `ageMs` back-dates it.
+async function authorizationFile(options: { ids: string[]; arms: string[]; capUsd?: number; ageMs?: number; change?: Record<string, unknown> }): Promise<string> {
+  const { loadApprovedTasks } = await harness();
+  const record = {
+    schema: 1,
+    kind: 'avarice-ac8-spend-authorization',
+    ownerConfirmedAt: new Date(Date.now() - (options.ageMs ?? 60_000)).toISOString(),
+    terminal: true,
+    listSha256: loadApprovedTasks(TASKS_FILE).digest,
+    taskIds: options.ids,
+    arms: options.arms,
+    capUsd: options.capUsd ?? 100,
+    ...options.change,
+  };
+  const file = join(temp('eval-authorization'), 'authorization.json');
+  writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+  return file;
+}
+
+const liveOn = (env: Record<string, string>): Record<string, string> => ({ ...env, AVARICE_LIVE: '1', AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+
 describe('verdict (AC-8) and knowledgeRule (D-08)', () => {
   it('passes when arm B succeeds as often as A at no more than half of A tokens, and fails one token above half', async () => {
     const { verdict } = await harness();
@@ -278,15 +299,118 @@ describe('--dry-run', () => {
     assert.equal(usage.code, 64);
   });
 
-  it('refuses a live start whose plan passes the ceiling before it clones, onboards or spends anything', () => {
+  it('refuses a live start whose plan passes the ceiling before it clones, onboards or spends anything', async () => {
     const ledger = phase4Ledger(39.9);
     const scratch = temp('eval-scratch');
     const out = join(scratch, 'results.json');
-    const result = runScript(['--live', '--tasks', '1', '--arms', 'A', '--out', out, '--scratch', scratch], { ...ledger.env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+    const authorization = await authorizationFile({ ids: ['T01'], arms: ['A'] });
+    const result = runScript(['--live', '--tasks', '1', '--arms', 'A', '--out', out, '--scratch', scratch, '--authorization', authorization], liveOn(ledger.env));
     assert.equal(result.code, 3, result.stderr + result.stdout);
     assert.match(result.stderr, /D-03/);
     assert.deepEqual(readdirSync(scratch), [], 'nothing was created in the scratch directory');
     assert.equal(readFileSync(ledger.path, 'utf8').split('\n').filter((l) => l !== '').length, 1, 'the ledger holds only the earlier entry');
+  });
+});
+
+const fileDigest = (path: string): string => (existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : 'absent');
+
+describe("--live needs the owner's recorded spend authorization (plan 04-46, WR-33, T-04-125)", () => {
+  // Every refusal returns 3 before a clone, an onboarding or a ledger write: the ledger file is byte for byte what it was and the scratch directory stays empty.
+  function refused(args: readonly string[], env: Record<string, string>, ledger: { path: string }, pattern: RegExp): void {
+    const scratch = temp('eval-live-gate');
+    const before = fileDigest(ledger.path);
+    const result = runScript(['--live', '--tasks', '1', '--arms', 'A', '--out', join(scratch, 'results.json'), '--scratch', scratch, ...args], env);
+    assert.equal(result.code, 3, result.stderr + result.stdout);
+    assert.match(result.stderr, pattern);
+    assert.equal(fileDigest(ledger.path), before, 'the spend ledger is unchanged');
+    assert.deepEqual(readdirSync(scratch), [], 'nothing was cloned or created');
+  }
+
+  it('refuses without AVARICE_LIVE=1, even with a matching current record', async () => {
+    const ledger = phase4Ledger(0.5);
+    const authorization = await authorizationFile({ ids: ['T01'], arms: ['A'] });
+    refused(['--authorization', authorization], { ...ledger.env, AVARICE_LIVE: '', AVARICE_CLAUDE_BIN: '/nonexistent/claude' }, ledger, /AVARICE_LIVE/);
+    refused(['--authorization', authorization], { ...ledger.env, AVARICE_LIVE: 'true', AVARICE_CLAUDE_BIN: '/nonexistent/claude' }, ledger, /AVARICE_LIVE/);
+  });
+
+  it('refuses with AVARICE_LIVE=1 and no --authorization, naming the flag', () => {
+    const ledger = phase4Ledger(0.5);
+    refused([], liveOn(ledger.env), ledger, /--authorization/);
+  });
+
+  it('refuses a record that does not exist or is not a JSON object', () => {
+    const ledger = phase4Ledger(0.5);
+    const dir = temp('eval-auth-missing');
+    refused(['--authorization', join(dir, 'none.json')], liveOn(ledger.env), ledger, /authorization/);
+    writeFileSync(join(dir, 'bad.json'), 'not json');
+    refused(['--authorization', join(dir, 'bad.json')], liveOn(ledger.env), ledger, /authorization/);
+  });
+
+  it('refuses a record of another list, other tasks, other arms, a cap under the projection, or a confirmation 25 hours old, each naming the mismatch', async () => {
+    const ledger = phase4Ledger(0.5);
+    const cases: Array<[Parameters<typeof authorizationFile>[0], RegExp]> = [
+      [{ ids: ['T01'], arms: ['A'], change: { listSha256: 'b'.repeat(64) } }, /list/],
+      [{ ids: ['T02'], arms: ['A'] }, /task/],
+      [{ ids: ['T01'], arms: ['B'] }, /arm/],
+      [{ ids: ['T01'], arms: ['A'], capUsd: 0.5 }, /cap/],
+      [{ ids: ['T01'], arms: ['A'], ageMs: 25 * 3_600_000 }, /24 hours/],
+      [{ ids: ['T01'], arms: ['A'], change: { terminal: false } }, /terminal/],
+      [{ ids: ['T01'], arms: ['A'], change: { ownerConfirmedAt: null } }, /ownerConfirmedAt/],
+    ];
+    for (const [options, pattern] of cases) refused(['--authorization', await authorizationFile(options)], liveOn(ledger.env), ledger, pattern);
+  });
+
+  it('judges a record in isolation: a matching one has no problem, and a future confirmation is a problem', async () => {
+    const { evalAuthorizationProblems } = await harness();
+    const expected = { listSha256: 'a'.repeat(64), taskIds: ['T01', 'T02'], arms: ['A', 'B'], projectedUsd: 3.2 };
+    const now = new Date('2026-11-20T12:00:00Z');
+    const good = { ownerConfirmedAt: '2026-11-20T11:00:00Z', terminal: true, listSha256: 'a'.repeat(64), taskIds: ['T01', 'T02'], arms: ['A', 'B'], capUsd: 3.2 };
+    assert.deepEqual(evalAuthorizationProblems(good, expected, now), []);
+    assert.deepEqual(evalAuthorizationProblems({ ...good, ownerConfirmedAt: '2026-11-19T12:00:00Z' }, expected, now), [], 'exactly 24 hours is current');
+    assert.match(evalAuthorizationProblems({ ...good, ownerConfirmedAt: '2026-11-19T11:59:59Z' }, expected, now).join(' '), /24 hours/);
+    assert.match(evalAuthorizationProblems({ ...good, ownerConfirmedAt: '2026-11-21T12:00:00Z' }, expected, now).join(' '), /future/);
+    assert.match(evalAuthorizationProblems(undefined, expected, now).join(' '), /no authorization/);
+    assert.match(evalAuthorizationProblems({ ...good, capUsd: 3.19 }, expected, now).join(' '), /cap/);
+    assert.match(evalAuthorizationProblems({ ...good, taskIds: ['T02', 'T01'] }, expected, now).join(' '), /task/);
+    assert.match(evalAuthorizationProblems({ ...good, arms: ['A'] }, expected, now).join(' '), /arm/);
+  });
+
+  it('--authorize refuses without an interactive terminal on stdin and stdout, exits non-zero and records nothing', () => {
+    const ledger = phase4Ledger(0.5);
+    const target = join(temp('eval-authorize-pipe'), 'authorization.json');
+    const result = runScript(['--authorize', '--tasks', '1', '--arms', 'A', '--authorization', target], ledger.env);
+    assert.equal(result.code, 3, result.stderr + result.stdout);
+    assert.match(result.stderr, /interactive terminal/);
+    assert.equal(existsSync(target), false, 'no record was written');
+  });
+
+  it('--authorize records the list digest, task ids, arms, cap, time and terminal on the typed word only, and the record then passes the live gate', async () => {
+    const { main, evalAuthorizationProblems, loadApprovedTasks } = await harness();
+    const ledger = phase4Ledger(0.5);
+    const saved = process.env['AVARICE_PHASE4_LEDGER'];
+    process.env['AVARICE_PHASE4_LEDGER'] = ledger.path;
+    const target = join(temp('eval-authorize'), 'authorization.json');
+    const io = (tty: boolean, answer: string) => ({ stdinTty: tty, stdoutTty: tty, ask: async () => answer, now: () => new Date('2026-11-20T10:00:00Z'), env: {} });
+    const argv = ['--authorize', '--tasks', '1', '--arms', 'A,B', '--authorization', target];
+    try {
+      assert.equal(await main(argv, io(false, 'authorize')), 3);
+      assert.equal(existsSync(target), false);
+      assert.equal(await main(argv, io(true, 'yes')), 1);
+      assert.equal(existsSync(target), false, 'anything but the typed word records nothing');
+      assert.equal(await main(argv, io(true, 'authorize')), 0);
+    } finally {
+      if (saved === undefined) delete process.env['AVARICE_PHASE4_LEDGER'];
+      else process.env['AVARICE_PHASE4_LEDGER'] = saved;
+    }
+    const record = JSON.parse(readFileSync(target, 'utf8')) as Record<string, unknown>;
+    assert.equal(record['listSha256'], loadApprovedTasks(TASKS_FILE).digest);
+    assert.deepEqual(record['taskIds'], ['T01']);
+    assert.deepEqual(record['arms'], ['A', 'B']);
+    assert.equal(record['terminal'], true);
+    assert.equal(record['ownerConfirmedAt'], '2026-11-20T10:00:00.000Z');
+    assert.ok(typeof record['capUsd'] === 'number' && record['capUsd'] > 0);
+    const expected = { listSha256: loadApprovedTasks(TASKS_FILE).digest, taskIds: ['T01'], arms: ['A', 'B'], projectedUsd: record['capUsd'] as number };
+    assert.deepEqual(evalAuthorizationProblems(record, expected, new Date('2026-11-20T11:00:00Z')), []);
   });
 });
 
@@ -574,10 +698,11 @@ describe('merging a results file (plan 04-36)', () => {
 
   it('refuses a live start over a results file that holds runs unless --merge is given, before it clones, onboards or spends anything', async () => {
     const { loadApprovedTasks } = await harness();
+    const authorization = await authorizationFile({ ids: ['T01'], arms: ['A'] });
     const file = resultsFileWith([{ task: 'T01', arm: 'A' }], loadApprovedTasks(TASKS_FILE).digest);
     const before = readFileSync(file, 'utf8');
     const scratch = temp('eval-merge-scratch');
-    const result = runScript(['--live', '--task-ids', 'T01', '--arms', 'A', '--out', file, '--scratch', scratch], { ...phase4Ledger(undefined).env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+    const result = runScript(['--live', '--task-ids', 'T01', '--arms', 'A', '--out', file, '--scratch', scratch, '--authorization', authorization], liveOn(phase4Ledger(undefined).env));
     assert.equal(result.code, 3, result.stderr + result.stdout);
     assert.match(result.stderr, /--merge/);
     assert.equal(readFileSync(file, 'utf8'), before, 'the recorded results are not rewritten');
@@ -586,11 +711,12 @@ describe('merging a results file (plan 04-36)', () => {
 
   it('ends a live --merge with nothing to run without starting a model, spending or rewriting the file', async () => {
     const { loadApprovedTasks } = await harness();
+    const authorization = await authorizationFile({ ids: [], arms: ['A', 'B'] });
     const file = resultsFileWith([{ task: 'T01', arm: 'A' }, { task: 'T01', arm: 'B' }], loadApprovedTasks(TASKS_FILE).digest);
     const before = readFileSync(file, 'utf8');
     const ledger = phase4Ledger(undefined);
     const scratch = temp('eval-merge-nothing');
-    const result = runScript(['--live', '--merge', '--task-ids', 'T01', '--arms', 'A,B', '--out', file, '--scratch', scratch], { ...ledger.env, AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
+    const result = runScript(['--live', '--merge', '--task-ids', 'T01', '--arms', 'A,B', '--out', file, '--scratch', scratch, '--authorization', authorization], liveOn(ledger.env));
     assert.equal(result.code, 0, result.stderr + result.stdout);
     assert.match(result.stdout, /nothing to run/);
     assert.equal(readFileSync(file, 'utf8'), before);
