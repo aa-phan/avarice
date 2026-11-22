@@ -70,7 +70,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
 - [x] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
 - [x] **CON-9** [MVP]: Recovery never resets or deletes changes the run did not make and never claims external effects were rolled back.
-- [ ] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
+- [x] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
 - [ ] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
 - [ ] **CON-12** [MVP]: Caches record source version, freshness and access scope and are not reused after access is revoked or across profiles.
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
@@ -145,7 +145,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **OPS-2** [MVP]: Structured events carry the correlation IDs defined in the contracts specification.
 - [ ] **OPS-3** [MVP backup, export, uninstall; Later restore across hosts]: AVARICE provides backup, restore, export, import and uninstall commands with documented behavior.
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
-- [ ] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
+- [x] **OPS-5** [MVP]: Resource bounds (concurrency, context budget, artifact quota, queue length) are configurable and enforced, with defined degradation when a bound is reached.
 - [ ] **OPS-6** [MVP]: Upgrading GSD, the agent host or AVARICE is detectable by `doctor`; incompatible versions fail with an actionable message, not partial behavior.
 - [x] **OPS-7** [MVP]: Human-readable output follows the one style in the extensions specification, shared by the one-shot commands and the shell; `--json` output does not depend on it.
 
@@ -258,7 +258,7 @@ Each v1 requirement maps to exactly one phase.
 | CON-7 | Phase 2 | Complete |
 | CON-8 | Phase 2 | Complete |
 | CON-9 | Phase 2 | Complete |
-| CON-10 | Phase 4 | Gaps Found |
+| CON-10 | Phase 4 | Complete |
 | CON-11 | Phase 4 | Gaps Found |
 | CON-12 | Phase 4 | Gaps Found |
 | CON-13 | Phase 2 | Complete |
@@ -318,7 +318,7 @@ Each v1 requirement maps to exactly one phase.
 | OPS-2 | Phase 2 | Complete |
 | OPS-3 | Phase 5 | Pending |
 | OPS-4 | Phase 5 | Pending |
-| OPS-5 | Phase 4 | Gaps Found |
+| OPS-5 | Phase 4 | Complete |
 | OPS-6 | Phase 4 | Gaps Found |
 | OPS-7 | Phase 2 | Complete |
 
