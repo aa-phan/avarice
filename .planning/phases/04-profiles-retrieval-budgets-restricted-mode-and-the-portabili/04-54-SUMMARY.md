@@ -150,6 +150,16 @@ None. Only documents and review records changed.
 - Re-run Task 2 from a caller that can dispatch subagents; then re-summarize this plan as `complete`, advance the plan counter and mark FR-3, FR-12, FR-13, FR-14, FR-15, FR-22, SEC-1, SEC-2, SEC-3, SEC-6, CON-4, CON-10, CON-11, ONB-6, ONB-11, OPS-1 and OPS-5 per the plan.
 - If a document is edited after this summary, its sha256 in `04-54-reviews/README.md` no longer matches and must be recomputed before review.
 
+## Round 1 fixes
+
+Four fresh reviewers read the documents in round 1 and all four groups failed (A: 1 BLOCKER, 7 WARNING; B: 3 WARNING; C: 8 BLOCKER, 8 WARNING; D: 1 BLOCKER, 9 WARNING). The reports are stored verbatim as `04-54-reviews/round-1-A.md` to `round-1-D.md`. Every BLOCKER and WARNING was checked against the code at HEAD and fixed; none was rejected. The fixes are the commits "fix round-1 review findings, group A" to "group D". `04-54-reviews/README.md` records each finding's disposition and the new sha256 of every document for round 2. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
+
+- Group A `findings.md` cites: the listed cites and about 70 further drifted ones are re-anchored with "(now at ...)", and eight duplicated observations now have one home. A scripted check compared each cite with the vocabulary of its line and the remaining flagged cites were read by hand, but the check cannot prove a cite right, so a round-2 reviewer may still find some that drifted.
+- One `findings.md` line was added: the `profile-isolation` row of the enforcement map (`src/domain/enforcement-map.ts:113`) still says a moved profile is not covered, while the registry now denies it.
+- Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner rulings 2 and 4 of plan 04-35 at the two ruling lines, commit hashes under "edited on this branch", and quoted strings with "Phase 1", "(D-11)" and "Phase 2"). The reviewer could not tell whether `findings.md` is exempt as owner working material.
+- NITs left: B-4 (long Exit lines in `cli-reference.md`, reference lists); D-N5 (bold-lead reference bullets) and D-N6 (question headings that other documents link to); the module-listing openings and the 138-word record-contents list in `onboarding.md` (reference lists). Stale entry found while re-anchoring: the `findings.md` line on a silent reap skip now says it no longer holds.
+- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
+
 ## Self-Check: PASSED
 
 - Files exist: the nine files above and this summary.

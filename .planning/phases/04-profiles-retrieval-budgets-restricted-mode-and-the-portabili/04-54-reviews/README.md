@@ -1,6 +1,6 @@
 # Plan 04-54 documentation review records
 
-Status: no round has run. The executor of plan 04-54 had no way to dispatch a fresh `technical-writer:prose-reviewer` (its toolset has no agent-dispatch tool, and the `prose-review` skill dispatches one reviewer per file), and the plan forbids a self-review. Every document below therefore stays `changed after review` in `docs/system/coverage.md`. Nothing here is a pass.
+Status: round 1 ran for all four groups and each ended FAIL. The fixes of round 1 are applied; the digests below are the versions that round 2 reviews. No group has passed, so every document below stays `changed after review` in `docs/system/coverage.md`. Nothing here is a pass.
 
 Code under review: `96a0718` (the last commit that touched `src`). Documents under review: the 04-53 changes (`792536d..HEAD -- docs/system`), the post-merge regression-fix statements (`54fc813`), and the ledger edits of `e6651c3`.
 
@@ -8,24 +8,24 @@ Code under review: `96a0718` (the last commit that touched `src`). Documents und
 
 Groups follow `04-53-doc-worklist.md` (A to D) and the plan's expected groups. The worklist's group D (runs, onboarding, indexes) was not in the plan's file list, so no `round-1-D.md` is named in the plan's `files_modified`; it is added here because three changed documents belong to no other group. `unknowns.md` (changed after its earlier review, in no earlier group) joins group C.
 
-| Group | Documents | sha256 of the version to review | Reviewer checks against the code |
+| Group | Documents | sha256 of the version to review in round 2 | Reviewer checks against the code |
 |---|---|---|---|
-| A | `policy-and-approvals.md` | `4613ac8b66aca649ac95179b1b79ab72f455fc40bc97fd47d92ffbfb5f9a9f9d` | the classifier, the two hook modes, the approval gate, the enforcement-map row |
-| A | `diagrams/approve-privileged-action.puml` | `f18ec888c1e2cd1db95a3dd960c4df5e1ae5cd49fee0951fe48252ab31e9d25d` | read with `processes.md` |
-| A | `processes.md` (approve flow) | `6600cb9ca1fd1ba76a775f021a0af2743ba03aa0fb0da03aeafc72b2c8f412fd` | the approve steps against the hook and `approve` command |
-| A | `doctor.md` | `215bba2b3345e44eff89e61c0b9a9d470c2b53c8e01839f6efd69ba456f9f1e9` | the extensions probe and finding row |
-| A | `profiles-and-credentials.md` | `7aab552cf430b8a96e285323f3af0f2bd7e4880b1e84c70fdf8f9c9b05be7b4c` | the bindings lock, the moved-root denial including the permission-refused case (`src/adapters/fs/profile-registry.ts`, `src/cli/composition.ts`), the `cmd` helper size rule |
-| A | `findings.md` | `8aeb50be9c39704d131e2d288aed191fa3a29aedc815614187624e979da0595c` | every added, closed and moved line at its cited `file:line` |
-| B | `cli-reference.md` | `937882f0f9ce43bfb859b7a35c0034930f71340f20c9d53613e74301f1e53cf2` | install-host and approve, the other-profiles bullet, the context item field `codeNode` |
+| A | `policy-and-approvals.md` | `99745d09d9801c65b63dffb272530fbaf94a4090207a1f0eeeaa1e1dde5f1e9c` | the classifier, the two hook modes, the approval gate, the enforcement-map row |
+| A | `diagrams/approve-privileged-action.puml` | `fc76193dd9c4b3a7996af32af1238980b41ed4bae36c1f7d9d6d878af4a26c2e` | read with `processes.md` |
+| A | `processes.md` (approve flow) | `843ed5883593ec2f7ee69a7ef76037d4969885c67725fa2164feb535f3ab3d13` | the approve steps against the hook and `approve` command |
+| A | `doctor.md` | `e620abbd713d92102b85368b81c6aa70fd810d2482efc73be1e448d75a052fd6` | the extensions probe and finding row |
+| A | `profiles-and-credentials.md` | `acd4e692f4b1582329d0c0c7b4a1f2498108bbc2474285d46518442064b37b43` | the bindings lock, the moved-root denial including the permission-refused case (`src/adapters/fs/profile-registry.ts`, `src/cli/composition.ts`), the `cmd` helper size rule |
+| A | `findings.md` | `3b558b899e11845fe6e8fdf4f886edbf9f3152fedf529f2246a0cf1726bc67f5` | every added, closed and moved line at its cited `file:line` |
+| B | `cli-reference.md` | `3e84fe6c97a35f59b770224555be0c0f7462bd58d11092acd82064962699cf0f` | install-host and approve, the other-profiles bullet, the context item field `codeNode` |
 | B | `config-reference.md` | `fc7997ff6625882f89b27411fb8b244e6c6296525b134fe7862510b3fcd68964` | the retrieval rows and the read-exclude row |
-| B | `README.md` | `da33eb7bafce92c1b3aca7ade312c91fbd057fb3d76af93f4c461afa0eb66e58` | both tables against the files and the proposals (new ADR-016 row) |
-| C | `containment.md` | `bed1886525aacb7654d7665439f13cc74cd021c0fd90c10373bcef6703afa901` | the rule list and counts (40, 35, 6), the Read charge, restricted patch rules, other profiles' roots |
-| C | `data-model.md` | `f1eecef5b28def08309c4f3d5a5ce07d9f997ede3262ff743374aee557c23bae` | the event rows, the lock file row |
-| C | `integrations.md` | `cb3ae44f51034f00e2d8b886999e7f5b2b2c84c1003214fb06b61f46e20ed894` | credential helper rows, install-host refusals |
-| C | `unknowns.md` | `9b444a7440670e4b0097645424a465523e6f3d6e2edfc605a945a81a684611d7` | the entries against the files they cite |
-| D | `runs.md` | `455375071b9bb30bab5a79834f4975ef9b0018f4b881770d25741210e846a48a` | the restricted stage, the resume re-block, spec derivation from code nodes |
-| D | `onboarding.md` | `4f47f8ad1547a2996cd78586a6271785e3f568283adc3266c677ee89dafde8e2` | the scoped-map refusal, the promotion path rule, the reap refusal |
-| D | `indexes-and-context.md` | `b8861ce4f5eaf0083420925909cb557489a48a616ebbb128a52eb82d53fbc444` | the cost cap, the heading parser, exclusion at any depth, the untrusted marking and `codeNode` |
+| B | `README.md` | `ab813bb0a86018c2a7e2b9cccb9a7cd15f40c664dee03d4d372fb25d46c151b1` | both tables against the files and the proposals (new ADR-016 row) |
+| C | `containment.md` | `0eb71752a67f6de37fb3b5e0ff3eae1232a203840f145e508b2bc3587921b1c1` | the rule list and counts (40, 35, 6), the Read charge, restricted patch rules, other profiles' roots |
+| C | `data-model.md` | `2e4e3678060e285994cf0477a1d0ae5ca5b9552e5456ee5f05b1b0f8b07a74f3` | the event rows, the lock file row |
+| C | `integrations.md` | `bf0bb735a9f1b8bd75777329ee8aefaf230ca78be81483f66c4caa01fc8e9110` | credential helper rows, install-host refusals |
+| C | `unknowns.md` | `721de6213fe2e93ae5381b4c46ca116c5e720cb56fe839aa123fa642015a346a` | the entries against the files they cite |
+| D | `runs.md` | `cdd816d658e203c99ac76beb187828dd783666288efac753977b8c94b92396da` | the restricted stage, the resume re-block, spec derivation from code nodes |
+| D | `onboarding.md` | `2cd91575d3e5a451612aba3c735339acb610650c6bb3989edcf2ad002c21ae12` | the scoped-map refusal, the promotion path rule, the reap refusal |
+| D | `indexes-and-context.md` | `1e6551adb0612f853ab414d4ffa731bee5e2fe363d593d1424cef86a52a6d0f8` | the cost cap, the heading parser, exclusion at any depth, the untrusted marking and `codeNode` |
 
 Each reviewer should read every sentence that states a limit (65,536 characters, 8 levels, 16 prefix words, 2 seconds, 1 MiB, 440 characters, 2,000 characters) against the constant in the code.
 
@@ -35,4 +35,7 @@ Round budget: at most three rounds per group, each by a fresh reviewer that has 
 
 | Round | Group | Report | Verdict | Found and done |
 |---|---|---|---|---|
-| (none run) | | | | |
+| 1 | A | `round-1-A.md` | FAIL (1 BLOCKER, 7 WARNING, 6 NIT, 1 observation) | Fixed B1 (`host-version-unknown` can be reported by doctor and by the launch preflight; both apply the same two rules, verified in `src/domain/host-admission.ts`, `src/app/doctor.ts` and `launch-preflight.ts`). Fixed W1 (the repository policy sentence left the class list), W2 (the `--json` sentence replaced by the real keys), W3 (a run refuses a line over 16,384 characters as `shell-syntax` before the classifier, verified at `hook-decision.ts:139` and `:810`), W4 (verified; the table text is at `src/domain/enforcement-map.ts:113`, not :79; one `findings.md` line added, the code is not edited), W5 (every listed sentence split; a scripted scan finds none over 35 words in these documents), W6 (the listed cites re-anchored, about 70 further drifted cites in `findings.md` re-anchored with "(now at ...)", the drift measured by a scripted check of each cite against its finding's vocabulary and then read by hand; a few cites that the script could not judge were left, see the SUMMARY), W7 (the eight later copies removed, the earlier line keeps the newer wording). NITs N1 to N6 fixed (N5 by deleting the two repeated quirks). Rejected: none. O1 (delivery history in `findings.md`) is not changed; it is an owner question. |
+| 1 | B | `round-1-B.md` | FAIL (0 BLOCKER, 3 WARNING, 2 NIT) | Fixed W1 and W3 (two long sentences split), W2 (the exit-70 message names the cause and, for an unreadable configuration, the profile; verified at `profile-registry.ts:71`, `:87`, `:101`), NIT 5 (reworded to "no document written for them alone"). Left NIT 4 (the long Exit lines of the command reference are compact code-to-meaning lists, which the doctrine exempts as reference lists). Rejected: none. |
+| 1 | C | `round-1-C.md` | FAIL (8 BLOCKER, 8 WARNING, 4 NIT) | All eight BLOCKERs verified against the code and fixed: onboarding does not deny the default parents (B1, `invocation-scope.ts:304` against `:570`); the broad-discovery filter for the hook is a narrowing glob or a type (B2, `hook-decision.ts:194-196`); no retrieval rows are created for an old contract (B3, `budget.ts:82` and `retrieval-guard.ts:70`); the verified host count is six (B4); the schema-only table entry is restated for the one never-set checkpoint column (B5); 84 ledger methods (B6); nine diagrams (B7); 552 shell lines (B8). WARNINGs fixed: W1 (attended-only per-command denial; a run records the first), W2, W3, W4 (a live case exists and was not run; "delivery record" removed), W5 and W6 (stale and repeated entries deleted, the ignore-scripts cite re-anchored to `checks.ts:435`), W7 (the install-host refusals now list the non-regular file, invalid JSON and the hook structure), W8 (every listed sentence split, the two quoted denial texts moved to a list). NITs N1 to N4 fixed (N4 by dropping the test count). Rejected: none. |
+| 1 | D | `round-1-D.md` | FAIL (1 BLOCKER, 9 WARNING, 7 NIT) | B1 verified (`gsd-intel.ts:97` and `:127`, `context.ts:573`) and the false quirk deleted. W1 and W2 verified at `resume.ts:158-183` (the stop-state exception and the privileged-action step added as step 1 of the prelude). W3 (one brief), W4 (the restricted hint only when `claude` is present and failed a probe, `composition.ts:233-262`), W5 (artifacts tolerated for modified and added paths only, `item.ts:348-358`), W6 (listed sentences split), W7 (the index-stage and derive-spec modules named in the openings), W8 (the cost-model data points now state the exact measured values and where they are recorded), W9 (freshness rule and the `.planning/` exclusion added) fixed. NITs N1 to N4 and N7 fixed. Left: the 138-word record-contents list in `onboarding.md` (a semicolon reference list), the module-listing openings (exempt), N5 (bold-lead reference bullets) and N6 (headings that name a question; other documents link to those anchors). Rejected: none. |
