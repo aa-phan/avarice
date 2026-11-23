@@ -171,6 +171,25 @@ Four fresh reviewers read the round-1 versions again and all four groups failed 
 - Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner question; round-2 reviewer repeated it as an observation). Round 3 is the last round: a group that still fails there stays `changed after review` and needs an owner decision on how to go on.
 - No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
 
+## Owner decisions (2026-11-23)
+
+Recorded by the owner, Aaron Phan, answering the checkpoint raised after round 3, and copied verbatim into `04-54-reviews/README.md`.
+
+1. Review budget: "Fix + scoped round 4". All four groups failed round 3, so the 3-round budget is exhausted. The owner overrides the budget for one more round: fix every round-3 finding, then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `f19ae4e`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope.
+2. `findings.md` delivery history (observation O1, raised in every round): "Exempt: it's a log". `findings.md` is the owner's working log of code-versus-proposal drift. Commit hashes, plan and ruling references and the `.planning` path may stay as evidence. Reviewers record it as exempt, not a finding. One sentence saying so is added to the header of `findings.md`.
+
+## Round 3 fixes
+
+Four fresh reviewers read the round-2 versions and all four groups failed (A: 1 BLOCKER, 6 WARNING, 3 NIT; B: 1 BLOCKER, 1 WARNING, 2 NIT; C: 0 BLOCKER, 3 WARNING, 7 NIT; D: 1 BLOCKER, 5 WARNING, 3 NIT). The reports are stored verbatim as `04-54-reviews/round-3-A.md` to `round-3-D.md` (commit `b41eb68`). Every finding was checked against the code at HEAD first and none was rejected. The fixes are the commits "fix round-3 review findings, group A" to "group D". `04-54-reviews/README.md` records each disposition and the sha256 of all 16 documents for round 4. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
+
+- Group A: the count of commands that refuse inside a run is three, not four; a policy file in the wrong slot is refused by the sources builder, not treated as broken or absent; an end with no open start is refused; doctor's write statement names the profile directories; the multi-line secret limit is scoped to the transcript boundary; the approve-diagram anchors are corrected; the `findings.md` header carries the owner's exemption sentence. Left: N10 (bold-lead outcome items), which the reviewer calls optional.
+- Group B: the install-host exit-70 message carries `internal error:`; the README sentence about proposals with no counterpart no longer contradicts the last table row; `approve` joins the exit-64 row; the retrieval override names are stated as integers with their ceilings.
+- Group C: the context-source sentence, the cost-reservation wording, the `action.started` data, the command-identity order, the stray Read-budget sentence, the `scm.api.write` condition and two cites are corrected. `unknowns.md` lost its delivery-history wording: the five "(run slice)" sections are merged into their subsystem sections, "Campaign-wide" is "All documents", and the recorded live result of `p4-restricted-run` (a PASS, with `p4-restricted-onboarding` not passing) is now named in the open entry.
+- Group D: the order of checks in `runs.md` puts preflight before the profile limits and places the conventions read inside it; the deletion rule is G2's; the brief reference is a second write; the `gsd-planning` row and the scoped-map refusal are corrected; four repeated Quirks lines are deleted; the derivation paragraph and the 1,000-word Launch paragraph are split by topic.
+- Mechanical checks over the lines changed since `f19ae4e`: no sentence over 35 words in running prose, no banned dash, and all 652 relative links and anchors across `docs/system/*.md` resolve (checked by script).
+- Documents changed since `f19ae4e` (the round-4 scope): fifteen of the sixteen. Only `diagrams/approve-privileged-action.puml` is unchanged.
+- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass. STATE.md and ROADMAP.md are unchanged.
+
 ## Self-Check: PASSED
 
 - Files exist: the nine files above and this summary.
