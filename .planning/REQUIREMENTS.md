@@ -17,7 +17,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 - [x] **FR-1** [MVP]: A run starts from a manual brief (Markdown text or file) or a typed external task reference; a manual brief is sufficient on its own.
 - [x] **FR-2** [MVP]: A run follows the explicit run state machine; every transition is persisted before the side effect that depends on it begins.
-- [ ] **FR-3** [MVP]: Context assembly produces a bounded, cited context pack; each item records source identity, revision, retrieval time and scope.
+- [x] **FR-3** [MVP]: Context assembly produces a bounded, cited context pack; each item records source identity, revision, retrieval time and scope.
 - [x] **FR-4** [MVP]: Planning, phase decomposition and implementation are delegated to GSD through supported commands; AVARICE keeps no competing plan, task list or retry loop for the same work.
 - [x] **FR-5** [MVP]: Verification runs the repository's own check commands as deterministic subprocesses and records exit status, duration, command and the verified workspace state.
 - [x] **FR-6** [MVP]: Completion evidence names the exact revision verified (commit SHA plus clean-tree flag, or a content digest of the dirty tree); model-written text is never completion evidence.
@@ -29,10 +29,10 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Authorization (FR-12 to FR-15)
 
-- [ ] **FR-12** [MVP]: Actions are classed `read`, `local-write` or `privileged`; privileged actions need an approval bound to run, action and parameters, and the run contract is a valid approval source when it authorizes the action with its parameters.
-- [ ] **FR-13** [MVP]: Permission to plan does not imply permission to perform privileged actions; approving a plan does not approve the privileged actions inside it.
-- [ ] **FR-14** [MVP]: Content retrieved from tickets, documents, web pages or tool output grants no authority and changes no policy.
-- [ ] **FR-15** [MVP]: Queued privileged actions never replay automatically after connectivity returns; each needs a fresh decision.
+- [x] **FR-12** [MVP]: Actions are classed `read`, `local-write` or `privileged`; privileged actions need an approval bound to run, action and parameters, and the run contract is a valid approval source when it authorizes the action with its parameters.
+- [x] **FR-13** [MVP]: Permission to plan does not imply permission to perform privileged actions; approving a plan does not approve the privileged actions inside it.
+- [x] **FR-14** [MVP]: Content retrieved from tickets, documents, web pages or tool output grants no authority and changes no policy.
+- [x] **FR-15** [MVP]: Queued privileged actions never replay automatically after connectivity returns; each needs a fresh decision.
 
 ### Integration (FR-16 to FR-27)
 
@@ -42,7 +42,7 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [ ] **FR-19** [MVP]: Every external integration has a manual equivalent: paste a ticket, paste CI output, record an approval by hand.
 - [x] **FR-20** [MVP]: Context assembly queries a fresh structured index (GSD intel and the GSD-managed graph, including document nodes) before reading whole files or sections, and ranks model-inferred graph edges below edges extracted from code.
 - [ ] **FR-21** [Later]: Project records may belong to a project group that shares references to standards and scaffolds; membership never widens any member's authority.
-- [ ] **FR-22** [MVP]: Retrieval is handle-first (handles with token estimates before content; the assembler chooses within budget), and graph reads follow a rule per edge type: containment loads descendants, dependency one hop, reference only the target's ID.
+- [x] **FR-22** [MVP]: Retrieval is handle-first (handles with token estimates before content; the assembler chooses within budget), and graph reads follow a rule per edge type: containment loads descendants, dependency one hop, reference only the target's ID.
 - [ ] **FR-24** [Later]: Each machine that runs work for a profile has a host record (identity, capability descriptor, status); a host is not deactivated while an active project or run depends on it.
 - [ ] **FR-25** [MVP]: A repository may declare an architecture model in `.avarice/architecture.json` (components with path globs, allowed edges with contract symbols, shared resources with UUIDs); AVARICE drafts it deterministically from the code graph as a proposal that takes effect only after user approval, and an `architecture-model` check reports departures (ADR-012).
 - [ ] **FR-26** [MVP]: `avarice dashboard` renders one self-contained, read-only HTML page from the profile's ledger, with no server, no listening port and no network access, redacted like events and limited to one profile (ADR-011).
@@ -64,14 +64,14 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **CON-1** [MVP]: Each contract restriction names its enforcement point, covered execution paths, known bypasses, failure behavior and the test that proves it; prevention, detection and recovery are labeled separately.
 - [x] **CON-2** [MVP]: Writes outside the contract's writable paths are prevented on every mutation path the run can reach (editing tools, shell and child processes, interpreters, subagents) or that path is unavailable; a post-run diff check is detection only.
 - [x] **CON-3** [MVP]: Required enforcement fails closed: missing configuration, invalid policy, enforcement timeout or crash blocks the protected operation.
-- [ ] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
+- [x] **CON-4** [MVP]: A host or environment without required enforcement runs in explicit restricted mode (read-only analysis and planning, no writes outside a disposable copy, no network) and never falls back to instructions or unrestricted execution.
 - [x] **CON-5** [MVP]: Shell-command pattern matching is not the only containment for arbitrary executable code.
 - [x] **CON-6** [MVP]: The run cannot modify enforcement configuration, hook implementations, permission settings, credential configuration, policy files or the budget ledger.
 - [x] **CON-7** [MVP]: Edits are preceded by reading the target and check a precondition (content digest or revision) so stale edits fail; pre-existing user changes in the workspace are preserved through failed work and recovery.
 - [x] **CON-8** [MVP]: Paths are canonicalized before evaluation; symlinks and traversal resolving outside writable paths are refused; build and test outputs have declared locations.
 - [x] **CON-9** [MVP]: Recovery never resets or deletes changes the run did not make and never claims external effects were rolled back.
 - [x] **CON-10** [MVP]: Retrieval is progressive (index, scoped search, bounded snippets, justified full reads); broad discovery must be authorized by the contract.
-- [ ] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
+- [x] **CON-11** [MVP local, Contract remote]: Retrieval adapters enforce scope filters, field selection, page and result caps, returned bytes, query timeouts, cancellation and cumulative budgets; backend cost is bounded separately from returned size.
 - [ ] **CON-12** [MVP]: Caches record source version, freshness and access scope and are not reused after access is revoked or across profiles.
 - [x] **CON-13** [MVP]: Budget accounting persists across restarts, is shared by subagents and retries, uses atomic reservation where work runs concurrently, and states where usage reporting is delayed or absent while using conservative limits.
 - [x] **CON-14** [MVP]: Loops stop: repeated denials, ineffective searches and repeated repair attempts each have a limit that ends in a checkpoint and an escalation.
@@ -105,12 +105,12 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 - [x] **ONB-3** [MVP]: During discovery and mapping, source code and existing project configuration are read-only on every exposed mutation path; generated artifacts are written only to the approved staging location.
 - [x] **ONB-4** [MVP]: Passive onboarding does not execute repository commands, install dependencies, run lifecycle scripts, start services, run migrations or reach production resources; reading a script never authorizes running it.
 - [x] **ONB-5** [MVP]: Committing generated artifacts is disabled unless the onboarding contract or policy separately authorizes it.
-- [ ] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
+- [x] **ONB-6** [MVP]: Existing GSD artifacts, existing AVARICE profiles, user edits to planning files and uncommitted source changes are never silently overwritten; provenance and source revision are reconciled first, and the outcome is adoption, refresh, migration, isolated regeneration or a recorded decision.
 - [x] **ONB-7** [MVP]: Every accepted GSD artifact is recorded with source revision, mapping scope, mapping mode and completeness; a fast or path-scoped map is labeled partial and never presented as whole-repository coverage.
 - [x] **ONB-8** [MVP]: Mapping runs under an onboarding contract with path scope, file and byte limits where supported, wall-clock, tool-call, invocation and cost budgets, subagent limits and retry limits; budgets persist across retries and restarts.
 - [x] **ONB-9** [MVP]: Activation produces a versioned project profile referencing GSD artifacts and recording operational policy; repository instructions and GSD output may propose profile values but cannot grant permissions, and activation validates the profile against higher-priority policy.
 - [x] **ONB-10** [MVP declared check commands, Later setup and run commands]: Discovered setup, build, lint and test commands stay inactive until a separate active-validation stage classifies and runs each in an isolated, sandboxed workspace; unexpected writes or network access fail validation.
-- [ ] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
+- [x] **ONB-11** [Contract]: Refresh uses revisions, changed paths and structural signals to choose between incremental refresh, path-scoped remapping and full remapping, and does not rescan the whole repository when the verified GSD version supports a narrower refresh.
 - [x] **ONB-12** [MVP]: A missing enforcement layer, an incompatible GSD version or malformed artifacts move onboarding to a blocking or restricted state, never to unrestricted execution.
 - [x] **ONB-13** [MVP]: Onboarding offers an index stage that builds GSD intel and the GSD-managed graph in the staging worktree under the onboarding contract and records each index's build commit and freshness; a failed index build leaves the record without that index and never blocks activation.
 - [x] **ONB-14** [MVP]: Onboarding offers a knowledge pass that adds model-inferred document nodes (citing source path and revision) for stable project documents, as one contained invocation under the onboarding contract; the text is data and never grants authority (FR-14).
@@ -130,18 +130,18 @@ Committed scope; each maps to a roadmap phase (see Traceability). Phases 1-3 are
 
 ### Security and isolation (SEC-1 to SEC-8)
 
-- [ ] **SEC-1** [MVP]: Profiles (`personal-local`, `personal-extended`, `enterprise-<org>`) have separate configuration, credential references, caches, logs, indexes, databases and artifacts, with no automatic fallback across profiles.
-- [ ] **SEC-2** [MVP]: Credentials are resolved by reference at the moment of use from an approved provider (ADR-009); an environment variable is not a provider; tokens are never written to prompts, state, evidence, artifacts or logs.
-- [ ] **SEC-3** [MVP]: Events and logs pass through a redactor before persistence; full tool payloads are not retained by default.
+- [x] **SEC-1** [MVP]: Profiles (`personal-local`, `personal-extended`, `enterprise-<org>`) have separate configuration, credential references, caches, logs, indexes, databases and artifacts, with no automatic fallback across profiles.
+- [x] **SEC-2** [MVP]: Credentials are resolved by reference at the moment of use from an approved provider (ADR-009); an environment variable is not a provider; tokens are never written to prompts, state, evidence, artifacts or logs.
+- [x] **SEC-3** [MVP]: Events and logs pass through a redactor before persistence; full tool payloads are not retained by default.
 - [ ] **SEC-4** [MVP model, Onboarding sources]: Enterprise policy outranks repository and user settings; a repository file cannot loosen an organization rule.
 - [x] **SEC-5** [MVP]: AVARICE never disables TLS verification, weakens authentication, creates an alternate egress path or substitutes an unapproved service to make an adapter work.
-- [ ] **SEC-6** [MVP]: Every control is documented with its enforcer (host, external platform or AVARICE) and its bypass limitations.
+- [x] **SEC-6** [MVP]: Every control is documented with its enforcer (host, external platform or AVARICE) and its bypass limitations.
 - [ ] **SEC-7** [MVP]: Employer-specific configuration and data stay outside the personal framework distribution and repository.
 - [ ] **SEC-8** [MVP]: Every credential resolution attempt is recorded as an event with reference, purpose, calling module, profile, run and invocation IDs, outcome and duration, and never the value, its length or a digest of it.
 
 ### Operability (OPS-1 to OPS-7)
 
-- [ ] **OPS-1** [MVP]: A `doctor` command reports configuration, versions, capabilities and dependency health without revealing secrets and works offline.
+- [x] **OPS-1** [MVP]: A `doctor` command reports configuration, versions, capabilities and dependency health without revealing secrets and works offline.
 - [x] **OPS-2** [MVP]: Structured events carry the correlation IDs defined in the contracts specification.
 - [ ] **OPS-3** [MVP backup, export, uninstall; Later restore across hosts]: AVARICE provides backup, restore, export, import and uninstall commands with documented behavior.
 - [ ] **OPS-4** [MVP]: Retention limits apply to events, evidence payloads and artifacts, configurable per profile.
@@ -217,7 +217,7 @@ Each v1 requirement maps to exactly one phase.
 |-------------|-------|--------|
 | FR-1 | Phase 2 | Complete |
 | FR-2 | Phase 2 | Complete |
-| FR-3 | Phase 4 | Gaps Found |
+| FR-3 | Phase 4 | Complete |
 | FR-4 | Phase 2 | Complete |
 | FR-5 | Phase 2 | Complete |
 | FR-6 | Phase 2 | Complete |
@@ -226,17 +226,17 @@ Each v1 requirement maps to exactly one phase.
 | FR-9 | Phase 5 | Pending |
 | FR-10 | Phase 5 | Pending |
 | FR-11 | Phase 2 | Complete |
-| FR-12 | Phase 4 | Gaps Found |
-| FR-13 | Phase 4 | Gaps Found |
-| FR-14 | Phase 4 | Gaps Found |
-| FR-15 | Phase 4 | Gaps Found |
+| FR-12 | Phase 4 | Complete |
+| FR-13 | Phase 4 | Complete |
+| FR-14 | Phase 4 | Complete |
+| FR-15 | Phase 4 | Complete |
 | FR-16 | Phase 4 | Gaps Found |
 | FR-17 | Phase 4 | Gaps Found |
 | FR-18 | Phase 4 | Gaps Found |
 | FR-19 | Phase 4 | Gaps Found |
 | FR-20 | Phase 1 | Complete |
 | FR-21 | Phase 8 | Pending |
-| FR-22 | Phase 4 | Gaps Found |
+| FR-22 | Phase 4 | Complete |
 | FR-24 | Phase 7 | Pending |
 | FR-25 | Phase 5 | Pending |
 | FR-26 | Phase 5 | Pending |
@@ -252,14 +252,14 @@ Each v1 requirement maps to exactly one phase.
 | CON-1 | Phase 2 | Complete |
 | CON-2 | Phase 2 | Complete |
 | CON-3 | Phase 2 | Complete |
-| CON-4 | Phase 4 | Gaps Found |
+| CON-4 | Phase 4 | Complete |
 | CON-5 | Phase 2 | Complete |
 | CON-6 | Phase 2 | Complete |
 | CON-7 | Phase 2 | Complete |
 | CON-8 | Phase 2 | Complete |
 | CON-9 | Phase 2 | Complete |
 | CON-10 | Phase 4 | Complete |
-| CON-11 | Phase 4 | Gaps Found |
+| CON-11 | Phase 4 | Complete |
 | CON-12 | Phase 4 | Gaps Found |
 | CON-13 | Phase 2 | Complete |
 | CON-14 | Phase 2 | Complete |
@@ -287,12 +287,12 @@ Each v1 requirement maps to exactly one phase.
 | ONB-3 | Phase 1 | Complete |
 | ONB-4 | Phase 1 | Complete |
 | ONB-5 | Phase 1 | Complete |
-| ONB-6 | Phase 4 | Gaps Found |
+| ONB-6 | Phase 4 | Complete |
 | ONB-7 | Phase 1 | Complete |
 | ONB-8 | Phase 1 | Complete |
 | ONB-9 | Phase 1 | Complete |
 | ONB-10 | Phase 2 | Complete |
-| ONB-11 | Phase 4 | Gaps Found |
+| ONB-11 | Phase 4 | Complete |
 | ONB-12 | Phase 1 | Complete |
 | ONB-13 | Phase 1 | Complete |
 | ONB-14 | Phase 1 | Complete |
@@ -306,15 +306,15 @@ Each v1 requirement maps to exactly one phase.
 | NFR-7 | Phase 5 | Pending |
 | NFR-8 | Phase 5 | Pending |
 | NFR-9 | Phase 2 | Complete |
-| SEC-1 | Phase 4 | Gaps Found |
-| SEC-2 | Phase 4 | Gaps Found |
-| SEC-3 | Phase 4 | Gaps Found |
+| SEC-1 | Phase 4 | Complete |
+| SEC-2 | Phase 4 | Complete |
+| SEC-3 | Phase 4 | Complete |
 | SEC-4 | Phase 4 | Gaps Found |
 | SEC-5 | Phase 1 | Complete |
-| SEC-6 | Phase 4 | Gaps Found |
+| SEC-6 | Phase 4 | Complete |
 | SEC-7 | Phase 4 | Gaps Found |
 | SEC-8 | Phase 5 | Pending |
-| OPS-1 | Phase 4 | Gaps Found |
+| OPS-1 | Phase 4 | Complete |
 | OPS-2 | Phase 2 | Complete |
 | OPS-3 | Phase 5 | Pending |
 | OPS-4 | Phase 5 | Pending |

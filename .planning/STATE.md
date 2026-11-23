@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-50-PLAN.md
-last_updated: "2026-11-23T03:18:44.164Z"
+stopped_at: Completed 04-54-PLAN.md
+last_updated: "2026-11-23T07:05:05.560Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 execution started
-state_head: 4028b3c1d978e870e40d6f2039c7e57be6efeb0a
+state_head: 26362b5072fde8b29b916ff091734d2b6bdf465f
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 55
-  completed_plans: 54
+  completed_plans: 55
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 15 of 55
+Plan: 16 of 55
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 execution started
 
@@ -217,6 +217,7 @@ Last activity: 2026-11-22 — Phase 04 execution started
 | Phase 04 P52 | not captured | 2 tasks | 4 files |
 | Phase 04 P53 | 13 min | 3 tasks | 14 files |
 | Phase 04 P50 | 8h (waited on owner decision) | 2 tasks | 8 files |
+| Phase 04 P54 | 3 sessions (2026-11-22 to 2026-11-23) | 2 tasks | 36 files |
 
 ## Accumulated Context
 
@@ -542,6 +543,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-53: docs/system documents no evaluation harness, so the harness authorization surface needs no document; recorded in the worklist — findings.md records the harness as undocumented; the scripts are test tooling that coverage.md counts as not documented
 - [Phase 04]: 04-53: processes.md updated with the redrawn approval diagram although not listed in files_modified — its approve-flow narrative restated the single-command approval and would contradict policy-and-approvals.md
 - [Phase 04]: AC-8 token clause is no more than 95% of the baseline's tokens, inclusive (owner decision a: new bound, ADR-016); the recorded evaluation re-judges as a pass through arm B at 94.4% — ADR-016 supersedes only ADR-015's AC-8 consequence; the bound was set after the result and B clears it by 0.6 points; WR-28, WR-29, WR-32 and WR-36 stay deferred
+- [Phase 04]: 04-54: all sixteen docs/system documents passed fresh prose review over five rounds; rounds 4 and 5 were owner-scoped beyond the three-round budget — Owner decisions of 2026-11-23: scoped round 4 (diff base f19ae4e), findings.md exempt as a log, one-bullet round 5 for group C; a report with a mismatched digest (processes.md) is re-read, not trusted
 
 ### Roadmap Evolution
 
@@ -609,8 +611,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-23T03:18:44.123Z
-Stopped at: Completed 04-50-PLAN.md
+Last session: 2026-11-23T07:05:05.518Z
+Stopped at: Completed 04-54-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
