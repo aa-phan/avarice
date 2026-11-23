@@ -1,6 +1,10 @@
 # Onboarding
 
-This document describes the onboarding flow implemented by the onboarding service, its stages, the resume and reconcile logic, the supporting domain modules (lifecycle, preflight, mapping, onboarding contract, validation, project record) and the git staging adapters (`src/app/onboarding-service.ts`, `src/app/stages/`, `src/app/resume.ts`, `src/domain/`, `src/adapters/git/`).
+This document describes the onboarding flow implemented by these modules:
+
+- The onboarding service, its stages and the resume and reconcile logic: `src/app/onboarding-service.ts`, `src/app/stages/`, `src/app/resume.ts` and `src/app/invocation.ts`.
+- The supporting domain modules (lifecycle, preflight, mapping, onboarding contract, validation, project record): `src/domain/`.
+- The git staging adapters: `src/adapters/git/`.
 
 Onboarding takes one existing git repository to one immutable project record, in a fixed pipeline: register and preflight, compile a contract, stage a clone, map with GSD in a contained host, validate, build indexes, activate. Nothing is written to the user's repository or to its `.planning/`. Every stage commits a checkpoint before its side effect and a transition after it, so a killed run resumes from the committed state. The sibling documents own what this one leaves out. They are [containment.md](containment.md) (hook and sandbox), [data-model.md](data-model.md) (tables), [indexes-and-context.md](indexes-and-context.md) (index internals) and [cli-reference.md](cli-reference.md) (flags). [runs.md](runs.md) covers the unattended run of one brief, which starts from the active record this pipeline produces.
 
@@ -155,7 +159,7 @@ Before the first invocation the mode also has to be one the admitted GSD can per
 | adopt | four map files | complete when all seven map files are present, otherwise partial | the files of the map |
 | skip | none | none | empty |
 
-A `paths` map reads only the directories its plan names, and the read scope the invocation is held to is narrowed to them. A stored plan for `paths` is refused with an `invalid` error on the field `mapping:plan` when it lists no path, an entry that is not a string, or a path that fails the scope-path check. The map is not launched, nothing is reserved or recorded, and the read scope is never widened to the whole repository.
+A `paths` map reads only the directories its plan names, and the read scope the invocation is held to is narrowed to them. Two layers refuse a bad stored plan for `paths`. The map stage refuses a plan with no path, a path that fails the scope-path check or more than 50 paths, as an `internal` error. Loading the plan and preparing the invocation refuse an entry that is not a string, and a scope with no valid path, as an `invalid` error on the field `mapping:plan`. In every case the map is not launched, nothing is reserved or recorded, and the read scope is never widened to the whole repository.
 
 Completeness is derived from the mode and, for an adopted map, from the files present, never from what the documents say. An adopted map runs no invocation and no budget, and goes straight to validation, which judges its files like any other map's. The record then says the map was adopted (`provenance: adopted`).
 
@@ -244,7 +248,25 @@ If the check passes, activation:
 2. Reads an optional repository proposal file from staging at the pin (size capped at 64 KiB), treats it as data, and narrows it against the profile policy. Rejected parts, unparseable input and oversize input become findings.
 3. Builds the record and inserts it as the next version while moving to `active`, in one ledger transaction.
 
-Project record contents: schema and record version; repository identity (root commit, remote, default branch); the onboarded revision and an active revision that starts equal to it; profile; routine policy preset; promotion `none`; GSD version, runtime, adapter and capabilities and the config AVARICE applied; the contract's run ID, version and digest; the existing-state block (with the final outcome and drift result from the mapping plan), instruction files and not-mapped names from preflight; `restricted: true` when the map was made under the restricted launch; findings (rejected earlier validation attempts, extra map files, narrowing refusals; capped at 50); artifacts (staging location and path, per-file path, digest and stamp, and the snapshot digest); mapping (mode, scope, completeness label, mapped-at time, freshness fresh, and `provenance: adopted` for an adopted map); folded index results (graph, intel, and an absent list); path grants, execution grants and commands. The record holds paths, digests and revisions, never document text.
+Project record contents:
+
+- Schema and record version.
+- Repository identity (root commit, remote, default branch).
+- The onboarded revision and an active revision that starts equal to it.
+- Profile.
+- Routine policy preset.
+- Promotion `none`.
+- GSD version, runtime, adapter and capabilities and the config AVARICE applied.
+- The contract's run ID, version and digest.
+- The existing-state block (with the final outcome and drift result from the mapping plan), instruction files and not-mapped names from preflight.
+- `restricted: true` when the map was made under the restricted launch.
+- Findings (rejected earlier validation attempts, extra map files, narrowing refusals), capped at 50.
+- Artifacts (staging location and path, per-file path, digest and stamp, and the snapshot digest).
+- Mapping (mode, scope, completeness label, mapped-at time, freshness fresh, and `provenance: adopted` for an adopted map).
+- Folded index results (graph, intel, and an absent list).
+- Path grants, execution grants and commands.
+
+The record holds paths, digests and revisions, never document text.
 
 Authority defaults grant nothing: no write paths, no endpoints, no credentials, read-only tool class, local-sandbox environment. Repository proposals can only narrow: the protected path list only grows, and accepted commands arrive as proposals with a status.
 
@@ -282,7 +304,7 @@ The prelude, in order:
 
 1. Reconcile interrupted privileged actions. Each promotion whose start was recorded and whose end was not gets one permission decision and a mark, and a note says it was not repeated. Nothing is written to the owner's repository, and nothing else runs until this is done.
 2. Reap every interrupted launch. Every launch step left `started` by the previous holder belongs to a host process that is detached in its own process group and may still be writing. The host is found by a process-table search for the session ID recorded at launch. It is ended with a terminate signal, then killed after a grace period; if it survives the kill, resume fails. A host that cannot be searched for or ended stops the resume: no stage and no relaunch runs beside a survivor. All reaps complete before any launch row is marked `interrupted`, so a failed reap leaves every row `started` and the next resume retries. A reap that ended at least one process appends a warning event. A launch that was started and cannot be reaped at all stops the resume with an internal error that names the onboarding and the cause, and no launch is marked interrupted. That is the case in three situations. No host is composed for the launch's mode. The host has no reap capability (the refusing host used when no contained host is available). The launch recorded no session ID. Relaunching beside a host that may still be running is never an option.
-3. Reconcile the map invocation. This applies to an onboarding in `mapping` or `paused`. A `mapping` row is first moved to `paused`. If the previous holder launched an invocation that no validation has yet followed (more launches than validations), the staging map files decide. If every required file is present, the launch row is marked reconciled and a reconciled event is appended. AVARICE stamps the map for fast and full, and the onboarding goes straight to `validating` without a second launch. Otherwise the launch row is marked interrupted and the onboarding returns to `mapping`, where the map stage launches again, charged against the invocation budget.
+3. Reconcile the map invocation. This applies to an onboarding in `mapping` or `paused`. A `mapping` row is first moved to `paused`. If the previous holder launched an invocation that no validation has yet followed (more launches than validations), the staging map files decide. If every required file is present, the launch row is marked reconciled and a reconciled event is appended. AVARICE stamps the map for fast, full and paths, and the onboarding goes straight to `validating` without a second launch. Otherwise the launch row is marked interrupted and the onboarding returns to `mapping`, where the map stage launches again, charged against the invocation budget.
 
 Every other stage is idempotent and simply runs again from the committed state. In particular the workspace stage repeats its whole probe, plan and configure block after a kill.
 
