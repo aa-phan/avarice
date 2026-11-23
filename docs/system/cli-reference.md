@@ -564,7 +564,7 @@ The file is the owner's, not AVARICE's. Every other key and every other entry ke
 
 Output (stdout), two blocks: `skill avarice-run: installed|unchanged|updated`, `path: <SKILL.md path>`, `digest: sha256:<hex>`, then `hook attended: installed|unchanged|updated`, `path: <settings.json path>`, `digest: sha256:<hex>`. There is no `--json` form.
 
-Exit: 0 installed, updated or unchanged. 3 refused (`avarice install-host: refused: <rule>`, a hook entry script that cannot be used with nothing written, and for the settings file `the skill is in place; the attended hook was refused: <rule>`, so the settings file is unusable but the skill stays installed). 64 usage or inside a run. 70 failure, with one of these messages:
+Exit: 0 installed, updated or unchanged. 3 refused. For a hook entry script that cannot be used the message is `avarice install-host: refused: <rule>` and nothing is written. For the settings file it is `the skill is in place; the attended hook was refused: <rule>`: the settings file is unusable but the skill stays installed. 64 usage or inside a run. 70 failure, with one of these messages:
 
 - `failed: cannot install the avarice-run skill: <code>`, a write error.
 - `the skill is in place; the attended hook failed: ...`, a failure to write the hook.
