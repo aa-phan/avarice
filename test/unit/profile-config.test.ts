@@ -3,10 +3,10 @@
 // the three root environment variables override them. A composed AppDeps carries the class and the parsed config.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readProfileConfig, readProfileNotify } from '../../src/adapters/fs/profile-config.ts';
+import { isPermissionRefusal, readProfileConfig, readProfileNotify, unreadableConfig } from '../../src/adapters/fs/profile-config.ts';
 import { configPathFor, resolveProfile } from '../../src/adapters/fs/profile-paths.ts';
 import { createDeps } from '../../src/cli/composition.ts';
 import { PROFILE_CONFIG_KEYS, parseProfileConfig } from '../../src/domain/profile.ts';
@@ -176,6 +176,39 @@ describe('readProfileConfig (SEC-1)', () => {
     assert.equal(must(readProfileNotify(home, 'personal-local')).batchWindowMinutes, 30);
     writeConfig(home, 'personal-local', '{"notify":{"digestTimes":["25:00"]}}');
     assert.deepEqual(refusal(readProfileNotify(home, 'personal-local')), { kind: 'invalid', field: 'notify.digestTimes[0]', reason: 'expected HH:MM, two digits each, 00:00 to 23:59' });
+  });
+});
+
+// WR-17 and the owner's ruling "deny, don't refuse": a read the system refused (a mode that forbids it is EACCES, a sandbox deny is EPERM) is told apart from any other
+// failure to read, so the registry can deny the profile's roots for the first and must still stop for the second.
+describe('isPermissionRefusal (WR-17, AC-6)', () => {
+  it('is true for an unreadable config whose system error is EACCES or EPERM, and false for every other code, for a failure with no code and for any other kind of error', () => {
+    assert.equal(isPermissionRefusal(unreadableConfig('EACCES')), true);
+    assert.equal(isPermissionRefusal(unreadableConfig('EPERM')), true);
+    for (const code of ['EIO', 'ENXIO', 'EMFILE', 'ENFILE', 'open failed', 'read failed', 'Unknown system error -102', '']) assert.equal(isPermissionRefusal(unreadableConfig(code)), false, code);
+    assert.equal(isPermissionRefusal({ kind: 'invalid', field: 'config', reason: 'the profile config is not valid JSON' }), false);
+    assert.equal(isPermissionRefusal({ kind: 'unavailable', cause: 'cannot list the profiles of /x: EPERM' }), false, 'only a refused read of the config counts');
+    assert.equal(isPermissionRefusal({ kind: 'denied', rule: 'cannot read the profile config: EPERM', enforcer: 'external-platform' }), false);
+  });
+
+  it('classifies the error readProfileConfig returns for a config a mode of 000 refuses', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+    const home = tempDir('avarice-cfg-');
+    writeConfig(home, 'personal-local', '{"schema":1}');
+    const path = configPathFor(home, 'personal-local');
+    chmodSync(path, 0o000);
+    try {
+      const error = refusal(readProfileConfig(home, 'personal-local'));
+      assert.equal(error.kind, 'unavailable');
+      assert.equal(isPermissionRefusal(error), true);
+    } finally {
+      chmodSync(path, 0o600);
+    }
+  });
+
+  it('is false for a config that is only corrupt: that stays invalid', () => {
+    const home = tempDir('avarice-cfg-');
+    writeConfig(home, 'personal-local', '{not json');
+    assert.equal(isPermissionRefusal(refusal(readProfileConfig(home, 'personal-local'))), false);
   });
 });
 

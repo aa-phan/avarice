@@ -10,12 +10,27 @@ import type { ProfileNotify } from '../../domain/notify-policy.ts';
 import { parseProfileConfig, parseProfileName, profileClass } from '../../domain/profile.ts';
 import type { ProfileConfig } from '../../domain/profile.ts';
 import { err, ok } from '../../domain/result.ts';
-import type { Result } from '../../domain/result.ts';
+import type { PortError, Result } from '../../domain/result.ts';
 
 export const MAX_PROFILE_CONFIG_BYTES = 64 * 1024;
 
 export function configPathFor(configHome: string, profile: string): string {
   return join(configHome, 'profiles', profile, 'config.json');
+}
+
+const READ_FAILED = 'cannot read the profile config: ';
+// The system error codes of a read the system refused: a mode that forbids it (EACCES) and a sandbox deny (EPERM).
+const PERMISSION_CODES: readonly string[] = ['EACCES', 'EPERM'];
+
+// The error of a config that exists and could not be read, with the code of the system error in its cause.
+export function unreadableConfig(code: string): PortError {
+  return { kind: 'unavailable', cause: `${READ_FAILED}${code}` };
+}
+
+// Whether `error` is a config the system refused to open or read (permissions or a sandbox deny), as opposed to any other failure to read it. A caller that only needs
+// to keep a path out of reach of its commands can act on a refusal (the registry denies the profile's roots); every other failure it must still stop on.
+export function isPermissionRefusal(error: PortError): boolean {
+  return error.kind === 'unavailable' && PERMISSION_CODES.some((code) => error.cause === `${READ_FAILED}${code}`);
 }
 
 // The parsed config of `profile`, or the defaults when the file is absent. A symbolic link, a file that is not regular, a file over the cap,
@@ -31,7 +46,7 @@ export function readProfileConfig(configHome: string, profile: string): Result<P
     const code = (e as { code?: unknown }).code;
     if (code === 'ENOENT') return ok({ schema: 1, id: profile, class: profileClass(profile), sections: {} });
     if (code === 'ELOOP') return err({ kind: 'invalid', field: 'config', reason: 'the profile config is a symbolic link, which is refused' });
-    return err({ kind: 'unavailable', cause: `cannot read the profile config: ${typeof code === 'string' ? code : 'open failed'}` });
+    return err(unreadableConfig(typeof code === 'string' ? code : 'open failed'));
   }
   try {
     const info = fstatSync(fd);
@@ -45,7 +60,7 @@ export function readProfileConfig(configHome: string, profile: string): Result<P
     }
     return parseProfileConfig(raw, profile);
   } catch (e) {
-    return err({ kind: 'unavailable', cause: `cannot read the profile config: ${(e as { code?: unknown }).code === undefined ? 'read failed' : String((e as { code?: unknown }).code)}` });
+    return err(unreadableConfig((e as { code?: unknown }).code === undefined ? 'read failed' : String((e as { code?: unknown }).code)));
   } finally {
     closeSync(fd);
   }

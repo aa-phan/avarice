@@ -63,6 +63,10 @@ export function resolveConfigHome(env: NodeJS.ProcessEnv): string {
   return resolve(join(home, '.config', 'avarice'));
 }
 
+// The roots a profile has when neither its config nor the environment moves them.
+export const defaultDataRoot = (home: string, profile: string): string => join(home, '.local', 'share', 'avarice', profile);
+export const defaultWorkRoot = (home: string, profile: string): string => join(home, '.local', 'share', 'avarice-work', profile);
+
 // A root written in the config: absolute, or starting with `~/` for the home directory.
 export function configRoot(value: string | undefined, home: string, field: 'dataRoot' | 'workRoot'): Result<string | undefined> {
   if (value === undefined) return ok(undefined);
@@ -95,8 +99,8 @@ export function resolveProfile(env: NodeJS.ProcessEnv, probes: ProfileProbes = {
       class: profileClass(profile),
       config: read.value,
       configHome,
-      dataRoot: pick('AVARICE_DATA_ROOT', configured.dataRoot.value ?? join(home, '.local', 'share', 'avarice', profile)),
-      workRoot: pick('AVARICE_WORK_ROOT', configured.workRoot.value ?? join(home, '.local', 'share', 'avarice-work', profile)),
+      dataRoot: pick('AVARICE_DATA_ROOT', configured.dataRoot.value ?? defaultDataRoot(home, profile)),
+      workRoot: pick('AVARICE_WORK_ROOT', configured.workRoot.value ?? defaultWorkRoot(home, profile)),
     };
 
     const claudeConfigDir = pick('CLAUDE_CONFIG_DIR', join(home, '.claude'));
