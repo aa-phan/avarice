@@ -4,7 +4,7 @@ This tree describes AVARICE as it is built. It covers the onboarding of one exis
 
 ## How to read this
 
-Start with [overview.md](overview.md). Reference documents ([cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md)) are exhaustive for their surface. Descriptive documents state the mechanism and its consequences; the code owns the implementation, so they name their modules once in the opening and not again. Each document ends with the quirks a reader is likely to trip over.
+Start with [overview.md](overview.md). Reference documents ([cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md)) are exhaustive for their surface. Descriptive documents state the mechanism and its consequences; the code owns the implementation, so they name their modules once in the opening and not again. Most reference and descriptive documents carry a quirks section for what a reader is likely to trip over.
 
 A new document carries the mark "drafted, not yet reviewed" under its title until a second reader has checked it. A document that changed after its review is listed as `changed after review` in [coverage.md](coverage.md) until a fresh reviewer has read the changes. Do not rely on a marked or changed document before the others. The review status of every document is in [coverage.md](coverage.md).
 

@@ -118,7 +118,7 @@ An object of cap names to whole numbers above 0, each at most the built-in value
 | `fullReadBytes` | 262144 | bytes per run | Bytes the run's Reads can return in all: the bytes of the lines each Read asks for. A Read that would pass the cap is refused with `budget:retrieval.fullReadBytes`, and a single Read above the cap is refused whatever is left. A run's contract may lower it with `--budget retrieval.fullReadBytes`. |
 | `maxPages` | 5 | pages | Pages of a source that declares itself paged. No local source does. |
 
-A run's contract adds two retrieval counters of its own: `searches`, whose built-in limit is the run's tool-call limit and which `--budget retrieval.searches` may lower, and `broadDiscovery`, 1 when the brief authorizes it and 0 otherwise. The counters, the rows that hold them and the hook's rules for them, including how a Read is counted against `fullReads` and `fullReadBytes`, are in [containment.md](containment.md#retrieval-budgets).
+A run's contract adds two retrieval counters of its own. `searches` has the run's tool-call limit as its built-in limit, and `--budget retrieval.searches` may lower it. `broadDiscovery` is 1 when the brief authorizes it and 0 otherwise. The counters, the rows that hold them and the hook's rules for them, including how a Read is counted against `fullReads` and `fullReadBytes`, are in [containment.md](containment.md#retrieval-budgets).
 
 ### The `credentials` section
 
