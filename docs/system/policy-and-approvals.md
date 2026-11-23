@@ -170,7 +170,7 @@ The enforcement map is a code table of 18 controls: who enforces each one, what 
 | `restricted-mode`: restricted mode when a layer is unavailable | avarice | Drops the run to restricted and refuses unattended runs; never substitutes instructions, an unapproved sandbox or an unapproved egress path | A restricted run produces a plan, a patch file and a decision list only, and the host must honor its restricted flag | None named in the table |
 | `hook-cost-fields`: finer budget enforcement from token or cost fields in hook input | host | None until the host provides the fields | Whether hook input carries those fields is not established; no profile relies on it | Unverified |
 
-Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The two rows with no test named say in the table that the proving test does not exist, although the suites that exercise them are tracked.
+Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The two rows with no test named say in the table that the proving test does not exist, although tracked suites test them (`test/integration/approvals.test.ts` and `test/integration/restricted-mode.test.ts`). The `profile-isolation` row above states the built behavior; the code table's own text is older and is recorded in [findings.md](findings.md).
 
 ## Manual equivalents
 
