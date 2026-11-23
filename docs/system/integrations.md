@@ -50,7 +50,7 @@ The ports directory holds the adapter ports and three support files. The descrip
 | Command executor | `sandbox-exec` executor | an executor that runs commands directly for a test already inside an outer sandbox, injected only by the test entry point |
 | Graph tool | graphify adapter | a fake `graphify` executable |
 | GSD onboarding | gsd-tools adapter, present only when an admitted gsd-core is located | a fake gsd-core tree |
-| Context source | up to four adapters, selected by the profile: intel, graph, planning sections and file search; the first two and the planning sections are built only when the GSD adapter exists, and the first two read through GSD's own readers. Each descriptor declares `refresh` | none |
+| Context source | up to four adapters, selected by the profile: intel, graph, planning sections and file search; all four are built only when the GSD adapter exists, and the first two read through GSD's own readers. Each descriptor declares `refresh` | none |
 | Credential provider | `keychain`, `cmd` and `delegated`, the ones the profile's class allows | none |
 | Staging workspace | local clone (the strategy is a single constant) | the worktree adapter exists behind the same port and runs the shared contract tests, but no production path selects it |
 | Run source | git adapter that reads repository objects only | none |
