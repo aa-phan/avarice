@@ -10,22 +10,26 @@ requires:
 provides:
   - findings.md, README.md and coverage.md at the final code commit (96a0718)
   - the regression-fix statements applied to five docs/system documents
-  - 04-54-reviews/README.md, the review groups with the sha256 of each version to review
+  - fresh prose reviews of all sixteen changed documents in four groups, five rounds, with every document marked reviewed in coverage.md
+  - 04-54-reviews/, the review index with each finding's disposition and the round reports stored verbatim
 affects: [phase-4-verification, docs-system]
 
 actuals:
-  tokens: 15000
-  tasks: 1
-  commits: 3
+  tokens: 175500
+  tasks: 2
+  commits: 29
 
 tech-stack:
   added: []
   patterns:
-    - "A document that changed after its review stays changed after review until a fresh reviewer passes its group"
+    - "A document is marked reviewed only from a passing round file whose digest equals the file's current sha256; a report whose digest does not match is re-read, not trusted"
+    - "A reviewer's scope is a git diff range, and the owner may add a scoped round when the budget is spent"
 
 key-files:
   created:
     - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-54-reviews/README.md
+    - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-54-reviews/round-1-A.md
+    - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-54-reviews/round-5.md
   modified:
     - docs/system/findings.md
     - docs/system/README.md
@@ -35,76 +39,103 @@ key-files:
     - docs/system/cli-reference.md
     - docs/system/indexes-and-context.md
     - docs/system/runs.md
+    - docs/system/policy-and-approvals.md
+    - docs/system/doctor.md
+    - docs/system/processes.md
+    - docs/system/config-reference.md
+    - docs/system/data-model.md
+    - docs/system/integrations.md
+    - docs/system/onboarding.md
+    - docs/system/unknowns.md
 
 key-decisions:
-  - "No document is marked reviewed: the executor could not dispatch a fresh prose-reviewer and the plan forbids a self-review (T-04-142)"
-  - "Status halted: Task 2 (fresh reviews and review statuses) is not done and needs a caller that can spawn subagents"
+  - "No document is marked reviewed by a round that failed, and a report whose digest differs from the file is not trusted: processes.md was marked only after round 5 read it with a command-copied digest (T-04-142)"
+  - "Owner decision 1 (2026-11-23): one scoped round 4 beyond the three-round budget, scoped to the lines changed since the round-3 digests (diff base f19ae4e)"
+  - "Owner decision 2 (2026-11-23): findings.md delivery history is exempt as the owner's working log; the exemption covers findings.md only"
+  - "Owner decision 3 (2026-11-23): group C gets one scoped round 5 on the one-bullet fix of unknowns.md"
 
-requirements-completed: []
+requirements-completed: [FR-3, FR-12, FR-13, FR-14, FR-15, FR-22, SEC-1, SEC-2, SEC-3, SEC-6, CON-4, CON-10, CON-11, ONB-6, ONB-11, OPS-1, OPS-5]
 
 coverage:
   - id: D1
-    description: "findings.md closes or refreshes the lines the gap plans changed, records the AC-8 bound and result of ADR-016, and gains the decided differences and the regression-fix lines"
+    description: "findings.md closes or refreshes the lines the gap plans changed, records the AC-8 bound and result of ADR-016, and gains the decided differences and the regression-fix lines; the file passed a fresh review in four rounds"
+    requirement: "OPS-5"
     verification:
       - kind: other
-        ref: "node --test test/unit/footprint.test.ts (32 pass); git diff HEAD~3 -- docs/system/findings.md read against the code"
+        ref: "node --test test/unit/footprint.test.ts (32 pass); 04-54-reviews/round-4-A.md (PASS)"
         status: pass
     human_judgment: true
-    rationale: "Whether each added line states the owner's question correctly is a judgment a fresh reviewer or the owner makes"
+    rationale: "Whether each added line states the owner's question correctly is a judgment the fresh reviewer made and the owner can overrule"
   - id: D2
-    description: "coverage.md denominators re-run at 96a0718 (40 hook rules, 47,873 source lines, 242 test files, other counts unchanged) and every changed document set to changed after review"
+    description: "coverage.md denominators re-run at 96a0718 (40 hook rules, 47,873 source lines, 242 test files, other counts unchanged) and every changed document carries a review status that names its round files"
     verification:
       - kind: other
-        ref: "the commands of the Denominators table, re-run at 96a0718"
+        ref: "the commands of the Denominators table, re-run at 96a0718; every sha256 compared with the digest the passing round read before marking"
         status: pass
     human_judgment: false
   - id: D3
-    description: "Fresh prose review of every changed document"
-    verification: []
+    description: "Fresh prose review of every changed document: all four groups passed (A, B and D in round 4, C in round 5, processes.md re-read in round 5)"
+    verification:
+      - kind: manual_procedural
+        ref: "04-54-reviews/round-4-A.md, round-4-B.md, round-4-C.md, round-4-D.md, round-5.md"
+        status: pass
     human_judgment: true
-    rationale: "Not done: no agent-dispatch tool was available to the executor"
+    rationale: "A prose review is a reader's judgment against the code; the owner decided the budget and the scope of rounds 4 and 5"
 
-duration: 40min
-completed: 2026-11-22
-status: halted
+duration: 3 sessions over 2026-11-22 and 2026-11-23 (the first, Task 1, took 40 min; five fresh review rounds with fix passes followed)
+completed: 2026-11-23
+status: complete
 plan_head_before: 96a07180841c5d2a589042f4d3ccb28d723746dc
+plan_head_after: 21fbbf676b45abd273a58e88edaa19d2fb974abb
 ---
 
-# Phase 4 Plan 54: Documentation ledgers and review preparation Summary
+# Phase 4 Plan 54: Documentation ledgers and review passes Summary
 
-**findings.md, both README tables and coverage.md now describe the tree at the final code commit, the owner's "deny, don't refuse" and code-node statements are in five documents, and the fresh reviews are prepared but not run, so no document is marked reviewed.**
+**findings.md, both README tables and coverage.md describe the tree at the final code commit, and all sixteen changed `docs/system` documents were reviewed by fresh readers against the code over five rounds (the last two scoped by the owner) and are marked reviewed.**
 
 ## Performance
 
-- **Duration:** about 40 min
-- **Completed:** 2026-11-22
-- **Tasks:** 1 of 2 complete (Task 1 done; Task 2 halted)
-- **Files modified:** 9 (1 created)
+- **Duration:** three sessions on 2026-11-22 and 2026-11-23; Task 1 took about 40 min, the review rounds and fix passes the rest
+- **Completed:** 2026-11-23 (round 5 closed at HEAD `c1279bb`; plan HEAD before the summary commit `21fbbf6`)
+- **Tasks:** 2 of 2 complete
+- **Files modified:** 36 (`git diff --shortstat 96a0718 HEAD`: 2,828 insertions, 367 deletions), of which 16 documents under `docs/system` and the rest review records
 
 ## Accomplishments
 
 - Task 1: findings.md closes the intel-untrusted line (35) and the whole-file read line (283, with the unused `beginRead` kept as the residual), refreshes the anchors of lines 267, 269, 270 and 332, drops `privileged-approval` from the unproven enforcement rows, names the AC-8 constant and the re-judge pair on the harness line (278), and records the ADR-016 bound (95% of the baseline's tokens, inclusive) and the recorded result (arm B at 94.4%, arm C at 88.5%) on the AC-8 line (331). It adds the three code-versus-proposal lines and the here-document line from the worklist, plus four lines from the regression fix (planning skip reads `untrusted`, unreachable intel branches in spec derivation, an unreadable enterprise config still exits 70, a permission error on the profile directory or listing still exits 70).
-- README.md: the counterparts table gains the ADR-016 row; the status wording matches coverage.md. Both tables already listed every document of the worklist.
-- coverage.md: denominators re-run at `96a0718`: hook rules 40 (6 allow, 35 deny, one on both), source lines 47,873 in 240 files, test files 242 (92 unit, 116 integration, 18 fault, 11 containment, 3 mutation, 2 contract); the other counts held (20 commands, 19 `AVARICE_*` names, 22 actions, 18 enforcement controls, 50 event kinds, 4 migrations, 9 diagrams, 11 doctor areas, 24 tables, 132 boundary files, 32 footprint tests). Fourteen documents moved to `changed after review` with what changed.
-- Regression-fix statements applied and checked against the code: a permission-refused other-profile config adds the profile's directory and the default data and work roots of its name and the command goes on; other read failures still exit 70; a refused config cannot name moved roots; `context --json` carries `codeNode`; spec derivation takes file and symbol from an untrusted code node and nothing from document, concept or intel entries.
-- Task 2: `04-54-reviews/README.md` lists the four review groups (A to D) with the sha256 of each version to review. No round ran.
+- README.md: the counterparts table gains the ADR-016 row; the status wording matches coverage.md.
+- coverage.md: denominators re-run at `96a0718` (hook rules 40, source lines 47,873 in 240 files, test files 242; the other counts held), and after the reviews every document of the four groups moved from `changed after review` to `reviewed`, each row naming its round files. The Outstanding list no longer carries the open review items or the T-04-102 condition.
+- Regression-fix statements applied and checked against the code: a permission-refused other-profile config adds the profile's directory and the default roots of its name and the command goes on; other read failures still exit 70; `context --json` carries `codeNode`; spec derivation takes file and symbol from an untrusted code node and nothing from document, concept or intel entries.
+- Task 2: four review groups (A policy, approvals, processes, doctor, profiles, findings; B cli-reference, config-reference, README; C containment, data-model, integrations, unknowns; D runs, onboarding, indexes-and-context) ran fresh reviewers in rounds 1 to 3 (all failed each time, every finding verified against the code and fixed, none rejected), round 4 (A, B, D pass; C one WARNING) and round 5 (C pass; `processes.md` digest-confirmed pass). The reports are stored verbatim in `04-54-reviews/` and `04-54-reviews/README.md` records each disposition and every digest.
 
 ## Task Commits
 
 1. **Regression-fix statements (Rule 2)** - `54fc813` (docs)
 2. **Task 1: findings, README tables, coverage counts** - `e6651c3` (docs)
-3. **Task 2 preparation: review groups and digests** - recorded in the commit that adds this summary
+3. **Task 2: review records and fixes** - `826ed28` (groups and digests), the round-1 to round-5 report and fix commits (`9b04b49`, `9f14584`, `adc1efb`, `bb80093`, `d8f108f`, `232ace4`, `6dd9cee`, `54150cb`, `899d6e5`, `d6f16f0`, `b41eb68`, `e40c5bf`, `707c964`, `bc49315`, `01e9aaf`, `18fc3fb`, `3b36b23`, `46da520`), and the index and coverage commits (`85eb6d7`, `f19ae4e`, `1987922`, `86e3258`, `c1279bb`, `4d47764`, `21fbbf6`)
+
+`commits: 29` is measured from the ledger base `96a0718` to `21fbbf6`, before this summary's own commit. **Plan metadata:** the commit that adds this summary, and the state commit after it.
 
 ## Review status for the owner
 
-| Group | Documents | Status |
+| Group | Documents | Passed in |
 |---|---|---|
-| A | policy-and-approvals, approve-privileged-action.puml, processes (approve flow), doctor, profiles-and-credentials, findings | FAIL in rounds 1 and 2, round 3 pending |
-| B | cli-reference, config-reference, README | FAIL in rounds 1 and 2, round 3 pending |
-| C | containment, data-model, integrations, unknowns | FAIL in rounds 1 and 2, round 3 pending |
-| D | runs, onboarding, indexes-and-context | FAIL in rounds 1 and 2, round 3 pending |
+| A | policy-and-approvals, processes (and its diagram `approve-privileged-action.puml`), doctor, profiles-and-credentials, findings | round 4 (`round-4-A.md`); `processes.md` re-read in round 5 (`round-5.md`) |
+| B | cli-reference, config-reference, README | round 4 (`round-4-B.md`) |
+| C | containment, data-model, integrations, unknowns | round 5 (`round-5.md`) for `unknowns.md`; no finding in round 4 for the other three (`round-4-C.md`) |
+| D | runs, onboarding, indexes-and-context | round 4 (`round-4-D.md`) |
 
-Open findings: the round-2 findings are fixed (see "Round 2 fixes"); round 3 has not run. T-04-102's open condition still holds: containment.md, data-model.md and integrations.md are `changed after review`, and so is every other document in the groups. Round 3 is the last round the plan allows: one fresh `technical-writer:prose-reviewer` per group, each report stored as `04-54-reviews/round-3-<group>.md`; only a group whose round 3 records no BLOCKER and no WARNING may have its coverage.md rows changed to `reviewed`.
+All sixteen documents are `reviewed` in `docs/system/coverage.md`. Before marking, each current sha256 was compared with the digest the passing review read: `unknowns.md` `6c521497...`, `processes.md` `d077412b...` (both from `round-5.md`), and `containment.md` `010447d3...`, `data-model.md` `f87e46b4...`, `integrations.md` `b915faaa...` (from `round-4-C.md`). All matched. T-04-102's open condition no longer holds: `containment.md`, `data-model.md` and `integrations.md` are `reviewed`.
+
+Two honest limits. Round 4 and round 5 were scoped by the owner to the lines changed since the previous digests, so unchanged text outside those scopes was read in rounds 1 to 3 only. Rounds 4 and 5 are outside the plan's three-round budget (owner decisions 1 and 3), and a scoped pass does not re-prove the whole document.
+
+## Owner decisions (2026-11-23)
+
+Recorded by the owner, Aaron Phan, answering the checkpoints raised after rounds 3 and 4, and copied verbatim into `04-54-reviews/README.md`.
+
+1. Review budget: "Fix + scoped round 4". All four groups failed round 3, so the 3-round budget was exhausted. The owner overrode the budget for one more round: fix every round-3 finding, then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `f19ae4e`). A group passes when round 4 records no BLOCKER and no WARNING within that scope.
+2. `findings.md` delivery history (observation O1, raised in every round): "Exempt: it's a log". Commit hashes, plan and ruling references and the `.planning` path may stay as evidence there. The exemption covers `findings.md` only. One sentence saying so is in its header.
+3. Group C after round 4: "Fix + one-bullet round 5". Group C failed round 4 on one WARNING (`round-4-C.md`, W1). It was fixed exactly as the reviewer specified, then one fresh reviewer checked only that diff.
 
 ## Deviations from Plan
 
@@ -123,19 +154,35 @@ Open findings: the round-2 findings are fixed (see "Round 2 fixes"); round 3 has
 - **Fix:** reworded; the guard passes (32 of 32).
 - **Committed in:** `e6651c3`
 
-**3. [Plan deviation] Task 2 not done**
-- Issue: the executor had no agent-dispatch tool, so no fresh reviewer could run, and the plan and the instructions forbid a self-review. The status is `halted`.
-- A fourth review group (D) is listed because the worklist assigns runs, onboarding and indexes to it; the plan's file list names three round files.
+**3. [Plan deviation] Review rounds beyond the plan's three-round budget**
+- Rounds 4 and 5 ran by the owner's decisions 1 and 3. The plan assumed no owner override; it records that a group still failing after round 3 stays `changed after review`. The owner chose to continue with scoped rounds instead, and every group then passed.
 
-**4. [Verify note] Task 1's automated check fails on one earlier sentence**
-- `git diff --quiet 792536d..HEAD -- <proposal documents>` exits 1 because plan 04-50 changed one sentence of `docs/operations-and-testing.md` under ADR-016 (a recorded design decision). This plan changed no document outside `docs/system/` (`git diff HEAD~3 -- docs ':!docs/system'` is empty).
+**4. [Plan deviation] A fourth review group**
+- Group D (runs, onboarding, indexes-and-context) is listed because the worklist assigns those documents to it; the plan's file list names three round files. The round files are `round-1-D.md` to `round-4-D.md`.
 
-**Total deviations:** 2 auto-fixed (1 Rule 2, 1 Rule 3), 1 halted task, 1 verify note.
+**5. [Verify note] Task 1's automated check fails on one earlier sentence**
+- `git diff --quiet 792536d..HEAD -- <proposal documents>` exits 1 because plan 04-50 changed one sentence of `docs/operations-and-testing.md` under ADR-016 (a recorded design decision). This plan changed no document outside `docs/system/` (`git diff HEAD~3 -- docs ':!docs/system'` was empty at Task 1).
+
+**Total deviations:** 2 auto-fixed (1 Rule 2, 1 Rule 3), 2 plan deviations (budget, group D), 1 verify note.
+**Impact on plan:** the documentation tree is current and every document has a review status backed by a passing round file. No scope creep: no file under `src/`, `test/` or `scripts/` changed in this plan and no proposal document changed.
 
 ## Issues Encountered
 
-- The worktree sandbox refused compound git commands; the pin guard script ran, and `git rev-parse --show-toplevel` printed the pinned root.
-- `STATE.md` and `ROADMAP.md` were not advanced: the plan is halted, and `state.advance-plan` was not run.
+- The worktree sandbox refused compound git commands; plain single commands were used, and `git rev-parse --show-toplevel` printed the pinned root.
+- `round-4-A.md` recorded the `processes.md` digest with one wrong character. The file was not marked on that report; a fresh round-5 reviewer read it with a digest copied from the command and passed it.
+- The plan-level check that no proposal document changed is a documentation check only; `npm test` was not run, as the tasks changed no code.
+
+## Open items for the owner
+
+None of these blocks the plan. Each is an observation or NIT outside the scope of a passing review and is not fixed.
+
+- From round 4 (A): the onboarding wording at `docs/system/profiles-and-credentials.md:67`, and the transcript PEM body lines that remain at `docs/system/profiles-and-credentials.md:111`.
+- From round 4 (C): the configuration homes are stated three times in `docs/system/containment.md` (lines 214, 479 and 574); the orphan-charge wording omits the assumption at `src/app/budget.ts:117-118`, that the cost budget is unchanged between grant and conversion.
+- Round 5 NIT 1, `docs/system/unknowns.md:63`: "did not pass" reads as the `p4-restricted-onboarding` case's standing result, though a later record is a PASS. The reviewer's suggested wording: "failed in its first three recorded attempts (... :25-27) and has a later PASS record (:32)".
+- Round 5 OBS 1, `docs/system/processes.md:174`: the approve-a-privileged-action drift anchor could add `src/domain/approval.ts` (holds `APPROVAL_TTL_MS`, which the diagram states three times) and `src/cli/identity.ts` (decides the refusal branch for a non-terminal, a run process tree and a wrong user).
+- Round 5 OBS 3, `test/containment/LIVE-CASES.md:574`: the `p4-restricted-onboarding` row says "FAIL, FAIL" while `live-run-phase4.jsonl` has three FAIL records (lines 25 to 27). The document cites the jsonl accurately; the mismatch is in the test evidence, which this plan does not edit.
+- Earlier NITs left as written: `cli-reference.md` long Exit lines (reference lists), bold-lead reference bullets and question headings that other documents link to (group D), the 140-word record-contents list in `onboarding.md` (now a bullet list), and group A N10 (bold-lead outcome items).
+- `config-reference.md` still omits `XDG_CONFIG_HOME` and `GH_CONFIG_DIR` (listed in the Outstanding section of `coverage.md`).
 
 ## Known Stubs
 
@@ -143,76 +190,21 @@ None.
 
 ## Threat Flags
 
-None. Only documents and review records changed.
+None. Only documents and review records changed. T-04-142 is mitigated: no document is marked reviewed by a failed round, and the one report with a mismatched digest was re-read before its document was marked.
 
 ## Next Phase Readiness
 
-- Re-run Task 2 from a caller that can dispatch subagents; then re-summarize this plan as `complete`, advance the plan counter and mark FR-3, FR-12, FR-13, FR-14, FR-15, FR-22, SEC-1, SEC-2, SEC-3, SEC-6, CON-4, CON-10, CON-11, ONB-6, ONB-11, OPS-1 and OPS-5 per the plan.
-- If a document is edited after this summary, its sha256 in `04-54-reviews/README.md` no longer matches and must be recomputed before review.
-
-## Round 1 fixes
-
-Four fresh reviewers read the documents in round 1 and all four groups failed (A: 1 BLOCKER, 7 WARNING; B: 3 WARNING; C: 8 BLOCKER, 8 WARNING; D: 1 BLOCKER, 9 WARNING). The reports are stored verbatim as `04-54-reviews/round-1-A.md` to `round-1-D.md`. Every BLOCKER and WARNING was checked against the code at HEAD and fixed; none was rejected. The fixes are the commits "fix round-1 review findings, group A" to "group D". `04-54-reviews/README.md` records each finding's disposition and the new sha256 of every document for round 2. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
-
-- Group A `findings.md` cites: the listed cites and about 70 further drifted ones are re-anchored with "(now at ...)", and eight duplicated observations now have one home. A scripted check compared each cite with the vocabulary of its line and the remaining flagged cites were read by hand, but the check cannot prove a cite right, so a round-2 reviewer may still find some that drifted.
-- One `findings.md` line was added: the `profile-isolation` row of the enforcement map (`src/domain/enforcement-map.ts:113`) still says a moved profile is not covered, while the registry now denies it.
-- Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner rulings 2 and 4 of plan 04-35 at the two ruling lines, commit hashes under "edited on this branch", and quoted strings with "Phase 1", "(D-11)" and "Phase 2"). The reviewer could not tell whether `findings.md` is exempt as owner working material.
-- NITs left: B-4 (long Exit lines in `cli-reference.md`, reference lists); D-N5 (bold-lead reference bullets) and D-N6 (question headings that other documents link to); the module-listing openings and the 138-word record-contents list in `onboarding.md` (reference lists). Stale entry found while re-anchoring: the `findings.md` line on a silent reap skip now says it no longer holds.
-- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
-
-## Round 2 fixes
-
-Four fresh reviewers read the round-1 versions again and all four groups failed (A: 1 BLOCKER, 3 WARNING, 4 NIT; B: 4 WARNING, 2 NIT; C: 1 BLOCKER, 6 WARNING, 3 NIT; D: 1 BLOCKER, 6 WARNING, 5 NIT). The reports are stored verbatim as `04-54-reviews/round-2-A.md` to `round-2-D.md`. Every finding was checked against the code at HEAD first and none was rejected. The fixes are the commits "fix round-2 review findings, group A" to "group D" and the two follow-up commits on `cli-reference.md` and the records. `04-54-reviews/README.md` records each disposition and the sha256 of all 16 documents for round 3. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
-
-- Group A `findings.md`, full cite pass. A script extracted every `file:line` cite (685 in code spans, 30 outside them). The 522 in code spans and the 30 outside them that claim a current location were each opened at HEAD and read: the cited line has to be inside the construct the entry names. About 15 cites on lines that a vocabulary check could not match were read by hand with their context. 90 cites changed: 86 in code spans and 4 outside them (the other 163 in code spans are "as logged" cites that a "(now at ...)" already replaces; their targets are among the cites checked). Every changed cite was re-pointed to the line that holds the observation, or gained a "(now at ...)" where it was a bare wrong cite. None is marked "moved; not re-located", because each was found. Wrong "(now at ...)" targets from round 1 are corrected: the reviewer listed 19 lines, and this pass found the others.
-- Four `findings.md` entries needed more than a re-anchor, because the claim itself had moved: `approvals` and `task_refs` now say "No longer holds" with writer and reader cites; the `onboard` boolean-flag entry now says `restricted` is declared (`onboard.ts:15`); the admitted-GSD-version regex entry now says it lives in `src/domain/gsd-version.ts` and `gsd-onboarding.ts`, not in `locate.ts`.
-- Sentence length: 34 sentences over 35 words in `findings.md` are split, with every `file:line` kept. A final scan of all 16 documents, outside fences, tables and reference lists, finds none over 35 words in running prose. What is left is the command list at `cli-reference.md:7` and the Exit lines of the command reference, which are code-to-meaning lists, and the module lists that group D turned into bullets.
-- Links and anchors: 652 relative links across `docs/system/*.md` resolve, checked by script after the five heading renames of group D and the one inbound link that followed.
-- Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner question; round-2 reviewer repeated it as an observation). Round 3 is the last round: a group that still fails there stays `changed after review` and needs an owner decision on how to go on.
-- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
-
-## Owner decisions (2026-11-23)
-
-Recorded by the owner, Aaron Phan, answering the checkpoint raised after round 3, and copied verbatim into `04-54-reviews/README.md`.
-
-1. Review budget: "Fix + scoped round 4". All four groups failed round 3, so the 3-round budget is exhausted. The owner overrides the budget for one more round: fix every round-3 finding, then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `f19ae4e`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope.
-2. `findings.md` delivery history (observation O1, raised in every round): "Exempt: it's a log". `findings.md` is the owner's working log of code-versus-proposal drift. Commit hashes, plan and ruling references and the `.planning` path may stay as evidence. Reviewers record it as exempt, not a finding. One sentence saying so is added to the header of `findings.md`.
-3. Group C after round 4 (2026-11-23): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING (`round-4-C.md`, W1). Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff.
-
-## Round 3 fixes
-
-Four fresh reviewers read the round-2 versions and all four groups failed (A: 1 BLOCKER, 6 WARNING, 3 NIT; B: 1 BLOCKER, 1 WARNING, 2 NIT; C: 0 BLOCKER, 3 WARNING, 7 NIT; D: 1 BLOCKER, 5 WARNING, 3 NIT). The reports are stored verbatim as `04-54-reviews/round-3-A.md` to `round-3-D.md` (commit `b41eb68`). Every finding was checked against the code at HEAD first and none was rejected. The fixes are the commits "fix round-3 review findings, group A" to "group D". `04-54-reviews/README.md` records each disposition and the sha256 of all 16 documents for round 4. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
-
-- Group A: the count of commands that refuse inside a run is three, not four; a policy file in the wrong slot is refused by the sources builder, not treated as broken or absent; an end with no open start is refused; doctor's write statement names the profile directories; the multi-line secret limit is scoped to the transcript boundary; the approve-diagram anchors are corrected; the `findings.md` header carries the owner's exemption sentence. Left: N10 (bold-lead outcome items), which the reviewer calls optional.
-- Group B: the install-host exit-70 message carries `internal error:`; the README sentence about proposals with no counterpart no longer contradicts the last table row; `approve` joins the exit-64 row; the retrieval override names are stated as integers with their ceilings.
-- Group C: the context-source sentence, the cost-reservation wording, the `action.started` data, the command-identity order, the stray Read-budget sentence, the `scm.api.write` condition and two cites are corrected. `unknowns.md` lost its delivery-history wording: the five "(run slice)" sections are merged into their subsystem sections, "Campaign-wide" is "All documents", and the recorded live result of `p4-restricted-run` (a PASS, with `p4-restricted-onboarding` not passing) is now named in the open entry.
-- Group D: the order of checks in `runs.md` puts preflight before the profile limits and places the conventions read inside it; the deletion rule is G2's; the brief reference is a second write; the `gsd-planning` row and the scoped-map refusal are corrected; four repeated Quirks lines are deleted; the derivation paragraph and the 1,000-word Launch paragraph are split by topic.
-- Mechanical checks over the lines changed since `f19ae4e`: no sentence over 35 words in running prose, no banned dash, and all 652 relative links and anchors across `docs/system/*.md` resolve (checked by script).
-- Documents changed since `f19ae4e` (the round-4 scope): fifteen of the sixteen. Only `diagrams/approve-privileged-action.puml` is unchanged.
-- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass. STATE.md and ROADMAP.md are unchanged.
-
-## Round 4
-
-Four fresh reviewers read the round-3 fixes, scoped to `git diff f19ae4e 1987922`. The reports are stored verbatim as `04-54-reviews/round-4-A.md` to `round-4-D.md` (commit `18fc3fb`).
-
-- Group A: PASS (0 BLOCKER, 0 WARNING, 0 NIT). Group B: PASS (0, 0, 0). Group D: PASS (0, 0, 0).
-- Group C: FAIL (0 BLOCKER, 1 WARNING, 0 NIT). W1: two bullets of "From containment" in `unknowns.md` contradicted each other about which evidence under `test/containment` was read, and the onboarding sentence left out the later PASS record. Verified at `live-run-phase4.jsonl:24` (PASS), `:25-27` (FAIL) and `:32` (PASS), and `LIVE-CASES.md:573-574`. Fixed in commit `3b36b23` (parent `86e3258`): the bullets are merged, they name what was read, and the onboarding sentence gives both outcomes. New `unknowns.md` sha256: `6c5214972cc51a5fa7aff71b8a603f7e49d2bb49e689d13623e7df8b8be8e3c5`.
-- Owner decision (2026-11-23, Aaron Phan, answering the checkpoint about group C): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING. Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff. Recorded verbatim in `04-54-reviews/README.md`.
-- Coverage marks (commit `86e3258`): `policy-and-approvals.md`, `doctor.md`, `profiles-and-credentials.md` and `findings.md` (round files `round-1-A.md` to `round-4-A.md`); `cli-reference.md`, `config-reference.md` and `README.md` (`round-1-B.md` to `round-4-B.md`); `runs.md`, `onboarding.md` and `indexes-and-context.md` (`round-1-D.md` to `round-4-D.md`). Each digest in the round-4 reports was compared with the file first.
-- `processes.md` is NOT marked. `round-4-A.md` records its digest as `d077412b...9c0deeb...` and the file is `d077412b...9e0deeb...`, a one-character difference that looks like a transcription slip. The report cannot settle it. Open for the owner: accept the pass, or have a fresh reviewer read it. The `.puml` has no row of its own in `coverage.md`.
-- Group C's four documents (`containment.md`, `data-model.md`, `integrations.md`, `unknowns.md`) stay `changed after review`. The round-5 scope is the diff of commit `3b36b23` against `86e3258` for `unknowns.md`.
-- Open items for the owner, observations outside the scope of round 4 that are not fixed:
-  - From round-4-A: the onboarding wording at `profiles-and-credentials.md:67`, and the transcript PEM body lines that remain at `profiles-and-credentials.md:111`.
-  - From round-4-C: the configuration homes are stated three times in `containment.md` (lines 214, 479 and 574); the orphan-charge wording omits the assumption at `src/app/budget.ts:117-118`, that the cost budget is unchanged between grant and conversion.
-- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run. STATE.md and ROADMAP.md are unchanged.
+- This is the phase's last plan (depends on all others). Phase 4 verification can check SC6: docs/system current, README tables, coverage and findings current, each changed document freshly reviewed.
+- If a document under `docs/system` is edited after this summary, its sha256 no longer matches the digest its passing round read and the review status in `coverage.md` should be set back to `changed after review`.
 
 ## Self-Check: PASSED
 
-- Files exist: the nine files above and this summary.
-- Commits `54fc813` and `e6651c3` are ancestors of HEAD.
-- `node --test test/unit/footprint.test.ts`: 32 pass, 0 fail. `node scripts/check-boundaries.ts`: ok (132 files).
-- The Self-Check covers Task 1 only; Task 2 is incomplete by design and is not claimed.
+- Files exist: the 16 documents above, `04-54-reviews/README.md`, `round-1-A.md` to `round-4-D.md` and `round-5.md`, and this summary.
+- Commits `54fc813`, `e6651c3`, `46da520`, `4d47764` and `21fbbf6` are ancestors of HEAD.
+- Digest check before the coverage marks: five sha256 values compared and equal.
+- `git rev-list --count 96a0718..HEAD` printed 29 before this summary's commit.
+- `node --test test/unit/footprint.test.ts` (Task 1): 32 pass, 0 fail. `node scripts/check-boundaries.ts`: ok (132 files). Not re-run at close: no file under `src/`, `test/` or `scripts/` changed.
 
 ---
 *Phase: 04-profiles-retrieval-budgets-restricted-mode-and-the-portabili*
-*Completed: 2026-11-22 (Task 2 halted)*
+*Completed: 2026-11-23*
