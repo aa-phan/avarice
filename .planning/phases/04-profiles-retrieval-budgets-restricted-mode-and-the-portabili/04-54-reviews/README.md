@@ -1,8 +1,15 @@
 # Plan 04-54 documentation review records
 
-Status: rounds 1, 2 and 3 ran for all four groups and every group ended FAIL each time. Round 4 is outside the plan's three-round budget and ran by the owner's decision (see Owner decisions). Round 4 passed groups A, B and D and failed group C on one WARNING. The documents of A (except `processes.md`, see below), B and D are marked `reviewed` in `docs/system/coverage.md`. Group C's four documents stay `changed after review` until the scoped round 5 passes. The digests in the table below are the versions that round 4 reviewed.
+Status: all four groups passed. Rounds 1, 2 and 3 ran for all four groups and every group ended FAIL each time. Round 4 is outside the plan's three-round budget and ran by the owner's decision (see Owner decisions). Round 4 passed groups A, B and D and failed group C on one WARNING. The scoped round 5 passed group C and re-read the one changed line of `processes.md` (group A) against a digest copied from the command. Every document of the four groups is marked `reviewed` in `docs/system/coverage.md`, naming its round files.
 
-`processes.md` is not marked. The digest in `round-4-A.md` is `d077412b7e07c90ab09c0deeb2970b909fb4885eec0f74b1c22fde6b0b758ede`; the file, unchanged since round 3 and listed in the table below, is `d077412b7e07c90ab09e0deeb2970b909fb4885eec0f74b1c22fde6b0b758ede` (they differ at one character, which looks like a transcription slip). The mismatch cannot be settled from the report, so the owner decides: accept the pass for `processes.md`, or have a fresh reviewer read it. The `.puml` has no row of its own in `coverage.md`; its status is that of `processes.md`.
+| Group | Passed in | Report that passed it |
+|---|---|---|
+| A | round 4 (`processes.md` also round 5) | `round-4-A.md`, and `round-5.md` for the digest-confirmed re-read of `processes.md` |
+| B | round 4 | `round-4-B.md` |
+| C | round 5 (`containment.md`, `data-model.md` and `integrations.md` had no finding in round 4) | `round-4-C.md` and `round-5.md` |
+| D | round 4 | `round-4-D.md` |
+
+The digest that `round-4-A.md` records for `processes.md` is `d077412b7e07c90ab09c0deeb2970b909fb4885eec0f74b1c22fde6b0b758ede`. The file, unchanged since round 3, is `d077412b7e07c90ab09e0deeb2970b909fb4885eec0f74b1c22fde6b0b758ede` (one character differs, a transcription slip in the report header). `round-5.md` read the file with a digest copied from `shasum -a 256` and passed it. The `.puml` has no row of its own in `coverage.md`; its status is that of `processes.md`.
 
 Code under review: `96a0718` (the last commit that touched `src`). Documents under review: the 04-53 changes (`792536d..HEAD -- docs/system`), the post-merge regression-fix statements (`54fc813`), and the ledger edits of `e6651c3`.
 
@@ -40,7 +47,7 @@ Recorded 2026-11-23 by the owner, Aaron Phan, answering the checkpoint raised af
 1. Review budget: "Fix + scoped round 4". All four groups failed round 3, so the 3-round budget is exhausted. The owner overrides the budget for one more round: fix every round-3 finding, then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `f19ae4e`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope.
 2. `findings.md` delivery history (observation O1, raised in every round): "Exempt: it's a log". `findings.md` is the owner's working log of code-versus-proposal drift. Commit hashes, plan and ruling references and the `.planning` path may stay as evidence. Reviewers record it as exempt, not as a finding. One sentence saying so is now in the header of `findings.md`. The exemption covers `findings.md` only: delivery history in `unknowns.md` and every other document is still a finding.
 
-3. Group C after round 4 (recorded 2026-11-23, answering the checkpoint raised after round 4): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING (`round-4-C.md`, W1). Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff.
+3. Group C after round 4 (recorded 2026-11-23, answering the checkpoint raised after round 4): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING (`round-4-C.md`, W1). Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff. (Round 5 ran and passed; see Round 5.)
 
 Round-4 scope: `git diff f19ae4e HEAD -- docs/system`. Fifteen of the sixteen documents changed since `f19ae4e`; only `diagrams/approve-privileged-action.puml` is unchanged.
 
@@ -64,8 +71,12 @@ Round-4 scope: `git diff f19ae4e HEAD -- docs/system`. Fifteen of the sixteen do
 | 4 | B | `round-4-B.md` | PASS (0 BLOCKER, 0 WARNING, 0 NIT in scope) | Nothing to fix. All three digests match. |
 | 4 | C | `round-4-C.md` | FAIL (0 BLOCKER, 1 WARNING, 0 NIT in scope) | W1 verified and fixed in the `unknowns.md` commit named below. The two bullets of "From containment" that disagreed about which evidence was read are merged into the first. It now names what was read under `test/containment`: the `p4-restricted-run` record (`live-run-phase4.jsonl:24`, `LIVE-CASES.md:573`) and the `p4-restricted-onboarding` row and records (`LIVE-CASES.md:574`, `live-run-phase4.jsonl:25-27` and `:32`), and no other file. The onboarding sentence is completed with the FAIL records at `live-run-phase4.jsonl:25-27` and the later PASS record at `:32` (state `active`, completeness `partial`); lines and verdicts were read in the files before writing. Rejected: none. Observations outside the scope, left for the owner: the configuration homes are stated three times in `containment.md` (lines 214, 479, 574); the orphan-charge wording omits the assumption stated at `src/app/budget.ts:117-118` (the cost budget is unchanged between grant and conversion). |
 | 4 | D | `round-4-D.md` | PASS (0 BLOCKER, 0 WARNING, 0 NIT in scope) | Nothing to fix. All three digests match. |
+| 5 | C | `round-5.md` (scope 1) | PASS (0 BLOCKER, 0 WARNING, 1 NIT, 1 observation) | `unknowns.md` at `6c521497...e8e3c5` read at lines 59 and 63 against `live-run-phase4.jsonl:24`, `:25-27`, `:32` and `LIVE-CASES.md:573-574`; the two bullets are consistent and no bullet says less was read than another cites. NIT 1 (`unknowns.md:63`, "did not pass" reads as the case's standing result; suggested "failed in its first three recorded attempts (... :25-27) and has a later PASS record (:32)") is left, as the reviewer says it is not blocking. OBS 3 (`LIVE-CASES.md:574` says "FAIL, FAIL" where the jsonl has three FAIL records) is a defect of the test evidence, not of the document, and is left for the owner. |
+| 5 | A | `round-5.md` (scope 2) | PASS (0 BLOCKER, 0 WARNING, 0 NIT, 1 observation) | `processes.md` at `d077412b...0b758ede`, line 174 (the approve-a-privileged-action drift anchor) read against the five modules it names and the diagram; the removal of `src/app/authorize.ts` is correct. OBS 1 (the anchor could add `src/domain/approval.ts`, which holds `APPROVAL_TTL_MS`, and `src/cli/identity.ts`, which decides the refusal branch) is optional and left for the owner. |
 
-## Round 5 (group C only, one bullet)
+## Round 5 (group C one bullet, and the processes.md digest)
+
+Result: both scopes PASS (`round-5.md`, reviewer fresh, HEAD `c1279bb`). Before marking, each current sha256 was compared with the digest the passing review read: `unknowns.md` `6c5214972cc51a5fa7aff71b8a603f7e49d2bb49e689d13623e7df8b8be8e3c5` and `processes.md` `d077412b7e07c90ab09e0deeb2970b909fb4885eec0f74b1c22fde6b0b758ede` match `round-5.md`; `containment.md` `010447d3...`, `data-model.md` `f87e46b4...` and `integrations.md` `b915faaa...` match the digests of `round-4-C.md`. No digest differed.
 
 Scope: the diff of the `unknowns.md` fix commit, `git diff 86e32584b268af9a1e9235888385a37418a830a3 3b36b23bd1288c25053a6af1b292c77c34bb8cef -- docs/system/unknowns.md`. No other document of group C changed since the round-4 digests.
 
