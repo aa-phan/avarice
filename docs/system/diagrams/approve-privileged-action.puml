@@ -49,7 +49,7 @@ else request unknown
 else request already approved
   Approve --> Owner : not applied (3)
 else request found
-  Approve --> Owner : action, scope, parameter summary, digest,\nand "one use, 30 minutes"
+  Approve --> Owner : action, scope, parameter summary, digest,\nand what it grants: one use, 30 minutes
   Owner --> Approve : yes or no
   alt anything but yes
     Approve --> Owner : not approved (0), nothing written
@@ -75,8 +75,11 @@ Agent -> Hook : the same line, same session, same directory
 alt attended session, an approval unexpired and unused for each privileged command
   Hook -> Ledger : approvals consumed with the actions' starts
   Hook --> Agent : the line passes once
-else run, or an approval expired, revoked, used or for other parameters,\na changed line or another directory
+else a run, or an approval that expired, was revoked or was used
   Hook -> Ledger : a new request, since the earlier one was answered
   Hook --> Agent : denied again, with the new request
+else approvals for other parameters, a changed line or another directory
+  Hook -> Ledger : the request for these parameters (the waiting one again, else a new one)
+  Hook --> Agent : denied, naming that request
 end
 @enduml
