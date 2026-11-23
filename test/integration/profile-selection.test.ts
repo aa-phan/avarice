@@ -3,6 +3,7 @@
 // ones under test and nothing here touches the real profile locations.
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,9 +13,11 @@ import { createDeps } from '../../src/cli/composition.ts';
 import { evaluatePolicy, parsedAs } from '../../src/domain/policy.ts';
 import type { PolicySources } from '../../src/domain/policy.ts';
 import type { Result } from '../../src/domain/result.ts';
+import { NO_NETWORK_PROFILE, SANDBOX_EXEC, offlineAvailable } from '../helpers/offline.ts';
 import { runCli } from '../helpers/run-cli.ts';
 import { git, makeScratchRepo } from '../helpers/scratch-repo.ts';
 import type { ScratchRepo } from '../helpers/scratch-repo.ts';
+import { plantSocketFile } from '../helpers/unix-socket-file.ts';
 
 const cleanup: string[] = [];
 after(() => {
@@ -411,19 +414,60 @@ describe('enterprise remote refusal (D-16, T-04-09)', () => {
   });
 });
 
-// WR-17 (T-04-116, SEC-1): another profile's config that exists but cannot be read leaves its moved roots out of the sandbox deny list of every run
-// of the selected profile. The composition refuses before it opens a store, instead of starting with a shorter list.
-describe('an unreadable config of another profile stops the composition (WR-17, T-04-116)', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+// WR-17 (T-04-116, SEC-1) and the owner's ruling "deny, don't refuse" (AC-6): another profile's config that exists but cannot be read leaves its moved roots out of the
+// sandbox deny list of every run of the selected profile. When the system refused the read (a mode of 000 is EACCES, a sandbox deny is EPERM) the composition denies the
+// whole root of that profile and goes on, so the selected profile's commands keep their documented exit codes; a config that cannot be read for any other reason stops
+// the composition before it opens a store, instead of starting with a shorter list.
+describe('an unreadable config of another profile (WR-17, T-04-116, AC-6)', () => {
   // A personal name, so that the enterprise pattern read of main() (which has its own refusal) is not what stops the command.
   const otherName = 'personal-extended';
 
-  it('refuses the command naming the unreadable config and creates no store for the selected profile', () => {
-    const home = tempDir('avarice-home-');
+  function otherProfileConfig(home: string): string {
     const dir = join(home, '.config', 'avarice', 'profiles', otherName);
     mkdirSync(dir, { recursive: true });
     const configPath = join(dir, 'config.json');
     writeFileSync(configPath, JSON.stringify({ schema: 1, profile: otherName, dataRoot: join(home, 'moved', 'other-data'), workRoot: join(home, 'moved', 'other-work') }));
+    return configPath;
+  }
+
+  it('composes when the config is refused with a mode of 000 (EACCES), and the roots it denies hold the whole root of that profile', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+    const home = tempDir('avarice-home-');
+    const configPath = otherProfileConfig(home);
     chmodSync(configPath, 0o000);
+    try {
+      const r = runCli(['status', '--json'], { env: homeEnv(home), cwd: home });
+      assert.equal(r.code, 0, r.stderr);
+      const composed = createDeps({ ...process.env, ...homeEnv(home) } as NodeJS.ProcessEnv, {}, { readOnly: true, profile: 'personal-local' });
+      assert.ok(composed.ok, composed.ok ? '' : composed.message);
+      const denied = composed.value.deps.profile.otherRoots;
+      for (const root of [join(home, '.config', 'avarice', 'profiles', otherName), join(dataRootOf(home, otherName)), join(home, '.local', 'share', 'avarice-work', otherName)]) {
+        assert.ok(denied.includes(root), `${root} is denied: ${JSON.stringify(denied)}`);
+      }
+      composed.value.close();
+    } finally {
+      chmodSync(configPath, 0o600);
+    }
+  });
+
+  it('composes when a sandbox refuses to open the config (EPERM): status exits 0 instead of 70', { skip: !offlineAvailable() }, () => {
+    const home = tempDir('avarice-home-');
+    const configPath = otherProfileConfig(home);
+    // The sandbox of AC-6: the data of that one file is unreadable, its metadata and the directory listing are not.
+    const wrap = [SANDBOX_EXEC, '-p', `${NO_NETWORK_PROFILE}(deny file-read-data (literal ${JSON.stringify(configPath)}))`];
+    const [wrapper, ...args] = wrap as [string, ...string[]];
+    const control = spawnSync(wrapper, [...args, '/bin/cat', configPath], { encoding: 'utf8' });
+    assert.notEqual(control.status, 0, 'control: the wrapper denies the read');
+    assert.match(control.stderr, /Operation not permitted/, 'control: the denial is EPERM');
+    const r = runCli(['status', '--json'], { env: homeEnv(home), cwd: home, wrap });
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), []);
+  });
+
+  it('refuses the command naming the unreadable config, and creates no store for the selected profile, when the config cannot be read for a reason that is not a permission', async () => {
+    const home = tempDir('avarice-home-');
+    const configPath = otherProfileConfig(home);
+    rmSync(configPath);
+    const planted = await plantSocketFile(configPath);
     try {
       const r = runCli(['status', '--json'], { env: homeEnv(home), cwd: home });
       assert.equal(r.code, 70, r.stderr);
@@ -434,7 +478,7 @@ describe('an unreadable config of another profile stops the composition (WR-17, 
       assert.equal(composed.ok, false);
       if (!composed.ok) assert.match(composed.message, new RegExp(otherName));
     } finally {
-      chmodSync(configPath, 0o600);
+      await planted.close();
     }
   });
 

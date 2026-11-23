@@ -6,6 +6,7 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { knownProfileRoots } from '../../src/adapters/fs/profile-registry.ts';
+import { plantSocketFile } from '../helpers/unix-socket-file.ts';
 
 // Built from parts, as footprint.test.ts builds a name it must not spell out: the SEC-7 scan reads every `enterprise-` name in test/.
 const ent = (suffix: string): string => ['enterprise', suffix].join('-');
@@ -143,22 +144,63 @@ describe('knownProfileRoots (D-19)', () => {
     }
   });
 
-  // WR-17 (T-04-116): a profile config that exists but cannot be read leaves that profile's moved roots out of the deny list. A list that could not
-  // be computed must not read as a shorter one, so the error names the profile and the registry stops; a config that is merely corrupt stays skipped.
-  describe('a profile config that cannot be read (WR-17)', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
-    it('is an unavailable error naming the profile, not a shorter list', () => {
-      const moved = join(base, 'wr17-moved');
-      const configHome = configHomeWith({ [ent('other-a')]: { dataRoot: join(moved, 'a-data'), workRoot: join(moved, 'a-work') } });
-      const configPath = join(configHome, 'profiles', ent('other-a'), 'config.json');
-      chmodSync(configPath, 0o000);
+  // WR-17 (T-04-116) and the owner's ruling "deny, don't refuse" (AC-6): a profile config that exists but cannot be read leaves that profile's moved roots out of
+  // the deny list. When the read was refused by permissions (EACCES, or the EPERM of a sandbox deny) the profile's whole root is denied and the registry goes on, so a
+  // profile the caller cannot read never blocks the commands of another; any other failure to read still stops the registry, naming the profile, because a list that
+  // could not be computed must not read as a shorter one. A config that is merely corrupt stays skipped.
+  describe('a profile config that cannot be read (WR-17)', () => {
+    describe('because of permissions', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
+      it('denies the whole root of the profile and goes on to the next one: its profile directory and the default data root and work root of its name', () => {
+        const moved = join(base, 'wr17-moved');
+        const configHome = configHomeWith({
+          [ent('other-a')]: { dataRoot: join(moved, 'a-data'), workRoot: join(moved, 'a-work') },
+          [ent('other-z')]: { dataRoot: join(base, 'wr17-z-data') },
+        });
+        const configPath = join(configHome, 'profiles', ent('other-a'), 'config.json');
+        chmodSync(configPath, 0o000);
+        try {
+          const found = roots(configHome);
+          assert.ok(found.includes(join(configHome, 'profiles', ent('other-a'))), `the profile directory: ${JSON.stringify(found)}`);
+          assert.ok(found.includes(join(home, '.local', 'share', 'avarice', ent('other-a'))), `the default data root of the name: ${JSON.stringify(found)}`);
+          assert.ok(found.includes(join(home, '.local', 'share', 'avarice-work', ent('other-a'))), `the default work root of the name: ${JSON.stringify(found)}`);
+          assert.ok(found.includes(join(base, 'wr17-z-data')), 'the profile after it is still read');
+          assert.ok(found.includes(configHome), 'the config home is still returned');
+        } finally {
+          chmodSync(configPath, 0o600);
+        }
+      });
+
+      it('never returns the selected profile\'s own roots among the roots it denies for an unreadable profile', () => {
+        const own = OWN();
+        const configHome = configHomeWith({ [ent('other-b')]: { dataRoot: join(base, 'wr17-b-data') } });
+        chmodSync(join(configHome, 'profiles', ent('other-b'), 'config.json'), 0o000);
+        try {
+          // The selected profile uses the default roots of the unreadable profile's name: they are its own, and a deny of them would lock it out of itself.
+          const ownDefaults = { ...own, ownDataRoot: join(home, '.local', 'share', 'avarice', ent('other-b')), ownWorkRoot: join(home, '.local', 'share', 'avarice-work', ent('other-b')) };
+          const found = roots(configHome, 'personal-local', ownDefaults);
+          assert.equal(found.includes(ownDefaults.ownDataRoot), false);
+          assert.equal(found.includes(ownDefaults.ownWorkRoot), false);
+          assert.ok(found.includes(join(configHome, 'profiles', ent('other-b'))));
+        } finally {
+          chmodSync(join(configHome, 'profiles', ent('other-b'), 'config.json'), 0o600);
+        }
+      });
+    });
+
+    it('is still an unavailable error naming the profile when the config cannot be read for a reason that is not a permission, not a shorter list', async () => {
+      const configHome = configHomeWith({ [ent('other-s')]: {} });
+      const configPath = join(configHome, 'profiles', ent('other-s'), 'config.json');
+      rmSync(configPath);
+      // A socket opens with ENXIO (EOPNOTSUPP on macOS): the file exists, is not a link, and cannot be read, for every user.
+      const planted = await plantSocketFile(configPath);
       try {
         const result = knownProfileRoots(configHome, 'personal-local', OWN());
-        assert.equal(result.ok, false, 'an unreadable config must stop the deny-list computation');
+        assert.equal(result.ok, false, 'a config that cannot be read for another reason must stop the deny-list computation');
         if (result.ok) return;
         assert.equal(result.error.kind, 'unavailable');
-        assert.match(JSON.stringify(result.error), new RegExp(ent('other-a')), 'the error names the profile whose config could not be read');
+        assert.match(JSON.stringify(result.error), new RegExp(ent('other-s')), 'the error names the profile whose config could not be read');
       } finally {
-        chmodSync(configPath, 0o600);
+        await planted.close();
       }
     });
 
