@@ -160,12 +160,53 @@ async function authorizationFile(options: { ids: string[]; arms: string[]; capUs
 const liveOn = (env: Record<string, string>): Record<string, string> => ({ ...env, AVARICE_LIVE: '1', AVARICE_CLAUDE_BIN: '/nonexistent/claude' });
 
 describe('verdict (AC-8) and knowledgeRule (D-08)', () => {
-  it('passes when arm B succeeds as often as A at no more than half of A tokens, and fails one token above half', async () => {
+  it('passes when arm B succeeds as often as A at no more than the AC-8 bound of A tokens (ADR-016: 95%), and fails one token above it', async () => {
+    const { verdict, AC8_TOKEN_BOUND_PERCENT } = await harness();
+    assert.equal(AC8_TOKEN_BOUND_PERCENT, 95, 'ADR-016 sets the bound at 95% of the baseline tokens');
+    // The bound is inclusive: A at 2,000 tokens puts it at exactly 1,900, so 1,900 passes and 1,901 fails.
+    const atBound = verdict({ A: { success: 10, tokens: 2000 }, B: { success: 10, tokens: 1900 } });
+    assert.equal(atBound.pass, true);
+    assert.equal(atBound.via, 'B');
+    assert.equal(verdict({ A: { success: 10, tokens: 2000 }, B: { success: 10, tokens: 1901 } }).pass, false);
+    assert.equal(verdict({ A: { success: 10, tokens: 1000 }, B: { success: 10, tokens: 500 } }).pass, true, 'the old half is well inside the bound');
+  });
+
+  it('names B when B and C both qualify, and fails with a reason that names the bound when neither does', async () => {
     const { verdict } = await harness();
-    const pass = verdict({ A: { success: 10, tokens: 1000 }, B: { success: 10, tokens: 500 } });
-    assert.equal(pass.pass, true);
-    assert.equal(pass.via, 'B');
-    assert.equal(verdict({ A: { success: 10, tokens: 1000 }, B: { success: 10, tokens: 501 } }).pass, false);
+    const both = verdict({ A: { success: 10, tokens: 1000 }, B: { success: 10, tokens: 900 }, C: { success: 11, tokens: 800 } });
+    assert.equal(both.pass, true);
+    assert.equal(both.via, 'B', 'B is judged first');
+    const neither = verdict({ A: { success: 10, tokens: 1000 }, B: { success: 10, tokens: 951 }, C: { success: 10, tokens: 960 } });
+    assert.equal(neither.pass, false);
+    assert.match(neither.reason, /95%/);
+  });
+
+  it('re-judges the recorded runs under the ADR-016 bound without spending and without touching the results file', async () => {
+    const { rejudge, rejudgeResultsFile, AC8_TOKEN_BOUND_PERCENT } = await harness();
+    const results = join(import.meta.dirname, '..', 'benchmark', 'phase4', 'eval-results.json');
+    const before = createHash('sha256').update(readFileSync(results)).digest('hex');
+    const judged = rejudgeResultsFile(results);
+    assert.equal(judged.boundPercent, AC8_TOKEN_BOUND_PERCENT);
+    assert.equal(judged.sourceSha256, before);
+    assert.equal(judged.arms['A']?.shareOfA, 1);
+    assert.equal(judged.arms['B']?.runs, 6);
+    assert.equal(judged.arms['B']?.success, 4);
+    assert.equal(judged.arms['B']?.tokens, 18_715_894);
+    assert.equal(judged.arms['C']?.tokens, 17_557_851);
+    assert.equal(judged.arms['B']?.shareOfA, 0.9436);
+    assert.equal(judged.arms['C']?.shareOfA, 0.8852);
+    assert.equal(judged.verdict.pass, true);
+    assert.equal(judged.verdict.via, 'B');
+    assert.equal(createHash('sha256').update(readFileSync(results)).digest('hex'), before, 'the recorded results are read, never written');
+    // The pure function agrees on the same runs, and an arm A that measured no tokens never passes.
+    assert.equal(rejudge([{ arm: 'A', success: true, tokens: 0, costUsd: 0 }, { arm: 'B', success: true, tokens: 0, costUsd: 0 }]).verdict.pass, false);
+  });
+
+  it('keeps the committed re-judgement equal to what the harness computes from the recorded runs', async () => {
+    const { rejudgeResultsFile } = await harness();
+    const dir = join(import.meta.dirname, '..', 'benchmark', 'phase4');
+    const committed = JSON.parse(readFileSync(join(dir, 'eval-verdict-adr016.json'), 'utf8')) as unknown;
+    assert.deepEqual(committed, JSON.parse(JSON.stringify(rejudgeResultsFile(join(dir, 'eval-results.json')))));
   });
 
   it('fails when the success of B and C is below A even at a tenth of the tokens, and passes through C when only C qualifies', async () => {
