@@ -29,7 +29,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From data-model
 
-- Whether the six schema-only tables are planned for specific later work. Checked: git grep of each name in src; the spec describes them without a schedule.
+- Whether the checkpoint column for GSD's state digest, which no caller sets, is planned for later work. Checked: every statement under src that names the column; none sets it.
 - Whether backups, per-invocation directories and staging clones are ever cleaned up by an operator procedure. Checked: git grep for deletions in src; no cleanup command among the six CLI commands; no runbook found.
 - Hook and CLI write contention beyond the busy timeout. Not tested.
 
@@ -40,14 +40,13 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From containment
 
-- Whether the five admitted host versions pass the live containment suite now. Checked: the constant and the recorded run files under test/containment; the live suite was not re-run (it needs AVARICE_LIVE=1 and spend).
+- Whether the six verified host versions pass the live containment suite now. Checked: the constant and the recorded run files under test/containment; the live suite was not re-run (it needs AVARICE_LIVE=1 and spend).
 - Whether the host honors each generated setting on the admitted versions. Host behavior; not determinable from code.
 - Hook latency against its 5 second host timeout. No performance test run.
 
 ## From runs
 
 - Whether the states `waiting_external`, `awaiting_review` and `closed` and the four unrecorded blocked reasons are meant to be driven by a later feature or are leftovers. Checked: a search of `src/app` and `src/cli` for a transition into each of those states, which found no match that writes the state. `failed` and `cancelled` are entered by the supervisor's end of a run that can deliver nothing and by `cancel`. A search of `src` for the four reason names found only the lifecycle definition and an unrelated freshness enum.
-- Whether containment.md is complete for the run purpose. Checked: the run-owner rule, the scope inputs, the scratch directory creation, the run skill and agents and the canonical clone working directory were read in `src/domain/invocation-scope.ts`, `src/adapters/host-claude/claude-host.ts` and `src/app/invocation.ts`; the hook rule list and the settings generator were not read for this document.
 - What the install, check validation, baseline, evidence and gate rules do in detail. Checked: `src/app/checks.ts` lines 325 to 390 (the install summary and the start of the install) and `src/domain/evidence.ts` (the baseline delta); `src/app/check-validation.ts` was not read for this document.
 - Whether the behavior holds on a live host. Checked: code only; no run was executed and no test was run.
 - Whether the onboarding document's statement that the worktree adapter is dormant still holds for onboarding. Checked: for runs, the run workspace module is separate from the onboarding staging modules, reuses only the clone helper and has no worktree variant; the onboarding side was not re-checked here.
@@ -55,14 +54,14 @@ This document lists what the grounding did not determine, and for each entry wha
 ## From checks-and-evidence
 
 - Whether the validation sandbox (no read re-allowance, `src/app/check-validation.ts:90`) denies a check its own clone under the default roots: read the seatbelt profile builder and the executor call; did not execute a validation.
-- Whether installers other than npm honour `npm_config_ignore_scripts`, and whether an install argument can override it: checked only the environment set in `src/app/checks.ts:364`; no installer was run.
+- Whether installers other than npm honour `npm_config_ignore_scripts`, and whether an install argument can override it: checked only the environment set in `src/app/checks.ts:435`; no installer was run.
 - Which parts of `src/app/run-stages/item.ts` were not read: covered in part. Read the gate, commit and routing-entry portions (lines 145-195, 236-263, 535-563, 685-871); the launch, prompt, classification internals, discard and retry portions were not read (owned by runs.md).
 - `src/adapters/git/run-workspace.ts` is covered in part: read in full, but only the revision, status, snapshot, diff and read behavior is documented; clone, discard, commit and fetch behavior belongs to runs.md.
 - Whether the repository ignores the GSD configuration file in a real run, which decides whether baseline rows carry `git:` or `tree:` revisions: not checked at runtime.
 
 ## From cli-reference (run slice)
 
-- Whether an exception thrown by a command's usage check or by profile composition (outside the try in `src/cli/main.ts`) ends the process with a code other than 70 (for example Node's own code 1 through the top-level await in `bin/avarice.ts`): checked by reading `src/cli/main.ts` and `bin/avarice.ts` only; no such exception was provoked.
+- Whether an exception thrown by a command's usage check or by profile composition ends the process with a code other than 70. Such an exception lies outside the try in `src/cli/main.ts` and could end in Node's own code 1 through the top-level await in `bin/avarice.ts`. Checked by reading those two files only; no such exception was provoked.
 - The exit codes of the interactive shell (the "the shell's" row of the dispatch table): only the usage refusal under `AVARICE_RUN` was read; `src/cli/shell/` is owned by interactive-shell.md and was not read in full.
 - Behavior of `src/app/context.ts` and the context adapters: no file of it changed in the run slice, so the existing `context` section was kept after checking the CLI layer and the budget constants only.
 - Whether a second supervisor spawned by `resume` against a just-started run is refused the lease: not read in `acquireRunLease`; no claim made in the document.
@@ -70,18 +69,15 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From config-reference (run slice)
 
-- Whether check validation can read its own clone under the default work root: the validation call passes no allow-read paths (`src/app/check-validation.ts:90`) and it was not run. Checked: the sandbox profile builder and the call sites by reading; not checked: a live run.
 - What a run ends in when an artifact file over 2 MiB stops classification: the stage returns an error to the supervisor loop, which releases the lease without a transition (`src/app/run-service.ts`). Not traced further into resume or status rendering.
 - Whether the hook's search-loop window (the last 2000 decision events) can hide a long search run: not read beyond the constant and the call.
-- Shell source (`src/cli/shell/shell.ts`, `src/cli/render/style.ts`) read only for environment, history and polling constants; the key handling and views were not read. Not covered: the rest of the 537-line shell.
+- Shell source (`src/cli/shell/shell.ts`, `src/cli/render/style.ts`) read only for environment, history and polling constants; the key handling and views were not read. Not covered: the rest of the 552-line shell.
 
 ## From containment (run slice)
 
-- Whether a declared check validated under the default roots can read its own validation clone: the code passes read denials without a re-allowance (`src/app/check-validation.ts:90`); no Seatbelt run was made. Checked: the code path and `git log` for that file.
-- Whether the package manager's ignore-scripts environment variable outranks a flag in a declared install argv: npm behavior, not in this code. Checked: `src/app/checks.ts:364`.
 - Whether the settings keys the host honors (permission rules, sandbox lists) take effect as generated: host behavior, outside this code. Checked: settings generator and preflight.
-- Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no runtime claim is made.
-- Whether the restricted launch behaves as its flags say. The delivery record reports live runs on 2.1.326 (2026-11-17 and 2026-11-18) in which the host accepted `--restricted` beside `--setting-sources ""` and `--strict-mcp-config`, listed no shell and no web fetch, kept the hooks running and wrote files only inside the clone. No test at HEAD asserts it, so the documents do not.
+- Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no recorded live result is claimed.
+- Whether the restricted launch behaves as its flags say on a live host. A live case for it exists (`p4-restricted-run` in `test/containment/live-run-phase4.test.ts`), gated by `AVARICE_LIVE=1`. It was not run for this document, so the documents make no claim about the host's behavior under `--restricted`.
 - `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the earlier text of this tree and `src/app/stages/activate.ts:98`.
 
 ## From data-model (run slice)
@@ -89,7 +85,7 @@ This document lists what the grounding did not determine, and for each entry wha
 - Whether the unused evidence external reference is deliberate staging for later work. Checked: every INSERT, UPDATE and DELETE statement under src for evidence; only ledger.ts writes it, with no update. The owner classifies intent. The decision states are all entered: `answerDecision`, `reopenStaleDecision` and `withdrawDecision` write them, called by the `decide` and `cancel` services, and an amendment answers its decision inside `amendRunContract`.
 - Event levels: invocation.finished, invocation.reconciled and the ledger-written kinds were checked for a level argument and have none, so they take the default info; every other kind's level was read at its call site.
 - The `containment.finding` check names a run's blocking stage chooses were not enumerated: the name comes from callers of the block function in item.ts, finish.ts and prepare.ts, read only where they write run rows and events. The runs and containment documents own the names.
-- src/ports/ledger.ts was read only for the Ledger method list (61 methods), not line by line.
+- src/ports/ledger.ts was read only for the Ledger method list (84 methods), not line by line.
 
 ## From history
 
@@ -99,25 +95,24 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From integrations (run slice)
 
-- The test-only adapters of the agent host, executor and egress ports come from the earlier text of this tree plus a search of `test/` for the egress override; the fake host and fake `claude` executable were not re-read at HEAD.
-- Whether the hook policy fields of the run purpose (globs, loop limits, denied tools) are enforced as the settings describe was not checked; the hook source is outside this packet and belongs to containment.md.
+- The test-only adapters of the agent host, executor and egress ports come from the earlier text of this tree plus a search of `test/` for the egress override. The fake host and fake `claude` executable were not re-read at HEAD.
 - Whether `avarice budget` is a planned command is not determinable from the code. The run skill text tells sessions not to run it, and no command of that name exists (checked the command list in `src/cli/main.ts` and searched `src` for it). `avarice contract amend` is built.
-- Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the earlier text of this tree after spot checks of timeouts and limits by grep; they were not re-read line by line.
+- Claims in unchanged files (the GSD adapter files, `graphify.ts`, `local-mount.ts`, `sqlite/db.ts`, `stream-json.ts`) were kept from the earlier text of this tree after spot checks of timeouts and limits by grep. They were not re-read line by line.
 - The order in which supervisor steps call the install and validation helpers was read only at the call sites in `src/app/run-stages/prepare.ts`; runs.md owns the sequence.
 
 ## From interactive-shell
 
-- Whether a terminal in raw mode delivers Ctrl-C as a key and never as SIGINT in every Node and terminal combination: checked only that the code takes the key path (`src/cli/shell/shell.ts:176`, `:249`) and queues input while an action runs (`:290-:306`); the signal behavior is runtime and was not run. The document states only the queueing and the key path.
+- Whether a terminal in raw mode delivers Ctrl-C as a key and never as SIGINT in every Node and terminal combination. Checked only that the code takes the key path (`src/cli/shell/shell.ts:176`, `:249`) and queues input while an action runs (`:290-:306`). The signal behavior is runtime and was not run. The document states only the queueing and the key path.
 - Whether the shell behaves well with `TERM` unset on real terminals: checked the code (`full` is true when `TERM` is not `dumb`, `src/cli/shell/shell.ts:153`); no live terminal run was made.
 - Test files (`test/unit/shell.test.ts`, `test/integration/shell-tty.test.ts` and `test/integration/shell-supervisor.test.ts`) were listed but not read; no claim rests on them.
 
 ## From overview
 
-- Whether `claude` itself, when driven by the contained host, contacts a network service: checked `src/cli/composition.ts` and the sandboxed executor (network denied there), and the footprint test; the host's own network behavior was not read, so the overview says only that AVARICE's own code opens connections in one place.
+- Whether `claude` itself, when driven by the contained host, contacts a network service. Checked `src/cli/composition.ts`, the sandboxed executor (network denied there) and the footprint test. The host's own network behavior was not read, so the overview says only that AVARICE's own code opens connections in one place.
 
 ## From processes
 
-- The eight PlantUML sources were not rendered or syntax-checked. Checked: no render command in package.json or scripts/, and `which plantuml` finds nothing (java exists). Not determined: whether the sources parse.
+- The nine PlantUML sources were not rendered or syntax-checked. Checked: no render command in package.json or scripts/, and `which plantuml` finds nothing (java exists). Not determined: whether the sources parse.
 - The 27-point run fault suite was read, not run. Checked: its list and expected states in test/helpers/fault-run.ts and test/fault/run-killpoints.test.ts. Not determined: that every point passes at this HEAD.
 - Onboarding flow steps were rechecked against the diff of shared modules (invocation, budget, hook, host adapter, composition), not re-traced through every onboarding stage file. Checked: those stage files and src/app/resume.ts are absent from the `git diff e725db6..HEAD --stat -- src` listing. Not determined: behavior of unchanged files beyond that.
 - Resume of a run with a refusing host was not traced. Checked: run reconcile code only, and no run test was read for it. The hand-off bullet on this describes onboarding and is carried over unchanged.
@@ -130,5 +125,5 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## Campaign-wide
 
-- What the documentation pass executed: the denominator commands of coverage.md, the import-boundary lint, the prose and link gates over this tree, the type check and the unit suite (1236 tests, all passing). It executed no live run and no full test run beyond the unit suite, so every behavior claim rests on code read at the counted commit and on test files read, not run.
-- Nothing in this tree was checked against a running host: the admitted host versions, the sandbox profile, the egress proxy and the run flows are described from code, and the diagrams were not rendered (no render step exists in the repository).
+- What the documentation pass executed: the denominator commands of coverage.md, the import-boundary lint, the prose and link gates, the type check and the unit suite (reported passing, count not re-verified). It executed no live run and no full test run beyond the unit suite. Every behavior claim therefore rests on code read at the counted commit and on test files read, not run.
+- Nothing in this tree was checked against a running host. The admitted host versions, the sandbox profile, the egress proxy and the run flows are described from code. The diagrams were not rendered (no render step exists in the repository).
