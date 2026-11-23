@@ -24,7 +24,9 @@ describe('gsd-planning headings: a pathological heading line no longer stops the
     const dir = mkdtempSync(join(tmpdir(), 'avarice-heading-'));
     cleanup.push(dir);
     const started = Date.now();
-    const child = spawnSync(process.execPath, [CHILD, dir], { timeout: 10_000, killSignal: 'SIGKILL', encoding: 'utf8' });
+    // The runner's own context variable is dropped so the child does real work (the helper does nothing when it is set, as the other helpers do).
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'NODE_TEST_CONTEXT'));
+    const child = spawnSync(process.execPath, [CHILD, dir], { timeout: 10_000, killSignal: 'SIGKILL', encoding: 'utf8', env });
     const elapsed = Date.now() - started;
     assert.equal(child.status, 0, `the child exited ${String(child.status)} (signal ${String(child.signal)}, error ${String(child.error?.message)}) after ${elapsed} ms: ${child.stderr}`);
     assert.ok(elapsed < 2000, `the child took ${elapsed} ms`);
