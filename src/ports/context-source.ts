@@ -71,6 +71,9 @@ export interface ContextHandle {
   confidence?: ContextConfidence;
   // Text that came from a document or from a model reading one: a consumer prints it as data, never as instruction.
   untrusted?: boolean;
+  // The item is a code node of the graph, not a document or a concept. `untrusted` can still be set on it, because its excerpt may show a description or a neighbour that is text;
+  // the file it cites and its label are code facts either way. Only the graph source sets it.
+  codeNode?: boolean;
   // For a stale item: whether the cited path exists at the repository's current HEAD (`git cat-file -e`).
   confirmed?: boolean;
   // The repository path the item cites, when it cites one: what the assembler confirms with `git-files` when the item is stale.
@@ -85,6 +88,7 @@ export interface ContextItem {
   reason: string;
   confidence?: ContextConfidence;
   untrusted?: boolean;
+  codeNode?: boolean;
   confirmed?: boolean;
   citedPath?: string;
 }

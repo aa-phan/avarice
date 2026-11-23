@@ -180,6 +180,8 @@ export class GsdGraphContext implements ContextSource {
         // instruction: its text is printed fenced and never acted on. So is the excerpt of a code node that shows such text:
         // its description, or the ID of a neighbour that is not code.
         ...(node.fileType !== 'code' || foreignText ? { untrusted: true } : {}),
+        // What a consumer of the node's facts (its file and its label) needs, which the mark above does not say: a code node whose excerpt is untrusted is still a code node.
+        ...(node.fileType === 'code' ? { codeNode: true } : {}),
         ...(cited !== undefined ? { citedPath: cited } : {}),
       };
       if (freshness !== 'fresh' && cited !== undefined) {
@@ -206,6 +208,7 @@ export class GsdGraphContext implements ContextSource {
         reason: handle.reason,
         ...(handle.confidence !== undefined ? { confidence: handle.confidence } : {}),
         ...(handle.untrusted === true ? { untrusted: true } : {}),
+        ...(handle.codeNode === true ? { codeNode: true } : {}),
         ...(handle.confirmed !== undefined ? { confirmed: handle.confirmed } : {}),
         ...(handle.citedPath !== undefined ? { citedPath: handle.citedPath } : {}),
       });

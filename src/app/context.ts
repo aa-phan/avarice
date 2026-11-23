@@ -53,6 +53,8 @@ export interface PackItem {
   freshness: ExternalRef['freshness'];
   confidence?: ContextConfidence;
   untrusted?: boolean;
+  // A code node of the graph, whether or not its excerpt is untrusted (see ContextHandle.codeNode).
+  codeNode?: boolean;
   confirmed?: boolean;
   // Where the item may be reused (plan 04-28; CON-12): the profile the pack was built in and a digest of the read scope it was built under. Appended last.
   profile?: string;
@@ -233,6 +235,7 @@ function packItem(source: PackItem['source'], item: ContextItem, stamp: { profil
     freshness: item.ref.freshness,
     ...(item.confidence !== undefined ? { confidence: item.confidence } : {}),
     ...(item.untrusted === true ? { untrusted: true } : {}),
+    ...(item.codeNode === true ? { codeNode: true } : {}),
     ...(item.confirmed !== undefined ? { confirmed: item.confirmed } : {}),
     profile: stamp.profile,
     accessScope: stamp.accessScope,

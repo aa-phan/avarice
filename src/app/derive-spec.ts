@@ -37,12 +37,15 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
 // The repository file and symbol an index answer cites, or nothing. A graph code node cites the file it was extracted from and is named by
 // its label (graphify writes `name()` for functions); an intel file-roles entry is a file; an intel API entry names its file in the entry.
 function cited(item: PackItem): { file: string; symbol?: string } | undefined {
-  if (item.untrusted === true) return undefined;
   if (item.source === 'gsd-graph') {
+    // Only a code node is a code fact: a document or a concept is text, whatever path it cites. An excerpt that shows a description or a non-code neighbour is marked untrusted
+    // so it prints fenced, and that mark does not make the node less of a code node: the file and the label are all that is taken from it, and the label must be an identifier.
+    if (item.codeNode !== true) return undefined;
     if (item.ref.scope.startsWith('.planning/')) return undefined;
     const label = item.title.replace(/\(\)$/, '');
     return { file: item.ref.scope, ...(IDENTIFIER.test(label) ? { symbol: label } : {}) };
   }
+  if (item.untrusted === true) return undefined;
   if (item.ref.scope.endsWith('/file-roles.json')) return { file: item.title };
   if (item.ref.scope.endsWith('/api-map.json')) {
     try {
