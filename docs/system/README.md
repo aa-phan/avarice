@@ -6,7 +6,7 @@ This tree describes AVARICE as it is built. It covers the onboarding of one exis
 
 Start with [overview.md](overview.md). Reference documents ([cli-reference.md](cli-reference.md), [config-reference.md](config-reference.md)) are exhaustive for their surface. Descriptive documents state the mechanism and its consequences; the code owns the implementation, so they name their modules once in the opening and not again. Each document ends with the quirks a reader is likely to trip over.
 
-A new document carries the mark "drafted, not yet reviewed" under its title until a second reader has checked it. A document that changed after its review is listed as `drafted` in [coverage.md](coverage.md) until it is reviewed again. Do not rely on a marked or drafted document before the others. The review status of every document is in [coverage.md](coverage.md).
+A new document carries the mark "drafted, not yet reviewed" under its title until a second reader has checked it. A document that changed after its review is listed as `changed after review` in [coverage.md](coverage.md) until a fresh reviewer has read the changes. Do not rely on a marked or changed document before the others. The review status of every document is in [coverage.md](coverage.md).
 
 ## Documents
 
@@ -57,4 +57,5 @@ Each proposal document in `docs/`, and each decision record in `docs/decisions/`
 | [decisions/ADR-009-credential-broker.md](../decisions/ADR-009-credential-broker.md) | partly: [profiles-and-credentials.md](profiles-and-credentials.md) (the broker is wired and has no caller yet) |
 | [decisions/ADR-014-host-patch-admission.md](../decisions/ADR-014-host-patch-admission.md) | [containment.md](containment.md) and [doctor.md](doctor.md), for the admitted host versions, the admission labels and the launch self-check of an unverified patch |
 | [decisions/ADR-015-knowledge-pass-default.md](../decisions/ADR-015-knowledge-pass-default.md) | [indexes-and-context.md](indexes-and-context.md), for the knowledge pass default |
+| [decisions/ADR-016-ac8-token-bound.md](../decisions/ADR-016-ac8-token-bound.md) | partly: [findings.md](findings.md), for the AC-8 bound and the recorded result; the evaluation harness has no document in this tree |
 | [implementation-plan.md](../implementation-plan.md), [reference-system-comparison.md](../reference-system-comparison.md), [reference-system-deep-dive.md](../reference-system-deep-dive.md) | none: planning and comparison material, not a description of the system |
