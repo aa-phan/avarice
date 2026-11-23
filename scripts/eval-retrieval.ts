@@ -274,7 +274,10 @@ function rateOf(arm: ArmTotals, byRate: boolean): number {
 
 const usesRates = (...arms: ArmTotals[]): boolean => arms.every((a) => a.tasks !== undefined && a.tasks > 0);
 
-// AC-8: arm B or arm C has a success rate at least arm A's at no more than half of arm A's tokens. Exactly half passes; one token over fails.
+// ADR-016: the AC-8 token bound, as a whole percentage of arm A's tokens. It is an integer so that the inclusive comparison below is exact.
+export const AC8_TOKEN_BOUND_PERCENT = 95;
+
+// AC-8 (ADR-016): arm B or arm C has a success rate at least arm A's at no more than AC8_TOKEN_BOUND_PERCENT of arm A's tokens. Exactly the bound passes; one token over fails.
 export function verdict(arms: { A?: ArmTotals; B?: ArmTotals; C?: ArmTotals }): Ac8Verdict {
   const a = arms.A;
   if (a === undefined) return { pass: false, via: null, reason: 'arm A has no totals, so there is nothing to compare against', arms: {} };
@@ -286,13 +289,13 @@ export function verdict(arms: { A?: ArmTotals; B?: ArmTotals; C?: ArmTotals }): 
     if (arm === undefined) continue;
     const byRate = usesRates(a, arm);
     const successOk = rateOf(arm, byRate) + 1e-12 >= rateOf(a, byRate);
-    const tokensOk = arm.tokens * 2 <= a.tokens;
+    const tokensOk = arm.tokens * 100 <= a.tokens * AC8_TOKEN_BOUND_PERCENT;
     detail[name] = { successOk, tokensOk, tokenShare: arm.tokens / a.tokens };
     if (via === null && successOk && tokensOk) via = name;
   }
   if (via !== null) return { pass: true, via, reason: `arm ${via} succeeds at least as often as A at ${(100 * (detail[via]?.tokenShare ?? 0)).toFixed(1)}% of A's tokens`, arms: detail };
   if (detail.B === undefined && detail.C === undefined) return { pass: false, via: null, reason: 'neither arm B nor arm C has totals', arms: detail };
-  return { pass: false, via: null, reason: 'no pack arm both matches the success of A and stays within half of its tokens', arms: detail };
+  return { pass: false, via: null, reason: `no pack arm both matches the success of A and stays within ${AC8_TOKEN_BOUND_PERCENT}% of its tokens`, arms: detail };
 }
 
 export interface KnowledgeOutcome {
@@ -356,6 +359,56 @@ export function summarize(results: readonly RunSummaryInput[]): EvaluationSummar
   const ac8 = verdict({ ...(a !== undefined ? { A: a } : {}), ...(b !== undefined ? { B: b } : {}), ...(c !== undefined ? { C: c } : {}) });
   const knowledge: KnowledgeOutcome = b !== undefined && c !== undefined ? knowledgeRule(b, c) : { outcome: 'on', reason: 'arms B and C were not both run, so the pass stays on' };
   return { arms, ac8, knowledge };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Re-judging recorded runs (ADR-016)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+export interface RejudgedArm {
+  runs: number;
+  success: number;
+  tokens: number;
+  // The arm's tokens as a share of arm A's, rounded to four decimals.
+  shareOfA: number;
+}
+
+export interface Rejudgement {
+  schema: 1;
+  kind: 'avarice-ac8-rejudgement';
+  decision: 'ADR-016';
+  boundPercent: number;
+  sourceSha256: string;
+  arms: Partial<Record<ArmId, RejudgedArm>>;
+  verdict: Ac8Verdict;
+  knowledge: KnowledgeOutcome;
+}
+
+const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
+
+// Judges recorded runs against the current AC-8 bound. It starts no model and spends nothing; `sourceSha256` names the results file it was read from ('' for runs given directly).
+export function rejudge(runs: readonly RunSummaryInput[], sourceSha256 = ''): Rejudgement {
+  const summary = summarize(runs);
+  const baseline = summary.arms.A?.tokens ?? 0;
+  const arms: Partial<Record<ArmId, RejudgedArm>> = {};
+  for (const arm of ARM_IDS) {
+    const own = summary.arms[arm];
+    if (own === undefined) continue;
+    arms[arm] = { runs: own.runs, success: own.success, tokens: own.tokens, shareOfA: baseline > 0 ? round4(own.tokens / baseline) : 0 };
+  }
+  return { schema: 1, kind: 'avarice-ac8-rejudgement', decision: 'ADR-016', boundPercent: AC8_TOKEN_BOUND_PERCENT, sourceSha256, arms, verdict: summary.ac8, knowledge: summary.knowledge };
+}
+
+// Reads a results file the harness wrote and judges its runs again. The file is only read, so its digest is the same afterwards.
+export function rejudgeResultsFile(file: string): Rejudgement {
+  const raw = readFileSync(file);
+  const parsed = JSON.parse(raw.toString('utf8')) as { runs?: unknown };
+  if (!isRecord(parsed) || !Array.isArray(parsed['runs'])) throw new EvalRefusal(`${file} holds no runs to judge`);
+  const runs = parsed['runs'].map((r: unknown): RunSummaryInput => {
+    if (!isRecord(r) || !ARM_IDS.some((a) => a === r['arm']) || typeof r['success'] !== 'boolean' || typeof r['tokens'] !== 'number' || typeof r['costUsd'] !== 'number') throw new EvalRefusal(`${file} holds a run that is not a recorded evaluation run`);
+    return { arm: r['arm'] as ArmId, success: r['success'], tokens: r['tokens'], costUsd: r['costUsd'], ...(typeof r['judgeError'] === 'string' ? { judgeError: r['judgeError'] } : {}) };
+  });
+  return rejudge(runs, createHash('sha256').update(raw).digest('hex'));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
