@@ -1,6 +1,6 @@
 # Findings
 
-This note lists suspected defects and code-versus-specification contradictions found while grounding the `docs/system/` tree against the code. It is working material for the owner: each line names `file:line` and the observation, nothing is triaged, and nothing was fixed. A line's `file:line` is where the observation was made when the line was logged; a line that is known to have moved says `(now at ...)`, and the code at HEAD is the authority. Where the intent is undecidable from the code, the line says so and the owner classifies it.
+This note lists suspected defects and code-versus-specification contradictions found while grounding the `docs/system/` tree against the code. It is working material for the owner: each line names `file:line` and the observation, nothing is triaged, and nothing was fixed. A line's `file:line` is where the observation was made when the line was logged; a line that is known to have moved says `(now at ...)`, and the code at HEAD is the authority. Where the intent is undecidable from the code, the line says so and the owner classifies it. The file is a log, so commit hashes, plan and ruling references and planning paths may stay in a line as evidence.
 
 A line marked "spec contradiction" means a proposal-era document in `docs/` states something the code does not do. The proposal stands as written; the line records the difference.
 

@@ -41,7 +41,7 @@ The evaluation runs in this order, and the first step that applies decides.
 4. Otherwise the built-in rule decides. Under a personal profile, a matching user rule replaces it, whether the rule loosens or tightens.
 5. Ranks 3 and 4 then replace the answer only with a stricter effect, in the order `allow`, `require-approval`, `deny`. Under an enterprise profile the user policy only tightens. The repository policy only tightens under every profile.
 
-A personal profile never reads `policy.organizationFile`, even when it is set. A policy file accepted by the evaluator must be one that the parser produced for that same source, so a file parsed as a repository policy placed in the user slot is unusable. Under rank 1 that counts as broken, and at ranks 3 and 4 it counts as absent, which leaves the stricter built-in answer in force. Text from a brief, a context item, tool output or model output has no slot to enter, and the evaluator takes no such text as a parameter.
+A personal profile never reads `policy.organizationFile`, even when it is set. A policy file must be one that the parser produced for that same source. The builder of the sources refuses the whole evaluation with an `invalid` error when a file sits in a slot other than its own, for example a repository policy placed in the user slot. The evaluator's own rule for an unusable file, broken under rank 1 and absent at ranks 3 and 4, applies only to sources assembled without the builder. Text from a brief, a context item, tool output or model output has no slot to enter, and the evaluator takes no such text as a parameter.
 
 The organization file and the user section are read at the first evaluation of a command and kept, so an edit applies from the next command. The repository policy is read from git objects at the pinned commit, never from the working tree, so an uncommitted edit, or one a run makes in the owner's checkout, cannot change an answer. A repository policy that is a symbolic link, a submodule entry, not a regular file or over 64 KiB is refused, and a pin that is not a full lowercase commit hash is refused.
 
@@ -139,7 +139,7 @@ The SCM platform's own protections are the authoritative control for these. In a
 
 ## No replay after an interruption
 
-A privileged action whose start is recorded and whose end is not may have taken effect, so it is never run again on its own. The gate enforces this at the start. While an earlier start of the same action with the same parameters has no end, a second start is denied with the rule `interrupted-action-open`. The message names the earlier start, and nothing is recorded. An end names the start it closes, so two open starts of one action are closed one at a time. An end recorded without a start closes the earliest open start of its action.
+A privileged action whose start is recorded and whose end is not may have taken effect, so it is never run again on its own. The gate enforces this at the start. While an earlier start of the same action with the same parameters has no end, a second start is denied with the rule `interrupted-action-open`. The message names the earlier start, and nothing is recorded. An end names the start it closes, so two open starts of one action are closed one at a time. An end that names no start closes the earliest open start of its action, and an end with no open start of that action is refused.
 
 The gate also finds such an action when the scope resumes and opens one permission decision for each, in the order the starts were recorded. The decision names the action and its parameter summary, cites the start event, and offers only `withdraw`, because nothing can be answered into an approval. The start is marked with an `action.interrupted` event after its decision exists, so a resume that is itself interrupted opens no second decision.
 
@@ -170,7 +170,7 @@ The enforcement map is a code table of 18 controls: who enforces each one, what 
 | `restricted-mode`: restricted mode when a layer is unavailable | avarice | Drops the run to restricted and refuses unattended runs; never substitutes instructions, an unapproved sandbox or an unapproved egress path | A restricted run produces a plan, a patch file and a decision list only, and the host must honor its restricted flag | None named in the table |
 | `hook-cost-fields`: finer budget enforcement from token or cost fields in hook input | host | None until the host provides the fields | Whether hook input carries those fields is not established; no profile relies on it | Unverified |
 
-Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The two rows with no test named say in the table that the proving test does not exist, although tracked suites test them (`test/integration/approvals.test.ts` and `test/integration/restricted-mode.test.ts`). The `profile-isolation` row above states the built behavior; the code table's own text is older and is recorded in [findings.md](findings.md).
+Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The two rows with no test named say in the table that the proving test does not exist, although tracked integration suites for approvals and restricted mode test them. The `profile-isolation` row above states the built behavior; the code table's own text is older and is recorded in [findings.md](findings.md).
 
 ## Manual equivalents
 
@@ -186,7 +186,7 @@ Every integration has a manual route for an organization that prohibits it. The 
 | Approvals | `avarice approve <request>` in an interactive terminal |
 | Audit sink | No command: `avarice export` does not exist |
 
-The four commands that record something refuse inside a run and from a run's process tree, with exit 64 before the profile resolves, and they need no terminal. Their flags and exit codes are in [cli-reference.md](cli-reference.md).
+Three commands record something: `context add`, `evidence add` and `pr record`. They refuse inside a run and from a run's process tree, with exit 64 before the profile resolves, and they need no terminal. `comment --print` records nothing and has no such refusal. The flags and exit codes of all four are in [cli-reference.md](cli-reference.md).
 
 **Context add.** The file is one pack's worth of text: non-empty, valid UTF-8, at most 16,000 bytes. The `--source` text is at most 200 characters, with no control characters, and is kept verbatim as the reference's identity. The text is stored redacted and offered to the run's next context pack as an untrusted item. Adding the same file under the same source again records nothing, and a new file under the same source replaces the earlier one.
 
