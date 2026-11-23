@@ -30,7 +30,7 @@ This document lists what the grounding did not determine, and for each entry wha
 ## From data-model
 
 - Whether the checkpoint column for GSD's state digest, which no caller sets, is planned for later work. Checked: every statement under src that names the column; none sets it.
-- Whether backups, per-invocation directories and staging clones are ever cleaned up by an operator procedure. Checked: git grep for deletions in src; no cleanup command among the six CLI commands; no runbook found.
+- Whether backups, per-invocation directories and staging clones are ever cleaned up by an operator procedure. Checked: git grep for deletions in src; no cleanup command among the twenty CLI commands; no runbook found.
 - Hook and CLI write contention beyond the busy timeout. Not tested.
 
 ## From integrations
@@ -40,7 +40,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 ## From containment
 
-- Whether the six verified host versions pass the live containment suite now. Checked: the constant and the recorded run files under test/containment; the live suite was not re-run (it needs AVARICE_LIVE=1 and spend).
+- Whether the six verified host versions pass the live containment suite now. Checked: the constant and the recorded run files under test/containment (the run-slice pass below did not re-read them); the live suite was not re-run (it needs AVARICE_LIVE=1 and spend).
 - Whether the host honors each generated setting on the admitted versions. Host behavior; not determinable from code.
 - Hook latency against its 5 second host timeout. No performance test run.
 
@@ -55,7 +55,7 @@ This document lists what the grounding did not determine, and for each entry wha
 
 - Whether the validation sandbox (no read re-allowance, `src/app/check-validation.ts:90`) denies a check its own clone under the default roots: read the seatbelt profile builder and the executor call; did not execute a validation.
 - Whether installers other than npm honour `npm_config_ignore_scripts`, and whether an install argument can override it: checked only the environment set in `src/app/checks.ts:435`; no installer was run.
-- Which parts of `src/app/run-stages/item.ts` were not read: covered in part. Read the gate, commit and routing-entry portions (lines 145-195, 236-263, 535-563, 685-871); the launch, prompt, classification internals, discard and retry portions were not read (owned by runs.md).
+- `src/app/run-stages/item.ts` is covered in part. Read: the gate, commit and routing-entry portions (lines 145-195, 236-263, 535-563, 685-871). Not read: the launch, prompt, classification internals, discard and retry portions (owned by runs.md).
 - `src/adapters/git/run-workspace.ts` is covered in part: read in full, but only the revision, status, snapshot, diff and read behavior is documented; clone, discard, commit and fetch behavior belongs to runs.md.
 - Whether the repository ignores the GSD configuration file in a real run, which decides whether baseline rows carry `git:` or `tree:` revisions: not checked at runtime.
 
@@ -76,7 +76,7 @@ This document lists what the grounding did not determine, and for each entry wha
 ## From containment (run slice)
 
 - Whether the settings keys the host honors (permission rules, sandbox lists) take effect as generated: host behavior, outside this code. Checked: settings generator and preflight.
-- Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read, so no recorded live result is claimed.
+- Evidence files (`test/containment/*.jsonl`, `LIVE-CASES.md`) were not read in the run-slice pass, so that pass claims no recorded live result.
 - Whether the restricted launch behaves as its flags say on a live host. A live case for it exists (`p4-restricted-run` in `test/containment/live-run-phase4.test.ts`), gated by `AVARICE_LIVE=1`. It was not run for this document, so the documents make no claim about the host's behavior under `--restricted`.
 - `src/app/stages/validate.ts` (the scope check run before the index steps) was not read; its description is carried from the earlier text of this tree and `src/app/stages/activate.ts:98`.
 
@@ -103,7 +103,7 @@ This document lists what the grounding did not determine, and for each entry wha
 ## From interactive-shell
 
 - Whether a terminal in raw mode delivers Ctrl-C as a key and never as SIGINT in every Node and terminal combination. Checked only that the code takes the key path (`src/cli/shell/shell.ts:176`, `:249`) and queues input while an action runs (`:290-:306`). The signal behavior is runtime and was not run. The document states only the queueing and the key path.
-- Whether the shell behaves well with `TERM` unset on real terminals: checked the code (`full` is true when `TERM` is not `dumb`, `src/cli/shell/shell.ts:153`); no live terminal run was made.
+- Whether the shell behaves well with `TERM` unset on real terminals: checked the code (`full` is true when stdout is a terminal and `TERM` is not `dumb`, `src/cli/shell/shell.ts:153`); no live terminal run was made.
 - Test files (`test/unit/shell.test.ts`, `test/integration/shell-tty.test.ts` and `test/integration/shell-supervisor.test.ts`) were listed but not read; no claim rests on them.
 
 ## From overview

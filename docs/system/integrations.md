@@ -71,7 +71,7 @@ A command is described by its argv (no shell), working directory, whole environm
 
 ### Ledger port
 
-The ledger port also carries the run operations. They cover runs and their lease, checkpoints, contracts and amendments, steps, attempts, evidence, gate results, work items, decisions, notifications, the cancel request, check validations, run events and the hook's read-before-edit rows. Their lifecycle is in [runs.md](runs.md) and their storage in [data-model.md](data-model.md). One more adapter-config row, named `host-skill:avarice-run` with port `host-skill`, is written by `install-host` and holds the digest of the installed skill. `host-skill` is not a port in the ports directory.
+The ledger port also carries the run operations. They cover runs and their lease, checkpoints, contracts and amendments, steps, attempts, evidence, gate results, work items, decisions, notifications, the cancel request, check validations, run events and the hook's read-before-edit rows. Their lifecycle is in [runs.md](runs.md) and their storage in [data-model.md](data-model.md). `install-host` writes two adapter-config rows: `host-skill:avarice-run` (port `host-skill`) holds the digest of the installed skill, and `host-hook:attended` (port `host-hook`) holds the entry's digest. Neither port is in the ports directory.
 
 ### Agent host port fields
 
