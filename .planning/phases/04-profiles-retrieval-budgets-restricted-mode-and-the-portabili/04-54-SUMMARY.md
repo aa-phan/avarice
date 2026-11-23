@@ -99,12 +99,12 @@ plan_head_before: 96a07180841c5d2a589042f4d3ccb28d723746dc
 
 | Group | Documents | Status |
 |---|---|---|
-| A | policy-and-approvals, approve-privileged-action.puml, processes (approve flow), doctor, profiles-and-credentials, findings | not reviewed, no round ran |
-| B | cli-reference, config-reference, README | not reviewed, no round ran |
-| C | containment, data-model, integrations, unknowns | not reviewed, no round ran |
-| D | runs, onboarding, indexes-and-context | not reviewed, no round ran |
+| A | policy-and-approvals, approve-privileged-action.puml, processes (approve flow), doctor, profiles-and-credentials, findings | FAIL in rounds 1 and 2, round 3 pending |
+| B | cli-reference, config-reference, README | FAIL in rounds 1 and 2, round 3 pending |
+| C | containment, data-model, integrations, unknowns | FAIL in rounds 1 and 2, round 3 pending |
+| D | runs, onboarding, indexes-and-context | FAIL in rounds 1 and 2, round 3 pending |
 
-Open findings: none were produced, because no reviewer ran. T-04-102's open condition still holds: containment.md, data-model.md and integrations.md are `changed after review`. The next step is to run one fresh `technical-writer:prose-reviewer` per document group (up to three rounds), store each report as `04-54-reviews/round-<n>-<group>.md`, fix findings against the code, and only then change coverage.md rows to `reviewed`.
+Open findings: the round-2 findings are fixed (see "Round 2 fixes"); round 3 has not run. T-04-102's open condition still holds: containment.md, data-model.md and integrations.md are `changed after review`, and so is every other document in the groups. Round 3 is the last round the plan allows: one fresh `technical-writer:prose-reviewer` per group, each report stored as `04-54-reviews/round-3-<group>.md`; only a group whose round 3 records no BLOCKER and no WARNING may have its coverage.md rows changed to `reviewed`.
 
 ## Deviations from Plan
 
@@ -158,6 +158,17 @@ Four fresh reviewers read the documents in round 1 and all four groups failed (A
 - One `findings.md` line was added: the `profile-isolation` row of the enforcement map (`src/domain/enforcement-map.ts:113`) still says a moved profile is not covered, while the registry now denies it.
 - Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner rulings 2 and 4 of plan 04-35 at the two ruling lines, commit hashes under "edited on this branch", and quoted strings with "Phase 1", "(D-11)" and "Phase 2"). The reviewer could not tell whether `findings.md` is exempt as owner working material.
 - NITs left: B-4 (long Exit lines in `cli-reference.md`, reference lists); D-N5 (bold-lead reference bullets) and D-N6 (question headings that other documents link to); the module-listing openings and the 138-word record-contents list in `onboarding.md` (reference lists). Stale entry found while re-anchoring: the `findings.md` line on a silent reap skip now says it no longer holds.
+- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
+
+## Round 2 fixes
+
+Four fresh reviewers read the round-1 versions again and all four groups failed (A: 1 BLOCKER, 3 WARNING, 4 NIT; B: 4 WARNING, 2 NIT; C: 1 BLOCKER, 6 WARNING, 3 NIT; D: 1 BLOCKER, 6 WARNING, 5 NIT). The reports are stored verbatim as `04-54-reviews/round-2-A.md` to `round-2-D.md`. Every finding was checked against the code at HEAD first and none was rejected. The fixes are the commits "fix round-2 review findings, group A" to "group D" and the two follow-up commits on `cli-reference.md` and the records. `04-54-reviews/README.md` records each disposition and the sha256 of all 16 documents for round 3. No group has passed, so `coverage.md` is unchanged and every document stays `changed after review`.
+
+- Group A `findings.md`, full cite pass. A script extracted every `file:line` cite (685 in code spans, 30 outside them). The 522 in code spans and the 30 outside them that claim a current location were each opened at HEAD and read: the cited line has to be inside the construct the entry names. About 15 cites on lines that a vocabulary check could not match were read by hand with their context. 90 cites changed: 86 in code spans and 4 outside them (the other 163 in code spans are "as logged" cites that a "(now at ...)" already replaces; their targets are among the cites checked). Every changed cite was re-pointed to the line that holds the observation, or gained a "(now at ...)" where it was a bare wrong cite. None is marked "moved; not re-located", because each was found. Wrong "(now at ...)" targets from round 1 are corrected: the reviewer listed 19 lines, and this pass found the others.
+- Four `findings.md` entries needed more than a re-anchor, because the claim itself had moved: `approvals` and `task_refs` now say "No longer holds" with writer and reader cites; the `onboard` boolean-flag entry now says `restricted` is declared (`onboard.ts:15`); the admitted-GSD-version regex entry now says it lives in `src/domain/gsd-version.ts` and `gsd-onboarding.ts`, not in `locate.ts`.
+- Sentence length: 34 sentences over 35 words in `findings.md` are split, with every `file:line` kept. A final scan of all 16 documents, outside fences, tables and reference lists, finds none over 35 words in running prose. What is left is the command list at `cli-reference.md:7` and the Exit lines of the command reference, which are code-to-meaning lists, and the module lists that group D turned into bullets.
+- Links and anchors: 652 relative links across `docs/system/*.md` resolve, checked by script after the five heading renames of group D and the one inbound link that followed.
+- Open for the owner (not changed): group A observation O1, delivery history in `findings.md` (owner question; round-2 reviewer repeated it as an observation). Round 3 is the last round: a group that still fails there stays `changed after review` and needs an owner decision on how to go on.
 - No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass.
 
 ## Self-Check: PASSED
