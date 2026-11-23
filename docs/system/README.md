@@ -36,7 +36,7 @@ A new document carries the mark "drafted, not yet reviewed" under its title unti
 
 ## Proposal counterparts
 
-Each proposal document in `docs/`, and each decision record in `docs/decisions/` that has a counterpart, maps to the living documents that describe the part of it that is built. A proposal with no counterpart has nothing built yet. The decision records not listed here have no document written for them alone. The documents here are written from the code, not copied from the proposals, so their names and boundaries follow the built system.
+Each proposal document in `docs/`, and each decision record in `docs/decisions/` that has a counterpart, maps to the living documents that describe the part of it that is built. A proposal with no counterpart either has nothing built yet or is planning material, not a description of the system. The decision records not listed here have no document written for them alone. The documents here are written from the code, not copied from the proposals, so their names and boundaries follow the built system.
 
 | Proposal | Living counterparts |
 |---|---|

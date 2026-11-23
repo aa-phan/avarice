@@ -291,7 +291,7 @@ The `--budget` value is `name=value` with a number. The name and the lower-only 
 
 The preset is the constant that the run compiler copies into each contract. A digest of the whole preset is stored as the policy revision, so changing any value changes it. No file or variable changes a preset value. A run's budgets can be lowered when it starts, and a contract amendment can raise or lower them afterwards; neither changes the preset.
 
-Budgets. The limits that scale grow with the number of work items n in the brief. A start override can only lower a value: a value above the limit the preset gives for n items is refused. The name must be one of the seven below or one of the three retrieval names (`retrieval.searches`, `retrieval.fullReads` and `retrieval.fullReadBytes`, see [The `retrieval` section](#the-retrieval-section)). The number must be finite and above 0, and an integer where marked. Only a contract amendment raises a limit.
+Budgets. The limits that scale grow with the number of work items n in the brief. A start override can only lower a value: a value above the limit the preset gives for n items is refused. The name must be one of the seven below or one of the three retrieval names (`retrieval.searches`, `retrieval.fullReads` and `retrieval.fullReadBytes`, see [The `retrieval` section](#the-retrieval-section)). The number must be finite and above 0, and an integer where marked. The three retrieval names must be integers, and the ceiling of `retrieval.fullReads` and `retrieval.fullReadBytes` is the profile's cap. Only a contract amendment raises a limit.
 
 | Budget | Preset | Override name | Integer |
 |---|---|---|---|
