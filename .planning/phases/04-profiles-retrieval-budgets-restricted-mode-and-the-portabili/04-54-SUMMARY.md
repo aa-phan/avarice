@@ -177,6 +177,7 @@ Recorded by the owner, Aaron Phan, answering the checkpoint raised after round 3
 
 1. Review budget: "Fix + scoped round 4". All four groups failed round 3, so the 3-round budget is exhausted. The owner overrides the budget for one more round: fix every round-3 finding, then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `f19ae4e`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope.
 2. `findings.md` delivery history (observation O1, raised in every round): "Exempt: it's a log". `findings.md` is the owner's working log of code-versus-proposal drift. Commit hashes, plan and ruling references and the `.planning` path may stay as evidence. Reviewers record it as exempt, not a finding. One sentence saying so is added to the header of `findings.md`.
+3. Group C after round 4 (2026-11-23): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING (`round-4-C.md`, W1). Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff.
 
 ## Round 3 fixes
 
@@ -189,6 +190,21 @@ Four fresh reviewers read the round-2 versions and all four groups failed (A: 1 
 - Mechanical checks over the lines changed since `f19ae4e`: no sentence over 35 words in running prose, no banned dash, and all 652 relative links and anchors across `docs/system/*.md` resolve (checked by script).
 - Documents changed since `f19ae4e` (the round-4 scope): fifteen of the sixteen. Only `diagrams/approve-privileged-action.puml` is unchanged.
 - No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run by this fix pass. STATE.md and ROADMAP.md are unchanged.
+
+## Round 4
+
+Four fresh reviewers read the round-3 fixes, scoped to `git diff f19ae4e 1987922`. The reports are stored verbatim as `04-54-reviews/round-4-A.md` to `round-4-D.md` (commit `18fc3fb`).
+
+- Group A: PASS (0 BLOCKER, 0 WARNING, 0 NIT). Group B: PASS (0, 0, 0). Group D: PASS (0, 0, 0).
+- Group C: FAIL (0 BLOCKER, 1 WARNING, 0 NIT). W1: two bullets of "From containment" in `unknowns.md` contradicted each other about which evidence under `test/containment` was read, and the onboarding sentence left out the later PASS record. Verified at `live-run-phase4.jsonl:24` (PASS), `:25-27` (FAIL) and `:32` (PASS), and `LIVE-CASES.md:573-574`. Fixed in commit `3b36b23` (parent `86e3258`): the bullets are merged, they name what was read, and the onboarding sentence gives both outcomes. New `unknowns.md` sha256: `6c5214972cc51a5fa7aff71b8a603f7e49d2bb49e689d13623e7df8b8be8e3c5`.
+- Owner decision (2026-11-23, Aaron Phan, answering the checkpoint about group C): "Fix + one-bullet round 5". Group C failed round 4 on one WARNING. Fix it exactly as the reviewer specified, then one fresh reviewer checks only that diff. Recorded verbatim in `04-54-reviews/README.md`.
+- Coverage marks (commit `86e3258`): `policy-and-approvals.md`, `doctor.md`, `profiles-and-credentials.md` and `findings.md` (round files `round-1-A.md` to `round-4-A.md`); `cli-reference.md`, `config-reference.md` and `README.md` (`round-1-B.md` to `round-4-B.md`); `runs.md`, `onboarding.md` and `indexes-and-context.md` (`round-1-D.md` to `round-4-D.md`). Each digest in the round-4 reports was compared with the file first.
+- `processes.md` is NOT marked. `round-4-A.md` records its digest as `d077412b...9c0deeb...` and the file is `d077412b...9e0deeb...`, a one-character difference that looks like a transcription slip. The report cannot settle it. Open for the owner: accept the pass, or have a fresh reviewer read it. The `.puml` has no row of its own in `coverage.md`.
+- Group C's four documents (`containment.md`, `data-model.md`, `integrations.md`, `unknowns.md`) stay `changed after review`. The round-5 scope is the diff of commit `3b36b23` against `86e3258` for `unknowns.md`.
+- Open items for the owner, observations outside the scope of round 4 that are not fixed:
+  - From round-4-A: the onboarding wording at `profiles-and-credentials.md:67`, and the transcript PEM body lines that remain at `profiles-and-credentials.md:111`.
+  - From round-4-C: the configuration homes are stated three times in `containment.md` (lines 214, 479 and 574); the orphan-charge wording omits the assumption at `src/app/budget.ts:117-118`, that the cost budget is unchanged between grant and conversion.
+- No file under `src/`, `test/` or `scripts/` was edited and `npm test` was not run. STATE.md and ROADMAP.md are unchanged.
 
 ## Self-Check: PASSED
 
