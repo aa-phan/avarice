@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-61-PLAN.md
-last_updated: "2026-11-24T21:48:55.788Z"
+stopped_at: Completed 04-57-PLAN.md
+last_updated: "2026-11-24T22:08:02.994Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: 17ad4fe8da6f9e1e951d76fb867343046f940fa3
+state_head: 87d6463f73f927bdb869268759aa49540587324b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 60
+  completed_plans: 61
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 6 of 69
+Plan: 7 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -223,6 +223,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P59 | 77 min | 3 tasks | 9 files |
 | Phase 04 P60 | 25 min | 2 tasks | 7 files |
 | Phase 04 P61 | 7 min | 3 tasks | 2 files |
+| Phase 04 P57 | 7 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -557,6 +558,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-60: pack items carry PACK_ITEM_FORMAT = 1; an absent or different format is a cache miss (reason format), judged after access scope and before revision — A reused item skips the read that sets untrusted and codeNode, so an older adapter's flags would persist (GIN-05, CON-12)
 - [Phase 04]: 04-61: a recorded success counts as success only when every bullet of its brief is delivered (otherwise partial, a recorded failure stays a failure); the verdict and D-08 count successes only — The owner decision on G-04-3, applied by judgeWithCoverage and rejudgeWithCoverage from pinned files without spend
 - [Phase 04]: 04-61: stepSpendUsd records 0 only when the store shows no launch: step row and the exit code is not null; uncountable launches, a null code or launches above finishes record at least the cap — Closes GIN-04 without letting real spend go unrecorded (T-04-162)
+- [Phase 04]: 04-57: a same-line alias or config include is unparseable; env inherited from an enclosing shell string is read for it but bound only by the enclosing command
+- [Phase 04]: 04-57: one record per substitution (start offset and terminator) de-duplicates the here-document scans; the expansion scan stays
 
 ### Roadmap Evolution
 
@@ -624,8 +627,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-24T21:48:55.575Z
-Stopped at: Completed 04-61-PLAN.md
+Last session: 2026-11-24T22:08:02.775Z
+Stopped at: Completed 04-57-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
