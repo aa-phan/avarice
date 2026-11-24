@@ -584,6 +584,26 @@ describe('a file read under a run retrieval policy charges the whole-file rows (
   });
 });
 
+describe('the broad-discovery refusal reason names a brace group when one is the cause (GIN-03, CON-10)', () => {
+  const run = policy({ purpose: 'run', retrieval: { searches: 400, broadDiscovery: false } });
+  const search = (extra: Record<string, unknown>) => {
+    const n = normalizeToolCall('Grep', { pattern: 'x', ...extra }, STAGING);
+    assert.equal(n.ok, true);
+    return n.ok ? decide(n.call, run) : decide({ kind: 'other', tool: 'x' }, run);
+  };
+
+  it('refuses a brace-group glob with a reason that differs from the no-filter reason', () => {
+    const brace = search({ glob: '*.{ts,tsx}' });
+    const none = search({});
+    assert.equal(brace.rule, 'retrieval:broad-discovery-not-authorized');
+    assert.equal(none.rule, 'retrieval:broad-discovery-not-authorized');
+    assert.match(brace.reason ?? '', /brace group/);
+    assert.match(brace.reason ?? '', /type filter/);
+    assert.notEqual(brace.reason, none.reason);
+    assert.doesNotMatch(none.reason ?? '', /brace group/);
+  });
+});
+
 describe('normalizeToolCall and parseHookPolicy', () => {
   it('maps Claude tool names to normalized calls and resolves relative paths against cwd', () => {
     assert.deepEqual(normalizeToolCall('Write', { file_path: '/a/b' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'Write', paths: ['/a/b'] } });
@@ -592,14 +612,21 @@ describe('normalizeToolCall and parseHookPolicy', () => {
     assert.deepEqual(normalizeToolCall('Read', { file_path: '/r' }, STAGING), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } });
     assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } });
     assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.ts', path: 'src' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: `${STAGING}/src` } });
-    for (const glob of ['*', '**', '**/*', '*.*', './**/*', '{*,.*}', 'src/{a,b}']) {
+    for (const glob of ['*', '**', '**/*', '*.*', './**/*']) {
       assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } }, `Grep glob ${glob} matches every file`);
+    }
+    // GIN-03: a glob holding a brace group is judged unfiltered and the call records why.
+    for (const glob of ['{*,.*}', 'src/{a,b}', '*.{ts,tsx}']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true, braceGlob: true } }, `Grep glob ${glob} holds a brace group`);
     }
     for (const glob of ['*.ts', 'src/**/*.ts']) {
       assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } }, `Grep glob ${glob} filters`);
     }
     assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', type: 'ts' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
-    assert.deepEqual(normalizeToolCall('Glob', { pattern: '{*,.*}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true } });
+    assert.deepEqual(normalizeToolCall('Glob', { pattern: '{*,.*}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true, braceGlob: true } });
+    assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.{ts,tsx}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true, braceGlob: true } });
+    // A brace group in a Grep's glob does not make a typed Grep unfiltered.
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', type: 'ts', glob: '*.{ts,tsx}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
     assert.deepEqual(normalizeToolCall('Bash', { command: 'ls', run_in_background: true }, STAGING), { ok: true, call: { kind: 'shell', command: 'ls', background: true, cwd: STAGING } });
     assert.deepEqual(normalizeToolCall('Agent', { subagent_type: 'a' }, STAGING), { ok: true, call: { kind: 'subagent', subagentType: 'a' } });
     assert.deepEqual(normalizeToolCall('Task', {}, STAGING), { ok: true, call: { kind: 'subagent', subagentType: null } });

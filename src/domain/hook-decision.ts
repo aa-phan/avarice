@@ -23,8 +23,9 @@ export type NormalizedToolCall =
   // `offset` and `limit` are the Read's first line and line count when each is a positive whole number (WR-11: the hook charges the bytes of those lines).
   | { kind: 'file-read'; tool: string; paths: string[]; offset?: number; limit?: number }
   // `unfiltered` is set when the call names no glob or type filter (a Grep) and no pattern narrower than every file (a Glob); with the path at the clone root it is a
-  // whole-repository search (plan 04-29; CON-10).
-  | { kind: 'search'; tool: string; path: string; patternRoot?: string; unfiltered?: true }
+  // whole-repository search (plan 04-29; CON-10). `braceGlob` is set on an unfiltered call whose Grep glob or Glob pattern holds a brace group: the hook does not
+  // expand braces, so such a glob counts as unfiltered, and the refusal says so instead of saying there is no glob (GIN-03).
+  | { kind: 'search'; tool: string; path: string; patternRoot?: string; unfiltered?: true; braceGlob?: true }
   | { kind: 'shell'; command: string; background: boolean; cwd: string }
   | { kind: 'subagent'; subagentType: string | null }
   | { kind: 'web'; tool: string }
@@ -153,7 +154,8 @@ const deny = (rule: string, reason?: string): HookDecision => ({ decision: 'deny
 const named = (value: unknown): boolean => typeof value === 'string' && value !== '';
 // A Glob pattern that names every file below its root (`*`, `**`, `**/*`, `*.*`, `./**/*`): no narrower than no pattern at all.
 const MATCHES_EVERY_FILE = /^(\.\/)?(\*\*?\/)*\*\*?(\.\*)?$/;
-// The hook does not expand braces, so a pattern holding a brace group is judged as the widest file set it could name (WR-06).
+// The hook does not expand braces, so a pattern holding a brace group is judged as the widest file set it could name (WR-06); `braceGlob` on the call keeps that
+// cause, so the refusal can name it (GIN-03).
 const narrowsFiles = (pattern: string): boolean => pattern !== '' && !MATCHES_EVERY_FILE.test(pattern) && !pattern.includes('{');
 const isPositiveWhole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -193,7 +195,11 @@ export function normalizeToolCall(tool: string, input: Record<string, unknown>, 
       const below = typeof pattern === 'string' ? pattern.slice(call.patternRoot?.length ?? 0) : '';
       const glob = input['glob'];
       const filtered = tool === 'Grep' ? named(input['type']) || (typeof glob === 'string' && narrowsFiles(glob)) : narrowsFiles(below);
-      if (!filtered) call.unfiltered = true;
+      if (!filtered) {
+        call.unfiltered = true;
+        const filterText = tool === 'Grep' ? glob : below;
+        if (typeof filterText === 'string' && filterText.includes('{')) call.braceGlob = true;
+      }
       return { ok: true, call };
     }
     case 'Bash': {
@@ -873,7 +879,13 @@ export function decideToolCall(call: NormalizedToolCall, policy: HookPolicy, can
       // CON-10: an unfiltered search rooted at the clone is a whole-repository discovery. The contract authorizes one; the broadDiscovery row (limit 1) makes it once.
       const broad = call.unfiltered === true && searchesWholeRepository(call, policy, canon);
       if (broad && !retrieval.broadDiscovery) {
-        return deny(BROAD_DISCOVERY_NOT_AUTHORIZED_RULE, 'a search of the whole repository with no glob or type filter is not authorized for this run; search a directory or add a filter');
+        // GIN-03: a brace-group glob is refused for the brace group, not for having no glob; say so, so the model does not retry the same call.
+        return deny(
+          BROAD_DISCOVERY_NOT_AUTHORIZED_RULE,
+          call.braceGlob === true
+            ? 'a glob with a brace group is treated as matching every file, so this is a search of the whole repository, which is not authorized for this run; use a separate glob for each extension, a type filter, or search a directory'
+            : 'a search of the whole repository with no glob or type filter is not authorized for this run; search a directory or add a filter',
+        );
       }
       return { decision: 'allow', rule: 'read-set', budget: 'toolCalls', alsoCharges: broad ? ['retrieval.searches', 'retrieval.broadDiscovery'] : ['retrieval.searches'] };
     }

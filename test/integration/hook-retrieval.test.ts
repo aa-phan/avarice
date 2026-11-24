@@ -358,6 +358,35 @@ describe('tracer: a Grep whose glob matches every file is a broad discovery (WR-
   });
 });
 
+describe('tracer: a brace-group refusal says the brace group is the cause (GIN-03, CON-10, T-04-158)', () => {
+  const reasonOf = (stdout: string): string => (JSON.parse(stdout) as Deny).hookSpecificOutput.permissionDecisionReason;
+
+  it('denies a root Grep with glob `*.{ts,tsx}` as broad discovery and names the brace group and the alternatives', () => {
+    const fx = retrievalFixture(10, false);
+    const result = runHook(fx, 'pre', { tool_name: 'Grep', tool_input: { pattern: 'x', glob: '*.{ts,tsx}' } });
+    assert.equal(outcome(result.stdout), 'retrieval:broad-discovery-not-authorized');
+    const reason = reasonOf(result.stdout);
+    assert.match(reason, /brace group/);
+    assert.match(reason, /type filter/);
+    assert.equal(budgetUsed(fx, 'retrieval.searches'), 0);
+    assert.equal(budgetUsed(fx, 'toolCalls'), 0);
+  });
+
+  it('gives a root Glob with pattern `**/*.{ts,tsx}` the brace reason', () => {
+    const fx = retrievalFixture(10, false);
+    const result = runHook(fx, 'pre', { tool_name: 'Glob', tool_input: { pattern: '**/*.{ts,tsx}' } });
+    assert.equal(outcome(result.stdout), 'retrieval:broad-discovery-not-authorized');
+    assert.match(reasonOf(result.stdout), /brace group/);
+  });
+
+  it('keeps the no-filter reason for a Grep with no glob and no type', () => {
+    const fx = retrievalFixture(10, false);
+    const reason = reasonOf(runHook(fx, 'pre', unfiltered).stdout);
+    assert.match(reason, /no glob or type filter/);
+    assert.doesNotMatch(reason, /brace group/);
+  });
+});
+
 describe('onboarding purposes keep their hook decisions (policy-gated rules)', () => {
   it('a policy without a retrieval block allows an unfiltered Grep and charges toolCalls only', () => {
     const fx = makeHookFixture();
