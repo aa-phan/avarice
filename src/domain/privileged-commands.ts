@@ -5,7 +5,7 @@
 //
 // What it recognizes is the command word and its arguments as the shell would split them (plan 04-40): the quoting, comment, here-document and redirection rules of the
 // shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo`, `time` (with `-p`), `timeout`, `xargs`, `setsid`, `stdbuf`, `ionice` and `flock` in front of the program, a shell started on a literal string (`bash -c 'git push'`, plan 04-51) and `eval`, the program's directory
-// (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
+// (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), gh's options between a group and its subcommand (`gh pr -R x/y create`, plan 04-57), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
 // backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
 // MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
 // and both callers refuse it: no limit and no parse failure is read as "not privileged". It does not run or expand anything: a name the shell builds at run time (a
@@ -778,12 +778,36 @@ function ghApiBodyFromFile(args: readonly string[], spec: ArgSpec): boolean {
   return false;
 }
 
+// The gh options that may stand between a group and its subcommand (`gh pr -R x/y create`, plan 04-57; GWR-01, T-04-150): `-R` and `--repo` take the next word as their value,
+// `--repo=x` and `-Rx` are one word, and any other word that starts with `-` is skipped alone. Returns the subcommand and the words that are not it: the leading options
+// followed by the words after the subcommand, so the form's own spec binds `-R` wherever it was written. Undefined when no subcommand follows.
+function ghGroupWords(args: readonly string[]): { subcommand: string; rest: string[] } | undefined {
+  const leading: string[] = [];
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (!arg.startsWith('-') || arg === '-') return { subcommand: arg, rest: [...leading, ...args.slice(i + 1)] };
+    leading.push(arg);
+    if ((arg === '-R' || arg === '--repo') && i + 1 < args.length) {
+      i += 1;
+      leading.push(args[i] as string);
+    }
+  }
+  return undefined;
+}
+
 function classifyGh(args: readonly string[]): PrivilegedCommand | null {
-  const key = args[0] === 'api' ? 'api' : `${args[0] ?? ''} ${args[1] ?? ''}`;
+  let key = 'api';
+  let rest: readonly string[] = args.slice(1);
+  if (args[0] !== 'api') {
+    const group = ghGroupWords(args);
+    if (group === undefined) return null;
+    key = `${args[0] ?? ''} ${group.subcommand}`;
+    rest = group.rest;
+  }
   const spec = GH_FORMS[key];
   const form = formOf('gh', key.split(' '));
   if (spec === undefined || form === undefined) return null;
-  const parsed = parseArgs(args.slice(key === 'api' ? 1 : 2), spec);
+  const parsed = parseArgs(rest, spec);
   if (form.action === 'scm.api.write') {
     const given = parsed.values['method']?.toUpperCase();
     const method = given ?? (GH_API_FIELD_OPTIONS.some((option) => parsed.seen.has(option)) ? 'POST' : 'GET');
