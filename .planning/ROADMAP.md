@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 66 plans in 31 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), and 11 gap-closure plans (04-56 to 04-66) in waves 27-31 from 04-UAT.md (one branch, one PR, D-01)
+**Plans**: 69 plans in 34 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), and 14 gap-closure plans (04-56 to 04-69) in waves 27-34 from 04-UAT.md (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -175,24 +175,33 @@ Plans:
 
 **Wave 27** *(gap closure from 04-UAT.md)*
 - [ ] 04-56-PLAN.md — Approval requests show every bound value whole, or the command is refused as unapprovable (G-04-1, GCR-01)
-- [ ] 04-57-PLAN.md — Classifier: gh options before the subcommand, same-line git aliases, one count per here-document substitution (GWR-01, GWR-03, GIN-01)
 - [ ] 04-58-PLAN.md — Restricted patch keeps in-scope edits whatever an out-of-scope file is named (GWR-04)
 - [ ] 04-59-PLAN.md — Bindings lock after PID reuse, corrupt config denied whole, race test proves overlap (GWR-05, GWR-06, GWR-07)
 - [ ] 04-60-PLAN.md — Brace-glob refusal reason; pack item format stamp (GIN-03, GIN-05)
 - [ ] 04-61-PLAN.md — Evaluation harness: brief coverage in the re-judge, brief no longer forbids its bullets, spend for a step with no host start (G-04-3 harness, GIN-04)
 
-**Wave 28** *(blocked on Wave 27 completion)*
-- [ ] 04-62-PLAN.md — Classifier: brace and glob expansion, wrappers and launchers, residual list (GWR-02, GIN-02)
-- [ ] 04-63-PLAN.md — AC-8 brief coverage recorded, owner re-approval (checkpoint), re-judgement and ADR-017 (G-04-3)
+**Wave 28** *(blocked on Wave 27 completion; 04-57 after 04-56, whose test run must not race classifier edits)*
+- [ ] 04-57-PLAN.md — Classifier: gh options before the subcommand, same-line git aliases, one count per here-document substitution (GWR-01, GWR-03, GIN-01)
+- [ ] 04-64-PLAN.md — AC-8 brief coverage recorded and the amended rule drafted, owner re-approval (checkpoint) recorded (G-04-3, first half)
 
 **Wave 29** *(blocked on Wave 28 completion)*
-- [ ] 04-64-PLAN.md — Test fixtures run on Node 22.22.3; full suite recorded on Node 22.22.3 and 26.9.0 (G-04-4)
+- [ ] 04-62-PLAN.md — Classifier: brace and glob expansion refused, glob residual named (GWR-02)
+- [ ] 04-65-PLAN.md — AC-8 re-judgement from the approved files, ADR-017 and the proposal's score sentence (G-04-3)
 
 **Wave 30** *(blocked on Wave 29 completion)*
-- [ ] 04-65-PLAN.md — Documentation: docs/system updated for the gap plans, review-gap dispositions
+- [ ] 04-63-PLAN.md — Classifier: wrappers, launchers, su and trap strings, here-strings, and the full residual list (GIN-02)
 
 **Wave 31** *(blocked on Wave 30 completion)*
-- [ ] 04-66-PLAN.md — Documentation: findings, README tables, coverage, fresh reviews
+- [ ] 04-66-PLAN.md — Test fixtures run on Node 22.22.3; full suite recorded on Node 22.22.3 and 26.9.0 (G-04-4)
+
+**Wave 32** *(blocked on Wave 31 completion)*
+- [ ] 04-67-PLAN.md — Documentation: docs/system review group A (approval gate, containment, commands, data model)
+
+**Wave 33** *(blocked on Wave 32 completion)*
+- [ ] 04-68-PLAN.md — Documentation: docs/system review group B (profiles, integrations, runs, context), worklist, review-gap dispositions
+
+**Wave 34** *(blocked on Wave 33 completion)*
+- [ ] 04-69-PLAN.md — Documentation: findings, README tables, coverage, fresh reviews
 
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
 
@@ -296,7 +305,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
-| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 55/66 | In Progress | - |
+| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 55/69 | In Progress | - |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |
