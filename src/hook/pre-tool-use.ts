@@ -323,8 +323,9 @@ function stopReasonOf(stop: LoopStop): string {
 
 // A privileged form refused for want of an approval (plan 04-19; FR-12, S-7): the request that is still waiting for this scope, action and parameters is named
 // again, else a new `apr_` request is recorded, and the denial itself is recorded as `policy.denied`. The caller's BEGIN IMMEDIATE transaction is open, so the
-// request, the denial and the decision they belong to commit together. The events carry the action, the digest and a bounded redacted summary of the parameters,
-// never the command line. `scope` is the run ID of a run, or `attended:<session id>`, which has no run ID (src/domain/approval.ts scopeRunId).
+// request, the denial and the decision they belong to commit together. The events carry the action, the digest and a summary of the parameters that shows every bound
+// value whole, the working directory included (callers refuse a command whose values cannot be shown whole before they get here; src/domain/approval.ts
+// unshowableReason), never the command line. `scope` is the run ID of a run, or `attended:<session id>`, which has no run ID (src/domain/approval.ts scopeRunId).
 interface PrivilegedDenial {
   scope: string;
   runId?: string;
@@ -358,6 +359,30 @@ function recordPrivilegedDenial(db: DatabaseSync, o: PrivilegedDenial): string {
     nowMs: o.nowMs,
   });
   return requestId;
+}
+
+// The denial of a privileged form in a run whose bound values cannot be shown to the owner whole (plan 04-56; G-04-1, GCR-01): no request is written, because there is nothing the
+// owner could approve knowingly. One `policy.denied` is recorded with the run's rule name (run-mode rule names do not change), the action, the digest of the parameters and the reason,
+// which names a key and a length and never a value, and no summary, request or command text. The caller's BEGIN IMMEDIATE transaction is open.
+interface UnshowableDenial {
+  runId: string;
+  invocationId: string;
+  tool: string;
+  privileged: PrivilegedCommand;
+  ruleId: string;
+  reason: string;
+  nowMs: number;
+}
+
+function recordUnshowableDenial(db: DatabaseSync, o: UnshowableDenial): void {
+  appendEventRow(db, {
+    type: 'policy.denied',
+    level: 'warn',
+    runId: o.runId,
+    invocationId: o.invocationId,
+    data: { ruleId: o.ruleId, action: o.privileged.action, scope: o.runId, runId: o.runId, tool: short(o.tool), paramsDigest: paramsDigest(o.privileged.params), reason: short(o.reason), source: 'hook' },
+    nowMs: o.nowMs,
+  });
 }
 
 // Charges the named budget rows of the run, all or none (plan 04-29; CON-11): one unit each, or the amount given for the row (WR-11: a Read charges its bytes to retrieval.fullReadBytes). The caller's BEGIN IMMEDIATE transaction is open and holds the ledger's
@@ -428,9 +453,16 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       let result = decided;
       // FR-12: a privileged shell form is refused here whatever the run's command set holds. An approval is never consumed in a run (it never widens the
       // run's commands), so the denial names the request the owner approves and the run goes on without the effect.
+      // A command whose bound values cannot be shown to the owner whole is refused with the same rule and no request (G-04-1, GCR-01): the owner would be approving less than the digest binds.
       if (result.decision === 'deny' && result.privileged !== undefined) {
-        const requestId = recordPrivilegedDenial(db, { scope: policy.runId, runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, nowMs: Date.now() });
-        result = { decision: 'deny', rule: result.rule, reason: privilegedReason(result.privileged.action, requestId) };
+        const unshowable = unshowableReason(result.privileged.params);
+        if (unshowable !== undefined) {
+          recordUnshowableDenial(db, { runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, ruleId: result.rule, reason: unshowable, nowMs: Date.now() });
+          result = { decision: 'deny', rule: result.rule, reason: `${result.privileged.action} cannot be approved, so no approval was asked for: ${unshowable}` };
+        } else {
+          const requestId = recordPrivilegedDenial(db, { scope: policy.runId, runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, nowMs: Date.now() });
+          result = { decision: 'deny', rule: result.rule, reason: privilegedReason(result.privileged.action, requestId) };
+        }
       }
       if (edit !== undefined) {
         const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), readKey(edit.canonical)) as { digest: string } | undefined;
@@ -596,8 +628,9 @@ function configChange(policyPath: string | undefined): never {
 // the skill. It enforces privileged-action approvals only. A Bash call that is not a privileged form (and every other tool) is allowed without a decision,
 // without opening the store and without an event. Each privileged command of a line consumes one approval of the scope `attended:<session id>`, the action and the digest
 // of its parameters in the same transaction that records the action's start (all of the line's commands or none), or the line is denied with a request for each
-// command that has no approval, which the owner approves with `avarice approve`. A line holding a command that cannot be approved (a gh api body from a file or standard
-// input) is denied with `privileged:unapprovable` before anything is consumed. Any error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
+// command that has no approval, which the owner approves with `avarice approve`. A request shows every value the approval binds, the working directory included, whole. A line
+// holding a command that cannot be approved (a gh api body from a file or standard input, or a command whose bound values cannot be shown whole: a key or value over 80 characters, the
+// entries over 400 together, a working directory over 512, a control character or a secret-shaped text) is denied with `privileged:unapprovable` before anything is consumed. Any error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
 // ---------------------------------------------------------------------------------------------------------
 
 // The host's session ID as a plain token: it becomes part of an approval scope.
@@ -628,9 +661,9 @@ function denyUnparseable(dataRoot: string, scope: string, tool: string, reason: 
   });
 }
 
-// A command no approval can cover (plan 04-51; WR-04, T-04-138): a gh api request whose body is a file or standard input, which the line digest cannot bind. The line is denied
-// before any approval is consumed and no request is made, because there is nothing the owner could approve; one `policy.denied` is recorded for each such command, with no
-// command text.
+// A command no approval can cover (plan 04-51; WR-04, T-04-138): a gh api request whose body is a file or standard input, which the line digest cannot bind, or (plan 04-56; G-04-1,
+// GCR-01) one whose bound values cannot be shown to the owner whole. The line is denied before any approval is consumed and no request is made, because there is nothing the owner
+// could approve knowingly; one `policy.denied` is recorded for each such command, with no command text.
 function denyUnapprovable(dataRoot: string, scope: string, tool: string, blocked: readonly PrivilegedCommand[]): void {
   const db = openLedger(join(dataRoot, 'state.db'));
   try {

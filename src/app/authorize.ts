@@ -8,15 +8,17 @@
 //   3a. before a privileged start is recorded the scope is read: an earlier start of the same action with the same parameter digest that has no end may have
 //      taken effect, so a second start is denied with rule `interrupted-action-open` and nothing is recorded (FR-15). The rule lives here so no caller can skip it;
 //   4. with no source the action is denied with rule `approval-required:<apr id>` and an `approval.requested` event, and the message names the command the
-//      owner runs: `avarice approve <apr id>`.
+//      owner runs: `avarice approve <apr id>`. The request shows every bound value whole: parameters that cannot be shown whole (src/domain/approval.ts
+//      `unshowableReason`) get no request and are denied with rule `privileged:unapprovable`; a contract or an approval already on record still allows them (G-04-1).
 //
 // Nothing here reads a plan, a decision answer or a clock for an answer: a plan approval, a decision answer, a deadline, silence and a replay after an
 // interruption approve nothing (FR-13). A privileged action whose start was recorded and whose end was not is never run again: `reconcilePrivilegedSteps`
 // finds it on resume and opens a permission decision that names it (FR-15). The scope is the run ID, the onboarding ID or `attended:<session id>`.
-import { paramsDigest, paramsSummary, scopeRunId } from '../domain/approval.ts';
+import { paramsDigest, paramsSummary, scopeRunId, unshowableReason } from '../domain/approval.ts';
 import { classifyAction } from '../domain/action-class.ts';
 import { ISSUE_MAX_CHARS, OPTION_LABEL_MAX_CHARS, classifyDecision } from '../domain/decision-policy.ts';
 import { evaluatePolicy } from '../domain/policy.ts';
+import { UNAPPROVABLE_RULE } from '../domain/privileged-commands.ts';
 import { storedText } from '../domain/quick-record.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
@@ -151,6 +153,13 @@ export function authorizeAction(deps: AppDeps, input: AuthorizeInput): Result<Au
   });
   if (!consumed.ok) return consumed;
   if (consumed.value !== null) return ok({ effect: 'allow', source: 'approval', approvalId: consumed.value.approvalId, startSeq: consumed.value.startSeq });
+
+  // An approval is asked for only when the owner can be shown every value it binds (G-04-1, GCR-01): parameters that cannot be shown whole are refused and no request is recorded.
+  // A contract or an approval already on record was checked above and still allows, because no owner display is involved.
+  const unshowable = unshowableReason(input.params);
+  if (unshowable !== undefined) {
+    return ok({ effect: 'deny', rule: UNAPPROVABLE_RULE, message: `${input.action} cannot be approved: ${unshowable}` });
+  }
 
   // No source: ask the owner once. A retry of the same action finds the request that is still waiting and names it again.
   const pending = deps.ledger.findPendingApprovalRequest({ scope: input.scope, action: input.action, paramsDigest: digest });

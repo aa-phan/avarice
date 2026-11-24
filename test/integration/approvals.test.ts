@@ -416,6 +416,24 @@ describe('the request, the scopes and the classes around the gate', () => {
     assert.equal(result.error.kind, 'invalid');
   });
 
+  it('parameters that cannot be shown whole get no approval request: deny with privileged:unapprovable, and a contract that authorizes them exactly still allows (G-04-1, GCR-01)', () => {
+    const roots = freshRoots();
+    const params = { head: 'avarice/run_x', base: 'b'.repeat(81) };
+    const refused = denied(authorize(roots, { scope: 'run_UNSHOWABLE', action: 'scm.pr.create', params }));
+    assert.equal(refused.rule, 'privileged:unapprovable');
+    assert.equal(refused.requestId, undefined);
+    assert.match(refused.message, /scm\.pr\.create cannot be approved/);
+    assert.match(refused.message, /base is 81 characters/);
+    assert.ok(!refused.message.includes('b'.repeat(20)), 'the message holds no part of the value');
+    assert.equal(eventsOf(roots, 'approval.requested').length, 0);
+    assert.equal(eventsOf(roots, 'action.started').length, 0);
+
+    const contract = allowed(authorize(roots, { scope: 'run_UNSHOWABLE', action: 'scm.pr.create', params, contractAuthorization: { action: 'scm.pr.create', params } }));
+    assert.equal(contract.source, 'contract');
+    assert.equal(eventsOf(roots, 'approval.requested').length, 0);
+    assert.equal(eventsOf(roots, 'action.started').length, 1);
+  });
+
   it('finishPrivilegedAction ends an open start once, and refuses an end with no start', () => {
     const roots = freshRoots();
     const clock = new SetClock(T0);
