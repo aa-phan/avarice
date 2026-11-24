@@ -1157,10 +1157,14 @@ export interface LedgerCosts {
   tokens: number;
   finished: number;
   tokensComplete: boolean;
+  // The number of host launches the store recorded for this step: `launch:` rows of run_steps (a run) or onboarding_steps (an onboarding), written before the host starts
+  // (GIN-04). Undefined when they could not be counted.
+  launched?: number;
 }
 
-// The cost and tokens of the invocations a ledger recorded: the onboarding's (events that name an onboarding) or the run's (those that do not).
-function costsOf(dataRoot: string, onboarding: boolean): LedgerCosts {
+// The cost and tokens of the invocations a ledger recorded: the onboarding's (events that name an onboarding) or the run's (those that do not), and the launches of the
+// same side.
+export function costsOf(dataRoot: string, onboarding: boolean): LedgerCosts {
   const total: LedgerCosts = { chargedUsd: 0, tokens: 0, finished: 0, tokensComplete: true };
   const file = join(dataRoot, 'state.db');
   if (!existsSync(file)) return total;
@@ -1174,6 +1178,14 @@ function costsOf(dataRoot: string, onboarding: boolean): LedgerCosts {
       total.chargedUsd += charged;
       if (typeof data['tokens'] === 'number') total.tokens += data['tokens'];
       else total.tokensComplete = false;
+    }
+    // A host launch is a `launch:` step row, written before the host starts. A store that cannot be queried leaves the count undefined: the launches are then unknown.
+    try {
+      const table = onboarding ? 'onboarding_steps' : 'run_steps';
+      const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE step LIKE 'launch:%'`).get() as { n: number } | undefined;
+      if (row !== undefined && typeof row.n === 'number') total.launched = row.n;
+    } catch {
+      // launched stays undefined
     }
   } finally {
     db.close();
@@ -1200,19 +1212,21 @@ function writeArmProfile(ctx: LiveContext, roots: CliRoots, arm: ArmId): void {
 }
 
 // What a model step is recorded at in the Phase 4 spend ledger (WR-30). The ledger is the only thing that enforces the ceiling, so an amount that cannot be known is the
-// step's cap, as the Phase 3 tools recorded it, and never less than the charge the ledger shows: a read that failed (`costs` undefined), a step the timeout killed
-// (`code` null, so an invocation may have been in flight when the process died) and a step that ended with no invocation.finished event (the host may have run and left no
-// record) each record at least the cap.
+// step's cap, as the Phase 3 tools recorded it, and never less than the charge the ledger shows. Each of these records at least the cap: a read that failed (`costs`
+// undefined), a step the timeout killed (`code` null, so an invocation may have been in flight when the process died), a step whose launches could not be counted (`launched`
+// undefined: the host may have run and left no record) and a step with more launches than finished invocations (a host started and left no invocation.finished). A step that
+// exited with a code and recorded no launch started no host, so it records 0 (GIN-04; spendStep says so in the log).
 export function stepSpendUsd(input: { costs: LedgerCosts | undefined; code: number | null; capUsd: number }): number {
   if (input.costs === undefined) return input.capUsd;
-  const floor = input.code === null || input.costs.finished === 0 ? input.capUsd : 0;
+  const { launched, finished } = input.costs;
+  const floor = input.code === null || launched === undefined || launched > finished ? input.capUsd : 0;
   return Math.max(input.costs.chargedUsd, floor);
 }
 
 // One model-spending step: the ceiling is checked against the step's cap first, and the amount `stepSpendUsd` gives (what the budgets charged: a killed invocation is
 // charged its reservation, never less than the cap when the step's cost cannot be known) is recorded in the Phase 4 spend ledger. A ledger read that throws is recorded at
 // the cap first and then rethrown, so the error never costs the ledger the spend.
-export async function spendStep<T extends { code: number | null }>(ctx: Pick<LiveContext, 'plan' | 'claudeVersion'>, label: string, capUsd: number, roots: CliRoots, onboarding: boolean, fn: () => T): Promise<{ result: T; costs: LedgerCosts }> {
+export async function spendStep<T extends { code: number | null }>(ctx: Pick<LiveContext, 'plan' | 'claudeVersion'> & Partial<Pick<LiveContext, 'log'>>, label: string, capUsd: number, roots: CliRoots, onboarding: boolean, fn: () => T): Promise<{ result: T; costs: LedgerCosts }> {
   if (!fitsPhase4Ceiling(capUsd)) throw new CeilingStop(ceilingRefusal(label, capUsd));
   const result = fn();
   let costs: LedgerCosts | undefined;
@@ -1224,6 +1238,8 @@ export async function spendStep<T extends { code: number | null }>(ctx: Pick<Liv
   }
   const spent = stepSpendUsd({ costs, code: result.code, capUsd });
   if (spent > 0) recordPhase4Spend({ plan: ctx.plan, case: label, costUsd: spent, claudeVersion: ctx.claudeVersion });
+  // GIN-04: a step that exited with a code and recorded no launch started no host, so nothing is written to the ledger; the log says why.
+  else if (costs !== undefined && costs.launched === 0 && result.code !== null) ctx.log?.(`${label}: no host started (no launch step recorded, exit code ${result.code}), so 0 is recorded in the spend ledger`);
   if (costs === undefined) throw readError;
   return { result, costs };
 }
