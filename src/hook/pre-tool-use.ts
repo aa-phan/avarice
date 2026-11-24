@@ -16,7 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { isAbsolute, join, relative } from 'node:path';
-import { paramsDigest, paramsSummary } from '../domain/approval.ts';
+import { paramsDigest, paramsSummary, unshowableReason } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
 import { newId } from '../domain/ids.ts';
 import { RETRIEVAL_CAPS } from '../domain/retrieval-rules.ts';
@@ -687,9 +687,14 @@ function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): v
   const cwd = attendedCwd(input);
   if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
   // The directory the owner's command runs in is part of what an approval binds (CR-03): `cd` is no word of the command, so a push approved in one repository is not one in another.
-  const blocked = classified.commands.filter((command) => command.unapprovable !== undefined);
+  // A command is also unapprovable when the owner could not be shown every value it binds, the directory included (G-04-1, GCR-01): it is refused before anything is consumed or requested.
+  const bound: PrivilegedCommand[] = classified.commands.map((command) => {
+    const params = { ...command.params, cwd };
+    const unapprovable = command.unapprovable ?? unshowableReason(params);
+    return { action: command.action, params, ...(unapprovable !== undefined ? { unapprovable } : {}) };
+  });
+  const blocked = bound.filter((command) => command.unapprovable !== undefined);
   if (blocked.length > 0) return denyUnapprovable(dataRoot, scope, tool, blocked);
-  const bound = classified.commands.map((command) => ({ action: command.action, params: { ...command.params, cwd } }));
   const db = openLedger(join(dataRoot, 'state.db'));
   let unapproved: { action: string; requestId: string }[];
   try {
