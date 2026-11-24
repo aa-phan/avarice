@@ -119,8 +119,8 @@ blocked: 0
       issue: "owner-approved, hash-pinned: successRule, deniedReads of e2e specs, T01/T02/T05 e2e bullets"
     - path: "docs/operations-and-testing.md"
       issue: "line 153 still says success matches the accepted change in reviewer judgment"
+  owner_decision: "Count as partial (2026-11-23): keep the recorded runs; record per-run brief-bullet coverage; a run that skipped a brief bullet counts as partial, not a success; rejudge from recorded data and restate ADR-015/ADR-016 numbers. Amends successRule and D-07 (record the decision); no new eval spend; runs are not re-run and the briefs are not stripped."
   missing:
-    - "Owner decision (touches D-07 and the approved task file): make the brief the run sees equal the brief the judge uses (strip e2e bullets under re-approval, or let the run write the e2e spec and judge its presence)"
     - "Record per-run brief-bullet coverage in the results; count a run that skips a bullet as partial or exclude it from AC-8 success counts"
     - "Re-run rejudge and restate the ADR-015/ADR-016 numbers"
     - "Reconcile docs/operations-and-testing.md:153 with D-07 or log it in docs/system/findings.md"
