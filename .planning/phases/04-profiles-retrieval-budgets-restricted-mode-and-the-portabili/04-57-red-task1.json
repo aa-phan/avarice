@@ -1,0 +1,5 @@
+{
+  "command": "node --test test/unit/privileged-commands.test.ts",
+  "exitCode": 1,
+  "output": "  ✖ under bash (8519.083208ms)\n✖ the differential oracle: every privileged command a shell runs on the corpus is one classifyLine returns (T-04-106) (22449.068583ms)\n  ✖ classifies the subcommand and binds the repository, whichever way the option is written (0.359917ms)\n  ✖ binds the same parameters whether the option comes before or after the subcommand, apart from the line digest (0.079625ms)\n✖ a gh option between the group and the subcommand does not hide the subcommand (GWR-01, FR-12, T-04-150) (0.560375ms)\nℹ tests 107\nℹ pass 104\nℹ fail 3\n✖ failing tests:\n✖ under bash (8519.083208ms)\n  AssertionError [ERR_ASSERTION]: bash performed 0 privileged commands, expected 1: \"gh pr -R x/y create\"\n✖ classifies the subcommand and binds the repository, whichever way the option is written (0.359917ms)\n  AssertionError [ERR_ASSERTION]: gh pr -R x/y create\n✖ binds the same parameters whether the option comes before or after the subcommand, apart from the line digest (0.079625ms)\n  AssertionError [ERR_ASSERTION]: gh pr -R x/y create --base main"
+}

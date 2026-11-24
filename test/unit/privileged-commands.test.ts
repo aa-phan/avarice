@@ -233,6 +233,11 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['gh pr create --title x --base main', 1],
   ['gh pr merge 12 --squash', 1],
   ['gh api repos/o/r/pulls -X POST', 1],
+  // A gh persistent flag between the group and the subcommand (plan 04-57; GWR-01).
+  ['gh pr -R x/y create', 1],
+  ['gh pr --repo=x/y merge 1', 1],
+  ['gh release -R x create v1', 1],
+  ['gh pr -Rx/y edit 3', 1],
   ['npm test && npm publish', 1],
   ['npm publish', 1],
   // Another program starts the command (plan 04-51; WR-01, WR-03): the stubs for the shells and the wrappers are linked into the stub directory, so a shell
@@ -521,5 +526,47 @@ describe('gh api forms whose body cannot be bound are marked unapprovable (WR-04
 
   it('classifies the unapprovable form as the same action, so a run still denies it as privileged:scm.api.write', () => {
     assert.equal(firstOf('gh api graphql -F query=@q.graphql').action, 'scm.api.write');
+  });
+});
+
+describe('a gh option between the group and the subcommand does not hide the subcommand (GWR-01, FR-12, T-04-150)', () => {
+  const noLine = (params: Record<string, string>): Record<string, string> => {
+    const { line: _line, ...rest } = params;
+    return rest;
+  };
+
+  it('classifies the subcommand and binds the repository, whichever way the option is written', () => {
+    const cases: ReadonlyArray<readonly [string, string, string]> = [
+      ['gh pr -R x/y create', 'scm.pr.create', 'x/y'],
+      ['gh pr --repo=x/y merge 1', 'scm.pr.merge', 'x/y'],
+      ['gh release -R x create v1', 'release.publish', 'x'],
+      ['gh pr -Rx/y edit 3', 'scm.pr.update', 'x/y'],
+      ['gh pr --repo x/y create', 'scm.pr.create', 'x/y'],
+      ['gh pr --some-flag -R x/y create', 'scm.pr.create', 'x/y'],
+    ];
+    for (const [line, action, repo] of cases) {
+      const one = firstOf(line);
+      assert.equal(one.action, action, line);
+      assert.equal(one.params['repo'], repo, line);
+    }
+  });
+
+  it('binds the same parameters whether the option comes before or after the subcommand, apart from the line digest', () => {
+    const before = firstOf('gh pr -R x/y create --base main');
+    const after = firstOf('gh pr create -R x/y --base main');
+    assert.deepEqual(noLine(before.params), noLine(after.params));
+    assert.equal(before.params['base'], 'main');
+    assert.equal(before.params['repo'], 'x/y');
+  });
+
+  it('leaves the non-privileged subcommands and an option with no subcommand as none', () => {
+    for (const line of ['gh pr -R x/y list', 'gh pr --repo x/y view 3', 'gh pr -R', 'gh pr', 'gh pr -R x/y']) {
+      assert.deepEqual(classifyLine(line), { kind: 'none' }, line);
+    }
+  });
+
+  it('still reads gh api as before', () => {
+    assert.equal(firstOf('gh api repos/o/r/pulls -X POST').action, 'scm.api.write');
+    assert.deepEqual(classifyLine('gh api repos/o/r/pulls'), { kind: 'none' });
   });
 });
