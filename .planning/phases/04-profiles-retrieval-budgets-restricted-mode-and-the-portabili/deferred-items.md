@@ -19,3 +19,8 @@ Warnings the triage did not fix. Each is also a row of `04-REVIEW-DISPOSITION.md
 - WR-36: The arm repository still holds the denied files in git history and `assertNoLeak` does not check it; plan 04-50's decision context scans whether any run read the held-out file. Target: plan 04-50 (moves the row to fixed if the owner chooses branch b, otherwise before any further AC-8 run).
 - WR-37: The fake-remote duplicate fault changes nothing, so the duplicate-tolerance tests pass vacuously against the fake. Target: Phase 7 (real remote adapters extend NFR-4).
 - WR-38: The doctor probe timeout is a fixed 1 s and the fake `claude` is a Node process, so two doctor tests flake under load. Target: Phase 5.
+
+## Found by plan 04-58 (out of scope, not fixed)
+
+- `node --test test/integration/run-workspace.test.ts test/integration/restricted-mode.test.ts test/integration/restricted-onboarding.test.ts` run as three files in parallel ended `restricted-onboarding.test.ts` with a file-level `Error: ENOTEMPTY, Directory not empty: .../avarice-cli-<id>` (its `after` cleanup racing a still-running supervisor) in 2 of 2 runs. The same three files pass 73 of 73 with `--test-concurrency=1`, and each pair passes in parallel. None of the files plan 04-58 changed is in the failing path (`restricted-onboarding.test.ts` was not touched and runs no `patch()` call); it looks like a load-dependent cleanup race in the shared CLI fixture. Target: Phase 5 (with WR-38, the other load-dependent flake).
+  status: open
