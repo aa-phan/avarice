@@ -4,11 +4,12 @@
 //
 // The registry reads those configs and returns paths to deny, so a planted or hostile file can only add a deny, never open a path. Each config is
 // read as the profile config always is (no link followed, a regular file, a size cap, the closed key set); a directory that is not a profile
-// name, a profile directory that is a link, a file that does not parse and a root that is not absolute are skipped. A config that exists but
-// cannot be read (as opposed to one that is corrupt) is a refusal of the system or a failure. When permissions or a sandbox refused it (EACCES, EPERM) the registry
-// denies the whole root of that profile (its profile directory and the default roots of its name) and goes on: "deny, don't refuse", so a profile the caller may not
-// read never stops the commands of another. Any other failure to read is `unavailable` and stops the computation. A profile whose config home was never seen from
-// here cannot be found, and a profile whose config is refused cannot say where it moved its roots; those residuals are documented.
+// name, a profile directory that is a link and a root that is not absolute are skipped. A config that exists but is corrupt (invalid JSON, a refused key, a
+// link, oversize) or cannot be read (a refusal of the system or a failure) cannot say where its profile put its roots, so the registry denies the whole root of that
+// profile (its profile directory and the default roots of its name) and goes on: "deny, don't refuse", so a profile the caller may not read, or whose file was
+// damaged, never stops the commands of another and never drops out of the deny list (GWR-06). Skipping a corrupt config would leave that profile's roots readable.
+// Any other failure to read is `unavailable` and stops the computation. A profile whose config home was never seen from here cannot be found, and a profile whose
+// config is refused or corrupt cannot say where it moved its roots; those residuals are documented.
 import { lstatSync, readdirSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -76,16 +77,17 @@ export function knownProfileRoots(configHome: string, selected: string, options:
         // The selected profile's own config, in the config home it runs from, names its own roots.
         if (home === inUse && entry === selected) continue;
         const config = readProfileConfig(home, entry);
-        // A config that is corrupt is skipped, as documented above. One the system refused to read (permissions, a sandbox deny) has its whole root denied, and the
-        // registry goes on. Any other config that exists but cannot be read (I/O) stops the computation, naming the profile: its moved roots would otherwise leave the
-        // deny list, and a list that could not be computed must not read as a shorter one.
+        // A config that is corrupt (invalid JSON, a refused key, a link, too large) names no roots, and skipping it would take the whole profile out of the deny list
+        // (GWR-06), so its whole root is denied, as it is for one the system refused to read (permissions, a sandbox deny); the registry goes on. Any other config that
+        // exists but cannot be read (I/O) stops the computation, naming the profile: its moved roots would otherwise leave the deny list, and a list that could not be
+        // computed must not read as a shorter one.
         if (!config.ok) {
-          if (isPermissionRefusal(config.error)) {
+          if (isPermissionRefusal(config.error) || config.error.kind === 'invalid') {
             for (const root of wholeRootOf(home, entry, options.home)) if (!own.has(root)) roots.add(root);
             continue;
           }
           if (config.error.kind === 'unavailable') return unavailable(`cannot read the config of profile ${entry} under ${home}: ${config.error.cause}`);
-          continue;
+          return unavailable(`cannot read the config of profile ${entry} under ${home}`);
         }
         for (const [field, value] of [['dataRoot', config.value.dataRoot], ['workRoot', config.value.workRoot]] as const) {
           const root = configRoot(value, options.home, field);

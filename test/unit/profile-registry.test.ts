@@ -128,7 +128,7 @@ describe('knownProfileRoots (D-19)', () => {
   // WR-17 (T-04-116) and the owner's ruling "deny, don't refuse" (AC-6): a profile config that exists but cannot be read leaves that profile's moved roots out of
   // the deny list. When the read was refused by permissions (EACCES, or the EPERM of a sandbox deny) the profile's whole root is denied and the registry goes on, so a
   // profile the caller cannot read never blocks the commands of another; any other failure to read still stops the registry, naming the profile, because a list that
-  // could not be computed must not read as a shorter one. A config that is merely corrupt stays skipped.
+  // could not be computed must not read as a shorter one. A config that is corrupt is denied whole too (GWR-06, below).
   describe('a profile config that cannot be read (WR-17)', () => {
     describe('because of permissions', { skip: process.getuid?.() === 0 && 'root can read any file, so a mode of 000 does not make a config unreadable' }, () => {
       it('denies the whole root of the profile and goes on to the next one: its profile directory and the default data root and work root of its name', () => {
