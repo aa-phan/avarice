@@ -5,7 +5,7 @@
   "resultsSha256": "3b40148356b2f2dd7420d18ed6e6d36b7e6d73378fe8f4d52deeba5fa9e5b5e8",
   "tasksSha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
   "judgedBy": "Claude, plan 04-64 executor, from recorded evidence",
-  "judgedAt": "2026-11-24T22:11:23Z",
+  "judgedAt": "2026-11-24T22:12:13Z",
   "method": "Judged from recorded data only (no model, no spend, no re-run): the run transcript and run summary of each of the 18 runs under 04-36-evidence, through the clone files its transcript edited and the Edit and Write inputs on the cited lines. Rules fixed before judging and the same for every arm: a bullet that asks for tests of one or more kinds (unit, e2e) is delivered only when the run edited a test file of each kind it names (tests/unit/ for unit, tests/e2e/ for e2e), partly when it edited some of the kinds, skipped when none; a bullet that asks for a behavior or a code change is delivered when an edit implements it as stated, partly when an edit implements part of it, skipped when no edit does; a bullet that asks for a comment or text is delivered when an edit adds that text; a run with no source edit has every bullet skipped. A run that recorded a failure is judged by the same rules; its outcome stays a failure.",
   "runs": [
     {
@@ -21,7 +21,7 @@
         {
           "text": "Add unit and e2e coverage for the reduced-then-off case",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-A/transcripts/run-transcript-45a8310f95bd8a14.txt: unit test written (tests/unit/motion-features.test.tsx line 195) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 288) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-A/transcripts/run-transcript-45a8310f95bd8a14.txt: unit test written (tests/unit/motion-features.test.tsx line 195) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 288) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -38,7 +38,7 @@
         {
           "text": "Add unit and e2e coverage for the reduced-then-off case",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-B/transcripts/run-transcript-7b2eccc80069116c.txt: unit test written (tests/unit/motion-features.test.tsx line 225) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 334) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-B/transcripts/run-transcript-7b2eccc80069116c.txt: unit test written (tests/unit/motion-features.test.tsx line 225) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 334) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -55,7 +55,7 @@
         {
           "text": "Add unit and e2e coverage for the reduced-then-off case",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-C/transcripts/run-transcript-59443a56c5212f55.txt: unit test written (tests/unit/motion-features.test.tsx lines 199, 236, 248; tests/unit/motion-features-mount.test.tsx lines 222, 239, 251) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 356) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-C/transcripts/run-transcript-59443a56c5212f55.txt: unit test written (tests/unit/motion-features.test.tsx lines 199, 236, 248; tests/unit/motion-features-mount.test.tsx lines 222, 239, 251) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 356) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -77,7 +77,7 @@
         {
           "text": "e2e drag, modifier and repeat cases plus unit coverage",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-A/transcripts/run-transcript-0517872e0c9505a9.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 226), but no file under tests/e2e/ was edited, and the final result (line 313) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-A/transcripts/run-transcript-0517872e0c9505a9.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 226), but no file under tests/e2e/ was edited, and the final result (line 313) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -99,7 +99,7 @@
         {
           "text": "e2e drag, modifier and repeat cases plus unit coverage",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-B/transcripts/run-transcript-9a8b14d9b506ebfb.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 207), but no file under tests/e2e/ was edited, and the final result (line 331) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-B/transcripts/run-transcript-9a8b14d9b506ebfb.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 207), but no file under tests/e2e/ was edited, and the final result (line 331) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -121,7 +121,7 @@
         {
           "text": "e2e drag, modifier and repeat cases plus unit coverage",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-C/transcripts/run-transcript-2bb8f52dfb57a62d.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx lines 200, 205), but no file under tests/e2e/ was edited, and the final result (line 278) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-C/transcripts/run-transcript-2bb8f52dfb57a62d.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx lines 200, 205), but no file under tests/e2e/ was edited, and the final result (line 278) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         }
       ]
     },
@@ -270,7 +270,7 @@
         {
           "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-A/transcripts/run-transcript-b3dfb11383b639b0.txt: unit checks on the picture sources written (tests/unit/experience-logo-sizes.test.tsx lines 237, 247, 266, 269), but no file under tests/e2e/ was edited, and the final result (line 381) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-A/transcripts/run-transcript-b3dfb11383b639b0.txt: unit checks on the picture sources written (tests/unit/experience-logo-sizes.test.tsx lines 237, 247, 266, 269), but no file under tests/e2e/ was edited, and the final result (line 381) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         },
         {
           "text": "logo comment in images.ts states the sizes-based choice",
@@ -292,7 +292,7 @@
         {
           "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-B/transcripts/run-transcript-b8dac768c3eeb837.txt: unit checks on the picture sources written (tests/unit/experience-logos.test.tsx lines 238, 249, 357), but no file under tests/e2e/ was edited, and the final result (line 443) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-B/transcripts/run-transcript-b8dac768c3eeb837.txt: unit checks on the picture sources written (tests/unit/experience-logos.test.tsx lines 238, 249, 357), but no file under tests/e2e/ was edited, and the final result (line 443) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         },
         {
           "text": "logo comment in images.ts states the sizes-based choice",
@@ -314,7 +314,7 @@
         {
           "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
           "status": "partly",
-          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-C/transcripts/run-transcript-77ff773d1bd02665.txt: unit checks on the picture sources written (tests/unit/employer-logo.test.tsx lines 255, 269, 284), but no file under tests/e2e/ was edited, and the final result (line 388) says no end-to-end test was written; the e2e kind is missing."
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-C/transcripts/run-transcript-77ff773d1bd02665.txt: unit checks on the picture sources written (tests/unit/employer-logo.test.tsx lines 255, 269, 284), but no file under tests/e2e/ was edited, and the final result (line 388) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
         },
         {
           "text": "logo comment in images.ts states the sizes-based choice",
