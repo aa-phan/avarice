@@ -222,7 +222,9 @@ None - no external service configuration required.
 
 ## Self-Check
 
-Run after writing: files exist, commits are ancestors of HEAD (see below).
+## Self-Check: PASSED
+
+All five created or modified files exist; the six task commits (093c170, 8879f03, 3f4cf44, f3d4a7b, 3df584b, ba323be) are on the branch history of HEAD.
 
 ---
 *Phase: 04-profiles-retrieval-budgets-restricted-mode-and-the-portabili*
