@@ -412,6 +412,285 @@ export function rejudgeResultsFile(file: string): Rejudgement {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
+// Re-judging recorded runs with brief coverage (ADR-017, G-04-3)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+//
+// An AC-8 success used to mean the required checks and the held-out test passed, so a run that skipped a bullet its brief asked for still counted (the owner's decision of
+// 2026-11-23, G-04-3: count it as partial). The functions below judge the recorded runs again from recorded data and files only: they start no model, spend nothing and write
+// nothing. The coverage of each run is a record a person made and the owner approved; the amended success rule is its own file, pinned to the digest of the approved task list,
+// which is never edited.
+
+// The bullets of a brief: the lines of the commit message after the subject. A line starting `- ` opens a bullet and a following indented line continues it (joined with one
+// space); any other non-empty line opens an item of its own; a message with no body has one bullet, its subject.
+export function briefBullets(task: { brief: string }): string[] {
+  const lines = task.brief.replace(/\r\n/g, '\n').split('\n');
+  const subject = (lines[0] ?? '').trim();
+  const items: string[] = [];
+  let open = false;
+  for (const line of lines.slice(1)) {
+    if (line.trim() === '') {
+      open = false;
+    } else if (line.startsWith('- ')) {
+      items.push(line.slice(2).trim());
+      open = true;
+    } else if (open && /^\s/.test(line)) {
+      items[items.length - 1] = `${items[items.length - 1] ?? ''} ${line.trim()}`;
+    } else {
+      items.push(line.trim());
+      open = false;
+    }
+  }
+  return items.length > 0 ? items : [subject];
+}
+
+export type CoverageStatus = 'delivered' | 'partly' | 'skipped';
+const COVERAGE_STATUSES: readonly string[] = ['delivered', 'partly', 'skipped'];
+
+export interface BulletCoverage {
+  text: string;
+  status: CoverageStatus;
+  evidence: string;
+}
+
+export interface RunCoverage {
+  task: string;
+  arm: ArmId;
+  runId: string;
+  bullets: BulletCoverage[];
+}
+
+export interface BriefCoverage {
+  schema: 1;
+  kind: 'avarice-eval-brief-coverage';
+  decision: 'ADR-017';
+  resultsSha256: string;
+  tasksSha256: string;
+  judgedBy: string;
+  judgedAt: string;
+  method: string;
+  runs: RunCoverage[];
+}
+
+export interface SuccessAmendment {
+  schema: 1;
+  kind: 'avarice-eval-success-amendment';
+  decision: 'ADR-017';
+  amends: { file: string; sha256: string; field: 'successRule' };
+  successRule: string;
+  partialRule: string;
+  // Both null in a draft; both set by the owner when approved.
+  approvedBy: string | null;
+  approvedAt: string | null;
+}
+
+// A recorded run of the results file, with the fields the coverage judgement reads.
+export interface RecordedRun extends RunSummaryInput {
+  task: string;
+  runId?: string;
+}
+
+export type CoverageOutcome = 'success' | 'partial' | 'failure';
+
+export interface JudgedRun {
+  task: string;
+  arm: ArmId;
+  recordedSuccess: boolean;
+  outcome: CoverageOutcome;
+  skipped: string[];
+  partly: string[];
+}
+
+export interface CoverageArm {
+  runs: number;
+  success: number;
+  partial: number;
+  tokens: number;
+}
+
+export interface CoverageJudgement {
+  arms: Partial<Record<ArmId, CoverageArm>>;
+  runs: JudgedRun[];
+  verdict: Ac8Verdict;
+  knowledge: KnowledgeOutcome;
+}
+
+const sha256Of = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
+
+function readJsonRecord(file: string, what: string): { bytes: Buffer; value: Record<string, unknown> } {
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(file);
+  } catch {
+    throw new EvalRefusal(`cannot read the ${what} ${file}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new EvalRefusal(`${file} is not valid JSON`);
+  }
+  if (!isRecord(parsed) || parsed['schema'] !== 1) throw new EvalRefusal(`${file} is not a ${what} of schema 1`);
+  return { bytes, value: parsed };
+}
+
+export type LoadedCoverage = BriefCoverage & { digest: string };
+export type LoadedAmendment = SuccessAmendment & { digest: string };
+
+// Reads a brief coverage record. `runs` are the recorded runs of the results file the record judges (see readCoverageRuns).
+export function loadCoverage(file: string, resultsSha256: string, tasks: ApprovedTasks, runs: readonly RecordedRun[]): LoadedCoverage {
+  void resultsSha256;
+  void tasks;
+  void runs;
+  const { bytes, value } = readJsonRecord(file, 'brief coverage record');
+  const text = (field: string): string => {
+    const v = value[field];
+    if (typeof v !== 'string') throw new EvalRefusal(`${file}: ${field} is missing or not text`);
+    return v;
+  };
+  if (value['kind'] !== 'avarice-eval-brief-coverage') throw new EvalRefusal(`${file}: kind is not avarice-eval-brief-coverage`);
+  if (value['decision'] !== 'ADR-017') throw new EvalRefusal(`${file}: decision is not ADR-017`);
+  const list = value['runs'];
+  if (!Array.isArray(list)) throw new EvalRefusal(`${file}: runs is missing or not a list`);
+  const entries = list.map((raw: unknown, index): RunCoverage => {
+    const where = `${file}: runs[${index}]`;
+    if (!isRecord(raw) || typeof raw['task'] !== 'string' || !ARM_IDS.some((a) => a === raw['arm']) || typeof raw['runId'] !== 'string' || !Array.isArray(raw['bullets'])) throw new EvalRefusal(`${where} is not a run coverage entry`);
+    const bullets = raw['bullets'].map((b: unknown, i): BulletCoverage => {
+      if (!isRecord(b) || typeof b['text'] !== 'string' || typeof b['status'] !== 'string' || typeof b['evidence'] !== 'string') throw new EvalRefusal(`${where}.bullets[${i}] is not a bullet coverage entry`);
+      return { text: b['text'], status: b['status'] as CoverageStatus, evidence: b['evidence'] };
+    });
+    return { task: raw['task'], arm: raw['arm'] as ArmId, runId: raw['runId'], bullets };
+  });
+  return {
+    schema: 1,
+    kind: 'avarice-eval-brief-coverage',
+    decision: 'ADR-017',
+    resultsSha256: text('resultsSha256'),
+    tasksSha256: text('tasksSha256'),
+    judgedBy: text('judgedBy'),
+    judgedAt: text('judgedAt'),
+    method: text('method'),
+    runs: entries,
+    digest: sha256Of(bytes),
+  };
+}
+
+// Reads the amended success rule. `tasksSha256` is the digest of the approved task list the amendment must be pinned to.
+export function loadAmendment(file: string, tasksSha256: string): LoadedAmendment {
+  void tasksSha256;
+  const { bytes, value } = readJsonRecord(file, 'success amendment');
+  const text = (field: string): string => {
+    const v = value[field];
+    if (typeof v !== 'string') throw new EvalRefusal(`${file}: ${field} is missing or not text`);
+    return v;
+  };
+  const amends = value['amends'];
+  if (value['kind'] !== 'avarice-eval-success-amendment') throw new EvalRefusal(`${file}: kind is not avarice-eval-success-amendment`);
+  if (value['decision'] !== 'ADR-017') throw new EvalRefusal(`${file}: decision is not ADR-017`);
+  if (!isRecord(amends) || typeof amends['file'] !== 'string' || typeof amends['sha256'] !== 'string' || amends['field'] !== 'successRule') throw new EvalRefusal(`${file}: amends is missing or malformed`);
+  const approval = (field: string): string | null => {
+    const v = value[field];
+    return typeof v === 'string' ? v : null;
+  };
+  return {
+    schema: 1,
+    kind: 'avarice-eval-success-amendment',
+    decision: 'ADR-017',
+    amends: { file: amends['file'], sha256: amends['sha256'], field: 'successRule' },
+    successRule: text('successRule'),
+    partialRule: text('partialRule'),
+    approvedBy: approval('approvedBy'),
+    approvedAt: approval('approvedAt'),
+    digest: sha256Of(bytes),
+  };
+}
+
+// The runs of a results file with the task and run id, refusing a run that is not a recorded evaluation run.
+export function readCoverageRuns(file: string): { runs: RecordedRun[]; sha256: string } {
+  const { bytes, value } = readJsonRecord(file, 'results file');
+  const list = value['runs'];
+  if (!Array.isArray(list)) throw new EvalRefusal(`${file} holds no runs to judge`);
+  const runs = list.map((r: unknown): RecordedRun => {
+    if (!isRecord(r) || typeof r['task'] !== 'string' || !ARM_IDS.some((a) => a === r['arm']) || typeof r['success'] !== 'boolean' || typeof r['tokens'] !== 'number' || typeof r['costUsd'] !== 'number') throw new EvalRefusal(`${file} holds a run that is not a recorded evaluation run`);
+    return { task: r['task'], arm: r['arm'] as ArmId, success: r['success'], tokens: r['tokens'], costUsd: r['costUsd'], ...(typeof r['runId'] === 'string' ? { runId: r['runId'] } : {}), ...(typeof r['judgeError'] === 'string' ? { judgeError: r['judgeError'] } : {}) };
+  });
+  return { runs, sha256: sha256Of(bytes) };
+}
+
+// Judges recorded runs with their brief coverage. Pure. A recorded success is a success only when every bullet of its brief is delivered, otherwise it is partial; a recorded
+// failure stays a failure whatever its coverage. The verdict and the knowledge outcome come from the existing functions over the success counts, so a partial counts for nothing.
+export function judgeWithCoverage(runs: readonly RecordedRun[], coverage: Pick<BriefCoverage, 'runs'>): CoverageJudgement {
+  const judged: JudgedRun[] = runs.map((run) => {
+    const entries = coverage.runs.filter((c) => c.task === run.task && c.arm === run.arm);
+    const entry = entries[0];
+    if (entry === undefined || entries.length !== 1) throw new EvalRefusal(`${run.task} arm ${run.arm} has ${entries.length} coverage entries, not one`);
+    const skipped = entry.bullets.filter((b) => b.status === 'skipped').map((b) => b.text);
+    const partly = entry.bullets.filter((b) => b.status === 'partly').map((b) => b.text);
+    const outcome: CoverageOutcome = !run.success ? 'failure' : skipped.length === 0 && partly.length === 0 ? 'success' : 'partial';
+    return { task: run.task, arm: run.arm, recordedSuccess: run.success, outcome, skipped, partly };
+  });
+  const summary = summarize(runs.map((run, i) => ({ arm: run.arm, success: judged[i]?.outcome === 'success', tokens: run.tokens, costUsd: run.costUsd })));
+  const arms: Partial<Record<ArmId, CoverageArm>> = {};
+  for (const arm of ARM_IDS) {
+    const own = summary.arms[arm];
+    if (own === undefined) continue;
+    arms[arm] = { runs: own.runs, success: own.success, partial: judged.filter((j) => j.arm === arm && j.outcome === 'partial').length, tokens: own.tokens };
+  }
+  return { arms, runs: judged, verdict: summary.ac8, knowledge: summary.knowledge };
+}
+
+export interface CoverageRejudgedArm extends CoverageArm {
+  // The arm's tokens as a share of arm A's, rounded to four decimals.
+  shareOfA: number;
+}
+
+export interface CoverageRejudgement {
+  schema: 1;
+  kind: 'avarice-ac8-rejudgement';
+  decision: 'ADR-017';
+  boundPercent: number;
+  resultsSha256: string;
+  tasksSha256: string;
+  coverageSha256: string;
+  amendmentSha256: string;
+  successRule: string;
+  arms: Partial<Record<ArmId, CoverageRejudgedArm>>;
+  runs: JudgedRun[];
+  verdict: Ac8Verdict;
+  knowledge: KnowledgeOutcome;
+}
+
+// Judges the recorded runs again from four files: the results, the approved task list, the brief coverage record and the amended success rule. Read-only.
+export function rejudgeWithCoverage(files: { resultsFile: string; tasksFile: string; coverageFile: string; amendmentFile: string }): CoverageRejudgement {
+  const tasks = loadApprovedTasks(files.tasksFile);
+  const results = readCoverageRuns(files.resultsFile);
+  const amendment = loadAmendment(files.amendmentFile, tasks.digest);
+  const coverage = loadCoverage(files.coverageFile, results.sha256, tasks, results.runs);
+  const judged = judgeWithCoverage(results.runs, coverage);
+  const baseline = judged.arms.A?.tokens ?? 0;
+  const arms: Partial<Record<ArmId, CoverageRejudgedArm>> = {};
+  for (const arm of ARM_IDS) {
+    const own = judged.arms[arm];
+    if (own === undefined) continue;
+    arms[arm] = { ...own, shareOfA: baseline > 0 ? round4(own.tokens / baseline) : 0 };
+  }
+  return {
+    schema: 1,
+    kind: 'avarice-ac8-rejudgement',
+    decision: 'ADR-017',
+    boundPercent: AC8_TOKEN_BOUND_PERCENT,
+    resultsSha256: results.sha256,
+    tasksSha256: tasks.digest,
+    coverageSha256: coverage.digest,
+    amendmentSha256: amendment.digest,
+    successRule: amendment.successRule,
+    arms,
+    runs: judged.runs,
+    verdict: judged.verdict,
+    knowledge: judged.knowledge,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // The arm workspace and the judging clone (T-04-85)
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
