@@ -1,0 +1,5 @@
+{
+  "command": "node --test test/unit/privileged-commands.test.ts",
+  "exitCode": 1,
+  "output": "  ✖ counts one push for a $(...) body line, a body line with an apostrophe before it, and backticks (0.511833ms)\n  ✖ counts two commands for two different substitutions in one body (0.253917ms)\n  ✖ counts a nested push inside a substitution once (0.07375ms)\n✖ an unquoted here-document body yields each substitution once (GIN-01, FR-12, T-04-152) (0.9855ms)\nℹ tests 126\nℹ pass 123\nℹ fail 3\n✖ failing tests:\n✖ counts one push for a $(...) body line, a body line with an apostrophe before it, and backticks (0.511833ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  2 !== 1\n✖ counts two commands for two different substitutions in one body (0.253917ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n✖ counts a nested push inside a substitution once (0.07375ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  2 !== 1"
+}

@@ -616,3 +616,33 @@ describe('a git alias or config include defined on the same line is refused as u
     assert.ok(found !== null && isUnparseable(found));
   });
 });
+
+describe('an unquoted here-document body yields each substitution once (GIN-01, FR-12, T-04-152)', () => {
+  const pushesOf = (line: string): number => actionsOf(line).filter((action) => action === 'git.push').length;
+
+  it('counts one push for a $(...) body line, a body line with an apostrophe before it, and backticks', () => {
+    assert.equal(pushesOf('cat <<EOF >out\n$(git push)\nEOF'), 1);
+    assert.equal(pushesOf("cat <<EOF >out\nit's $(git push)\nEOF"), 1);
+    assert.equal(pushesOf('cat <<EOF >out\n`git push`\nEOF'), 1);
+    assert.equal(pushesOf('cat <<EOF\n$(git push)\nEOF'), 1);
+  });
+
+  it('counts one push for a quoted delimiter, which the tolerant command scan finds', () => {
+    assert.equal(pushesOf("cat <<'EOF' >out\n$(git push)\nEOF"), 1);
+  });
+
+  it('counts two commands for two different substitutions in one body', () => {
+    assert.deepEqual(actionsOf('cat <<EOF\n$(git push a)\n$(npm publish)\nEOF'), ['git.push', 'release.publish']);
+    assert.equal(pushesOf('cat <<EOF\n$(git push a) and $(git push b)\nEOF'), 2);
+  });
+
+  it('counts a nested push inside a substitution once', () => {
+    assert.equal(pushesOf('cat <<EOF\n$(echo $(git push))\nEOF'), 1);
+  });
+
+  it('keeps the results of the existing here-document cases', () => {
+    assert.deepEqual(classifyLine(COMMIT_WITH_HEREDOC), { kind: 'none' });
+    assert.deepEqual(classifyLine("cat <<'EOF'\nit's prose, with (parens)\nEOF"), { kind: 'none' });
+    assert.deepEqual(actionsOf("bash <<'EOF'\ngit push\nEOF"), ['git.push']);
+  });
+});
