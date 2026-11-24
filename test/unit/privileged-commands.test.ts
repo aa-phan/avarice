@@ -570,3 +570,49 @@ describe('a gh option between the group and the subcommand does not hide the sub
     assert.deepEqual(classifyLine('gh api repos/o/r/pulls'), { kind: 'none' });
   });
 });
+
+describe('a git alias or config include defined on the same line is refused as unparseable (GWR-03, FR-12, T-04-151)', () => {
+  const UNPARSEABLE_ALIAS: readonly string[] = [
+    'git -c alias.p=push p origin main',
+    "git -c Alias.P='!git push' p",
+    'git --config-env=alias.p=VAR p',
+    'git --config-env alias.p=VAR p',
+    'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p',
+    'env GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push GIT_CONFIG_COUNT=1 git p',
+    `GIT_CONFIG_PARAMETERS="'alias.p'='push'" git p`,
+    'git -c include.path=/tmp/x p',
+    'git -c includeIf.gitdir:/x.path=/tmp/x p',
+    'git -c alias.p=push status',
+  ];
+  for (const line of UNPARSEABLE_ALIAS) {
+    it(`${JSON.stringify(line)} is unparseable, with a reason that names the alias or include`, () => {
+      const found = classifyLine(line);
+      assert.equal(found.kind, 'unparseable');
+      if (found.kind === 'unparseable') assert.match(found.reason, /git alias or a config include/);
+    });
+  }
+
+  it('refuses the same forms inside a shell string, after env, and when an outer assignment reaches the inner command', () => {
+    for (const line of ["bash -c 'git -c alias.p=push p origin main'", "env bash -c 'git -c alias.p=push p'", "bash -c 'GIT_CONFIG_KEY_0=alias.p git p'", "GIT_CONFIG_KEY_0=alias.p bash -c 'git p'", 'sudo git -c alias.p=push p']) {
+      assert.equal(classifyLine(line).kind, 'unparseable', line);
+    }
+  });
+
+  it('refuses a same-line alias in a later command of the line, not only the first', () => {
+    assert.equal(classifyLine('echo hi; git -c alias.p=push p').kind, 'unparseable');
+  });
+
+  it('leaves the other config keys alone: an unrelated -c is none or a push with gitOptions bound', () => {
+    assert.deepEqual(classifyLine('git -c core.editor=vi status'), { kind: 'none' });
+    assert.equal(firstOf('git -c remote.origin.url=x push origin main').action, 'git.push');
+    assert.equal(firstOf('git -c remote.origin.url=x push origin main').params['gitOptions'], '-c remote.origin.url=x');
+    assert.equal(firstOf('git -c aliasx.y=1 push origin main').action, 'git.push', 'a key that only starts with the letters alias');
+    assert.equal(firstOf('GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=cat GIT_CONFIG_COUNT=1 git push origin main').action, 'git.push');
+    assert.equal(firstOf('git push origin main').action, 'git.push');
+  });
+
+  it('classifyShellCommand answers unparseable for the same one-command form', () => {
+    const found = classifyShellCommand(['git', '-c', 'alias.p=push', 'p']);
+    assert.ok(found !== null && isUnparseable(found));
+  });
+});
