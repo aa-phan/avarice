@@ -581,6 +581,77 @@ describe('re-judging recorded runs with brief coverage (plan 04-61, G-04-3)', ()
     assert.equal(judged.verdict.via, 'B');
     assert.equal(judged.knowledge.outcome, 'on');
   });
+
+  // Rewrites one of the fixture files through `change` and says what rejudgeWithCoverage refuses with.
+  async function refusal(file: 'coverageFile' | 'amendmentFile' | 'resultsFile', change: (json: Record<string, unknown>) => void): Promise<string> {
+    const { rejudgeWithCoverage, EvalRefusal } = await harness();
+    const files = await fixture();
+    const json = JSON.parse(readFileSync(files[file], 'utf8')) as Record<string, unknown>;
+    change(json);
+    writeFileSync(files[file], `${JSON.stringify(json, null, 2)}\n`);
+    try {
+      rejudgeWithCoverage(files);
+    } catch (e) {
+      assert.ok(e instanceof EvalRefusal, `an EvalRefusal, not ${String(e)}`);
+      return e.message;
+    }
+    return assert.fail('the files were accepted');
+  }
+  type Entry = { task: string; arm: string; runId: string; bullets: Array<Record<string, unknown>> };
+  const entriesOf = (json: Record<string, unknown>): Entry[] => json['runs'] as Entry[];
+
+  it('refuses an amendment that is not approved, half approved, approved at a time that is not RFC 3339, or pinned to another task list', async () => {
+    assert.match(await refusal('amendmentFile', (j) => { j['approvedBy'] = null; j['approvedAt'] = null; }), /not approved/);
+    assert.match(await refusal('amendmentFile', (j) => { j['approvedAt'] = null; }), /approvedAt/);
+    assert.match(await refusal('amendmentFile', (j) => { j['approvedBy'] = ''; }), /approvedBy/);
+    assert.match(await refusal('amendmentFile', (j) => { j['approvedAt'] = 'yesterday afternoon'; }), /approvedAt.*RFC 3339/);
+    assert.match(await refusal('amendmentFile', (j) => { (j['amends'] as Record<string, unknown>)['sha256'] = '0'.repeat(64); }), /amends\.sha256.*task list/);
+    assert.match(await refusal('amendmentFile', (j) => { (j['amends'] as Record<string, unknown>)['file'] = 'other.json'; }), /amends\.file/);
+  });
+
+  it('refuses a coverage record pinned to other results or another task list', async () => {
+    assert.match(await refusal('coverageFile', (j) => { j['resultsSha256'] = '1'.repeat(64); }), /resultsSha256/);
+    assert.match(await refusal('coverageFile', (j) => { j['tasksSha256'] = '1'.repeat(64); }), /tasksSha256/);
+  });
+
+  it('refuses a coverage record with a missing run, a repeated run, a run that was not recorded or a run id that differs', async () => {
+    assert.match(await refusal('coverageFile', (j) => { entriesOf(j).pop(); }), /T02 arm B has no coverage entry/);
+    assert.match(await refusal('coverageFile', (j) => { entriesOf(j).push(structuredClone(entriesOf(j)[0] as Entry)); }), /T01 arm A has 2 coverage entries/);
+    assert.match(await refusal('coverageFile', (j) => { entriesOf(j).push({ ...structuredClone(entriesOf(j)[0] as Entry), task: 'T09' }); }), /T09 arm A.*not a recorded run/);
+    assert.match(await refusal('coverageFile', (j) => { (entriesOf(j)[0] as Entry).runId = 'run_other'; }), /T01 arm A.*runId/);
+  });
+
+  it('refuses a coverage entry whose bullets differ from the bullets of the brief in text, in order or in number', async () => {
+    assert.match(await refusal('coverageFile', (j) => { ((entriesOf(j)[0] as Entry).bullets[0] as Record<string, unknown>)['text'] = 'a bullet the brief does not have'; }), /T01 arm A.*bullet 1 .*differs/);
+    assert.match(await refusal('coverageFile', (j) => { (entriesOf(j)[1] as Entry).bullets.reverse(); }), /T02 arm A.*bullet 1 .*differs/);
+    assert.match(await refusal('coverageFile', (j) => { (entriesOf(j)[0] as Entry).bullets.pop(); }), /T01 arm A.*1 bullets.*brief has 2/);
+  });
+
+  it('refuses a status that is not delivered, partly or skipped and an evidence string that is empty', async () => {
+    assert.match(await refusal('coverageFile', (j) => { ((entriesOf(j)[0] as Entry).bullets[0] as Record<string, unknown>)['status'] = 'done'; }), /status.*delivered, partly or skipped/);
+    assert.match(await refusal('coverageFile', (j) => { ((entriesOf(j)[0] as Entry).bullets[0] as Record<string, unknown>)['evidence'] = '  '; }), /evidence/);
+  });
+
+  it('reads the clone-relative paths of the files a transcript edited, once each, in the order first seen, and skips what is not JSON', async () => {
+    const { editedPaths } = await harness();
+    const event = (name: string, input: Record<string, unknown>): string => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'x' }, { type: 'tool_use', id: 't', name, input }] } });
+    const base = '/private/var/T/avarice-eval-X/T01-B/arm/work/run_1/clone';
+    const text = [
+      'not json at all',
+      event('Read', { file_path: `${base}/src/read-only.ts` }),
+      event('Write', { file_path: `${base}/src/a.ts`, content: 'x' }),
+      event('Edit', { file_path: `${base}/tests/unit/a.test.tsx`, old_string: 'a', new_string: 'b' }),
+      event('Edit', { file_path: `${base}/src/a.ts`, old_string: 'a', new_string: 'b' }),
+      event('MultiEdit', { file_path: `${base}/src/b.ts`, edits: [] }),
+      event('NotebookEdit', { file_path: `${base}/notes.ipynb` }),
+      event('Write', { file_path: '/elsewhere/not-in-the-clone.ts' }),
+      event('Edit', { file_path: 12 }),
+      JSON.stringify({ type: 'user', message: { content: 'plain text' } }),
+      '',
+    ].join('\n');
+    assert.deepEqual(editedPaths(text), ['src/a.ts', 'tests/unit/a.test.tsx', 'src/b.ts', 'notes.ipynb']);
+    assert.deepEqual(editedPaths(''), []);
+  });
 });
 
 describe('the evaluation records every model step at no less than it may have cost (plan 04-46, WR-30, T-04-126)', () => {
@@ -823,8 +894,10 @@ describe('the brief of a run', () => {
 
   // The historical commit messages of the portfolio ask for "unit and e2e coverage". The harness runs and judges the four required checks and the held-out unit test only (the
   // e2e spec is a denied read and `npm run test:e2e` is neither a required check nor an allowed command), so a unit that took the bullet literally finished the change, found the
-  // e2e coverage unverifiable and ended on a question, which the run recorded as an acceptance decision (the diagnostic of plan 04-36: run_01M7VBZJC2MK5J2KQYM89QHPTJ).
-  it('states, for every task alike, that only the required checks run here and that end-to-end work is out of scope and no reason to ask or stop, and keeps the commit message whole', async () => {
+  // e2e coverage unverifiable and ended on a question, which the run recorded as an acceptance decision (the diagnostic of plan 04-36: run_01M7VBZJC2MK5J2KQYM89QHPTJ). The
+  // text that stopped this called such a test out of scope, and the runs then left out work their briefs asked for (G-04-3): the scope text says the test is still part of the
+  // change, to be written and not run here.
+  it('states, for every task alike, that only the required checks run here, that an end-to-end test the brief asks for is still part of the change and is written but not run, and keeps the commit message whole', async () => {
     const { briefFor } = await harness();
     const { parseBrief } = await import('../../src/domain/brief.ts');
     const leak = leakFixture();
@@ -837,14 +910,18 @@ describe('the brief of a run', () => {
     const behavior = parsed.value.behavior;
     assert.match(behavior, /Only the required checks can run in this environment/);
     for (const check of e2e.checks) assert.ok(behavior.includes(check.argv.join(' ')), `names ${check.argv.join(' ')}`);
-    assert.match(behavior, /end-to-end or browser test/i);
-    assert.match(behavior, /out of scope/i);
-    assert.match(behavior, /do not write it, do not ask whether to cover it and do not stop for it/i);
-    assert.match(behavior, /finish the rest of the change/i);
+    assert.match(behavior, /An end-to-end or browser test the brief asks for cannot be run here, and it is still part of the change/);
+    assert.match(behavior, /write it as the brief asks, do not try to run it, and do not stop to ask about running it/);
+    assert.match(behavior, /finish the change without waiting for an answer/);
+    // The text keeps no clause that takes the test out of the change or forbids writing it.
+    assert.doesNotMatch(behavior, /out of scope/i);
+    assert.doesNotMatch(behavior, /do not (write|add|include|plan)\b[^.]*(end-to-end|e2e|browser|\bit\b)/i);
     // The same wording for a task that does not mention e2e: the arms and the tasks are briefed alike.
     const plain = parseBrief(briefFor(leak.task), { kind: 'file', id: 'brief.md' });
     assert.ok(plain.ok);
     assert.match(plain.value.behavior, /Only the required checks can run in this environment/);
+    assert.match(plain.value.behavior, /still part of the change/);
+    assert.doesNotMatch(plain.value.behavior, /out of scope/i);
     assert.equal(plain.value.title, 'fix(x): make a two');
   });
 });
