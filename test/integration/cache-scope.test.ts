@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { queryContext } from '../../src/app/context.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
-import { mayReuse, reusablePack } from '../../src/domain/cache-scope.ts';
+import { cacheMiss, mayReuse, reusablePack } from '../../src/domain/cache-scope.ts';
 import { defaultContextReadScope } from '../../src/domain/context-adapters.ts';
 import type { CacheEntry, CacheNow } from '../../src/domain/cache-scope.ts';
 import { digestOf } from '../../src/domain/digest.ts';
@@ -22,9 +22,15 @@ const entry = (over: Partial<CacheEntry> & { revision?: string; freshness?: stri
   ref: { revision: over.revision ?? 'git:aaa', freshness: over.freshness ?? 'fresh' },
   profile: over.profile ?? 'personal-local',
   accessScope: over.accessScope ?? 'sha256:scope-a',
+  format: over.format ?? 1,
   ...(over.answer !== undefined ? { answer: over.answer } : {}),
 });
-const NOW: CacheNow = { profile: 'personal-local', accessScope: 'sha256:scope-a', revision: 'git:aaa' };
+const NOW: CacheNow = { profile: 'personal-local', accessScope: 'sha256:scope-a', revision: 'git:aaa', format: 1 };
+// An item built before pack items were stamped with a format: no `format` key at all.
+const unstamped = (over: Parameters<typeof entry>[0] = {}): CacheEntry => {
+  const { format: _dropped, ...rest } = entry(over);
+  return rest;
+};
 
 describe('tracer: mayReuse is false across a profile, a scope, a revision and a revocation (CON-12)', () => {
   it('is true for an entry of the same profile, scope and revision whose source answered', () => {
@@ -42,13 +48,32 @@ describe('tracer: mayReuse is false across a profile, a scope, a revision and a 
 
   it('is false when the source revision differs, and when the entry names none', () => {
     assert.equal(mayReuse(entry({ revision: 'git:bbb' }), NOW), false);
-    assert.equal(mayReuse({ ref: { freshness: 'fresh' }, profile: NOW.profile, accessScope: NOW.accessScope }, NOW), false);
+    assert.equal(mayReuse({ ref: { freshness: 'fresh' }, profile: NOW.profile, accessScope: NOW.accessScope, format: 1 }, NOW), false);
   });
 
   it('is false when the reference is access_revoked, or the source answered denied or unauthenticated', () => {
     assert.equal(mayReuse(entry({ freshness: 'access_revoked' }), NOW), false);
     assert.equal(mayReuse(entry({ answer: 'denied' }), NOW), false);
     assert.equal(mayReuse(entry({ answer: 'unauthenticated' }), NOW), false);
+  });
+});
+
+describe('cacheMiss names the format when an entry was built by another adapter format (GIN-05, CON-12, T-04-159)', () => {
+  it('is `format` for an entry with no format, format 0 or an older format, and null for the current one', () => {
+    assert.equal(cacheMiss(unstamped(), NOW), 'format');
+    assert.equal(cacheMiss(entry({ format: 0 }), NOW), 'format');
+    assert.equal(cacheMiss(entry({ format: 1 }), { ...NOW, format: 2 }), 'format');
+    assert.equal(cacheMiss(entry({ format: 1 }), NOW), null);
+    assert.equal(mayReuse(unstamped(), NOW), false);
+  });
+
+  it('is judged after revocation, the profile and the access scope, and before the revision', () => {
+    assert.equal(cacheMiss(unstamped({ profile: 'work' }), NOW), 'profile');
+    assert.equal(cacheMiss(unstamped({ accessScope: 'sha256:scope-b' }), NOW), 'access-scope');
+    assert.equal(cacheMiss(unstamped({ revision: 'git:bbb' }), NOW), 'format', 'an item of an older build is wrong whatever revision it was read at');
+    assert.equal(cacheMiss(unstamped({ freshness: 'access_revoked' }), NOW), 'access_revoked');
+    assert.equal(cacheMiss(unstamped({ answer: 'denied' }), NOW), 'access_revoked');
+    assert.equal(cacheMiss(entry({ revision: 'git:bbb' }), NOW), 'revision');
   });
 });
 
@@ -61,7 +86,8 @@ describe('reusablePack: what may be reused, and what is refetched and why', () =
     const e = entry({ freshness: 'access_revoked' });
     const f = entry({ answer: 'unauthenticated' });
     const g = entry({ revision: 'git:aaa' });
-    const split = reusablePack([a, b, c, d, e, f, g], NOW);
+    const h = unstamped();
+    const split = reusablePack([a, b, c, d, e, f, g, h], NOW);
     assert.deepEqual(split.reusable, [a, g]);
     assert.deepEqual(split.refetch, [
       { entry: b, reason: 'profile' },
@@ -69,6 +95,7 @@ describe('reusablePack: what may be reused, and what is refetched and why', () =
       { entry: d, reason: 'revision' },
       { entry: e, reason: 'access_revoked' },
       { entry: f, reason: 'access_revoked' },
+      { entry: h, reason: 'format' },
     ]);
   });
 
@@ -158,12 +185,69 @@ describe('pack items carry the profile and the access scope, appended at the end
       assert.ok(first, 'a pack with an item');
       assert.equal(first.profile, o.deps.profile.profile);
       assert.equal(first.accessScope, digestOf(defaultContextReadScope()));
-      assert.deepEqual(Object.keys(first).slice(-2), ['profile', 'accessScope'], 'appended after every key an item already had');
+      assert.equal(first.format, 1, 'the first stamped format');
+      assert.deepEqual(Object.keys(first).slice(-3), ['profile', 'accessScope', 'format'], 'appended after every key an item already had');
       const narrow = await queryContext(o.deps, { term: 'handleCheckout', budget: 4000, readScope: { read: ['src/**'], readExclude: [], secretGlobs: [] } });
       assert.ok(narrow.ok);
       const [other] = narrow.value.items;
       assert.ok(other);
       assert.notEqual(other.accessScope, first.accessScope, 'another read scope is another access scope');
+    } finally {
+      o.close();
+    }
+  });
+});
+
+describe('a reused pack item of an older format is read again and carries the current trust marks (GIN-05, CON-12, T-04-159)', () => {
+  // A source standing in for the graph: its read returns the flags the current adapters set on a described code node.
+  const flaggedSource = (reads: string[]): GitFilesSource =>
+    fakeGitFiles(
+      async (handles) => ({
+        ok: true,
+        value: handles.map((h) => ({ ref: h.ref, title: h.title, excerpt: 'a described code node', estTokens: h.estTokens, reason: h.reason, untrusted: true, codeNode: true })),
+      }),
+      reads,
+    );
+  const files = { 'README.md': '# scratch\n', 'src/index.ts': 'export const a = 1;\n' };
+
+  it('refetches an item with no format, with reason `format`, and the item read again carries format 1, codeNode and untrusted', async () => {
+    const o = await onboardedContext(cleanup, files);
+    try {
+      const reads: string[] = [];
+      const deps: AppDeps = { ...o.deps, context: { ...o.deps.context, gitFiles: flaggedSource(reads) } };
+      const first = await queryContext(deps, { term: 'X', budget: 4000 });
+      assert.ok(first.ok, JSON.stringify(first));
+      const [built] = first.value.items.filter((i) => i.source === 'git-files');
+      assert.ok(built);
+      assert.deepEqual([built.format, built.codeNode, built.untrusted], [1, true, true]);
+      assert.equal(reads.length, 1);
+
+      // The same item as an older build left it: no format, and none of the flags the current adapters set.
+      const { format: _format, codeNode: _codeNode, untrusted: _untrusted, ...old } = built;
+      const retry = await queryContext(deps, { term: 'X', budget: 4000, reuse: [old] });
+      assert.ok(retry.ok, JSON.stringify(retry));
+      assert.equal(reads.length, 2, 'the item was read again');
+      assert.deepEqual(retry.value.reuse, { reused: 0, refetch: [{ source: 'git-files', id: 'src/secret.ts:1', reason: 'format' }] });
+      const [again] = retry.value.items.filter((i) => i.source === 'git-files');
+      assert.ok(again);
+      assert.deepEqual([again.format, again.codeNode, again.untrusted], [1, true, true]);
+    } finally {
+      o.close();
+    }
+  });
+
+  it('still reuses an item with format 1 and the same profile, access scope and revision, without a read', async () => {
+    const o = await onboardedContext(cleanup, files);
+    try {
+      const reads: string[] = [];
+      const deps: AppDeps = { ...o.deps, context: { ...o.deps.context, gitFiles: flaggedSource(reads) } };
+      const first = await queryContext(deps, { term: 'X', budget: 4000 });
+      assert.ok(first.ok, JSON.stringify(first));
+      const retry = await queryContext(deps, { term: 'X', budget: 4000, reuse: first.value.items });
+      assert.ok(retry.ok, JSON.stringify(retry));
+      assert.equal(reads.length, 1, 'no second read');
+      assert.deepEqual(retry.value.reuse, { reused: first.value.items.length, refetch: [] });
+      assert.ok(first.value.items.every((i) => i.format === 1), 'every item of the pack is stamped');
     } finally {
       o.close();
     }

@@ -8,7 +8,7 @@
 // content, and the fence cannot be closed from inside because every fenced line is prefixed (S-46).
 import { defaultContextReadScope } from '../domain/context-adapters.ts';
 import type { ContextReadScope } from '../domain/context-adapters.ts';
-import { cacheMiss, isRevoked, mayReuse } from '../domain/cache-scope.ts';
+import { PACK_ITEM_FORMAT, cacheMiss, isRevoked, mayReuse } from '../domain/cache-scope.ts';
 import type { CacheMiss } from '../domain/cache-scope.ts';
 import { digestOf } from '../domain/digest.ts';
 import { err, ok } from '../domain/result.ts';
@@ -38,7 +38,8 @@ export interface ContextRequest {
   // The query is a whole-repository or whole-corpus discovery. A query with no term is one whether or not it says so. It needs the contract's authorization and is allowed once per run.
   broad?: boolean;
   // The items of the pack this run built before (a retried item; plan 04-30, CON-12). A handle the new query picks that one of them already holds is not read again when the
-  // cache rule allows it (src/domain/cache-scope.ts): same profile, same access scope, the source still at the revision the item was read at, and the reference not revoked.
+  // cache rule allows it (src/domain/cache-scope.ts): same profile, same access scope, the same item format, the source still at the revision the item was read at, and the
+  // reference not revoked.
   // The rest are read again. The answer says which was which in `reuse`. Absent: nothing is reused and the report has no `reuse`.
   reuse?: readonly PackItem[];
 }
@@ -59,6 +60,8 @@ export interface PackItem {
   // Where the item may be reused (plan 04-28; CON-12): the profile the pack was built in and a digest of the read scope it was built under. Appended last.
   profile?: string;
   accessScope?: string;
+  // The item format the adapters built it in (PACK_ITEM_FORMAT; GIN-05). An item with none, or another, is read again rather than reused. Appended after accessScope.
+  format?: number;
 }
 
 // The four local sources, by the short name the assembler and a resume use for them.
@@ -223,8 +226,8 @@ export function confirmCitedPaths(items: readonly ContextItem[], gitFiles: GitFi
   return { items: confirmedItems, notes };
 }
 
-// Where an item may be reused: the profile the pack was built in and the digest of the read scope it was built under (CON-12), appended after every other key.
-function packItem(source: PackItem['source'], item: ContextItem, stamp: { profile: string; accessScope: string }): PackItem {
+// Where an item may be reused: the profile the pack was built in, the digest of the read scope it was built under and the item format (CON-12; GIN-05), appended after every other key.
+function packItem(source: PackItem['source'], item: ContextItem, stamp: { profile: string; accessScope: string; format: number }): PackItem {
   return {
     source,
     ref: item.ref,
@@ -239,6 +242,7 @@ function packItem(source: PackItem['source'], item: ContextItem, stamp: { profil
     ...(item.confirmed !== undefined ? { confirmed: item.confirmed } : {}),
     profile: stamp.profile,
     accessScope: stamp.accessScope,
+    format: stamp.format,
   };
 }
 
@@ -339,8 +343,8 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
   const worktreePath = request.worktreePath ?? scope.worktreePath;
   const workspace: ContextQuery['workspace'] = { stagingPath: staging, repoPath: project.repoPath, ...(worktreePath !== undefined ? { worktreePath } : {}) };
   const readScope = request.readScope ?? scope.readScope ?? defaultContextReadScope();
-  // Each item is stamped with where it may be reused (CON-12): this profile, and a digest of the read scope the pack is built under.
-  const stamp = { profile: deps.profile.profile, accessScope: digestOf(readScope) };
+  // Each item is stamped with where it may be reused (CON-12): this profile, a digest of the read scope the pack is built under, and the item format (GIN-05).
+  const stamp = { profile: deps.profile.profile, accessScope: digestOf(readScope), format: PACK_ITEM_FORMAT };
   // The references this run recorded as access_revoked: a new pack never carries an excerpt of one (CON-12).
   const revoked = new Set<string>();
   if (request.runId !== undefined) {
@@ -454,13 +458,13 @@ export async function queryContext(deps: AppDeps, request: ContextRequest): Prom
     }
     snippetsRead += Math.min(allowed, snippets.length);
     if (mine.length === 0) continue;
-    // A picked handle the previous pack already holds is not read again when the cache rule allows it: same profile, same access scope, and the source still at the revision
-    // the item was read at (the handle's own revision, which the find just reported). The rest are read.
+    // A picked handle the previous pack already holds is not read again when the cache rule allows it: same profile, same access scope, the same item format, and the source
+    // still at the revision the item was read at (the handle's own revision, which the find just reported). The rest are read.
     const kept = new Map<Candidate, PackItem>();
     for (const c of mine) {
       const old = prior.get(refKey(c.handle));
       if (old === undefined) continue;
-      const entry = { ref: old.ref, profile: old.profile ?? '', accessScope: old.accessScope ?? '' };
+      const entry = { ref: old.ref, profile: old.profile ?? '', accessScope: old.accessScope ?? '', ...(old.format !== undefined ? { format: old.format } : {}) };
       const now = { ...stamp, revision: c.handle.ref.revision ?? '' };
       if (mayReuse(entry, now)) kept.set(c, old);
       else refetch.push({ source: label, id: old.ref.id, reason: cacheMiss(entry, now) as CacheMiss });

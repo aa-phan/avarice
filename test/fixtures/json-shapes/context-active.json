@@ -27,7 +27,8 @@
       "freshness": "fresh",
       "untrusted": true,
       "profile": "personal-local",
-      "accessScope": "sha256:<sha256>"
+      "accessScope": "sha256:<sha256>",
+      "format": 1
     },
     {
       "source": "gsd-intel",
@@ -47,7 +48,8 @@
       "freshness": "fresh",
       "untrusted": true,
       "profile": "personal-local",
-      "accessScope": "sha256:<sha256>"
+      "accessScope": "sha256:<sha256>",
+      "format": 1
     },
     {
       "source": "git-files",
@@ -67,7 +69,8 @@
       "freshness": "fresh",
       "untrusted": true,
       "profile": "personal-local",
-      "accessScope": "sha256:<sha256>"
+      "accessScope": "sha256:<sha256>",
+      "format": 1
     }
   ],
   "omitted": [],
