@@ -75,6 +75,8 @@ interface Scan {
   text: string;
   out: string[][];
   failure: string | undefined;
+  // The position after each substitution already scanned, by its start offset and terminator (scanSubstitution).
+  visited: Map<string, number>;
 }
 
 interface Pending {
@@ -131,12 +133,19 @@ function decodeAnsiC(body: string): string {
 }
 
 // A substitution opened just before `pos`: the position after its terminator. An unterminated one is a failure outside a here-document body, and runs to the end inside one.
+// Each substitution is scanned once for each start offset (plan 04-57; GIN-01, T-04-152): the command scan and the expansion scan of an unquoted here-document body both reach
+// `$(git push)`, and a second visit returns the position the first one found and adds no commands, so one substitution is one command and one approval.
 function scanSubstitution(scan: Scan, pos: number, end: number, depth: number, term: Terminator, tolerant: boolean): number {
+  const key = `${pos}:${term}`;
+  const seen = scan.visited.get(key);
+  if (seen !== undefined) return seen;
   const next = scanCommands(scan, pos, end, depth + 1, term, tolerant);
-  if (scan.failure !== undefined) return end;
-  if (next >= 0) return next;
-  if (!tolerant) fail(scan, term === ')' ? 'a command substitution is not closed' : 'a backquote is not closed');
-  return end;
+  let after = end;
+  if (scan.failure !== undefined) after = end;
+  else if (next >= 0) after = next;
+  else if (!tolerant) fail(scan, term === ')' ? 'a command substitution is not closed' : 'a backquote is not closed');
+  scan.visited.set(key, after);
+  return after;
 }
 
 interface Quoted {
@@ -305,8 +314,9 @@ function scanExpansions(scan: Scan, pos: number, end: number, depth: number): vo
 }
 
 // The here-document bodies that begin after the newline just before `pos`, each running to the line that equals its delimiter or to `end`. A body is classified as commands,
-// read tolerantly (it may be fed to an interpreter), and, when its delimiter is not quoted, also for the substitutions the shell would expand in it. Returns the position
-// after the last delimiter line.
+// read tolerantly (it may be fed to an interpreter), and, when its delimiter is not quoted, also for the substitutions the shell would expand in it: quotes are literal in such a
+// body, so the command scan can miss a `$(...)` after an apostrophe that the expansion scan finds. The two scans share one record per substitution (scanSubstitution), so each
+// substitution runs once. Returns the position after the last delimiter line.
 function readBodies(scan: Scan, pos: number, end: number, depth: number, pending: Pending[]): number {
   const t = scan.text;
   for (const here of pending) {
@@ -418,7 +428,7 @@ export type Commands = { ok: true; commands: string[][] } | { ok: false; reason:
 
 export function commandsOf(command: string, depth = 0): Commands {
   if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
-  const scan: Scan = { text: command, out: [], failure: undefined };
+  const scan: Scan = { text: command, out: [], failure: undefined, visited: new Map() };
   scanCommands(scan, 0, command.length, depth, 'top', false);
   return scan.failure === undefined ? { ok: true, commands: scan.out } : { ok: false, reason: scan.failure };
 }
