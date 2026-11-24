@@ -1,0 +1,6 @@
+{
+  "task": "04-58-task1",
+  "command": "node --test --test-name-pattern=\"a b.txt\" test/integration/restricted-mode.test.ts",
+  "exitCode": 1,
+  "output": "fail 1: AssertionError: the patch is stored, got [\"restricted-plan\"] (no restricted-patch artifact: patch() refused the exclude entry `a b.txt`, so the whole patch was dropped)"
+}

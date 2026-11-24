@@ -222,7 +222,8 @@ function readOutputs(ctx: RunStageContext, contract: RunContract, clone: string)
     problems.push(`the changed paths could not be read (${failureClause(changes.error)}), so no patch was stored`);
   } else {
     outOfScope = scopeBreaches(changes.value, contract);
-    const patch = workspace.patch(clone, { exclude: [RESTRICTED_DIR, ...outOfScope] });
+    // The restricted directory is a plain directory name; the out-of-scope paths are file names the host chose, left out literally whatever they hold.
+    const patch = workspace.patch(clone, { exclude: [RESTRICTED_DIR], excludePaths: outOfScope });
     if (!patch.ok) problems.push(`the patch could not be built (${failureClause(patch.error)}) and was not stored`);
     else if (Buffer.byteLength(patch.value) > MAX_PATCH_BYTES) problems.push('the patch is larger than the 1 MiB limit and was not stored');
     else patchText = patch.value;

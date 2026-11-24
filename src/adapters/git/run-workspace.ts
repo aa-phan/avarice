@@ -660,15 +660,27 @@ export class CloneRunWorkspace implements RunWorkspace {
     return ok(found);
   }
 
-  patch(path: string, options: { exclude: readonly string[] }): Result<string> {
+  patch(path: string, options: { exclude: readonly string[]; excludePaths?: readonly string[] }): Result<string> {
     // An excluded directory is a plain relative path: no glob, no magic, no `..`, so it can name only a place inside the clone.
     for (const dir of options.exclude) {
       if (!/^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(dir) || dir.split('/').includes('..')) return invalid('exclude', `${JSON.stringify(dir)} is not a plain relative directory`);
     }
+    // An excluded file is any name git can hold, so it is not held to the directory pattern. It reaches git as one argv word after `--` behind the `literal`
+    // pathspec magic, which makes `*`, `?`, `[`, `:` and a leading `-` plain characters; what is refused is only what could name a place outside the clone.
+    const excludePaths = options.excludePaths ?? [];
+    for (const file of excludePaths) {
+      if (typeof file !== 'string' || file === '' || file.startsWith('/') || file.includes('\0') || file.split('/').includes('..')) {
+        return invalid('excludePaths', `${JSON.stringify(file)} is not a relative file path inside the clone`);
+      }
+    }
     const tree = this.treeOfWorkingContent(path);
     if (!tree.ok) return tree;
     const diff = runGit(
-      ['diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', tree.value, '--', '.', ...options.exclude.map((dir) => `:(exclude)${dir}`)],
+      [
+        'diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', tree.value, '--', '.',
+        ...options.exclude.map((dir) => `:(exclude)${dir}`),
+        ...excludePaths.map((file) => `:(exclude,literal)${file}`),
+      ],
       { cwd: path, neutralizeFilters: true, timeoutMs: TREE_TIMEOUT_MS },
     );
     return diff.ok ? ok(diff.value.stdout) : failure(diff.error);

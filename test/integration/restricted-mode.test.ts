@@ -194,6 +194,30 @@ describe('a restricted patch holds only what the contract allowed (WR-13, CON-4,
   });
 });
 
+// ---- an out-of-scope file name cannot cost the owner the in-scope patch (plan 04-58; GWR-04, CON-4) ------------------------------------------
+
+describe('an out-of-scope file named `a b.txt` does not withhold the in-scope patch (GWR-04, CON-4, T-04-153)', () => {
+  it('stores a patch with the in-scope hunk and no hunk for `a b.txt`, names the file in the block text and records no patch problem', () => {
+    const f = fixture({ writes: { ...WRITES, 'a b.txt': 'out of scope\n' } });
+    const r = start(f, '--restricted', '--wait');
+    assert.equal(r.code, 3, r.stdout + r.stderr);
+    const runId = runIdOf(r.stdout);
+
+    const artifacts = artifactsOf(f.roots, runId);
+    const row = artifacts.find((a) => a.kind === 'restricted-patch');
+    assert.ok(row, `the patch is stored, got ${JSON.stringify(artifacts.map((a) => a.kind))}`);
+    const patch = artifactText(f.roots, row.digest);
+    const headers = patch.split('\n').filter((line) => line.startsWith('diff --git '));
+    assert.deepEqual(headers, ['diff --git a/src/slug.ts b/src/slug.ts'], 'only the in-scope path has a hunk');
+    assert.ok(!patch.includes('out of scope'), 'no content of the out-of-scope file');
+
+    const issue = rows<{ issue: string }>(f.roots, 'SELECT issue FROM decisions WHERE run_id = ?', runId)[0]?.issue ?? '';
+    assert.match(issue, /a b\.txt/, 'the block text names the file left out');
+    assert.match(issue, /left out of the patch/);
+    assert.ok(!/the patch could not be built/.test(issue), issue);
+  });
+});
+
 // ---- a bad output of the uncontained host ends the run blocked, once (plan 04-44; WR-12, CON-4) -------------------------------------------------
 
 describe('a bad output of the restricted host ends the run blocked and launches the host once (WR-12, CON-4, T-04-120)', () => {
