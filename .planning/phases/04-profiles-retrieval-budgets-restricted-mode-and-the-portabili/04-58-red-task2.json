@@ -1,0 +1,6 @@
+{
+  "task": "04-58-task2",
+  "command": "node --test --test-name-pattern=\"excludePaths\" test/integration/run-workspace.test.ts (run against the adapter as of d56910c, before Task 1's change)",
+  "exitCode": 1,
+  "output": "tests 6, pass 2, fail 4: 'leaves each of the odd file names out', 'reads *.md as a file name', 'reads a [x].md entry as a file name' and 'refuses an entry that is empty, absolute, ...' fail; the two control cases (unfiltered patch holds every name; no excludePaths gives the plain git diff) pass"
+}
