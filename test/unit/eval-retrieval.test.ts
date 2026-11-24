@@ -655,29 +655,40 @@ describe('re-judging recorded runs with brief coverage (plan 04-61, G-04-3)', ()
 });
 
 describe('the evaluation records every model step at no less than it may have cost (plan 04-46, WR-30, T-04-126)', () => {
-  const costs = (chargedUsd: number, finished: number) => ({ chargedUsd, tokens: 100 * finished, finished, tokensComplete: true });
+  // `launched` is the number of `launch:` step rows (plan 04-61, GIN-04); undefined is "the launch rows could not be counted".
+  const costs = (chargedUsd: number, finished: number, launched?: number) => ({ chargedUsd, tokens: 100 * finished, finished, tokensComplete: true, ...(launched !== undefined ? { launched } : {}) });
 
   it('amounts: a timeout after one finished invocation records the larger of the charge and the cap', async () => {
     const { stepSpendUsd } = await harness();
-    assert.equal(stepSpendUsd({ costs: costs(0.1, 1), code: null, capUsd: 0.4 }), 0.4);
-    assert.equal(stepSpendUsd({ costs: costs(0.55, 2), code: null, capUsd: 0.4 }), 0.55);
+    assert.equal(stepSpendUsd({ costs: costs(0.1, 1, 1), code: null, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: costs(0.55, 2, 2), code: null, capUsd: 0.4 }), 0.55);
+    assert.equal(stepSpendUsd({ costs: costs(0, 0, 0), code: null, capUsd: 0.4 }), 0.4, 'a killed step may have had a host in flight, whatever the launch rows say');
   });
 
-  it('amounts: an exit before any invocation.finished event records the cap, whatever the exit code', async () => {
+  it('amounts: a launch with no invocation.finished event records the cap, whatever the exit code', async () => {
+    const { stepSpendUsd } = await harness();
+    assert.equal(stepSpendUsd({ costs: costs(0, 0, 1), code: 1, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: costs(0, 0, 1), code: 0, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: costs(0.1, 1, 2), code: 0, capUsd: 0.4 }), 0.4, 'two launches and one finish: the second may have run');
+  });
+
+  it('amounts: launch rows that could not be counted record the cap when nothing finished, and a ledger that could not be read records the cap', async () => {
     const { stepSpendUsd } = await harness();
     assert.equal(stepSpendUsd({ costs: costs(0, 0), code: 1, capUsd: 0.4 }), 0.4);
     assert.equal(stepSpendUsd({ costs: costs(0, 0), code: 0, capUsd: 0.4 }), 0.4);
+    assert.equal(stepSpendUsd({ costs: undefined, code: 0, capUsd: 0.6 }), 0.6);
   });
 
-  it('amounts: a ledger that could not be read records the cap, and a finished step that ended on its own records what it was charged', async () => {
+  it('amounts: a step whose every launch finished records what it was charged, and a step that exited with a code and launched nothing records 0 (GIN-04)', async () => {
     const { stepSpendUsd } = await harness();
-    assert.equal(stepSpendUsd({ costs: undefined, code: 0, capUsd: 0.6 }), 0.6);
-    assert.equal(stepSpendUsd({ costs: costs(0.12, 1), code: 0, capUsd: 0.4 }), 0.12);
-    assert.equal(stepSpendUsd({ costs: costs(0.12, 1), code: 1, capUsd: 0.4 }), 0.12);
+    assert.equal(stepSpendUsd({ costs: costs(0.12, 1, 1), code: 0, capUsd: 0.4 }), 0.12);
+    assert.equal(stepSpendUsd({ costs: costs(0.12, 1, 1), code: 1, capUsd: 0.4 }), 0.12);
+    assert.equal(stepSpendUsd({ costs: costs(0, 0, 0), code: 1, capUsd: 0.4 }), 0);
+    assert.equal(stepSpendUsd({ costs: costs(0, 0, 0), code: 0, capUsd: 0.4 }), 0);
   });
 
   // spendStep against a temporary Phase 4 ledger and a temporary data root.
-  async function stepAgainst(options: { dataRoot: (dir: string) => void; code: number | null; cap: number }): Promise<{ recorded: number[]; thrown: unknown }> {
+  async function stepAgainst(options: { dataRoot: (dir: string) => void; code: number | null; cap: number; onboarding?: boolean }): Promise<{ recorded: number[]; thrown: unknown; logged: string[] }> {
     const { spendStep } = await harness();
     const ledger = phase4Ledger(undefined);
     const dir = temp('eval-spend-step');
@@ -685,9 +696,10 @@ describe('the evaluation records every model step at no less than it may have co
     const saved = process.env['AVARICE_PHASE4_LEDGER'];
     process.env['AVARICE_PHASE4_LEDGER'] = ledger.path;
     let thrown: unknown;
+    const logged: string[] = [];
     try {
       const roots = { base: dir, AVARICE_CONFIG_HOME: join(dir, 'config'), AVARICE_DATA_ROOT: dir, AVARICE_WORK_ROOT: join(dir, 'work') };
-      await spendStep({ plan: '04-46', claudeVersion: 'x' }, 'eval-T01-A-run', options.cap, roots, false, () => ({ code: options.code }));
+      await spendStep({ plan: '04-46', claudeVersion: 'x', log: (line: string) => logged.push(line) }, 'eval-T01-A-run', options.cap, roots, options.onboarding ?? false, () => ({ code: options.code }));
     } catch (e) {
       thrown = e;
     } finally {
@@ -695,15 +707,35 @@ describe('the evaluation records every model step at no less than it may have co
       else process.env['AVARICE_PHASE4_LEDGER'] = saved;
     }
     const recorded = existsSync(ledger.path) ? readFileSync(ledger.path, 'utf8').split('\n').filter((l) => l !== '').map((l) => (JSON.parse(l) as { costUsd: number }).costUsd) : [];
-    return { recorded, thrown };
+    return { recorded, thrown, logged };
   }
 
-  const stateDb = (dir: string, events: Array<Record<string, unknown>>): void => {
+  // A state.db with the events table and, when `launches` is given, both step tables: the run's (`run`) and the onboarding's (`onboarding`) step names.
+  const stateDb = (dir: string, events: Array<Record<string, unknown>>, launches?: { run?: string[]; onboarding?: string[] }): void => {
     const db = new DatabaseSync(join(dir, 'state.db'));
     db.exec('CREATE TABLE events (seq INTEGER PRIMARY KEY, type TEXT NOT NULL, data_json TEXT NOT NULL)');
     for (const data of events) db.prepare('INSERT INTO events (type, data_json) VALUES (?, ?)').run('invocation.finished', JSON.stringify(data));
+    if (launches !== undefined) {
+      for (const [table, key, steps] of [['run_steps', 'run_id', launches.run ?? []], ['onboarding_steps', 'onboarding_id', launches.onboarding ?? []]] as const) {
+        db.exec(`CREATE TABLE ${table} (${key} TEXT NOT NULL, step TEXT NOT NULL, attempt INTEGER NOT NULL, status TEXT NOT NULL, result_json TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT, PRIMARY KEY (${key}, step, attempt))`);
+        steps.forEach((step, i) => db.prepare(`INSERT INTO ${table} VALUES ('x', ?, ?, 'done', '{}', '2026-11-24T00:00:00Z', NULL)`).run(step, i + 1));
+      }
+    }
     db.close();
   };
+
+  it('counts the launch rows of the run for a run and those of the onboarding for an onboarding, and leaves the count undefined when the tables cannot be read', async () => {
+    const { costsOf } = await harness();
+    const dir = temp('eval-costs-of');
+    stateDb(dir, [{ costChargedUsd: 0.1, tokens: 5 }], { run: ['launch:run', 'launch:run', 'validate'], onboarding: ['launch:map', 'scan', 'launch:knowledge', 'launch:review'] });
+    assert.equal(costsOf(dir, false).launched, 2, 'run_steps rows that start with launch:');
+    assert.equal(costsOf(dir, true).launched, 3, 'onboarding_steps rows that start with launch:');
+    assert.equal(costsOf(dir, false).finished, 1);
+    const bare = temp('eval-costs-of-bare');
+    stateDb(bare, []);
+    assert.equal(costsOf(bare, false).launched, undefined, 'no step tables: the launches cannot be counted');
+    assert.equal(costsOf(temp('eval-costs-of-none'), false).launched, undefined, 'no store at all: nothing can be said, so the step is recorded at its cap as before');
+  });
 
   it('records the cap and then rethrows when the ledger read throws', async () => {
     const result = await stepAgainst({ dataRoot: (dir) => writeFileSync(join(dir, 'state.db'), 'this is not a database'), code: 0, cap: 0.4 });
@@ -712,19 +744,41 @@ describe('the evaluation records every model step at no less than it may have co
   });
 
   it('records the cap for a step the timeout killed after one finished invocation', async () => {
-    const result = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.1, tokens: 50 }]), code: null, cap: 0.4 });
+    const result = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.1, tokens: 50 }], { run: ['launch:run'] }), code: null, cap: 0.4 });
     assert.deepEqual(result.recorded, [0.4]);
     assert.equal(result.thrown, undefined);
   });
 
-  it('records the cap for a step that exited non-zero with no finished invocation', async () => {
-    const early = await stepAgainst({ dataRoot: (dir) => stateDb(dir, []), code: 1, cap: 0.4 });
-    assert.deepEqual(early.recorded, [0.4]);
+  it('records the cap for a step that exited non-zero after a launch with no finished invocation, and for one whose launches cannot be counted', async () => {
+    const launched = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [], { run: ['launch:run'] }), code: 1, cap: 0.4 });
+    assert.deepEqual(launched.recorded, [0.4]);
+    assert.deepEqual(launched.logged, []);
+    const uncounted = await stepAgainst({ dataRoot: (dir) => stateDb(dir, []), code: 1, cap: 0.4 });
+    assert.deepEqual(uncounted.recorded, [0.4]);
+  });
+
+  it('records the cap for an onboarding step by the launches of the onboarding, not of the run', async () => {
+    const onboarding = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [], { onboarding: ['launch:map'] }), code: 1, cap: 0.6, onboarding: true });
+    assert.deepEqual(onboarding.recorded, [0.6]);
+    const wrongTable = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [], { run: ['launch:run'] }), code: 1, cap: 0.6, onboarding: true });
+    assert.deepEqual(wrongTable.recorded, [], 'a launch of the run is no launch of the onboarding');
   });
 
   it('records what the ledger charged for a step that ended on its own', async () => {
-    const done = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.12, tokens: 50 }]), code: 0, cap: 0.4 });
+    const done = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [{ costChargedUsd: 0.12, tokens: 50 }], { run: ['launch:run'] }), code: 0, cap: 0.4 });
     assert.deepEqual(done.recorded, [0.12]);
+  });
+
+  it('records nothing for a step that exited with a code before any host started, and logs a line that names the step and says no host started (GIN-04)', async () => {
+    const early = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [], { run: [] }), code: 1, cap: 0.4 });
+    assert.deepEqual(early.recorded, []);
+    assert.equal(early.thrown, undefined);
+    assert.equal(early.logged.length, 1);
+    assert.match(early.logged[0] ?? '', /eval-T01-A-run/);
+    assert.match(early.logged[0] ?? '', /no host started/);
+    const clean = await stepAgainst({ dataRoot: (dir) => stateDb(dir, [], { run: [] }), code: 0, cap: 0.4 });
+    assert.deepEqual(clean.recorded, []);
+    assert.match(clean.logged[0] ?? '', /no host started/);
   });
 });
 
