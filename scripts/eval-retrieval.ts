@@ -533,14 +533,14 @@ function readJsonRecord(file: string, what: string): { bytes: Buffer; value: Rec
   return { bytes, value: parsed };
 }
 
+const RFC_3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const AMENDED_TASKS_FILE = 'test/benchmark/phase4/eval-tasks.json';
+
 export type LoadedCoverage = BriefCoverage & { digest: string };
 export type LoadedAmendment = SuccessAmendment & { digest: string };
 
 // Reads a brief coverage record. `runs` are the recorded runs of the results file the record judges (see readCoverageRuns).
 export function loadCoverage(file: string, resultsSha256: string, tasks: ApprovedTasks, runs: readonly RecordedRun[]): LoadedCoverage {
-  void resultsSha256;
-  void tasks;
-  void runs;
   const { bytes, value } = readJsonRecord(file, 'brief coverage record');
   const text = (field: string): string => {
     const v = value[field];
@@ -560,6 +560,31 @@ export function loadCoverage(file: string, resultsSha256: string, tasks: Approve
     });
     return { task: raw['task'], arm: raw['arm'] as ArmId, runId: raw['runId'], bullets };
   });
+  if (text('resultsSha256') !== resultsSha256) throw new EvalRefusal(`${file}: resultsSha256 does not match the results file being judged`);
+  if (text('tasksSha256') !== tasks.digest) throw new EvalRefusal(`${file}: tasksSha256 does not match the approved task list ${tasks.file}`);
+  // Every recorded run has exactly one entry (and the run id it recorded), and no entry names a run that was not recorded.
+  for (const run of runs) {
+    const own = entries.filter((e) => e.task === run.task && e.arm === run.arm);
+    if (own.length === 0) throw new EvalRefusal(`${file}: ${run.task} arm ${run.arm} has no coverage entry`);
+    if (own.length > 1) throw new EvalRefusal(`${file}: ${run.task} arm ${run.arm} has ${own.length} coverage entries, not one`);
+    if (run.runId !== undefined && own[0]?.runId !== run.runId) throw new EvalRefusal(`${file}: ${run.task} arm ${run.arm} names runId ${own[0]?.runId ?? ''}, the results record ${run.runId}`);
+  }
+  for (const entry of entries) {
+    if (!runs.some((r) => r.task === entry.task && r.arm === entry.arm)) throw new EvalRefusal(`${file}: ${entry.task} arm ${entry.arm} is not a recorded run of the results file`);
+  }
+  // Each entry judges exactly the bullets of its task's brief, in the brief's order, with a known status and a stated piece of evidence.
+  for (const entry of entries) {
+    const where = `${file}: ${entry.task} arm ${entry.arm}`;
+    const task = tasks.tasks.find((t) => t.id === entry.task);
+    if (task === undefined) throw new EvalRefusal(`${where}: the task is not on the approved task list ${tasks.file}`);
+    const expected = briefBullets(task);
+    if (entry.bullets.length !== expected.length) throw new EvalRefusal(`${where}: ${entry.bullets.length} bullets, the brief has ${expected.length}`);
+    for (const [i, bullet] of entry.bullets.entries()) {
+      if (bullet.text !== expected[i]) throw new EvalRefusal(`${where}: bullet ${i + 1} text differs from the bullet of the brief`);
+      if (!COVERAGE_STATUSES.includes(bullet.status)) throw new EvalRefusal(`${where}: status of bullet ${i + 1} is ${JSON.stringify(bullet.status)}, not delivered, partly or skipped`);
+      if (bullet.evidence.trim() === '') throw new EvalRefusal(`${where}: evidence of bullet ${i + 1} is empty`);
+    }
+  }
   return {
     schema: 1,
     kind: 'avarice-eval-brief-coverage',
@@ -576,7 +601,6 @@ export function loadCoverage(file: string, resultsSha256: string, tasks: Approve
 
 // Reads the amended success rule. `tasksSha256` is the digest of the approved task list the amendment must be pinned to.
 export function loadAmendment(file: string, tasksSha256: string): LoadedAmendment {
-  void tasksSha256;
   const { bytes, value } = readJsonRecord(file, 'success amendment');
   const text = (field: string): string => {
     const v = value[field];
@@ -591,6 +615,16 @@ export function loadAmendment(file: string, tasksSha256: string): LoadedAmendmen
     const v = value[field];
     return typeof v === 'string' ? v : null;
   };
+  // The owner approves the amendment as the owner approved the task list: both fields set, the time an RFC 3339 time. A draft holds both as null.
+  const approvedBy = approval('approvedBy');
+  const approvedAt = approval('approvedAt');
+  const isSet = (v: string | null): v is string => v !== null && v.trim() !== '';
+  if (!isSet(approvedBy) && !isSet(approvedAt)) throw new EvalRefusal(`${file} is not approved: approvedBy and approvedAt must both be set by the owner`);
+  if (!isSet(approvedBy)) throw new EvalRefusal(`${file} is half approved: approvedBy is not set`);
+  if (!isSet(approvedAt)) throw new EvalRefusal(`${file} is half approved: approvedAt is not set`);
+  if (!RFC_3339.test(approvedAt) || Number.isNaN(Date.parse(approvedAt))) throw new EvalRefusal(`${file}: approvedAt is not an RFC 3339 time`);
+  if (amends['file'] !== AMENDED_TASKS_FILE) throw new EvalRefusal(`${file}: amends.file is not ${AMENDED_TASKS_FILE}`);
+  if (amends['sha256'] !== tasksSha256) throw new EvalRefusal(`${file}: amends.sha256 is not the digest of the approved task list (${tasksSha256})`);
   return {
     schema: 1,
     kind: 'avarice-eval-success-amendment',
@@ -598,8 +632,8 @@ export function loadAmendment(file: string, tasksSha256: string): LoadedAmendmen
     amends: { file: amends['file'], sha256: amends['sha256'], field: 'successRule' },
     successRule: text('successRule'),
     partialRule: text('partialRule'),
-    approvedBy: approval('approvedBy'),
-    approvedAt: approval('approvedAt'),
+    approvedBy,
+    approvedAt,
     digest: sha256Of(bytes),
   };
 }
@@ -636,6 +670,35 @@ export function judgeWithCoverage(runs: readonly RecordedRun[], coverage: Pick<B
     arms[arm] = { runs: own.runs, success: own.success, partial: judged.filter((j) => j.arm === arm && j.outcome === 'partial').length, tokens: own.tokens };
   }
   return { arms, runs: judged, verdict: summary.ac8, knowledge: summary.knowledge };
+}
+
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+// The files a run's host transcript edited, to help the person who records the coverage: the clone-relative path (the part after the last `/clone/`) of every Edit, Write,
+// MultiEdit and NotebookEdit tool call, in the order first seen and once each. Pure; a line that is not JSON, and a call whose path is not inside a clone, is skipped.
+export function editedPaths(transcriptText: string): string[] {
+  const seen = new Set<string>();
+  for (const line of transcriptText.split('\n')) {
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const message = isRecord(event) ? event['message'] : undefined;
+    const content = isRecord(message) ? message['content'] : undefined;
+    if (!Array.isArray(content)) continue;
+    for (const block of content as unknown[]) {
+      if (!isRecord(block) || block['type'] !== 'tool_use' || typeof block['name'] !== 'string' || !EDIT_TOOLS.has(block['name']) || !isRecord(block['input'])) continue;
+      // A notebook edit names its file `notebook_path`; the other three name it `file_path`.
+      const path = block['input']['file_path'] ?? (block['name'] === 'NotebookEdit' ? block['input']['notebook_path'] : undefined);
+      if (typeof path !== 'string') continue;
+      const at = path.lastIndexOf('/clone/');
+      const relative = at < 0 ? '' : path.slice(at + '/clone/'.length);
+      if (relative !== '') seen.add(relative);
+    }
+  }
+  return [...seen];
 }
 
 export interface CoverageRejudgedArm extends CoverageArm {
@@ -826,10 +889,11 @@ export function briefFor(task: EvalTask): string {
   const title = (lines[0] ?? '').trim().slice(0, 200).replace(/^["']|["']$/g, '') || task.id;
   const message = lines.map((line) => (/^\s{0,3}#{1,6}(\s|$)/.test(line) ? line.replace('#', '\\#') : line)).join('\n').trim();
   // The commit messages ask for work the harness cannot run or judge (an end-to-end spec: its file is a denied read and its command is no required check). A unit that took
-  // such a bullet literally finished the change and then ended on a question, which the run recorded as an acceptance decision (plan 04-36 diagnostic). The scope line
-  // is the same for every task and arm; the commit message above it is kept whole.
+  // such a bullet literally finished the change and then ended on a question, which the run recorded as an acceptance decision (plan 04-36 diagnostic). The earlier text kept
+  // runs from stopping by putting such tests out of scope, which made the run skip work its brief asked for (G-04-3); the 18 recorded runs were given that earlier text. The
+  // scope line now says the test is still part of the change, to be written and not run. It is the same for every task and arm; the commit message above it is kept whole.
   const commands = task.checks.map((c) => c.argv.join(' ')).join(', ');
-  const scope = `Only the required checks can run in this environment: ${commands}. Any end-to-end or browser test named above is out of scope: do not write it, do not ask whether to cover it and do not stop for it. Make the change and its unit tests, run the required checks, and finish the rest of the change without waiting for an answer.`;
+  const scope = `Only the required checks can run in this environment: ${commands}. An end-to-end or browser test the brief asks for cannot be run here, and it is still part of the change: write it as the brief asks, do not try to run it, and do not stop to ask about running it. Make the change and its tests, run the required checks, and finish the change without waiting for an answer.`;
   const behavior = `${message}\n\n${scope}`;
   return [
     '---',
