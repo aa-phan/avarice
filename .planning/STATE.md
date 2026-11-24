@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-59-PLAN.md
-last_updated: "2026-11-24T21:26:55.066Z"
+stopped_at: Completed 04-60-PLAN.md
+last_updated: "2026-11-24T21:38:44.864Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: 0a9f57b0b20268ec4eb125542d739c2096b02975
+state_head: 0627c783c12d5d4aa4f4ecf3242503d1ecf20727
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 58
+  completed_plans: 59
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 4 of 69
+Plan: 5 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -221,6 +221,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P56 | 55 min | 2 tasks | 7 files |
 | Phase 04 P58 | 14 min | 2 tasks | 6 files |
 | Phase 04 P59 | 77 min | 3 tasks | 9 files |
+| Phase 04 P60 | 25 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -551,6 +552,8 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-58: restricted patch excludes out-of-scope files through a separate excludePaths option with per-path :(exclude,literal) pathspecs; the strict directory check for exclude is unchanged and the global literal-pathspecs mode is not used (GWR-04, CON-4)
 - [Phase 04]: 04-59: a bindings lock naming a live PID is stale when that process started more than 2 s after the lock's startedAt (ps etime); unreadable start falls back to a 60 s file-age bound
 - [Phase 04]: 04-59: a corrupt (invalid) profile config gets its whole root denied by knownProfileRoots, as a permission refusal does
+- [Phase 04]: 04-60: a brace-group glob still counts as unfiltered (WR-06); only the refusal reason changes, via braceGlob on the normalized search call — The refusal told the model it had no glob, inviting retries toward the consecutive-denials limit (GIN-03)
+- [Phase 04]: 04-60: pack items carry PACK_ITEM_FORMAT = 1; an absent or different format is a cache miss (reason format), judged after access scope and before revision — A reused item skips the read that sets untrusted and codeNode, so an older adapter's flags would persist (GIN-05, CON-12)
 
 ### Roadmap Evolution
 
@@ -618,8 +621,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-24T21:26:54.863Z
-Stopped at: Completed 04-59-PLAN.md
+Last session: 2026-11-24T21:38:38.585Z
+Stopped at: Completed 04-60-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
