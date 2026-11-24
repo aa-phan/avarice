@@ -78,14 +78,6 @@ describe('knownProfileRoots (D-19)', () => {
     assert.ok(found.includes(join(home, 'acme-work')), JSON.stringify(found));
   });
 
-  it('skips a config.json that is a symbolic link', () => {
-    const configHome = configHomeWith({});
-    mkdirSync(join(configHome, 'profiles', ent('linked')), { recursive: true });
-    writeFileSync(join(base, 'planted.json'), JSON.stringify({ dataRoot: join(base, 'planted-data') }));
-    symlinkSync(join(base, 'planted.json'), join(configHome, 'profiles', ent('linked'), 'config.json'));
-    assert.equal(roots(configHome).includes(join(base, 'planted-data')), false);
-  });
-
   it('skips a profile directory whose name is not a profile name, a directory that is a link, and a file', () => {
     const configHome = configHomeWith({ Bogus: { dataRoot: join(base, 'bogus-data') }, 'not a profile': { dataRoot: join(base, 'spaced-data') } });
     mkdirSync(join(base, 'elsewhere', ent('away')), { recursive: true });
@@ -94,17 +86,6 @@ describe('knownProfileRoots (D-19)', () => {
     writeFileSync(join(configHome, 'profiles', ent('file')), 'x');
     const found = roots(configHome);
     for (const planted of ['bogus-data', 'spaced-data', 'away-data']) assert.equal(found.includes(join(base, planted)), false, planted);
-  });
-
-  it('skips a config that does not parse and goes on to the next profile', () => {
-    const configHome = configHomeWith({
-      [ent('broken')]: '{ not json',
-      [ent('unknown-key')]: { notAKey: 1, dataRoot: join(base, 'unknown-key-data') },
-      [ent('good')]: { dataRoot: join(base, 'good-data') },
-    });
-    const found = roots(configHome);
-    assert.equal(found.includes(join(base, 'unknown-key-data')), false);
-    assert.ok(found.includes(join(base, 'good-data')));
   });
 
   it('skips a root that is not absolute, so a planted relative path adds nothing', () => {
@@ -204,13 +185,71 @@ describe('knownProfileRoots (D-19)', () => {
       }
     });
 
-    it('still skips a corrupt config next to it, and returns the roots of the readable profiles when nothing is unreadable', () => {
+    it('denies the whole root of a corrupt config next to it, and still returns the roots of the readable profiles', () => {
       const configHome = configHomeWith({
         [ent('other-b')]: '{ not json',
         [ent('other-c')]: { dataRoot: join(base, 'wr17-c-data') },
       });
       const found = roots(configHome);
       assert.ok(found.includes(join(base, 'wr17-c-data')), JSON.stringify(found));
+      assert.ok(found.includes(join(configHome, 'profiles', ent('other-b'))), `the corrupt profile's directory: ${JSON.stringify(found)}`);
+    });
+  });
+
+  // GWR-06 (SEC-1, T-04-156): a config that is present but corrupt names no roots, so skipping it removed the whole profile from the deny list, and anyone able to
+  // write that one file (or a link in its place) made the profile's store and work tree readable to another profile's sandboxed command. A corrupt config is denied
+  // whole, as a refused one is: the profile directory and the default data root and work root of its name.
+  describe('a corrupt profile config is denied whole (GWR-06)', () => {
+    const wholeRootOf = (configHome: string, name: string): string[] => [
+      join(configHome, 'profiles', name),
+      join(home, '.local', 'share', 'avarice', name),
+      join(home, '.local', 'share', 'avarice-work', name),
+    ];
+
+    function assertDeniedWhole(configHome: string, name: string, planted: string): void {
+      const found = roots(configHome);
+      for (const root of wholeRootOf(configHome, name)) assert.ok(found.includes(root), `${root} is denied: ${JSON.stringify(found)}`);
+      assert.equal(found.includes(planted), false, 'a root a corrupt config names is not trusted');
+      assert.ok(found.includes(configHome), 'the config home is still returned');
+    }
+
+    it('invalid JSON', () => {
+      const configHome = configHomeWith({ [ent('bad-json')]: '{ not json', [ent('good')]: { dataRoot: join(base, 'gwr06-good-data') } });
+      assertDeniedWhole(configHome, ent('bad-json'), join(base, 'gwr06-never'));
+      assert.ok(roots(configHome).includes(join(base, 'gwr06-good-data')), 'the profile after it is still read');
+    });
+
+    it('a key the parser refuses', () => {
+      const configHome = configHomeWith({ [ent('unknown-key')]: { notAKey: 1, dataRoot: join(base, 'gwr06-unknown-key-data') } });
+      assertDeniedWhole(configHome, ent('unknown-key'), join(base, 'gwr06-unknown-key-data'));
+    });
+
+    it('a config that is a symbolic link', () => {
+      const configHome = configHomeWith({});
+      mkdirSync(join(configHome, 'profiles', ent('linked')), { recursive: true });
+      writeFileSync(join(base, 'gwr06-planted.json'), JSON.stringify({ dataRoot: join(base, 'gwr06-planted-data') }));
+      symlinkSync(join(base, 'gwr06-planted.json'), join(configHome, 'profiles', ent('linked'), 'config.json'));
+      assertDeniedWhole(configHome, ent('linked'), join(base, 'gwr06-planted-data'));
+    });
+
+    it('a config over the size cap', () => {
+      const configHome = configHomeWith({ [ent('huge')]: JSON.stringify({ dataRoot: join(base, 'gwr06-huge-data'), padding: 'x'.repeat(70 * 1024) }) });
+      assertDeniedWhole(configHome, ent('huge'), join(base, 'gwr06-huge-data'));
+    });
+
+    it('never denies the selected profile\'s own roots, and a directory that is not a profile adds nothing', () => {
+      const own = OWN();
+      const ownDefaults = { ...own, ownDataRoot: join(home, '.local', 'share', 'avarice', ent('mine')), ownWorkRoot: join(home, '.local', 'share', 'avarice-work', ent('mine')) };
+      const configHome = configHomeWith({ [ent('mine')]: '{ not json', Bogus: '{ not json', [ent('other')]: '{ not json' });
+      const found = roots(configHome, ent('mine'), ownDefaults);
+      assert.equal(found.includes(join(configHome, 'profiles', ent('mine'))), false, 'the selected profile entry is skipped');
+      assert.equal(found.includes(join(configHome, 'profiles', 'Bogus')), false, 'a name outside the profile grammar is not a profile');
+      assert.ok(found.includes(join(configHome, 'profiles', ent('other'))));
+      // A different profile whose default roots are the selected profile's own roots is not denied those.
+      const sameDefaults = { ...own, ownDataRoot: join(home, '.local', 'share', 'avarice', ent('other')), ownWorkRoot: join(home, '.local', 'share', 'avarice-work', ent('other')) };
+      const foundSame = roots(configHome, ent('mine'), sameDefaults);
+      assert.equal(foundSame.includes(sameDefaults.ownDataRoot), false);
+      assert.equal(foundSame.includes(sameDefaults.ownWorkRoot), false);
     });
   });
 });
