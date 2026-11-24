@@ -8,7 +8,8 @@
 // (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), gh's options between a group and its subcommand (`gh pr -R x/y create`, plan 04-57), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
 // backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
 // MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
-// and both callers refuse it: no limit and no parse failure is read as "not privileged". It does not run or expand anything: a name the shell builds at run time (a
+// and both callers refuse it: no limit and no parse failure is read as "not privileged". A git alias or config include defined on the command's own line (`git -c alias.p=push p`,
+// `GIT_CONFIG_KEY_0=alias.p ... git p`, plan 04-57) is refused the same way; an alias set by an earlier separate call stays a residual. It does not run or expand anything: a name the shell builds at run time (a
 // variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string, text piped into a shell) and repository or shell
 // state changed by an earlier separate call are the documented bypass of
 // command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
@@ -729,17 +730,31 @@ function shellString(args: readonly string[]): string | undefined {
   return undefined;
 }
 
-function classifyGit(args: readonly string[]): PrivilegedCommand | null {
+// A git alias or a config include defined on the command's own line (plan 04-57; GWR-03, T-04-151): the alias is a name for any command, so `git p` may push and no word of
+// the line says so. The line is refused, whatever its subcommand, and the reason tells the model to run the command the alias stands for.
+const ALIAS_REFUSAL = 'the line defines a git alias or a config include, which cannot be checked; run the command it stands for';
+const CONFIG_KEY_REFUSED = /^(alias\.|include\.|includeif\.)/i;
+// The environment words that define a config entry: `GIT_CONFIG_KEY_<n>=<key>` whose key is refused, and `GIT_CONFIG_PARAMETERS=` holding an alias or an include anywhere (git reads
+// the quoted `'alias.p'='push'` form from it). Searched as text, so an `env -S` string that carries an assignment is seen too.
+const ENV_CONFIG_KEY = /(?:^|\s)GIT_CONFIG_KEY_[0-9]+=['"]?(?:alias\.|include\.|includeif\.)/i;
+const ENV_CONFIG_PARAMETERS = /(?:^|\s)GIT_CONFIG_PARAMETERS=[\s\S]*(?:alias\.|include)/i;
+// The key of a `-c` value or a `--config-env` value (`name=value`, `name=VAR`): the text before the first `=`, or all of it.
+const configKeyRefused = (value: string): boolean => CONFIG_KEY_REFUSED.test(value.split('=')[0] as string);
+
+function classifyGit(args: readonly string[], env: readonly string[]): PrivilegedCommand | UnparseableCommand | null {
   let i = 0;
+  if (env.some((word) => ENV_CONFIG_KEY.test(word) || ENV_CONFIG_PARAMETERS.test(word))) return { unparseable: ALIAS_REFUSAL };
   // The global options before the subcommand, verbatim with their values: `-c remote.origin.url=...` and `-C dir` redirect the push, so an approval binds them (CR-03).
   const globals: string[] = [];
   for (; i < args.length; i += 1) {
     const arg = args[i] as string;
     if (!arg.startsWith('-') || arg === '-') break;
     globals.push(arg);
+    if (arg.startsWith('--config-env=') && configKeyRefused(arg.slice('--config-env='.length))) return { unparseable: ALIAS_REFUSAL };
     if (GIT_VALUED_GLOBALS.includes(arg) && i + 1 < args.length) {
       i += 1;
       globals.push(args[i] as string);
+      if ((arg === '-c' || arg === '--config-env') && configKeyRefused(args[i] as string)) return { unparseable: ALIAS_REFUSAL };
     }
   }
   if (args[i] !== 'push') return null;
@@ -832,8 +847,9 @@ function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
 // The privileged commands one command runs, or an unparseable command whose program (or whose shell string) could not be read. `words` are the words of a single command
 // (no `;`, `&&` or `|`). A shell started on a literal string and `eval` run the commands of their string (plan 04-51; WR-01): the string is read by the same scanner one
 // level deeper, so a computed string (`bash -c "$X"`, text left to a variable or a substitution) holds no command of its own, while the commands of a substitution inside it
-// were already scanned with the line.
-function classifyWords(words: readonly string[], depth: number): PrivilegedCommand[] | UnparseableCommand {
+// were already scanned with the line. `inherited` is the environment the enclosing commands gave this one (`GIT_CONFIG_KEY_0=alias.p bash -c 'git p'`), read for a same-line git
+// alias and not bound again, because the enclosing command binds its own.
+function classifyWords(words: readonly string[], depth: number, inherited: readonly string[] = []): PrivilegedCommand[] | UnparseableCommand {
   const program = programWords(words);
   if (program === null) return [];
   if ('unparseable' in program) return program;
@@ -842,12 +858,13 @@ function classifyWords(words: readonly string[], depth: number): PrivilegedComma
   const name = baseOf(program.words[0] as string);
   let found: PrivilegedCommand[];
   if (name === 'git' || name === 'gh' || name === 'npm') {
-    const one = name === 'git' ? classifyGit(args) : name === 'gh' ? classifyGh(args) : classifyNpm(args);
+    const one = name === 'git' ? classifyGit(args, [...inherited, ...program.env]) : name === 'gh' ? classifyGh(args) : classifyNpm(args);
+    if (one !== null && isUnparseable(one)) return one;
     found = one === null ? [] : [one];
   } else if (SHELLS.includes(name) || name === 'eval') {
     const text = name === 'eval' ? (args.length > 0 ? args.join(' ') : undefined) : shellString(args);
     if (text === undefined) return [];
-    const nested = classifyString(text, depth + 1);
+    const nested = classifyString(text, depth + 1, [...inherited, ...program.env]);
     if ('unparseable' in nested) return nested;
     found = nested;
   } else {
@@ -860,12 +877,12 @@ function classifyWords(words: readonly string[], depth: number): PrivilegedComma
 }
 
 // The privileged commands of a string that a shell or eval runs, `depth` levels below the line.
-function classifyString(text: string, depth: number): PrivilegedCommand[] | UnparseableCommand {
+function classifyString(text: string, depth: number, inherited: readonly string[] = []): PrivilegedCommand[] | UnparseableCommand {
   const split = commandsOf(text, depth);
   if (!split.ok) return { unparseable: split.reason };
   const commands: PrivilegedCommand[] = [];
   for (const words of split.commands) {
-    const found = classifyWords(words, depth);
+    const found = classifyWords(words, depth, inherited);
     if ('unparseable' in found) return found;
     commands.push(...found);
   }
