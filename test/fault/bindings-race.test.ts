@@ -113,6 +113,23 @@ describe('the bindings lock (WR-15, T-04-117)', () => {
     assert.equal(existsSync(lockPathFor(configHome)), false, 'the lock taken over is released');
   });
 
+  // GWR-05 (T-04-155): a writer that crashed leaves its lock behind, and its process ID can be given to an unrelated process that is alive. The lock says it was
+  // written an hour ago; the process now holding that ID started a moment ago, so it cannot be the writer, and the lock is taken over.
+  it('takes over a lock whose process ID is held by a live process that started after the lock was written, within the wait', () => {
+    const configHome = freshHome();
+    const pid = liveHolder();
+    writeFileSync(lockPathFor(configHome), JSON.stringify({ pid, startedAt: new Date(Date.now() - 3_600_000).toISOString() }));
+    const started = Date.now();
+    const written = writeBinding(configHome, { ...identity(3), profile: 'personal-local', boundAt: '2026-11-22T00:00:00.000Z' });
+    const waited = Date.now() - started;
+    assert.ok(written.ok, `the lock of a reused process ID is taken over, not waited on: ${written.ok ? '' : JSON.stringify(written.error)} after ${String(waited)} ms`);
+    assert.ok(waited < 1900, `taken over without waiting out the 2 seconds, not after ${String(waited)} ms`);
+    const all = readBindings(configHome);
+    assert.ok(all.ok);
+    assert.equal(all.value.length, 1, 'the binding is in the registry');
+    assert.equal(existsSync(lockPathFor(configHome)), false, 'the lock is released');
+  });
+
   it('returns unavailable naming the holder when a live process holds the lock for longer than 2 seconds, and writes nothing', () => {
     const configHome = freshHome();
     const pid = liveHolder();
