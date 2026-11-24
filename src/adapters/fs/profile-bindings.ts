@@ -4,6 +4,7 @@
 // link and read only when it is a regular file of at most 64 KiB, so a planted link or a huge file cannot steer which store opens.
 // Entries are validated by hand: a file that does not validate is refused whole (nothing is skipped), because a skipped entry would
 // silently let a bound repository open under another profile.
+import { spawnSync } from 'node:child_process';
 import { closeSync, constants, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseProfileName, profileClass } from '../../domain/profile.ts';
@@ -150,7 +151,8 @@ export function bindingsLockPathFor(configHome: string): string {
   return `${bindingsPathFor(configHome)}.lock`;
 }
 
-interface LockHolder {
+// What a lock file names: the writer's process ID and the time it wrote the lock (`startedAt` is the time of the lock, not of the process).
+export interface LockHolder {
   pid: number;
   startedAt: string;
 }
@@ -159,7 +161,7 @@ function pause(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-// Whether a process still exists. A lock that names this very process is a leftover of an earlier process that had the same ID, since this
+// Whether a process with this ID exists; whether it is the process that wrote a lock is a separate question (lockIsStale). A lock that names this very process is a leftover of an earlier process that had the same ID, since this
 // process holds a lock only inside one synchronous call and never leaves one behind while it runs.
 function processAlive(pid: number): boolean {
   if (pid === process.pid) return false;
@@ -173,7 +175,69 @@ function processAlive(pid: number): boolean {
 
 type LockState = { kind: 'absent' } | { kind: 'stale'; text: string } | { kind: 'held'; holder: LockHolder | undefined };
 
-// The lock file as found: gone, left by a process that no longer exists (or cut off before it held its holder, and older than the wait), or held.
+// A lock that names a live process is still stale when that process cannot be the writer. A process ID is reused after a crash, so the process now
+// holding the ID is compared with the lock: one that started more than this long after the lock was written is not the process that wrote it. The margin
+// covers the whole-second resolution of the elapsed time ps prints and the gap between a process starting and its lock being written.
+const START_MARGIN_MS = 2000;
+
+// How old a lock file must be before a live holder whose start time could not be read is taken to be gone. Far above one registry rewrite, which takes
+// milliseconds. The residual: a live but hung holder is taken over after this long when ps is not available.
+export const BINDINGS_STALE_AGE_MS = 60_000;
+
+export interface LockEvidence {
+  // The holder the lock names, or undefined when its text could not be read.
+  holder: LockHolder | undefined;
+  // Whether a process with the holder's ID exists.
+  alive: boolean;
+  // When the process now holding the holder's ID started, in epoch milliseconds, or undefined when that could not be read.
+  processStartMs: number | undefined;
+  // How long ago the lock file was last written.
+  lockAgeMs: number;
+}
+
+// Whether a lock is stale (GWR-05). A holder that cannot be read is a writer that has not finished writing it, unless it has been that way for longer than any
+// writer waits. A holder whose process is gone is stale. A holder whose ID a live process now holds is stale when that process started more than the margin
+// after the lock was written, since it cannot be the writer; when its start or the lock's time cannot be read, the lock is stale only when its file is older
+// than BINDINGS_STALE_AGE_MS.
+export function lockIsStale(evidence: LockEvidence): boolean {
+  const { holder, alive, processStartMs, lockAgeMs } = evidence;
+  if (holder === undefined) return lockAgeMs > BINDINGS_LOCK_WAIT_MS;
+  if (!alive) return true;
+  const wroteAt = Date.parse(holder.startedAt);
+  if (processStartMs !== undefined && Number.isFinite(wroteAt)) return processStartMs > wroteAt + START_MARGIN_MS;
+  return lockAgeMs > BINDINGS_STALE_AGE_MS;
+}
+
+// Seconds from the text `ps -o etime=` prints: `[[dd-]hh:]mm:ss`. Anything else is undefined.
+export function parseEtimeSeconds(text: string): number | undefined {
+  const m = /^(?:(\d+)-)?(?:(\d{2}):)?(\d{2}):(\d{2})$/.exec(text.trim());
+  if (m === null) return undefined;
+  const [days, hours, minutes, seconds] = [Number(m[1] ?? 0), Number(m[2] ?? 0), Number(m[3]), Number(m[4])];
+  if (minutes > 59 || seconds > 59 || hours > 23) return undefined;
+  return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
+}
+
+const PS_PATHS = ['/bin/ps', '/usr/bin/ps'];
+
+// When the process `pid` started, in epoch milliseconds: `nowMs` minus the elapsed time ps prints for it. The elapsed time involves no locale or time zone.
+// ps is run by absolute path with a fixed minimal environment, so nothing in the caller's environment steers it. Undefined on any failure: no ps, a
+// non-zero exit (no such process), a timeout, or output that does not parse.
+export function readProcessStartMs(pid: number, nowMs: number): number | undefined {
+  const ps = PS_PATHS.find((candidate) => {
+    try {
+      return statSync(candidate).isFile();
+    } catch {
+      return false;
+    }
+  });
+  if (ps === undefined) return undefined;
+  const ran = spawnSync(ps, ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] });
+  if (ran.error !== undefined || ran.status !== 0) return undefined;
+  const elapsed = parseEtimeSeconds(ran.stdout);
+  return elapsed === undefined ? undefined : nowMs - elapsed * 1000;
+}
+
+// The lock file as found: gone, stale (see lockIsStale), or held.
 function inspectLock(lockPath: string): LockState {
   let text: string;
   try {
@@ -191,14 +255,16 @@ function inspectLock(lockPath: string): LockState {
   } catch {
     holder = undefined;
   }
-  if (holder !== undefined) return processAlive(holder.pid) ? { kind: 'held', holder } : { kind: 'stale', text };
-  // A lock whose holder cannot be read is a holder that has not finished writing it, unless it has been that way for longer than any writer waits.
+  let lockAgeMs: number;
   try {
-    if (Date.now() - statSync(lockPath).mtimeMs > BINDINGS_LOCK_WAIT_MS) return { kind: 'stale', text };
+    lockAgeMs = Date.now() - statSync(lockPath).mtimeMs;
   } catch {
     return { kind: 'absent' };
   }
-  return { kind: 'held', holder: undefined };
+  const alive = holder !== undefined && processAlive(holder.pid);
+  // The start time matters only for a holder whose ID a live process holds.
+  const processStartMs = holder !== undefined && alive ? readProcessStartMs(holder.pid, Date.now()) : undefined;
+  return lockIsStale({ holder, alive, processStartMs, lockAgeMs }) ? { kind: 'stale', text } : { kind: 'held', holder };
 }
 
 // Takes a stale lock out of the way: it is renamed to a name of this process (only one contender wins the rename) and removed once it is seen to
@@ -237,7 +303,8 @@ function describeHolder(holder: LockHolder | undefined): string {
 }
 
 // Runs `fn` while holding the exclusive lock file beside the registry (WR-15): created with the exclusive-create flag, holding this process's ID and
-// start time, waited for at most BINDINGS_LOCK_WAIT_MS, taken over when its holder no longer exists, and removed when `fn` returns or throws.
+// time, waited for at most BINDINGS_LOCK_WAIT_MS, taken over when its holder no longer exists or its process ID now belongs to a process that started after
+// the lock was written (a reused ID, GWR-05), and removed when `fn` returns or throws.
 function withBindingsLock<T>(configHome: string, fn: () => Result<T>): Result<T> {
   const lockPath = bindingsLockPathFor(configHome);
   try {
