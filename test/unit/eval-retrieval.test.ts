@@ -455,6 +455,134 @@ describe("--live needs the owner's recorded spend authorization (plan 04-46, WR-
   });
 });
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Plan 04-61 (G-04-3): recorded runs judged again against the bullets of their briefs. A recorded success that skipped a bullet is partial, not a success; the judgement is
+// computed from recorded data and files only.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+describe('re-judging recorded runs with brief coverage (plan 04-61, G-04-3)', () => {
+  it('reads the bullets of the six recorded portfolio briefs: two, three, three, three, three and one, with the wrapped bullet of T03 joined', async () => {
+    const { briefBullets, loadApprovedTasks } = await harness();
+    const tasks = loadApprovedTasks(TASKS_FILE).tasks;
+    const bullets = (id: string): string[] => briefBullets(tasks.find((t) => t.id === id) as never);
+    assert.deepEqual(['T01', 'T02', 'T03', 'T04', 'T05', 'T06'].map((id) => bullets(id).length), [2, 3, 3, 3, 3, 1]);
+    assert.deepEqual(bullets('T01'), ['Hold the LazyMotion loader pending while reduced and release it when the preference flips', 'Add unit and e2e coverage for the reduced-then-off case']);
+    assert.equal(bullets('T03')[1], 'Sleeve name is its visible title via aria-labelledby; dates, context, stack, +N more and position move to an sr-only description');
+    assert.deepEqual(bullets('T06'), ['fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked']);
+  });
+
+  it('opens an item for a line that is not a bullet, and keeps CRLF and blank lines from changing the list', async () => {
+    const { briefBullets } = await harness();
+    assert.deepEqual(briefBullets({ brief: 'fix: x\r\n\r\n- one\r\n  two\r\nplain line\r\n\r\n- three' }), ['one two', 'plain line', 'three']);
+    assert.deepEqual(briefBullets({ brief: 'fix: only a subject' }), ['fix: only a subject']);
+  });
+
+  const run = (task: string, arm: 'A' | 'B' | 'C', success: boolean, tokens = 100) => ({ task, arm, success, tokens, costUsd: 0.1, runId: `run_${task}${arm}` });
+
+  it('counts a success with every bullet delivered as success, one with a partly or skipped bullet as partial and a failure as failure, and takes the verdict from the successes', async () => {
+    const { judgeWithCoverage, verdict } = await harness();
+    const runs = [run('T1', 'A', true, 1000), run('T2', 'A', true, 1000), run('T1', 'B', true, 900), run('T2', 'B', true, 900), run('T1', 'C', false, 800), run('T2', 'C', true, 800)];
+    const bullets = (...status: Array<'delivered' | 'partly' | 'skipped'>) => status.map((s, i) => ({ text: `bullet ${i}`, status: s, evidence: 'seen' }));
+    const coverage = {
+      runs: [
+        { task: 'T1', arm: 'A' as const, runId: 'run_T1A', bullets: bullets('delivered', 'skipped') },
+        { task: 'T2', arm: 'A' as const, runId: 'run_T2A', bullets: bullets('delivered') },
+        { task: 'T1', arm: 'B' as const, runId: 'run_T1B', bullets: bullets('delivered', 'delivered') },
+        { task: 'T2', arm: 'B' as const, runId: 'run_T2B', bullets: bullets('partly') },
+        { task: 'T1', arm: 'C' as const, runId: 'run_T1C', bullets: bullets('delivered') },
+        { task: 'T2', arm: 'C' as const, runId: 'run_T2C', bullets: bullets('delivered', 'delivered') },
+      ],
+    };
+    const judged = judgeWithCoverage(runs, coverage as never);
+    assert.deepEqual(judged.arms['A'], { runs: 2, success: 1, partial: 1, tokens: 2000 });
+    assert.deepEqual(judged.arms['B'], { runs: 2, success: 1, partial: 1, tokens: 1800 });
+    assert.deepEqual(judged.arms['C'], { runs: 2, success: 1, partial: 0, tokens: 1600 });
+    assert.deepEqual(judged.runs.map((r) => r.outcome), ['partial', 'success', 'success', 'partial', 'failure', 'success']);
+    assert.equal(judged.runs[0]?.recordedSuccess, true);
+    assert.deepEqual(judged.runs[0]?.skipped, ['bullet 1']);
+    assert.deepEqual(judged.runs[3]?.partly, ['bullet 0']);
+    assert.deepEqual(judged.verdict, verdict({ A: { success: 1, tokens: 2000, tasks: 2 }, B: { success: 1, tokens: 1800, tasks: 2 }, C: { success: 1, tokens: 1600, tasks: 2 } }));
+    assert.equal(judged.verdict.pass, true);
+  });
+
+  // Fixture files: a results file, an approved task list, a coverage record pinned to their digests and an approved amendment pinned to the task digest.
+  async function fixture(): Promise<{ resultsFile: string; tasksFile: string; coverageFile: string; amendmentFile: string }> {
+    const { loadApprovedTasks, briefBullets } = await harness();
+    const dir = temp('eval-coverage');
+    const real = JSON.parse(readFileSync(TASKS_FILE, 'utf8')) as { tasks: Array<Record<string, unknown>> };
+    const tasksFile = join(dir, 'eval-tasks.json');
+    writeFileSync(tasksFile, `${JSON.stringify({ ...real, tasks: real.tasks.slice(0, 2) }, null, 2)}\n`);
+    const tasks = loadApprovedTasks(tasksFile);
+    const resultsFile = join(dir, 'eval-results.json');
+    const runs = [
+      { task: 'T01', arm: 'A', success: true, tokens: 1000, costUsd: 0.1, runId: 'run_01' },
+      { task: 'T02', arm: 'A', success: false, tokens: 1000, costUsd: 0.1, runId: 'run_02' },
+      { task: 'T01', arm: 'B', success: true, tokens: 900, costUsd: 0.1, runId: 'run_03' },
+      { task: 'T02', arm: 'B', success: true, tokens: 900, costUsd: 0.1, runId: 'run_04' },
+    ];
+    writeFileSync(resultsFile, `${JSON.stringify({ schema: 1, runs })}\n`);
+    const entry = (r: (typeof runs)[number], status: (i: number) => string) => ({
+      task: r.task,
+      arm: r.arm,
+      runId: r.runId,
+      bullets: briefBullets(tasks.tasks.find((t) => t.id === r.task) as never).map((text, i) => ({ text, status: status(i), evidence: `evidence ${i}` })),
+    });
+    const coverage = {
+      schema: 1,
+      kind: 'avarice-eval-brief-coverage',
+      decision: 'ADR-017',
+      resultsSha256: createHash('sha256').update(readFileSync(resultsFile)).digest('hex'),
+      tasksSha256: tasks.digest,
+      judgedBy: 'tester',
+      judgedAt: '2026-11-24T10:00:00Z',
+      method: 'read the diff',
+      runs: [
+        entry(runs[0] as (typeof runs)[number], (i) => (i === 1 ? 'skipped' : 'delivered')),
+        entry(runs[1] as (typeof runs)[number], () => 'delivered'),
+        entry(runs[2] as (typeof runs)[number], () => 'delivered'),
+        entry(runs[3] as (typeof runs)[number], (i) => (i === 0 ? 'partly' : 'delivered')),
+      ],
+    };
+    const coverageFile = join(dir, 'coverage.json');
+    writeFileSync(coverageFile, `${JSON.stringify(coverage, null, 2)}\n`);
+    const amendment = {
+      schema: 1,
+      kind: 'avarice-eval-success-amendment',
+      decision: 'ADR-017',
+      amends: { file: 'test/benchmark/phase4/eval-tasks.json', sha256: tasks.digest, field: 'successRule' },
+      successRule: 'A task succeeds when the checks and the held-out test pass and every bullet of the brief is delivered.',
+      partialRule: 'A run that passes but skipped a bullet is partial.',
+      approvedBy: 'Owner',
+      approvedAt: '2026-11-24T11:00:00Z',
+    };
+    const amendmentFile = join(dir, 'amendment.json');
+    writeFileSync(amendmentFile, `${JSON.stringify(amendment, null, 2)}\n`);
+    return { resultsFile, tasksFile, coverageFile, amendmentFile };
+  }
+
+  it('re-judges the files without writing: the digests of the four sources, the amendment rule, the arms, the runs, the verdict and the knowledge outcome', async () => {
+    const { rejudgeWithCoverage, AC8_TOKEN_BOUND_PERCENT } = await harness();
+    const files = await fixture();
+    const digests = (): string[] => [files.resultsFile, files.tasksFile, files.coverageFile, files.amendmentFile].map((f) => createHash('sha256').update(readFileSync(f)).digest('hex'));
+    const before = digests();
+    const judged = rejudgeWithCoverage(files);
+    assert.deepEqual(digests(), before, 'nothing is written');
+    assert.equal(judged.kind, 'avarice-ac8-rejudgement');
+    assert.equal(judged.decision, 'ADR-017');
+    assert.equal(judged.boundPercent, AC8_TOKEN_BOUND_PERCENT);
+    assert.deepEqual([judged.resultsSha256, judged.tasksSha256, judged.coverageSha256, judged.amendmentSha256], before);
+    assert.match(judged.successRule, /every bullet of the brief is delivered/);
+    assert.deepEqual(judged.arms['A'], { runs: 2, success: 0, partial: 1, tokens: 2000, shareOfA: 1 });
+    assert.deepEqual(judged.arms['B'], { runs: 2, success: 1, partial: 1, tokens: 1800, shareOfA: 0.9 });
+    assert.deepEqual(judged.runs.map((r) => [r.task, r.arm, r.recordedSuccess, r.outcome]), [['T01', 'A', true, 'partial'], ['T02', 'A', false, 'failure'], ['T01', 'B', true, 'success'], ['T02', 'B', true, 'partial']]);
+    assert.equal(judged.runs[0]?.skipped.length, 1);
+    assert.equal(judged.runs[3]?.partly.length, 1);
+    assert.equal(judged.verdict.pass, true, 'B has one success against none for A, at 90 percent of the tokens');
+    assert.equal(judged.verdict.via, 'B');
+    assert.equal(judged.knowledge.outcome, 'on');
+  });
+});
+
 describe('the evaluation records every model step at no less than it may have cost (plan 04-46, WR-30, T-04-126)', () => {
   const costs = (chargedUsd: number, finished: number) => ({ chargedUsd, tokens: 100 * finished, finished, tokensComplete: true });
 
