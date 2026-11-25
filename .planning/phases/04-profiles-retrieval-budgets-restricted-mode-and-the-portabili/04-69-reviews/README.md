@@ -1,6 +1,6 @@
 # Plan 04-69 documentation review records
 
-Status: round 4 pending. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). The owner authorized a scoped round 4 on 2026-11-25 (see Owner decisions). The four round-3 WARNINGs (A-W1, A-W2, B-W1, B-W2) are fixed in commit `fdde37f`, and each fix was checked against the code at HEAD (see the dispositions of round 3). One fresh reviewer per group reads the changed lines (see Round 4). The executor of plan 04-70 cannot start a fresh `technical-writer:prose-reviewer` (no Agent tool), so the round is a checkpoint to the orchestrator. No document is marked `reviewed` in `docs/system/coverage.md` yet; the documents below are `changed after review` there, naming their round files.
+Status: complete. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). The owner authorized a scoped round 4 on 2026-11-25 (see Owner decisions). The four round-3 WARNINGs (A-W1, A-W2, B-W1, B-W2) were fixed in commit `fdde37f`, each checked against the code at HEAD (see the dispositions of round 3). Round 4 passed for both groups: `round-4-A.md` for group A and `round-4-B.md` for group B, each with 0 BLOCKER and 0 WARNING within scope and every current digest matching. All ten documents are marked `reviewed` in `docs/system/coverage.md`, naming their round files. The round-3 NITs stay open by the owner's decision.
 
 Code under review: `3a6c10c` (the last commit that touched `src`, `scripts`, `bin` or `test`; the last `src` commit is `2bd1e03`). Documents under review: the changes of plans 04-56 to 04-68 to `docs/system/`, as `git diff 96a0718..HEAD -- docs/system` shows for each file. The version to review in round 1 is the one with the round 1 digest below (HEAD `b07b088`). The version to review in round 2 is the one with the round 2 digest (the documents as at commit `21ae2eb`). The version to review in round 3 is the one with the round 3 digest (the documents as at commit `d38f5ea`; the commit that records the digests only changes this file).
 
@@ -45,10 +45,10 @@ Recorded 2026-11-25 by the owner, Aaron Phan, answering the checkpoint raised af
 | 2 | B | `round-2-B.md` | FAIL: 1 WARNING, 2 OBS, 1 out-of-scope note | See the dispositions of round 2 |
 | 3 | A | `round-3-A.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 6 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
 | 3 | B | `round-3-B.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 3 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
-| 4 | A | `round-4-A.md` | pending | Scoped by the owner; see "Round 4" |
-| 4 | B | `round-4-B.md` | pending | Scoped by the owner; see "Round 4" |
+| 4 | A | `round-4-A.md` | PASS: 0 BLOCKER, 0 WARNING, 0 NIT within scope | Scoped by the owner; report committed unchanged in `8064176`; documents marked `reviewed` |
+| 4 | B | `round-4-B.md` | PASS: 0 BLOCKER, 0 WARNING, 0 NIT within scope | Scoped by the owner; report committed unchanged in `8064176`; documents marked `reviewed` |
 
-Outcome by group: group A ended FAIL after three rounds (round 1 one BLOCKER and one WARNING, round 2 one WARNING, round 3 two WARNINGs). Group B ended FAIL after three rounds (one WARNING in each). The three-round budget is spent for both groups, so no document of either group is marked `reviewed`.
+Outcome by group: group A ended FAIL after three rounds (round 1 one BLOCKER and one WARNING, round 2 one WARNING, round 3 two WARNINGs) and passed the owner-scoped round 4. Group B ended FAIL after three rounds (one WARNING in each) and passed the owner-scoped round 4. Every document of both groups is marked `reviewed`.
 
 ### Dispositions of round 1
 
@@ -215,3 +215,7 @@ Dispatch rule: one fresh reviewer per group with no earlier round in its prompt.
 | B | `integrations.md` | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` (unchanged since round 3) |
 | B | `indexes-and-context.md` | `21f6c1dd1783b19018eb498a258217db571bb0793c88b04453324c613d4ec4bc` (changed since round 3) |
 | B | `README.md` | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` (unchanged since round 3) |
+
+Each document's current sha256 was compared with the digest its round-4 report records: `hashlib` over the file at HEAD, then a search for the hex string in the report. All eleven were found, so none differed, and each equals the digest in the table above. No group document changed after the round-4 dispatch (`git diff --quiet e5b33ba` over the eleven documents exits 0). Group A passed in `round-4-A.md` and group B in `round-4-B.md`. Both reports were committed once, unchanged, in `8064176`.
+
+The reports record two observations outside the scope. Neither is counted, and neither changed a document. Group A: the full attended-session hook message wraps the alias and brace reasons with advice to split the command, which fits neither cause; the document speaks only of "the reason", which is accurate. Group B: when a source refuses a read as denied or unauthenticated, the handles are omitted with `access_revoked` but are not added to the retry report's refetch list; the sentence on revoked items holds for revoked references, and the edge is narrow.
