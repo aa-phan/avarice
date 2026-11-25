@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The Phase 4 benchmark README says the ADR-017 verdict file is \"not yet present\" and gives an AC-8 token bound of 50%"
   - id: WR-02
     severity: warning
@@ -27,7 +27,7 @@ findings:
     severity: info
     disposition: open
     title: "`loadCoverage` accepts any text for `judgedBy`, `judgedAt` and `method`, so the verdict's input record carries no check of who made it"
-open: 6
+open: 5
 total: 6
 recorded: 2026-11-25T10:07:57.829Z
 ---
@@ -36,12 +36,14 @@ recorded: 2026-11-25T10:07:57.829Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
+| WR-01 | warning | fixed | 04-70, df3611a |
 | WR-02 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
 | IN-04 | info | open | - |
+
+The owner decided on 2026-11-25 not to fix WR-02 in this gap closure, because it changes `src` and would need both full-suite Node legs rerun, so it stays open.
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.

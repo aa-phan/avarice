@@ -1,6 +1,6 @@
 # Plan 04-69 documentation review records
 
-Status: closed without a pass. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). Round 3, the last allowed, left two WARNINGs in each group; they are listed under "Open after round 3" and were not fixed, because a fix after the last round would be an unreviewed edit. The executor of plan 04-69 cannot start a fresh `technical-writer:prose-reviewer` (no Agent tool, and the `technical-writer:prose-review` skill only instructs the caller to dispatch reviewer agents), so each round was a checkpoint to the orchestrator. No document is marked `reviewed` in `docs/system/coverage.md`; the documents below are `changed after review` there, naming their round files.
+Status: round 4 pending. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). The owner authorized a scoped round 4 on 2026-11-25 (see Owner decisions). The four round-3 WARNINGs (A-W1, A-W2, B-W1, B-W2) are fixed in commit `fdde37f`, and each fix was checked against the code at HEAD (see the dispositions of round 3). One fresh reviewer per group reads the changed lines (see Round 4). The executor of plan 04-70 cannot start a fresh `technical-writer:prose-reviewer` (no Agent tool), so the round is a checkpoint to the orchestrator. No document is marked `reviewed` in `docs/system/coverage.md` yet; the documents below are `changed after review` there, naming their round files.
 
 Code under review: `3a6c10c` (the last commit that touched `src`, `scripts`, `bin` or `test`; the last `src` commit is `2bd1e03`). Documents under review: the changes of plans 04-56 to 04-68 to `docs/system/`, as `git diff 96a0718..HEAD -- docs/system` shows for each file. The version to review in round 1 is the one with the round 1 digest below (HEAD `b07b088`). The version to review in round 2 is the one with the round 2 digest (the documents as at commit `21ae2eb`). The version to review in round 3 is the one with the round 3 digest (the documents as at commit `d38f5ea`; the commit that records the digests only changes this file).
 
@@ -26,7 +26,14 @@ Groups follow `04-68-doc-worklist.md`. `README.md` changed in Task 1 of this pla
 
 Each reviewer should read every sentence that states a limit (2 seconds, 60 seconds, 1 second for `ps`, 1 MiB, 440 characters, 80 characters, 400 characters, 512 characters, 16 prefix words) against the constant in the code.
 
-Round budget: at most three rounds per group, each by a fresh reviewer that has not seen an earlier round. Each report is stored verbatim as `round-<n>-<group>.md`. A group passes when its last round records no BLOCKER and no WARNING. A document is marked `reviewed` in `coverage.md` only after its group passed, naming the round file. An edit after a passing round voids the verdict.
+Round budget: at most three rounds per group, each by a fresh reviewer that has not seen an earlier round; the owner added one scoped round 4 (see Owner decisions). Each report is stored verbatim as `round-<n>-<group>.md`. A group passes when its last round records no BLOCKER and no WARNING. A document is marked `reviewed` in `coverage.md` only after its group passed, naming the round file. An edit after a passing round voids the verdict.
+
+## Owner decisions
+
+Recorded 2026-11-25 by the owner, Aaron Phan, answering the checkpoint raised after round 3.
+
+1. Review budget: "Fix + scoped round 4". Fix A-W1, A-W2, B-W1 and B-W2 with the reviewers' suggested wording, checked against the code at HEAD. Then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `08db6a5`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope. Only then are its documents marked `reviewed`; otherwise they stay `changed after review` and the owner decides, with no automatic round 5.
+2. The round-3 NITs (A-N1 to A-N6, B-N3 to B-N5) are not applied and stay open.
 
 ## Review rounds
 
@@ -36,8 +43,10 @@ Round budget: at most three rounds per group, each by a fresh reviewer that has 
 | 1 | B | `round-1-B.md` | FAIL: 1 WARNING, 3 OBS | See the dispositions below |
 | 2 | A | `round-2-A.md` | FAIL: 1 WARNING, 4 OBS | See the dispositions of round 2 |
 | 2 | B | `round-2-B.md` | FAIL: 1 WARNING, 2 OBS, 1 out-of-scope note | See the dispositions of round 2 |
-| 3 | A | `round-3-A.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 6 NITs | Not fixed; open, see "Open after round 3" |
-| 3 | B | `round-3-B.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 3 NITs | Not fixed; open, see "Open after round 3" |
+| 3 | A | `round-3-A.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 6 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
+| 3 | B | `round-3-B.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 3 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
+| 4 | A | `round-4-A.md` | pending | Scoped by the owner; see "Round 4" |
+| 4 | B | `round-4-B.md` | pending | Scoped by the owner; see "Round 4" |
 
 Outcome by group: group A ended FAIL after three rounds (round 1 one BLOCKER and one WARNING, round 2 one WARNING, round 3 two WARNINGs). Group B ended FAIL after three rounds (one WARNING in each). The three-round budget is spent for both groups, so no document of either group is marked `reviewed`.
 
@@ -82,7 +91,7 @@ The sweep of every line added to `docs/system/` since `96a0718` (table rows excl
 
 Round 3 was the last round allowed. The plan's fallback applies: no `docs/system/` document was edited after round 3, because an edit that no fresh reviewer has read would be an unreviewed fix. Every item below is open, with the reviewer's location, code evidence and suggested fix as the reports `round-3-A.md` and `round-3-B.md` record them. The owner decides whether to authorize a scoped round 4 (the precedent is round 4 of plan 04-54, scoped by the owner to the changed lines).
 
-The digests the documents had when round 3 ran are in the table under "Review groups". The documents are unchanged since, so a round 4 reviews the same text.
+The digests the documents had when round 3 ran are in the table under "Review groups". The owner then authorized a scoped round 4 (see Owner decisions); the WARNINGs below were fixed afterwards in commit `fdde37f`, so the round-4 digests differ for the two documents that changed.
 
 ### Group A, WARNINGs
 
@@ -170,3 +179,39 @@ The reviewer numbered these 3 to 5 in `round-3-B.md`.
 
 - `docs/decisions/ADR-017-ac8-brief-coverage.md` says "Date 2026-11-23" and, in decision 2, approval on 2026-11-25. An accepted ADR is never rewritten, so the plan did not edit it. The owner decides whether a superseding ADR or an accepted exception is wanted.
 
+### Dispositions of round 3
+
+Each fix was checked against the code at HEAD, not against a proposal. Commit `fdde37f` holds the four fixes.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| A-W1: the gate's step list omits the unshowable-values denial | WARNING | Fixed. Step 6 now says that with no source, parameters that cannot be shown whole are denied with `privileged:unapprovable` and no request is written; step 7 starts "Otherwise" and keeps the `approval-required:` denial. Checked against `src/app/authorize.ts:154-164` (a contract or a recorded approval allows first; `UNAPPROVABLE_RULE`, `privileged:unapprovable` at `src/domain/privileged-commands.ts:42`, is returned at `:161`, before the pending-request lookup at `:164`). Adjustment to the reviewer's text: the inserted step keeps the "With no source" condition of the old step 6, because `authorize.ts:154-157` lets a contract or a recorded approval allow these parameters before `:159-162` refuses them. |
+| A-W2: the "cannot be checked" reason texts are stated for both modes | WARNING | Fixed. The git alias and brace-glob bullets each begin "In an attended session the reason says" and end with "A run denies the line as `shell-syntax` with that rule's own reason." Checked against `src/domain/hook-decision.ts:820-821`, `src/domain/run-shell-rules.ts:35-36` and `src/hook/pre-tool-use.ts:659`. Adjustment: the reviewer's semicolon is two sentences here so the alias sentence stays within the 35-word cap. No other bullet of the list states a reason text, so these two are the only sentences scoped. |
+| B-W1: dangling reference "What the record states" | WARNING | Fixed with the reviewer's link to `#knowledge-record-fields`. The heading "Knowledge record fields" exists in `indexes-and-context.md` and describes `corpusCap`; no document of `docs/system` names the old heading. |
+| B-W2: the reuse sentences contradict the code | WARNING | Fixed. Checked against `src/app/context.ts:427-433` (revoked handles are dropped before any read and listed in `refetch` only when the earlier pack held them, `:431`), `:461-472` (a picked earlier item that misses is listed with its miss reason and read; `reused` is counted), `:537` (the report's `reuse: { reused, refetch }`) and `src/domain/cache-scope.ts:51-58` (miss order). Three adjustments to the reviewer's text: the first sentence keeps the reused count that the old text stated (`reuse.reused`, `context.ts:472`, `:537`) and gives "the report" its antecedent; "of the earlier pack" is added to the revoked sentence, because a revoked handle reaches the report only when the earlier pack held it (`context.ts:431`); "Any other" starts the last sentence, because a revoked earlier item is never picked (it is removed before picking, `:433`) and yet is listed. |
+| A-N1 to A-N6, B-N3 to B-N5 | NIT | Not fixed: owner decision of 2026-11-25; open. |
+
+## Round 4 (scoped by the owner)
+
+Scope, per group, against the round-3 version (`08db6a5`, the HEAD both round-3 reports name):
+
+- Group A: `git diff 08db6a5 HEAD -- docs/system/policy-and-approvals.md docs/system/containment.md docs/system/diagrams/approve-privileged-action.puml docs/system/processes.md docs/system/cli-reference.md docs/system/data-model.md`
+- Group B: `git diff 08db6a5 HEAD -- docs/system/runs.md docs/system/profiles-and-credentials.md docs/system/integrations.md docs/system/indexes-and-context.md docs/system/README.md`
+
+Only `policy-and-approvals.md` (group A) and `indexes-and-context.md` (group B) changed since round 3. The other nine documents are unchanged by digest. The digests below were printed by a command over the files, not typed.
+
+Dispatch rule: one fresh reviewer per group with no earlier round in its prompt. Each report is stored verbatim as `round-4-A.md` and `round-4-B.md`. A group passes only with no BLOCKER and no WARNING within the scope.
+
+| Group | Document | sha256 to review in round 4 |
+|---|---|---|
+| A | `policy-and-approvals.md` | `b6f371ec9b122a4dd193277bb17f2f056dc9f23c6e0e77f1298f4185e0c66962` (changed since round 3) |
+| A | `containment.md` | `0bdf47a8b35b064e614ad8fe2bc90d336c260a591e83d0a4a069c0e2234b6d16` (unchanged since round 3) |
+| A | `diagrams/approve-privileged-action.puml` | `0f5cfa1268c1d34cce59eaef66dec72e6d3b93deab3aa00ddb29a46a61e4524e` (unchanged since round 3) |
+| A | `processes.md` | `d329315f11e8e047e666d34fcf2952382b2be0371be46d99ed474e0c6890ac51` (unchanged since round 3) |
+| A | `cli-reference.md` | `30cd0bba18f5b7f305739bfa1f0378e813e1011679de2096e58a68a7902d66fc` (unchanged since round 3) |
+| A | `data-model.md` | `f1badee031dc5cf7bee8d7db7468c53d5da798fd835df7996d775b686b663cbc` (unchanged since round 3) |
+| B | `runs.md` | `3fe2166132fab036a22a554a139386d2ea9b864186ff1b32c767f06ef32af879` (unchanged since round 3) |
+| B | `profiles-and-credentials.md` | `d1dfa303f68a07902d39545da1ec178a23db6bf710ff09670db6743b1165f368` (unchanged since round 3) |
+| B | `integrations.md` | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` (unchanged since round 3) |
+| B | `indexes-and-context.md` | `21f6c1dd1783b19018eb498a258217db571bb0793c88b04453324c613d4ec4bc` (changed since round 3) |
+| B | `README.md` | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` (unchanged since round 3) |
