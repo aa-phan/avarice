@@ -13,7 +13,7 @@ created: "2026-11-22"
 
 # Phase 04 — Security
 
-> Per-phase security contract: threat register, accepted risks, and audit trail. Register parsed from the `<threat_model>` blocks of the 55 phase plans. The 39 original plans were verified against code and tests by `gsd-security-auditor` (ASVS L1, block_on high) on 2026-11-22. The register now also includes the gap plans 04-40..04-55 and the regression fix that followed them (96a0718, pinned by d01ff88: an other-profile config refused by permissions is denied whole instead of stopping the command), audited at L1 on 2026-11-23. Neither run changed code, tests or docs.
+> Per-phase security contract: threat register, accepted risks, and audit trail. Register parsed from the `<threat_model>` blocks of the 69 phase plans. The 39 original plans were verified against code and tests by `gsd-security-auditor` (ASVS L1, block_on high) on 2026-11-22. The register now also includes the gap plans 04-40..04-55 and the regression fix that followed them (96a0718, pinned by d01ff88: an other-profile config refused by permissions is denied whole instead of stopping the command), audited at L1 on 2026-11-23. The second gap closure, plans 04-56..04-69 (T-04-147..T-04-175), was audited at L1 on 2026-11-25. No audit run changed code, tests or docs.
 
 ---
 
@@ -41,13 +41,13 @@ Consolidated from the plans' threat models (one row per boundary class).
 
 ## Threat Register
 
-147 unique threats: 141 mitigate, 6 accept. 146 closed (T-04-116 with an accepted residual, AR-04-04); 1 open below the `high` block threshold (non-blocking).
+176 unique threats: 169 mitigate, 7 accept. 175 closed (T-04-116 with an accepted residual, AR-04-04); 1 open below the `high` block threshold (non-blocking).
 
 | Threat ID | Category | Component | Severity | Disposition | Mitigation | Status |
 |-----------|----------|-----------|----------|-------------|------------|--------|
 | T-04-01 | Denial of service | live spend runaway | high | mitigate | 40 USD ceiling checked before every case; env override lower-only; tested | closed |
 | T-04-02 | Tampering | corrupt ledger reads as zero spend | medium | mitigate | a non-JSON line throws; tested | closed |
-| T-04-SC | Tampering | npm/pip/cargo installs | high | mitigate | No package installs in this plan; restated unchanged by the gap plans 04-40..04-55 (`package.json` and `package-lock.json` unchanged since before them) | closed |
+| T-04-SC | Tampering | npm/pip/cargo installs | high | mitigate | No package installs in this plan; restated unchanged by the gap plans 04-40..04-55 and 04-56..04-69 (`package.json` and `package-lock.json` unchanged since before them; the Node 22.22.3 binary used by 04-66 is the checksum-verified official build, `04-UAT.md:38`) | closed |
 | T-04-03 | Tampering | cloned public repositories executing code | medium | mitigate | clone only; no install, build or script run; graphify parses with tree-sitter; clones live outside this checkout and are deleted after | closed |
 | T-04-04 | Information disclosure | spike records quoting home paths | low | accept | spike records are repository files; paths under the owner's home are the same ones RESEARCH already records | closed |
 | T-04-05 | Information disclosure | private repository content copied into this repository | medium | mitigate | the lists hold paths, SHAs, commit subjects and test paths only, never file content; the owner reviews them at the checkpoint | closed |
@@ -192,6 +192,35 @@ Consolidated from the plans' threat models (one row per boundary class).
 | T-04-144 | Denial of service | the hook stalled by measuring a very large file | medium | mitigate | the scan gives up after 64 MiB and refuses the read. Evidence: `src/hook/pre-tool-use.ts:43`, `:272` | closed |
 | T-04-145 | Tampering | a file that grows between the hook's measurement and the host's read is under-charged | low | accept | only the run's own confined agents write its clone, and each such write is judged by the hook; the charge is the size at decision time; AR-04-07 | closed |
 | T-04-146 | Repudiation | a harness finding moved to fixed with no fix behind it (branch b only) | medium | mitigate | rows move only with a fix commit and a red test, in branch b only. Evidence: branch a taken (`04-50-SUMMARY.md:43`); WR-28, WR-29, WR-32 and WR-36 stay deferred (`04-REVIEW-DISPOSITION.md:347-355`) | closed (not applicable) |
+| T-04-147 | Spoofing | approval display hides a redirecting git option or env assignment the digest binds (GCR-01) | critical | mitigate | unshowableReason refuses a key or value over 80, entries over 400, cwd over 512, control characters and secret-shaped text, on the attended, run and gate paths. Evidence: `src/domain/approval.ts:15-17,100-122,131-136`; `src/hook/pre-tool-use.ts:458-461,667,724-730`; `src/app/authorize.ts:159-162`; `src/domain/privileged-commands.ts:42`; tests `test/unit/approval.test.ts:144-149,159-167,170-174,199-207`, `test/integration/hook-privileged.test.ts:721-741,790-`, `test/integration/approvals.test.ts:419-` | closed |
+| T-04-148 | Information disclosure | a secret in a bound value printed whole or stored in an event | medium | mitigate | a summary the secret patterns match is unapprovable; reasons name the key and pattern, never the value. Evidence: `src/domain/approval.ts:92,118-121`; `src/hook/pre-tool-use.ts:667-690`; tests `test/unit/approval.test.ts:176-183`, `test/integration/hook-privileged.test.ts:721-741` | closed |
+| T-04-149 | Spoofing | a pending request with a cut summary, written before the change, approved afterwards | low | accept | no release shipped the old behavior (tag v1.0 has no `paramsSummary` or attended hook); requests expire after 30 minutes (`src/domain/approval.ts:8,37-39`); the phase PR lands both together; AR-04-08 | closed |
+| T-04-173 | Denial of service | an ordinary approval refused because the cwd or the classifier's own parameters trip the refusal | medium | mitigate | the cwd has its own 512 cap outside the 80 and 400 caps. Evidence: `src/domain/approval.ts:17,62-75,111,116`; tests `test/integration/hook-privileged.test.ts:744-788`, `test/unit/approval.test.ts:199-240` | closed |
+| T-04-150 | Elevation of privilege | a pull request or release created without approval via `-R` before the subcommand (GWR-01) | high | mitigate | gh group options skipped before the subcommand; repo bound in either position. Evidence: `src/domain/privileged-commands.ts:1012-1037`; tests `test/unit/privileged-commands.test.ts:242-246,315-343` (bash and zsh oracle), `:573-612` | closed |
+| T-04-151 | Elevation of privilege | a push under a same-line alias or config include (GWR-03) | high | mitigate | a same-line alias or include definition (`-c`, `--config-env`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_PARAMETERS`) is unparseable and both callers refuse it. Evidence: `src/domain/privileged-commands.ts:946-951,957,964,968`; `src/domain/hook-decision.ts:820-821`; `src/hook/pre-tool-use.ts:715-721`; tests `test/unit/privileged-commands.test.ts:615-659` | closed |
+| T-04-152 | Denial of service | the owner asked twice for one push because a here-document body is scanned twice (GIN-01) | low | mitigate | one scan per substitution offset. Evidence: `src/domain/privileged-commands.ts:206-216`; tests `test/unit/privileged-commands.test.ts:661-689` | closed |
+| T-04-153 | Denial of service | an untrusted host withholding its patch via one oddly named out-of-scope file (GWR-04) | medium | mitigate | literal file exclusions; in-scope hunks kept. Evidence: `src/adapters/git/run-workspace.ts:663-684`; `src/app/run-stages/restricted.ts:226`; tests `test/integration/restricted-mode.test.ts:199-218`, `test/integration/run-workspace.test.ts:677-` | closed |
+| T-04-154 | Tampering | a file name read as pathspec magic or a glob | medium | mitigate | `:(exclude,literal)` per path, no global literal mode, relative only, no `..`, no NUL. Evidence: `src/adapters/git/run-workspace.ts:670-675,682`; tests `test/integration/run-workspace.test.ts:677-` (literal-star and bracket cases, refusals) | closed |
+| T-04-155 | Denial of service | a crashed writer's lock held forever after PID reuse (GWR-05) | medium | mitigate | start-time comparison via `ps -o etime=` with a 2 s margin; 60 s age bound when unreadable; `ps` by absolute path, no shell, 1 s timeout. Evidence: `src/adapters/fs/profile-bindings.ts:181,185,202-262`; tests `test/unit/profile-bindings-lock.test.ts:1-71`, `test/fault/bindings-race.test.ts:183-197` | closed |
+| T-04-156 | Information disclosure | a planted corrupt config removing a profile from the deny list (GWR-06) | high | mitigate | an invalid config denies the profile's whole root; other failures are `unavailable` (fail closed). Evidence: `src/adapters/fs/profile-registry.ts:85-90`; tests `test/unit/profile-registry.test.ts:188,202-250` (four corrupt forms) | closed |
+| T-04-157 | Repudiation | a race test passing without a race (GWR-07) | medium | mitigate | per-call timings, overlap assertion with retry, unlocked discriminating variant. Evidence: `test/helpers/bindings-race-child.ts`; `test/fault/bindings-race.test.ts:7,100-141` | closed |
+| T-04-158 | Denial of service | a run stopped at the consecutive-denials limit retrying a false refusal reason (GIN-03) | low | mitigate | the reason names the brace group and the alternatives; rule unchanged. Evidence: `src/domain/hook-decision.ts:26-28,195-201,879-891`; tests `test/unit/hook-decision.test.ts:587-`, `test/integration/hook-retrieval.test.ts:361-387` | closed |
+| T-04-159 | Tampering | an older-format pack item reused without its untrusted mark (GIN-05) | medium | mitigate | format stamp; absent or different format is a miss and is read again. Evidence: `src/domain/cache-scope.ts:17,51`; `src/app/context.ts:347,466-470`; tests `test/integration/cache-scope.test.ts:61-,201-` | closed |
+| T-04-160 | Repudiation | a success count including runs that skipped part of their brief (G-04-3) | medium | mitigate | judgeWithCoverage counts such runs as partial; loaders pin results and tasks digests and refuse incomplete or reordered coverage. Evidence: `scripts/eval-retrieval.ts:543-596,655-676,726-`; tests `test/unit/eval-retrieval.test.ts:212-,481-` | closed |
+| T-04-161 | Tampering | the approved task list edited in place | medium | mitigate | the amendment is a separate file pinned to the tasks sha256 with its own approval; the harness never writes eval-tasks.json. Evidence: `scripts/eval-retrieval.ts:603-640`; `test/benchmark/phase4/eval-success-amendment.json`; `eval-tasks.json` unchanged since ed9e123 | closed |
+| T-04-162 | Elevation of privilege | real spend under-recorded because a launch is not seen | medium | mitigate | the cap is recorded when launches are uncountable, exceed finishes, or the exit code is null; only a step with a code and no launch records 0. Evidence: `scripts/eval-retrieval.ts:1219-1223`; tests `test/unit/eval-retrieval.test.ts:686-,790-` | closed |
+| T-04-163 | Elevation of privilege | a push formed by brace expansion or a command-position glob (GWR-02) | high | mitigate | expansion words in command, prefix and subcommand positions and brace words in a privileged command are unparseable; a glob after the subcommand is bound as written and named in the enforcement map. Evidence: `src/domain/privileged-commands.ts:528-535,649,972,1032,1057,1178-1228`; `src/domain/enforcement-map.ts:97`; tests `test/unit/privileged-commands.test.ts:153-154,247-250,691-754`, `test/unit/enforcement-map.test.ts:202-212` | closed |
+| T-04-164 | Elevation of privilege | a push started through a wrapper or launcher outside the fixed list (GIN-02) | medium | mitigate | doas, taskset, arch, caffeinate, unbuffer, chronic, coproc, the find -exec family, parallel, watch, su -c, trap and here-strings followed. Evidence: `src/domain/privileged-commands.ts:543,570-575,889-945,1072-1160,1189-1230`; tests `test/unit/privileged-commands.test.ts:253-283,756-`, `test/helpers/shell-oracle.ts:52-71` | closed |
+| T-04-165 | Repudiation | the enforcement map presenting the gate as covering more than it does | medium | mitigate | residual list rewritten from the code and asserted. Evidence: `src/domain/enforcement-map.ts:97`; `test/unit/enforcement-map.test.ts:202-235`; `docs/system/policy-and-approvals.md:160-169` | closed |
+| T-04-166 | Repudiation | the success rule changed or the task list edited without the owner's approval | medium | mitigate | loadAmendment refuses an amendment without both approval fields; approval recorded 2026-11-25T05:57:45Z after the coverage commits and before the verdict. Evidence: `scripts/eval-retrieval.ts:603-628`; `eval-success-amendment.json`; `04-64-SUMMARY.md:96-102` | closed |
+| T-04-167 | Tampering | a coverage judgment that is wrong or biased toward an arm | medium | mitigate | rules fixed before judging (`method` field), per-bullet evidence for all 45 bullets, loader refuses empty evidence or a bad status, owner review at the checkpoint. Evidence: `test/benchmark/phase4/eval-coverage.json`; `scripts/eval-retrieval.ts:583-586`; `04-64-SUMMARY.md:37,72,102` | closed |
+| T-04-168 | Information disclosure | private source text copied into a public file through evidence strings | low | mitigate | evidence cites paths and line numbers; no evidence string holds a quoted phrase of 40 or more characters. Evidence: `test/benchmark/phase4/eval-coverage.json` | closed |
+| T-04-169 | Repudiation | claiming Node 22.22.3 support with no passing run | medium | mitigate | both legs at 3a6c10c: v22.22.3 and v26.9.0, exit 0, 5722 tests, 0 fail. Evidence: `04-66-node-legs.json:3-36`; no src, test or scripts change after 3a6c10c | closed |
+| T-04-170 | Tampering | a Node-22-only product defect hidden by a test edit | medium | mitigate | plan 04-66 changed no src file; its test edits are fixture changes that weaken no product assertion. Evidence: `git diff --stat 9fde92e^ 3a6c10c -- src` empty | closed |
+| T-04-171 | Repudiation | documentation describing the approval gate, the classifier or containment as stronger than built | medium | mitigate | written from the code; residual list matches the enforcement map; fresh review ran in 04-69. Evidence: `docs/system/policy-and-approvals.md:56-66,100-126,147-169`; `04-69-reviews/`. Caveat: group A did not pass review; A-W1 and A-W2 are open with the owner and are accuracy defects, not overstatements | closed (caveat) |
+| T-04-172 | Repudiation | a document marked reviewed without a passing fresh review | medium | mitigate | none of the 11 changed docs/system files is marked reviewed. Evidence: `docs/system/coverage.md:82-98`; `04-69-reviews/README.md` | closed |
+| T-04-174 | Repudiation | a verdict from an unapproved amendment, ADR-017 figures differing from the harness, or an accepted ADR rewritten | medium | mitigate | approval precondition; unit test deep-equals the committed verdict; ADR-017 table matches the verdict arms; ADR-015, ADR-016 and docs/requirements.md unchanged since ed9e123. Evidence: `scripts/eval-retrieval.ts:622-624`; `test/unit/eval-retrieval.test.ts:212-`; `docs/decisions/ADR-017-ac8-brief-coverage.md` | closed |
+| T-04-175 | Repudiation | documentation describing isolation, the lock, the patch or pack reuse as stronger than built, or a disposition naming a fix that did not land | medium | mitigate | all 30 hashes in `04-REVIEW-GAPS-DISPOSITION.md` resolve to commits; 14 fix commits spot-checked; red records present. Evidence: `docs/system/profiles-and-credentials.md:26,69`, `docs/system/indexes-and-context.md:280-283`. Caveat: B-W1 and B-W2 open with the owner (B-W2 contradicts `src/app/context.ts:461-470`) | closed (caveat) |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -221,6 +250,7 @@ Dispositions accepted at plan time, and one residual the owner accepted at the 2
 | AR-04-05 | T-04-107 | The attended hook refuses only lines past the classifier limits or with unterminated constructs; the deny reason tells the model to split the command or use the Write tool (`src/hook/pre-tool-use.ts:626`; `04-40-PLAN.md:225`) | plan 04-40 threat model | 2026-11-22 |
 | AR-04-06 | T-04-127 | The agent runs as the owner's user, so no owner-writable file is out of its reach; the script states the authorization record is a procedural guard and the Phase 4 spend ledger ceiling the mechanical one (`scripts/eval-retrieval.ts:24`; `04-46-PLAN.md:189`) | plan 04-46 threat model | 2026-11-22 |
 | AR-04-07 | T-04-145 | Only the run's own confined agents write its clone, and each such write is judged by the hook; the charge is the size at decision time (`04-55-PLAN.md:193`) | plan 04-55 threat model | 2026-11-22 |
+| AR-04-08 | T-04-149 | A pending request with a cut summary written before the change could be approved afterwards; no release shipped the old behavior (tag v1.0 has no `paramsSummary`), requests expire unused after 30 minutes (`src/domain/approval.ts:8`), and the phase PR lands both together (`04-56-PLAN.md:34`, `:203`) | plan 04-56 threat model | 2026-11-25 |
 
 The open medium threat T-04-14 is not accepted: accepting is an owner decision, and none has been made for it. T-04-102 closed on 2026-11-23 when the three documents passed the 04-54 reviews.
 
@@ -236,6 +266,8 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 4. Informational (04-25): doctor probes read files and spawn processes; bounded and consistent with T-04-67..T-04-69.
 5. The SUMMARY files for 04-02, 04-11 and 04-13 have no `## Threat Flags` section.
 6. The SUMMARY files for 04-40..04-55 each report no threat flag; every surface they name maps to T-04-105..T-04-146 (2026-11-23).
+7. The SUMMARY files for 04-56..04-69 report no threat flag (04-59 and 04-67 have no `## Threat Flags` section). Informational: the `ps` subprocess added to the bindings lock (`src/adapters/fs/profile-bindings.ts:225-236`) is the surface T-04-155 declares; absolute path, fixed environment, 1 s timeout, no shell, validated pid (`:252`) (2026-11-25).
+8. Informational (04-69): the fresh prose reviews of groups A and B ended FAIL after three rounds with four WARNINGs open for the owner (A-W1, A-W2, B-W1, B-W2; `04-69-SUMMARY.md` "Open items"). None claims a control stronger than the code builds; recorded as caveats on T-04-171 and T-04-175. ADR-017 is dated 2026-11-23 but cites a 2026-11-25 approval (documentation inconsistency, not a threat).
 
 ---
 
@@ -245,6 +277,7 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 |------------|---------------|--------|------|--------|
 | 2026-11-22 | 105 | 103 | 2 (medium, non-blocking) | gsd-security-auditor (sonnet), orchestrated by gsd-secure-phase |
 | 2026-11-23 | 147 (42 new) | 146 | 1 (medium, non-blocking) | L1 classification by gsd-secure-phase; owner accepted AR-04-04; register update by gsd-security-auditor |
+| 2026-11-25 | 176 (29 new) | 175 | 1 (medium, non-blocking) | gsd-security-auditor (sonnet), orchestrated by gsd-secure-phase; L1 audit of gap plans 04-56..04-69 |
 
 ---
 
@@ -255,7 +288,7 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 - [x] `threats_open: 0` confirmed (at block_on high)
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-11-23 (threats_open: 0; T-04-14 open below threshold; AR-04-04 accepted by the owner; unregistered flag 1 needs the owner before any push)
+**Approval:** verified 2026-11-25 (threats_open: 0; T-04-14 open below threshold; 29 new threats from gap plans 04-56..04-69 closed, AR-04-08 recorded from the plan-time accept; unregistered flag 1 needs the owner before any push). Earlier: verified 2026-11-23.
 
 ## Security Audit 2026-11-23
 
@@ -263,4 +296,12 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 |---|---|
 | Threats found | 42 |
 | Closed | 42 |
+| Open | 0 |
+
+## Security Audit 2026-11-25
+
+| Metric | Count |
+|---|---|
+| Threats found | 29 |
+| Closed | 29 |
 | Open | 0 |
