@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-66-PLAN.md
-last_updated: "2026-11-25T08:49:04.441Z"
+stopped_at: Completed 04-67-PLAN.md
+last_updated: "2026-11-25T08:54:53.813Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: 5f38971ec3f3f46b7c9ac0d6e58602e51c84e1e7
+state_head: 5bd772b0a6fefffb0c10a645165e88998216fe8a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 66
+  completed_plans: 67
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 12 of 69
+Plan: 13 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -229,6 +229,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P65 | 12 min | 2 tasks | 4 files |
 | Phase 04 P63 | 35 min | 2 tasks | 5 files |
 | Phase 04 P66 | 137 min | 3 tasks | 11 files |
+| Phase 04 P67 | 35 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -569,6 +570,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-65: AC-8 restated under the approved amendment: successes A 0, B 2, C 3 of 6; verdict pass via B at 94.4%; knowledge pass on because C succeeds more often than B; ADR-017 records it and states the triviality of the success clause
 - [Phase 04]: 04-63: parallel yields one command string per ':::' argument (quoted, or replacing {} / {1}); a brace word beginning with '-' or '{' is refused where a reader's option decides what runs; coproc lines run in the oracle without a run count (bash 3.2 has no coproc) — A quoted argument keeps 'parallel echo ::: git push' none while 'parallel git ::: push' is a push; the brace rule closes -e{x,}ec style options without refusing other brace words; the oracle still checks every invocation a shell performs
 - [Phase 04]: 04-66: scratch-repository test scripts use the quoted glob node --test "test/**/*.test.ts", never a directory argument (Node 22 does not expand one); the full suite is recorded green on Node 22.22.3 and 26.9.0 at one commit — G-04-4: the engines floor (ADR-001) is proven by a recorded run; no src/ or engines change
+- [Phase 04]: 04-67: policy-and-approvals.md's privileged-approval row names the unshowable-value refusal beyond the code table's gh api body wording; the difference goes to findings.md in 04-69
 
 ### Roadmap Evolution
 
@@ -636,8 +638,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-25T08:49:04.205Z
-Stopped at: Completed 04-66-PLAN.md
+Last session: 2026-11-25T08:54:53.595Z
+Stopped at: Completed 04-67-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
