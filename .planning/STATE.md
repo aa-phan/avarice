@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-68-PLAN.md
-last_updated: "2026-11-25T09:02:02.797Z"
+stopped_at: Completed 04-69-PLAN.md (review groups A and B failed round 3; open findings with the owner)
+last_updated: "2026-11-25T09:41:06.775Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: a13d034f5039ec5744216b791904670ee31c6931
+state_head: 5e078d59bf32563ff8d92b077e4a515cbdfd1a99
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 68
+  completed_plans: 69
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 14 of 69
+Plan: 15 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -231,6 +231,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P66 | 137 min | 3 tasks | 11 files |
 | Phase 04 P67 | 35 min | 2 tasks | 6 files |
 | Phase 04 P68 | 40 min | 2 tasks | 6 files |
+| Phase 04 P69 | multi-session | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -573,6 +574,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-66: scratch-repository test scripts use the quoted glob node --test "test/**/*.test.ts", never a directory argument (Node 22 does not expand one); the full suite is recorded green on Node 22.22.3 and 26.9.0 at one commit — G-04-4: the engines floor (ADR-001) is proven by a recorded run; no src/ or engines change
 - [Phase 04]: 04-67: policy-and-approvals.md's privileged-approval row names the unshowable-value refusal beyond the code table's gh api body wording; the difference goes to findings.md in 04-69
 - [Phase 04]: 04-68: the pack stored for a run step is not documented as carrying the item format; the code records only references and a fixed field set, so only the context report and the retry's reuse report are said to carry it
+- [Phase 04]: 04-69: no docs/system document edited after round 3; both review groups failed the last allowed round, so all ten documents stay changed after review and the four open WARNINGs go to the owner (scoped round 4 is the owner's call)
 
 ### Roadmap Evolution
 
@@ -640,8 +642,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-25T09:02:02.580Z
-Stopped at: Completed 04-68-PLAN.md
+Last session: 2026-11-25T09:41:06.555Z
+Stopped at: Completed 04-69-PLAN.md (review groups A and B failed round 3; open findings with the owner)
 Resume file: None
 
 ## Operator Next Steps
