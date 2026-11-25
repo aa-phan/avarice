@@ -16,8 +16,8 @@ alt no privileged command
   Hook --> Agent : this check says nothing; a run's command rules,\nor in an attended session the host's own rules, decide
 else the line cannot be read, in a run
   Hook --> Agent : denied as a shell syntax error, no request
-else a privileged command whose values cannot be shown whole, in a run
-  Hook -> Ledger : the denial for the first such command, no request
+else the line's first privileged command has values that cannot be shown whole, in a run
+  Hook -> Ledger : the denial for that command, no request
   Hook --> Agent : denied, no approval was asked for because a bound value cannot be shown whole
 else a privileged command, in a run
   Hook -> Ledger : request for the first privileged command's scope, action and parameter digest\n(the waiting one again, else a new one), and the denial
