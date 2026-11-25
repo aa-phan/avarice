@@ -177,6 +177,10 @@ interface CorpusLine {
 
 const corpus = (...entries: ReadonlyArray<readonly [string, number]>): CorpusLine[] => entries.map(([line, runs]) => ({ line, runs }));
 
+// Lines whose form the machine's shell may not support (coproc is no part of bash 3.2, which is what /bin/bash is on macOS): no run count, but every invocation a shell does perform
+// must still be one classifyLine returned.
+export const SHELL_DEPENDENT: readonly CorpusLine[] = corpus(['coproc git push; wait', 0]);
+
 export const CORPUS: readonly CorpusLine[] = corpus(
   ['git push origin main', 1],
   ['git -C . push origin main', 1],
@@ -246,6 +250,22 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['g{i,}t push', 0],
   ['npm test && npm publish', 1],
   ['npm publish', 1],
+  // More wrappers and launchers (plan 04-63; GIN-02): the stubs for them are in the oracle's stub directory, and find is the system one.
+  ['find . -maxdepth 0 -exec git push \\;', 1],
+  ['find . -maxdepth 0 -execdir git push {} +', 1],
+  ['parallel git push ::: a', 1],
+  ["parallel ::: 'git push'", 1],
+  ['watch git push', 1],
+  ['watch -x git push', 1],
+  ['doas git push', 1],
+  ['taskset 1 git push', 1],
+  ['taskset -c 0 git push', 1],
+  ['arch -arm64 git push', 1],
+  ['caffeinate git push', 1],
+  ['unbuffer git push', 1],
+  ['chronic git push', 1],
+  ['taskset -p 1234', 0],
+  ["find . -name '*.ts'", 0],
   // Another program starts the command (plan 04-51; WR-01, WR-03): the stubs for the shells and the wrappers are linked into the stub directory, so a shell
   // started on a literal string really runs the stub.
   ['bash -c "git push origin main"', 1],
@@ -287,14 +307,14 @@ describe('the differential oracle: every privileged command a shell runs on the 
   for (const shell of ['bash', 'zsh'] as const satisfies readonly Shell[]) {
     const available = shellAvailable(shell);
     it(`under ${shell}${available ? '' : ' (skipped: /bin/zsh is not installed on this machine)'}`, { skip: available ? false : `${shell} is not installed` }, () => {
-      for (const { line, runs } of CORPUS) {
+      for (const { line, runs } of [...CORPUS, ...SHELL_DEPENDENT]) {
         const performed = runUnderShell(shell, line)
           .flatMap((argv) => {
             const found = classifyShellCommand(argv);
             return found === null || isUnparseable(found) ? [] : [found];
           });
         // bash expands a redirection target twice when the redirection fails, so a line may run a command more often than it names it: at least `runs`, and none for a line that only mentions one.
-        if (shell === 'bash') assert.ok(runs === 0 ? performed.length === 0 : performed.length >= runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
+        if (shell === 'bash' && !SHELL_DEPENDENT.some((entry) => entry.line === line)) assert.ok(runs === 0 ? performed.length === 0 : performed.length >= runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
         const found = classifyLine(line);
         // A line classifyLine refuses as unparseable covers every invocation it runs: both callers refuse such a line (plan 04-62; GWR-02), so none of them runs unapproved.
         if (found.kind === 'unparseable') continue;
@@ -717,5 +737,91 @@ describe('a brace expansion or a glob that decides which command runs is refused
     const found = classifyShellCommand(['git', 'push', 'origin', 'main']);
     assert.ok(found !== null && !isUnparseable(found) && found.action === 'git.push');
     assert.equal(classifyShellCommand(['git', 'status']), null);
+  });
+});
+
+describe('a push started through a wrapper or launcher is seen (GIN-02, FR-12, T-04-164)', () => {
+  const FORMS: ReadonlyArray<readonly [string, string]> = [
+    ['find . -maxdepth 0 -exec git push \\;', 'git.push'],
+    ["find . -maxdepth 0 -exec git push ';'", 'git.push'],
+    ['find . -maxdepth 0 -execdir git push {} +', 'git.push'],
+    ['find . -maxdepth 0 -ok git push {} \\;', 'git.push'],
+    ['find . -maxdepth 0 -okdir git push \\;', 'git.push'],
+    ['find . -name x -exec echo {} \\; -exec git push \\;', 'git.push'],
+    ["find . -exec sh -c 'git push' _ {} \\;", 'git.push'],
+    ['sudo find . -exec git push \\;', 'git.push'],
+    ['parallel git push ::: a', 'git.push'],
+    ['parallel -j 4 git push ::: a b', 'git.push'],
+    ['parallel git push {} ::: a', 'git.push'],
+    ['parallel git ::: push', 'git.push'],
+    ["parallel ::: 'git push'", 'git.push'],
+    ["parallel 'git push' ::: a", 'git.push'],
+    ['watch git push', 'git.push'],
+    ['watch -n 5 git push', 'git.push'],
+    ["watch 'git push'", 'git.push'],
+    ['watch -x git push', 'git.push'],
+    ['watch --exec git push', 'git.push'],
+    ['watch -n5 -x git push', 'git.push'],
+    ['doas git push', 'git.push'],
+    ['doas -u root git push', 'git.push'],
+    ['taskset 1 git push', 'git.push'],
+    ['taskset 0x3 git push', 'git.push'],
+    ['taskset -c 0 git push', 'git.push'],
+    ['taskset --cpu-list 0,1 git push', 'git.push'],
+    ['arch -arm64 git push', 'git.push'],
+    ['arch -x86_64 git push', 'git.push'],
+    ['arch -arch arm64 git push', 'git.push'],
+    ['arch -e A=1 -d B git push', 'git.push'],
+    ['caffeinate git push', 'git.push'],
+    ['caffeinate -t 60 -i git push', 'git.push'],
+    ['caffeinate -w 12 git push', 'git.push'],
+    ['unbuffer git push', 'git.push'],
+    ['unbuffer -p git push', 'git.push'],
+    ['chronic git push', 'git.push'],
+    ['chronic -e git push', 'git.push'],
+    ['coproc git push', 'git.push'],
+    ['coproc git push; wait', 'git.push'],
+    ['doas taskset 1 caffeinate gh pr create', 'scm.pr.create'],
+    ['find . -exec npm publish \\;', 'release.publish'],
+  ];
+  for (const [line, action] of FORMS) {
+    it(`${JSON.stringify(line)} is ${action}`, () => {
+      assert.deepEqual(actionsOf(line).slice(0, 1), [action]);
+    });
+  }
+
+  it('names one push for each command a find -exec runs, and one for each argument of parallel', () => {
+    assert.deepEqual(actionsOf('find . -exec git push \\; -exec npm publish \\;'), ['git.push', 'release.publish']);
+    assert.deepEqual(actionsOf('parallel git push ::: a b'), ['git.push', 'git.push']);
+    assert.deepEqual(actionsOf('parallel git push'), ['git.push']);
+  });
+
+  it('binds the target of the command a wrapper runs, and carries the assignments before the wrapper', () => {
+    const pushed = firstOf('FOO=1 doas -u root git push origin main');
+    assert.equal(pushed.params['remote'], 'origin');
+    assert.equal(pushed.params['refspec'], 'main');
+    assert.equal(pushed.params['env'], 'FOO=1');
+    assert.equal(firstOf('BAR=2 taskset 1 git push').params['env'], 'BAR=2');
+    assert.equal(firstOf('FOO=1 find . -exec git push origin main \\;').params['env'], 'FOO=1');
+    assert.equal(firstOf('parallel git push {} ::: a').params['remote'], 'a');
+  });
+
+  it('answers none for a form that runs nothing, or runs a program that is not privileged', () => {
+    for (const line of ['taskset -p 1234', 'taskset -pc 0 1234', 'taskset --pid 1234', "find . -name '*.ts'", 'find . -type f -print', 'find . -exec echo {} \\;', 'watch ls', 'watch -n 1', 'parallel echo ::: a b', 'parallel ::: ls', 'doas', 'arch', 'caffeinate', 'unbuffer', 'chronic', 'coproc', 'coproc ls', 'taskset 1']) {
+      assert.deepEqual(classifyLine(line), { kind: 'none' }, line);
+    }
+  });
+
+  it('keeps the prefix limit with the new wrappers: 16 classify and 17 are unparseable', () => {
+    for (const wrapper of ['doas', 'caffeinate', 'unbuffer', 'chronic', 'taskset 1', 'arch -arm64', 'coproc']) {
+      assert.deepEqual(actionsOf(`${`${wrapper} `.repeat(16)}git push`), ['git.push'], wrapper);
+      assert.equal(classifyLine(`${`${wrapper} `.repeat(17)}git push`).kind, 'unparseable', wrapper);
+    }
+  });
+
+  it('refuses a brace or a glob in the words each new reader consumes before the command it runs', () => {
+    for (const line of ['doas -u {a,b} git push', 'taskset {1,2} git push', 'taskset -c 0* git push', 'arch -{a,b} git push', 'caffeinate -t {1,2} git push', 'find . -exec git pus{h,} \\;', 'find . -exec g*t push \\;', 'watch -n {1,2} git push', 'watch -x git pu?h', 'parallel -j {1,2} git push ::: a', 'parallel git pus{h,} ::: a', 'watch git pus{h,}']) {
+      assert.equal(classifyLine(line).kind, 'unparseable', line);
+    }
   });
 });

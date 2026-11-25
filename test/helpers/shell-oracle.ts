@@ -3,7 +3,7 @@
 // its arguments. The stubs do nothing but log, so a line that pushes, opens a pull request or publishes only writes a line to a file in the temporary directory.
 //
 // Test input reaches the shell only as the -c argument of a child process with a minimal environment, standard input from /dev/null and a timeout. A few more stubs
-// (env, nohup, cat, diff, bash) let the lines of the corpus run the way the shell would run them; none of them does more than the real one with these arguments.
+// (env, nohup, cat, diff, bash, and the wrappers and launchers named below) let the lines of the corpus run the way the shell would run them; none of them does more than the real one with these arguments.
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -49,6 +49,19 @@ export function runUnderShell(shell: Shell, line: string): string[][] {
     stub(bin, 'stdbuf', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
     stub(bin, 'ionice', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
     stub(bin, 'flock', 'cmd=\nwhile [ $# -gt 0 ]; do case "$1" in -c) cmd="$2"; shift 2;; -w|-E) shift 2;; -*) shift;; *) break;; esac; done\nshift\nwhile [ $# -gt 0 ]; do case "$1" in -c) cmd="$2"; shift 2;; *) break;; esac; done\nif [ -n "$cmd" ]; then exec /bin/sh -c "$cmd"; fi\nexec "$@"');
+    // More wrappers and launchers (plan 04-63; GIN-02): each does what the real one does with the arguments the corpus gives it. `find` is the system one, run through PATH like the
+    // others; `watch` runs its command once instead of every two seconds; `parallel` runs the command string for each argument after `:::`, or each such argument as a command string
+    // when it is given no command; `su` runs the string of its -c option through /bin/sh and runs nothing without one.
+    stub(bin, 'doas', 'while [ $# -gt 0 ]; do case "$1" in -u|-C) shift 2;; -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'taskset', 'for a in "$@"; do case "$a" in -p|--pid) exit 0;; esac; done\nwhile [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nshift\nexec "$@"');
+    stub(bin, 'arch', 'while [ $# -gt 0 ]; do case "$1" in -arch|-e|-d) shift 2;; -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'caffeinate', 'while [ $# -gt 0 ]; do case "$1" in -t|-w) shift 2;; -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'unbuffer', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'chronic', 'while [ $# -gt 0 ]; do case "$1" in -*) shift;; *) break;; esac; done\nexec "$@"');
+    stub(bin, 'find', 'exec /usr/bin/find "$@"');
+    stub(bin, 'watch', 'direct=\nwhile [ $# -gt 0 ]; do case "$1" in -n|--interval) shift 2;; -x|--exec) direct=1; shift;; -*) shift;; *) break;; esac; done\nif [ -n "$direct" ]; then exec "$@"; fi\nexec /bin/sh -c "$*"');
+    stub(bin, 'parallel', 'cmd=\nwhile [ $# -gt 0 ]; do case "$1" in :::) shift; break;; -*) if [ -z "$cmd" ]; then shift; else cmd="$cmd $1"; shift; fi;; *) cmd="$cmd $1"; shift;; esac; done\nfor a in "$@"; do if [ -n "$cmd" ]; then /bin/sh -c "$cmd $a"; else /bin/sh -c "$a"; fi; done');
+    stub(bin, 'su', 'cmd=\nwhile [ $# -gt 0 ]; do case "$1" in -c) cmd="$2"; shift 2;; --command=*) cmd="${1#--command=}"; shift;; -s|-g|-G|-w) shift 2;; *) shift;; esac; done\nif [ -n "$cmd" ]; then exec /bin/sh -c "$cmd"; fi');
     spawnSync(SHELL_PATHS[shell], [...SHELL_FLAGS[shell], line], { cwd: root, env: { PATH: bin, HOME: root, LC_ALL: 'C' }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 });
     if (!existsSync(log)) return [];
     return readFileSync(log, 'utf8')
