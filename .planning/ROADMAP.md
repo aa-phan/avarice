@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 69/69 plans executed in 34 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), and 14 gap-closure plans (04-56 to 04-69) in waves 27-34 from 04-UAT.md (one branch, one PR, D-01)
+**Plans**: 69/70 plans executed in 35 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), 14 gap-closure plans (04-56 to 04-69) in waves 27-34 from 04-UAT.md, and 1 gap-closure plan (04-70) in wave 35 from the re-verification's SC6 gap, not yet executed (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -202,6 +202,9 @@ Plans:
 
 **Wave 34** *(blocked on Wave 33 completion)*
 - [x] 04-69-PLAN.md — Documentation: findings, README tables, coverage, fresh reviews
+
+**Wave 35** *(blocked on Wave 34 completion)*
+- [ ] 04-70-PLAN.md — Documentation: the four round-3 review WARNINGs fixed, an owner-scoped round 4 per group, review statuses on a pass; benchmark README AC-8 bound (WR-01)
 
 **Notes**: The largest phase (28 requirements); consider splitting at planning time. Resolves host limitations 3 and 4. Includes the spike mapping graphify relations to per-edge read rules and the three-arm retrieval evaluation that decides the knowledge-pass default. Excluded: real remote adapters, enterprise policy delivery.
 
