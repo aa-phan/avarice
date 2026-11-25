@@ -16,6 +16,9 @@ alt no privileged command
   Hook --> Agent : this check says nothing; a run's command rules,\nor in an attended session the host's own rules, decide
 else the line cannot be read, in a run
   Hook --> Agent : denied as a shell syntax error, no request
+else a privileged command whose values cannot be shown whole, in a run
+  Hook -> Ledger : the denial for the first such command, no request
+  Hook --> Agent : denied, no approval was asked for because a bound value cannot be shown whole
 else a privileged command, in a run
   Hook -> Ledger : request for the first privileged command's scope, action and parameter digest\n(the waiting one again, else a new one), and the denial
   Hook --> Agent : denied, the owner approves with: avarice approve REQUEST
@@ -23,9 +26,9 @@ else attended session
   alt the line cannot be read
     Hook -> Ledger : the denial, no request
     Hook --> Agent : denied as unparseable, split the line or use the Write tool
-  else a command takes its body from a file or standard input
+  else a command takes its body from a file or standard input,\nor has a bound value that cannot be shown whole
     Hook -> Ledger : one denial for each such command, no request
-    Hook --> Agent : denied as unapprovable, pass the fields inline
+    Hook --> Agent : denied as unapprovable, pass the fields inline or run the command at the owner's own terminal
   else every privileged command is bound to its parameters, the exact line and the directory
     Hook -> Ledger : take one usable approval for each command (scope, action, digest), oldest first
     alt every command has an approval
