@@ -529,7 +529,8 @@ const expands = (marks: readonly number[], from: number, to: number, braceOnly =
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // A word that begins a command in a compound statement and is not the command: the program is the word after it.
-const RESERVED_WORDS: ReadonlySet<string> = new Set(['!', '{', '}', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
+// `coproc` is a reserved word of bash and zsh: `coproc git push` starts the command after it as a coprocess (plan 04-63; GIN-02).
+const RESERVED_WORDS: ReadonlySet<string> = new Set(['!', '{', '}', 'then', 'do', 'else', 'elif', 'if', 'while', 'until', 'coproc']);
 // Programs that run the command that follows them: the options of each that take a separate value, and the operands (a duration) that come after the options and before the
 // command. Options that take none (`time -p`) are skipped as they are met. Looked up with Object.hasOwn: a word that exists only on the object prototype (`constructor`,
 // `__proto__`) is a program, not a wrapper (WR-02). `flock` is read apart (flockWords): its lock file may come before or after its `-c` option.
@@ -553,6 +554,15 @@ const WRAPPERS: Readonly<Record<string, WrapperSpec>> = {
   stdbuf: { valued: ['-i', '-o', '-e', '--input', '--output', '--error'] },
   ionice: { valued: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'] },
   flock: { valued: ['-w', '--timeout', '-E', '--conflict-exit-code'] },
+  // Plan 04-63 (GIN-02), each read as the real program reads its arguments. `doas` is `sudo` with -u and -C valued; `taskset` takes options and then one mask or list operand
+  // (`taskset -p` runs nothing, see programWords); `arch` takes -arch, -e and -d with a value and skips the -arm64 and -x86_64 style flags; `caffeinate` takes -t and -w; `unbuffer`
+  // and `chronic` take flags only.
+  doas: { valued: ['-u', '-C'] },
+  taskset: { valued: [], operands: 1 },
+  arch: { valued: ['-arch', '-e', '-d'] },
+  caffeinate: { valued: ['-t', '-w'] },
+  unbuffer: { valued: [] },
+  chronic: { valued: [] },
 };
 
 const baseOf = (word: string): string => (word.split('/').pop() ?? '').toLowerCase();
@@ -663,6 +673,8 @@ function programWords(words: readonly string[], wordMarks: readonly number[] = [
       }
       if (!arg.startsWith('-') || arg === '-') break;
       if (wrapper === 'command' && (arg === '-v' || arg === '-V')) return null;
+      // `taskset -p [mask] pid` reads or sets the affinity of a running process: it runs no command.
+      if (wrapper === 'taskset' && (arg === '--pid' || (/^-[A-Za-z]+$/.test(arg) && arg.includes('p')))) return null;
       if (wrapper === 'env' && (arg === '-S' || arg === '--split-string')) {
         const value = rest[i + 1] ?? '';
         env.push(arg, value);
@@ -982,6 +994,101 @@ function classifyNpm(args: readonly string[], marks: readonly number[]): Privile
   return { action: form.action, params: paramsOf(parsed, NPM_PUBLISH) };
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Programs that run the commands they are given (plan 04-63; GIN-02): find, parallel and watch are read apart, as flock is
+// ---------------------------------------------------------------------------------------------------------
+
+// The commands `find` runs: the words after each `-exec`, `-execdir`, `-ok` or `-okdir` up to the next `;`, or up to a `+` that follows `{}`. A command with no end word runs to the
+// end of the line: find refuses such a line and runs nothing, and reading more than it runs only asks for an approval it does not need. Returned as ranges of `args`.
+const FIND_EXEC: readonly string[] = ['-exec', '-execdir', '-ok', '-okdir'];
+
+function findRanges(args: readonly string[]): { from: number; to: number }[] {
+  const ranges: { from: number; to: number }[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (!FIND_EXEC.includes(args[i] as string)) continue;
+    let end = i + 1;
+    while (end < args.length && args[end] !== ';' && !(args[end] === '+' && args[end - 1] === '{}')) end += 1;
+    if (end > i + 1) ranges.push({ from: i + 1, to: end });
+    i = end;
+  }
+  return ranges;
+}
+
+// Whether a word from `from` up to but not including `to` holds a brace expansion and begins with `-` or `{`: such a word can form an option the reader looks for (`-e{x,}ec`,
+// `{-,}exec`), and a word that begins with another character cannot.
+const formsOption = (words: readonly string[], marks: readonly number[], from: number, to: number): boolean => {
+  for (let i = from; i < to && i < words.length; i += 1) {
+    const word = words[i] as string;
+    if (((marks[i] ?? 0) & EXPANDS_BRACE) !== 0 && (word.startsWith('-') || word.startsWith('{'))) return true;
+  }
+  return false;
+};
+
+// The options of `parallel` that take a separate value (the others, and every `--name=value` and `-jN` word, are one word).
+const PARALLEL_VALUED: readonly string[] = [
+  '-j', '--jobs', '-n', '--max-args', '-N', '-L', '-l', '--max-lines', '-a', '--arg-file', '-S', '--sshlogin', '--sshloginfile', '--slf', '-I', '-d', '--delimiter', '-E', '--eof', '-s',
+  '--max-chars', '--delay', '--timeout', '--results', '--joblog', '--colsep', '-C', '--tagstring', '--workdir', '--wd', '--retries', '--load', '--memfree', '--nice', '--return', '--transfer-file',
+];
+
+const shellQuote = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
+
+// The command strings `parallel` runs through a shell. The words before the first `:::` are a command string; each argument of a `:::` list is appended to it, or replaces its `{}` or
+// `{1}`, quoted as parallel quotes it. With no command, each argument of a `:::` list is a command string. The arguments of a `::::` list are file names, and what parallel reads
+// from standard input or a file is not read here. Undefined when the words before the command hold an expansion word.
+function parallelStrings(args: readonly string[], marks: readonly number[]): string[] | undefined {
+  let i = 0;
+  for (; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') {
+      i += 1;
+      break;
+    }
+    if (!arg.startsWith('-') || arg === '-') break;
+    if (PARALLEL_VALUED.includes(arg)) i += 1;
+  }
+  if (expands(marks, 0, i)) return undefined;
+  const separator = args.findIndex((word, index) => index >= i && word.startsWith(':::'));
+  const command = args.slice(i, separator === -1 ? args.length : separator);
+  const values: string[] = [];
+  let listing = false;
+  for (const word of separator === -1 ? [] : args.slice(separator)) {
+    if (word.startsWith('::::')) listing = false;
+    else if (word.startsWith(':::')) listing = true;
+    else if (listing) values.push(word);
+  }
+  if (command.length === 0) return values;
+  const base = command.join(' ');
+  if (values.length === 0) return [base];
+  return values.map((value) => (base.includes('{}') || base.includes('{1}') ? base.replaceAll('{}', shellQuote(value)).replaceAll('{1}', shellQuote(value)) : `${base} ${shellQuote(value)}`));
+}
+
+// `watch [options] command`: the words after the options are joined and run through a shell, or run directly with -x or --exec. `at` is where the command starts in `args`. -n and
+// --interval take a value; in a cluster of short options, -n takes the rest of the word or, last in the word, the next word.
+function watchWords(args: readonly string[]): { exec: boolean; at: number } {
+  let exec = false;
+  let i = 0;
+  for (; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') {
+      i += 1;
+      break;
+    }
+    if (!arg.startsWith('-') || arg === '-') break;
+    if (arg === '--exec') exec = true;
+    else if (arg === '--interval') i += 1;
+    else if (!arg.startsWith('--')) {
+      for (let k = 1; k < arg.length; k += 1) {
+        if (arg[k] === 'x') exec = true;
+        else if (arg[k] === 'n') {
+          if (k === arg.length - 1) i += 1;
+          break;
+        }
+      }
+    }
+  }
+  return { exec, at: i };
+}
+
 // The privileged commands one command runs, or an unparseable command whose program (or whose shell string) could not be read. `words` are the words of a single command
 // (no `;`, `&&` or `|`). A shell started on a literal string and `eval` run the commands of their string (plan 04-51; WR-01): the string is read by the same scanner one
 // level deeper, so a computed string (`bash -c "$X"`, text left to a variable or a substitution) holds no command of its own, while the commands of a substitution inside it
@@ -995,7 +1102,7 @@ function classifyWords(words: readonly string[], depth: number, inherited: reado
   const args = program.words.slice(1);
   const marks = program.marks.slice(1);
   const name = baseOf(program.words[0] as string);
-  let found: PrivilegedCommand[];
+  let found: PrivilegedCommand[] = [];
   if (name === 'git' || name === 'gh' || name === 'npm') {
     const one = name === 'git' ? classifyGit(args, [...inherited, ...program.env], marks) : name === 'gh' ? classifyGh(args, marks) : classifyNpm(args, marks);
     if (one !== null && isUnparseable(one)) return one;
@@ -1009,6 +1116,39 @@ function classifyWords(words: readonly string[], depth: number, inherited: reado
     const nested = classifyString(text, depth + 1, [...inherited, ...program.env]);
     if ('unparseable' in nested) return nested;
     found = nested;
+  } else if (name === 'find') {
+    // Each command of an -exec, -execdir, -ok or -okdir is classified as a command of its own (plan 04-63; GIN-02). A brace expansion outside them that forms such an option is refused.
+    const ranges = findRanges(args);
+    const outside = args.map((_, index) => (ranges.some((range) => index >= range.from && index < range.to) ? 0 : (marks[index] ?? 0)));
+    if (formsOption(args, outside, 0, args.length)) return { unparseable: EXPANSION_REFUSAL };
+    for (const range of ranges) {
+      const inner = classifyWords(args.slice(range.from, range.to), depth, [...inherited, ...program.env], marks.slice(range.from, range.to));
+      if ('unparseable' in inner) return inner;
+      found.push(...inner);
+    }
+  } else if (name === 'parallel' || name === 'watch') {
+    let strings: string[] | undefined;
+    if (name === 'parallel') {
+      strings = parallelStrings(args, marks);
+    } else {
+      const watched = watchWords(args);
+      if (expands(marks, 0, watched.at)) strings = undefined;
+      else if (watched.exec) {
+        // Run directly: the words are a command, with their expansion flags.
+        const inner = args.length > watched.at ? classifyWords(args.slice(watched.at), depth, [...inherited, ...program.env], marks.slice(watched.at)) : [];
+        if ('unparseable' in inner) return inner;
+        strings = [];
+        found = inner;
+      } else {
+        strings = args.length > watched.at ? [args.slice(watched.at).join(' ')] : [];
+      }
+    }
+    if (strings === undefined) return { unparseable: EXPANSION_REFUSAL };
+    for (const text of strings) {
+      const inner = classifyString(text, depth + 1, [...inherited, ...program.env]);
+      if ('unparseable' in inner) return inner;
+      found.push(...inner);
+    }
   } else {
     return [];
   }
