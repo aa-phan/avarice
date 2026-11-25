@@ -20,7 +20,7 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 | graphify | AVARICE spawns it, sandboxed | `extract` and `cluster-only`, files on disk | 0.9.x documented, not enforced | the code-graph and knowledge indexes are recorded absent; onboarding continues |
 | `sandbox-exec` | AVARICE spawns it as a wrapper | Seatbelt profile on argv | any macOS where a probe profile applies | no command runs; no unsandboxed fallback |
 | `mount` | AVARICE spawns it | text table on stdout | none | profile preparation fails closed |
-| `pgrep` and `ps` | AVARICE spawns them | text on stdout | none | reaping reports unavailable; an owner command that cannot read the process chain refuses |
+| `pgrep` and `ps` | AVARICE spawns them | text on stdout; `ps` also reads the elapsed time of the process that holds the profile bindings lock (`ps -o etime= -p <pid>`, 1 second timeout, `PATH` and `LC_ALL` alone) | none | reaping reports unavailable; an owner command that cannot read the process chain refuses; the bindings lock falls back to the age of its file (see [profiles-and-credentials.md](profiles-and-credentials.md#selecting-a-profile)) |
 | `osascript` | AVARICE spawns it once per banner | a fixed three-line AppleScript, with the text as arguments | any macOS; the path comes from the profile config | the attempt is recorded as `osascript-missing`, `osascript-timeout` or `osascript-failed`; the decision stays in `inbox` |
 | `launchctl` | `schedule` spawns it | `bootstrap` and `bootout` of `gui/<uid>` jobs | any macOS | `schedule` exits 70 and quotes the first line of the tool's error |
 | `plutil` | `schedule install` spawns it | `-lint` of the property list before it is installed | any macOS | `schedule install` exits 70 and installs nothing |
@@ -35,7 +35,7 @@ The spawn sites are these:
 
 - `sandbox-exec` (probe and wrapper), git, and `claude` (launch and `--version`).
 - `node` for the gsd-core identity check, for the hook self-test and for the detached supervisor.
-- `pgrep`, and `ps` (reaping and the process chain).
+- `pgrep`, and `ps` (reaping, the process chain and the start of a bindings lock holder).
 - `mount`, `osascript`, `launchctl` and `plutil`.
 
 GSD verbs and graphify do not spawn directly; they go through the sandboxed executor. No source file spawns `gh`.
@@ -267,6 +267,7 @@ The run workspace is the git side of one run. Everything in it runs in the super
 - Restore and remove: put named tracked files back to their content at HEAD, or delete named untracked files and the directories they leave empty. An untracked path given to restore, or a tracked path given to remove, is a conflict and nothing is changed.
 - Commit: the supervisor commits exactly the given clone-relative paths under a fixed identity, unsigned, with `--no-verify`. The paths, message and trailers it refuses are in [containment.md](containment.md#the-supervisors-commit-and-the-hand-off). A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
 - Read: a clone file as UTF-8 under a size limit, refusing traversal, absolute paths and symbolic links that leave the clone.
+- Patch: the clone's tracked and untracked non-ignored content compared with HEAD as one binary-form patch, without renames, external diff drivers or text conversion. It writes nothing to the clone and leaves the clone's index alone. The caller names directories to leave out, which must be plain relative directory names, and files to leave out. A file may have any name git can hold: it is left out literally, so `*`, `?`, `[`, `:` and a leading `-` are ordinary characters. A file entry that is empty, absolute, holds a NUL or has a `..` segment is refused as invalid and no patch is built. Only the restricted run builds one.
 
 ### Fetch into the source repository
 
@@ -383,6 +384,7 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | `schedule install` cannot load the agent (`plutil` rejects the file or `launchctl bootstrap` fails) | exit 70 with the tool's first error line; a new file is removed again, and a replaced one stays in place unloaded |
 | A scheduled digest fails under launchd | the error is in `logs/digest.log` in the data root; nothing else records it |
 | An owner command cannot read the process chain with `ps` | the command refuses as if it were inside a run (exit 64) |
+| `ps` is missing, fails or prints an unreadable time when a writer judges the profile bindings lock | the lock of a live holder counts as stale only when its file is older than 60 seconds; nothing refuses |
 
 ## Quirks
 

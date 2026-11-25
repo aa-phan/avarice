@@ -272,14 +272,17 @@ A containment edge is followed down only from the parent; seen from the child it
 
 ### Reuse and access
 
-A retried item's new pack may keep an item from the pack it built before, without reading it again, when the cache rule holds. The rule holds when all of these are true:
+A retried item's new pack may keep an item from the pack it built before, without reading it again, when the cache rule holds. The rule holds when none of five misses applies. They are judged in this order, and the first that applies is the reason the report gives:
 
-- the profile is the same;
-- the access scope is the same (a digest of the read lists, exclusions and secret globs the pack was built under);
-- the source is still at the revision the item was read at;
-- the reference is not revoked.
+1. `access_revoked`: the reference is revoked. This comes first, whatever else holds.
+2. `profile`: the profile that built the item is not the profile asking.
+3. `access-scope`: the access scope differs. It is a digest of the read lists, exclusions and secret globs the pack was built under.
+4. `format`: the item's format is absent or is not the current one.
+5. `revision`: the item has no revision, or the source is no longer at the revision the item was read at.
 
-The item carries `profile` and `accessScope` for that reason. Everything else is read again, and the report says which was which. The ledger keeps references and never excerpt text, so a supervisor that starts afresh reuses nothing.
+Each item carries `profile`, `accessScope` and `format` for that reason, in that order after its other fields. The format is a number that says which build of the adapters read the item, and the current number is 1. An item holds the flags the adapters set when they read it, such as `untrusted` and a code node. A reused item skips that read, so an item built by an older adapter would keep its old flags. The number is therefore raised whenever an adapter changes which flags an item carries. An item with no format, or another one, is read again, and a pack built before items were stamped reuses nothing. The format is judged before the revision because an item of an older build is wrong whatever revision it was read at.
+
+Everything that is not reused is read again. A retry's report says how many items were reused, and lists each item it read again with its source, its ID and the reason from the list above. The ledger keeps references and never excerpt text, so a supervisor that starts afresh reuses nothing.
 
 A reference the run recorded as `access_revoked` never reaches a new pack: its handle is listed as omitted. Each context source judges a reference against the repository as it is now, and a resume uses that judgment (see [runs.md](runs.md#reference-refresh-on-resume)).
 
