@@ -12,7 +12,8 @@
 // `GIT_CONFIG_KEY_0=alias.p ... git p`, plan 04-57) is refused the same way; an alias set by an earlier separate call stays a residual. A brace expansion (`git pus{h,}`) or a
 // glob (`git pu?h`) in the program position or in a word before it (an assignment, a wrapper and its options and operands), in git's global options and subcommand, gh's group, options
 // before the subcommand and subcommand, and npm's words up to its subcommand (all of them when it has none), and a brace expansion anywhere in a privileged command, is refused the same
-// way: the words it forms are not the words the scanner sees (plan 04-62). It does not run or expand anything: a name the shell builds at run time (a
+// way: the words it forms are not the words the scanner sees (plan 04-62). A glob in the arguments after a privileged subcommand (`git push origin refs/heads/*`) is not expanded: it is
+// bound as written, so an approval binds the pattern and not the files the shell matches, and stays a residual. It does not run or expand anything: a name the shell builds at run time (a
 // variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string, text piped into a shell) and repository or shell
 // state changed by an earlier separate call are the documented bypass of
 // command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
