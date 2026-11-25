@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-65-PLAN.md
-last_updated: "2026-11-25T06:16:01.013Z"
+stopped_at: Completed 04-63-PLAN.md
+last_updated: "2026-11-25T06:30:33.361Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: eb0af63d974245689057276ed51457f1c63a5dd6
+state_head: 10e11f13303bca35c9f8553dc4847dc64d95e375
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 64
+  completed_plans: 65
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 10 of 69
+Plan: 11 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -227,6 +227,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P64 | 10 min | 3 tasks | 4 files |
 | Phase 04 P62 | 20 min | 2 tasks | 6 files |
 | Phase 04 P65 | 12 min | 2 tasks | 4 files |
+| Phase 04 P63 | 35 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -565,6 +566,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-57: one record per substitution (start offset and terminator) de-duplicates the here-document scans; the expansion scan stays
 - [Phase 04]: 04-62: a case pattern ended by a stray parenthesis carries no expansion flags, so a default arm such as *) is not refused as a glob in the program position; ${...} bodies, $* and $? are not expansions — The shell never runs a command ended by a stray parenthesis; flagging it would refuse ordinary case statements (GWR-02)
 - [Phase 04]: 04-65: AC-8 restated under the approved amendment: successes A 0, B 2, C 3 of 6; verdict pass via B at 94.4%; knowledge pass on because C succeeds more often than B; ADR-017 records it and states the triviality of the success clause
+- [Phase 04]: 04-63: parallel yields one command string per ':::' argument (quoted, or replacing {} / {1}); a brace word beginning with '-' or '{' is refused where a reader's option decides what runs; coproc lines run in the oracle without a run count (bash 3.2 has no coproc) — A quoted argument keeps 'parallel echo ::: git push' none while 'parallel git ::: push' is a push; the brace rule closes -e{x,}ec style options without refusing other brace words; the oracle still checks every invocation a shell performs
 
 ### Roadmap Evolution
 
@@ -632,8 +634,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-25T06:16:00.783Z
-Stopped at: Completed 04-65-PLAN.md
+Last session: 2026-11-25T06:30:33.122Z
+Stopped at: Completed 04-63-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
