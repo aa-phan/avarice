@@ -5,16 +5,16 @@ milestone_name: MVP Completion
 current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
-stopped_at: Completed 04-62-PLAN.md
-last_updated: "2026-11-25T06:11:06.294Z"
+stopped_at: Completed 04-65-PLAN.md
+last_updated: "2026-11-25T06:16:01.013Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 04 execution started
-state_head: 17440e74b85b796ff91b533d62af2823b12b9e90
+state_head: eb0af63d974245689057276ed51457f1c63a5dd6
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 69
-  completed_plans: 63
+  completed_plans: 64
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 ## Current Position
 
 Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
-Plan: 9 of 69
+Plan: 10 of 69
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 04 execution started
 
@@ -226,6 +226,7 @@ Last activity: 2026-11-24 — Phase 04 execution started
 | Phase 04 P57 | 7 min | 3 tasks | 5 files |
 | Phase 04 P64 | 10 min | 3 tasks | 4 files |
 | Phase 04 P62 | 20 min | 2 tasks | 6 files |
+| Phase 04 P65 | 12 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -563,6 +564,7 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 04]: 04-57: a same-line alias or config include is unparseable; env inherited from an enclosing shell string is read for it but bound only by the enclosing command
 - [Phase 04]: 04-57: one record per substitution (start offset and terminator) de-duplicates the here-document scans; the expansion scan stays
 - [Phase 04]: 04-62: a case pattern ended by a stray parenthesis carries no expansion flags, so a default arm such as *) is not refused as a glob in the program position; ${...} bodies, $* and $? are not expansions — The shell never runs a command ended by a stray parenthesis; flagging it would refuse ordinary case statements (GWR-02)
+- [Phase 04]: 04-65: AC-8 restated under the approved amendment: successes A 0, B 2, C 3 of 6; verdict pass via B at 94.4%; knowledge pass on because C succeeds more often than B; ADR-017 records it and states the triviality of the success clause
 
 ### Roadmap Evolution
 
@@ -630,8 +632,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-25T06:11:06.080Z
-Stopped at: Completed 04-62-PLAN.md
+Last session: 2026-11-25T06:16:00.783Z
+Stopped at: Completed 04-65-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
