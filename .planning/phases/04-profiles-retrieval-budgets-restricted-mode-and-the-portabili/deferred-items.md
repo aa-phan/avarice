@@ -23,4 +23,4 @@ Warnings the triage did not fix. Each is also a row of `04-REVIEW-DISPOSITION.md
 ## Found by plan 04-58 (out of scope, not fixed)
 
 - `node --test test/integration/run-workspace.test.ts test/integration/restricted-mode.test.ts test/integration/restricted-onboarding.test.ts` run as three files in parallel ended `restricted-onboarding.test.ts` with a file-level `Error: ENOTEMPTY, Directory not empty: .../avarice-cli-<id>` (its `after` cleanup racing a still-running supervisor) in 2 of 2 runs. The same three files pass 73 of 73 with `--test-concurrency=1`, and each pair passes in parallel. None of the files plan 04-58 changed is in the failing path (`restricted-onboarding.test.ts` was not touched and runs no `patch()` call); it looks like a load-dependent cleanup race in the shared CLI fixture. Target: Phase 5 (with WR-38, the other load-dependent flake).
-  status: open
+  status: resolved by plan 04-66 (cause: the last test of restricted-onboarding.test.ts started a run without --wait, so the detached supervisor recreated the roots after the cleanup hook removed them; the test now passes --wait and the hook retries the removal)

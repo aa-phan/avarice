@@ -28,8 +28,10 @@ const REPO_FILES = {
 };
 
 const cleanup: string[] = [];
+// A detached supervisor can still be writing into a scratch directory when this hook runs under load, and a plain recursive remove then fails with
+// ENOTEMPTY; the retries give it up to 4 s to finish (G-04-4, the race logged by plan 04-58).
 after(() => {
-  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true });
+  for (const dir of cleanup) rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 });
 });
 
 interface Fixture {
@@ -344,7 +346,8 @@ describe('a restricted record is never presented as whole-repository coverage (O
     assert.equal(record.body.mapping.completeness, 'complete');
     const json = JSON.parse(runCli(['status', '--json'], { roots: f.roots, env: envOf(f) }).stdout) as Array<Record<string, unknown>>;
     assert.ok(!('restricted' in (json[0] as Record<string, unknown>)), 'status no longer says restricted');
-    const r = start(f, envOf(f));
+    // `--wait` keeps the test in step with the detached supervisor: without it the supervisor outlives the test and recreates the roots after the cleanup hook removed them.
+    const r = start(f, envOf(f), '--wait');
     assert.ok(!/restricted onboarding/.test(r.stderr), `the contained start is not refused for a restricted record: ${r.stderr}`);
   });
 });
