@@ -209,6 +209,24 @@ describe('verdict (AC-8) and knowledgeRule (D-08)', () => {
     assert.deepEqual(committed, JSON.parse(JSON.stringify(rejudgeResultsFile(join(dir, 'eval-results.json')))));
   });
 
+  it('keeps the committed ADR-017 re-judgement equal to what the harness computes from the recorded runs, the coverage record and the approved amendment', async () => {
+    const { rejudgeWithCoverage } = await harness();
+    const dir = join(import.meta.dirname, '..', 'benchmark', 'phase4');
+    const committed = JSON.parse(readFileSync(join(dir, 'eval-verdict-adr017.json'), 'utf8')) as { decision: string; runs: Array<{ task: string; arm: string; recordedSuccess: boolean; outcome: string }> };
+    const computed = JSON.parse(JSON.stringify(rejudgeWithCoverage({
+      resultsFile: join(dir, 'eval-results.json'),
+      tasksFile: join(dir, 'eval-tasks.json'),
+      coverageFile: join(dir, 'eval-coverage.json'),
+      amendmentFile: join(dir, 'eval-success-amendment.json'),
+    }))) as unknown;
+    assert.deepEqual(committed, computed);
+    assert.equal(committed.decision, 'ADR-017');
+    const partial = committed.runs.filter((r) => r.outcome === 'partial');
+    assert.ok(partial.length > 0, 'the record finds partial runs');
+    assert.ok(partial.every((r) => r.recordedSuccess), 'only a recorded success can become partial');
+    assert.deepEqual(partial.map((r) => `${r.task}-${r.arm}`), ['T01-A', 'T01-B', 'T02-C', 'T05-A', 'T05-B']);
+  });
+
   it('fails when the success of B and C is below A even at a tenth of the tokens, and passes through C when only C qualifies', async () => {
     const { verdict } = await harness();
     assert.equal(verdict({ A: { success: 10, tokens: 1000 }, B: { success: 9, tokens: 100 }, C: { success: 9, tokens: 100 } }).pass, false);
