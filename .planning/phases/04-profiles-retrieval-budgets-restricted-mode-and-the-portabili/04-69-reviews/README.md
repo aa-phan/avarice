@@ -1,6 +1,6 @@
 # Plan 04-69 documentation review records
 
-Status: rounds 1 and 2 ran and both groups failed each time; the findings are fixed (see the review table) and round 3, the last allowed, is pending. The executor of plan 04-69 cannot start a fresh `technical-writer:prose-reviewer` (no Agent tool, and the `technical-writer:prose-review` skill only instructs the caller to dispatch reviewer agents), so each round is a checkpoint to the orchestrator. No document is marked `reviewed` in `docs/system/coverage.md`; the documents below are `changed after review` there.
+Status: closed without a pass. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). Round 3, the last allowed, left two WARNINGs in each group; they are listed under "Open after round 3" and were not fixed, because a fix after the last round would be an unreviewed edit. The executor of plan 04-69 cannot start a fresh `technical-writer:prose-reviewer` (no Agent tool, and the `technical-writer:prose-review` skill only instructs the caller to dispatch reviewer agents), so each round was a checkpoint to the orchestrator. No document is marked `reviewed` in `docs/system/coverage.md`; the documents below are `changed after review` there, naming their round files.
 
 Code under review: `3a6c10c` (the last commit that touched `src`, `scripts`, `bin` or `test`; the last `src` commit is `2bd1e03`). Documents under review: the changes of plans 04-56 to 04-68 to `docs/system/`, as `git diff 96a0718..HEAD -- docs/system` shows for each file. The version to review in round 1 is the one with the round 1 digest below (HEAD `b07b088`). The version to review in round 2 is the one with the round 2 digest (the documents as at commit `21ae2eb`). The version to review in round 3 is the one with the round 3 digest (the documents as at commit `d38f5ea`; the commit that records the digests only changes this file).
 
@@ -36,8 +36,10 @@ Round budget: at most three rounds per group, each by a fresh reviewer that has 
 | 1 | B | `round-1-B.md` | FAIL: 1 WARNING, 3 OBS | See the dispositions below |
 | 2 | A | `round-2-A.md` | FAIL: 1 WARNING, 4 OBS | See the dispositions of round 2 |
 | 2 | B | `round-2-B.md` | FAIL: 1 WARNING, 2 OBS, 1 out-of-scope note | See the dispositions of round 2 |
-| 3 | A | `round-3-A.md` (pending) | not run | |
-| 3 | B | `round-3-B.md` (pending) | not run | |
+| 3 | A | `round-3-A.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 6 NITs | Not fixed; open, see "Open after round 3" |
+| 3 | B | `round-3-B.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 3 NITs | Not fixed; open, see "Open after round 3" |
+
+Outcome by group: group A ended FAIL after three rounds (round 1 one BLOCKER and one WARNING, round 2 one WARNING, round 3 two WARNINGs). Group B ended FAIL after three rounds (one WARNING in each). The three-round budget is spent for both groups, so no document of either group is marked `reviewed`.
 
 ### Dispositions of round 1
 
@@ -75,4 +77,96 @@ Each fix was checked against the code at HEAD, not against a proposal. Commit `d
 | B out-of-scope note: ADR-017 says "Date 2026-11-23" and, in decision 2, approval on 2026-11-25 | Note | Not edited: an accepted ADR is never rewritten. Recorded as an open item for the owner in the plan summary. |
 
 The sweep of every line added to `docs/system/` since `96a0718` (table rows excluded) finds no banned dash and no sentence over 35 words in the ten reviewed documents. Three over-cap items remain in `coverage.md`, a ledger outside the review groups. `findings.md` is exempt from prose review (see above).
+
+## Open after round 3
+
+Round 3 was the last round allowed. The plan's fallback applies: no `docs/system/` document was edited after round 3, because an edit that no fresh reviewer has read would be an unreviewed fix. Every item below is open, with the reviewer's location, code evidence and suggested fix as the reports `round-3-A.md` and `round-3-B.md` record them. The owner decides whether to authorize a scoped round 4 (the precedent is round 4 of plan 04-54, scoped by the owner to the changed lines).
+
+The digests the documents had when round 3 ran are in the table under "Review groups". The documents are unchanged since, so a round 4 reviews the same text.
+
+### Group A, WARNINGs
+
+**A-W1 (WARNING, confidence high). The gate's step list omits the unshowable-values denial and contradicts the paragraph above it.**
+- Location: `docs/system/policy-and-approvals.md:86`, "6. With no source, the action is denied with the rule `approval-required:` and the request ID, and the message names the command the owner runs."
+- Defect: the list is introduced as "It runs in this order". The gate has a step between 5 and 6 that the list never mentions. Parameters that cannot be shown whole are denied with `privileged:unapprovable` and no request. Step 6 says every sourceless action gets `approval-required:`. That contradicts the Parameters and digest paragraph at line 65.
+- Code evidence: `src/app/authorize.ts:159-162` returns `UNAPPROVABLE_RULE` before the pending-request lookup at `:164`. `src/app/authorize.ts:154-157` shows that a contract or an approval already on record still allows the action first. The code comment at `src/app/authorize.ts:11-12` states the order.
+- Suggested fix, verbatim: "insert a step before step 6. For example: "If the parameters cannot be shown to the owner whole (see Parameters and digest), the action is denied with the rule `privileged:unapprovable` and no request is written." Then make step 6 start "Otherwise"."
+
+**A-W2 (WARNING, confidence high). The "cannot be checked" reason texts are stated as if both modes give them, but a run gives the generic shell-syntax text.**
+- Location: `docs/system/policy-and-approvals.md:122` (git alias or config include bullet) and `:123` (brace expansion or glob bullet). Quotes: "The reason says the line defines a git alias or a config include, which cannot be checked, and asks for the command it stands for to be run." and "The reason says a brace expansion or a glob decides which command runs and asks for the command written without it."
+- Defect: these bullets sit under "Three outcomes", which applies to a run and to an attended session. Only an attended session shows the classifier's reason to the agent. A run converts any unreadable line to `shell-syntax` and gives the fixed shell-syntax reason. The agent in a run is never told about the alias or the brace expansion.
+- Code evidence: `src/domain/hook-decision.ts:820-821` (`classified.kind === 'unparseable'` returns `refuse('shell-syntax')`). `src/domain/run-shell-rules.ts:35-36` (the reason is "one plain command per call, written without ..."). Attended: `src/hook/pre-tool-use.ts:659` appends the classifier reason in parentheses.
+- Suggested fix, verbatim: "scope both sentences, for example "In an attended session the reason says ...; a run denies the line as `shell-syntax` with that rule's own reason." The same scoping applies to the other reasons in the list."
+
+### Group A, NITs
+
+**A-N1 (NIT, confidence medium). "The rule over-refuses in two places" undercounts.**
+- Location: `docs/system/policy-and-approvals.md:125`.
+- Defect: the code refuses in more cases than the two named. A shell or `su` command with a brace word that begins with `{` or `-` is refused (`bash {a,b}.sh` is refused, `bash scripts/{a,b}.sh` is not; the reviewer ran `classifyLine` read-only to confirm both). The same holds for an `su` or `watch` option word, and for `find`, which the text names. The text also says the words in "the arguments of any other program" are not refused; a shell operand of that form is refused.
+- Code evidence: `src/domain/privileged-commands.ts:1066-1072` and `:1081-1085` (`formsOption`, applied to shells and `su`), and `:1026-1029`.
+- Suggested fix, verbatim: ""The rule also over-refuses, for example: ..." and add the shell and `su` case. Or drop the count."
+
+**A-N2 (NIT, confidence medium). "Such a line is refused." is detached from its list.**
+- Location: `docs/system/policy-and-approvals.md:127`.
+- Defect: after the six-bullet list comes a long paragraph on expansion words. The sentence that states the outcome of "cannot be checked" sits below that paragraph, and "Such a line" is ambiguous.
+- Suggested fix, verbatim: "move "A line that cannot be checked is refused. No limit and no failure to read is taken as 'not privileged'." directly under the "Three outcomes" lead, before the bullets."
+
+**A-N3 (NIT, confidence medium). The same moved-root denial fact has three homes, with no link from `containment.md`.**
+- Location: `docs/system/containment.md:185` (the corrupt-configuration definition and the whole-root definition) and the "Another profile's roots" bullet in the limits section; `docs/system/cli-reference.md:68`.
+- Defect: the owner is `docs/system/profiles-and-credentials.md`, "Moved-root denial" and "What stays open". The definition of a corrupt configuration is restated word for word in three documents. `containment.md` links only `profiles-and-credentials.md#redaction`, not `#roots-and-isolation`. The restatements are accurate today but can drift.
+- Suggested fix, verbatim: "keep the consequence each document owns (exit 70 in the CLI reference, the sandbox denial in containment) and link to `profiles-and-credentials.md#roots-and-isolation` for the definition of corrupt and unreadable."
+
+**A-N4 (NIT, confidence low). The list of what makes a configuration corrupt is not exhaustive.**
+- Location: `docs/system/containment.md:185`, `docs/system/profiles-and-credentials.md` (Moved-root denial), `docs/system/cli-reference.md:68`.
+- Defect: "(not valid JSON, a refused key, a symbolic link, a file that is not regular, or over the size cap)" reads as the full list. Other `invalid` outcomes also deny the whole root: the file is not a JSON object, the schema is not 1, the `profile` field names another profile, and a root value of the wrong shape.
+- Code evidence: `src/domain/profile.ts:166-182` and `:138-143`; `src/adapters/fs/profile-config.ts:51-65`. The registry denies the whole root for any `invalid` error at `src/adapters/fs/profile-registry.ts:82`.
+- Suggested fix, verbatim: "add "or any other refusal by the configuration parser", or say "for example"."
+
+**A-N5 (NIT, confidence low). "Record something" is ambiguous in the manual-equivalents section.**
+- Location: `docs/system/policy-and-approvals.md:222`, "Three commands record something: `context add`, `evidence add` and `pr record`."
+- Defect: `approve` also writes (an approval) and is listed in the same table. The sentence "they need no terminal" is what separates the three from `approve`, but the lead does not say so.
+- Suggested fix, verbatim: ""Three commands record manual input: ..."."
+
+**A-N6 (NIT, confidence low). Two small term and detail points.**
+- `docs/system/cli-reference.md` (approve output) says "shown in full" where `policy-and-approvals.md` says "shown whole". Use one term.
+- `docs/system/policy-and-approvals.md:65` says the refusal reason "names the key and its length". For an over-long key the code names "a parameter name", not the key (`src/domain/approval.ts:109`).
+- The reviewer gave no separate suggested fix; the first point is "Use one term".
+
+### Group B, WARNINGs
+
+**B-W1 (WARNING, confidence high): dangling cross-reference after a heading rename.**
+- Location: `docs/system/indexes-and-context.md:138`. Quote: "The `knowledge` object of the record gains a `corpusCap` object when the cap left something out (see "What the record states")".
+- Problem: the sections "What the record states" were renamed to "Code graph record fields" (line 72) and "Knowledge record fields" (line 212). No heading named "What the record states" exists any more. A grep of `docs/system` finds the old title only at this line.
+- Evidence: the heading list of the file. The `corpusCap` field is described under "Knowledge record fields" (line 212).
+- Suggested fix, verbatim: "change the reference to `(see [Knowledge record fields](#knowledge-record-fields))`."
+
+**B-W2 (WARNING, confidence high): a sentence on pack-item cache misses contradicts what the code does.**
+- Location: `docs/system/indexes-and-context.md:285`. Quote: "Everything in the earlier pack that is not reused is read again. A retry's report says how many items were reused, and lists each item of the earlier pack that it read again with its source, its ID and the reason from the list above."
+- Problem 1: the first sentence is false. The code lists only an earlier-pack item that the new pack picks again and that misses (`src/app/context.ts:461-470`), or one whose handle is revoked (`src/app/context.ts:431`). An earlier-pack item that the retry does not pick again, because of ranking, the snippet cap or a share limit, is neither read again nor listed.
+- Problem 2: a revoked item (`access_revoked`) is dropped before any read (`src/app/context.ts:427-433`). The report lists it, but it is not "read again". This conflicts with "lists each item ... that it read again", which also contradicts list item 1 of the same section.
+- What matches the code: the order of the five misses and "first that applies is the reason" match `cacheMiss` (`src/domain/cache-scope.ts:51-58`); item format 1 matches `PACK_ITEM_FORMAT`; the stamping order (profile, accessScope, format) matches `packItem` (`src/app/context.ts:229-246`).
+- Suggested fix, verbatim: "replace the two sentences with "An item of the earlier pack that the retry picks again and cannot reuse is read again, and the report lists it with its source, its ID and the reason from the list above. An item whose access was revoked is not read, and the report lists it with the reason `access_revoked`. An earlier item that the retry does not pick is not listed.""
+
+### Group B, NITs
+
+The reviewer numbered these 3 to 5 in `round-3-B.md`.
+
+**B-N3 (NIT, confidence medium): knowledge-pass success lead is stated without its one-run basis.**
+- Location: `docs/system/indexes-and-context.md:140`. Quote: "found it ahead of the code-only arm on successes, 3 of 6 against 2 of 6."
+- The figures are correct against ADR-017 (arm B 2 successes, arm C 3). The adjoining clause says ADR-015 calls "the sample small and the token edge thin", but the success lead is one run. ADR-017 says "the ranking of B and C is one run. The knowledge-pass outcome now depends on that one run."
+- Suggested fix, verbatim: "add "a lead of one run" after "2 of 6", or route the reader to ADR-017 for that caveat."
+
+**B-N4 (NIT, confidence medium): the 60-second figure has two homes.**
+- Location: `docs/system/integrations.md:387`, a failure-table row stating "counts as stale only when its file is older than 60 seconds".
+- The rule lives in `profiles-and-credentials.md:26`. The `ps` row at `integrations.md:23` already routes there by link.
+- Suggested fix, verbatim: "shorten the row to "the bindings lock falls back to the age of its file (see ...#selecting-a-profile)" and drop the number. This is optional, because failure rows are a legitimate place to route."
+
+**B-N5 (NIT, confidence low): "writes nothing to the clone".**
+- Location: `docs/system/integrations.md:271` (Patch). Quote: "It writes nothing to the clone and leaves the clone's index alone."
+- Evidence: `treeOfWorkingContent` (`src/adapters/git/run-workspace.ts:735-757`) uses a temporary index outside the clone's own index. `git add -A` and `write-tree` still add objects to the clone's object store. The port comment says the same (`src/ports/run-workspace.ts:167`). The user-visible claim (working tree and index untouched) is true.
+- Suggested fix, verbatim: "say "changes no file of the working tree and leaves the clone's index alone"."
+
+### Open item outside the review groups
+
+- `docs/decisions/ADR-017-ac8-brief-coverage.md` says "Date 2026-11-23" and, in decision 2, approval on 2026-11-25. An accepted ADR is never rewritten, so the plan did not edit it. The owner decides whether a superseding ADR or an accepted exception is wanted.
 
