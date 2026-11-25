@@ -919,7 +919,7 @@ describe('a shell string in su and trap, and a here-string given to a shell, are
   });
 
   it('refuses a brace or a glob that can form the option, or is the string, the reader looks for', () => {
-    for (const line of ["su {-c,} 'git push'", "su -{c,x} 'git push'", "su -c {'git push',x}", "su -c g*t", "trap {'git push',x} EXIT", "trap 'git pus{h,}' EXIT", "su -c 'git pus{h,}'"]) {
+    for (const line of ["bash -c {'git push',x}", "bash -{c,x} 'git push'", "sh -c g*t", "su {-c,} 'git push'", "su -{c,x} 'git push'", "su -c {'git push',x}", "su -c g*t", "trap {'git push',x} EXIT", "trap 'git pus{h,}' EXIT", "su -c 'git pus{h,}'"]) {
       assert.equal(classifyLine(line).kind, 'unparseable', line);
     }
   });

@@ -4,7 +4,8 @@
 // the parameters an approval binds. The hook entry, the run decision and the attended mode all ask this one module.
 //
 // What it recognizes is the command word and its arguments as the shell would split them (plan 04-40): the quoting, comment, here-document and redirection rules of the
-// shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo`, `time` (with `-p`), `timeout`, `xargs`, `setsid`, `stdbuf`, `ionice` and `flock` in front of the program, a shell started on a literal string (`bash -c 'git push'`, plan 04-51) and `eval`, the program's directory
+// shell, a leading NAME=value assignment, `env`, `command`, `exec`, `nohup`, `nice`, `sudo`, `time` (with `-p`), `timeout`, `xargs`, `setsid`, `stdbuf`, `ionice`, `flock`, `doas`, `taskset`, `arch`, `caffeinate`, `unbuffer`, `chronic` and `coproc` in front of the program, a shell started on a literal string (`bash -c 'git push'`, plan 04-51) and `eval`,
+// the commands that `find -exec`, `parallel` and `watch` run, the string of `su -c` and the first operand of `trap`, a here-string given to a shell with no string and no script (`bash <<< 'git push'`, plan 04-63), the program's directory
 // (`/usr/bin/git`) and case, git's global options (`-C dir`, `-c name=value`, `--git-dir`), gh's options between a group and its subcommand (`gh pr -R x/y create`, plan 04-57), a segment after `;`, `&&`, `||`, `|`, a newline, a parenthesis or a
 // backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
 // MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
@@ -13,10 +14,12 @@
 // glob (`git pu?h`) in the program position or in a word before it (an assignment, a wrapper and its options and operands), in git's global options and subcommand, gh's group, options
 // before the subcommand and subcommand, and npm's words up to its subcommand (all of them when it has none), and a brace expansion anywhere in a privileged command, is refused the same
 // way: the words it forms are not the words the scanner sees (plan 04-62). A glob in the arguments after a privileged subcommand (`git push origin refs/heads/*`) is not expanded: it is
-// bound as written, so an approval binds the pattern and not the files the shell matches, and stays a residual. It does not run or expand anything: a name the shell builds at run time (a
-// variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string, text piped into a shell) and repository or shell
-// state changed by an earlier separate call are the documented bypass of
-// command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
+// bound as written, so an approval binds the pattern and not the files the shell matches, and stays a residual. It does not run or expand anything. What it leaves unseen is the documented bypass of command classification (ADR-005, the SEC-6 enforcement map; plan 04-63, GIN-02): a name the shell
+// builds at run time (a variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string) and text piped into a shell; arguments a
+// wrapper reads from standard input (`xargs`, `parallel` fed from a pipe or a `::::` file); interpreters running a code string (`node -e`, `python -c`); other programs that run commands
+// (`make`, `ssh`, `script`, `expect`); a git alias or config set by an earlier separate call, and the git config files named on the line (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`,
+// `GIT_CONFIG`), which are bound as env words and whose content is not read; pathname globbing in the arguments after a privileged subcommand, kept above; and repository or shell state
+// changed by an earlier separate call. The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
 // hold when this one is evaded.
 //
 // The parameters are what an approval is bound to (src/domain/approval.ts): the target of the effect (remote and refspec, base and head, tag, endpoint and method)
@@ -80,6 +83,8 @@ interface Scan {
   out: string[][];
   // For each command of `out`, the expansion flags of each of its words (EXPANDS_GLOB, EXPANDS_BRACE), in the same order.
   marks: number[][];
+  // For each command of `out`, the text of each here-string (`<<<`) given to it, in the same order (plan 04-63; GIN-02). A here-string is no word of the command.
+  inputs: string[][];
   failure: string | undefined;
   // The position after each substitution already scanned, by its start offset and terminator (scanSubstitution).
   visited: Map<string, number>;
@@ -422,15 +427,18 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
   const t = scan.text;
   let words: string[] = [];
   let marks: number[] = [];
+  let strings: string[] = [];
   let groups = 0;
   const pending: Pending[] = [];
   const endCommand = (): void => {
     if (words.length > 0) {
       scan.out.push(words);
       scan.marks.push(marks);
+      scan.inputs.push(strings);
     }
     words = [];
     marks = [];
+    strings = [];
   };
   // A redirection operator at `pos` and its target, which is read as a word (substitutions in it are classified) and is no word of the command.
   const redirect = (at: number): number => {
@@ -440,6 +448,8 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
     if (p >= end || ';&|\n\r()'.includes(t[p] as string)) return p;
     const target = readWord(scan, p, end, depth, tolerant, term);
     if (operator === '<<' || operator === '<<-') pending.push({ delimiter: target.text, stripTabs: operator === '<<-', quoted: target.quoted });
+    // The text of a here-string stays with the command it belongs to: a shell given one runs it (classifyWords).
+    if (operator === '<<<' && target.started) strings.push(target.text);
     return Math.max(target.pos, p + 1);
   };
   while (pos < end && scan.failure === undefined) {
@@ -505,13 +515,13 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
 
 // The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands. `marks` holds, for each
 // word of each command, whether the shell would expand it (plan 04-62; GWR-02): the word's text is unchanged.
-export type Commands = { ok: true; commands: string[][]; marks: number[][] } | { ok: false; reason: string };
+export type Commands = { ok: true; commands: string[][]; marks: number[][]; inputs: string[][] } | { ok: false; reason: string };
 
 export function commandsOf(command: string, depth = 0): Commands {
   if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
-  const scan: Scan = { text: command, out: [], marks: [], failure: undefined, visited: new Map() };
+  const scan: Scan = { text: command, out: [], marks: [], inputs: [], failure: undefined, visited: new Map() };
   scanCommands(scan, 0, command.length, depth, 'top', false);
-  return scan.failure === undefined ? { ok: true, commands: scan.out, marks: scan.marks } : { ok: false, reason: scan.failure };
+  return scan.failure === undefined ? { ok: true, commands: scan.out, marks: scan.marks, inputs: scan.inputs } : { ok: false, reason: scan.failure };
 }
 
 // The answer for a command whose words the shell would expand into other words (plan 04-62; GWR-02, T-04-163): the line is refused, never read as "not privileged".
@@ -874,6 +884,63 @@ function shellString(args: readonly string[]): string | undefined {
   return undefined;
 }
 
+// Whether a shell started with these arguments reads its commands from standard input (plan 04-63; GIN-02): it is given no `-c` string and no script operand, or it is given `-s`.
+// `--` and `-` end the options as they do for the shell. A script operand makes the script read the input, and the classifier does not read the script.
+function readsStandardInput(args: readonly string[]): boolean {
+  let command = false;
+  let stdin = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--' || arg === '-') return !command && (stdin || i + 1 >= args.length);
+    if ((!arg.startsWith('-') && !arg.startsWith('+')) || arg === '+') return !command && stdin;
+    if (SHELL_VALUED.includes(arg)) i += 1;
+    else if (/^-[A-Za-z]+$/.test(arg)) {
+      if (arg.includes('c')) command = true;
+      if (arg.includes('s')) stdin = true;
+    }
+  }
+  return !command;
+}
+
+// The string `su` runs: the value of `-c`, `--command` or `--command=`, read as getopt reads them. The options that take another value (`-s`, `-g`, `-G`, `-w` and their long names) are
+// skipped with it. In a cluster of short options (`-lc`) the first option that takes a value takes the rest of the word or, last in the word, the next word. The words that are no option
+// (the user and the arguments of its shell) are skipped. Returns the index in `args` of the word that holds the string, and the string.
+const SU_LONG_VALUED: readonly string[] = ['--shell', '--group', '--supp-group', '--whitelist-environment'];
+
+function suString(args: readonly string[]): { at: number; text: string } | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === '--') return undefined;
+    if (arg === '--command') return args[i + 1] === undefined ? undefined : { at: i + 1, text: args[i + 1] as string };
+    if (arg.startsWith('--command=')) return { at: i, text: arg.slice('--command='.length) };
+    if (arg.startsWith('--')) {
+      if (SU_LONG_VALUED.includes(arg)) i += 1;
+    } else if (arg.startsWith('-') && arg !== '-') {
+      for (let k = 1; k < arg.length; k += 1) {
+        const option = arg[k] as string;
+        if (option !== 'c' && option !== 's' && option !== 'g' && option !== 'G' && option !== 'w') continue;
+        if (option === 'c') {
+          if (k < arg.length - 1) return { at: i, text: arg.slice(k + 1) };
+          return args[i + 1] === undefined ? undefined : { at: i + 1, text: args[i + 1] as string };
+        }
+        if (k === arg.length - 1) i += 1;
+        break;
+      }
+    }
+  }
+  return undefined;
+}
+
+// The string `trap` runs: its first operand, when it has two or more and the first is not `-` (which resets the traps); with one operand, or with `-p` or `-l`, it runs nothing. `--`
+// before the operands is skipped.
+function trapString(args: readonly string[]): { at: number; text: string } | undefined {
+  let at = 0;
+  if (args[0] === '--') at = 1;
+  else if ((args[0] ?? '').startsWith('-') && args[0] !== '-') return undefined;
+  if (args.length - at < 2 || args[at] === '-') return undefined;
+  return { at, text: args[at] as string };
+}
+
 // A git alias or a config include defined on the command's own line (plan 04-57; GWR-03, T-04-151): the alias is a name for any command, so `git p` may push and no word of
 // the line says so. The line is refused, whatever its subcommand, and the reason tells the model to run the command the alias stands for.
 const ALIAS_REFUSAL = 'the line defines a git alias or a config include, which cannot be checked; run the command it stands for';
@@ -1094,7 +1161,7 @@ function watchWords(args: readonly string[]): { exec: boolean; at: number } {
 // level deeper, so a computed string (`bash -c "$X"`, text left to a variable or a substitution) holds no command of its own, while the commands of a substitution inside it
 // were already scanned with the line. `inherited` is the environment the enclosing commands gave this one (`GIT_CONFIG_KEY_0=alias.p bash -c 'git p'`), read for a same-line git
 // alias and not bound again, because the enclosing command binds its own.
-function classifyWords(words: readonly string[], depth: number, inherited: readonly string[] = [], wordMarks: readonly number[] = []): PrivilegedCommand[] | UnparseableCommand {
+function classifyWords(words: readonly string[], depth: number, inherited: readonly string[] = [], wordMarks: readonly number[] = [], inputs: readonly string[] = []): PrivilegedCommand[] | UnparseableCommand {
   const program = programWords(words, wordMarks);
   if (program === null) return [];
   if ('unparseable' in program) return program;
@@ -1112,8 +1179,23 @@ function classifyWords(words: readonly string[], depth: number, inherited: reado
     found = one === null ? [] : [one];
   } else if (SHELLS.includes(name) || name === 'eval') {
     const text = name === 'eval' ? (args.length > 0 ? args.join(' ') : undefined) : shellString(args);
-    if (text === undefined) return [];
-    const nested = classifyString(text, depth + 1, [...inherited, ...program.env]);
+    // A string that is itself an expansion word (`bash -c {'git push',x}`), or a brace expansion that can form the -c option, may turn into another string (plan 04-63; GIN-02).
+    if (name !== 'eval' && ((text !== undefined && (marks[args.indexOf(text)] ?? 0) !== 0) || formsOption(args, marks, 0, args.length))) return { unparseable: EXPANSION_REFUSAL };
+    // A shell given no string and no script reads the commands of its standard input: the text of each here-string it is given (plan 04-63; GIN-02).
+    const texts = text !== undefined ? [text] : name !== 'eval' && inputs.length > 0 && readsStandardInput(args) ? inputs : [];
+    for (const one of texts) {
+      const nested = classifyString(one, depth + 1, [...inherited, ...program.env]);
+      if ('unparseable' in nested) return nested;
+      found.push(...nested);
+    }
+  } else if (name === 'su' || name === 'trap') {
+    // The string of su's -c option and the first operand of trap are run by a shell (plan 04-63; GIN-02). An expansion word that is the string, or a brace expansion that can form the -c
+    // option, may turn into another string: the line is refused.
+    const given = name === 'su' ? suString(args) : trapString(args);
+    if (name === 'su' && formsOption(args, marks, 0, args.length)) return { unparseable: EXPANSION_REFUSAL };
+    if (given === undefined) return [];
+    if ((marks[given.at] ?? 0) !== 0) return { unparseable: EXPANSION_REFUSAL };
+    const nested = classifyString(given.text, depth + 1, [...inherited, ...program.env]);
     if ('unparseable' in nested) return nested;
     found = nested;
   } else if (name === 'find') {
@@ -1122,7 +1204,7 @@ function classifyWords(words: readonly string[], depth: number, inherited: reado
     const outside = args.map((_, index) => (ranges.some((range) => index >= range.from && index < range.to) ? 0 : (marks[index] ?? 0)));
     if (formsOption(args, outside, 0, args.length)) return { unparseable: EXPANSION_REFUSAL };
     for (const range of ranges) {
-      const inner = classifyWords(args.slice(range.from, range.to), depth, [...inherited, ...program.env], marks.slice(range.from, range.to));
+      const inner = classifyWords(args.slice(range.from, range.to), depth, [...inherited, ...program.env], marks.slice(range.from, range.to), inputs);
       if ('unparseable' in inner) return inner;
       found.push(...inner);
     }
@@ -1135,7 +1217,7 @@ function classifyWords(words: readonly string[], depth: number, inherited: reado
       if (expands(marks, 0, watched.at)) strings = undefined;
       else if (watched.exec) {
         // Run directly: the words are a command, with their expansion flags.
-        const inner = args.length > watched.at ? classifyWords(args.slice(watched.at), depth, [...inherited, ...program.env], marks.slice(watched.at)) : [];
+        const inner = args.length > watched.at ? classifyWords(args.slice(watched.at), depth, [...inherited, ...program.env], marks.slice(watched.at), inputs) : [];
         if ('unparseable' in inner) return inner;
         strings = [];
         found = inner;
@@ -1164,7 +1246,7 @@ function classifyString(text: string, depth: number, inherited: readonly string[
   if (!split.ok) return { unparseable: split.reason };
   const commands: PrivilegedCommand[] = [];
   for (const [index, words] of split.commands.entries()) {
-    const found = classifyWords(words, depth, inherited, split.marks[index]);
+    const found = classifyWords(words, depth, inherited, split.marks[index], split.inputs[index]);
     if ('unparseable' in found) return found;
     commands.push(...found);
   }
@@ -1196,7 +1278,7 @@ export function classifyLine(command: string): LineClassification {
   // Binds the whole line to the approval: an earlier cd, a git config, a wrapper's options or a gh api body change a command's effect without changing its own words.
   const line = `sha256:${sha256Hex(command).slice(0, 32)}`;
   for (const [index, words] of split.commands.entries()) {
-    const found = classifyWords(words, 0, [], split.marks[index]);
+    const found = classifyWords(words, 0, [], split.marks[index], split.inputs[index]);
     if ('unparseable' in found) return { kind: 'unparseable', reason: found.unparseable };
     for (const one of found) commands.push({ ...one, params: { ...one.params, line } });
   }
