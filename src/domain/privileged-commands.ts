@@ -9,7 +9,10 @@
 // backtick, and a command substitution, a process substitution or a here-document body, also inside double quotes. A line it cannot read (longer than
 // MAX_COMMAND_CHARS, nested deeper than MAX_NESTING, more than MAX_PREFIX_WORDS words before the program, or a quote or substitution left open) is `unparseable`,
 // and both callers refuse it: no limit and no parse failure is read as "not privileged". A git alias or config include defined on the command's own line (`git -c alias.p=push p`,
-// `GIT_CONFIG_KEY_0=alias.p ... git p`, plan 04-57) is refused the same way; an alias set by an earlier separate call stays a residual. It does not run or expand anything: a name the shell builds at run time (a
+// `GIT_CONFIG_KEY_0=alias.p ... git p`, plan 04-57) is refused the same way; an alias set by an earlier separate call stays a residual. A brace expansion (`git pus{h,}`) or a
+// glob (`git pu?h`) in the program position or in a word before it (an assignment, a wrapper and its options and operands), in git's global options and subcommand, gh's group, options
+// before the subcommand and subcommand, and npm's words up to its subcommand (all of them when it has none), and a brace expansion anywhere in a privileged command, is refused the same
+// way: the words it forms are not the words the scanner sees (plan 04-62). It does not run or expand anything: a name the shell builds at run time (a
 // variable, an alias, a function), a script that pushes, a shell started on a computed string (`bash -c` over a built string, text piped into a shell) and repository or shell
 // state changed by an earlier separate call are the documented bypass of
 // command classification (ADR-005, the SEC-6 enforcement map). The sandbox (no network, no credentials) and the SCM platform's own protections are the controls that
@@ -74,6 +77,8 @@ type Terminator = 'top' | ')' | '`' | '\\`';
 interface Scan {
   text: string;
   out: string[][];
+  // For each command of `out`, the expansion flags of each of its words (EXPANDS_GLOB, EXPANDS_BRACE), in the same order.
+  marks: number[][];
   failure: string | undefined;
   // The position after each substitution already scanned, by its start offset and terminator (scanSubstitution).
   visited: Map<string, number>;
@@ -90,7 +95,64 @@ interface Word {
   started: boolean;
   quoted: boolean;
   pos: number;
+  // EXPANDS_GLOB and EXPANDS_BRACE: what the shell would expand in the word. The word's text is unchanged.
+  marks: number;
 }
+
+// Expansion words (plan 04-62; GWR-02, T-04-163). The shell expands a word that holds, outside quotes and not after a backslash, a brace group (a `{` with a later `}` and a `,` or
+// `..` between them: `pus{h,}`, `{1..3}`) or a glob (`*`, `?`, or a `[` with a later `]` in the same word) into other words, so the words the scanner sees are not the words that run.
+// The scanner notes which words are expansion words; a `$`-brace parameter expansion (`${A:-a,b}`, `${B#*/}`) and the special parameters `$*` and `$?` are not.
+const EXPANDS_GLOB = 1;
+const EXPANDS_BRACE = 2;
+
+// What readWord has met of a word that decides whether it is an expansion word.
+interface Expansion {
+  glob: boolean;
+  brace: boolean;
+  // A `[` has been met; a later `]` makes the word a glob.
+  bracket: boolean;
+  // A `{` has been met since the last `}` outside a parameter expansion, and a `,` or `..` since that `{`.
+  open: boolean;
+  separator: boolean;
+  // The positions of the last `.` and of the last literal `$`, so `..` and `${` are read as two adjacent characters of the source.
+  dotAt: number;
+  dollarAt: number;
+  // How deep in a `${...}` parameter expansion, where braces, commas and patterns are no expansion.
+  parameter: number;
+}
+
+const newExpansion = (): Expansion => ({ glob: false, brace: false, bracket: false, open: false, separator: false, dotAt: -2, dollarAt: -2, parameter: 0 });
+
+// One literal character of a word outside quotes, at source position `at`. Linear in the word: nothing is searched back.
+function noteExpansion(e: Expansion, ch: string, at: number): void {
+  if (ch === '{') {
+    if (e.parameter > 0 || e.dollarAt === at - 1) e.parameter += 1;
+    else e.open = true;
+    return;
+  }
+  if (e.parameter > 0) {
+    if (ch === '}') e.parameter -= 1;
+    return;
+  }
+  if (ch === '}') {
+    if (e.separator) e.brace = true;
+    e.open = false;
+    e.separator = false;
+  } else if (ch === ',') {
+    if (e.open) e.separator = true;
+  } else if (ch === '.') {
+    if (e.open && e.dotAt === at - 1) e.separator = true;
+    e.dotAt = at;
+  } else if (ch === '*' || ch === '?') {
+    e.glob = true;
+  } else if (ch === '[') {
+    e.bracket = true;
+  } else if (ch === ']' && e.bracket) {
+    e.glob = true;
+  }
+}
+
+const marksOf = (e: Expansion): number => (e.glob ? EXPANDS_GLOB : 0) | (e.brace ? EXPANDS_BRACE : 0);
 
 const fail = (scan: Scan, reason: string): void => {
   scan.failure ??= reason;
@@ -196,11 +258,12 @@ function readWord(scan: Scan, pos: number, end: number, depth: number, tolerant:
   const t = scan.text;
   if ((t[pos] === '<' || t[pos] === '>') && t[pos + 1] === '(') {
     const after = scanSubstitution(scan, pos + 2, end, depth, ')', tolerant);
-    return { text: `${t[pos]}(`, started: true, quoted: false, pos: after };
+    return { text: `${t[pos]}(`, started: true, quoted: false, pos: after, marks: 0 };
   }
   let text = '';
   let started = false;
   let quoted = false;
+  const expansion = newExpansion();
   while (pos < end && scan.failure === undefined) {
     const ch = t[pos] as string;
     if (WORD_STOP.includes(ch)) break;
@@ -282,9 +345,15 @@ function readWord(scan: Scan, pos: number, end: number, depth: number, tolerant:
         pos = scanSubstitution(scan, pos + 2, end, depth, ')', tolerant);
         text += '$';
         started = true;
+      } else if (next === '*' || next === '?') {
+        // `$*` and `$?` are special parameters, no glob.
+        text += `$${next}`;
+        started = true;
+        pos += 2;
       } else {
         text += '$';
         started = true;
+        expansion.dollarAt = pos;
         pos += 1;
       }
     } else if (ch === '`') {
@@ -293,12 +362,13 @@ function readWord(scan: Scan, pos: number, end: number, depth: number, tolerant:
       text += '$';
       started = true;
     } else {
+      noteExpansion(expansion, ch, pos);
       text += ch;
       started = true;
       pos += 1;
     }
   }
-  return { text, started, quoted, pos };
+  return { text, started, quoted, pos, marks: marksOf(expansion) };
 }
 
 // Text that a here-document without a quoted delimiter expands: only backslashes, `$(...)` and backticks matter; quotes are ordinary characters.
@@ -350,11 +420,16 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
   }
   const t = scan.text;
   let words: string[] = [];
+  let marks: number[] = [];
   let groups = 0;
   const pending: Pending[] = [];
   const endCommand = (): void => {
-    if (words.length > 0) scan.out.push(words);
+    if (words.length > 0) {
+      scan.out.push(words);
+      scan.marks.push(marks);
+    }
     words = [];
+    marks = [];
   };
   // A redirection operator at `pos` and its target, which is read as a word (substitutions in it are classified) and is no word of the command.
   const redirect = (at: number): number => {
@@ -399,6 +474,7 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
       groups += 1;
       pos += 1;
     } else if (ch === ')') {
+      if (groups === 0 && term !== ')') marks = marks.map(() => 0);
       endCommand();
       if (groups > 0) {
         groups -= 1;
@@ -415,7 +491,10 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
       const next = word.pos < end ? t[word.pos] : undefined;
       // `2>&1`: a number touching a redirection operator is the file descriptor, no word of the command.
       const descriptor = word.started && !word.quoted && /^[0-9]+$/.test(word.text) && (next === '<' || next === '>');
-      if (word.started && !descriptor) words.push(word.text);
+      if (word.started && !descriptor) {
+        words.push(word.text);
+        marks.push(word.marks);
+      }
       pos = Math.max(word.pos, pos + 1);
     }
   }
@@ -423,15 +502,25 @@ function scanCommands(scan: Scan, pos: number, end: number, depth: number, term:
   return term === 'top' ? end : -1;
 }
 
-// The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands.
-export type Commands = { ok: true; commands: string[][] } | { ok: false; reason: string };
+// The commands of a shell line, each as its words, or the reason the line could not be read. A line past a limit is never an empty list of commands. `marks` holds, for each
+// word of each command, whether the shell would expand it (plan 04-62; GWR-02): the word's text is unchanged.
+export type Commands = { ok: true; commands: string[][]; marks: number[][] } | { ok: false; reason: string };
 
 export function commandsOf(command: string, depth = 0): Commands {
   if (command.length > MAX_COMMAND_CHARS) return { ok: false, reason: `the command is longer than ${MAX_COMMAND_CHARS.toLocaleString('en-US')} characters` };
-  const scan: Scan = { text: command, out: [], failure: undefined, visited: new Map() };
+  const scan: Scan = { text: command, out: [], marks: [], failure: undefined, visited: new Map() };
   scanCommands(scan, 0, command.length, depth, 'top', false);
-  return scan.failure === undefined ? { ok: true, commands: scan.out } : { ok: false, reason: scan.failure };
+  return scan.failure === undefined ? { ok: true, commands: scan.out, marks: scan.marks } : { ok: false, reason: scan.failure };
 }
+
+// The answer for a command whose words the shell would expand into other words (plan 04-62; GWR-02, T-04-163): the line is refused, never read as "not privileged".
+const EXPANSION_REFUSAL = 'a brace expansion or a glob decides which command runs; write the command without it';
+
+// Whether any of the words `from` up to but not including `to` is an expansion word (a brace expansion or a glob), or, with `braceOnly`, a brace expansion.
+const expands = (marks: readonly number[], from: number, to: number, braceOnly = false): boolean => {
+  for (let i = from; i < to && i < marks.length; i += 1) if (((marks[i] as number) & (braceOnly ? EXPANDS_BRACE : EXPANDS_BRACE | EXPANDS_GLOB)) !== 0) return true;
+  return false;
+};
 
 // ---------------------------------------------------------------------------------------------------------
 // Finding the program
@@ -481,8 +570,9 @@ export const isUnparseable = (found: PrivilegedCommand | null | UnparseableComma
 const isPrefixWord = (word: string): boolean => ASSIGNMENT.test(word) || RESERVED_WORDS.has(word) || Object.hasOwn(WRAPPERS, baseOf(word));
 
 // What `flock [options] lock-file command...` or `flock [options] lock-file -c string` runs: the command words, or `sh -c string` for the string form. The options may come
-// before and after the lock file, and the lock file is the first word that is not an option or an option's value.
-function flockWords(words: readonly string[]): string[] {
+// before and after the lock file, and the lock file is the first word that is not an option or an option's value. `from` is where the command words start in `words`, or undefined
+// when the answer is the made-up `sh -c string`.
+function flockWords(words: readonly string[]): { words: string[]; from: number | undefined } {
   const valued = (WRAPPERS['flock'] as WrapperSpec).valued;
   let file = false;
   let string: string | undefined;
@@ -509,7 +599,7 @@ function flockWords(words: readonly string[]): string[] {
       break;
     }
   }
-  return string !== undefined ? ['sh', '-c', string] : words.slice(i);
+  return string !== undefined ? { words: ['sh', '-c', string], from: undefined } : { words: words.slice(i), from: i };
 }
 
 // The program and its words with what comes before it removed: assignments, reserved words and wrappers with their options. `env` is what is bound of the prefix (CR-03): the
@@ -518,27 +608,47 @@ function flockWords(words: readonly string[]): string[] {
 interface Program {
   words: string[];
   env: string[];
+  // The expansion flags of `words`, in the same order.
+  marks: number[];
 }
 
-function programWords(words: readonly string[]): Program | null | UnparseableCommand {
+// `marks` are the expansion flags of `words` (commandsOf). A word read before the program, the program word itself included, that the shell would expand (an assignment, a
+// wrapper, a wrapper's option or operand, the program) leaves the program unknown: the command is unparseable (plan 04-62; GWR-02).
+function programWords(words: readonly string[], wordMarks: readonly number[] = []): Program | null | UnparseableCommand {
   let rest = [...words];
+  let marks = words.map((_, index) => wordMarks[index] ?? 0);
+  let marked = false;
   const env: string[] = [];
+  // Removes the first `n` words, noting an expansion word among them.
+  const drop = (n: number): void => {
+    if (expands(marks, 0, n)) marked = true;
+    rest = rest.slice(n);
+    marks = marks.slice(n);
+  };
+  const program = (): Program | UnparseableCommand => (marked || expands(marks, 0, 1) ? { unparseable: EXPANSION_REFUSAL } : { words: rest, env, marks });
   for (let guard = 0; guard < MAX_PREFIX_WORDS; guard += 1) {
     const first = rest[0];
-    if (first === undefined) return { words: rest, env };
+    if (first === undefined) return program();
     if (ASSIGNMENT.test(first)) {
       env.push(first);
-      rest = rest.slice(1);
+      drop(1);
       continue;
     }
     if (RESERVED_WORDS.has(first)) {
-      rest = rest.slice(1);
+      drop(1);
       continue;
     }
     const wrapper = baseOf(first);
-    if (!Object.hasOwn(WRAPPERS, wrapper)) return { words: rest, env };
+    if (!Object.hasOwn(WRAPPERS, wrapper)) return program();
     if (wrapper === 'flock') {
-      rest = flockWords(rest);
+      const locked = flockWords(rest);
+      if (locked.from === undefined) {
+        drop(rest.length);
+        rest = locked.words;
+        marks = locked.words.map(() => 0);
+      } else {
+        drop(locked.from);
+      }
       continue;
     }
     const spec = WRAPPERS[wrapper] as WrapperSpec;
@@ -555,13 +665,20 @@ function programWords(words: readonly string[]): Program | null | UnparseableCom
       if (wrapper === 'env' && (arg === '-S' || arg === '--split-string')) {
         const value = rest[i + 1] ?? '';
         env.push(arg, value);
-        rest = [...rest.slice(0, i), ...value.split(/\s+/).filter((w) => w !== ''), ...rest.slice(i + 2)];
+        // The words the string splits into are new words, which `env` does not expand; the option and its string are dropped, so an expansion word among them is noted.
+        const split = value.split(/\s+/).filter((w) => w !== '');
+        if (expands(marks, i, i + 2)) marked = true;
+        rest = [...rest.slice(0, i), ...split, ...rest.slice(i + 2)];
+        marks = [...marks.slice(0, i), ...split.map(() => 0), ...marks.slice(i + 2)];
         i -= 1;
         continue;
       }
       if (wrapper === 'env' && arg.startsWith('--split-string=')) {
         env.push(arg);
-        rest = [...rest.slice(0, i), ...arg.slice('--split-string='.length).split(/\s+/).filter((w) => w !== ''), ...rest.slice(i + 1)];
+        const split = arg.slice('--split-string='.length).split(/\s+/).filter((w) => w !== '');
+        if (expands(marks, i, i + 1)) marked = true;
+        rest = [...rest.slice(0, i), ...split, ...rest.slice(i + 1)];
+        marks = [...marks.slice(0, i), ...split.map(() => 0), ...marks.slice(i + 1)];
         i -= 1;
         continue;
       }
@@ -571,11 +688,11 @@ function programWords(words: readonly string[]): Program | null | UnparseableCom
         if (wrapper === 'env' && rest[i] !== undefined) env.push(rest[i] as string);
       }
     }
-    rest = rest.slice(i + (spec.operands ?? 0));
+    drop(i + (spec.operands ?? 0));
   }
   const next = rest[0];
   if (next !== undefined && isPrefixWord(next)) return { unparseable: `more than ${MAX_PREFIX_WORDS} assignment, reserved or wrapper words before the program` };
-  return { words: rest, env };
+  return program();
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -592,6 +709,8 @@ interface ArgSpec {
 interface Parsed {
   values: Record<string, string>;
   positionals: string[];
+  // The index in `args` of each positional word, so a word can be matched to its expansion flags.
+  positionalAt: number[];
   // The names of the options given, valued or not, except those bound as a parameter.
   flags: Set<string>;
   // Every option name given, bound or not.
@@ -599,7 +718,7 @@ interface Parsed {
 }
 
 function parseArgs(args: readonly string[], spec: ArgSpec): Parsed {
-  const parsed: Parsed = { values: {}, positionals: [], flags: new Set(), seen: new Set() };
+  const parsed: Parsed = { values: {}, positionals: [], positionalAt: [], flags: new Set(), seen: new Set() };
   const take = (name: string, value: string | undefined): void => {
     parsed.seen.add(name);
     const key = spec.valued[name];
@@ -613,10 +732,12 @@ function parseArgs(args: readonly string[], spec: ArgSpec): Parsed {
     const arg = args[i] as string;
     if (arg === '--') {
       parsed.positionals.push(...args.slice(i + 1));
+      args.slice(i + 1).forEach((_, k) => parsed.positionalAt.push(i + 1 + k));
       break;
     }
     if (arg === '-' || !arg.startsWith('-')) {
       parsed.positionals.push(arg);
+      parsed.positionalAt.push(i);
     } else if (arg.startsWith('--')) {
       const eq = arg.indexOf('=');
       if (eq !== -1) take(arg.slice(0, eq), arg.slice(eq + 1));
@@ -751,7 +872,7 @@ const ENV_CONFIG_PARAMETERS = /(?:^|\s)GIT_CONFIG_PARAMETERS=[\s\S]*(?:alias\.|i
 // The key of a `-c` value or a `--config-env` value (`name=value`, `name=VAR`): the text before the first `=`, or all of it.
 const configKeyRefused = (value: string): boolean => CONFIG_KEY_REFUSED.test(value.split('=')[0] as string);
 
-function classifyGit(args: readonly string[], env: readonly string[]): PrivilegedCommand | UnparseableCommand | null {
+function classifyGit(args: readonly string[], env: readonly string[], marks: readonly number[]): PrivilegedCommand | UnparseableCommand | null {
   let i = 0;
   if (env.some((word) => ENV_CONFIG_KEY.test(word) || ENV_CONFIG_PARAMETERS.test(word))) return { unparseable: ALIAS_REFUSAL };
   // The global options before the subcommand, verbatim with their values: `-c remote.origin.url=...` and `-C dir` redirect the push, so an approval binds them (CR-03).
@@ -767,6 +888,8 @@ function classifyGit(args: readonly string[], env: readonly string[]): Privilege
       if ((arg === '-c' || arg === '--config-env') && configKeyRefused(args[i] as string)) return { unparseable: ALIAS_REFUSAL };
     }
   }
+  // An expansion word among the global options, their values and the subcommand (every word when no subcommand follows) may turn into another subcommand (plan 04-62; GWR-02).
+  if (expands(marks, 0, i + 1)) return { unparseable: EXPANSION_REFUSAL };
   if (args[i] !== 'push') return null;
   const form = formOf('git', ['push']) as CommandForm;
   const params = paramsOf(parseArgs(args.slice(i + 1), GIT_PUSH), GIT_PUSH);
@@ -806,11 +929,11 @@ function ghApiBodyFromFile(args: readonly string[], spec: ArgSpec): boolean {
 // The gh options that may stand between a group and its subcommand (`gh pr -R x/y create`, plan 04-57; GWR-01, T-04-150): `-R` and `--repo` take the next word as their value,
 // `--repo=x` and `-Rx` are one word, and any other word that starts with `-` is skipped alone. Returns the subcommand and the words that are not it: the leading options
 // followed by the words after the subcommand, so the form's own spec binds `-R` wherever it was written. Undefined when no subcommand follows.
-function ghGroupWords(args: readonly string[]): { subcommand: string; rest: string[] } | undefined {
+function ghGroupWords(args: readonly string[]): { subcommand: string; rest: string[]; at: number } | undefined {
   const leading: string[] = [];
   for (let i = 1; i < args.length; i += 1) {
     const arg = args[i] as string;
-    if (!arg.startsWith('-') || arg === '-') return { subcommand: arg, rest: [...leading, ...args.slice(i + 1)] };
+    if (!arg.startsWith('-') || arg === '-') return { subcommand: arg, rest: [...leading, ...args.slice(i + 1)], at: i };
     leading.push(arg);
     if ((arg === '-R' || arg === '--repo') && i + 1 < args.length) {
       i += 1;
@@ -820,11 +943,13 @@ function ghGroupWords(args: readonly string[]): { subcommand: string; rest: stri
   return undefined;
 }
 
-function classifyGh(args: readonly string[]): PrivilegedCommand | null {
+function classifyGh(args: readonly string[], marks: readonly number[]): PrivilegedCommand | UnparseableCommand | null {
   let key = 'api';
   let rest: readonly string[] = args.slice(1);
   if (args[0] !== 'api') {
     const group = ghGroupWords(args);
+    // An expansion word among the group, the options before the subcommand and the subcommand (every word when no subcommand follows) may turn into another subcommand (plan 04-62; GWR-02).
+    if (expands(marks, 0, group === undefined ? args.length : group.at + 1)) return { unparseable: EXPANSION_REFUSAL };
     if (group === undefined) return null;
     key = `${args[0] ?? ''} ${group.subcommand}`;
     rest = group.rest;
@@ -843,11 +968,13 @@ function classifyGh(args: readonly string[]): PrivilegedCommand | null {
   return { action: form.action, params: paramsOf(parsed, spec) };
 }
 
-function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
+function classifyNpm(args: readonly string[], marks: readonly number[]): PrivilegedCommand | UnparseableCommand | null {
   const parsed = parseArgs(args, NPM_PUBLISH);
   // The subcommand is the first positional that is an npm command (an option's value npm does not know is skipped), so `npm install publish` is an install. It and what
   // precedes it are dropped by position: the positionals that remain are the package and its operands.
   const at = parsed.positionals.findIndex((word) => npmCommandOf(word) !== undefined);
+  // An expansion word up to and including the subcommand, or in any word when none is found, may turn into the subcommand (plan 04-62; GWR-02).
+  if (expands(marks, 0, at === -1 ? args.length : (parsed.positionalAt[at] as number) + 1)) return { unparseable: EXPANSION_REFUSAL };
   if (at === -1 || npmCommandOf(parsed.positionals[at] as string) !== 'publish') return null;
   parsed.positionals = parsed.positionals.slice(at + 1);
   const form = formOf('npm', ['publish']) as CommandForm;
@@ -859,17 +986,21 @@ function classifyNpm(args: readonly string[]): PrivilegedCommand | null {
 // level deeper, so a computed string (`bash -c "$X"`, text left to a variable or a substitution) holds no command of its own, while the commands of a substitution inside it
 // were already scanned with the line. `inherited` is the environment the enclosing commands gave this one (`GIT_CONFIG_KEY_0=alias.p bash -c 'git p'`), read for a same-line git
 // alias and not bound again, because the enclosing command binds its own.
-function classifyWords(words: readonly string[], depth: number, inherited: readonly string[] = []): PrivilegedCommand[] | UnparseableCommand {
-  const program = programWords(words);
+function classifyWords(words: readonly string[], depth: number, inherited: readonly string[] = [], wordMarks: readonly number[] = []): PrivilegedCommand[] | UnparseableCommand {
+  const program = programWords(words, wordMarks);
   if (program === null) return [];
   if ('unparseable' in program) return program;
   if (program.words.length === 0) return [];
   const args = program.words.slice(1);
+  const marks = program.marks.slice(1);
   const name = baseOf(program.words[0] as string);
   let found: PrivilegedCommand[];
   if (name === 'git' || name === 'gh' || name === 'npm') {
-    const one = name === 'git' ? classifyGit(args, [...inherited, ...program.env]) : name === 'gh' ? classifyGh(args) : classifyNpm(args);
+    const one = name === 'git' ? classifyGit(args, [...inherited, ...program.env], marks) : name === 'gh' ? classifyGh(args, marks) : classifyNpm(args, marks);
     if (one !== null && isUnparseable(one)) return one;
+    // A brace expansion anywhere in a privileged command: the parameters an approval binds would not be the words the shell runs (plan 04-62; GWR-02). A glob after the subcommand
+    // is bound as written, which the enforcement map names.
+    if (one !== null && expands(marks, 0, marks.length, true)) return { unparseable: EXPANSION_REFUSAL };
     found = one === null ? [] : [one];
   } else if (SHELLS.includes(name) || name === 'eval') {
     const text = name === 'eval' ? (args.length > 0 ? args.join(' ') : undefined) : shellString(args);
@@ -891,8 +1022,8 @@ function classifyString(text: string, depth: number, inherited: readonly string[
   const split = commandsOf(text, depth);
   if (!split.ok) return { unparseable: split.reason };
   const commands: PrivilegedCommand[] = [];
-  for (const words of split.commands) {
-    const found = classifyWords(words, depth, inherited);
+  for (const [index, words] of split.commands.entries()) {
+    const found = classifyWords(words, depth, inherited, split.marks[index]);
     if ('unparseable' in found) return found;
     commands.push(...found);
   }
@@ -923,8 +1054,8 @@ export function classifyLine(command: string): LineClassification {
   const commands: PrivilegedCommand[] = [];
   // Binds the whole line to the approval: an earlier cd, a git config, a wrapper's options or a gh api body change a command's effect without changing its own words.
   const line = `sha256:${sha256Hex(command).slice(0, 32)}`;
-  for (const words of split.commands) {
-    const found = classifyWords(words, 0);
+  for (const [index, words] of split.commands.entries()) {
+    const found = classifyWords(words, 0, [], split.marks[index]);
     if ('unparseable' in found) return { kind: 'unparseable', reason: found.unparseable };
     for (const one of found) commands.push({ ...one, params: { ...one.params, line } });
   }
