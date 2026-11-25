@@ -199,6 +199,18 @@ describe('the privileged-approval row says what the gate does and does not do (S
     assert.match(row.bypassLimitation, /removed hook/);
   });
 
+  it('says a brace expansion or a glob in a command, prefix or subcommand position, and a brace expansion anywhere in a privileged command, is refused (GWR-02, plan 04-62)', () => {
+    assert.match(row.bypassLimitation, /brace expansion or a glob in a command, prefix or subcommand position/);
+    assert.match(row.bypassLimitation, /brace expansion anywhere in a privileged command/);
+    assert.match(row.bypassLimitation, /refused as unreadable/);
+  });
+
+  it('names pathname globbing in the arguments after a privileged subcommand as not expanded by the gate (GWR-02, plan 04-62)', () => {
+    assert.match(row.bypassLimitation, /glob in the arguments after a privileged subcommand/);
+    assert.match(row.bypassLimitation, /bound as written/);
+    assert.match(row.bypassLimitation, /not the files the shell matches/);
+  });
+
   it('names a tracked test as its proof, in place and not unverified', () => {
     assert.deepEqual(row.test, { kind: 'test', path: 'test/integration/hook-privileged.test.ts' });
     assert.ok(trackedFiles().has('test/integration/hook-privileged.test.ts'));

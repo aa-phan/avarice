@@ -1,0 +1,5 @@
+{
+  "command": "node --test test/unit/enforcement-map.test.ts",
+  "exitCode": 1,
+  "output": "  ✖ says a brace expansion or a glob in a command, prefix or subcommand position, and a brace expansion anywhere in a privileged command, is refused (GWR-02, plan 04-62) (0.529459ms)\n  ✖ names pathname globbing in the arguments after a privileged subcommand as not expanded by the gate (GWR-02, plan 04-62) (0.093667ms)\n✖ the privileged-approval row says what the gate does and does not do (SEC-6, IN-03, plan 04-51) (15.438958ms)\nℹ tests 19\nℹ pass 17\nℹ fail 2\n✖ failing tests:\n  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /brace expansion or a glob in a command, prefix or subcommand position/.\n  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /glob in the arguments after a privileged subcommand/."
+}
