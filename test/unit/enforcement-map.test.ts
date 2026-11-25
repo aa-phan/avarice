@@ -195,7 +195,7 @@ describe('the privileged-approval row says what the gate does and does not do (S
   it('names the residual bypasses: an earlier separate call, and names built at run time', () => {
     assert.match(row.bypassLimitation, /earlier separate call/);
     assert.match(row.bypassLimitation, /built at run time/);
-    assert.match(row.bypassLimitation, /variables, aliases, functions, scripts/);
+    assert.match(row.bypassLimitation, /a name built at run time \(a variable, an alias, a function\)/);
     assert.match(row.bypassLimitation, /removed hook/);
   });
 
@@ -209,6 +209,31 @@ describe('the privileged-approval row says what the gate does and does not do (S
     assert.match(row.bypassLimitation, /glob in the arguments after a privileged subcommand/);
     assert.match(row.bypassLimitation, /bound as written/);
     assert.match(row.bypassLimitation, /not the files the shell matches/);
+  });
+
+  it('names every residual the classifier leaves: expansion, standard input, interpreter strings, other programs that run commands, an earlier alias, git config files (GIN-02, plan 04-63)', () => {
+    assert.match(row.bypassLimitation, /brace expansion/);
+    assert.match(row.bypassLimitation, /globbing/);
+    assert.match(row.bypassLimitation, /standard input/);
+    assert.match(row.bypassLimitation, /xargs/);
+    assert.match(row.bypassLimitation, /parallel/);
+    assert.match(row.bypassLimitation, /interpreters running a code string/);
+    assert.match(row.bypassLimitation, /node -e/);
+    assert.match(row.bypassLimitation, /python -c/);
+    assert.match(row.bypassLimitation, /other programs that run commands/);
+    for (const program of ['make', 'ssh', 'script', 'expect']) assert.ok(row.bypassLimitation.includes(program), `the row does not name ${program}`);
+    assert.match(row.bypassLimitation, /alias or config set by an earlier separate call/);
+    assert.match(row.bypassLimitation, /git config files named on the line/);
+    for (const name of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG']) assert.ok(row.bypassLimitation.includes(name), `the row does not name ${name}`);
+    assert.match(row.bypassLimitation, /a script that pushes/);
+    assert.match(row.bypassLimitation, /a shell started on a computed string/);
+    assert.match(row.bypassLimitation, /text piped into a shell/);
+  });
+
+  it('names the wrappers and launchers the classifier follows, so the covered list is as long as the code', () => {
+    for (const program of ['find -exec', 'su -c', 'trap', 'parallel', 'watch', 'doas', 'taskset', 'arch', 'caffeinate', 'unbuffer', 'chronic', 'coproc', 'here-string']) {
+      assert.ok(row.bypassLimitation.includes(program), `the row does not name ${program}`);
+    }
   });
 
   it('names a tracked test as its proof, in place and not unverified', () => {

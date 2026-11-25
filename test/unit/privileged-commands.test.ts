@@ -266,6 +266,19 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['chronic git push', 1],
   ['taskset -p 1234', 0],
   ["find . -name '*.ts'", 0],
+  // A shell string in su and trap, and a here-string given to a shell (plan 04-63; GIN-02).
+  ["su -c 'git push'", 1],
+  ["su - me -c 'git push'", 1],
+  ["su --command='git push'", 1],
+  ['su -l me', 0],
+  ["trap 'git push' EXIT", 1],
+  ["trap -- 'git push' EXIT", 1],
+  ['trap EXIT', 0],
+  ['trap - INT', 0],
+  ["bash <<< 'git push'", 1],
+  ['sh <<<"git push"', 1],
+  ["bash -c true <<< 'git push'", 0],
+  ["bash script.sh <<< 'git push'", 0],
   // Another program starts the command (plan 04-51; WR-01, WR-03): the stubs for the shells and the wrappers are linked into the stub directory, so a shell
   // started on a literal string really runs the stub.
   ['bash -c "git push origin main"', 1],
@@ -823,5 +836,96 @@ describe('a push started through a wrapper or launcher is seen (GIN-02, FR-12, T
     for (const line of ['doas -u {a,b} git push', 'taskset {1,2} git push', 'taskset -c 0* git push', 'arch -{a,b} git push', 'caffeinate -t {1,2} git push', 'find . -exec git pus{h,} \\;', 'find . -exec g*t push \\;', 'watch -n {1,2} git push', 'watch -x git pu?h', 'parallel -j {1,2} git push ::: a', 'parallel git pus{h,} ::: a', 'watch git pus{h,}']) {
       assert.equal(classifyLine(line).kind, 'unparseable', line);
     }
+  });
+});
+
+describe('a shell string in su and trap, and a here-string given to a shell, are read as shell input (GIN-02, FR-12, T-04-164)', () => {
+  const FORMS: ReadonlyArray<readonly [string, string]> = [
+    ["su -c 'git push'", 'git.push'],
+    ["su - me -c 'git push'", 'git.push'],
+    ["su --command='git push'", 'git.push'],
+    ["su -l me -c 'git push'", 'git.push'],
+    ["su -s /bin/sh me -c 'git push'", 'git.push'],
+    ["su -lc 'git push' me", 'git.push'],
+    ["su me --command 'git push'", 'git.push'],
+    ["sudo su -c 'npm publish'", 'release.publish'],
+    ["trap 'git push' EXIT", 'git.push'],
+    ["trap -- 'git push' INT TERM", 'git.push'],
+    ["trap 'echo x; git push' EXIT", 'git.push'],
+    ['bash <<< \'git push\'', 'git.push'],
+    ['sh <<<"git push"', 'git.push'],
+    ["zsh <<< 'git push'", 'git.push'],
+    ["sudo bash <<< 'git push'", 'git.push'],
+    ["env bash <<< 'git push'", 'git.push'],
+    ["bash -s <<< 'git push'", 'git.push'],
+    ["bash -s arg <<< 'git push'", 'git.push'],
+    ["bash - <<< 'git push'", 'git.push'],
+    ["<<< 'git push' bash", 'git.push'],
+    ["bash <<< 'echo a; git push'", 'git.push'],
+    ["bash <<< 'npm publish'", 'release.publish'],
+  ];
+  for (const [line, action] of FORMS) {
+    it(`${JSON.stringify(line)} is ${action}`, () => {
+      assert.deepEqual(actionsOf(line).slice(0, 1), [action]);
+    });
+  }
+
+  it('answers none when the string or the input is not a push, or the shell does not read the input as commands', () => {
+    for (const line of [
+      'trap EXIT',
+      'trap - INT',
+      'trap -p',
+      'trap -l',
+      'trap',
+      'trap 0 EXIT',
+      'su',
+      'su -l me',
+      'su - me',
+      "su -s /bin/sh me",
+      "su -c 'echo hi'",
+      "bash -c true <<< 'git push'",
+      "bash script.sh <<< 'git push'",
+      "bash -x script.sh <<< 'git push'",
+      "bash <<< 'echo hi'",
+      'bash <<< "$X"',
+      "cat <<< 'git push'",
+      "echo x <<< 'git push'",
+      "eval true <<< 'git push'",
+      "git status <<< 'git push'",
+    ]) {
+      assert.deepEqual(classifyLine(line), { kind: 'none' }, line);
+    }
+  });
+
+  it('binds the target of the inner command, the assignments before the shell, and the whole line', () => {
+    const text = "FOO=1 bash <<< 'git push origin main'";
+    const pushed = firstOf(text);
+    assert.equal(pushed.params['remote'], 'origin');
+    assert.equal(pushed.params['refspec'], 'main');
+    assert.equal(pushed.params['env'], 'FOO=1');
+    assert.equal(pushed.params['line'], lineDigest(text));
+    assert.equal(firstOf("su -c 'git push origin dev'").params['refspec'], 'dev');
+    assert.equal(firstOf("trap 'git push origin dev' EXIT").params['refspec'], 'dev');
+  });
+
+  it('names a here-string that holds a command substitution once', () => {
+    assert.deepEqual(actionsOf('bash <<< "$(git push)"'), ['git.push']);
+  });
+
+  it('a here-string or a string that cannot be read is unparseable, never none', () => {
+    assert.equal(classifyLine("bash <<< 'echo \"x'").kind, 'unparseable');
+    assert.equal(classifyLine("su -c 'echo \"x'").kind, 'unparseable');
+    assert.equal(classifyLine("trap 'echo \"x' EXIT").kind, 'unparseable');
+  });
+
+  it('refuses a brace or a glob that can form the option, or is the string, the reader looks for', () => {
+    for (const line of ["su {-c,} 'git push'", "su -{c,x} 'git push'", "su -c {'git push',x}", "su -c g*t", "trap {'git push',x} EXIT", "trap 'git pus{h,}' EXIT", "su -c 'git pus{h,}'"]) {
+      assert.equal(classifyLine(line).kind, 'unparseable', line);
+    }
+  });
+
+  it('keeps a here-string into a shell nested in a shell string, within the nesting limit', () => {
+    assert.deepEqual(actionsOf("bash -c \"bash <<< 'git push'\""), ['git.push']);
+    assert.deepEqual(actionsOf("su -c \"su -c 'git push'\""), ['git.push']);
   });
 });
