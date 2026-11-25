@@ -41,7 +41,7 @@ export const S21_FILES: Record<string, string> = {
   'test/refresh.test.ts': authTest('auth.refresh_token_rejected', 'canRefresh(0, 7200)', false),
   'test/limits.test.ts': [`import assert from 'node:assert/strict';`, `import { test } from 'node:test';`, '', "test('auth.limit_enforced', () => {", '  assert.equal(1 + 1, 2);', '});', ''].join('\n'),
   'scripts/list-tests.mjs': LIST_TESTS_SCRIPT,
-  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test test/"\n  }\n}\n',
+  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test \\"test/**/*.test.ts\\""\n  }\n}\n',
 };
 
 // The text of the node ES module the launch wrapper runs after each `-p` launch of the host, once the host process has exited. It makes the three changes of the
@@ -111,7 +111,7 @@ export function S21_AFTER_UNIT_SCRIPT(workRoot: string): string {
 export const CS5_FILES: Record<string, string> = {
   'src/slug.ts': FIXED_SLUG,
   'config/app.json': '{"mode":"production"}\n',
-  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test test/"\n  }\n}\n',
+  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test \\"test/**/*.test.ts\\""\n  }\n}\n',
 };
 
 // Each item names its own two files, so nothing is derived from the Behavior text and config/probe-a.json is in no specification.

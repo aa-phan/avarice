@@ -152,7 +152,7 @@ describe('s21: the tamper is the harness\'s, made after the host exits (plan 03-
       assert.equal(/tamper|probe/i.test(rel + text), false, `${rel} names a tamper or probe step`);
     }
     const pkg = JSON.parse(S21_FILES['package.json'] as string) as { scripts: { test: string } };
-    assert.equal(pkg.scripts.test, 'node --test test/');
+    assert.equal(pkg.scripts.test, 'node --test "test/**/*.test.ts"');
   });
 });
 
@@ -165,7 +165,7 @@ describe('cs5: the subagent write is a plain request for a write the hook refuse
   it('holds no probe script and a plain test script', () => {
     for (const [rel, text] of Object.entries(CS5_FILES)) assert.equal(/probe|tamper/i.test(rel + text), false, `${rel} names a probe step`);
     const pkg = JSON.parse(CS5_FILES['package.json'] as string) as { scripts: { test: string } };
-    assert.equal(pkg.scripts.test, 'node --test test/');
+    assert.equal(pkg.scripts.test, 'node --test "test/**/*.test.ts"');
     assert.equal(CS5_PROBE_PATH, 'config/probe-a.json');
   });
 
@@ -365,7 +365,7 @@ function runTests(dir: string): { status: number | null; failed: string[]; passe
   // A child test runner inside a running test inherits NODE_TEST_CONTEXT and then writes a binary report instead of TAP, so the variable is dropped.
   const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
   void _context;
-  const ran = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'test/'], { cwd: dir, encoding: 'utf8', timeout: 60_000, env });
+  const ran = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'test/**/*.test.ts'], { cwd: dir, encoding: 'utf8', timeout: 60_000, env });
   const failed: string[] = [];
   const passed: string[] = [];
   for (const line of ran.stdout.split('\n')) {
