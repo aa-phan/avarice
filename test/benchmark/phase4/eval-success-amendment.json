@@ -9,6 +9,6 @@
   },
   "successRule": "A task succeeds when every required check passes at the end of the run, the held-out test copied from the target commit after the agent finishes passes, and the run delivered every bullet of its brief, as the brief-coverage record of the run states. Reviewer judgment beyond the brief's bullets is a sampled owner spot-check, not a gate.",
   "partialRule": "A run whose required checks and held-out test pass but which skipped or only partly delivered a bullet of its brief is partial: it is not a success and not a failure of its checks, and it is not counted as a success.",
-  "approvedBy": null,
-  "approvedAt": null
+  "approvedBy": "Aaron Phan",
+  "approvedAt": "2026-11-25T05:57:45Z"
 }
