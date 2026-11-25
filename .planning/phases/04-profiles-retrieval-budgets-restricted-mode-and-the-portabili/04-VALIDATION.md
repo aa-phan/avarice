@@ -7,7 +7,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-16"
-audited: "2026-11-23"
+audited: "2026-11-25"
 ---
 
 # Phase 04 — Validation Strategy
@@ -110,6 +110,24 @@ Filled in by the planner and executor per plan; requirement-level map:
 | a53637b | — | Item specs derived from untrusted code nodes (WR-18) | `node --test test/integration/context-adapters.test.ts test/integration/run-spec-derivation.test.ts` | ✅ green |
 | d01ff88 + 96a0718 | — | Permission refusal denies the other profile's whole root (WR-17, AC-6) | `node --test test/unit/profile-config.test.ts test/unit/profile-registry.test.ts test/integration/profile-selection.test.ts` | ✅ green |
 
+**Second gap closure, plans 04-56 to 04-69 (audited 2026-11-25):** all 29 test files below run together on Node 26.9.0: 1054 tests, 0 fail; `npm run typecheck` and `npm run check:boundaries` clean.
+
+| Plan | Task(s) | Behavior | Automated Command | Status |
+|------|---------|----------|-------------------|--------|
+| 04-56 | T1-T3 | Approval shows every bound value whole; unshowable values refused as `privileged:unapprovable` (GCR-01) | `node --test test/unit/approval.test.ts test/integration/hook-privileged.test.ts test/integration/approvals.test.ts test/fault/privileged-no-replay.test.ts test/integration/untrusted-authority.test.ts` | ✅ green |
+| 04-57 | T1-T3 | gh persistent flags, same-line git alias, here-document scanned once (GWR-01, GWR-03, GIN-01) | `node --test test/unit/privileged-commands.test.ts` | ✅ green |
+| 04-58 | T1-T2 | Out-of-scope file paths excluded literally from the restricted patch (GWR-04) | `node --test test/integration/run-workspace.test.ts test/integration/restricted-mode.test.ts test/integration/restricted-onboarding.test.ts` | ✅ green |
+| 04-59 | T1-T3 | Stale bindings lock takeover, corrupt profile config denied whole, overlapped race shown (GWR-05, GWR-06, GWR-07) | `node --test test/unit/profile-bindings-lock.test.ts test/fault/bindings-race.test.ts test/unit/profile-registry.test.ts test/integration/run-sandbox-other-profiles.test.ts test/integration/profile-isolation.test.ts` | ✅ green |
+| 04-60 | T1-T2 | Brace-group glob refusal says what is true; reused pack items carry current trust marks (GIN-03, GIN-05) | `node --test test/unit/hook-decision.test.ts test/integration/hook-retrieval.test.ts test/integration/cache-scope.test.ts test/integration/context.test.ts test/integration/context-handle-first.test.ts test/unit/json-shapes.test.ts test/integration/run-spec-derivation.test.ts` | ✅ green |
+| 04-61 | T1-T3 | Per-run brief coverage in the AC-8 judgement; no spend charged for a step that never started a host (G-04-3, GIN-04) | `node --test test/unit/eval-retrieval.test.ts test/unit/live-spend-ceiling.test.ts test/unit/exit-run-phase4-tools.test.ts` | ✅ green |
+| 04-62 | T1-T2 | Brace expansion and command-position globs seen or refused; residuals documented (GWR-02) | `node --test test/unit/privileged-commands.test.ts test/unit/enforcement-map.test.ts test/integration/hook-privileged.test.ts test/unit/hook-decision.test.ts` | ✅ green |
+| 04-63 | T1-T2 | Wrappers and launchers (`find -exec`, `su -c`, `watch`, `parallel`, `doas`, `trap`, here-string) followed (GIN-02) | `node --test test/unit/privileged-commands.test.ts test/unit/enforcement-map.test.ts test/integration/hook-privileged.test.ts test/unit/hook-decision.test.ts` | ✅ green |
+| 04-64 | T1 | Coverage record for the 18 recorded AC-8 runs loads against the pinned digests | plan's `loadCoverage` check; pinned inputs unchanged since ed9e123 | ✅ green |
+| 04-64 | T2 | Owner re-approval of the amended success rule | manual-only (owner decision, recorded in `eval-success-amendment.json`) | ✅ recorded |
+| 04-65 | T1-T2 | Re-judged verdict equals harness output (`eval-verdict-adr017.json`); ADR-017 accepted | `node --test test/unit/eval-retrieval.test.ts` | ✅ green |
+| 04-66 | T1-T3 | Suite green on the Node floor 22.22.3 and on 26.9.0 (G-04-4) | node-legs check over `04-66-node-legs.json` (5722 tests, 0 fail, both legs) | ✅ green |
+| 04-67, 04-68, 04-69 | all | Documentation pass and fresh prose reviews | not applicable (docs only); reviews manual-only | — |
+
 Note (04-54 T1): the literal check `git diff --quiet 792536d..HEAD -- <five proposal docs>` exits 1 because commit 843c839 (plan 04-50, ADR-016, an owner decision) changed one line of `docs/operations-and-testing.md`. This is an accepted deviation recorded in `04-54-SUMMARY.md`, not a gap.
 
 Suggestion (not a gap): add a unit test asserting every `test/helpers/*-child.ts` is inert under `node --test`, hardening the class of regression fixed in 3dccf9d.
@@ -149,7 +167,7 @@ Suggestion (not a gap): add a unit test asserting every `test/helpers/*-child.ts
 - [ ] Feedback latency < 90s (met for unit + gates; the integration tier runs longer)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** validated 2026-11-23 (gap-closure audit after plans 04-40 to 04-55; 0 gaps; no tests generated)
+**Approval:** validated 2026-11-25 (gap-closure audit after plans 04-56 to 04-69; 0 gaps; no tests generated). Earlier: validated 2026-11-23 after plans 04-40 to 04-55; 0 gaps.
 
 Audit notes (2026-11-22): two mapped files do not exist and are covered elsewhere. FR-14 is covered by `test/unit/policy-precedence.test.ts` ("the evaluator accepts only the four declared sources"); FR-18 by `test/unit/extensions-namespace.test.ts`, `test/integration/run-resume-refs.test.ts` and `test/integration/manual-equivalents.test.ts`. All 42 mapped offline test files plus `test/contract/*.test.ts` were run together: one failure (`test/integration/doctor-versions.test.ts:79`, a load flake, green alone), which joins the known-flake list.
 
