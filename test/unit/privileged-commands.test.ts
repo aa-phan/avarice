@@ -150,6 +150,8 @@ describe('reads a line of 65,536 characters made of quotes, parentheses and doll
     ['unclosed quotes and parentheses', lineOf('"($)"\'$()\'')],
     ['backquotes inside backquotes', lineOf('`echo \\`x\\`` ')],
     ['a here-document body of quotes and substitutions', `cat <<A\n${lineOf('\'"$(`\n').slice(0, 65_536 - 'cat <<A\n'.length)}`],
+    ['words of braces, commas, dots, brackets and globs (GWR-02)', lineOf('git status {a,..}*?[] ')],
+    ['one word of unclosed braces and commas (GWR-02)', ('echo ' + '{,'.repeat(40_000)).slice(0, 65_536)],
   ];
   for (const [what, line] of adversarial) {
     it(what, () => {
@@ -238,6 +240,10 @@ export const CORPUS: readonly CorpusLine[] = corpus(
   ['gh pr --repo=x/y merge 1', 1],
   ['gh release -R x create v1', 1],
   ['gh pr -Rx/y edit 3', 1],
+  // A brace expansion forms the command (plan 04-62; GWR-02): the shell runs `git push pus`, `git push origin main` and `git gt push`; classifyLine answers unparseable for each.
+  ['git pus{h,}', 1],
+  ['{git,push} origin main', 1],
+  ['g{i,}t push', 0],
   ['npm test && npm publish', 1],
   ['npm publish', 1],
   // Another program starts the command (plan 04-51; WR-01, WR-03): the stubs for the shells and the wrappers are linked into the stub directory, so a shell
@@ -290,6 +296,8 @@ describe('the differential oracle: every privileged command a shell runs on the 
         // bash expands a redirection target twice when the redirection fails, so a line may run a command more often than it names it: at least `runs`, and none for a line that only mentions one.
         if (shell === 'bash') assert.ok(runs === 0 ? performed.length === 0 : performed.length >= runs, `bash performed ${performed.length} privileged commands, expected ${runs}: ${JSON.stringify(line)}`);
         const found = classifyLine(line);
+        // A line classifyLine refuses as unparseable covers every invocation it runs: both callers refuse such a line (plan 04-62; GWR-02), so none of them runs unapproved.
+        if (found.kind === 'unparseable') continue;
         const commands = found.kind === 'privileged' ? found.commands : [];
         for (const one of performed) {
           assert.ok(
@@ -644,5 +652,70 @@ describe('an unquoted here-document body yields each substitution once (GIN-01, 
     assert.deepEqual(classifyLine(COMMIT_WITH_HEREDOC), { kind: 'none' });
     assert.deepEqual(classifyLine("cat <<'EOF'\nit's prose, with (parens)\nEOF"), { kind: 'none' });
     assert.deepEqual(actionsOf("bash <<'EOF'\ngit push\nEOF"), ['git.push']);
+  });
+});
+
+describe('a brace expansion or a glob that decides which command runs is refused as unparseable (GWR-02, FR-12, T-04-163)', () => {
+  const refused = (line: string): void => {
+    const found = classifyLine(line);
+    assert.equal(found.kind, 'unparseable', line);
+    if (found.kind === 'unparseable') assert.match(found.reason, /brace expansion or a glob/, line);
+  };
+
+  it('refuses a brace or a glob in the program, the subcommand or a global option of a git command', () => {
+    for (const line of ['git pus{h,}', '{git,push} origin main', 'g{i,}t push', 'git pu?h', 'git -C dir* push', 'git p[u]sh', 'git -c core.x={a,b} push', 'git {push,pull} origin', 'FOO={a,b} git push', 'env {a,b}=1 git push']) refused(line);
+  });
+
+  it('refuses a brace or a glob in a word before the program, whatever the command after it', () => {
+    for (const line of ['echo ok; {git,push} origin main', 'time {git,x} push', 'nohup g*t push', 'timeout 5* git push', 'sudo -u {a,b} git push', 'xargs -n {1,2} git push', "bash -c 'git pus{h,}'", 'eval git pus{h,}', 'echo $(git pus{h,})']) refused(line);
+  });
+
+  it('refuses a brace or a glob in the group, an option before the subcommand, or the subcommand of gh', () => {
+    for (const line of ['gh pr cre{ate,}', 'gh {pr,issue} create', 'gh pr -R {a,b}/y create', 'gh pr crea* --title x', 'gh a?i repos/o/r/issues -X POST', 'gh p* create']) refused(line);
+  });
+
+  it('refuses a brace or a glob in the words npm reads up to its subcommand, and in any word when it has none', () => {
+    for (const line of ['npm pub{lish,}', 'npm publis?', 'npm --scope {a,b} publish', 'npm p*', 'npm --x*']) refused(line);
+  });
+
+  it('refuses a brace expansion anywhere in a privileged command, because the bound parameters would not be the words that run', () => {
+    for (const line of ['git push origin {main,dev}', 'git push origin HEAD:refs/heads/{a,b}', 'git push {origin,fork} main', 'git push origin {1..3}', 'gh pr create --base {main,dev}', 'gh api repos/o/r/issues -X POST -f title={a,b}', 'npm publish --tag {a,b}', 'npm publish {a,b}']) refused(line);
+  });
+
+  it('refuses a line when the refused word is in a later command or in a substitution', () => {
+    refused('echo hi; git push origin {a,b}');
+    refused('echo "$(git push origin {a,b})"');
+  });
+
+  it('keeps the answers of lines that only look like expansions', () => {
+    for (const line of ['mkdir -p src/{a,b}', 'git add src/{a,b}.ts', '[ -f x ] && echo ok', 'gh api repos/{owner}/{repo}/issues', 'echo {a,b}', 'echo *.ts', 'ls src/*.ts | wc -l', 'git status *', 'git diff HEAD~{1,2}', 'git log --since=?', 'echo $? $* $@ $#', 'echo ${A:-a,b} ${B#*/}', '[[ -f x ]] && echo ok', 'gh pr list --label x*', 'npm run build:*', 'npm test -- src/**/*.ts', 'git commit -m "fix {a,b} * ?"', "echo '{a,b}' \\{c,d\\}", 'for f in *.ts; do echo $f; done', 'case x in a) echo 1;; *) echo 2;; esac']) {
+      assert.deepEqual(classifyLine(line), { kind: 'none' }, line);
+    }
+  });
+
+  it('keeps a push whose words hold no brace expansion, a glob after the subcommand included, and binds the glob as written', () => {
+    assert.deepEqual(actionsOf('git push origin main'), ['git.push']);
+    assert.deepEqual(actionsOf('git push origin "{a,b}"'), ['git.push']);
+    assert.deepEqual(actionsOf("git push origin '{a,b}' \\{c,d\\}"), ['git.push']);
+    assert.deepEqual(actionsOf('git push origin ${BRANCH:-a,b}'), ['git.push']);
+    assert.deepEqual(actionsOf('git push origin refs/heads/*'), ['git.push']);
+    assert.equal(firstOf('git push origin refs/heads/*').params['refspec'], 'refs/heads/*');
+    assert.deepEqual(actionsOf('git push origin ma?n'), ['git.push']);
+    assert.deepEqual(actionsOf('git push origin [ab]'), ['git.push']);
+    assert.deepEqual(actionsOf('gh pr create --title "x" --base ma*'), ['scm.pr.create']);
+    assert.deepEqual(actionsOf('gh api repos/{owner}/{repo}/pulls -X POST'), ['scm.api.write']);
+    assert.deepEqual(actionsOf('npm publish dist/*.tgz'), ['release.publish']);
+  });
+
+  it('does not read a quoted, escaped, parameter or special-parameter character as an expansion', () => {
+    for (const line of ["git 'pus{h,}' origin", 'git "pu?h"', 'git pus\\{h,\\}', 'git pu\\?h', 'git ${A:-a,b}', 'git $*', 'git $? push']) {
+      assert.notEqual(classifyLine(line).kind, 'unparseable', line);
+    }
+  });
+
+  it('classifyShellCommand, given words without expansion marks, still names a push', () => {
+    const found = classifyShellCommand(['git', 'push', 'origin', 'main']);
+    assert.ok(found !== null && !isUnparseable(found) && found.action === 'git.push');
+    assert.equal(classifyShellCommand(['git', 'status']), null);
   });
 });
