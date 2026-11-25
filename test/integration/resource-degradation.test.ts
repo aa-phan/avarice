@@ -224,11 +224,18 @@ describe('limits.maxActiveRuns: `start` is refused at the limit, naming the runs
 describe('limits.maxConcurrentChecks: checks start in declared order, at most that many at once, and are recorded in declared order (OPS-5)', () => {
   // Writes `start <name> <ms>` and `end <name> <ms>` lines to the run's scratch directory (TMPDIR), sleeping for the time the declaration gives it.
   const SLOW_SCRIPT = [
-    "import { appendFileSync } from 'node:fs';",
+    "import { appendFileSync, existsSync, readFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
-    'const [name, ms] = process.argv.slice(2);',
+    'const [name, ms, gate] = process.argv.slice(2);',
     "const log = join(process.env.TMPDIR ?? '.', 'timeline.log');",
+    "const count = (prefix) => (existsSync(log) ? readFileSync(log, 'utf8').split('\\n').filter((line) => line.startsWith(prefix)).length : 0);",
     'appendFileSync(log, `start ${name} ${Date.now()}\\n`);',
+    '// A gated check waits (at most 20 s) until the check it names has ended as often as this one has started, so an overlap does not depend on how fast a loaded machine starts a process.',
+    'if (gate !== undefined) {',
+    '  const ordinal = count(`start ${name} `);',
+    '  const limit = Date.now() + 20_000;',
+    '  while (count(`end ${gate} `) < ordinal && Date.now() < limit) await new Promise((resolve) => setTimeout(resolve, 25));',
+    '}',
     'await new Promise((resolve) => setTimeout(resolve, Number(ms)));',
     'appendFileSync(log, `end ${name} ${Date.now()}\\n`);',
     '',
@@ -243,6 +250,12 @@ describe('limits.maxConcurrentChecks: checks start in declared order, at most th
       { name: 'c2', argv: ['node', 'scripts/slow.mjs', 'c2', '200'], timeoutSec: 60, required: true },
       { name: 'c3', argv: ['node', 'scripts/slow.mjs', 'c3', '200'], timeoutSec: 60, required: true },
     ],
+  };
+
+  // The same checks with c1 gated on c2's end (see SLOW_SCRIPT): with two at a time c1 cannot end before c2 has started and ended.
+  const GATED_CONVENTIONS = {
+    ...CONVENTIONS,
+    checks: CONVENTIONS.checks.map((c) => (c.name === 'c1' ? { ...c, argv: ['node', 'scripts/slow.mjs', 'c1', '100', 'c2'] } : c)),
   };
 
   interface Mark {
@@ -272,8 +285,8 @@ describe('limits.maxConcurrentChecks: checks start in declared order, at most th
     return most;
   };
 
-  async function runWith(limits: unknown) {
-    const f = runFixture(limits, { 'scripts/slow.mjs': SLOW_SCRIPT }, CONVENTIONS);
+  async function runWith(limits: unknown, conventions: unknown = CONVENTIONS) {
+    const f = runFixture(limits, { 'scripts/slow.mjs': SLOW_SCRIPT }, conventions);
     const ran = await runInProcess(f.roots, f.repo, f.brief, FIX);
     assert.equal(ran.state, 'ready_for_review', `${ran.state} ${String(ran.reason)}`);
     const all = marks(f.roots, ran.runId);
@@ -291,7 +304,7 @@ describe('limits.maxConcurrentChecks: checks start in declared order, at most th
   });
 
   it('with maxConcurrentChecks 2 two run at once, never three, starts stay in declared order and evidence is recorded in declared order though c2 ends before c1', async () => {
-    const { all, evidence } = await runWith({ maxConcurrentChecks: 2 });
+    const { all, evidence } = await runWith({ maxConcurrentChecks: 2 }, GATED_CONVENTIONS);
     assert.equal(peak(all), 2, 'two overlapped, and never more');
     assert.deepEqual(startOrder(all).slice(0, 3), ['c1', 'c2', 'c3']);
     // Some pass (the checks run more than once: the validation clone, the baseline, the gates) ran c1 and c2 together, and in it c2 ended first.
