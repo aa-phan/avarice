@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "task": 1,
+  "phase": "red",
+  "node": "/Users/aphan/.claude-edu/jobs/5be29488/tmp/node-v22.22.3-darwin-arm64/bin/node",
+  "version": "v22.22.3",
+  "command": "PATH=<node 22 bin dir>:$PATH <node 22 bin>/node --test test/integration/run-status.test.ts",
+  "exitCode": 1,
+  "summary": [
+    "# tests 27",
+    "# suites 6",
+    "# pass 12",
+    "# fail 15",
+    "# cancelled 0",
+    "# skipped 0",
+    "# todo 0",
+    "# duration_ms 48211.020167"
+  ],
+  "firstFailure": {
+    "test": "status shows a finished run: state, checkpoint, evidence and branch, offline (tracer; FR-11, SC 2) / the run reached ready_for_review",
+    "detail": "the run ended blocked_on_decision where ready_for_review was expected (first read showed contract_ready); status --json assertion: actual blocked_on_decision, expected ready_for_review"
+  },
+  "cause": "scratch package.json test script is node --test test/ ; Node 22.22.3 spawns the directory and fails with MODULE_NOT_FOUND, so the required check fails"
+}
