@@ -10,7 +10,7 @@ Two lists drive the live exit runs of Phase 4. Neither is used for spend until t
 | `eval-tasks.json` | The twenty replayed historical commits for AC-8 (D-07), the three arms, the pass rule, the knowledge rule, the token metric and the isolation rule. It is not edited after approval. |
 | `eval-coverage.json` | For each of the 18 recorded AC-8 runs, every bullet of its brief with a status (delivered, partly or skipped) and the evidence for it. Pinned to the sha256 of `eval-results.json` and of `eval-tasks.json` (ADR-017). |
 | `eval-success-amendment.json` | The amended success rule and the partial rule, pinned to the sha256 of `eval-tasks.json`, with its own `approvedBy` and `approvedAt`, both `null` until the owner approves (ADR-017). |
-| `eval-verdict-adr017.json` | The re-judgement of the 18 recorded runs with the coverage record and the approved amendment. Written by plan 04-65, not yet present. |
+| `eval-verdict-adr017.json` | The re-judgement of the 18 recorded runs with the coverage record and the approved amendment (plan 04-65). |
 
 The pass bar for AC-14 is 5 of 5 repositories reaching an active profile with no source change and 0 containment failures.
 
@@ -50,7 +50,7 @@ The spec names its three arms as document section reads, the code-only graph and
 ## Rules
 
 - **Success:** every required check passes at the end of the run and the held-out test, copied from the target commit after the agent stops, passes. Reviewer judgment is a sampled owner spot-check, not a gate. The amended rule in `eval-success-amendment.json` (ADR-017) adds that the run delivered every bullet of its brief, as `eval-coverage.json` records; a run that skipped or only partly delivered a bullet is partial, not a success. The amendment is a separate file pinned to the approved task list, so the task list itself, and the `successRule` text it holds, are not edited.
-- **AC-8:** passes when arm B or arm C has a success rate at least arm A's, at no more than 50% of arm A's total tokens.
+- **AC-8:** passes when arm B or arm C has a success rate at least arm A's, at no more than 95% of arm A's total tokens, inclusive (ADR-016). The task list keeps its original rule text unedited, so the bound in force is the one in ADR-016.
 - **Knowledge pass (D-08):** stays on unless arm C shows no success gain over arm B and also costs more tokens than arm B.
 - **Tokens:** the sum over distinct assistant messages of input, cache-creation, cache-read and output tokens. USD cost is recorded beside them.
 - **Isolation:** each arm runs in a checkout at the task parent with no later history and no remote. `deniedReads` takes precedence over `allowedReads`. The index and the pack are built at the parent, never at the target commit.
