@@ -127,6 +127,8 @@ Filled in by the planner and executor per plan; requirement-level map:
 | 04-65 | T1-T2 | Re-judged verdict equals harness output (`eval-verdict-adr017.json`); ADR-017 accepted | `node --test test/unit/eval-retrieval.test.ts` | ✅ green |
 | 04-66 | T1-T3 | Suite green on the Node floor 22.22.3 and on 26.9.0 (G-04-4) | node-legs check over `04-66-node-legs.json` (5722 tests, 0 fail, both legs) | ✅ green |
 | 04-67, 04-68, 04-69 | all | Documentation pass and fresh prose reviews | not applicable (docs only); reviews manual-only | — |
+| 04-70 | T1, T3 | Round-3 WARNINGs and WR-01 fixed; review statuses set only from a PASS verdict and matching digests | plan's grep, sentence-sweep, `git diff --quiet` and digest checks; `npm test` 5722 tests, 0 fail | ✅ green |
+| 04-70 | T2 | Scoped round-4 prose reviews, groups A and B | manual-only (reviewer judgment; both PASS, 0 BLOCKER, 0 WARNING) | ✅ recorded |
 
 Note (04-54 T1): the literal check `git diff --quiet 792536d..HEAD -- <five proposal docs>` exits 1 because commit 843c839 (plan 04-50, ADR-016, an owner decision) changed one line of `docs/operations-and-testing.md`. This is an accepted deviation recorded in `04-54-SUMMARY.md`, not a gap.
 
@@ -167,7 +169,7 @@ Suggestion (not a gap): add a unit test asserting every `test/helpers/*-child.ts
 - [ ] Feedback latency < 90s (met for unit + gates; the integration tier runs longer)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** validated 2026-11-25 (gap-closure audit after plans 04-56 to 04-69; 0 gaps; no tests generated). Earlier: validated 2026-11-23 after plans 04-40 to 04-55; 0 gaps.
+**Approval:** validated 2026-11-25 (gap-closure audit after plan 04-70, docs only; 0 gaps; no tests generated). Also 2026-11-25: gap-closure audit after plans 04-56 to 04-69; 0 gaps; no tests generated. Earlier: validated 2026-11-23 after plans 04-40 to 04-55; 0 gaps.
 
 Audit notes (2026-11-22): two mapped files do not exist and are covered elsewhere. FR-14 is covered by `test/unit/policy-precedence.test.ts` ("the evaluator accepts only the four declared sources"); FR-18 by `test/unit/extensions-namespace.test.ts`, `test/integration/run-resume-refs.test.ts` and `test/integration/manual-equivalents.test.ts`. All 42 mapped offline test files plus `test/contract/*.test.ts` were run together: one failure (`test/integration/doctor-versions.test.ts:79`, a load flake, green alone), which joins the known-flake list.
 
