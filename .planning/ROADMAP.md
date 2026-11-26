@@ -32,7 +32,7 @@ Full phase details, success criteria and notes: `milestones/v1.0-ROADMAP.md`. Re
 
 **v1.1 MVP Completion**
 
-- [ ] **Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof** - Separate profiles, progressive retrieval with enforced caps, explicit degradation, proof that domain code is adapter-independent
+- [x] **Phase 4: Profiles, retrieval budgets, restricted mode and the portability proof** - Separate profiles, progressive retrieval with enforced caps, explicit degradation, proof that domain code is adapter-independent (completed 2026-11-25)
 - [ ] **Phase 5: Delivery, test strength, review feedback and data safety** - From `ready_for_review` to a pushed branch and draft PR, back to a new attempt on feedback, with no duplicate PRs
 
 **v2.0 Post-MVP Extensions**
@@ -63,7 +63,7 @@ Phase 1 to 3 details are archived in `milestones/v1.0-ROADMAP.md`.
   5. The workflow suite runs unchanged against local and fake-remote adapters with 0 lines of domain-code change (AC-7); an unsupported capability returns a typed `Unsupported` error naming the reduced mode, and each integration has a manual equivalent
   6. `docs/system/` describes what this phase built: every new or changed command, flag, config key, table, event, integration and subsystem is documented against the code; `docs/system/README.md` (documents and proposal counterparts tables), `coverage.md` and `findings.md` are current; each new or changed document had a fresh-eyes review. The phase's last plan is this documentation pass
 
-**Plans**: 70/70 plans executed in 35 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), 14 gap-closure plans (04-56 to 04-69) in waves 27-34 from 04-UAT.md, and 1 gap-closure plan (04-70) in wave 35 from the re-verification's SC6 gap, not yet executed (one branch, one PR, D-01)
+**Plans**: 70/70 plans complete in 35 waves: 55 executed in waves 1-26 (39 in waves 1-18, and 16 gap-closure plans 04-40 to 04-55 in waves 19-26 from 04-VERIFICATION.md), 14 gap-closure plans (04-56 to 04-69) in waves 27-34 from 04-UAT.md, and 1 gap-closure plan (04-70) in wave 35 from the re-verification's SC6 gap, not yet executed (one branch, one PR, D-01)
 
 Plans:
 **Wave 1**
@@ -308,7 +308,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5, then 6, 7 (part 6c a
 | 1. Contained onboarding of one repository | v1.0 | 26/26 | Complete | 2026-11-05 |
 | 2. Contained unattended run of one work item | v1.0 | 35/35 | Complete    | 2026-11-08 |
 | 3. Decisions, independent work and amendments | v1.0 | 73/73 | Complete    | 2026-11-15 |
-| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 70/70 | In Progress | - |
+| 4. Profiles, retrieval budgets, restricted mode and the portability proof | v1.1 | 70/70 | Complete    | 2026-11-25 |
 | 5. Delivery, test strength, review feedback and data safety | v1.1 | 0/TBD | Not started | - |
 | 6. GSD capability bridge, phased work, plugin and push notifiers | v2.0 | 0/TBD | Not started | - |
 | 7. Personal infrastructure | v2.0 | 0/TBD | Not started | - |

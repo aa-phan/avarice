@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Profiles, retrieval budgets, restricted mode and the portability proof",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 1 of 6 · executing"
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 2 of 6 — needs a plan"
   },
-  "updated_at": "2026-11-25T23:48:19.167Z"
+  "updated_at": "2026-11-26T00:41:50.418Z"
 }
