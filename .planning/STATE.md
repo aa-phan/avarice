@@ -604,7 +604,7 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Init]: GSD skills and agents live under `~/.claude-edu` while `gsd-core` workflows and templates live under `~/.claude`. Validate "whatever `CLAUDE_CONFIG_DIR` names" against this split (host limitation 7, `doctor --extensions`).
 - [Init]: Phase numbering starts at 1; GSD 1.17.0 does not support a phase 0 (verified 2026-11-01).
 - [Phase 6]: Owns no requirement IDs; it extends FR-4, AUT-6 and OPS-6 (owned by Phases 2, 3, 4). Flip ownership if preferred.
-- [Phase 4, before any push]: `04-SECURITY.md` unregistered flag 1: `04-36-evidence/` (commit 4afbcaa, ~45 MB of live transcripts from a private repository) is on this branch and `origin` is public. Owner decides keep, trim or remove from history before the phase PR is pushed.
+- [Phase 4, resolved 2026-11-25]: `04-SECURITY.md` unregistered flag 1 (`04-36-evidence/`, live transcripts, public `origin`): the owner decided to keep the files and push.
 - [Phase 4]: `04-UAT.md` is still `diagnosed` (gaps G-04-1.. found 2026-11-24, fixed by gap plans 04-56..04-69, verified 2026-11-25); re-run `/gsd-verify-work 4` to close the UAT record.
 - [Phase 4]: Open review findings by owner decision or untriaged: WR-02 (`approve` and invisible formatting characters, `04-REVIEW-GAPS2-DISPOSITION.md`), 04-REVIEW-GAPS3 WR-01 (stale `coverage.md` ledger sentence) and IN-01..IN-05, round-3 NITs A-N1..A-N6 and B-N3..B-N5.
 - [Intel]: SYNTHESIS.md says 111 normative requirements; the correct count is 105 (149 entries in total).
@@ -652,7 +652,7 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Phase 4 is complete and verified (2026-11-25). Before pushing worktree-phase-04 for its one PR, resolve the `04-36-evidence/` publication question (Blockers/Concerns, SECURITY flag 1)
+- Phase 4 is complete and verified (2026-11-25); its PR from worktree-phase-04 merges into main with a merge commit
 - Optionally re-run `/gsd-verify-work 4` to close the diagnosed UAT record
 - Then start Phase 5 on its own branch with /gsd-discuss-phase 5
 - Phase 9 (v1.0 tech-debt cleanup) is planned last, after every implemented phase
