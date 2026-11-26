@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-profiles-retrieval-budgets-restricted-mode-and-the-portabili
 source: [04-VERIFICATION.md]
 started: 2026-11-23T00:00:00Z
-updated: 2026-11-24T05:18:44.661Z
+updated: 2026-11-26T01:11:11.937Z
 ---
 
 ## Current Test
@@ -56,7 +56,9 @@ blocked: 0
 
 - gap_id: G-04-1
   truth: "`avarice approve` shows the owner every value an approval binds, or the command is refused as unapprovable"
-  status: failed
+  status: resolved
+  resolved_by: 04-56-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: gap (GCR-01: paramsSummary clips each bound value at 80 characters, so a padded gitOptions or env hides a redirecting option the digest binds)"
   severity: blocker
   test: 1
@@ -77,7 +79,9 @@ blocked: 0
 
 - gap_id: G-04-4
   truth: "The test suite passes on Node 22.22.3, the minimum version package.json declares (engines >=22.22.3)"
-  status: failed
+  status: resolved
+  resolved_by: 04-66-PLAN.md
+  resolved_at: 2026-11-25
   reason: "Run on Node v22.22.3: 207 failed, 45 cancelled of 5475; run-status.test.ts fails 15/27 on 22.22.3 and passes 27/27 on 26.9.0 (runs end blocked_on_decision instead of ready_for_review)"
   severity: blocker
   test: 4
@@ -101,7 +105,9 @@ blocked: 0
 
 - gap_id: G-04-3
   truth: "An AC-8 success means the run delivered what its brief asked: a run that skips part of the brief (here the e2e coverage T01-B and T05-A were asked for) is not judged a full success, and the run instructions do not forbid work the brief requires"
-  status: failed
+  status: resolved
+  resolved_by: 04-65-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: issue (T01-B and T05-A judged successful while delivering unit tests only where their briefs also asked for e2e coverage)"
   severity: major
   test: 3
@@ -128,7 +134,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-01
   truth: "`gh pr -R x/y create`, `gh pr --repo=x/y merge 1` and `gh release -R x create v1` are classified as privileged and need an approval"
-  status: failed
+  status: resolved
+  resolved_by: 04-57-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-01, reproduced by the verifier)"
   severity: major
   test: 2
@@ -143,7 +151,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-02
   truth: "A brace expansion that forms a privileged command (`git pus{h,}`, `{git,push}`) is classified or refused as unparseable, and the residual list names any brace or glob form left unhandled"
-  status: failed
+  status: resolved
+  resolved_by: 04-62-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-02, reproduced by the verifier)"
   severity: major
   test: 2
@@ -160,7 +170,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-03
   truth: "A git alias defined on the same line (`git -c alias.p=push p`, `--config-env=alias.*`, `GIT_CONFIG_KEY_n=alias.*`) is classified by its value or refused as unparseable"
-  status: failed
+  status: resolved
+  resolved_by: 04-57-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-03, reproduced by the verifier)"
   severity: major
   test: 2
@@ -175,7 +187,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-04
   truth: "A restricted run's patch keeps its in-scope edits when an out-of-scope changed file has a space, `@`, `+`, non-ASCII letter, bracket or leading `-` in its name"
-  status: failed
+  status: resolved
+  resolved_by: 04-58-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-04)"
   severity: major
   test: 2
@@ -192,7 +206,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-05
   truth: "A bindings lock left by a crashed writer is taken over even when its PID has been reused by another process"
-  status: failed
+  status: resolved
+  resolved_by: 04-59-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-05)"
   severity: major
   test: 2
@@ -207,7 +223,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-06
   truth: "A profile whose config is present but corrupt still has its whole root denied to other profiles' sandboxed commands"
-  status: failed
+  status: resolved
+  resolved_by: 04-59-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-06)"
   severity: major
   test: 2
@@ -224,7 +242,9 @@ blocked: 0
 
 - gap_id: G-04-2-GWR-07
   truth: "The bindings race test proves the two writers overlapped, retries until the race is exercised, and has a variant showing the unlocked path loses a binding"
-  status: failed
+  status: resolved
+  resolved_by: 04-59-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GWR-07)"
   severity: major
   test: 2
@@ -241,7 +261,9 @@ blocked: 0
 
 - gap_id: G-04-2-GIN-01
   truth: "A here-document with an unquoted delimiter is scanned once, so one `$(git push)` in it needs one approval"
-  status: failed
+  status: resolved
+  resolved_by: 04-57-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GIN-01)"
   severity: minor
   test: 2
@@ -255,7 +277,9 @@ blocked: 0
 
 - gap_id: G-04-2-GIN-02
   truth: "Common wrappers and launchers (`doas`, `su -c`, `find -exec/-execdir`, `parallel`, `watch`, `taskset`, `arch`, `caffeinate`, `unbuffer`, `chronic`, `coproc`, `trap`, `<<<` into a shell) are classified, and what remains is named in the enforcement-map residuals"
-  status: failed
+  status: resolved
+  resolved_by: 04-63-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GIN-02)"
   severity: minor
   test: 2
@@ -272,7 +296,9 @@ blocked: 0
 
 - gap_id: G-04-2-GIN-03
   truth: "A Grep refused for a brace-group glob names the brace group as the cause, not a missing glob"
-  status: failed
+  status: resolved
+  resolved_by: 04-60-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GIN-03)"
   severity: minor
   test: 2
@@ -286,7 +312,9 @@ blocked: 0
 
 - gap_id: G-04-2-GIN-04
   truth: "`stepSpendUsd` records the cap only for a step whose host started without finishing, and 0 with a note for a step that exited before any host start"
-  status: failed
+  status: resolved
+  resolved_by: 04-61-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GIN-04)"
   severity: minor
   test: 2
@@ -300,7 +328,9 @@ blocked: 0
 
 - gap_id: G-04-2-GIN-05
   truth: "A reused pack item built by an older adapter format is treated as a miss and read again, so it carries current `untrusted` and `codeNode` flags"
-  status: failed
+  status: resolved
+  resolved_by: 04-60-PLAN.md
+  resolved_at: 2026-11-25
   reason: "User reported: fix (04-REVIEW-GAPS.md GIN-05)"
   severity: minor
   test: 2
