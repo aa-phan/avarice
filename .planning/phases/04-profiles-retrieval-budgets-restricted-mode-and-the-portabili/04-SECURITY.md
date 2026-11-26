@@ -13,7 +13,7 @@ created: "2026-11-22"
 
 # Phase 04 — Security
 
-> Per-phase security contract: threat register, accepted risks, and audit trail. Register parsed from the `<threat_model>` blocks of the 69 phase plans. The 39 original plans were verified against code and tests by `gsd-security-auditor` (ASVS L1, block_on high) on 2026-11-22. The register now also includes the gap plans 04-40..04-55 and the regression fix that followed them (96a0718, pinned by d01ff88: an other-profile config refused by permissions is denied whole instead of stopping the command), audited at L1 on 2026-11-23. The second gap closure, plans 04-56..04-69 (T-04-147..T-04-175), was audited at L1 on 2026-11-25. No audit run changed code, tests or docs.
+> Per-phase security contract: threat register, accepted risks, and audit trail. Register parsed from the `<threat_model>` blocks of the 69 phase plans. The 39 original plans were verified against code and tests by `gsd-security-auditor` (ASVS L1, block_on high) on 2026-11-22. The register now also includes the gap plans 04-40..04-55 and the regression fix that followed them (96a0718, pinned by d01ff88: an other-profile config refused by permissions is denied whole instead of stopping the command), audited at L1 on 2026-11-23. The second gap closure, plans 04-56..04-69 (T-04-147..T-04-175), was audited at L1 on 2026-11-25, and the third, plan 04-70 (T-04-176..T-04-179, T-04-SC restated), the same day. No audit run changed code, tests or docs.
 
 ---
 
@@ -47,7 +47,7 @@ Consolidated from the plans' threat models (one row per boundary class).
 |-----------|----------|-----------|----------|-------------|------------|--------|
 | T-04-01 | Denial of service | live spend runaway | high | mitigate | 40 USD ceiling checked before every case; env override lower-only; tested | closed |
 | T-04-02 | Tampering | corrupt ledger reads as zero spend | medium | mitigate | a non-JSON line throws; tested | closed |
-| T-04-SC | Tampering | npm/pip/cargo installs | high | mitigate | No package installs in this plan; restated unchanged by the gap plans 04-40..04-55 and 04-56..04-69 (`package.json` and `package-lock.json` unchanged since before them; the Node 22.22.3 binary used by 04-66 is the checksum-verified official build, `04-UAT.md:38`) | closed |
+| T-04-SC | Tampering | npm/pip/cargo installs | high | mitigate | No package installs in this plan; restated unchanged by the gap plans 04-40..04-55, 04-56..04-69 and 04-70 (`package.json` and `package-lock.json` unchanged since before them; the Node 22.22.3 binary used by 04-66 is the checksum-verified official build, `04-UAT.md:38`) | closed |
 | T-04-03 | Tampering | cloned public repositories executing code | medium | mitigate | clone only; no install, build or script run; graphify parses with tree-sitter; clones live outside this checkout and are deleted after | closed |
 | T-04-04 | Information disclosure | spike records quoting home paths | low | accept | spike records are repository files; paths under the owner's home are the same ones RESEARCH already records | closed |
 | T-04-05 | Information disclosure | private repository content copied into this repository | medium | mitigate | the lists hold paths, SHAs, commit subjects and test paths only, never file content; the owner reviews them at the checkpoint | closed |
@@ -217,10 +217,14 @@ Consolidated from the plans' threat models (one row per boundary class).
 | T-04-168 | Information disclosure | private source text copied into a public file through evidence strings | low | mitigate | evidence cites paths and line numbers; no evidence string holds a quoted phrase of 40 or more characters. Evidence: `test/benchmark/phase4/eval-coverage.json` | closed |
 | T-04-169 | Repudiation | claiming Node 22.22.3 support with no passing run | medium | mitigate | both legs at 3a6c10c: v22.22.3 and v26.9.0, exit 0, 5722 tests, 0 fail. Evidence: `04-66-node-legs.json:3-36`; no src, test or scripts change after 3a6c10c | closed |
 | T-04-170 | Tampering | a Node-22-only product defect hidden by a test edit | medium | mitigate | plan 04-66 changed no src file; its test edits are fixture changes that weaken no product assertion. Evidence: `git diff --stat 9fde92e^ 3a6c10c -- src` empty | closed |
-| T-04-171 | Repudiation | documentation describing the approval gate, the classifier or containment as stronger than built | medium | mitigate | written from the code; residual list matches the enforcement map; fresh review ran in 04-69. Evidence: `docs/system/policy-and-approvals.md:56-66,100-126,147-169`; `04-69-reviews/`. Caveat: group A did not pass review; A-W1 and A-W2 are open with the owner and are accuracy defects, not overstatements | closed (caveat) |
+| T-04-171 | Repudiation | documentation describing the approval gate, the classifier or containment as stronger than built | medium | mitigate | written from the code; residual list matches the enforcement map; fresh review ran in 04-69. Evidence: `docs/system/policy-and-approvals.md:56-66,100-126,147-169`; `04-69-reviews/`. Caveat resolved 2026-11-25 by 04-70: A-W1 and A-W2 fixed (fdde37f) and group A passed round 4 (`04-69-reviews/round-4-A.md`) | closed |
 | T-04-172 | Repudiation | a document marked reviewed without a passing fresh review | medium | mitigate | none of the 11 changed docs/system files is marked reviewed. Evidence: `docs/system/coverage.md:82-98`; `04-69-reviews/README.md` | closed |
 | T-04-174 | Repudiation | a verdict from an unapproved amendment, ADR-017 figures differing from the harness, or an accepted ADR rewritten | medium | mitigate | approval precondition; unit test deep-equals the committed verdict; ADR-017 table matches the verdict arms; ADR-015, ADR-016 and docs/requirements.md unchanged since ed9e123. Evidence: `scripts/eval-retrieval.ts:622-624`; `test/unit/eval-retrieval.test.ts:212-`; `docs/decisions/ADR-017-ac8-brief-coverage.md` | closed |
-| T-04-175 | Repudiation | documentation describing isolation, the lock, the patch or pack reuse as stronger than built, or a disposition naming a fix that did not land | medium | mitigate | all 30 hashes in `04-REVIEW-GAPS-DISPOSITION.md` resolve to commits; 14 fix commits spot-checked; red records present. Evidence: `docs/system/profiles-and-credentials.md:26,69`, `docs/system/indexes-and-context.md:280-283`. Caveat: B-W1 and B-W2 open with the owner (B-W2 contradicts `src/app/context.ts:461-470`) | closed (caveat) |
+| T-04-175 | Repudiation | documentation describing isolation, the lock, the patch or pack reuse as stronger than built, or a disposition naming a fix that did not land | medium | mitigate | all 30 hashes in `04-REVIEW-GAPS-DISPOSITION.md` resolve to commits; 14 fix commits spot-checked; red records present. Evidence: `docs/system/profiles-and-credentials.md:26,69`, `docs/system/indexes-and-context.md:280-283`. Caveat resolved 2026-11-25 by 04-70: B-W1 and B-W2 fixed (fdde37f) and group B passed round 4 (`04-69-reviews/round-4-B.md`) | closed |
+| T-04-176 | Repudiation | a group document marked `reviewed` without a passing round 4, or with a report whose header digest differs from the file | medium | mitigate | both round-4 first lines read PASS with 0 BLOCKER and 0 WARNING; Task 3 consistency check exits 0; the 10 group rows of `docs/system/coverage.md` each cite their round-4 file. Evidence: `04-69-reviews/round-4-A.md:1`, `round-4-B.md:1`; `04-70-SUMMARY.md` Self-Check | closed |
+| T-04-177 | Tampering | a group document edited after dispatch, or a round-4 report altered after it was saved | medium | mitigate | `git diff --quiet e5b33ba HEAD` over the 11 group documents exits 0; both reports committed once, unchanged (8064176 is their only commit) | closed |
+| T-04-178 | Spoofing | a round-4 reviewer that saw earlier rounds or the suggested fixes | medium | mitigate | the dispatch prompts carried only the scope, code paths, house rules and fresh digests, and forbade reading `.planning/`; each report ends with a read-only proof stating `.planning/` was not read; both verdict lines were well-formed on first issue | closed |
+| T-04-179 | Repudiation | security documentation stating the gate's order or a run's refusal text differently from the code, or a benchmark README stating a 50% bound or a missing verdict | medium | mitigate | acceptance greps pass (new steps 6 and 7, two scoped run sentences, `95% of arm A`, no `50%`); round 4 A checked the changed lines against `src/app/authorize.ts`, `src/domain/hook-decision.ts:821`, `src/domain/run-shell-rules.ts:35`, `src/domain/privileged-commands.ts:42,528,946`. Evidence: `docs/system/policy-and-approvals.md:86-87`; `test/benchmark/phase4/README.md` | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -268,6 +272,7 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 6. The SUMMARY files for 04-40..04-55 each report no threat flag; every surface they name maps to T-04-105..T-04-146 (2026-11-23).
 7. The SUMMARY files for 04-56..04-69 report no threat flag (04-59 and 04-67 have no `## Threat Flags` section). Informational: the `ps` subprocess added to the bindings lock (`src/adapters/fs/profile-bindings.ts:225-236`) is the surface T-04-155 declares; absolute path, fixed environment, 1 s timeout, no shell, validated pid (`:252`) (2026-11-25).
 8. Informational (04-69): the fresh prose reviews of groups A and B ended FAIL after three rounds with four WARNINGs open for the owner (A-W1, A-W2, B-W1, B-W2; `04-69-SUMMARY.md` "Open items"). None claims a control stronger than the code builds; recorded as caveats on T-04-171 and T-04-175. ADR-017 is dated 2026-11-23 but cites a 2026-11-25 approval (documentation inconsistency, not a threat).
+9. The SUMMARY for 04-70 reports no threat flag (documentation and review records only); every surface it names maps to T-04-176..T-04-179. The four WARNINGs of item 8 are fixed and both review groups passed round 4 (2026-11-25).
 
 ---
 
@@ -278,6 +283,7 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 | 2026-11-22 | 105 | 103 | 2 (medium, non-blocking) | gsd-security-auditor (sonnet), orchestrated by gsd-secure-phase |
 | 2026-11-23 | 147 (42 new) | 146 | 1 (medium, non-blocking) | L1 classification by gsd-secure-phase; owner accepted AR-04-04; register update by gsd-security-auditor |
 | 2026-11-25 | 176 (29 new) | 175 | 1 (medium, non-blocking) | gsd-security-auditor (sonnet), orchestrated by gsd-secure-phase; L1 audit of gap plans 04-56..04-69 |
+| 2026-11-25 | 180 (4 new) | 179 | 1 (medium, non-blocking) | L1 classification by gsd-secure-phase (short-circuit: register at plan time, threats_open 0, ASVS 1); gap plan 04-70 |
 
 ---
 
@@ -288,7 +294,7 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 - [x] `threats_open: 0` confirmed (at block_on high)
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-11-25 (threats_open: 0; T-04-14 open below threshold; 29 new threats from gap plans 04-56..04-69 closed, AR-04-08 recorded from the plan-time accept; unregistered flag 1 needs the owner before any push). Earlier: verified 2026-11-23.
+**Approval:** verified 2026-11-25 after gap plan 04-70 (threats_open: 0; T-04-14 open below threshold; 4 new threats T-04-176..T-04-179 closed; caveats on T-04-171 and T-04-175 resolved; unregistered flag 1 still needs the owner before any push). Also 2026-11-25: 29 new threats from gap plans 04-56..04-69 closed, AR-04-08 recorded from the plan-time accept; unregistered flag 1 needs the owner before any push). Earlier: verified 2026-11-23.
 
 ## Security Audit 2026-11-23
 
@@ -304,4 +310,12 @@ Flags raised by SUMMARY `## Threat Flags` sections or found during verification 
 |---|---|
 | Threats found | 29 |
 | Closed | 29 |
+| Open | 0 |
+
+## Security Audit 2026-11-26
+
+| Metric | Count |
+|---|---|
+| Threats found | 4 |
+| Closed | 4 |
 | Open | 0 |
