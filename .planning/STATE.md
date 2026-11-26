@@ -6,10 +6,10 @@ current_phase: 04
 current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
 status: executing
 stopped_at: Completed 04-69-PLAN.md (review groups A and B failed round 3; open findings with the owner)
-last_updated: "2026-11-25T23:04:59.251Z"
-last_activity: 2026-11-24
+last_updated: "2026-11-25T23:48:19.141Z"
+last_activity: 2026-11-25
 last_activity_desc: Phase 04 execution started
-state_head: 2f979b186a48dd612cf83ba3361f21bac8ddb73a
+state_head: 23dbff64bd8415a11cda88cf26ccf83e6cad19ab
 progress:
   total_phases: 6
   completed_phases: 3
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-15)
 
 ## Current Position
 
-Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — READY TO EXECUTE
-Plan: 15 of 69
-Status: Ready to execute
-Last activity: 2026-11-24 — Phase 04 execution started
+Phase: 04 (Profiles, retrieval budgets, restricted mode and the portability proof) — EXECUTING
+Plan: 1 of 70
+Status: Executing Phase 04
+Last activity: 2026-11-25 — Phase 04 execution started
 
 ## Performance Metrics
 
